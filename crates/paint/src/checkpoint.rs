@@ -38,7 +38,8 @@
 //! thickness (for craquelure fitted to the ground); each wet pixel's paint
 //! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
 //! every cell of the deposit (coverage, flake reflectance, lift, fixed
-//! floor, film when drawn) and the whole-canvas guide with its fixed floor;
+//! floor, film when drawn; with pastel, flag 2, the reflectance in color and
+//! the tooth's fill) and the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
@@ -214,7 +215,8 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                put_u64(w, 1)?;
+                // 2: a drawing with pastel, its cells in color (graphite.rs)
+                put_u64(w, if d.has_color() { 2 } else { 1 })?;
                 put_all(w, d.to_f32s())?;
             }
         }
@@ -355,9 +357,9 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            1 => {
+            v @ (1 | 2) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
-                let d = crate::graphite::Drawing::from_f32s(n, whole, |k| get_all(r, k))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, v == 2, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
@@ -483,6 +485,27 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// A pastel drawing (in color, with its tooth) survives a checkpoint bit
+    /// for bit, and goes on taking pastel as it would have.
+    #[test]
+    fn pastel_survives_a_checkpoint() {
+        use crate::graphite::hand_line;
+        use crate::Lead;
+        let mut c = Canvas::new_window(300, 1.5, [0.8; 3], None).with_size_mm(440.0);
+        let red = Lead::pastel([0.7, 0.1, 0.05], 0.8);
+        let blue = Lead::pastel([0.05, 0.1, 0.6], 0.6);
+        c.draw(&red.side(10.0), &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.6], false, true, 0.0, 5), 0.0, 9);
+        c.draw(&blue, &hand_line(&[(100.0, 100.0), (900.0, 110.0)], &[0.8], false, true, 0.0, 6), 0.0, 10);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert!(r.drawing_view() == c.drawing_view() && r.pixels() == c.pixels());
+        for k in [&mut c, &mut r] {
+            k.draw(&blue.side(10.0), &hand_line(&[(100.0, 104.0), (900.0, 104.0)], &[0.5], false, true, 0.0, 7), 0.0, 11);
+        }
+        assert!(r.pixels() == c.pixels());
     }
 
     /// A resumed canvas keeps its drawing: the deposit (so the

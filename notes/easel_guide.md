@@ -422,7 +422,7 @@ is the silhouette of a skeleton of points and widths. Methods: `o:mask()`,
 `o:offset(d)`, `o:paint(brush, {...})`, `o:path(i)`, `o:paths()`,
 `o:strokes()`, `o:at(t)`, `o:length()`, `o:corners()`.
 
-## Drawing: pencil, chalk and eraser
+## Drawing: pencil, chalk, pastel and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -431,6 +431,7 @@ h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
 h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
+h:hatch(w, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
@@ -442,6 +443,44 @@ hollows. Soft leads lay darker, glossier lines, hard ones pale silver
 lines. The eraser lifts most of a line, more from the tops than the
 hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
+
+**Pastel.** A pastel is a stick of pigment with a little gum and chalk:
+colored, dry and soft.
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {soft=0.7})  -- the pile's color; soft 0 (hard) .. 1 (very soft)
+p:line(pts, {pressure={0.6, 0.1}})    -- with the end of the stick (also sketch, hatch, rule, as a pencil)
+p:side(pts, {width=20, pressure=0.4}) -- laid on its side: a broad band (width in units, about 12 mm by default)
+q = pastel(pile{{"lead white", 1}}, {soft=0.2, point=0.6})  -- a pastel pencil: a fine point (mm) that keeps
+smudge(mask or pts, {strength=0.6, width=, reach=})   -- a finger or stump rubbed over it
+fix(mask)                             -- fixative between layers
+```
+
+- The stick's color is the pile's pigments as they look dry, a little
+  paler and grayer than the same pile in oil; the pile's medium and
+  thinner don't matter. Tints are made the way the sticks were, with
+  white in the pile (lead white stands in for the chalk).
+- Pastel lays on itself. A stroke covers a share of what is under it,
+  earlier pastel included, so colors laid across each other mix in the
+  eye, stroke by stroke, and the last one laid is on top. A soft stick
+  pressed hard covers almost completely; a light touch catches only the
+  tops of the tooth and leaves the hollows; the edge of a mark, where the
+  stick presses least, breaks up in the tooth.
+- Each stroke also fills the tooth, and a full tooth takes little more: the
+  paper refuses more pastel. `fix` binds what is there (the eraser and the
+  stump no longer move it), gives back more than half the tooth so more can
+  go on top, and darkens the layer a little.
+- `p:side` lays the stick flat: wide, riding on the tops of the tooth
+  (speckled at a light touch), and it doesn't wear the end.
+- `smudge` drags loose pastel within `reach` units (about 2 mm) together,
+  averaging its colors by how much of each is there, presses it into the
+  hollows (it covers more) and packs it, so it takes less pastel afterwards.
+  It doesn't move pastel that is fixed, painted over or under wet paint.
+- Pastel skips wet paint, as graphite does; let the paint set first. Paint
+  laid over pastel seals it, as it seals a drawing.
+
+The numbers (how much a stroke lays, how fast the tooth fills, what dry
+pigment looks like) are estimates, not measurements.
 
 ## The rag
 

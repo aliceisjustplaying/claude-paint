@@ -1,5 +1,6 @@
-//! Drawing in Lua: graphite pencils and black chalk on the ground, the
-//! kneaded eraser and fixative (engine: `paint::graphite`).
+//! Drawing in Lua: graphite pencils, black chalk and colored pastels on the
+//! ground, the kneaded eraser, the stump and fixative (engine:
+//! `paint::graphite`).
 //!
 //! A pencil is a plain Lua table (`{grade="2B", kind="graphite", worn=0}`)
 //! with shared methods, so how far its point has worn is part of the Lua
@@ -14,19 +15,32 @@ use paint::{Canvas, Mask, Shape};
 const PENCIL_KEYS: &[&str] = &["grade", "kind"];
 const LINE_KEYS: &[&str] = &["pressure", "smooth", "ruler", "tremor", "seed"];
 const SKETCH_KEYS: &[&str] = &["pressure", "passes", "wander", "smooth", "tremor", "seed"];
-const HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "seed"];
+const HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded", "seed"];
 const ERASE_KEYS: &[&str] = &["strength", "width"];
+const PASTEL_KEYS: &[&str] = &["soft", "point"];
+const SIDE_KEYS: &[&str] = &["pressure", "width", "smooth", "tremor", "seed"];
+const SMUDGE_KEYS: &[&str] = &["strength", "width", "reach"];
 
 /// The lead a pencil table stands for.
 fn lead_of(p: &Table) -> Result<Lead> {
     let kind: String = p.get::<Option<String>>("kind")?.unwrap_or_else(|| "graphite".into());
     match kind.as_str() {
         "chalk" => Ok(Lead::chalk()),
+        "pastel" => {
+            let c: [f32; 3] = [p.get("r")?, p.get("g")?, p.get("b")?];
+            let soft: f32 = p.get::<Option<f32>>("soft")?.unwrap_or(0.7);
+            let lead = Lead::pastel(c, soft);
+            // a pastel pencil: a fine point that keeps
+            Ok(match p.get::<Option<f32>>("point")? {
+                Some(mm) => Lead { point_mm: mm, blunt_mm: 2000.0, ..lead },
+                None => lead,
+            })
+        }
         "graphite" => {
             let g: String = p.get::<Option<String>>("grade")?.unwrap_or_else(|| "HB".into());
             Lead::pencil(&g).ok_or_else(|| mlua::Error::runtime(format!("pencil grade {g:?}: 9H..H, F, HB, B..9B (e.g. \"2H\", \"HB\", \"2B\", \"4B\")")))
         }
-        o => err(format!("pencil kind {o:?}: graphite or chalk")),
+        o => err(format!("pencil kind {o:?}: graphite or chalk (a pastel is made with pastel(pile))")),
     }
 }
 
@@ -55,7 +69,11 @@ fn profile(o: Option<&Table>, default: f32) -> Result<Vec<f32>> {
 
 /// Draw marks with the pencil `p`, wearing its point; returns mm drawn.
 fn draw_marks(st: &S, p: &Table, marks: &[Mark], seed: u64) -> Result<f32> {
-    let lead = lead_of(p)?;
+    draw_with(st, p, lead_of(p)?, marks, seed)
+}
+
+/// Draw marks with `lead` (the pencil `p`'s, or its side), wearing `p`.
+fn draw_with(st: &S, p: &Table, lead: Lead, marks: &[Mark], seed: u64) -> Result<f32> {
     let mut worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
     let drawn = crate::time::verb(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
@@ -158,7 +176,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             draw_marks(&st1, &p, &marks, seed)
         })?)?;
     }
-    // p:hatch(mask, {angle=0.8, spacing=, length=, pressure=0.45, seed=})
+    // p:hatch(mask, {angle=0.8, spacing=, length=, pressure=0.45, graded=false, seed=}):
+    // graded: the mask is a weight (each stroke pressed by its value)
     {
         let st1 = st.clone();
         methods.set("hatch", lua.create_function(move |lua, (p, m, o): (Table, Value, Option<Table>)| {
@@ -184,8 +203,49 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => seed_of(&st1, o)?,
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
-            let marks = graphite::hatch_marks(&m, angle, spacing, length, pressure, seed);
+            let graded = o.as_ref().map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
+            let marks = graphite::hatch_marks_graded(&m, angle, spacing, length, pressure, graded, seed);
             draw_marks(&st1, &p, &marks, seed)
+        })?)?;
+    }
+    // p:side(pts, {width=, pressure=0.5, smooth=true, tremor=, seed=}): a
+    // pastel laid on its side and drawn along the line, `width` units of it
+    // touching (about 12 mm by default): a broad band over the tops of the tooth
+    {
+        let st1 = st.clone();
+        methods.set("side", lua.create_function(move |lua, (p, pts, o): (Table, Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, SIDE_KEYS, "side")?;
+            }
+            let lead = lead_of(&p)?;
+            if lead.medium != paint::Medium::Pastel {
+                return err("side: only a pastel is laid on its side (pastel(pile))");
+            }
+            let pts = points(&pts)?;
+            if pts.len() < 2 {
+                return err("side: needs at least two points");
+            }
+            let mmu = {
+                let s = st1.borrow();
+                mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
+            };
+            let width = o.as_ref().map(|o| num(o, "width")).transpose()?.flatten().unwrap_or(12.0 / mmu);
+            if !(width > 0.0) {
+                return err("side: width wants > 0 (units)");
+            }
+            let prof = profile(o.as_ref(), 0.5)?;
+            let smooth = o.as_ref().map(|o| o.get::<Option<bool>>("smooth")).transpose()?.flatten().unwrap_or(true);
+            let tremor = tremor_units(&st1, o.as_ref())?;
+            let seed = match &o {
+                Some(o) => seed_of(&st1, o)?,
+                None => seed_of(&st1, &lua.create_table()?)?,
+            };
+            let m = graphite::hand_line(&pts, &prof, smooth, false, tremor, seed);
+            // the side doesn't wear the point: draw, then put the wear back
+            let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
+            let d = draw_with(&st1, &p, lead.side(width * mmu), &[m], seed)?;
+            p.set("worn", worn)?;
+            Ok(d)
         })?)?;
     }
     // p:sharpen(): a fresh point
@@ -211,6 +271,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
         Ok(if kind == "chalk" {
             format!("black chalk (worn {worn:.0} mm)")
+        } else if kind == "pastel" {
+            let soft: f32 = p.get::<Option<f32>>("soft")?.unwrap_or(0.7);
+            let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
+            format!("pastel {name} (soft {soft:.2}, worn {worn:.0} mm)")
         } else {
             format!("pencil {} (worn {worn:.0} mm)", p.get::<Option<String>>("grade")?.unwrap_or_else(|| "HB".into()))
         })
@@ -251,6 +315,82 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
+    // pastel(pile, {soft=0.7, point=}): a pastel stick of the pile's color (its
+    // pigments as they look dry: paler than in oil); the pile's medium and
+    // thinner don't matter. soft: 0 hard .. 1 very soft; point (mm): a pastel
+    // pencil, its point that wide, keeping it
+    {
+        let meta = meta.clone();
+        g.set("pastel", lua.create_function(move |lua, (v, o): (Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, PASTEL_KEYS, "pastel")?;
+            }
+            let pile = crate::api::pile_of(&v, "pastel")?;
+            let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.7);
+            if !(0.0..=1.0).contains(&soft) {
+                return err("pastel: soft is 0 (hard) to 1 (very soft)");
+            }
+            let point = o.as_ref().map(|o| num(o, "point")).transpose()?.flatten();
+            if let Some(mm) = point
+                && !(0.2..=10.0).contains(&mm)
+            {
+                return err("pastel: point is the width of a pastel pencil's point, 0.2 to 10 mm");
+            }
+            let p = lua.create_table()?;
+            p.set("kind", "pastel")?;
+            let c = pile.mix.color;
+            p.set("r", c[0])?;
+            p.set("g", c[1])?;
+            p.set("b", c[2])?;
+            p.set("soft", soft)?;
+            if let Some(mm) = point {
+                p.set("point", mm)?;
+            }
+            p.set("name", pile.recipe())?;
+            p.set("worn", 0.0)?;
+            p.set_metatable(Some(meta.clone()))?;
+            Ok(p)
+        })?)?;
+    }
+    // smudge(mask or pts, {strength=0.6, width=, reach=}): a finger or stump
+    // rubbed over loose pastel: drags neighboring colors together (within
+    // `reach` units, about 2 mm) and presses it into the tooth
+    {
+        let st1 = st.clone();
+        g.set("smudge", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, SMUDGE_KEYS, "smudge")?;
+            }
+            let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
+            let strength = get("strength")?.unwrap_or(0.6);
+            let f = frame(&st1)?;
+            let mmu = {
+                let s = st1.borrow();
+                mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
+            };
+            let reach = get("reach")?.unwrap_or(2.0 / mmu).max(0.05);
+            let m = match &a {
+                Value::UserData(_) => (*mask_of(&a)?).clone(),
+                Value::Table(_) => {
+                    let pts = points(&a)?;
+                    // a fingertip, ~8 mm
+                    let w = get("width")?.unwrap_or(8.0 / mmu).max(0.1);
+                    let pts = if pts.len() == 1 { vec![pts[0], (pts[0].0 + 0.01, pts[0].1)] } else { pts };
+                    let ws = vec![w; pts.len()];
+                    Mask::from_shape(f, Shape::new().ribbon(&pts, &ws)).blur(0.2 * w)
+                }
+                o => return err(format!("smudge: want a mask or points, got {}", o.type_name())),
+            };
+            crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                let moved = c.smudge(&m, strength, reach);
+                // hand time: a rub over about 8 cm² a second
+                let mm2 = moved as f64 * (c.px_mm() as f64).powi(2);
+                c.tally_mut().secs += 1.0 + mm2 / 800.0;
+                Ok(moved)
+            })
+        })?)?;
+    }
     // erase(mask or pts, {strength=0.9, width=}): a kneaded eraser
     {
         let st1 = st.clone();

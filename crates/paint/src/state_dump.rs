@@ -83,7 +83,9 @@ impl Canvas {
             Field { name: "film", shape: px(1), values: Values::F32(self.film.clone()) },
             Field { name: "wet.vol", shape: px(1), values: Values::F32(wt.vol.clone()) },
             Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| *l).collect()) },
-            Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| *p).collect()) },
+            // Keep the legacy hiding/stiffness/drying field byte-compatible.
+            // Engine 4's additional properties have their own fields below.
+            Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()) },
             Field { name: "wet.stroke", shape: px(1), values: Values::U32(wt.stroke.clone()) },
             Field { name: "wet.touched", shape: px(1), values: Values::U32(wt.touched.clone()) },
             Field { name: "wet.floor", shape: px(1), values: Values::F32(wt.floor.clone()) },
@@ -115,6 +117,12 @@ impl Canvas {
         // added with the thinner (engine 3): the solvent in the open film,
         // µm per pixel (0 where there is none, and before engine 3)
         v.push(Field { name: "wet.solvent", shape: px(1), values: Values::F32(if wt.solv.len() == h * w { wt.solv.clone() } else { vec![0.0; h * w] }) });
+        if self.engine >= 4 {
+            v.push(Field { name: "wet.turps", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[3]).collect()) });
+            v.push(Field { name: "wet.oil", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[4]).collect()) });
+            v.push(Field { name: "gloss", shape: px(1), values: Values::F32(self.gloss.clone()) });
+            v.push(Field { name: "absorb", shape: px(1), values: Values::F32(self.absorb.clone()) });
+        }
         v
     }
 }

@@ -614,7 +614,7 @@ impl Canvas {
                             got.lat[q] += l[q] * take;
                         }
                         let h = &self.wet.hide[i];
-                        for q in 0..3 {
+                        for q in 0..h.len() {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {
@@ -700,7 +700,7 @@ impl Canvas {
             for q in 0..pl.lat.len() {
                 pl.lat[q] = (pl.lat[q] * v0 + got.lat[q]) / t;
             }
-            for q in 0..3 {
+            for q in 0..pl.hide.len() {
                 pl.hide[q] = (pl.hide[q] * v0 + got.hide[q]) / t;
             }
             pl.cure = (pl.cure * v0 + got.cure) / t;
@@ -721,7 +721,7 @@ impl Canvas {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
         let hd = &mut self.wet.hide[i];
-        for k in 0..3 {
+        for k in 0..hd.len() {
             hd[k] += (pl.hide[k] - hd[k]) * a;
         }
         if self.wet.clock.px.len() == self.wet.vol.len() {
@@ -1140,6 +1140,30 @@ mod tests {
 
     /// One thin brushed coat of ground: the weave shows through it.
     const GROUND_UM: f32 = 25.0;
+
+    #[test]
+    fn a_rag_smear_preserves_the_paint_oil_and_turps() {
+        let mut c = Canvas::new(240, 1.0, [0.3, 0.2, 0.1]).with_engine(4);
+        for i in 0..c.wet.vol.len() {
+            if i % 240 < 120 {
+                c.wet.vol[i] = 0.8;
+                c.wet.hide[i] = [0.8, 0.6, 1.0, 0.4, 0.6];
+                c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+            }
+        }
+        let mut rag = Rag::new(50.0, 2);
+        let lifted = c.rag_wipe(&mut rag, &[(100.0, 200.0), (900.0, 200.0)], &[0.8], 19);
+        assert!(lifted > 0.0, "the wipe must actually lift and smear open paint");
+        let mut laid = 0;
+        for (i, (&v, h)) in c.wet.vol.iter().zip(&c.wet.hide).enumerate() {
+            if i % 240 >= 120 && v > 1e-5 {
+                laid += 1;
+                assert!((h[3] - 0.4).abs() < 1e-5 && (h[4] - 0.6).abs() < 1e-5,
+                    "smearing the same paint must preserve its material: {h:?}");
+            }
+        }
+        assert!(laid > 0, "the rag must carry paint onto the initially bare half");
+    }
 
     /// A 440 mm canvas on 15-thread linen with a thin brushed ground, the
     /// weave showing through, and a sky film laid over the middle with a

@@ -4,11 +4,12 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { realpathSync, renameSync } from "node:fs";
+import { realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { PruneLimits } from "./context-images.ts";
 
 export interface Ran {
 	code: number | null;
@@ -146,11 +147,21 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; palette?: boolean }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
 	const a: string[] = [];
-	if (p.palette === true) a.push("--palette");
+	if (p.palette) {
+		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
+			throw new Error("look: palette takes no other option");
+		}
+		return ["--palette"];
+	}
+	if (p.survey) a.push("--survey");
+	if (p.compare) a.push("--compare", p.compare);
+	if (p.hold) a.push("--hold", p.hold);
+	if (p.at) a.push("--at", p.at);
 	if (p.crop) a.push("--crop", p.crop);
 	if (p.mode) a.push("--mode", p.mode);
+	if (p.light) a.push("--light", p.light);
 	if (p.size !== undefined) a.push("--size", String(p.size));
 	if (p.grid === true) a.push("--grid");
 	else if (typeof p.grid === "number") a.push("--grid", String(p.grid));
@@ -164,7 +175,23 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 export function toolWords(t: string): string {
 	return t
 		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
-		.replace(/--(crop|mode|size|grid|palette)\b/g, "$1");
+		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
+}
+
+/** Deliver a survey in order within the request budget, keeping every original tile on disk. */
+export function surveyReply<I extends { type: "image"; data: string }>(said: string, paths: string[], images: I[], limits: PruneLimits) {
+	if (images.length !== paths.length) throw new Error("look: a survey tile could not be read; the survey is incomplete");
+	const oversized = images.findIndex((image) => image.data.length > limits.maxImageChars);
+	if (oversized >= 0) throw new Error(`look: survey incomplete: ${paths[oversized]} alone exceeds the configured image budget; full-detail tiles remain on disk, but this budget cannot deliver them`);
+	let count = 0;
+	let chars = 0;
+	while (count < images.length && count < limits.maxImages && chars + images[count].data.length <= limits.maxImageChars) {
+		chars += images[count++].data.length;
+	}
+	if (count < images.length) {
+		said += `\nPartial survey: showing tiles 1–${count} of ${images.length} within the image budget. The remaining full-detail tiles have not been shown. Read each remaining file in a separate turn before assessing the whole canvas:\n${paths.slice(count).join("\n")}\n`;
+	}
+	return { content: [{ type: "text" as const, text: said }, ...images.slice(0, count)] };
 }
 
 /**
@@ -197,6 +224,35 @@ export function statusReply(reply: string): string {
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */
 export function logReply(log: string): string {
 	return log.replace(/^--@ chunk \d+[ \t]*$/gm, "--@ chunk");
+}
+
+/** Whether `path` is a file that is there (false too where it can't be read). */
+function isFile(path: string): boolean {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * `renameLook` for every look an answer names (a survey names several): each
+ * line that begins with a look's png path (a file that is there; its folders may
+ * have spaces, or ".png", in their names) gets a fresh name; the paths in order.
+ */
+export function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
+	const paths: string[] = [];
+	const lines = said.split("\n").map((line) => {
+		// (the whole path, to its last ".png": a folder's name may hold one too)
+		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
+		if (!m || !isFile(resolve(studio, m[1]))) return line;
+		const path = join(dirname(m[1]), `${randomUUID()}.png`);
+		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		paths.push(path);
+		// (without the machine's seconds, as `renameLook`)
+		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
+	});
+	return { said: lines.join("\n"), paths };
 }
 
 /**

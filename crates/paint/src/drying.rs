@@ -137,6 +137,15 @@ pub mod drier {
     pub const MARS: f32 = 1.1;
     /// Viridian: no drier action reported; average. Estimate.
     pub const VIRIDIAN: f32 = 1.0;
+    /// Strontium and barium chromates hold no lead, so none of lead
+    /// chromate's drier action, and are inert, nearly insoluble salts:
+    /// average. Estimate (materials research,
+    /// notes/research/impressionist_materials.md).
+    pub const CHROMATE: f32 = 1.0;
+    /// Zinc yellow (potassium zinc chromate) holds no lead either, and it
+    /// brings zinc into the film, which slows an oil's drying (see
+    /// `ZINC_WHITE`): a little below average. Estimate; no measured rate found.
+    pub const ZINC_YELLOW: f32 = 0.8;
     /// Indian yellow: an early account has it drying in oil "nearly as soon
     /// or sooner than" other colors (Artists' Pigments vol. 1 p.24); set near
     /// average. Uncertain.
@@ -732,6 +741,7 @@ impl Canvas {
         let (ew, eh) = (ex.2 - ex.0, ex.3 - ex.1);
         let mut add = vec![0.0f32; ew * eh];
         let mut stiff = vec![0.5f32; ew * eh];
+        let mut oil = vec![1.0f32; ew * eh];
         let mut sets = vec![SET_TIME; ew * eh];
         // cure per minute of each film that bakes (for its tack afterwards)
         let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
@@ -746,6 +756,7 @@ impl Canvas {
                     let k = y * ew + x;
                     add[k] = v * COAT_UM;
                     stiff[k] = self.wet.hide[i][1];
+                    oil[k] = self.wet.hide[i][4];
                     if let Some(p) = cp.get(i) {
                         sets[k] = p.lev;
                     }
@@ -772,7 +783,25 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets);
+        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
+        // engine 4: the film's surface is as glossy as it is rich in oil (a
+        // thin one shows the surface under it through), and dry paint seals
+        // an absorbent ground's pores
+        if self.engine >= 4 {
+            for y in 0..ex.3 - ex.1 {
+                for x in 0..ew {
+                    let k = y * ew + x;
+                    if add[k] > 0.0 {
+                        let i = (ex.1 + y) * w + ex.0 + x;
+                        // (the film as it settled here, not as it was laid)
+                        let coats = t[k].max(0.0) / COAT_UM;
+                        let g = smoothstep(0.15, 1.3, oil[k]);
+                        self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
+                        self.absorb[i] *= (-coats / 0.4).exp();
+                    }
+                }
+            }
+        }
         // wet paint closes pinholes: a pixel's share of paint is at least
         // what the two neighbors on opposite sides of it both hold (bare
         // neighbors hold none), so the gaps between the hairs of a wide
@@ -1040,7 +1069,7 @@ mod tests {
         let mut c = Canvas::new(40, 1.0, [0.5; 3]).with_size_mm(40.0).with_engine(engine);
         let lat = Paint::body([0.9; 3]).latent();
         for i in 0..c.wet.vol.len() {
-            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying], 1);
+            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0], 1);
         }
         c.wet.current = 1;
         c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
@@ -1216,7 +1245,7 @@ mod tests {
                 let i = y * f.w + x;
                 c.wet.vol[i] = t;
                 c.wet.lat[i] = lat;
-                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE];
+                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE, 0.0, 1.0];
                 c.wet.stroke[i] = 1;
             }
         }
@@ -1276,7 +1305,7 @@ mod tests {
                 let thin = x % 2 == 0;
                 c.wet.vol[i] = if thin { 0.2 } else { 4.0 };
                 c.wet.lat[i] = p.latent();
-                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }];
+                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }, 0.0, 1.0];
                 c.wet.stroke[i] = 1;
             }
         }

@@ -27,14 +27,16 @@ use crate::pigment::{Pigment, hiding_of, scatter_for};
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
-/// coat, stiffness, drying rate].
+/// coat, stiffness, drying rate, solvent, oil].
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
-/// relative to average paint (see `drying::drier`).
-pub type Prop = [f32; 3];
+/// relative to average paint (see `drying::drier`). Solvent and oil are
+/// engine 4's (see `Paint`; engine 3's thinner keeps its solvent beside the
+/// paint, `crate::thinner`).
+pub type Prop = [f32; 5];
 
 #[inline]
 fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
-    for k in 0..3 {
+    for k in 0..p.len() {
         p[k] += (q[k] - p[k]) * a;
     }
 }
@@ -65,18 +67,31 @@ pub struct Paint {
     /// takes up, 0 (none) to 0.95 (`crate::thinner`; engine 3). The other
     /// fields stay the paint's own: solvent is never mixed into them.
     pub thinner: f32,
+    /// The share of the paint's volume that is volatile solvent (turpentine,
+    /// 0..0.9): it makes the paint flow on the brush and evaporates as it is
+    /// laid, leaving a film of the paint's own body, that much thinner
+    /// (engine 4; `pile{turps=}`).
+    pub solvent: f32,
+    /// How rich in oil the paint is, relative to tube paint (1): more with
+    /// medium, less blotted or drawn into an absorbent ground. A film's gloss
+    /// follows it (engine 4).
+    pub oil: f32,
 }
 
 impl Paint {
+    /// Its properties as they mix in a brush and on the canvas (`Prop`).
+    pub fn prop(&self) -> Prop {
+        [self.scatter(), self.stiff, self.drying, self.solvent, self.oil]
+    }
     /// A paint of masstone `color` whose one coat hides `hiding` (contrast
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0 }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0 }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0 }
+        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0 }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -133,7 +148,7 @@ impl Paint {
 pub(crate) struct Wet {
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
-    /// [scattering, stiffness, drying rate] of the wet paint.
+    /// [scattering, stiffness, drying rate, solvent, oil] of the wet paint.
     pub(crate) hide: Vec<Prop>,
     /// Which stroke last laid paint here (a stroke barely re-picks its own paint).
     pub(crate) stroke: Vec<u32>,
@@ -168,7 +183,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is
@@ -285,6 +300,20 @@ impl Canvas {
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
         use rayon::prelude::*;
+        if self.engine >= 4 {
+            // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
+            return (0..self.px.len())
+                .into_par_iter()
+                .map(|i| {
+                    // (the thinnest wet film lets the surface under it show: no edge where it ends)
+                    let v = self.wet.vol[i];
+                    let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
+                    let gloss_share = if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, v / cover) } else { 0.0 };
+                    let g = crate::lerp(self.gloss[i], 1.0, gloss_share);
+                    crate::canvas::haze(self.look_px(i), g)
+                })
+                .collect();
+        }
         (0..self.px.len()).into_par_iter().map(|i| self.look_px(i)).collect()
     }
 
@@ -344,6 +373,21 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_partial_wet_mark_keeps_the_uncovered_surface_matte() {
+        let mut c = crate::Canvas::new(32, 1.0, [0.1; 3]).with_engine(4);
+        c.gloss.fill(0.0);
+        let matte = c.seen()[0][0];
+        c.wet.lat[0] = mixbox::linear_float_rgb_to_latent(&[0.1; 3]);
+        c.wet.vol[0] = 0.1;
+        c.wet.cover[0] = 1.0;
+        let full = c.seen()[0][0];
+        c.wet.cover[0] = 0.01;
+        let partial = c.seen()[0][0];
+        assert!((partial - matte).abs() < (full - matte).abs() * 0.05,
+            "1% wet coverage cannot remove the matte veil from the whole pixel: {matte}, {partial}, {full}");
+    }
 
     /// Setting a paint's hiding changes its scattering and nothing else: a
     /// slow-drying paint stays slow whichever builder comes first.

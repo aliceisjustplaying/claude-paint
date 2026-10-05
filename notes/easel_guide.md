@@ -54,6 +54,25 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   crossing strokes, its striations stay). The ground is dry when painting
   starts.
 - `seed`: the randomness of the linen, the ground and everything after.
+- `raw` (engine 3), instead of `ground`: leave the canvas raw, the bare
+  cloth unprimed: `"cotton duck"` (creamy and absorbent) or `"linen"`
+  (browner, it holds less), as Frankenthaler and Morris Louis left theirs
+  for soak-staining (see `notes/research/soak_stain.md`). The cloth shows
+  its colour and its weave. A brush works on it as on a primed canvas: its
+  paint lies on the cloth. `soaked(x, y)` says in words what is in the
+  cloth there (`"raw"`), and whether paint lies on it.
+- A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
+  ground: it draws oil out of the paint laid straight on it until its pores
+  are full, so thin paint there goes lean, stiff, quick to set and matte,
+  while thick paint barely notices. Paint that has dried over it seals it.
+  An oil ground (the default) absorbs nothing and is semi-matte.
+
+**Gloss.** Every dry surface is more or less glossy: oily paint (medium)
+dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
+matte, a thin film shows the surface under it, a varnish makes all of it
+glossy. A matte surface scatters the light its first surface reflects back
+toward you, a faint veil of white over the colors that lifts the darks; a
+glossy one sends it away. The looks and the saved picture show it.
 
 It sets `W` (1000) and `H` (`1000 / aspect`). The canvas is always 1000
 units wide, whatever its pixel width. The origin `(0, 0)` is the upper
@@ -80,6 +99,45 @@ the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
 proportions (about 6%). The palette has room for 16 piles; the oldest is
 scraped off to make room.
+
+`turps` thins the pile with that share of turpentine (0 to 0.9):
+`pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
+evaporates as the paint is laid, so it leaves a film that much thinner, of
+the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
+is the other way to thin a pile: its solvent stays in the film for a while
+and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
+little slower) or `"poppy"` (dries much slower, yellows least).
+
+`blot` is the opposite of medium: the paint laid out on blotting paper
+first, which draws out that share of its own oil (0 to 0.5):
+`pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
+more opaque and much stiffer: it holds the ridges and furrows of the brush
+as it dries. A pile takes medium or blot, not both.
+
+**The palette board.** Every pile is a heap on the board beside the easel.
+
+- `pile{..., name="sky"}` names it.
+- `look --palette` (the `look` tool's `palette: true`) shows the board: each
+  heap knifed out thick (its masstone and body) with a smear dragged from
+  thick to thin across a black stripe (its tint as it thins, how much it
+  hides), lit as in the gallery view. Judge a mix there before it touches the
+  canvas.
+- `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
+  heap, in the units its recipe was given in (a pile knifed as
+  `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
+  as a tenth of a part more): look, adjust, look again. It returns the pile.
+- `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
+  new heap, as they are now.
+- `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
+  palette: a pile of any other is an error.
+- `palette{dirty=<0..1>}` keeps the board as dirty as painters do. A brush
+  that comes to a heap carrying paint leaves a little of it there, more the
+  fuller it is (a `b:reload` wipes it first), and the smears of the mixing
+  area seep into each new heap, so the heaps drift toward each other through
+  a sitting. `palette{clean=true}` scrapes the mixing area and skims the
+  heaps. 0, the default, is a clean board: every heap stays as knifed.
+- `palette()` returns a line about each heap: its recipe now, and how much of
+  it is other paint.
 
 The tube box:
 
@@ -179,6 +237,55 @@ pointed round or rigger lays a hairline at light pressure and spreads to
 its belly when pressed, so its width follows the pressure and a stroke
 whose pressure falls to 0 ends in a point.
 
+**Loading part of the brush.** `b:load(p, amount, {side=, share=, streak=})`
+dips only part of it: `side` (-1 or 1) and `share` (0..1) put one edge of
+the brush in the pile (a double-loaded brush: two paints side by side in
+one stroke), `streak` (0..1) takes it up unevenly in bands a few hairs
+wide. In `work`, `streak=` does this on every dip and
+`second={pile=, load=, side=, share=, streak=}` dips part of the brush in a
+second pile after the first.
+
+**Gestures.** `b:gesture({{x, y, p}, ...}, {wobble=, orient=, ramps=, shake=, clip=})` is one
+deliberate stroke along a smooth curve through the points, its pressure
+following each point's `p` (0..1; a point without one takes its
+neighbors'): pressed hard at a root and lifted to nothing at a tip, swelling
+through a turn. A pointed brush (`point=`) widens as it is pressed, so its
+mark swells from a hairline and tapers back to one with the pressure; a
+blunt one narrows at a light touch too (to about a third), but has no point.
+`wobble` (units, up to 100) lets the hand drift sideways. Use gestures for the marks
+that carry the picture: the few decisive strokes a passage needs.
+
+**Thick paint.** `lay` (a brush option) sets how much paint a full brush
+lays down: 1 for an ordinary load, 4 to 16 for impasto. Stiff paint
+(blotted, or a stiff tube with no medium) holds what the brush leaves: in
+it the hairs gather into clumps that lay the stroke in ridges and furrows
+and push walls up along its edges, the coarser the hair (`hair`) the
+coarser the clumps. Fluid paint levels out.
+
+**The knife.** `k = knife{width=<units>}` is a painting knife, its blade
+that long. `k:load(p, amount)` picks up paint, `k:wipe()` cleans it.
+`k:lay(points, {pressure={a, b}, angle=, lift=})` drags it along the points
+with the blade across the path (or at a fixed `angle`): it rests on the
+surface's high points and stands off them by less the harder it is pressed,
+filling what lies under it to the blade's level in a slab with a flat top,
+or over dry impasto catching only the ridges; wet paint standing above the
+blade is cut off into its bead or pressed out at its ends in ridges, and
+the share `lift` of the bead (0.1) stays where it lifts.
+`k:scrape(points, {pressure=, angle=})` scrapes wet paint off down to the blade
+(at full pressure, down to the dry paint) and keeps it on the blade.
+
+**Spatter.** `b:spatter{at={x, y}, toward={dx, dy}, spread=, force=, clip=}`
+flicks the loaded brush: the paint its hairs can't hold flies off in droplets
+toward `toward` (its length is how far the paint carries, in units), in a cone
+`spread` radians either side (0.45 by default), `force` 0..1 hard (0.6). Fluid
+paint (medium, turpentine) flies readily; blotted or stiff tube paint barely
+leaves the brush. A hard flick throws many small droplets, a gentle one fewer
+and bigger; heavier droplets carry farther, and those that land at a slant
+stretch along their flight. Each comes off one hair with that hair's paint (a
+double-loaded brush spatters both colors), and lands in the wet layer like
+any paint. It returns how many droplets landed; `b:fullness()` shows what is
+left on the brush.
+
 ## Covering an area
 
 ```lua
@@ -216,6 +323,8 @@ change:
 | `edge` | how the passage meets the mask's edge (below) |
 | `clip` | `true`: every bristle stops on the mask's edge; or a mask to clip to |
 | `hug` | `true` (default): strokes reach the mask's edges; `false` lets coverage thin there |
+| `piles` | graded color: `{{p1, w1}, {p2, w2}, ...}`, each weight a number or `function(x, y)`; each dip takes a mix of the piles by their weights at the stroke (the brush dipped into neighboring piles), so color changes continuously across one passage, with no seams between masks |
+| `scale_at` | the size of the marks across the area: a number or `function(x, y)` multiplying stroke length and brush width (smaller where things are far, larger near); the pass lays more strokes where they are smaller, so its coverage holds |
 | `fill` | `false` by default: gaps between strokes stay. Set `true` to follow the strokes with dabs into the gaps they left |
 | `order` | `"passages"` (default), `"scatter"`, `"down"`, `"across"` or a sweep angle |
 | `angle_jitter`, `curve` (`{bow, wave}`), `cross`, `drift` (`{amount, scale}`), `tail`, `broken`, `swell`, `clump`, `ruler` | how far the strokes depart from even ruler lines (`ruler=true` sets them straight and even) |
@@ -517,6 +626,9 @@ in canvas units, not a position and width/height.
 | `mode: "value"` | in grays |
 | `mode: "squint"` | blurred, as through half-closed eyes |
 | `mode: "mirror"` | flipped left to right |
+| `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
+| `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation; the lower the light, the harsher |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
@@ -524,13 +636,26 @@ in canvas units, not a position and width/height.
 The grid is drawn on the PNG only, never on the canvas, like the squares
 ruled over a drawing to transfer it.
 
-`look` with `palette: true` shows the palette instead of the canvas: a row
-for each pile a global holds, labeled with the global's name and the pile
-(as `print` gives it). Each row shows the pile laid thick; one thin coat
-(12 µm) and a very thin coat (4 µm) over this canvas's ground color; and
-the thin coat over a white card with a black stripe across it. It shows
-the pile's own paint, before the unevenness of a brushload. It takes no
+`look` with `palette: true` shows the palette board instead of the canvas:
+each live heap's masstone and body paint, with a smear dragged across a
+black stripe. It shows the heap's paint before the unevenness of a
+brushload. It takes no
 other option, and nothing on the canvas or the clock changes.
+
+| `look` with | shows |
+|---|---|
+| `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
+| `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height; repeat the earlier look's crop, modes, light and grid options to compare the same view |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage. A knife shows what is on it; a pile, a fresh load. It shows the paint on the knife, not how it would look laid |
+
+A survey can arrive in a partial batch to fit the painter's image budget.
+The reply lists the remaining tile paths; read them one at a time to inspect
+the rest of the canvas.
+
+A whole view defaults to 1000 pixels on its long side, reduced from the
+full-detail canvas: small marks, beads of paint and stray strokes can be
+hard to see in it. Survey the canvas after
+each campaign, and compare before and after.
 
 ## How chunks behave
 

@@ -356,15 +356,20 @@ pub struct Held {
     /// Painting with engine 3 (`with_engine`): its `Debug` names each
     /// bristle's `solvent`. Not printed itself.
     shows_solvent: bool,
+    /// Painting with engine 4 or later: its `Debug` gives each bristle's
+    /// paint its solvent and oil too. Not printed itself.
+    shows_oil: bool,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
-/// thinner, field for field, plus `solvent` when `show` (engine 3).
-struct BristleText<'a>(&'a Bristle, bool);
+/// thinner, field for field, plus `solvent` when `show` (engine 3); the
+/// paint's properties without solvent and oil unless `oil` (engine 4).
+struct BristleText<'a>(&'a Bristle, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
+        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
         let mut d = f.debug_struct("Bristle");
         d.field("rx", &b.rx)
             .field("ry", &b.ry)
@@ -375,7 +380,7 @@ impl std::fmt::Debug for BristleText<'_> {
             .field("prev", &b.prev)
             .field("vol", &b.vol)
             .field("lat", &b.lat)
-            .field("hide", &b.hide)
+            .field("hide", &hide)
             .field("cure", &b.cure);
         if self.1 {
             d.field("solvent", &b.solvent);
@@ -386,7 +391,7 @@ impl std::fmt::Debug for BristleText<'_> {
 
 impl std::fmt::Debug for Bristle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        BristleText(self, true).fmt(f)
+        BristleText(self, true, true).fmt(f)
     }
 }
 
@@ -396,13 +401,13 @@ impl std::fmt::Debug for Bristle {
 /// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
 impl std::fmt::Debug for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct List<'a>(&'a [Bristle], bool);
+        struct List<'a>(&'a [Bristle], bool, bool);
         impl std::fmt::Debug for List<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1))).finish()
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent)).finish()
+        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
     }
 }
 
@@ -465,13 +470,13 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5, 1.0],
+                    hide: [0.5, 0.5, 1.0, 0.0, 1.0],
                     cure: 0.0,
                     solvent: 0.0,
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -479,6 +484,7 @@ impl Held {
     /// the text it always was.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.shows_solvent = v >= 3;
+        self.shows_oil = v >= 4;
         self
     }
 
@@ -513,12 +519,42 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+        }
+    }
+
+    /// Dip only part of the brush: `amount` of `paint` goes into the bristles
+    /// `part` reaches, as much as each one takes. A painter double-loads a
+    /// brush this way (one side or corner in a second pile), and a brush
+    /// pulled through an unevenly knifed pile takes paint up in streaks; the
+    /// colors then come off side by side within one stroke and mingle as they
+    /// go. With `Part::ALL` this is `load`.
+    pub fn load_part(&mut self, paint: Paint, amount: f32, part: &Part) {
+        let lat = paint.latent();
+        let full = self.full();
+        let scatter = paint.scatter();
+        for (i, b) in self.bristles.iter_mut().enumerate() {
+            let w = part.weight(b.rx, i);
+            if w <= 0.0 {
+                continue;
+            }
+            let k = (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * w;
+            if paint.thinner > 0.0 {
+                // (a thinned load, as `load`: part paint, part solvent)
+                let v = amount * full * k;
+                let vp = v * (1.0 - paint.thinner);
+                b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                b.solvent += v * paint.thinner;
+                continue;
+            }
+            b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
         }
     }
 
@@ -547,6 +583,55 @@ impl Held {
     /// `Canvas::wet_total` (coats × square units).
     pub fn carried(&self) -> (f64, f64) {
         self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
+    }
+}
+
+/// Which of a brush's bristles a dip reaches, and how much each takes up
+/// (see `Held::load_part`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Part {
+    /// The edge of the brush's wide axis that goes into the pile: -1 one
+    /// edge, 1 the other, 0 the whole width alike.
+    pub side: f32,
+    /// The share of the width, from that edge, that reaches the paint (1 all).
+    pub share: f32,
+    /// How unevenly the bristles take it up: 0 alike, 1 in streaks (bands a
+    /// few bristles wide take much more, others little or none).
+    pub streak: f32,
+    /// The streaks' randomness (a new one for every dip).
+    pub seed: u64,
+}
+
+impl Part {
+    pub const ALL: Part = Part { side: 0.0, share: 1.0, streak: 0.0, seed: 0 };
+
+    /// How much of the dip bristle `i` (root offset `rx` across the wide
+    /// axis, about -1..1) takes, relative to an even dip (about 1 on
+    /// average over the part reached).
+    pub fn weight(&self, rx: f32, i: usize) -> f32 {
+        let mut w = 1.0;
+        if self.side != 0.0 && self.share < 1.0 {
+            // 0 at the far edge .. 1 at the dipped edge; a soft margin, as hairs splay
+            let t = (rx * self.side.signum() + 1.0) * 0.5;
+            let lo = 1.0 - self.share.clamp(0.0, 1.0);
+            w *= crate::smoothstep(lo - 0.08, lo + 0.08, t);
+        }
+        if self.streak > 0.0 {
+            // bands: neighboring bristles share a streak (a clump of hair goes in together)
+            let bands = 7.0;
+            let u = (rx + 1.0) * 0.5 * bands;
+            let (b0, f) = (u.floor(), u - u.floor());
+            let s = self.seed;
+            let a = crate::rng::hash2(b0 as i64, 91, s);
+            let c = crate::rng::hash2(b0 as i64 + 1, 91, s);
+            let band = a + (c - a) * crate::smoothstep(0.0, 1.0, f);
+            let own = crate::rng::hash2(i as i64, 92, s);
+            let n = 0.75 * band + 0.25 * own; // 0..1, mean 0.5
+            // n² has a mean of about 0.3: 3.3 n² keeps the dip's total about the same
+            let st = self.streak.clamp(0.0, 1.0);
+            w *= (1.0 - st) + st * (3.3 * n * n);
+        }
+        w.max(0.0)
     }
 }
 
@@ -657,6 +742,15 @@ pub(crate) struct Surf {
     /// Paint laid or moved updates the film's cure at once (see `add`;
     /// engine 2). Engine 1 left it to the next `wait`.
     cure_now: bool,
+    /// Engine 4: bristles in stiff paint gather into clumps that lay it in
+    /// ridges and furrows and plough it aside a clump's width (`exchange`).
+    clump: bool,
+    /// Engine 4: paint laid loses its solvent at once (it evaporates in
+    /// minutes), and an absorbent ground draws oil out of it (`add`).
+    lean: bool,
+    /// The ground's remaining absorbency per pixel (coats of oil; null when
+    /// none of it is absorbent or before engine 4).
+    absorb: *mut f32,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
@@ -689,6 +783,16 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
+            // engine 4: the solvent in the paint evaporates as it is laid
+            // (in minutes: before anything else can work it), leaving a film
+            // of the paint's own body that much thinner
+            let (v, hide) = if self.lean && hide[3] > 0.0 {
+                let mut h = hide;
+                h[3] = 0.0;
+                (v * (1.0 - hide[3].clamp(0.0, 0.95)), h)
+            } else {
+                (v, hide)
+            };
             let vol = &mut *self.vol.add(i);
             let l = &mut *self.lat.add(i);
             let hd = &mut *self.hide.add(i);
@@ -706,6 +810,24 @@ impl Surf {
                 p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
+            // engine 4: an absorbent ground under the film draws oil out of
+            // the paint just laid, until its pores are full: a thin wash goes
+            // lean (stiff, matte, quick to set), thick paint barely notices
+            if !self.absorb.is_null() {
+                let cap = &mut *self.absorb.add(i);
+                if *cap > 0.0 {
+                    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
+                    let take = (*cap).min(0.8 * oil_in);
+                    if take > 0.0 {
+                        *cap -= take;
+                        let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
+                        let lean = (take / film_oil).min(0.9);
+                        hd[4] *= 1.0 - lean;
+                        hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
+                        *vol = (t - take).max(0.0);
+                    }
+                }
+            }
         }
     }
 
@@ -768,6 +890,9 @@ impl Canvas {
             base: self.base.as_ref().unwrap().1.as_ptr(),
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
+            clump: self.engine >= 4,
+            lean: self.engine >= 4,
+            absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
@@ -892,7 +1017,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 3], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         ts += b.solvent;
@@ -910,7 +1035,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     for l in &mut lat {
         *l /= tv;
     }
-    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv];
+    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
     let share_s = k * ts / bristles.len() as f32;
@@ -1446,6 +1571,28 @@ unsafe fn exchange(
         } else {
             dep_total
         };
+        // engine 4: in stiff paint the hairs gather into clumps, a few hairs
+        // to a clump, more the stiffer the paint; a clump lays more and the
+        // gaps between clumps less, so the stroke lies in ridges and furrows
+        // along its length (the variation averages out across the brush).
+        // A pointed tip's few hairs lie together already.
+        // (the paint as it is on the brush: solvent makes it flow)
+        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
+        // how far the paint is stiff enough to hold hairs together: none in
+        // fluid paint, rising steeply in stiff
+        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
+            let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
+            let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
+            let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
+            let (b0, f) = (u.floor(), u - u.floor());
+            let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
+            let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
+            let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
+            (dep_total * (1.0 + 0.6 * stiffen * (2.0 * band - 1.0))).min(liquid * 0.95)
+        } else {
+            dep_total
+        };
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
@@ -1466,12 +1613,23 @@ unsafe fn exchange(
         // (see `touch_rb`): its contact is its track.
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
-        let off = if dep.is_some() { rb + 1.0 } else { 2.0 * hair };
+        // (engine 4: each hair still moves only its own share of paint, but a
+        // clump of hairs in stiff paint throws it aside the clump's width,
+        // up to a few pixels: walls along the stroke's edges, a bead ahead)
+        // (only the hairs along the brush's sides: inside it, a clump's
+        // neighbors hem it in, and its paint stays in the stroke)
+        let off = if dep.is_some() {
+            rb + 1.0
+        } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
+            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+        } else {
+            2.0 * hair
+        };
         let spread = dep.is_none();
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0; 3];
+        let mut got_h: Prop = [0.0; 5];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
@@ -1853,6 +2011,265 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
     }
     // whole-canvas pixels → buffer pixels
     bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy))
+}
+
+/// A flick of a loaded brush (spatter): the paint the hairs can't hold by
+/// capillarity flies off in droplets and lands in a cone toward the flick.
+///
+/// What flies is physical: only the loose paint beyond what each hair holds,
+/// more of it the harder the flick and the more fluid the paint (medium and
+/// turpentine thin it; blotted or stiff tube paint barely leaves the brush).
+/// A harder flick breaks it into more, smaller droplets. Each droplet comes
+/// off one hair and carries that hair's paint, so a double-loaded brush
+/// spatters both colors. Heavier droplets carry farther; those arriving at a
+/// slant stretch into ovals along their flight. They land in the wet layer
+/// like any paint: they mix into wet paint under them and dry with it.
+#[derive(Clone, Debug)]
+pub struct Spatter {
+    /// Where the brush is when it is flicked (canvas units).
+    pub at: (f32, f32),
+    /// The flick: its direction, and its length how far the paint carries
+    /// (canvas units).
+    pub toward: (f32, f32),
+    /// Half the angle of the cone the droplets fly in (radians).
+    pub spread: f32,
+    /// How hard the flick is, 0..1.
+    pub force: f32,
+    pub seed: u64,
+}
+
+/// A full load of a brush, in mm³ of paint, for its width in mm (a 10 mm
+/// brush holds about 0.08 ml).
+fn load_mm3(width_mm: f32) -> f32 {
+    0.08 * width_mm.max(0.5).powi(3)
+}
+
+/// Lay `v` coats of a droplet's liquid (the share `phi` solvent) on pixel `i`
+/// of the flick `id`: covered and the flick's own, as `drag` lays a hair's
+/// paint, and a thinned load's solvent into the film. With `capped`, no more
+/// than is left of the pixel's ceiling `cap` for this flick. Returns what was
+/// laid.
+///
+/// # Safety
+/// `i` is inside `sf`'s buffer window, and the canvas is exclusively borrowed.
+#[allow(clippy::too_many_arguments)]
+unsafe fn lay_droplet(sf: &Surf, i: usize, v: f32, phi: f32, cap: f32, capped: bool, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
+    let mut d = v.max(0.0);
+    // SAFETY: the caller's: i is inside the window, the canvas exclusively ours
+    unsafe {
+        if capped {
+            let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
+            d = d.min((cap - used).max(0.0));
+            *sf.laid_id.add(i) = id;
+            *sf.laid.add(i) = used + d;
+        }
+        if d > 0.0 {
+            *sf.cover.add(i) = 1.0;
+            sf.add(i, d * (1.0 - phi), lat, hide, cure);
+            if phi > 0.0 && !sf.solv.is_null() {
+                *sf.solv.add(i) += d * phi * COAT_UM;
+            }
+            *sf.stroke.add(i) = id;
+        }
+    }
+    d
+}
+
+impl Spatter {
+    /// Check that every number in the flick is finite (see `Gesture::validate`).
+    pub fn validate(&self) -> Result<(), String> {
+        let nums = [("at.x", self.at.0), ("at.y", self.at.1), ("toward.x", self.toward.0), ("toward.y", self.toward.1), ("spread", self.spread), ("force", self.force)];
+        match nums.iter().find(|(_, v)| !v.is_finite()) {
+            Some((name, v)) => Err(format!("Spatter {name} is not finite: {v}")),
+            None => Ok(()),
+        }
+    }
+
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
+    }
+}
+
+impl Canvas {
+    /// Flick a held brush (see `Spatter`); returns how many droplets landed.
+    pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
+        held.tool.assert_valid();
+        sp.assert_valid();
+        if self.engine < 3 {
+            self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
+        }
+        if let Some(m) = clip {
+            self.check_mask(m);
+        }
+        self.tally.touch();
+        let id = self.next_stroke_ids(1);
+        let mm_per_px = self.px_mm();
+        let sf = self.surf();
+        let s = sf.scale;
+        let mut rng = Rng::new(sp.seed);
+        let force = sp.force.clamp(0.0, 1.0);
+        let full = held.full();
+        let n = held.bristles.len().max(1) as f32;
+        let width_mm = held.tool.width * s * mm_per_px;
+        // mm³ of paint per unit of bristle volume
+        let per_vol = load_mm3(width_mm) / (full * n);
+        // each hair's loose paint, and the share of it the flick throws
+        let mut budget: Vec<f32> = held
+            .bristles
+            .iter()
+            .map(|b| {
+                let liquid = b.vol + b.solvent;
+                let stiff = (b.hide[1] * b.vol / liquid.max(1e-9)).clamp(0.0, 1.0);
+                let fluid = ((1.0 - stiff) * (1.0 + b.hide[3].clamp(0.0, 0.9))).clamp(0.0, 1.5);
+                let hold = full * (0.2 + 0.6 * stiff);
+                let loose = (liquid - hold).max(0.0);
+                loose * (force.powf(0.8) * (0.15 + 0.6 * fluid)).clamp(0.0, 0.95)
+            })
+            .collect();
+        let total: f32 = budget.iter().sum();
+        if total <= 0.0 {
+            return 0;
+        }
+        let stiff_mean = held.bristles.iter().map(|b| b.hide[1] * b.vol / (b.vol + b.solvent).max(1e-9)).sum::<f32>() / n;
+        // droplet sizes (radius in flight, mm): log-normal, smaller the harder the flick
+        let r_med = (0.32 * (1.25 - force) * (0.6 + 0.8 * stiff_mean)).clamp(0.04, 1.2);
+        let reach = (sp.toward.0 * sp.toward.0 + sp.toward.1 * sp.toward.1).sqrt().max(1e-3);
+        let dir = sp.toward.1.atan2(sp.toward.0);
+        let spread = sp.spread.clamp(0.0, 1.5);
+        let px_mm2 = mm_per_px * mm_per_px;
+        let (cx0, cy0) = (sp.at.0 * s, sp.at.1 * s);
+        let mut bounds: Bounds = None;
+        let mut count = 0usize;
+        let mut left = total;
+        let mut cum: Vec<f32> = Vec::with_capacity(budget.len());
+        let mut guard = 0;
+        while left > total * 0.002 && guard < 40000 {
+            guard += 1;
+            // the hair it comes off: by how much loose paint each still has
+            cum.clear();
+            let mut acc = 0.0;
+            for &v in &budget {
+                acc += v;
+                cum.push(acc);
+            }
+            if acc <= 0.0 {
+                break;
+            }
+            let pick = rng.f() * acc;
+            let bi = cum.iter().position(|&c| c >= pick).unwrap_or(budget.len() - 1);
+            let r = (r_med * (0.55 * rng.normal()).exp()).clamp(0.03, 2.5);
+            let want = (4.0 / 3.0) * std::f32::consts::PI * r * r * r / per_vol;
+            let take = want.min(budget[bi]);
+            budget[bi] -= take;
+            left -= take;
+            let vol_mm3 = take * per_vol;
+            let b = &mut held.bristles[bi];
+            let solvent_share = b.solvent / (b.vol + b.solvent).max(1e-9);
+            b.vol = (b.vol - take * (1.0 - solvent_share)).max(0.0);
+            b.solvent = (b.solvent - take * solvent_share).max(0.0);
+            // flight: off the flick's line by the cone, farther for heavier drops
+            let th = dir + (0.5 * spread * rng.normal()).clamp(-1.2 * spread, 1.2 * spread);
+            let d = reach * (0.35 + 0.65 * rng.f()) * (r / r_med).powf(0.25).clamp(0.5, 1.6);
+            let (px, py) = (cx0 + th.cos() * d * s, cy0 + th.sin() * d * s);
+            // on impact it spreads, less for stiff paint; a slanting arrival stretches it
+            let stiff = (b.hide[1] * (1.0 - solvent_share)).clamp(0.0, 1.0);
+            let r_land = r * (2.2 - 0.9 * stiff) / mm_per_px;
+            let stretch = 1.0 + 1.2 * force * (d / reach) * rng.f();
+            let (ra, rb) = ((r_land * stretch.sqrt()).max(0.35), (r_land / stretch.sqrt()).max(0.35));
+            let area_px = std::f32::consts::PI * ra * rb;
+            let coats_mean = vol_mm3 / (area_px * px_mm2).max(1e-9) * 1000.0 / crate::surface::COAT_UM;
+            let (ct, st) = (th.cos(), th.sin());
+            let ext = ra.max(rb) + 1.0;
+            let (x0, x1) = ((px - ext).floor() as i64, (px + ext).ceil() as i64);
+            let (y0, y1) = ((py - ext).floor() as i64, (py + ext).ceil() as i64);
+            let lat = b.lat;
+            let hide = b.hide;
+            let cure = b.cure;
+            // dome-shaped: thickest in the middle; weights normalised so the droplet's volume lands
+            let mut cells: Vec<(usize, usize, f32)> = Vec::new();
+            let mut wsum = 0.0;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    if x < 0 || y < 0 || x as usize >= sf.fw || y as usize >= sf.fh {
+                        continue;
+                    }
+                    let (dx, dy) = (x as f32 + 0.5 - px, y as f32 + 0.5 - py);
+                    let (u, v) = ((dx * ct + dy * st) / ra, (-dx * st + dy * ct) / rb);
+                    let q = u * u + v * v;
+                    let w = if q < 1.0 { (1.0 - q).sqrt() } else if ra < 1.0 && q < 2.0 { 0.15 * (2.0 - q) } else { 0.0 };
+                    if w <= 0.0 {
+                        continue;
+                    }
+                    wsum += w;
+                    cells.push((x as usize, y as usize, w));
+                }
+            }
+            if wsum <= 0.0 {
+                continue;
+            }
+            // a thinned droplet is liquid: a pixel takes no more of the flick's
+            // liquid than a stroke may lay there (crate::thinner, the
+            // stroke's ceiling, as `drag`), and the rest runs into the pixels
+            // around it; what finds no room there runs off
+            let capped = solvent_share > 0.0 && !sf.laid.is_null() && !sf.laid_id.is_null();
+            let cap = if capped { crate::thinner::stroke_limit_um(solvent_share) / COAT_UM } else { f32::INFINITY };
+            let mut landed = false;
+            let mut spill: Vec<(usize, usize, f32)> = Vec::new();
+            for &(x, y, w) in &cells {
+                if x < sf.ox || y < sf.oy || x >= sf.ox + sf.w || y >= sf.oy + sf.h {
+                    continue;
+                }
+                let m = clip.map(|m| m.data[y * sf.fw + x]).unwrap_or(1.0);
+                if m <= 0.0 {
+                    continue;
+                }
+                let i = (y - sf.oy) * sf.w + (x - sf.ox);
+                let v = coats_mean * area_px * w / wsum * m;
+                // SAFETY: exclusive &mut self; i is inside the buffer window.
+                let d = unsafe { lay_droplet(&sf, i, v, solvent_share, cap, capped, id, &lat, hide, cure) };
+                if v - d > 0.0 {
+                    spill.push((x, y, v - d));
+                }
+                if d > 0.0 {
+                    grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
+                    // (a droplet has landed only where it laid paint: not under a mask's zero)
+                    landed = true;
+                }
+            }
+            for (x, y, v) in spill {
+                // into the eight pixels around, an eighth each as far as each has room
+                let share = v / 8.0;
+                let mut left = v;
+                for (dx, dy) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                    let (nx, ny) = (x as i64 + dx, y as i64 + dy);
+                    if left <= 0.0 || nx < sf.ox as i64 || ny < sf.oy as i64 || nx >= (sf.ox + sf.w) as i64 || ny >= (sf.oy + sf.h) as i64 {
+                        continue;
+                    }
+                    let (nx, ny) = (nx as usize, ny as usize);
+                    if clip.map(|m| m.data[ny * sf.fw + nx]).unwrap_or(1.0) <= 0.0 {
+                        continue;
+                    }
+                    let i = (ny - sf.oy) * sf.w + (nx - sf.ox);
+                    // SAFETY: as above; i is inside the buffer window.
+                    let d = unsafe { lay_droplet(&sf, i, share.min(left), solvent_share, cap, capped, id, &lat, hide, cure) };
+                    if d > 0.0 {
+                        left -= d;
+                        grow(&mut bounds, nx - sf.ox, ny - sf.oy, nx - sf.ox + 1, ny - sf.oy + 1);
+                    }
+                }
+            }
+            if landed {
+                count += 1;
+            }
+        }
+        if let Some((x0, y0, x1, y1)) = bounds {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+        count
+    }
 }
 
 #[cfg(test)]
@@ -2329,8 +2746,8 @@ mod kernel_traps {
     /// `wait` counts as a film (up to 1.05e-5), with cure 0.1, the rest
     /// thick wet paint with cure 0.05.
     fn thin_and_thick() -> Canvas {
-        let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0);
-        assert!(c.engine >= 2);
+        // (the recorded hashes are engine 2's)
+        let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0).with_engine(2);
         c.wait(1.0);
         let n = c.f.w * c.f.h;
         assert_eq!(c.wet.clock.px.len(), n, "drying state allocated");
@@ -2470,5 +2887,450 @@ mod kernel_traps {
         }
         assert!(differ > 0, "the cropped blur is bit-identical here: box_blur no longer keeps a running sum?");
         eprintln!("cropped box blur: {differ} of 1600 pixels differ, by up to {max:e}");
+    }
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+    use crate::color::hex;
+
+    fn vols(h: &Held) -> Vec<(f32, f32)> {
+        h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
+    }
+
+    #[test]
+    fn whole_part_is_an_ordinary_load() {
+        let mut a = Held::new(Tool::filbert(12.0), 7);
+        let mut b = Held::new(Tool::filbert(12.0), 7);
+        a.load(Paint::body(hex("#445566")), 0.8);
+        b.load_part(Paint::body(hex("#445566")), 0.8, &Part::ALL);
+        assert_eq!(vols(&a), vols(&b));
+    }
+
+    #[test]
+    fn a_side_dip_reaches_only_that_side() {
+        let mut h = Held::new(Tool::filbert(12.0), 7);
+        h.load_part(Paint::body(hex("#c04040")), 0.8, &Part { side: 1.0, share: 0.4, streak: 0.0, seed: 1 });
+        for (rx, v) in vols(&h) {
+            if rx < -0.1 {
+                assert_eq!(v, 0.0, "bristle at {rx} took paint");
+            }
+            if rx > 0.6 {
+                assert!(v > 0.0, "bristle at {rx} took none");
+            }
+        }
+    }
+
+    #[test]
+    fn streaks_keep_about_the_same_paint() {
+        let mut even = Held::new(Tool::filbert(12.0), 7);
+        even.load(Paint::body(hex("#445566")), 0.8);
+        let mut sum = 0.0;
+        for seed in 0..40 {
+            let mut h = Held::new(Tool::filbert(12.0), 7);
+            h.load_part(Paint::body(hex("#445566")), 0.8, &Part { streak: 1.0, seed, ..Part::ALL });
+            sum += h.fullness() / even.fullness();
+            // and the bristles take it unevenly
+            let v: Vec<f32> = h.bristles.iter().map(|b| b.vol).collect();
+            let (lo, hi) = v.iter().fold((f32::MAX, 0f32), |(l, m), &x| (l.min(x), m.max(x)));
+            assert!(hi > 3.0 * lo.max(1e-9), "seed {seed}: {lo}..{hi}");
+        }
+        let mean = sum / 40.0;
+        assert!((0.8..1.2).contains(&mean), "mean {mean}");
+    }
+}
+
+/// The share of a tube paint's volume that is oil (about 30–45%).
+const OIL_SHARE: f32 = 0.4;
+
+/// How far (µm) below the paint under a knife's blade it is pressed into the
+/// hollows of the surface (`Canvas::knife`).
+const PRESS_IN_UM: f32 = 60.0;
+
+/// The span (mm) over which a knife's flexible blade follows the relief under
+/// it; finer hollows than that it bridges (`Canvas::knife`).
+const FLEX_MM: f32 = 4.0;
+
+/// A painting knife: a flat, rigid steel blade, `width` units long, and the
+/// bead of paint it carries (coats × units², as a bristle's load). It lays
+/// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
+/// ridges and a bead where it lifts, and scrapes wet paint off.
+#[derive(Clone, Debug)]
+pub struct Knife {
+    pub width: f32,
+    vol: f32,
+    solvent: f32,
+    lat: Latent,
+    hide: Prop,
+    cure: f32,
+}
+
+impl Knife {
+    /// Bound the work before resampling a knife path (pixel-space samples).
+    pub fn check_path(pts: &[(f32, f32)], scale: f32) -> Result<(), &'static str> {
+        if pts.is_empty() || pts.len() > 2000 || !(scale.is_finite() && scale > 0.0)
+            || pts.iter().any(|&(x, y)| !x.is_finite() || !y.is_finite() || x.abs() > 20_000.0 || y.abs() > 20_000.0)
+        {
+            return Err("points must be finite and on or near the canvas (at most 2000)");
+        }
+        let length = crate::path::length(pts) * scale;
+        if !length.is_finite() || length > 70_000.0 {
+            return Err("path is too long to sample");
+        }
+        Ok(())
+    }
+
+    pub fn new(width: f32) -> Self {
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+    }
+    /// A full load: a bead along the blade twice its length deep and 12
+    /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
+    pub fn full(&self) -> f32 {
+        self.width * self.width * 2.0 * 12.0
+    }
+    /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
+    pub fn load(&mut self, paint: Paint, amount: f32) {
+        // (no amount that is not a number: it would leave the blade's paint NaN)
+        if !(0.0..=1.0).contains(&amount) || !self.width.is_finite() || !(1.0..=1000.0).contains(&self.width) {
+            return;
+        }
+        let liquid = amount * self.full();
+        let v = liquid * (1.0 - paint.thinner);
+        self.solvent += liquid * paint.thinner;
+        let lat = paint.latent();
+        self.cure = mix_cure(self.cure, self.vol, 0.0, v);
+        crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
+    }
+    /// The paint on the blade as one paint (what it has picked up, mixed by
+    /// volume), or None on a clean blade. For looking at it: nothing changes.
+    pub fn paint(&self) -> Option<Paint> {
+        if self.vol <= 1e-9 {
+            return None;
+        }
+        let color = mixbox::latent_to_linear_float_rgb(&self.lat);
+        let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
+        Some(Paint { solvent: self.hide[3], oil: self.hide[4], thinner: self.solvent / (self.vol + self.solvent), ..p })
+    }
+    /// Wipe the blade clean on the rag.
+    pub fn wipe(&mut self) {
+        self.vol = 0.0;
+        self.solvent = 0.0;
+    }
+    /// Paint on the blade, relative to a full load.
+    pub fn fullness(&self) -> f32 {
+        (self.vol + self.solvent) / self.full()
+    }
+}
+
+impl Canvas {
+    /// Drag a knife along `pts` (units), its blade held across the path or at
+    /// a fixed `angle` (radians), pressed `pressure` (start, end; 0..1). The
+    /// blade rests on the highest points of the dry surface under it and
+    /// stands off them by a gap that closes as it is pressed: a light touch
+    /// rides some 0.3 mm up, a full press scrapes down to the dry paint. Wet
+    /// paint standing above the blade is cut off and carried in its bead,
+    /// mixing with it, or at the blade's ends pressed out sideways into
+    /// ridges. Where the surface lies below the blade, within the gap of it,
+    /// `lay` fills it from the bead to the blade's level: a slab with a flat
+    /// top, or over dry impasto paint on its peaks only. When the blade
+    /// lifts, the share `lift` of the bead stays where it last was.
+    pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
+        // (the blade's length is a public field: nothing to pull with one that is no length)
+        if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
+            return;
+        }
+        self.assert_thinner_supported(k.solvent > 0.0, "Canvas::knife");
+        self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
+        let id = self.next_stroke_ids(1);
+        // engine 5: knife-laid paint tears where it parts from the blade:
+        // at the slab's ends, its leading edge, and where the blade's reach
+        // into the hollows runs out (`tn`, a noise along and across the blade)
+        let tears = self.engine >= 5;
+        // (the paint the tears held back under the blade: back on it at the end)
+        let (mut held, mut held_solvent) = (0.0f32, 0.0f32);
+        let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
+        let height: *const f32 = self.height.as_ptr();
+        let sf = self.surf();
+        let s = sf.scale;
+        let px_area = 1.0 / (s * s);
+        let p: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| (x * s, y * s)).collect();
+        let path = if p.len() >= 2 { crate::path::densify(&p) } else { vec![p[0], p[0]] };
+        let mut arc = vec![0.0f32; path.len()];
+        for i in 1..path.len() {
+            arc[i] = arc[i - 1] + ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
+        }
+        let total = arc[arc.len() - 1].max(1e-6);
+        let half = k.width * s * 0.5;
+        // mm per pixel
+        let s_mm = self.px_mm();
+        // the tears' noise: cells per pixel along the path (0.9 and 2.7 to
+        // the mm, at most a cell to 3 and to 2 pixels) and cells across half
+        // the blade (4 and 11, at least 2 pixels each)
+        let tear_d = ((0.9 * s_mm).min(1.0 / 3.0), (2.7 * s_mm).min(0.5));
+        let tear_u = (4.0f32.min(half / 2.0).max(1.0), 11.0f32.min(half / 2.0).max(1.0));
+        let (fw, fh) = (sf.fw as isize, sf.fh as isize);
+        let pix = |x: f32, y: f32| -> Option<usize> {
+            let (xi, yi) = (x.floor() as isize, y.floor() as isize);
+            if xi < sf.ox as isize || yi < sf.oy as isize || xi >= (sf.ox + sf.w) as isize || yi >= (sf.oy + sf.h) as isize || xi >= fw || yi >= fh {
+                return None;
+            }
+            Some((yi as usize - sf.oy) * sf.w + xi as usize - sf.ox)
+        };
+        let mut bounds: Bounds = None;
+        let step = 0.7f32;
+        let n = ((total / step).ceil() as usize).max(1);
+        let mut j = 0usize;
+        let mut last = (path[0], (1.0f32, 0.0f32));
+        for t in 0..=n {
+            let d = total * t as f32 / n as f32;
+            while j + 1 < path.len() - 1 && arc[j + 1] < d {
+                j += 1;
+            }
+            let (a, b) = (path[j], path[(j + 1).min(path.len() - 1)]);
+            let seg = (arc[(j + 1).min(path.len() - 1)] - arc[j]).max(1e-6);
+            let f = ((d - arc[j]) / seg).clamp(0.0, 1.0);
+            let c = (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
+            let dir = {
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                let m = (dx * dx + dy * dy).sqrt();
+                if m > 1e-6 { (dx / m, dy / m) } else { last.1 }
+            };
+            last = (c, dir);
+            let e = match angle {
+                Some(a) => (a.cos(), a.sin()),
+                None => (-dir.1, dir.0),
+            };
+            let pr = pressure.0 + (pressure.1 - pressure.0) * (d / total);
+            // the gap between blade and the dry surface's peaks, µm
+            let gap = 300.0 * (1.0 - pr.clamp(0.0, 1.0)).powf(1.5);
+            // the blade's pixels, and the highest dry point under it
+            let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
+            let mut blade: Vec<(usize, f32, (f32, f32))> = Vec::with_capacity(nb + 1);
+            for q in 0..=nb {
+                let u = -half + 2.0 * half * q as f32 / nb as f32;
+                let (x, y) = (c.0 + e.0 * u, c.1 + e.1 * u);
+                if let Some(i) = pix(x, y) {
+                    if blade.last().map(|b| b.0) != Some(i) {
+                        blade.push((i, u / half, (x, y)));
+                    }
+                }
+            }
+            if blade.is_empty() {
+                continue;
+            }
+            // the steel flexes over broad relief and bridges fine hollows: the
+            // blade rests on the highest point within FLEX_MM along it
+            let hs: Vec<f32> = blade.iter().map(|b| unsafe { *height.add(b.0) }).collect();
+            let reach = ((FLEX_MM / (s_mm * 0.7)).ceil() as usize).max(1);
+            let rest: Vec<f32> = (0..hs.len()).map(|q| hs[q.saturating_sub(reach)..(q + reach + 1).min(hs.len())].iter().cloned().fold(f32::MIN, f32::max)).collect();
+            for (bi, &(i, u, (x, y))) in blade.iter().enumerate() {
+                let plane = rest[bi] + gap;
+                // the tear here: 0..1, coarse along the blade, finer along the
+                // path: about a millimetre across, but never finer than a few
+                // pixels, so a small canvas (a sketch, a preview) tears too,
+                // more coarsely, where a pixel is wider than a tear
+                let tn = if tears {
+                    crate::surface::vnoise(u * tear_u.0 + 7.0, d * tear_d.0, tseed) * 0.7 + crate::surface::vnoise(u * tear_u.1, d * tear_d.1, tseed ^ 0x51) * 0.3
+                } else {
+                    0.5
+                };
+                // SAFETY: exclusive &mut self; the knife is one tool on its own
+                unsafe {
+                    let v = *sf.vol.add(i);
+                    let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / crate::surface::COAT_UM };
+                    let top = *height.add(i) + (v + sol) * crate::surface::COAT_UM;
+                    let fl = if sf.dry.is_null() { 1.0 } else { crate::drying::fluid((*sf.dry.add(i)).cure) };
+                    if top > plane && v > 1e-6 {
+                        // cut off what stands above the blade (setting paint resists)
+                        let cut = ((top - plane) / crate::surface::COAT_UM).min(v + sol) * fl;
+                        let ex = cut * v / (v + sol);
+                        let ex_solvent = cut * sol / (v + sol);
+                        if ex <= 1e-7 {
+                            continue;
+                        }
+                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
+                        let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
+                        sf.take(i, ex);
+                        if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
+                        // pressed out past the blade's end into a ridge (off
+                        // the canvas's edge there is nowhere to press it: it
+                        // stays on the blade)
+                        let o = half * u.signum() * 0.2 + 1.5 * u.signum();
+                        let ridge = if u.abs() > 0.85 { pix(x + e.0 * o, y + e.1 * o) } else { None };
+                        if let Some(jx) = ridge {
+                            sf.add(jx, ex, &l, hd, cure);
+                            if !sf.solv.is_null() { *sf.solv.add(jx) += ex_solvent * crate::surface::COAT_UM; }
+                            *sf.cover.add(jx) = 1.0;
+                            grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
+                        } else {
+                            let tv = ex * px_area;
+                            k.solvent += ex_solvent * px_area;
+                            k.cure = mix_cure(k.cure, k.vol, cure, tv);
+                            crate::wet::mix_into(&mut k.vol, &mut k.lat, &mut k.hide, tv, &l, hd);
+                        }
+                    } else if lay
+                        && top < plane
+                        && tears
+                        && plane - top <= 2.0 * gap + PRESS_IN_UM
+                        && (plane - top > (2.0 * gap + PRESS_IN_UM) * (0.45 + 1.1 * tn) || u.abs() > 0.72 && tn < (u.abs() - 0.72) / 0.28 * 1.1 || d < (1.0 + 7.0 * tn) / s_mm)
+                    {
+                        // a tear: the paint a whole slab would have left here
+                        // parts with the blade and stays under it, out of the
+                        // bead, so a torn pull runs out where a whole one
+                        // does and covers less (once for each pixel)
+                        if k.vol > 1e-9 && *sf.stroke.add(i) != id {
+                            let liquid = k.vol + k.solvent;
+                            let hold = ((plane - top) / crate::surface::COAT_UM).min(liquid / px_area * 0.25) * px_area;
+                            let solvent = hold * k.solvent / liquid;
+                            k.solvent -= solvent;
+                            held_solvent += solvent;
+                            let hold = hold - solvent;
+                            k.vol -= hold;
+                            held += hold;
+                        }
+                    } else if lay && top < plane && plane - top <= (2.0 * gap + PRESS_IN_UM) * if tears { 0.45 + 1.1 * tn } else { 1.0 } && k.vol > 1e-9 {
+                        // the paint under the blade is pressed into the
+                        // surface's hollows as deep as the gap and some tens
+                        // of µm more (the weave, a ground's marks); deeper
+                        // hollows stay bare, so a light pull over dry
+                        // impasto catches its ridges and skips its valleys
+                        let want = (plane - top) / crate::surface::COAT_UM;
+                        let liquid = k.vol + k.solvent;
+                        let give = want.min(liquid / px_area * 0.25);
+                        let phi = k.solvent / liquid;
+                        if give > 1e-7 {
+                            sf.add(i, give * (1.0 - phi), &k.lat, k.hide, k.cure);
+                            if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
+                            *sf.cover.add(i) = 1.0;
+                            k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
+                            k.solvent = (k.solvent - give * phi * px_area).max(0.0);
+                        }
+                    }
+                    *sf.stroke.add(i) = id;
+                    grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);
+                }
+            }
+        }
+        // lifting off: part of the bead stays as a ridge along the blade
+        if lift > 0.0 && k.vol > 1e-9 {
+            let (c, dir) = last;
+            let e = match angle {
+                Some(a) => (a.cos(), a.sin()),
+                None => (-dir.1, dir.0),
+            };
+            let phi = k.solvent / (k.vol + k.solvent);
+            let leave = (k.vol + k.solvent) * lift.clamp(0.0, 1.0);
+            let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
+            let mut cells = Vec::new();
+            for q in 0..=nb {
+                let u = -half + 2.0 * half * q as f32 / nb as f32;
+                for back in [0.0f32, 1.0, 2.0] {
+                    let (x, y) = (c.0 + e.0 * u + dir.0 * back, c.1 + e.1 * u + dir.1 * back);
+                    if let Some(i) = pix(x, y) {
+                        // (where it tears, the ridge left at the lift breaks up)
+                        let t = if tears { smoothstep(0.25, 0.65, crate::surface::vnoise(u / half * 6.0 + 3.0, back, tseed ^ 0x11F7)) } else { 1.0 };
+                        cells.push((i, (1.0 - (u / half).powi(2)).max(0.2) * (1.0 - 0.3 * back) * t, (x, y)));
+                    }
+                }
+            }
+            let tw: f32 = cells.iter().map(|c| c.1).sum();
+            if tw > 0.0 {
+                for (i, wgt, (x, y)) in cells {
+                    let v = leave * wgt / tw / px_area;
+                    // SAFETY: as above
+                    unsafe {
+                        sf.add(i, v * (1.0 - phi), &k.lat, k.hide, k.cure);
+                        if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
+                        *sf.cover.add(i) = 1.0;
+                        *sf.stroke.add(i) = id;
+                    }
+                    grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);
+                }
+                k.vol = (k.vol - leave * (1.0 - phi)).max(0.0);
+                k.solvent = (k.solvent - leave * phi).max(0.0);
+            }
+        }
+        k.vol += held;
+        k.solvent += held_solvent;
+        // (the window's own pixels, as a brush's bounds: a crop's start at its corner)
+        if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
+            self.wet.touch(x0, y0, x1, y1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod knife_tests {
+    use super::*;
+    use crate::hex;
+
+    #[test]
+    fn knife_preserves_thinner_when_loading_laying_and_scraping() {
+        let mut c = Canvas::new(120, 1.0, hex("#ffffff")).with_engine(4);
+        let mut k = Knife::new(30.0);
+        k.load(Paint::body(hex("#224466")).with_thinner(0.75), 0.5);
+        let liquid = k.full() * 0.5;
+        assert!((k.vol / liquid - 0.25).abs() < 1e-6, "the blade stores pigment separately from thinner");
+        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (0.4, 0.4), None, true, 0.1);
+        let paint: f32 = c.wet.vol.iter().sum();
+        let solvent: f32 = c.wet.solv.iter().sum::<f32>() / crate::surface::COAT_UM;
+        assert!(paint > 0.0 && solvent > 0.0, "a thinned knife lays both liquids");
+        assert!((solvent / paint - 3.0).abs() < 1e-3);
+        k.wipe();
+        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (1.0, 1.0), None, false, 0.0);
+        assert!(k.vol > 0.0);
+        let before = c.wet.solv.iter().sum::<f32>();
+        c.knife(&mut k, &[(200.0, 600.0), (700.0, 600.0)], (0.4, 0.4), None, true, 0.1);
+        assert!(c.wet.solv.iter().sum::<f32>() > before, "scraped thinner remains on the blade for the next pull");
+    }
+}
+
+#[cfg(test)]
+mod spatter_tests {
+    use super::*;
+    use crate::color::hex;
+
+    #[test]
+    fn review_spatter_transfers_solvent_and_covers_its_drops() {
+        let mut c = Canvas::new(200, 1.0, hex("#e8e0d0")).with_size_mm(300.0);
+        c.wet.cover.fill(0.1);
+        let mut h = Held::new(Tool::round_sable(12.0), 3);
+        h.load(Paint::new(hex("#b03020"), 0.9, 0.1).with_thinner(0.5), 1.0);
+        let before: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(c.spatter(&mut h, &Spatter { at: (300.0, 400.0), toward: (100.0, 0.0), spread: 0.2, force: 0.9, seed: 9 }, None) > 0);
+        let after: f32 = h.bristles.iter().map(|b| b.solvent).sum();
+        assert!(after < before && c.solvent_total() > 0.0, "spatter must transfer the load's solvent");
+        assert!(c.wet.vol.iter().zip(&c.wet.cover).filter(|(v,_)| **v > 0.0).all(|(_,cover)| *cover == 1.0));
+    }
+
+    fn flick(stiff: f32, force: f32) -> (usize, f32, f32) {
+        let mut c = Canvas::new(400, 2.0, hex("#e8e0d0")).with_size_mm(300.0);
+        let mut h = Held::new(Tool::round_sable(8.0), 3);
+        h.load(Paint::new(hex("#b03020"), 0.9, stiff), 1.0);
+        let before = h.fullness();
+        let n = c.spatter(&mut h, &Spatter { at: (100.0, 150.0), toward: (150.0, 0.0), spread: 0.4, force, seed: 9 }, None);
+        let laid: f32 = c.wet.vol.iter().sum();
+        (n, before - h.fullness(), laid)
+    }
+
+    /// Fluid paint flies; stiff paint mostly stays on the brush; a harder
+    /// flick throws more; what leaves the brush lands on the canvas.
+    #[test]
+    fn fluid_paint_flies_and_stiff_paint_stays() {
+        let (n_fluid, out_fluid, laid_fluid) = flick(0.1, 0.9);
+        let (_, out_stiff, _) = flick(0.95, 0.9);
+        let (_, out_soft, _) = flick(0.1, 0.2);
+        assert!(n_fluid > 20, "a hard flick of fluid paint throws many droplets ({n_fluid})");
+        assert!(out_fluid > 2.0 * out_stiff, "stiff paint stays on the brush ({out_fluid} vs {out_stiff})");
+        assert!(out_fluid > out_soft, "a harder flick throws more ({out_fluid} vs {out_soft})");
+        assert!(laid_fluid > 0.0, "the droplets land in the wet layer");
+    }
+
+    /// Same seed, same spatter.
+    #[test]
+    fn spatter_is_deterministic() {
+        assert_eq!(flick(0.2, 0.7).0, flick(0.2, 0.7).0);
+        assert_eq!(flick(0.2, 0.7).2.to_bits(), flick(0.2, 0.7).2.to_bits());
     }
 }

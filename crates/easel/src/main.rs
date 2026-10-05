@@ -203,12 +203,11 @@ fn short_sock(dir: &Path) -> PathBuf {
     if p.as_os_str().len() < 100 {
         return p;
     }
-    use std::hash::{Hash, Hasher};
-    let mut h = std::hash::DefaultHasher::new();
-    dir.hash(&mut h);
-    let file = format!("{:016x}.sock", h.finish());
-    let me = std::env::home_dir().and_then(|d| std::fs::metadata(d).ok()).map(|m| std::os::unix::fs::MetadataExt::uid(&m));
-    let Some(uid) = me else { return p };
+    // fnv1a, not DefaultHasher: client and server must agree across Rust releases
+    let file = format!("{:016x}.sock", fnv1a(dir.as_os_str().as_encoded_bytes()));
+    // the user is whoever owns the studio (the nearest existing ancestor of the session dir)
+    let owner = dir.ancestors().find_map(|a| std::fs::metadata(a).ok()).map(|m| std::os::unix::fs::MetadataExt::uid(&m));
+    let Some(uid) = owner else { return p };
     for base in [std::env::temp_dir(), PathBuf::from("/tmp")] {
         let private = base.join(format!("easel-{uid}"));
         let s = private.join(&file);
@@ -1421,7 +1420,8 @@ mod tests {
         use std::os::unix::fs::MetadataExt;
         let short = std::path::Path::new("/s/out/easel/p");
         assert_eq!(super::short_sock(short), short.join("sock"));
-        let long = std::path::PathBuf::from(format!("/{}/out/easel/p", "d".repeat(120)));
+        // under the temp dir, so its nearest existing ancestor is this user's
+        let long = std::env::temp_dir().join("d".repeat(120)).join("out/easel/p");
         let s = super::short_sock(&long);
         assert!(s.as_os_str().len() < 100, "{s:?}");
         let private = std::fs::symlink_metadata(s.parent().unwrap()).unwrap();

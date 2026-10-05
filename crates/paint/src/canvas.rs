@@ -560,18 +560,34 @@ impl Canvas {
         let um_px = self.px_mm() * 1000.0;
         // the surface: dry height plus the wet film where paint is wet
         let surf = self.wet_surface();
-        let (az, el) = (azimuth.to_radians(), elevation.clamp(3.0, 89.0).to_radians());
+        // elevation as the easel takes it, 0 to 90 degrees: overhead (90) has no
+        // horizontal part and casts no shadow; grazing (0) is a lamp in the
+        // canvas's plane, which lights no flat paint, only slopes turned to it
+        let elevation = elevation.clamp(0.0, 90.0);
+        let (overhead, grazing) = (elevation >= 90.0, elevation <= 1e-3);
+        let (az, el) = (azimuth.to_radians(), elevation.to_radians());
         // toward the light, in pixel axes (y runs down: light from the top is -y)
-        let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
-        let k = 0.5 / um_px;
-        // µm the light ray climbs per pixel toward the light
-        let rise = el.tan() * um_px;
-        let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
-        let steps = (((hi - lo) / rise).ceil() as usize).max(1).min(w.saturating_add(h));
-        let (sx, sy) = {
-            let m = (lx * lx + ly * ly).sqrt().max(1e-6);
-            (lx / m, ly / m)
+        let (lx, ly, lz) = if overhead {
+            (0.0, 0.0, 1.0)
+        } else if grazing {
+            (az.cos(), -az.sin(), 0.0)
+        } else {
+            (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin())
         };
+        let k = 0.5 / um_px;
+        // µm the light ray climbs per pixel toward the light (overhead and grazing, none)
+        let rise = if overhead || grazing { 0.0 } else { el.tan() * um_px };
+        let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
+        let m = (lx * lx + ly * ly).sqrt();
+        let march = m > 1e-6 && (rise > 0.0 || grazing);
+        let steps = if !march {
+            0
+        } else if grazing {
+            w.saturating_add(h)
+        } else {
+            (((hi - lo) / rise).ceil() as usize).max(1).min(w.saturating_add(h))
+        };
+        let (sx, sy) = if march { (lx / m, ly / m) } else { (0.0, 0.0) };
         let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
         // shadows are cast by the relief a pixel can resolve: bumps finer than
         // a pixel (a stroke's furrows) shade by their slope, above, and don't
@@ -604,19 +620,24 @@ impl Canvas {
                 let mut lit = 1.0f32;
                 for s in 1..=steps {
                     let ray_height = h0 + rise * s as f32;
-                    if ray_height > shade_hi || lit == 0.0 {
+                    // (at or above the highest paint nothing further shades it: a
+                    // grazing ray, which doesn't climb, stops there at once)
+                    if ray_height >= shade_hi || lit == 0.0 {
                         break;
                     }
                     let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
                     if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 { break; }
                     let over = sat(px.round() as isize, py.round() as isize) - ray_height;
                     if over > 0.0 {
-                        lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
+                        // (grazing, anything higher hides the lamp)
+                        lit = if grazing { 0.0 } else { lit.min(1.0 - (over / (0.5 * rise)).min(1.0)) };
                     }
                 }
                 // (a slope facing a low lamp is lit more than the flat canvas,
-                // 1; capped, so the lowest lights don't burn ridges out to white)
-                let diffuse = (ambient + (1.0 - ambient) * ndl * lit / lz).min(1.6);
+                // 1; capped, so the lowest lights don't burn ridges out to white;
+                // grazing, only slopes toward the lamp are lit, by n·l itself: lz is 0)
+                let direct = if grazing { ndl * lit } else { ndl * lit / lz };
+                let diffuse = (ambient + (1.0 - ambient) * direct).min(1.6);
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
@@ -818,5 +839,23 @@ mod review_lighting_tests {
         let lit = c.seen_lit(0.0, 3.0, 1.0);
         let i = 150 * 300 + 100;
         assert!(lit[i][0] < plain[i][0] * 0.8, "a ridge 100 pixels toward the light must cast a shadow");
+    }
+
+    /// The light's two ends, exactly: overhead (90°) casts no shadow and
+    /// lights flat paint fully; grazing (0°), a lamp in the canvas's plane,
+    /// leaves flat paint to the room's light, lights the ridge's face turned
+    /// to it, and hides whatever lies behind the ridge. No NaN at either end.
+    #[test]
+    fn review_overhead_and_grazing_lights_are_exact() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(300.0);
+        for y in 0..300 { for x in 200..205 { c.height[y * 300 + x] += 8000.0; } }
+        let (over, graze, low) = (c.seen_lit(0.0, 90.0, 1.0), c.seen_lit(0.0, 0.0, 1.0), c.seen_lit(0.0, 30.0, 1.0));
+        assert!(over.iter().chain(&graze).all(|p| p.iter().all(|v| v.is_finite())));
+        // the light comes from the right (azimuth 0): x 100 lies behind the ridge, x 250 in front of it
+        let (behind, front, face) = (150 * 300 + 100, 150 * 300 + 250, 150 * 300 + 205);
+        assert!((over[behind][0] - over[front][0]).abs() < 1e-4, "overhead: no shadow ({} vs {})", over[behind][0], over[front][0]);
+        assert!(graze[front][0] < low[front][0] * 0.6, "grazing: flat paint gets only the room's light");
+        assert!(graze[face][0] > graze[front][0] * 1.5, "grazing: the ridge's face toward the lamp is lit");
+        assert!(graze[behind][0] <= graze[front][0], "grazing: nothing behind the ridge is lit by the lamp");
     }
 }

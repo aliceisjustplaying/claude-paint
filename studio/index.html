@@ -114,6 +114,12 @@
   .pic .box { flex:1; min-height:0; position:relative }
   .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; cursor:zoom-in; filter:drop-shadow(0 10px 30px rgba(0,0,0,.7)) }
   .pic img:not([src]) { visibility:hidden }
+  /* the other canvas, small in the corner: the scratch canvas while the painter paints, the painting while it tries
+     things on the scratch canvas */
+  #pip { position:absolute; right:14px; bottom:14px; width:17%; max-width:240px; margin:0; padding:5px; z-index:3; background:rgba(12,12,14,.92); border:1px solid var(--line); border-radius:5px; display:flex; flex-direction:column; gap:4px }
+  #pip[hidden] { display:none }
+  #pip img { display:block; width:100%; height:auto; cursor:zoom-in }
+  #pip figcaption { font:11px/1.3 -apple-system,sans-serif; color:var(--soft) }
   #cap { font:12px var(--mono); color:var(--dim); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   #other { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center }
   #other .box { height:100% } #other img { object-position:right center }
@@ -233,6 +239,7 @@
       <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
       <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette"></div></figure>
     </div>
+    <figure id="pip" hidden><figcaption id="pipcap"></figcaption><img id="pipimg" alt=""></figure>
     <div id="pband" hidden aria-label="Palette"></div>
     <a id="finished" hidden>See the exported painting →</a>
   </section>
@@ -490,7 +497,7 @@ function ticks() {
 // the painting's own clock at event i: the easel's time of day ("day 3, 14:20"; it began at 09:00 on day 1), from the last
 // successful chunk or harness recovery summary. Older runs may have no recorded clock.
 function easelClockAt(i) {
-  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k], text = e.clock || (e.kind === 'paint' && e.out); if (!text || e.err) continue;
+  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k], text = e.clock || (e.kind === 'paint' && !e.scratch && e.out); if (!text || e.err) continue;  // (the scratch canvas keeps its own clock)
     const m = [...text.matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); if (m) return { text: m[0], min: (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 }; }
   return null;
 }
@@ -531,7 +538,8 @@ function kindOf(e) {
   if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
   if (e.kind === 'clock') return ['notes', '◷', 'painting clock'];
   if (e.kind === 'paint') { const ok = paintOK(e);
-    return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' : (e.err ? 'paints, but its code has an error' : 'paints')]; }
+    const on = e.scratch ? ' on the scratch canvas' : '';
+    return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + on : (e.err ? `paints${on}, but its code has an error` : 'paints' + on)]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
@@ -587,9 +595,9 @@ function doing(isLive) {
 
 // ---- code
 // easel tool sessions: the painting is the chunks that ran, in order
-const PAINTED = 'paintings/lua/painting.lua';
+const PAINTED = 'paintings/lua/painting.lua', SCRATCHED = 'paintings/lua/scratch.lua';
 function paintingFile(upto) {
-  for (let k = 0; k <= upto; k++) if (events[k].kind === 'paint') return cwd + '/' + PAINTED;
+  for (let k = 0; k <= upto; k++) if (events[k].kind === 'paint') return cwd + '/' + (scratchingAt(upto) ? SCRATCHED : PAINTED);
   const n = {};
   for (let k = 0; k <= upto; k++) { const e = events[k];
     if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1;
@@ -597,9 +605,12 @@ function paintingFile(upto) {
   let best = null, m = 0; for (const p in n) if (n[p] > m) { m = n[p]; best = p; } return best;
 }
 function source(path, upto) {
-  if (path.endsWith('/' + PAINTED) && events.some(e => e.kind === 'paint')) {
+  const sc = path.endsWith('/' + SCRATCHED);
+  if ((sc || path.endsWith('/' + PAINTED)) && events.some(e => e.kind === 'paint')) {
     let text = '', before = '', changed = [], n = 0;
-    for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.kind !== 'paint' || !paintOK(e)) continue;
+    for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.kind !== 'paint' || !!e.scratch !== sc) continue;
+      if (sc && e.new_scratch) { text = ''; n = 0; }  // a fresh scratch canvas: a new log
+      if (!paintOK(e)) continue;
       const head = `--@ chunk ${++n}\n`; before = text; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; }
     return { text, before, changed, known: true };
   }
@@ -754,10 +765,20 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey) (?!False)/.test(e.look);
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(e.look);
+// the scratch canvas beside the painting: a look at it, or a chunk painted on it
+const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
+const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
+const isWholeScratch = e => e.look !== undefined && isScratch(e) && isWhole({ look: unscratched(e.look) });
+// whether the painter is at the scratch canvas at event i: its newest chunk or look was there
+function scratchingAt(i) {
+  for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k];
+    if (e.kind === 'paint' || e.kind === 'look') return isScratch(e); }
+  return false;
+}
 const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
 // the newest palette look at or before event i (-1: none yet)
-function paletteAt(i) { for (let k = i; k >= 0; k--) if (isPalette(events[k])) return k; return -1; }
+function paletteAt(i) { const sc = scratchingAt(i); for (let k = i; k >= 0; k--) if (isPalette(events[k]) && isScratch(events[k]) === sc) return k; return -1; }
 let viewI3 = -1;
 let paletteURL = '';
 function paletteHeading() {
@@ -879,6 +900,8 @@ function palette(k) {
 }
 // a look request in words: [title, what it's for, the chip's words]
 function lookWords(req) {
+  if (req != null && /scratch (?!False)/.test(req)) { const [t, why, chip] = lookWords(unscratched(req));
+    return [t === 'The whole canvas' ? 'The scratch canvas' : `${t} (scratch canvas)`, why, chip + ' (scratch canvas)']; }
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
   if (/survey (?!False)/.test(req)) return ['Survey', 'a part of the canvas at full detail, one of several', 'surveys the canvas up close'];
@@ -915,12 +938,13 @@ const resting = () => live && events.length > 0 && pos === events.length - 1 && 
 // painter studied before it stopped isn't what it's looking at now. Before the look tool, or with no whole look
 // yet: the last picture of its canvas. A reference picture is never the painting: with only reference pictures so
 // far there is no painting (-1), and the reference shows beside its empty place.
-function picturesAt(i, rest) {
+// sc: the scratch canvas's pictures instead of the painting's.
+function picturesAt(i, rest, sc = false) {
   let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
-    else if (e.kind === 'image' && !isPalette(e)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks || isWhole(e)) { whole = k; break; } } } }
+    else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
+      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks || (sc ? isWholeScratch(e) : isWhole(e))) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
   return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
 }
@@ -979,9 +1003,13 @@ $('img').addEventListener('load', shape); $('img').addEventListener('load', warm
 let rested = false;  // the view as last drawn was resting
 function pictures() {
   rested = resting();
-  const [w, o] = picturesAt(pos, rested);
+  // at the scratch canvas (and a picture of it seen): it is the big picture and the painting the small one
+  let sc = scratchingAt(pos) && !rested && picturesAt(pos, true, true)[0] >= 0;
+  const [w, o] = picturesAt(pos, rested, sc);
+  pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = !hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : isWhole(img) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`;
+    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : (sc ? isWholeScratch(img) : isWhole(img)) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`);
+    $('img').alt = sc ? 'the scratch canvas' : 'the painting';
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
   else noPicture();
@@ -990,6 +1018,16 @@ function pictures() {
   for (const t of $('strip').children) { const on = +t.dataset.i === curK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
   if (live) stripEnd();
 }
+// the other canvas in the corner (k: its picture's event, -1 none); sc: the big picture is the scratch canvas
+let pipI = -1;
+function pip(k, sc) {
+  const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
+  if (!on) { clearPic($('pipimg')); return; }
+  setPic($('pipimg'), [thumbURL(pipI), viewURL(pipI), imgURL(pipI)]);
+  $('pipcap').textContent = sc ? `The painting · ${hhmm(events[k].ts)}` : `Scratch canvas · ${hhmm(events[k].ts)}`;
+  $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
+}
+$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = imgURL(pipI); $('zoom').style.display = 'flex'; } };
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   pictures(); codeAt(pos); journal(pos); status();

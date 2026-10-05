@@ -343,6 +343,10 @@ def _parse(path):
                             ev["ref"] = True  # it reads from reference/ (see in_reference)
                     elif name == "paint":  # the painter harness's easel tools (round 19 on)
                         ev.update(kind="paint", code=a.get("lua", ""))
+                        if a.get("scratch"):  # on the scratch canvas beside the painting
+                            ev["scratch"] = True
+                            if a.get("new_scratch"):
+                                ev["new_scratch"] = True
                     elif name == "look":
                         ev.update(kind="look", text=look_text(a))
                     elif name == "note":
@@ -403,8 +407,8 @@ def look_text(args):
 
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison and not a held knife."""
-    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:palette|survey) (?!False)", look)
+    not the palette, not a survey's tile, not a comparison, not a held knife and not the scratch canvas."""
+    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -568,11 +572,14 @@ ARCHIVE = os.path.join(os.path.dirname(HERE), "archive", "sources")
 def painting_sources(events):
     """The folder to read the painting's source files from and those files, relative to it: the ones
     the page may ask for. The folder is the painter's (its last start) or, once that is gone,
-    archive/sources/<its name>. The files: paintings/lua/painting.lua and, from the events, every .lua
+    archive/sources/<its name>. The files: paintings/lua/painting.lua, paintings/lua/scratch.lua once the
+    painter paints there and, from the events, every .lua
     under paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
     `cargo paint <bin>`. Nothing else in the folder (the brief, notes, bin/, settings) is served."""
     cwd = next((e["cwd"] for e in reversed(events) if e["kind"] == "start"), "")
     rels = {"paintings/lua/painting.lua"}
+    if any(e["kind"] == "paint" and e.get("scratch") for e in events):
+        rels.add("paintings/lua/scratch.lua")
     for e in events:
         if e["kind"] in ("write", "edit"):
             p = e.get("path", "")

@@ -1,0 +1,12 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 8.31s
+     Running tests/thinner_pigments.rs (target/debug/deps/thinner_pigments-c2b158dac1c4fa73)
+
+running 4 tests
+test print_tube_table ... ignored, prints the tube table; run on af49348 to make tests/thinner/tubes_af49348.txt
+test c13_burnt_sienna_has_a_lower_contrast_ratio_than_raw_sienna_at_equal_film ... ok
+test c13_every_pigment_value_is_af49348s ... ok
+test c13_diagnostic_sienna_card_retained_absolute_substrate_difference ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.14s
+

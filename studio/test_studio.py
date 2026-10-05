@@ -314,6 +314,7 @@ def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_re
 
 @pytest.mark.parametrize("asset,ctype", [
     ("stream.css", "text/css"),
+    ("code-display.js", "text/javascript"),
     ("code-format.js", "text/javascript"),
     ("vendor/stylua/stylua_lib_web.js", "text/javascript"),
     ("vendor/stylua/stylua_lib_bg.wasm", "application/wasm"),

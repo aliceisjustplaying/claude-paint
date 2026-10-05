@@ -1,6 +1,8 @@
 // Display-only formatting, off the UI thread. No painter files or session data are written.
 import init, { Config, formatCode, IndentType, LuaVersion, OutputVerification, CallParenType } from './vendor/stylua/stylua_lib_web.js';
 
+import './code-display.js';
+const { diffLines, lineHTML } = self.CodeDisplay;
 const ready = init();
 // Live polling and replay commonly revisit the current and preceding source.
 const cache = new Map();
@@ -17,7 +19,7 @@ function format(text) {
   if (cache.size > 2) cache.delete(cache.keys().next().value);
   return result;
 }
-self.onmessage = async ({ data: { id, input, previous } }) => {
+self.onmessage = async ({ data: { id, input, previous, changed: rawChanged } }) => {
   let text = input, before = previous, formatted = false;
   try {
     await ready;
@@ -27,5 +29,10 @@ self.onmessage = async ({ data: { id, input, previous } }) => {
     text = result;
     formatted = true;
   } catch (e) { /* Invalid or unsupported Lua (or unavailable WASM): retain the original bytes. */ }
-  self.postMessage({ id, input, previous, text, before, formatted });
+  const changed = formatted && rawChanged.length ? diffLines(before, text) : new Set(rawChanged);
+  const chunks = [], lines = text.split('\n');
+  for (let i = 0; i < lines.length; i += 200) {
+    chunks.push(lines.slice(i, i + 200).map((line, k) => lineHTML(line, true, i + k, changed.has(i + k))).join(''));
+  }
+  self.postMessage({ id, input, previous, text, before, formatted, chunks, changed:[...changed] });
 };

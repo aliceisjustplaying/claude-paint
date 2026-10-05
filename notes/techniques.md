@@ -77,9 +77,9 @@ the picture is yours.
 ## Spatter
 
 - **Flicked paint for what is scattered by nature**: spray, gravel, a field of
-  small flowers, lichen, the speckle of an old wall. `b:spatter{}` throws
-  droplets whose sizes, spacing and colors vary by themselves; aim it, don't
-  place each one.
+  small flowers, lichen, the speckle of an old wall.
+  `b:spatter{at={x, y}, toward={dx, dy}}` throws droplets whose sizes,
+  spacing and colors vary by themselves; aim it, don't place each one.
 - **Thin the paint to make it fly**: a pile with medium or turpentine
   spatters; blotted paint hardly does. A hard flick gives a fine spray, a
   gentle one fat drops.
@@ -141,8 +141,8 @@ the picture is yours.
   impasto nowhere. `load_at=` varies the load across a pass; `scale_at` gives
   ridges of different sizes.
 
-- Stiff paint holds the brush's marks: blot it (`blot=0.3`) or use it as it
-  comes from the tube, with no medium. A full brush lays more with `lay=4`
+- Stiff paint holds the brush's marks: blot it (`pile{..., blot=0.3}`) or
+  use it as it comes from the tube, with no medium. A full brush lays more with `lay=4`
   to `lay=16`; a coarse hog brush (larger `hair`) leaves coarser ridges.
 - In stiff paint the hairs gather into clumps: strokes lie in ridges and
   furrows, walls rise along their sides, a bead where they end. Fluid paint
@@ -195,9 +195,9 @@ the picture is yours.
 ## Time
 
 - Time passes only as you paint or `wait`. Paint dries on its own clock:
-  lead white and umber fast, lakes and vermilion slow, thin paint faster than
-  thick. Added medium slows drying; oil species and ground absorbency are
-  not drying controls in this easel.
+  lead white and umber fast, lakes and vermilion slow, poppy oil slower than
+  linseed, thin paint faster than thick, an absorbent ground faster still;
+  added medium slows drying.
 - A painting can take months of painted time. Let layers dry between
   campaigns; that is what lets the next one sit on top.
 

@@ -2033,6 +2033,37 @@ fn load_mm3(width_mm: f32) -> f32 {
     0.08 * width_mm.max(0.5).powi(3)
 }
 
+/// Lay `v` coats of a droplet's liquid (the share `phi` solvent) on pixel `i`
+/// of the flick `id`: covered and the flick's own, as `drag` lays a hair's
+/// paint, and a thinned load's solvent into the film. With `capped`, no more
+/// than is left of the pixel's ceiling `cap` for this flick. Returns what was
+/// laid.
+///
+/// # Safety
+/// `i` is inside `sf`'s buffer window, and the canvas is exclusively borrowed.
+#[allow(clippy::too_many_arguments)]
+unsafe fn lay_droplet(sf: &Surf, i: usize, v: f32, phi: f32, cap: f32, capped: bool, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
+    let mut d = v.max(0.0);
+    // SAFETY: the caller's: i is inside the window, the canvas exclusively ours
+    unsafe {
+        if capped {
+            let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
+            d = d.min((cap - used).max(0.0));
+            *sf.laid_id.add(i) = id;
+            *sf.laid.add(i) = used + d;
+        }
+        if d > 0.0 {
+            *sf.cover.add(i) = 1.0;
+            sf.add(i, d * (1.0 - phi), lat, hide, cure);
+            if phi > 0.0 && !sf.solv.is_null() {
+                *sf.solv.add(i) += d * phi * COAT_UM;
+            }
+            *sf.stroke.add(i) = id;
+        }
+    }
+    d
+}
+
 impl Spatter {
     /// Check that every number in the flick is finite (see `Gesture::validate`).
     pub fn validate(&self) -> Result<(), String> {
@@ -2178,8 +2209,15 @@ impl Canvas {
             if wsum <= 0.0 {
                 continue;
             }
+            // a thinned droplet is liquid: a pixel takes no more of the flick's
+            // liquid than a stroke may lay there (crate::thinner, the
+            // stroke's ceiling, as `drag`), and the rest runs into the pixels
+            // around it; what finds no room there runs off
+            let capped = phi > 0.0 && !sf.laid.is_null() && !sf.laid_id.is_null();
+            let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
             let mut landed = false;
-            for (x, y, w) in cells {
+            let mut spill: Vec<(usize, usize, f32)> = Vec::new();
+            for &(x, y, w) in &cells {
                 if x < sf.ox || y < sf.oy || x >= sf.ox + sf.w || y >= sf.oy + sf.h {
                     continue;
                 }
@@ -2190,20 +2228,36 @@ impl Canvas {
                 let i = (y - sf.oy) * sf.w + (x - sf.ox);
                 let v = coats_mean * area_px * w / wsum * m;
                 // SAFETY: exclusive &mut self; i is inside the buffer window.
-                if v > 0.0 {
-                    unsafe {
-                        // as `drag` lays a hair's paint: the pixel covered, the
-                        // stroke's own, and a thinned load's solvent into the film
-                        *sf.cover.add(i) = 1.0;
-                        sf.add(i, v * (1.0 - phi), &lat, hide, cure);
-                        if phi > 0.0 && !sf.solv.is_null() {
-                            *sf.solv.add(i) += v * phi * COAT_UM;
-                        }
-                        *sf.stroke.add(i) = id;
-                    }
+                let d = unsafe { lay_droplet(&sf, i, v, phi, cap, capped, id, &lat, hide, cure) };
+                if v - d > 0.0 {
+                    spill.push((x, y, v - d));
+                }
+                if d > 0.0 {
                     grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
                     // (a droplet has landed only where it laid paint: not under a mask's zero)
                     landed = true;
+                }
+            }
+            for (x, y, v) in spill {
+                // into the eight pixels around, an eighth each as far as each has room
+                let share = v / 8.0;
+                let mut left = v;
+                for (dx, dy) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                    let (nx, ny) = (x as i64 + dx, y as i64 + dy);
+                    if left <= 0.0 || nx < sf.ox as i64 || ny < sf.oy as i64 || nx >= (sf.ox + sf.w) as i64 || ny >= (sf.oy + sf.h) as i64 {
+                        continue;
+                    }
+                    let (nx, ny) = (nx as usize, ny as usize);
+                    if clip.map(|m| m.data[ny * sf.fw + nx]).unwrap_or(1.0) <= 0.0 {
+                        continue;
+                    }
+                    let i = (ny - sf.oy) * sf.w + (nx - sf.ox);
+                    // SAFETY: as above; i is inside the buffer window.
+                    let d = unsafe { lay_droplet(&sf, i, share.min(left), phi, cap, capped, id, &lat, hide, cure) };
+                    if d > 0.0 {
+                        left -= d;
+                        grow(&mut bounds, nx - sf.ox, ny - sf.oy, nx - sf.ox + 1, ny - sf.oy + 1);
+                    }
                 }
             }
             if landed {
@@ -2887,7 +2941,7 @@ mod part_tests {
 }
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
-const OIL_SHARE: f32 = 0.4;
+pub(crate) const OIL_SHARE: f32 = 0.4;
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).

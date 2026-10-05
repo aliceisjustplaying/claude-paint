@@ -578,13 +578,15 @@ impl Canvas {
         let (hi, lo) = surf.par_iter().fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v))).reduce(|| (f32::MIN, f32::MAX), |(a, b), (c, d)| (a.max(c), b.min(d)));
         let m = (lx * lx + ly * ly).sqrt();
         let march = m > 1e-6 && rise.is_finite() && (rise > 0.0 || grazing);
-        // a low light's shadow may cross the whole canvas
+        // a low light's shadow may cross the whole canvas, corner to corner
+        // (one step a pixel along the ray; it stops at the canvas's edge)
+        let across = ((w * w + h * h) as f32).sqrt().ceil() as usize;
         let steps = if !march {
             0
         } else if grazing {
-            w.max(h)
+            across
         } else {
-            (((hi - lo) / rise).ceil() as usize).min(w.max(h)).max(1)
+            (((hi - lo) / rise).ceil() as usize).min(across).max(1)
         };
         let (sx, sy) = if march { (lx / m, ly / m) } else { (0.0, 0.0) };
         let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];

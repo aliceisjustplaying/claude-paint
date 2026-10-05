@@ -32,9 +32,12 @@
 //! absorbency, one f32 each per pixel. An older engine's canvas is written
 //! as it always was. Version 12 combines version 11 with the raw canvas's
 //! soak section after the solvent. Versions 13 and 14 are engine 6's:
-//! versions 11 and 12 with three more properties to each pixel of wet paint
-//! (its packed oil, its drained floor and the share of the film packed on
-//! an absorbent ground, `crate::wet::Prop`). After the header the
+//! versions 11 and 12 with five more properties to each pixel of wet paint
+//! (its packed oil, its drained floor, the share of the film packed on an
+//! absorbent ground, its tube paint's oil by volume and its wax,
+//! `crate::wet::Prop`), and after the solvent (before
+//! a raw canvas's soak section) the paper, if the support is paper, with
+//! its micro-roughness per pixel. After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -43,7 +46,8 @@
 //! thickness (for craquelure fitted to the ground); each wet pixel's paint
 //! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
 //! every cell of the deposit (coverage, flake reflectance, lift, fixed
-//! floor, film when drawn) and the whole-canvas guide with its fixed floor;
+//! floor, film when drawn; with pastel, flag 2, the reflectance in color and
+//! the tooth's fill) and the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
@@ -304,7 +308,9 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                put_u64(w, 1)?;
+                // 2: a drawing with pastel, its cells in color; 3: engine 6's pastel,
+        // with what lies in the tooth (graphite.rs)
+                put_u64(w, d.layout())?;
                 put_all(w, d.to_f32s())?;
             }
         }
@@ -332,6 +338,38 @@ impl Canvas {
                 put_all(w, self.wet.solv.iter().copied())?;
             } else {
                 put_all(w, std::iter::repeat_n(0.0f32, n))?;
+            }
+        }
+        // engine 6's section (versions 13 and 14): the paper (if the support
+        // is paper) and its micro-roughness per pixel
+        if self.engine >= 6 {
+            match self.paper {
+                None => put_u64(w, 0)?,
+                Some(p) => {
+                    put_u64(w, 1)?;
+                    for v in [p.grammage, p.fibre_mm, p.fibre_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
+                        put_f32(w, v)?;
+                    }
+                    put_u64(w, p.seed)?;
+                    match p.felt {
+                        None => put_u64(w, 0)?,
+                        Some(f) => {
+                            put_u64(w, 1)?;
+                            put_f32(w, f.cell_mm)?;
+                            put_f32(w, f.depth_um)?;
+                        }
+                    }
+                    match p.laid {
+                        None => put_u64(w, 0)?,
+                        Some(l) => {
+                            put_u64(w, 1)?;
+                            put_f32(w, l.per_cm)?;
+                            put_f32(w, l.chain_mm)?;
+                            put_f32(w, l.deficit)?;
+                        }
+                    }
+                    put_all(w, self.micro.iter().copied())?;
+                }
             }
         }
         // a raw canvas's soak section (version 10), last
@@ -453,9 +491,9 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            1 => {
+            v @ (1..=3) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
-                let d = crate::graphite::Drawing::from_f32s(n, whole, |k| get_all(r, k))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
@@ -508,6 +546,41 @@ impl Canvas {
                 c.wet.solv = s;
             }
             (false, false) => {}
+        }
+        // engine 6's section: the paper
+        if c.engine >= 6 {
+            match get_u64(r)? {
+                0 => {}
+                1 => {
+                    let mut v = [0.0f32; 12];
+                    for x in v.iter_mut() {
+                        *x = get_f32(r)?;
+                    }
+                    if !v.iter().all(|x| x.is_finite()) {
+                        return Err(bad("checkpoint paper is invalid"));
+                    }
+                    let seed = get_u64(r)?;
+                    let felt = match get_u64(r)? {
+                        0 => None,
+                        1 => Some(crate::paper::Felt { cell_mm: get_f32(r)?, depth_um: get_f32(r)? }),
+                        _ => return Err(bad("checkpoint paper felt flag is invalid")),
+                    };
+                    let laid = match get_u64(r)? {
+                        0 => None,
+                        1 => Some(crate::paper::Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
+                        _ => return Err(bad("checkpoint paper laid flag is invalid")),
+                    };
+                    c.paper = Some(crate::paper::Paper {
+                        grammage: v[0], fibre_mm: v[1], fibre_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
+                        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+                    });
+                    c.micro = get_all(r, n)?;
+                    if !c.micro.iter().all(|x| x.is_finite() && *x >= 0.0) {
+                        return Err(bad("checkpoint micro-roughness is invalid"));
+                    }
+                }
+                _ => return Err(bad("checkpoint paper flag is invalid")),
+            }
         }
         // raw formats go on with the soak section, which ends the file
         if version == 10 || version == 12 || version == 14 {
@@ -605,6 +678,50 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// Engine 6: a sheet of paper with stick pastel in its tooth survives a
+    /// checkpoint bit for bit (the paper, its micro-roughness, the loose and
+    /// bound pastel), and goes on taking pastel as it would have.
+    #[test]
+    fn paper_and_stick_pastel_survive_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_engine(6).with_paper(crate::paper::Paper::drawing(2));
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(200.0));
+        c.fix_pastel(None, 0.15);
+        c.stick_stroke(&mut st, &line(260.0));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert!(r.pixels() == c.pixels() && r.height == c.height && r.micro == c.micro && r.paper == c.paper);
+        let mut st2 = st.clone();
+        c.stick_stroke(&mut st, &line(300.0));
+        r.stick_stroke(&mut st2, &line(300.0));
+        assert!(r.pixels() == c.pixels() && st == st2);
+    }
+
+    /// A pastel drawing (in color, with its tooth) survives a checkpoint bit
+    /// for bit, and goes on taking pastel as it would have.
+    #[test]
+    fn pastel_survives_a_checkpoint() {
+        use crate::graphite::hand_line;
+        use crate::Lead;
+        let mut c = Canvas::new_window(300, 1.5, [0.8; 3], None).with_size_mm(440.0);
+        let red = Lead::pastel([0.7, 0.1, 0.05], 0.8);
+        let blue = Lead::pastel([0.05, 0.1, 0.6], 0.6);
+        c.draw(&red.side(10.0), &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.6], false, true, 0.0, 5), 0.0, 9);
+        c.draw(&blue, &hand_line(&[(100.0, 100.0), (900.0, 110.0)], &[0.8], false, true, 0.0, 6), 0.0, 10);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert!(r.drawing_view() == c.drawing_view() && r.pixels() == c.pixels());
+        for k in [&mut c, &mut r] {
+            k.draw(&blue.side(10.0), &hand_line(&[(100.0, 104.0), (900.0, 104.0)], &[0.5], false, true, 0.0, 7), 0.0, 11);
+        }
+        assert!(r.pixels() == c.pixels());
     }
 
     /// A resumed canvas keeps its drawing: the deposit (so the

@@ -344,6 +344,9 @@ impl Canvas {
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
+                    if let Some(c) = self.sheet_seen(i) {
+                        return c;
+                    }
                     // (the thinnest wet film lets the surface under it show: no edge where it ends)
                     let v = self.wet.vol[i];
                     let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);

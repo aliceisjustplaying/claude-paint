@@ -807,7 +807,7 @@ fn an_absorbent_ground_drains_paint_as_its_pigment_packs() {
     let run = |tube: &str, absorbent: f32, passes: usize| {
         let i = pal.tubes.iter().position(|t| t.name == tube).unwrap();
         let mut c = Canvas::new(300, 1.0, [0.8; 3]);
-        assert_eq!(c.engine, 6);
+        assert!(c.engine >= 6);
         c.ground_finish(absorbent);
         for _ in 0..passes {
             let mut h = Held::new(Tool::filbert(60.0), 3);
@@ -836,7 +836,7 @@ fn an_absorbent_ground_drains_paint_as_its_pigment_packs() {
 fn wax_dries_more_matte() {
     let gloss = |wax: f32| {
         let mut c = Canvas::new(300, 1.0, [0.8; 3]);
-        assert_eq!(c.engine, 6);
+        assert!(c.engine >= 6);
         let p = Paint { wax, ..Paint::body(hex("#556677")) };
         for _ in 0..4 {
             let mut h = Held::new(Tool::filbert(60.0), 3);

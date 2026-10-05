@@ -1087,6 +1087,29 @@ impl Palette {
         Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, engine: self.engine, tube_oil_rate, wax }
     }
 
+    /// How the parts (tube index, fraction by volume) look dry, in a pastel
+    /// stick (engine 6): `pastel::dry_color` from each tube's masstone,
+    /// scattering in oil and refractive index.
+    pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
+        let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(|| self.scat.iter().cloned().fold(0.0, f32::max), |i| self.scat[i]);
+        let list: Vec<(crate::Rgb, f32, f32, f32)> = parts
+            .iter()
+            .map(|&(i, f)| {
+                let name = self.tubes[i].name;
+                // engine 7: a black's colour comes from its carbon, which
+                // stays on the particles it coats: its scattering rises in air
+                // by the measured air/oil ratio (`pastel::carbon_ratio`), not
+                // to a white's
+                let n = match crate::pastel::carbon_ratio(name) {
+                    Some(r) if self.engine >= 7 => -r,
+                    _ => crate::pastel::refractive_index(name),
+                };
+                (self.tubes[i].color, self.scat[i], n, f)
+            })
+            .collect();
+        crate::pastel::dry_color(&list, white)
+    }
+
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
     /// piles of one recipe vary.
     pub fn remix(&self, m: &Mixture, amount: f32, rng: &mut Rng) -> Mixture {

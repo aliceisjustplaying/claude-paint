@@ -520,9 +520,10 @@ impl UserData for Brush {
             if let Some(o) = &o {
                 check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
                 wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
-                // (an endless wobble would throw the checked points off to nowhere)
-                if !wobble.is_finite() {
-                    return err("gesture: wobble is a number of units, not infinite");
+                // (a hand's drift: a huge one would throw the checked points off to
+                // nowhere and the curve's length past any count)
+                if !(wobble <= GESTURE_WOBBLE) {
+                    return err(format!("gesture: wobble is the hand's drift, 0 to {GESTURE_WOBBLE} units"));
                 }
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
@@ -999,6 +1000,10 @@ const WORK_KEYS: &[&str] = &[
 /// canvas is 1000 wide and at most 5000 high).
 const GESTURE_REACH: f32 = 20_000.0;
 
+/// The most a gesture's hand drifts sideways (`wobble`, units): a tenth of
+/// the canvas's width.
+const GESTURE_WOBBLE: f32 = 100.0;
+
 /// The most samples a gesture's curve takes (one every 1.5 units or so:
 /// about 300 000 units of curve).
 const GESTURE_SAMPLES: usize = 200_000;
@@ -1181,6 +1186,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
                 w => scalar_field(st, w, b, "work piles weight")?,
             };
             ps.push((p.mix.clone(), p.medium, f));
+            h.piles_thinner.push(p.thinner());
         }
         h.piles_at = Some(ps);
     }

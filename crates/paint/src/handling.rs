@@ -58,6 +58,10 @@ pub struct Handling<'a> {
     /// (the brush dipped into neighboring piles on the palette). Their tubes
     /// and medium mix as knifed (`piles_at`); `pile` gives the palette.
     pub piles_at: Option<Vec<(crate::palette::Mixture, f32, Field<'a, f32>)>>,
+    /// Each graded pile's share of solvent (`thinner`), in `piles_at`'s
+    /// order: a dip mixes them by the weights as it mixes the paint. Empty:
+    /// every pile at `thinner`.
+    pub piles_thinner: Vec<f32>,
     /// Cut in the region's edges with this brush instead of clipping: body
     /// strokes stop short of the edge, then short strokes follow the outline.
     pub cut_in: Option<Tool>,
@@ -193,6 +197,7 @@ impl<'a> Handling<'a> {
             load_at: None,
             scale_at: None,
             piles_at: None,
+            piles_thinner: Vec::new(),
             cut_in: None,
             curve: 0.05,
             wave: 0.25,
@@ -461,7 +466,8 @@ impl Canvas {
     /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
-        self.assert_thinner_supported((hd.thinner > 0.0 && hd.pile.is_some()) || (hd.pile.is_some() && hd.second.as_ref().is_some_and(|s2| s2.thinner > 0.0)), "Canvas::work");
+        let graded_thinned = hd.piles_at.is_some() && hd.piles_thinner.iter().any(|&t| t > 0.0);
+        self.assert_thinner_supported(hd.pile.is_some() && (hd.thinner > 0.0 || graded_thinned || hd.second.as_ref().is_some_and(|s2| s2.thinner > 0.0)), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }
@@ -986,7 +992,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 return None;
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
-            let mut med = 0.0f32;
+            let (mut med, mut thin) = (0.0f32, 0.0f32);
             for (k, (m, md, _)) in ps.iter().enumerate() {
                 let wk = w[k] / tot;
                 if wk <= 0.0 {
@@ -1000,17 +1006,18 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                     }
                 }
                 med += wk * md;
+                thin += wk * hd.piles_thinner.get(k).copied().unwrap_or(hd.thinner);
             }
-            Some((pal.pile(parts), med))
+            Some((pal.pile(parts), med, thin))
         });
-        let (pile, medium) = match &graded {
-            Some((m, md)) => (m, md),
-            None => (pile0, medium0),
+        let (pile, medium, thinner) = match &graded {
+            Some((m, md, t)) => (m, md, *t),
+            None => (pile0, medium0, hd.thinner),
         };
         // the pile on the palette, as knifed (its own mixing generator)
         let mut prng = Rng::new(rng.next_u64());
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
-        let paint = if hd.thinner > 0.0 { paint.with_thinner(hd.thinner) } else { paint };
+        let paint = if thinner > 0.0 { paint.with_thinner(thinner) } else { paint };
         let load = hd.load * load_k;
         // (its own generator, drawn only for a double-loaded brush: other passes plan as before)
         let dip2 = hd.second.as_ref().map(|s2| {

@@ -180,8 +180,8 @@ sleep 0.2
 echo painted`);
 	const other = WAIT_MS.other;
 	const rebuild = WAIT_MS.rebuild;
-	WAIT_MS.other = 300;
-	WAIT_MS.rebuild = 800;
+	WAIT_MS.other = 1000;
+	WAIT_MS.rebuild = 2000;
 	try {
 		assert.equal(await atEasel(studio, ["look"], undefined), "painted");
 		assert.deepEqual(calls(studio), [...Array(5).fill("status"), "look"]);

@@ -94,10 +94,13 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
             c.glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y));
             // (a varnished surface is glossy: engine 4 shows no matte veil;
-            // no coats, no varnish)
-            // (nor the hand's time for brushing it)
-            if coats > 0.0 || vary > 0.0 {
+            // no coats, no varnish, and from engine 4 not the hand's time for
+            // brushing it: an older log keeps the time it always had)
+            let laid = coats > 0.0 || vary > 0.0;
+            if laid {
                 c.varnished();
+            }
+            if laid || c.engine() < 4 {
                 brushed(c, None);
             }
             Ok(())

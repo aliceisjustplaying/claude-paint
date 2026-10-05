@@ -326,6 +326,46 @@ mod tests {
     }
 
     #[test]
+    fn added_tube_paint_dilutes_the_turps_and_the_oil() {
+        let mut b = Board::default();
+        let a = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.4, 0.6, None);
+        b.add(a, &[(0, 1.0)], 0.0).unwrap();
+        let h = b.heap(a).unwrap();
+        assert!((h.solvent - 0.2).abs() < 1e-6 && (h.oil_rate - 0.8).abs() < 1e-6, "{} {}", h.solvent, h.oil_rate);
+    }
+
+    #[test]
+    fn an_addition_that_overflows_the_heap_is_refused_and_changes_nothing() {
+        let mut b = Board::default();
+        // a tiny recipe sum makes each added part a vast volume
+        let a = b.knife(vec![(0, 1.0)], 1e-30, 0.0, 0.0, 1.0, None);
+        let before = b.heap(a).unwrap().clone();
+        assert!(b.add(a, &[(0, f32::MAX)], 0.0).is_err());
+        let h = b.heap(a).unwrap();
+        assert_eq!((h.parts.clone(), h.medium, h.solvent, h.oil_rate), (before.parts, before.medium, before.solvent, before.oil_rate));
+        assert!(h.fractions().iter().all(|p| p.1.is_finite()));
+    }
+
+    #[test]
+    fn adding_to_a_scraped_heap_knifes_it_again() {
+        let mut b = Board { dirty: 1.0, ..Default::default() };
+        let first = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        let other = b.knife(vec![(1, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        b.visit(other, 1.0);
+        b.visit(first, 1.0);
+        assert!(!b.heap(first).unwrap().dirt.is_empty());
+        for _ in 0..LIVE {
+            b.knife(vec![(1, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
+        }
+        assert!(b.heap(first).unwrap().scraped);
+        b.add(first, &[(0, 1.0)], 0.0).unwrap();
+        let h = b.heap(first).unwrap();
+        assert!(!h.scraped && h.dirt.is_empty());
+        assert_eq!(b.heaps.last().unwrap().id, first, "back on the board as the newest heap");
+        assert_eq!(b.live().len(), LIVE);
+    }
+
+    #[test]
     fn the_oldest_heap_is_scraped_and_knifed_again_when_used() {
         let mut b = Board::default();
         let first = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.0, 1.0, None);

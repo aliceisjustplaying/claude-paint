@@ -1,10 +1,9 @@
 //! Characterization tests: pin down current behavior (conservation, mixing,
-//! determinism, and a golden fingerprint of a fixed multi-pass fixture) so
-//! refactors can prove they change nothing. Regenerate the golden file
+//! determinism, and a golden image of a fixed multi-pass fixture). Regenerate the golden file
 //! deliberately with `UPDATE_GOLDEN=1 cargo test -p paint` when a change is
 //! meant to alter rendering. The golden is recorded with the workspace's `[profile.test]`
-//! (optimized, debug assertions on, not incremental: see Cargo.toml); a
-//! release build rounds floats differently and doesn't match it.
+//! (optimized, debug assertions on: see Cargo.toml). Cross-build image drift
+//! follows notes/workflow.md; same-build state fingerprints remain exact.
 
 use crate::bristle::{Gesture, Held, Orient, Tool};
 use crate::canvas::Canvas;
@@ -148,15 +147,27 @@ fn fixture_is_deterministic_across_thread_counts() {
 #[test]
 #[cfg(tube_box)]
 fn fixture_matches_golden() {
-    let got = fingerprint(&fixture());
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.txt");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.png");
     if std::env::var("UPDATE_GOLDEN").is_ok() {
-        std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/tests")).unwrap();
-        std::fs::write(path, &got).unwrap();
+        fixture().save(path).unwrap();
         return;
     }
-    let want = std::fs::read_to_string(path).expect("no golden: run with UPDATE_GOLDEN=1");
-    assert_eq!(got, want.trim(), "rendering changed; if intended, rerun with UPDATE_GOLDEN=1");
+    let rendered = std::env::temp_dir().join(format!("paint-golden-{}.png", std::process::id()));
+    fixture().save(&rendered).unwrap();
+    let got = image::open(&rendered).unwrap().to_rgb8();
+    std::fs::remove_file(rendered).unwrap();
+    let want = image::open(path).expect("no golden: run with UPDATE_GOLDEN=1").to_rgb8();
+    assert_eq!(got.dimensions(), want.dimensions());
+    let mut changed = 0usize;
+    let mut maximum = 0u8;
+    for (a, b) in got.pixels().zip(want.pixels()) {
+        let delta = a.0.into_iter().zip(b.0).map(|(x, y)| x.abs_diff(y)).max().unwrap();
+        changed += usize::from(delta != 0);
+        maximum = maximum.max(delta);
+    }
+    let pixels = got.width() as usize * got.height() as usize;
+    assert!(maximum <= 1 && changed * 10_000 <= pixels,
+            "golden image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <=0.01% pixels and <=1/255 per channel");
 }
 
 #[test]

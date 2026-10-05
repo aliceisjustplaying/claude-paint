@@ -44,6 +44,53 @@ fail() { echo "replay_env: $1 (EASEL_BOX=inness in its environment); see $2" >&2
 "$repo/scripts/check_painting" "$studio" "$work/check" >"$work/check.log" 2>&1 || fail "check_painting failed" "$work/check.log"
 grep -q '^check: ok' "$work/check.log" || fail "check_painting didn't pass" "$work/check.log"
 grep -q "the replay's PNG equals the painter's last save" "$work/check.log" || fail "check_painting's replay differs from the save" "$work/check.log"
+# A one-level change is rejected for the same build but accepted across builds.
+# Two levels are rejected even across builds. Keep the original studio artifacts.
+live=$studio/out/easel/painting/live.png
+livetxt=$studio/out/easel/painting/live.txt
+cp "$live" "$work/original.png"
+cp "$livetxt" "$work/original.txt"
+change_pixel() {
+  uv run --no-project --with 'pillow>=11,<13' python - "$work/original.png" "$live" "$1" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+p = list(im.getpixel((0, 0)))
+d = int(sys.argv[3])
+p[0] += d if p[0] <= 255 - d else -d
+im.putpixel((0, 0), tuple(p))
+im.save(sys.argv[2])
+PY
+}
+change_pixel 1
+if "$repo/scripts/check_painting" "$studio" "$work/check-exact" >"$work/check-exact.log" 2>&1; then
+  fail "same-build image drift was accepted" "$work/check-exact.log"
+fi
+grep -q '^check: DIFFERS from the live canvas:' "$work/check-exact.log" || fail "same-build check failed for another reason" "$work/check-exact.log"
+sed 's/^build .*/build another-build/' "$work/original.txt" >"$livetxt"
+"$repo/scripts/check_painting" "$studio" "$work/check-tolerant" >"$work/check-tolerant.log" 2>&1 || fail "bounded cross-build drift failed" "$work/check-tolerant.log"
+grep -q 'within the image tolerance' "$work/check-tolerant.log" || fail "cross-build comparison wasn't exercised" "$work/check-tolerant.log"
+change_pixel 2
+if "$repo/scripts/check_painting" "$studio" "$work/check-too-far" >"$work/check-too-far.log" 2>&1; then
+  fail "excessive cross-build drift was accepted" "$work/check-too-far.log"
+fi
+grep -q '^check: DIFFERS from the live canvas:' "$work/check-too-far.log" || fail "cross-build check failed for another reason" "$work/check-too-far.log"
+cp "$work/original.png" "$live"
+cp "$work/original.txt" "$livetxt"
+# A checkpoint difference remains fatal within a build. Across builds it is
+# diagnostic only when the live image passed the comparison.
+ckpt=$studio/out/easel/painting/live.ckpt
+cp "$ckpt" "$work/original.ckpt"
+printf '\n' >>"$ckpt"
+if "$repo/scripts/check_painting" "$studio" "$work/check-state" >"$work/check-state.log" 2>&1; then
+  fail "same-build checkpoint drift was accepted" "$work/check-state.log"
+fi
+grep -q '^check: DIFFERS from the live save:' "$work/check-state.log" || fail "checkpoint check failed for another reason" "$work/check-state.log"
+sed 's/^build .*/build another-build/' "$work/original.txt" >"$livetxt"
+"$repo/scripts/check_painting" "$studio" "$work/check-state-cross" >"$work/check-state-cross.log" 2>&1 || fail "cross-build state diagnostic rejected a matching image" "$work/check-state-cross.log"
+grep -q 'canvas state DIFFERS' "$work/check-state-cross.log" || fail "cross-build state difference was not reported" "$work/check-state-cross.log"
+cp "$work/original.ckpt" "$ckpt"
+cp "$work/original.txt" "$livetxt"
 "$repo/scripts/finish_painting" "$log" "$work/finished.png" --no-cracks >"$work/finish.log" 2>&1 || fail "finish_painting failed" "$work/finish.log"
 [ -s "$work/finished.png" ] || fail "finish_painting wrote no picture" "$work/finish.log"
 "$repo/scripts/replay_clip" "$log" "$work/clip.mp4" --every 1 --length 5 --max-hold 2 --width 300 >"$work/clip.log" 2>&1 || fail "replay_clip failed" "$work/clip.log"

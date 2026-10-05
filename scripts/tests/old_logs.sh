@@ -3,9 +3,11 @@
 # synthetic engine-1 log, the first chunks of two engine-1 studio logs and of the six
 # legacy easel3/easel4 logs, a synthetic log of the legacy verbs past those chunks, the
 # round 19 log at 320 px), replayed by a release easel at
-# a small width. Each case's PNG (sha256) and per-chunk state digests (secs= dropped)
-# must equal its golden, recorded with af49348's unchanged release easel
-# (crates/easel/tests/old_logs/golden/README.md). These replace the tests that replayed
+# a small width. Each PNG must meet the cross-build image tolerance against
+# its golden; state digests are diagnostic across builds. A repeat with the
+# same binary must match PNG bytes and state digests exactly. References came
+# from af49348's release easel (crates/easel/tests/old_logs/golden/README.md).
+# These replace the tests that replayed
 # whole paintings (notes/speed/SKIPPED.md); no whole painting is replayed here.
 #
 #   scripts/tests/old_logs.sh [<release easel>]          (default $CARGO_TARGET_DIR or target, /release/easel)
@@ -42,14 +44,23 @@ while IFS=$'\t' read -r name log width; do
     echo "old_logs: $name: the replay failed:"; tail -5 "$work/$name.err" | sed 's/^/  /'; failed=1; continue
   fi
   if [ -n "$record" ]; then
-    mkdir -p "$record"; cp "$work/$name.got" "$record/$name.txt"; echo "old_logs: $name recorded"; continue
+    mkdir -p "$record"; cp "$work/$name.got" "$record/$name.txt"; cp "$work/$name.png" "$record/$name.png"; echo "old_logs: $name recorded"; continue
   fi
   want=$cases/golden/$name.txt
   if [ ! -f "$want" ]; then echo "old_logs: $name: no golden ($want)"; failed=1; continue; fi
-  if cmp -s "$want" "$work/$name.got"; then
+  if uv run --script "$repo/scripts/compare_images.py" "$cases/golden/$name.png" "$work/$name.png"; then
     echo "old_logs: $name ok ($log at $width px)"
+    # Cross-build float-state digests are diagnostic; identical-build replay
+    # below must still reproduce both the PNG and every chunk's state exactly.
+    if ! cmp -s "$want" "$work/$name.got"; then
+      echo "old_logs: $name cross-build digests differ (image is within tolerance)"
+    fi
+    "$easel" run "$cases/$log" --width "$width" --out "$work/$name.again.png" --state-digest "$work/$name.again.dig" >"$work/$name.again.out" 2>"$work/$name.again.err"
+    if ! cmp -s "$work/$name.png" "$work/$name.again.png" || ! cmp -s <(sed 's/ secs=[^ ]*//' "$work/$name.dig") <(sed 's/ secs=[^ ]*//' "$work/$name.again.dig"); then
+      echo "old_logs: $name same-build replay DIFFERS"; failed=1
+    fi
   else
-    echo "old_logs: $name DIFFERS from af49348:"; { diff "$want" "$work/$name.got" || true; } | sed "s/^/  /" | head -6; failed=1
+    echo "old_logs: $name exceeds the cross-build image tolerance"; failed=1
   fi
 done <"$work/list"
 [ $failed = 0 ] || { echo "old_logs: FAILED" >&2; exit 1; }

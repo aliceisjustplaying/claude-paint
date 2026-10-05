@@ -612,6 +612,8 @@ fn serve_lock(name: &str) -> Result<std::fs::File, String> {
 
 struct Server {
     name: String,
+    // Captured at session startup, before a later rebuild can replace the executable.
+    build: u64,
     s: Session,
     frames: bool,
     /// The log text as the easel last wrote (or read) it: if the file on
@@ -919,7 +921,8 @@ impl Server {
         // configured box (session::box_for)
         let tubes = session::box_for(text.as_deref())?;
         let width = width_for(&name, text.as_deref());
-        let mut srv = Self { name, s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
+        let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -991,7 +994,7 @@ impl Server {
             let _ = std::fs::remove_file(&ckpt);
             eprintln!("the save file couldn't be written: {e}");
         }
-        std::fs::write(&txt, format!("chunks {}\nreplayed {}\n", self.s.log.len(), self.replayed)).map_err(|e| format!("{}: {e}", txt.display()))?;
+        std::fs::write(&txt, format!("chunks {}\nreplayed {}\nbuild {:016x}\n", self.s.log.len(), self.replayed, self.build)).map_err(|e| format!("{}: {e}", txt.display()))?;
         Ok(format!("the live canvas is in {}\n", png.display()))
     }
 

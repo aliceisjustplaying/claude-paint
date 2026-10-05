@@ -300,4 +300,39 @@ set +e; LOCKRUN_DIR=$D/lk2 "$R" --list "$D/badbuild.tsv" --summary "$D/bad.json"
 ok "two phases, two lockrun jobs; after a failed build the check phase doesn't run"
 fi
 
+# 18. Kache's detached daemon is shared, but a detached compiler wrapper is
+# still this step's work. A native process retains visible argv/environment
+# on macOS (bash rewrites them, hiding the runner's marker from ps -E).
+if want 18; then
+D=$(case_dir kache)
+cc -x c -o "$D/kache" - <<'C'
+#include <unistd.h>
+int main(void) { for (;;) pause(); }
+C
+cat >"$D/start.py" <<'PY'
+import os, sys
+directory, mode = sys.argv[1:]
+os.setsid()
+os.chdir(directory)
+with open("pid." + mode, "w") as f:
+    f.write(str(os.getpid()))
+os.execv(directory + "/kache", [directory + "/kache", mode, "run"])
+PY
+cat >"$D/start.sh" <<'SH'
+set -eu
+D=$1
+for mode in daemon compiler; do
+  python3 "$D/start.py" "$D" "$mode" &
+  while [ ! -s "$D/pid.$mode" ] || ! ps -o command= -p "$(cat "$D/pid.$mode")" | grep -q "kache $mode run"; do sleep 0.05; done
+done
+echo started
+SH
+step start 15 1 '^started$' "bash $D/start.sh $D" >"$D/list.tsv"
+LOCKRUN_DIR=$D/lk "$R" --list "$D/list.tsv" --summary "$D/result.json" --logs "$D/logs" >"$D/out" 2>&1 || fail "kache: $(cat "$D/out")"
+alive "$(cat "$D/pid.daemon")" || fail "kache: shared daemon was stopped"
+alive "$(cat "$D/pid.compiler")" && fail "kache: compiler wrapper survived"
+kill "$(cat "$D/pid.daemon")"
+ok "kache daemon survives; kache compiler wrapper is stopped"
+fi
+
 echo "test_runner: all $passed checks passed"

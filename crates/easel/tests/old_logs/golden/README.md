@@ -1,5 +1,13 @@
 # Goldens of the old-log cases (scripts/tests/old_logs.sh)
 
+As of 2026-10-05, the PNG files accompany these hashes so cross-build
+comparisons can enforce the bounded image tolerance in `notes/workflow.md`.
+Each PNG was recovered using the pre-change release executable and verified
+against its existing `png_sha256` and every recorded state digest before
+being added. The historical `.txt` references below were not regenerated.
+Repeat replays with the same executable still require exact PNG and state
+digest equality. Cross-build state digests are diagnostic.
+
 Each `<case>.txt` is the PNG's sha256 and the per-chunk `--state-digest`
 lines (`secs=` dropped) of one case in `../cases.tsv`, as af49348's
 unchanged release easel replays it. Recorded under decision 2 (option B):

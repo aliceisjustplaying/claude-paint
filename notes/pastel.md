@@ -73,3 +73,52 @@ next instead of stopping at a line. `hatch_marks` (ungraded) is unchanged.
 - A paper with tooth: a knifed board ground with a rolled absorbent layer on
   top (texture 1.0). A brushed layer, or a roller over bare linen, is too
   smooth or shows the weave's grid.
+
+## Engine 6: the stick (physical)
+
+Sources: notes/research/paper_surface.md, pastel_stick_tribology.md,
+dry_pigment_optics.md (materials and physics research; every number there is
+tagged measured, derived or estimated). Engine 5's pastel above replays as it
+was for older logs; a painting begun with engine 6 gets this one.
+
+- **Paper** (`paper.rs`): fibres laid as a Poisson fibre network (lognormal
+  lengths, uniform angles, mass laid along each fibre into the pixels it
+  crosses), a share of them in flocs (Neyman–Scott clusters), thinned over a
+  laid mould's wires; the surface follows the fibre count to a power below one
+  (pressing), plus a felt's cells and calendering. Under each pixel the pores'
+  depths below the top envelope are exponential with a mean about the fibre
+  thickness (µ, `Canvas::micro`). A paint film thicker than µ brings its own
+  micro-roughness, which follows its gloss.
+- **Contact** (`pastel.rs`): the stick is a solid (round, square or a
+  sharpened core) cut by the facets it has worn; its underside over each
+  pixel is a ray cast up through it. It sinks until the force is carried. At
+  each pixel the sheet gives as a Winkler spring (z modulus over caliper)
+  while the pastel yields plastically at σp on the material ratio of the
+  micro-relief it meets (1 − e^(−o/µ)): the two carry the same pressure.
+- **Deposit**: Archard, ΔV = K × (material ratio met) × (distance slid) per
+  pixel. Only bare paper (or paint) and fixed pastel file the stick; loose
+  pastel, which fills the pores from the bottom, is a third body. Volume
+  becomes covered area as particles about 6 µm thick (Poisson coverage);
+  colours layer by coverage, the last on top.
+- **Wear**: the volume abraded comes off the stick flat against the paper,
+  on the face within 20 µm of its lowest point: a facet within 4° of one it
+  has is worn further, else a new one is cut.
+- **Fixative**: loose becomes bound (a crust filed at half the rate of
+  paper); the particles' scattering falls by the share the resin wets
+  (Kubelka–Munk: K/S rises), the coverage floor is set.
+- **The finger** (`Canvas::rub`): a pad (135 mm² × F^0.4) picks up 20% of
+  the loose pastel under it per pass and lays 25% of what it carries, as
+  grains a third as thick (pressed in, they cover more).
+- **Dry colour** (`pastel::dry_color`): two-constant Kubelka–Munk from each
+  tube's oil masstone (K/S) and oil scattering, the scattering raised to its
+  dry value by the Mie ratio for the pigment's refractive index (n ≥ 1.9), or
+  set from the dry Mie scattering itself below that.
+- **The hand**: a stroke's force rises from nothing over 50 ms of travel and
+  falls over 40 ms (the 2–5 Hz bandwidth of a hand's force); deposit per mm
+  doesn't depend on speed (Archard), only hand time does.
+
+Estimates in use (no measurement of pastel itself exists): σp from 30 MPa
+(hard) to 2 MPa (very soft), K from 0.01 to 0.06, particle thickness 6 µm,
+crust roughness 3 µm, crust wear 0.5, the finger's 20%/25%, the felt's cells
+(0.8 mm, 20 µm), the resin wetting 15% of the particles. The research notes
+end with bench measurements that would replace them.

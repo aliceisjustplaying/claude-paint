@@ -19,7 +19,7 @@ const HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "graded"
 const ERASE_KEYS: &[&str] = &["strength", "width"];
 const PASTEL_KEYS: &[&str] = &["soft", "point"];
 const SIDE_KEYS: &[&str] = &["pressure", "width", "smooth", "tremor", "seed"];
-const SMUDGE_KEYS: &[&str] = &["strength", "width", "reach"];
+const SMUDGE_KEYS: &[&str] = &["strength", "width", "reach", "force", "pad", "speed"];
 
 /// The lead a pencil table stands for.
 fn lead_of(p: &Table) -> Result<Lead> {
@@ -100,6 +100,124 @@ fn tremor_units(st: &S, o: Option<&Table>) -> Result<f32> {
     Ok(0.15 / mm_per_unit(c))
 }
 
+// ---------------------------------------------------------------- engine 6: sticks
+
+const STICK_KEYS: &[&str] = &["kind", "soft", "diameter", "length"];
+const STROKE_KEYS: &[&str] = &["force", "alt", "azimuth", "roll", "speed"];
+/// A pencil's pressure 0..1 as a hand's force on a pastel, N (light 0.1–0.5,
+/// normal 0.5–2, heavy 2–5: notes/research/pastel_stick_tribology.md §5).
+const FORCE_AT_FULL: f32 = 5.0;
+
+fn is_stick(p: &Table) -> Result<bool> {
+    Ok(p.get::<Option<String>>("kind")?.as_deref() == Some("stick"))
+}
+
+/// The stick a stick table holds.
+fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
+    use paint::pastel::{Section, Stick};
+    let section: String = p.get("section")?;
+    let size: f32 = p.get("size")?;
+    let section = match section.as_str() {
+        "square" => Section::Square { side_mm: size },
+        _ => Section::Round { d_mm: size },
+    };
+    let ft: Table = p.get("facets")?;
+    let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
+    let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?] })
+}
+
+/// Write a stick's wear back into its table (a part of the Lua heap: a
+/// failed chunk puts it back, a replay wears it the same).
+fn store_stick(lua: &Lua, p: &Table, s: &paint::pastel::Stick) -> Result<()> {
+    let ft = lua.create_table()?;
+    for f in &s.facets {
+        for v in f {
+            ft.push(*v)?;
+        }
+    }
+    p.set("facets", ft)?;
+    p.set("length", s.length_mm)?;
+    Ok(())
+}
+
+/// A number or a list of numbers along `n` points (interpolated by index).
+fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32>> {
+    let Some(o) = o else { return Ok(vec![default; n]) };
+    match o.get::<Value>(key)? {
+        Value::Nil => Ok(vec![default; n]),
+        Value::Integer(v) => Ok(vec![v as f32; n]),
+        Value::Number(v) => Ok(vec![v as f32; n]),
+        Value::Table(t) => {
+            let v: Vec<f32> = t.sequence_values::<f32>().collect::<Result<_>>()?;
+            if v.is_empty() {
+                return err(format!("{key}: a number, or a list of them along the stroke"));
+            }
+            Ok((0..n)
+                .map(|i| {
+                    if v.len() == 1 || n == 1 {
+                        return v[0];
+                    }
+                    let u = i as f32 / (n - 1) as f32 * (v.len() - 1) as f32;
+                    let k = (u.floor() as usize).min(v.len() - 2);
+                    v[k] + (v[k + 1] - v[k]) * (u - k as f32)
+                })
+                .collect())
+        }
+        o => err(format!("{key}: want a number or a list, got {}", o.type_name())),
+    }
+}
+
+/// One stroke of a stick along `pts` (units), each point's force (N), alt,
+/// azimuth and roll (degrees) and speed (mm/s); the hand lands and lifts
+/// as a hand does (pastel.rs `LAND_S`, `LIFT_S`). Returns the volume laid, mm³.
+fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32], alt: &[f32], az: &[f32], roll: &[f32], speed: &[f32]) -> Result<f32> {
+    use paint::pastel::{Pose, StrokePoint};
+    let mut stick = stick_of(p)?;
+    let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
+    let mmu = {
+        let s = st.borrow();
+        mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
+    };
+    let _ = mmu;
+    // (the hand's landing and lifting are the stroke's: pastel.rs)
+    let sp: Vec<StrokePoint> = (0..pts.len())
+        .map(|i| {
+            let v = speed[i].max(1.0);
+            StrokePoint {
+                x: pts[i].0,
+                y: pts[i].1,
+                pose: Pose { force: force[i].max(0.0), alt: alt[i].clamp(0.0, 90.0).to_radians(), az: az[i].to_radians(), roll: (base_roll + roll[i]).to_radians() },
+                speed: v,
+            }
+        })
+        .collect();
+    let laid = crate::time::verb(st, crate::time::Verb::Pass, |s| {
+        let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+        let l = c.stick_stroke(&mut stick, &sp);
+        c.tally_mut().secs += l.secs as f64 + 0.25;
+        Ok(l)
+    })?;
+    store_stick(lua, p, &stick)?;
+    Ok(laid.volume_mm3)
+}
+
+/// The stick's way of drawing a pencil's marks: each mark a stroke at the
+/// pencil's pressure as force (`FORCE_AT_FULL` at full), the stick held at
+/// 60° with its upper end to the lower right (a right hand), at 80 mm/s.
+fn stick_marks(lua: &Lua, st: &S, p: &Table, marks: &[Mark]) -> Result<f32> {
+    let mut v = 0.0;
+    for m in marks {
+        // (a mark is dense, every 0.25 units: every eighth point will do)
+        let idx: Vec<usize> = (0..m.pts.len()).step_by(8).chain(std::iter::once(m.pts.len() - 1)).collect();
+        let pts: Vec<(f32, f32)> = idx.iter().map(|&i| m.pts[i]).collect();
+        let force: Vec<f32> = idx.iter().map(|&i| m.pressure[i] * FORCE_AT_FULL).collect();
+        let n = pts.len();
+        v += stick_stroke(lua, st, p, &pts, &force, &vec![60.0; n], &vec![45.0; n], &vec![0.0; n], &vec![80.0; n])?;
+    }
+    Ok(v)
+}
+
 pub fn install(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let methods = lua.create_table()?;
@@ -124,6 +242,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
             let m = graphite::hand_line(&pts, &prof, smooth, ruler, tremor, seed);
+            if is_stick(&p)? {
+                return stick_marks(lua, &st1, &p, &[m]);
+            }
             draw_marks(&st1, &p, &[m], seed)
         })?)?;
     }
@@ -144,6 +265,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
             let m = graphite::hand_line(&[a[0], b[0]], &prof, false, true, 0.0, seed);
+            if is_stick(&p)? {
+                return stick_marks(lua, &st1, &p, &[m]);
+            }
             draw_marks(&st1, &p, &[m], seed)
         })?)?;
     }
@@ -173,6 +297,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
             let marks = graphite::sketch_marks(&pts, pressure, passes, wander, smooth, tremor, seed);
+            if is_stick(&p)? {
+                return stick_marks(lua, &st1, &p, &marks);
+            }
             draw_marks(&st1, &p, &marks, seed)
         })?)?;
     }
@@ -205,6 +332,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             };
             let graded = o.as_ref().map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
             let marks = graphite::hatch_marks_graded(&m, angle, spacing, length, pressure, graded, seed);
+            if is_stick(&p)? {
+                return stick_marks(lua, &st1, &p, &marks);
+            }
             draw_marks(&st1, &p, &marks, seed)
         })?)?;
     }
@@ -214,6 +344,32 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         methods.set("side", lua.create_function(move |lua, (p, pts, o): (Table, Value, Option<Table>)| {
+            if is_stick(&p)? {
+                // engine 6: the stick laid nearly flat across the stroke, a
+                // piece `length` mm long (p:snap breaks one off)
+                if let Some(o) = &o {
+                    check_keys(o, &["force", "pressure", "speed", "roll", "seed", "width", "smooth", "tremor"], "side")?;
+                }
+                let pts = points(&pts)?;
+                if pts.len() < 2 {
+                    return err("side: needs at least two points");
+                }
+                let n = pts.len();
+                let force = match o.as_ref().map(|o| o.get::<Value>("force")).transpose()?.unwrap_or(Value::Nil) {
+                    Value::Nil => profile(o.as_ref(), 0.4)?.iter().map(|p| p * FORCE_AT_FULL).collect::<Vec<_>>(),
+                    _ => along(o.as_ref(), "force", n, 2.0)?,
+                };
+                let force = if force.len() == n { force } else { (0..n).map(|i| force[(i * force.len() / n).min(force.len() - 1)]).collect() };
+                // across the stroke: the stick's axis at a right angle to its direction
+                let az: Vec<f32> = (0..n).map(|i| {
+                    let (a, b) = (pts[i.saturating_sub(1)], pts[(i + 1).min(n - 1)]);
+                    (b.1 - a.1).atan2(b.0 - a.0).to_degrees() + 90.0
+                }).collect();
+                let speed = along(o.as_ref(), "speed", n, 60.0)?;
+                let roll = along(o.as_ref(), "roll", n, 0.0)?;
+                // (laid flat: the hand presses the piece down along its length)
+                return stick_stroke(lua, &st1, &p, &pts, &force, &vec![0.0; n], &az, &roll, &speed);
+            }
             if let Some(o) = &o {
                 check_keys(o, SIDE_KEYS, "side")?;
             }
@@ -248,6 +404,60 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(d)
         })?)?;
     }
+    // p:stroke(pts, {force=, alt=, azimuth=, roll=, speed=}): one stroke of
+    // an engine-6 stick, each a number or a list along the points: force (N),
+    // alt (the stick's angle to the paper, degrees), azimuth (where its upper
+    // end points, degrees: 0 to the right, 90 down the canvas), roll (turned
+    // about its axis, degrees, added to p:roll's), speed (mm/s)
+    {
+        let st1 = st.clone();
+        methods.set("stroke", lua.create_function(move |lua, (p, pts, o): (Table, Value, Option<Table>)| {
+            if !is_stick(&p)? {
+                return err("stroke: a stroke of a pastel stick (engine 6); a pencil draws with line");
+            }
+            if let Some(o) = &o {
+                check_keys(o, STROKE_KEYS, "stroke")?;
+            }
+            let pts = points(&pts)?;
+            if pts.len() < 2 {
+                return err("stroke: needs at least two points");
+            }
+            let n = pts.len();
+            let force = along(o.as_ref(), "force", n, 1.5)?;
+            let alt = along(o.as_ref(), "alt", n, 60.0)?;
+            let az = along(o.as_ref(), "azimuth", n, 45.0)?;
+            let roll = along(o.as_ref(), "roll", n, 0.0)?;
+            let speed = along(o.as_ref(), "speed", n, 80.0)?;
+            if force.iter().any(|f| !(0.0..=20.0).contains(f)) {
+                return err("stroke: force is newtons, 0 to 20 (light 0.1–0.5, normal 0.5–2, heavy 2–5)");
+            }
+            if speed.iter().any(|v| !(1.0..=2000.0).contains(v)) {
+                return err("stroke: speed is mm/s, 1 to 2000 (hatching 60–400)");
+            }
+            stick_stroke(lua, &st1, &p, &pts, &force, &alt, &az, &roll, &speed)
+        })?)?;
+    }
+    // p:roll(degrees): turn the stick in the fingers (later strokes add theirs)
+    methods.set("roll", lua.create_function(|_, (p, d): (Table, f32)| {
+        if !is_stick(&p)? {
+            return err("roll: a pastel stick (engine 6) turns in the fingers");
+        }
+        let r: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
+        p.raw_set("turned", (r + d).rem_euclid(360.0))?;
+        Ok(())
+    })?)?;
+    // p:snap(mm): break the stick, keeping a piece that long (its worn end)
+    methods.set("snap", lua.create_function(|_, (p, mm): (Table, f32)| {
+        if !is_stick(&p)? {
+            return err("snap: a pastel stick (engine 6) breaks");
+        }
+        let l: f32 = p.get("length")?;
+        if !(mm > 2.0 && mm < l) {
+            return err(format!("snap: keep a piece between 2 mm and its length ({l:.0} mm)"));
+        }
+        p.set("length", mm)?;
+        Ok(())
+    })?)?;
     // p:sharpen(): a fresh point
     methods.set("sharpen", lua.create_function(|_, p: Table| p.set("worn", 0.0))?)?;
     // p:width(): the width of the line it draws now, in units (at pressure 0.5)
@@ -271,6 +481,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
         Ok(if kind == "chalk" {
             format!("black chalk (worn {worn:.0} mm)")
+        } else if kind == "stick" {
+            let s = stick_of(&p)?;
+            let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
+            let sec: String = p.get("section")?;
+            format!("pastel {sec} {name} ({} MPa, {:.1} mm long, {} facets)", (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
         } else if kind == "pastel" {
             let soft: f32 = p.get::<Option<f32>>("soft")?.unwrap_or(0.7);
             let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
@@ -315,17 +530,79 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
+    // engine 6: pastel(pile, {kind="soft"|"hard"|"pencil", soft=, diameter=, length=}):
+    // a stick of the pile's pigments as they look dry (pastel.rs), that rests on
+    // the tooth, wears to facets and lays what it abrades
     // pastel(pile, {soft=0.7, point=}): a pastel stick of the pile's color (its
     // pigments as they look dry: paler than in oil); the pile's medium and
     // thinner don't matter. soft: 0 hard .. 1 very soft; point (mm): a pastel
     // pencil, its point that wide, keeping it
     {
         let meta = meta.clone();
+        let st1 = st.clone();
         g.set("pastel", lua.create_function(move |lua, (v, o): (Value, Option<Table>)| {
+            let pile = crate::api::pile_of(&v, "pastel")?;
+            let (engine, tubes) = {
+                let s = st1.borrow();
+                (s.tubes.engine, s.tubes.clone())
+            };
+            if engine >= 6 {
+                // engine 6: a stick (pastel.rs)
+                if let Some(o) = &o {
+                    check_keys(o, STICK_KEYS, "pastel")?;
+                }
+                let kind: String = o.as_ref().map(|o| o.get::<Option<String>>("kind")).transpose()?.flatten().unwrap_or_else(|| "soft".into());
+                let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten();
+                let dia = o.as_ref().map(|o| num(o, "diameter")).transpose()?.flatten();
+                let color = tubes.dry_color(&pile.mix.parts);
+                let stick = match kind.as_str() {
+                    "soft" => paint::pastel::Stick::round(color, soft.unwrap_or(0.75), dia.unwrap_or(12.0).clamp(4.0, 25.0)),
+                    "hard" => paint::pastel::Stick::square(color, soft.unwrap_or(0.25), dia.unwrap_or(6.35).clamp(3.0, 15.0)),
+                    "pencil" => paint::pastel::Stick::pencil(color, soft.unwrap_or(0.35), dia.unwrap_or(4.5).clamp(2.0, 8.0)),
+                    k => return err(format!("pastel: kind {k:?}: soft (a round stick), hard (a square one) or pencil")),
+                };
+                if soft.is_some_and(|s| !(0.0..=1.0).contains(&s)) {
+                    return err("pastel: soft is 0 (hard) to 1 (very soft)");
+                }
+                let p = lua.create_table()?;
+                p.set("kind", "stick")?;
+                p.set("section", match (kind.as_str(), stick.section) {
+                    ("pencil", _) => "pencil",
+                    (_, paint::pastel::Section::Square { .. }) => "square",
+                    _ => "round",
+                })?;
+                p.set("size", match stick.section {
+                    paint::pastel::Section::Round { d_mm } => d_mm,
+                    paint::pastel::Section::Square { side_mm } => side_mm,
+                })?;
+                p.set("hardness", stick.hardness)?;
+                p.set("wear", stick.wear)?;
+                p.set("r", stick.color[0])?;
+                p.set("g", stick.color[1])?;
+                p.set("b", stick.color[2])?;
+                p.set("name", pile.recipe())?;
+                p.set("worn", 0.0)?;
+                if let Some(l) = o.as_ref().map(|o| num(o, "length")).transpose()?.flatten() {
+                    if !(5.0..=200.0).contains(&l) {
+                        return err("pastel: length is the stick's length in mm, 5 to 200");
+                    }
+                    p.set("length", l)?;
+                } else {
+                    p.set("length", stick.length_mm)?;
+                }
+                let ft = lua.create_table()?;
+                for f in &stick.facets {
+                    for v in f {
+                        ft.push(*v)?;
+                    }
+                }
+                p.set("facets", ft)?;
+                p.set_metatable(Some(meta.clone()))?;
+                return Ok(p);
+            }
             if let Some(o) = &o {
                 check_keys(o, PASTEL_KEYS, "pastel")?;
             }
-            let pile = crate::api::pile_of(&v, "pastel")?;
             let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten().unwrap_or(0.7);
             if !(0.0..=1.0).contains(&soft) {
                 return err("pastel: soft is 0 (hard) to 1 (very soft)");
@@ -362,6 +639,29 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 check_keys(o, SMUDGE_KEYS, "smudge")?;
             }
             let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
+            if st1.borrow().tubes.engine >= 6 {
+                // engine 6: a finger (or a stump: pad=) drawn along a path, moving
+                // loose pastel (pastel.rs `rub`)
+                let pts = match &a {
+                    Value::Table(_) => points(&a)?,
+                    _ => return err("smudge: a finger is drawn along a path, smudge(pts, {force=, pad=, speed=})"),
+                };
+                if pts.len() < 2 {
+                    return err("smudge: needs at least two points");
+                }
+                let force = get("force")?.unwrap_or(1.0);
+                let pad = get("pad")?;
+                let speed = get("speed")?.unwrap_or(40.0);
+                if !(0.05..=10.0).contains(&force) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
+                    return err("smudge: force is newtons (0.05 to 10); pad, the contact in mm² (a stump: 2–10; a fingertip: about 135 at 1 N)");
+                }
+                return crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
+                    let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                    let secs = c.rub(&pts, force, pad, speed);
+                    c.tally_mut().secs += secs as f64 + 0.5;
+                    Ok(0)
+                });
+            }
             let strength = get("strength")?.unwrap_or(0.6);
             let f = frame(&st1)?;
             let mmu = {
@@ -432,9 +732,24 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 v => Some(mask_of(v)?),
             };
             let mut s = st1.borrow_mut();
+            let engine = s.tubes.engine;
             let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
             c.fix_drawing(m.as_deref());
+            if engine >= 6 {
+                // a light spray wets about 0.15 of the particles (pastel.rs `fix_pastel`)
+                c.fix_pastel(m.as_deref(), 0.15);
+            }
             Ok(())
+        })?)?;
+    }
+    // feel(x, y): what a fingertip feels there (engine 6): the surface, and the
+    // pastel in the tooth
+    {
+        let st1 = st.clone();
+        g.set("feel", lua.create_function(move |_, (x, y): (f32, f32)| {
+            let s = st1.borrow();
+            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+            Ok(c.feel(x, y))
         })?)?;
     }
     // drawing_guide(): the drawn lines as geometry over the whole canvas (1

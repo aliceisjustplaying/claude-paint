@@ -199,20 +199,25 @@ pub fn dry_color(masstone: Rgb) -> Rgb {
 
 /// One pixel of the drawing's bookkeeping.
 #[derive(Clone, Copy, Default)]
-struct Cell {
+pub(crate) struct Cell {
     /// Fraction of the pixel covered.
-    a: f32,
+    pub(crate) a: f32,
     /// Mean reflectance of the flakes (linear RGB).
-    r: Rgb,
+    pub(crate) r: Rgb,
     /// How readily an eraser lifts it (coverage-weighted).
-    lift: f32,
+    pub(crate) lift: f32,
     /// Fixed coverage: the eraser can't lift below this.
-    floor: f32,
+    pub(crate) floor: f32,
     /// The canvas's film (coats) when this was drawn: once paint has gone
     /// over it the film is thicker, and the drawing is sealed.
-    film: f32,
-    /// How full the tooth is with pastel (0 bare .. 1 it takes no more).
-    fill: f32,
+    pub(crate) film: f32,
+    /// How full the tooth is with pastel (0 bare .. 1 it takes no more):
+    /// engine 5's pastel.
+    pub(crate) fill: f32,
+    /// Engine 6's pastel in the tooth, µm (volume per area as it lies,
+    /// packed): loose, and bound by fixative.
+    pub(crate) loose: f32,
+    pub(crate) bound: f32,
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -220,7 +225,7 @@ struct Cell {
 #[derive(Clone)]
 pub struct Drawing {
     /// The deposit, per pixel of the window (the canvas's optical buffers).
-    cells: Vec<Cell>,
+    pub(crate) cells: Vec<Cell>,
     /// The drawn lines as geometry, per pixel of the whole canvas (not just
     /// the window of a crop render): the coverage each line would lay on a
     /// perfectly smooth ground (the lead's rate and cap at the pressure),
@@ -231,7 +236,10 @@ pub struct Drawing {
     guide_floor: Option<Vec<f32>>,
     /// Whether any pastel (color) has been laid: the cells are then
     /// serialized with their color and tooth (`to_f32s`).
-    color: bool,
+    pub(crate) color: bool,
+    /// Whether engine 6's pastel has been laid: the cells then carry their
+    /// loose and bound pastel too.
+    pub(crate) sticks: bool,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -513,22 +521,29 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
 
 impl Drawing {
     fn new(n: usize, whole: usize) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, color: false }
+        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, color: false, sticks: false }
     }
 
     /// Whether any pastel has been laid (the serialized layout has color).
+    #[cfg(test)]
     pub(crate) fn has_color(&self) -> bool {
         self.color
+    }
+
+    /// The serialized layout: 1 graphite only, 2 engine 5's pastel, 3
+    /// engine 6's (with the pastel in the tooth).
+    pub(crate) fn layout(&self) -> u64 {
+        if self.sticks { 3 } else if self.color { 2 } else { 1 }
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
     /// pastel, `has_color`: a, r, g, b, lift, floor, film, fill), the guide
     /// (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
-        let k = if self.color { 8 } else { 5 };
-        let color = self.color;
+        let k = if self.sticks { 10 } else if self.color { 8 } else { 5 };
+        let color = self.color || self.sticks;
         let cells = self.cells.iter().flat_map(move |c| {
-            let q = if color { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.fill] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0] };
+            let q = if color { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.fill, c.loose, c.bound] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0, 0.0] };
             q.into_iter().take(k)
         });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
@@ -538,20 +553,23 @@ impl Drawing {
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
     /// pixels, `whole` canvas pixels, `color` the layout with pastel. None if
     /// the data is inconsistent.
-    pub(crate) fn from_f32s<E>(n: usize, whole: usize, color: bool, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
-        let cells: Vec<Cell> = if color {
-            get(n * 8)?.as_chunks::<8>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], fill: q[7] }).collect()
+    pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
+        let (color, sticks) = (layout >= 2, layout >= 3);
+        let cells: Vec<Cell> = if sticks {
+            get(n * 10)?.as_chunks::<10>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], fill: q[7], loose: q[8], bound: q[9] }).collect()
+        } else if color {
+            get(n * 8)?.as_chunks::<8>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], fill: q[7], ..Cell::default() }).collect()
         } else {
-            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], fill: 0.0 }).collect()
+            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], ..Cell::default() }).collect()
         };
         let guide = get(whole)?;
         let has_floor = get(1)?[0];
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && c.film.is_finite() && ok(c.fill))
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && c.film.is_finite() && ok(c.fill) && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, color }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, color, sticks }))
     }
 }
 
@@ -603,7 +621,7 @@ impl Canvas {
         self.drawing.is_some()
     }
 
-    fn drawing_mut(&mut self) -> &mut Drawing {
+    pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {
         let (n, whole) = (self.px.len(), self.f.full_w * self.f.full_h);
         self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n, whole)))
     }
@@ -940,7 +958,7 @@ impl Canvas {
 }
 
 /// The ground under a deposit of coverage `a` and flake reflectance `r`.
-fn uncover(p: Rgb, a: f32, r: Rgb) -> Rgb {
+pub(crate) fn uncover(p: Rgb, a: f32, r: Rgb) -> Rgb {
     if a <= 0.0 {
         return p;
     }
@@ -949,7 +967,7 @@ fn uncover(p: Rgb, a: f32, r: Rgb) -> Rgb {
 }
 
 /// A deposit of coverage `a` and flake reflectance `r` over `under`.
-fn cover(under: Rgb, a: f32, r: Rgb) -> Rgb {
+pub(crate) fn cover(under: Rgb, a: f32, r: Rgb) -> Rgb {
     [under[0] * (1.0 - a) + a * r[0], under[1] * (1.0 - a) + a * r[1], under[2] * (1.0 - a) + a * r[2]]
 }
 

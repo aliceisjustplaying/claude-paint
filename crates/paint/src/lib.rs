@@ -24,6 +24,8 @@ pub mod graphite;
 pub mod rag;
 pub mod scene;
 pub mod palette;
+pub mod paper;
+pub mod pastel;
 pub mod pigment;
 pub mod rng;
 mod sched;
@@ -88,7 +90,11 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-pub const ENGINE: u32 = 5;
+/// - 6: paper as a support (`paper`); pastel as a stick that rests on the
+///   tooth, wears to facets and sheds what it abrades (`pastel`); the stump
+///   moves pastel; a pastel's colour is its pigments' dry (`pastel::dry_color`).
+///   An engine-5 log's pastel replays as it was painted (`graphite`).
+pub const ENGINE: u32 = 6;
 
 /// Hermite smoothstep.
 #[inline]

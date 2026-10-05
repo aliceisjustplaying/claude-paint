@@ -1430,6 +1430,8 @@ mod tests {
         let private = std::fs::symlink_metadata(s.parent().unwrap()).unwrap();
         assert!(private.is_dir() && private.mode() & 0o077 == 0, "the socket's directory is private");
         assert_eq!(s, super::short_sock(&long), "the same directory, the same socket");
+        // The private <tmp>/easel-<uid> it made stays: it is the one live servers use,
+        // and removing it under a running easel would take its socket away.
         std::fs::remove_dir(&mine).unwrap();
     }
     #[test]

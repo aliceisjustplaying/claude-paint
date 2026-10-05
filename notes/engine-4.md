@@ -74,7 +74,8 @@ painter never saw relief either: looks showed color only.
   - `canvas{ground={{..., absorbent=true}}}`: a chalk and glue ground holds
     `ABSORB_COATS` (0.6 coats) of oil it draws out of paint laid on it
     (`Surf::add`): the film loses that oil, gets stiffer and leaner. Dry
-    paint seals it.
+    paint seals it. (Engine 6 drains instead as the pigment packs, from the
+    ground up, to each pigment's floor: notes/research/pigment_oil.md.)
   - **Gloss** (`Canvas::gloss`): a baked film's gloss follows its oil
     (smoothstep 0.15..1.3), blended with the surface under it for thin
     films; varnish sets it to 1. Engine 4 shows a matte surface with the

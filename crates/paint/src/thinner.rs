@@ -262,6 +262,11 @@ impl Canvas {
     pub(crate) fn spread(&mut self, dt: f32) {
         let Some((bx0, by0, bx1, by1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
+        // engine 6: paint packed on an absorbent ground (`bristle::ground_drain`)
+        // stays where it is; only the liquid above it flows, the paint in it
+        // as rich as the film's surface (`bristle::surface_oil`)
+        let drain = self.engine >= 6;
+        let packed = |wet: &crate::wet::Wet, i: usize| if drain { wet.hide[i][7].clamp(0.0, 1.0) } else { 0.0 };
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
         // the mobility (mm²/min) of each pixel in the dirty box
@@ -322,7 +327,9 @@ impl Canvas {
                     let i = y * w + x;
                     let l = wet.vol[i] + wet.solv[i] / COAT_UM;
                     let m = mob(wet, i);
-                    if m <= 0.0 || l <= 0.0 {
+                    // (what can leave: the liquid above any packed paint)
+                    let lm = l - wet.vol[i] * packed(wet, i);
+                    if m <= 0.0 || l <= 0.0 || lm <= 0.0 {
                         return [0.0; 4];
                     }
                     let z = height[i] + l * COAT_UM;
@@ -339,8 +346,8 @@ impl Canvas {
                             }
                         }
                     }
-                    if sum > MAX_OUT * l {
-                        let f = MAX_OUT * l / sum;
+                    if sum > MAX_OUT * lm {
+                        let f = MAX_OUT * lm / sum;
                         for v in &mut q {
                             *v *= f;
                         }
@@ -372,6 +379,20 @@ impl Canvas {
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
                     let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                    let pk = packed(wet, i);
+                    if pk > 0.0 && gone > 0.0 {
+                        // the liquid left from above the packed paint, which
+                        // stays: the film's packed share grows, its oil falls
+                        // by the surface paint's
+                        let lm = l - v * pk;
+                        let (pl, sl) = (gone * v * (1.0 - pk) / lm, gone * s / lm);
+                        (pv, ps) = ((v - pl).max(0.0), (s - sl).max(0.0));
+                        if pv > 1e-9 {
+                            let top = crate::bristle::surface_oil(&hide);
+                            hide[4] = ((hide[4] * v - top * pl) / pv).max(0.0);
+                            hide[7] = (pk * v / pv).min(1.0);
+                        }
+                    }
                     let mut changed = gone > 0.0;
                     let (mut qin, mut thin) = (0.0f32, 0.0f32);
                     // from the left neighbor (its rightward flow), the right
@@ -384,16 +405,20 @@ impl Canvas {
                             continue;
                         }
                         let j = fy * w + fx;
-                        let lj = wet.vol[j] + wet.solv[j] / COAT_UM;
+                        // (the liquid above any packed paint, which came)
+                        let vj = wet.vol[j] * (1.0 - packed(wet, j));
+                        let lj = vj + wet.solv[j] / COAT_UM;
                         if lj <= 0.0 {
                             continue;
                         }
-                        let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
+                        let (qp, qs) = (q * vj / lj, q * (wet.solv[j] / COAT_UM) / lj);
                         if qp > 0.0 {
                             qin += qp;
                             thin += qp * th_of(j);
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
-                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                            let hj = wet.hide[j];
+                            let hj = if drain { let mut h = crate::bristle::fluid_of(hj); h[4] = crate::bristle::surface_oil(&hj); h } else { hj };
+                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], hj);
                         }
                         ps += qs;
                         changed = true;

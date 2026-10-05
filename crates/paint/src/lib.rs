@@ -90,7 +90,14 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-pub const ENGINE: u32 = 5;
+/// - 6: an absorbent ground drains paint as its pigment allows
+///   (`bristle::ground_drain`): to the oil left when the pigment packs, and
+///   below it only for pigments coarser than the ground's pores, the packed
+///   layer growing up from the ground while the surface keeps its oil, flow
+///   and gloss; the tubes hold the oil their box's period ground them with
+///   (`palette::Period`), and a rag's smear is drained as a brush's paint is
+///   (notes/research/pigment_oil.md).
+pub const ENGINE: u32 = 6;
 
 /// Hermite smoothstep.
 #[inline]

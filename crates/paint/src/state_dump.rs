@@ -123,6 +123,15 @@ impl Canvas {
             v.push(Field { name: "gloss", shape: px(1), values: Values::F32(self.gloss.clone()) });
             v.push(Field { name: "absorb", shape: px(1), values: Values::F32(self.absorb.clone()) });
         }
+        // engine 6: each film's oil when its pigment packs and when drained,
+        // the share of it packed on an absorbent ground, and its tube
+        // paint's oil by volume
+        if self.engine >= 6 {
+            v.push(Field { name: "wet.packed_oil", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[5]).collect()) });
+            v.push(Field { name: "wet.floor_oil", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[6]).collect()) });
+            v.push(Field { name: "wet.packed_share", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[7]).collect()) });
+            v.push(Field { name: "wet.oil_volume", shape: px(1), values: Values::F32(wt.hide.iter().map(|p| p[8]).collect()) });
+        }
         v
     }
 }

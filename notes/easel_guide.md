@@ -31,6 +31,9 @@ The studio holds one painting, and the easel is open on it. Its tools:
 The first chunk is `canvas{}` (see [The canvas](#the-canvas)). `read` reads the files in this folder: your brief and
 your notes.
 
+Beside the painting is a scratch canvas to try things on (see [The scratch canvas](#the-scratch-canvas)): `paint`,
+`look`, `status` and `log` work on it with `scratch: true`.
+
 In the examples below, `<tube>` stands for a name from the tube box and
 `<parts>` for a number of parts you choose. Other numbers in the examples
 only show how a call is written; they aren't recommended values.
@@ -691,6 +694,25 @@ each campaign, and compare before and after.
   print or choose differently.
 - **Memory.** Masks and forms are large: keep big ones `local` when
   later chunks don't need them.
+
+## The scratch canvas
+
+Beside the painting stands a scratch canvas for trying out a mix, a stroke, a glaze or a
+drying time before it goes on the painting. `paint`, `look`, `status` and `log` work on it
+with `scratch: true`; without it they work on the painting.
+
+- The first chunk painted on it sets it up as the painting's canvas was set up: the same
+  size, linen and ground. The painting needs its own `canvas{}` first.
+- It is a separate canvas: its own palette, brushes, knives, rags and variables (a pile
+  knifed for the painting has to be knifed again here), and its own log,
+  `paintings/lua/scratch.lua`. Nothing done on it reaches the painting.
+- It keeps its own clock. Time spent or waited there (`wait`, `dry()`, `glaze()`) doesn't
+  pass for the painting, and the painting's time doesn't pass for it.
+- To use what worked, paint it on the painting: the same pile, the same handling.
+- `new_scratch: true` (with `scratch: true`) puts the scratch canvas aside and starts a
+  fresh one before the chunk runs. The old log stays, as `paintings/lua/scratch-1.lua`, and so on.
+- A trial judges a passage only as far as it repeats that passage's conditions: lay the
+  underlayer you mean to work over, and let it dry as long as it has on the painting.
 
 ## The journal
 

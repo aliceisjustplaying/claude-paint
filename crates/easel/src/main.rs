@@ -424,6 +424,8 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
         } else {
             false
         };
+        let target: Vec<String> = args.iter().filter(|a| *a == "--scratch" || *a == "--new").cloned().collect();
+        args.retain(|a| a != "--scratch" && a != "--new");
         payload = match args.first().map(|s| s.as_str()) {
             Some("-f") => std::fs::read(args.get(1).ok_or("do -f <file>")?).map_err(|e| e.to_string())?,
             Some("-") => {
@@ -437,6 +439,7 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
             }
         };
         args = if look { vec!["--look".into()] } else { vec![] };
+        args.extend(target);
     }
     let (ok, body) = request(&name, cmd, &args, &payload)?;
     if ok {
@@ -622,7 +625,18 @@ struct Server {
     /// How many of the log's chunks the state was replayed from (at reopen or rebuild),
     /// not painted live.
     replayed: usize,
+    /// The scratch canvas beside the painting (`--scratch`): a session of its own (its own
+    /// log, canvas, palette, brushes and Lua state), set up as a copy of the painting's
+    /// canvas, with its own clock: time spent or waited there doesn't pass for the painting.
+    /// None until first used.
+    scratch: Option<Box<Server>>,
 }
+
+/// The scratch canvas's session beside the session `name`.
+fn scratch_name(name: &str) -> String {
+    if name == "painting" { "scratch".to_string() } else { format!("{name}-scratch") }
+}
+
 
 fn serve(args: &[String]) -> Result<(), String> {
     let name = args.first().ok_or("serve <name>")?.clone();
@@ -699,6 +713,15 @@ fn serve(args: &[String]) -> Result<(), String> {
             }
             let _ = std::fs::remove_file(&sock);
             break;
+        }
+        // the same for the scratch canvas, at once (its log is short)
+        if let Some(sc) = srv.scratch.as_mut()
+            && sc.s.stale
+        {
+            if let Err(e) = sc.s.rebuild() {
+                eprintln!("warning: the scratch canvas couldn't be rebuilt ({e}); it is put away");
+                srv.scratch = None;
+            }
         }
         // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
         // after the reply; status stays available and other requests are refused until done
@@ -799,6 +822,26 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
 /// The session's committed record: the log as the session last wrote it.
 fn witness_path(name: &str) -> PathBuf {
     session_dir(name).join("committed.lua")
+}
+
+/// Put a session's log aside as `<name>-N.lua` (the first N free) and drop its committed
+/// record, so a fresh session of that name starts empty. The path it went to, if any.
+fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
+    let lp = log_path(name);
+    let _ = std::fs::remove_file(witness_path(name));
+    if !lp.exists() {
+        return Ok(None);
+    }
+    let mut n = 1;
+    let to = loop {
+        let p = log_path(&format!("{name}-{n}"));
+        if !p.exists() {
+            break p;
+        }
+        n += 1;
+    };
+    std::fs::rename(&lp, &to).map_err(|e| format!("{}: {e}", lp.display()))?;
+    Ok(Some(to))
 }
 
 /// The log and the committed record on disk both hold `expected`.
@@ -912,6 +955,12 @@ impl Server {
     }
 
     fn resume(name: String) -> Result<Self, String> {
+        Self::resume_as(name, None)
+    }
+
+    /// `resume`; a new session's box and width are `like`'s when given (the scratch canvas
+    /// takes the painting's), else the configured box and the name's width.
+    fn resume_as(name: String, like: Option<&Session>) -> Result<Self, String> {
         let lp = log_path(&name);
         let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
         if let Some(t) = &text {
@@ -919,10 +968,12 @@ impl Server {
         }
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
-        let tubes = session::box_for(text.as_deref())?;
-        let width = width_for(&name, text.as_deref());
+        let (tubes, width) = match (like, &text) {
+            (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
+            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
+        };
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0 };
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1171,7 +1222,90 @@ impl Server {
         })
     }
 
+    /// A command for the painting, or with `--scratch` for the scratch canvas beside it.
+    /// `do --scratch --new` puts the scratch canvas aside and starts a fresh one.
     fn handle(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
+        let scratch = args.iter().any(|a| a == "--scratch");
+        let new = args.iter().any(|a| a == "--new");
+        let args: Vec<String> = args.iter().filter(|a| *a != "--scratch" && *a != "--new").cloned().collect();
+        if new && !(scratch && cmd == "do") {
+            return Err("--new starts a fresh scratch canvas: do --scratch --new".into());
+        }
+        if !scratch {
+            return self.serve_cmd(cmd, &args, payload);
+        }
+        if !matches!(cmd, "do" | "look" | "status" | "log" | "globals" | "save") {
+            return Err(format!("{cmd} is the painting's: it takes no --scratch"));
+        }
+        self.ready()?;
+        let mut out = String::new();
+        // reopened when first asked for, so it never holds up the painting's reopen
+        if self.scratch.is_none() && !new {
+            out += &self.resume_scratch();
+        }
+        if new || (self.scratch.is_none() && cmd == "do") {
+            out += &self.new_scratch()?;
+        }
+        let sc = self.scratch.as_mut().ok_or("there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting")?;
+        if let Err(e) = sc.ready() {
+            self.scratch = None;
+            return Err(format!("{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
+        }
+        out += &sc.serve_cmd(cmd, &args, payload)?;
+        Ok(out)
+    }
+
+    /// Run a chunk of the easel's own (not the painter's) and log it.
+    fn run_own(&mut self, src: &str) -> Result<(), String> {
+        self.ready()?;
+        self.s.run(src)?;
+        self.save_log()?;
+        Ok(())
+    }
+
+    /// Reopen the scratch canvas the studio has (its log), if any, at its first use after the
+    /// painting's reopen. A scratch canvas that can't be reopened is put aside, as `--new`
+    /// does, and doesn't stop the painting.
+    /// What happened, if the painter should know (a scratch canvas put aside).
+    fn resume_scratch(&mut self) -> String {
+        let name = scratch_name(&self.name);
+        if !(log_path(&name).exists() || witness_path(&name).exists()) {
+            return String::new();
+        }
+        match Server::resume_as(name.clone(), Some(&self.s)) {
+            Ok(sc) => {
+                self.scratch = Some(Box::new(sc));
+                String::new()
+            }
+            Err(e) => {
+                eprintln!("warning: the scratch canvas couldn't be reopened ({e}); it is put aside");
+                match put_aside(&name) {
+                    Ok(_) => "(the scratch canvas couldn't be reopened, so it is put aside)\n".into(),
+                    Err(e) => format!("(the scratch canvas couldn't be reopened, nor put aside: {e})\n"),
+                }
+            }
+        }
+    }
+
+    /// A fresh scratch canvas: the old one's log is put aside, and the new one is set up as
+    /// the painting's canvas was (its `canvas{...}`, the easel's first chunk there).
+    fn new_scratch(&mut self) -> Result<String, String> {
+        let src = self.s.st.borrow().canvas_src.clone().ok_or(
+            "the scratch canvas is set up as a copy of the painting's canvas, and the painting has none yet: its first chunk is canvas{...}",
+        )?;
+        let name = scratch_name(&self.name);
+        self.scratch = None;
+        let aside = put_aside(&name)?;
+        let mut sc = Server::resume_as(name, Some(&self.s))?;
+        sc.run_own(&src)?;
+        self.scratch = Some(Box::new(sc));
+        Ok(match aside {
+            Some(p) => format!("a fresh scratch canvas (the last one's log is {})\n", p.strip_prefix(root()).unwrap_or(&p).display()),
+            None => "a scratch canvas beside the painting, set up as the painting's canvas was\n".into(),
+        })
+    }
+
+    fn serve_cmd(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
         self.ready()?;
         match cmd {
             "note" => append_note(self.s.st.borrow().clock, payload),

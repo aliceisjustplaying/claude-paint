@@ -1,0 +1,11 @@
+(•‿•) Round27 Hopper is running persistently under `launchd art.stillwet.painter.r27`. Its first session completed successful read, status, note, paint and look calls. [Startup receipt](readiness/startup.json).
+
+The painter is Claude Opus 5.5 high through pi-black, engine5 at 2400px with the 13-tube Hopper box. Support and proportions are painter chosen. There is no reader or sitting cap. The original American city-life opening and reference prohibition remain, with the approved inspection addition verbatim. [Configuration](runner/r21_chains.py), [actual brief](readiness/BRIEF.md).
+
+Source is pinned to `4b9bef6a5872803f4f20623c15b7677a152db70c`, which includes the approved prompt and descends from bug-fix commit `840583587f0663fa361bace67da8c6c9d5fe9438`. The separate frozen checkout is `~/src/a/claude-paint-r27run`; runnable configuration is `~/tmp/gallery-fcf9c110/r27/r21_chains.py`. The exported binary rejects extra arguments to `pile`, the paint-mixing call, instead of silently ignoring them. The runner counts gestures and rag work as painting, preventing false completion. It declares completion only after a sitting inspects whole and detail views and adds no painting. [Export receipt](readiness/export.log), [verification and hashes](readiness/verification.json), [dry run](readiness/dry-run.log).
+
+Session ID: `01a10c9e-e9e1-723b-b297-114062917975`. The live prompt is `~/src/a/paint-studio-7c4dd1/BRIEF.md`. [Startup receipt](readiness/startup.json).
+
+[Private live studio](http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-7c4dd1) returned HTTP200 and the existing all-paintings viewer lists round27/HOPR with the correct model. Verification used the serving M3's actual tailnet hostname; another Mac was not independently checked. The existing public tunnel hostname failed DNS resolution; its local studio returned HTTP200. No tunnel or viewer changes were required. [Startup receipt](readiness/startup.json).
+
+The original automatic finisher remains: drying, 0.4 varnish coats and cracks. That finished image is separate from the normal painter view. The earlier Hopper used Sol, so this is not a controlled comparison. Production studio deployment was not performed. Painting completion was not awaited. [Finisher](../../scripts/finish_painting:32), [startup receipt](readiness/startup.json).

@@ -22,7 +22,7 @@ compare a mix with a passage.
   paint would have on a real blade.
 - **One light, one surround.** The blade is seen exactly as the passage is:
   `mode: "value"` grays both, `squint` blurs both, `relief`, `gallery` and
-  `light` light both. It takes no `mirror`, `grid`, `size` or `palette`.
+  `light` light both. It takes no `mirror`, `grid`, `size`, `palette`, `survey` or `compare`.
 - **It only reads.** No hand time, nothing in the log, the knife keeps its
   load, the state digest is as it was (tested).
 

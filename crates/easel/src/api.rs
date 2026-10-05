@@ -1854,12 +1854,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             parts.iter_mut().for_each(|q| q.1 /= wsum);
             let (medium, solvent, thinner, oil) = (medium / wsum, solvent / wsum, thinner / wsum, oil / wsum);
             let tubes = st.borrow().tubes.clone();
-            let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v)).collect();
+            let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v * wsum)).collect();
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
-            let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
+            let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
@@ -2142,7 +2142,8 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
         let absorbent = match l.get::<Value>("absorbent")? {
             Value::Nil => 0.0,
             Value::Boolean(b) => if b { 1.0 } else { 0.0 },
-            Value::Number(n) => (n as f32).clamp(0.0, 1.0),
+            // (NaN passes a clamp, and would leave the ground's gloss NaN)
+            Value::Number(n) if !n.is_nan() => (n as f32).clamp(0.0, 1.0),
             Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
             _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
         };

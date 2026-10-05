@@ -2037,6 +2037,40 @@ mod tests {
         s.run(r#"pile{{"lead white", 1}, turps=0.5}; pile{{"lead white", 1}, blot=0.3, oil="poppy"}; pile{{"lead white", 1}, thinner=0.5}"#).unwrap();
     }
 
+    /// A mix's printed recipe gives each heap its share, whatever its own
+    /// recipe sums to, and p:add counts in the units that recipe prints.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_mix_prints_its_heaps_in_their_shares_and_adds_in_those_units() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"local a = pile{{"lead white", 3}, {"cobalt blue", 1}}; local b = pile{{"vermilion", 1}}
+                 m = mix{{a, 1}, {b, 1}}
+                 local w = {}; for _, p in ipairs(m:parts()) do w[p[1]] = p[2] end
+                 assert(math.abs(w["vermilion"] - 1) < 1e-5 and math.abs(w["lead white"] - 0.75) < 1e-5, "half of the mix is vermilion")
+                 m2 = m:add{{"vermilion", 2}}
+                 local v = {}; for _, p in ipairs(m2:parts()) do v[p[1]] = p[2] end
+                 assert(math.abs(v["vermilion"] - 3) < 1e-5, "two parts more in the printed units")"#).unwrap();
+    }
+
+    /// pile{oil=} grinds the paint in that oil: its drying rate against
+    /// linseed's (paint's oil_rate_scales_drying has what the rate does).
+    #[test]
+    #[cfg(tube_box)]
+    fn a_pile_s_oil_sets_its_drying_rate() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"pl = pile{{"lead white", 1}}; pli = pile{{"lead white", 1}, oil="linseed"}
+                 pw = pile{{"lead white", 1}, oil="walnut"}; pp = pile{{"lead white", 1}, oil="poppy"}"#).unwrap();
+        let rate = |n: &str| match &s.globals[n].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.oil_rate,
+            o => panic!("{n} is {o:?}"),
+        };
+        assert_eq!([rate("pl"), rate("pli"), rate("pw"), rate("pp")], [1.0, 1.0, 0.8, 0.6]);
+        let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
+        assert!(e.contains("linseed"), "{e}");
+    }
+
     /// A gesture's points are checked before its curve is sampled (a point
     /// that is nowhere would be sampled without end), and its pressure keeps
     /// a press that falls between its evenly spaced knots.

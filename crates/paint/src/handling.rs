@@ -192,6 +192,7 @@ impl<'a> Handling<'a> {
             load_at: None,
             scale_at: None,
             piles_at: None,
+            piles_thinner: Vec::new(),
             cut_in: None,
             curve: 0.05,
             wave: 0.25,

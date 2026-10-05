@@ -39,6 +39,7 @@ pub struct Studio {
     pub style: Option<Rc<Style>>,
     /// Arguments `canvas{}` was called with (for status).
     pub setup: Option<String>,
+    pub fabric: Option<paint::Fabric>,
     pub seed: u64,
     /// Index of the chunk being run (1-based), for seeds.
     pub chunk: u64,
@@ -69,7 +70,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
+        Studio { width, canvas: None, style: None, setup: None, fabric: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -1714,6 +1715,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
+                    s.fabric = fabric.clone();
                     s.seed = seed;
                     s.rng = Rng::new(mixseed(seed, s.chunk, 0xC0FFEE));
                     s.clock0 = c.clock();

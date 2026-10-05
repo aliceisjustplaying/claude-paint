@@ -1,0 +1,400 @@
+{
+  "method": "Three fresh Chromium pages per version, 1440 x 900. Wait for the real Monet events then leave the painting visible for exactly 1000 ms. Click via the DOM; use performance.now for handler and two requestAnimationFrame callbacks for a paint opportunity. MutationObserver records code DOM changes, a Worker wrapper records round trips, PerformanceObserver records tasks >= 50 ms and a port-handler wrapper records each preparation batch. No waiting for formatter readiness before clicking. Paint opportunity timings include browser scheduling jitter.",
+  "source": {
+    "painter": "paint-studio-12e572",
+    "chars": 63829,
+    "rawLines": 1458,
+    "formattedLines": 3164,
+    "reconstructedChars": 63734,
+    "reconstructedLines": 1523
+  },
+  "baselineCommit": "e6468d29ab19bb1998403aad4d259eb48538d8f4",
+  "baseline": {
+    "handlerMedianMs": 61.80000000447035,
+    "paintMedianMs": 70.39999999850988,
+    "formatWaitMedianMs": 632.3000000044703,
+    "preparedBeforeEveryOpen": false,
+    "maxDOMBatchMs": 0,
+    "runs": [
+      {
+        "port": 8768,
+        "run": 0,
+        "loaded": 225.60000000149012,
+        "open": {
+          "start": 1230.2999999970198,
+          "handler": 61.80000000447035,
+          "paint": 70.39999999850988,
+          "labelAtClick": "",
+          "linesAtClick": 0
+        },
+        "workers": [
+          {
+            "post": 1291.2999999970198,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 1319.6999999955297,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 1695.6999999955297,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 1848.6999999955297,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 1292.2999999970198,
+            "label": "raw source",
+            "lines": 1523
+          },
+          {
+            "at": 1319.6999999955297,
+            "label": "raw source",
+            "lines": 1458
+          },
+          {
+            "at": 1862.6000000014901,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [
+          {
+            "start": 118,
+            "duration": 76
+          },
+          {
+            "start": 1230.1000000014901,
+            "duration": 62
+          }
+        ],
+        "workerCreated": 1291.1999999955297,
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      },
+      {
+        "port": 8768,
+        "run": 1,
+        "loaded": 129.10000000149012,
+        "open": {
+          "start": 1131.7999999970198,
+          "handler": 56,
+          "paint": 65.40000000596046,
+          "labelAtClick": "",
+          "linesAtClick": 0
+        },
+        "workers": [
+          {
+            "post": 1187.5,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 1216,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 1591,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 1707.7999999970198,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 1187.8999999985099,
+            "label": "raw source",
+            "lines": 1523
+          },
+          {
+            "at": 1216.1000000014901,
+            "label": "raw source",
+            "lines": 1458
+          },
+          {
+            "at": 1723.8999999985099,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [
+          {
+            "start": 1131.5,
+            "duration": 56
+          },
+          {
+            "start": 1755.7000000029802,
+            "duration": 80
+          }
+        ],
+        "workerCreated": 1187.3999999985099,
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      },
+      {
+        "port": 8768,
+        "run": 2,
+        "loaded": 130,
+        "open": {
+          "start": 1132.5,
+          "handler": 92.60000000149012,
+          "paint": 111.10000000149012,
+          "labelAtClick": "",
+          "linesAtClick": 0
+        },
+        "workers": [
+          {
+            "post": 1224.8000000044703,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 1266.2000000029802,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 1937.5,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 2059.2000000029802,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 1225.2000000029802,
+            "label": "raw source",
+            "lines": 1523
+          },
+          {
+            "at": 1266.2000000029802,
+            "label": "raw source",
+            "lines": 1458
+          },
+          {
+            "at": 2073.8000000044703,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [
+          {
+            "start": 148.90000000596046,
+            "duration": 51
+          },
+          {
+            "start": 216.80000000447035,
+            "duration": 53
+          },
+          {
+            "start": 1132.4000000059605,
+            "duration": 92
+          },
+          {
+            "start": 1266.2000000029802,
+            "duration": 56
+          },
+          {
+            "start": 2118.2000000029802,
+            "duration": 60
+          }
+        ],
+        "workerCreated": 1224.6000000014901,
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      }
+    ]
+  },
+  "candidate": {
+    "handlerMedianMs": 0.20000000298023224,
+    "paintMedianMs": 48.5,
+    "formatWaitMedianMs": 0,
+    "preparedBeforeEveryOpen": true,
+    "maxDOMBatchMs": 4.100000001490116,
+    "runs": [
+      {
+        "port": 8769,
+        "run": 0,
+        "loaded": 255.30000000447035,
+        "open": {
+          "start": 1259,
+          "handler": 0.3999999985098839,
+          "paint": 48.5,
+          "labelAtClick": "formatted · display only",
+          "linesAtClick": 3164
+        },
+        "workers": [
+          {
+            "post": 144.20000000298023,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 334.1000000014901,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 1020.3000000044703,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 1210.2000000029802,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 1231.7000000029802,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [
+          {
+            "start": 127.60000000149012,
+            "duration": 76
+          }
+        ],
+        "workerCreated": 31,
+        "batches": [
+          4.100000001490116,
+          3.7999999970197678,
+          3.0999999940395355,
+          3.100000001490116,
+          3.600000001490116,
+          2.899999998509884
+        ],
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      },
+      {
+        "port": 8769,
+        "run": 1,
+        "loaded": 197.70000000298023,
+        "open": {
+          "start": 1200,
+          "handler": 0.10000000149011612,
+          "paint": 42.899999998509884,
+          "labelAtClick": "formatted · display only",
+          "linesAtClick": 3164
+        },
+        "workers": [
+          {
+            "post": 131.80000000447035,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 288.1000000014901,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 673.8000000044703,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 792.3000000044703,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 801.8000000044703,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [],
+        "workerCreated": 30.899999998509884,
+        "batches": [
+          1.8999999985098839,
+          1.5999999940395355,
+          1.8999999985098839,
+          3.2000000029802322
+        ],
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      },
+      {
+        "port": 8769,
+        "run": 2,
+        "loaded": 214.20000000298023,
+        "open": {
+          "start": 1217.3999999985099,
+          "handler": 0.20000000298023224,
+          "paint": 92.5,
+          "labelAtClick": "formatted · display only",
+          "linesAtClick": 3164
+        },
+        "workers": [
+          {
+            "post": 132.60000000149012,
+            "id": 1,
+            "chars": 63734
+          },
+          {
+            "post": 252.10000000149012,
+            "id": 2,
+            "chars": 63829
+          },
+          {
+            "reply": 618.7999999970198,
+            "id": 1,
+            "lines": 3159
+          },
+          {
+            "reply": 755.7000000029802,
+            "id": 2,
+            "lines": 3164
+          }
+        ],
+        "dom": [
+          {
+            "at": 764.2999999970198,
+            "label": "formatted · display only",
+            "lines": 3164
+          }
+        ],
+        "tasks": [],
+        "workerCreated": 29.299999997019768,
+        "batches": [
+          1.5999999940395355,
+          1.6000000014901161,
+          1.8000000044703484,
+          3
+        ],
+        "sourceChars": 63829,
+        "sourceLines": 1458,
+        "formattedLines": 3164
+      }
+    ]
+  }
+}

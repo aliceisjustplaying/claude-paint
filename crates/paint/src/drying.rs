@@ -179,7 +179,8 @@ pub mod drier {
         pub const BONE_BLACK: f32 = 0.9;
         /// Lamp black, and vine black (a carbon black like it): medium, 2–5
         /// days; set as bone black's. Vine black, less stiff: about 4.9 days
-        /// (engine 2's 0.35: about 12.6).
+        /// (at engine 2's rate, 0.35, about 12.6; engine 2 itself, with its
+        /// own pace, takes about 5.0).
         pub const LAMP_BLACK: f32 = 0.9;
         /// Cobalt blue: fast, about 2 days: 45 h (1.4: 71 h).
         pub const COBALT_BLUE: f32 = 2.2;

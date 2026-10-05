@@ -14,9 +14,9 @@ against its source before it is relied on. -->
 
 ## Summary
 
-From about 1880 Monet's paintings hold no black and no earths [AM].
+From about 1880 Monet's paintings hold no black and no earths other than yellow ochre [AM].
 That yellow ochre stays on as the one earth is this note's reading, from
-its use in 1899–1926 [TB28] (*Uncertain*). In a painting of about 1897–99
+its use in 1899–1926 [TB28] (*Uncertain*). In a painting of about 1897–99 (the museum's date)
 zinc white is mixed into the colors [MM22]. The paintings of 1899
 to 1926 were painted from a short list: lead white, cobalt blue, French
 ultramarine, cobalt violet, viridian, the cadmium yellows and orange, zinc
@@ -31,7 +31,7 @@ yellow ochre is still documented [TB28].
 
 ## 2. Grounds
 
-- **A lead white ground** under a painting of about 1897–99 [MM22].
+- **A lead white ground** under a painting of about 1897–99 (the museum's date) [MM22].
 - Commercial oil grounds of the period were white, off-white, cream, pale
   grey (white with a little black) or beige [AM]. *Uncertain* for any one
   canvas.
@@ -40,7 +40,7 @@ yellow ochre is still documented [TB28].
 
 | pigment | found | source |
 |---|---|---|
-| lead white | throughout; the ground of about 1897–99 | [MM22; TB28] |
+| lead white | throughout; the ground of about 1897–99 (the museum's date) | [MM22; TB28] |
 | zinc white | mixed into the colors, about 1897–99 | [MM22] |
 | cobalt blue | about 1897–99 and 1899–1926 | [MM22; TB28] |
 | French ultramarine | 1899–1926 | [TB28] |
@@ -51,7 +51,6 @@ yellow ochre is still documented [TB28].
 | barium (lemon) yellow and zinc yellow | used together, 1899–1926 | [TB28] |
 | vermilion | about 1897–99 and 1899–1926 | [MM22; TB28] |
 | madder lake | 1899–1926 | [TB28] |
-| cochineal lake | with madder lakes in AIC samples of his late paintings (secondary summaries; *Uncertain*) | |
 | cochineal lake | found with madder in French paint of the period | [POZ] |
 | yellow ochre | still documented, the one earth | [TB28] |
 
@@ -90,7 +89,7 @@ lake → rose madder; cochineal lake → carmine lake; yellow ochre → yellow
 ochre.
 
 Zinc white stays in the giverny box for the whole span, 1897 to 1926: a
-judgement from the one painting of about 1897–99 [MM22], not a sourced finding.
+judgement from the one painting of about 1897–99 (the museum's date) [MM22], not a sourced finding.
 
 Barium yellow and zinc yellow take their color and tinting strength from
 measured dry powders, darkened for oil [OTE]; carmine lake's numbers are

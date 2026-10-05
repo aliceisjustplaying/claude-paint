@@ -1,0 +1,41 @@
+diff --git a/notes/round27/runner/brief_template.md b/notes/round28/runner/brief_template.md
+index cb322dc..c264929 100644
+--- a/notes/round27/runner/brief_template.md
++++ b/notes/round28/runner/brief_template.md
+@@ -26,7 +26,11 @@
+ {READING}
+ 
+ ## Working
+-After the first large masses and each major campaign, inspect the whole picture in normal color against your intended effect. If a repair keeps recreating the same problem, reconsider the composition or method. Before repeating an unfamiliar mixture or stroke across a passage, inspect a small trial and the existing marks in a detail crop.
++Work one campaign at a time. After laying a campaign, inspect the whole picture in normal color and relevant detail before writing the code for the next campaign. Let what you see inform the next action; record what changes or why continuing unchanged serves the picture.
++
++After the first large masses, consider whether the whole picture produces your intended effect: how its large shapes, values and spatial relationships support it, and whether anything weakens it. Before adding repeated small details, improve a weakening relationship or deliberately accept it with your reason. After a local repair, check its effect on the whole picture. If the repair recreates the problem, reconsider the composition or method before expanding it.
++
++Before repeating an unfamiliar mixture or stroke, inspect a small trial laid on the intended substrate after the intended treatment, alongside the existing marks in a detail crop. A held pile shows thick paint on steel; use the laid trial to judge its effect on the picture. For material trials and repairs, keep useful observations in your journal: substrate and wetness, recipe ratios, medium or thinner, brush load, coverage and the viewed result. Carry forward the conditions that mattered and label broader rules as hypotheses until a further trial isolates them.
+ 
+ - You make every artistic decision.
+ - Keep exploring what interests you. You’re free to reconsider a passage,
+diff --git a/notes/round27/runner/r21_chains.py b/notes/round28/runner/r21_chains.py
+index 667c41a..379ec5e 100644
+--- a/notes/round27/runner/r21_chains.py
++++ b/notes/round28/runner/r21_chains.py
+@@ -54,11 +54,19 @@ PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is y
+                "At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, "
+                "practical lessons to carry forward from what you observed and recipes that failed. Before retrying "
+                "a failed recipe, identify what has changed and why that could address the observed failure. "
++               "Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, "
++               "medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. "
+                "Record what you observed and what remains uncertain.")
+ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+                    "Your brief is in BRIEF.md and your journal in notes/journal.md. "
+                    "Take your time with a fresh look at the whole canvas and detail crops in normal color. "
+                    "Read your journal handoff and apply its practical lessons before acting. "
++                   "Continue one campaign at a time, inspecting the whole picture and relevant detail before "
++                   "writing the next campaign's code. Let the result inform your next action and check local "
++                   "repairs against the whole picture; reconsider the composition or method if a repair repeats "
++                   "the problem. Judge unfamiliar mixtures and marks through small laid trials on the intended "
++                   "substrate after the intended treatment. Carry forward the observed material conditions "
++                   "and treat broader rules as hypotheses. "
+                    "Inspect each passage you previously acknowledged as unresolved in an appropriate "
+                    "detail crop, then explicitly judge it in your journal: improve it or accept it as it is, "
+                    "with your reason. You may finish with imperfections you deliberately accept. "

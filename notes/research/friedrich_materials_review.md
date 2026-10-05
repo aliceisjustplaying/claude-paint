@@ -1,4 +1,14 @@
-# Friedrich materials: readiness for an original engine 5 landscape
+# Friedrich materials: review and approved palette update
+
+**Approved update, October 5, 2026:** the new `friedrich` box supplies 16
+tubes: the original fourteen plus the existing catalog's Naples yellow and
+rose madder. The Friedrich exporter selects this box. Their catalog
+properties are reused, including rose madder's engine-5 drying rate of
+0.4. [R1; R2]
+
+The review below records the assessment of the original 14-tube selection
+before the approved additions. The current supplied materials are in the
+[updated materials note](friedrich_materials.md), §9.
 
 **Recommendation: the current 14-tube box is suitable for the original Friedrich brief.** It supplies the principal documented pigment families and the engine supports thin paint, textured layered grounds and precise drawing. This is a judgment of practical suitability, not a claim that its numerical properties reproduce Friedrich's paint. Solvent thinning retains an unreconciled modeling limit: combining `thinner=` and `turps=` in one pile is untested, as detailed below. The brief requests an invented landscape, not a dated replica or every pigment he ever used. [R1; R2; R3; R14 lines 93–110; CATS p.127; ALF pp.344–349; MAD pp.102–103]
 

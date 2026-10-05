@@ -5,7 +5,7 @@
 #   the catalog holds that box's tubes and no other;
 # - two box-* features without all-boxes: no build (a compile error);
 # - the replay build (easel's default, paint's all-boxes): the default box
-#   and all seven named boxes.
+#   and all eight named boxes.
 # paint's catalog tests (palette::tests) run in each, and the easel's
 # painter test the_build_holds_only_its_box_s_tubes in each painter build.
 #
@@ -50,7 +50,7 @@ refused() {
 }
 
 painter_test=(--test painter the_build_holds_only_its_box_s_tubes -- --exact)
-for f in "" box-sargent box-inness box-alma-tadema box-tonn box-hopper box-giverny box-impressionist; do
+for f in "" box-friedrich box-sargent box-inness box-alma-tadema box-tonn box-hopper box-giverny box-impressionist; do
   features=(--no-default-features)
   [ -z "$f" ] || features+=(--features "$f")
   passes 3 "paint ${f:-no box}" -p paint "${features[@]}" --lib -- palette::tests::the_catalog palette::tests::every_box

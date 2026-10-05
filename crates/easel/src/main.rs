@@ -650,7 +650,6 @@ fn serve(args: &[String]) -> Result<(), String> {
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
-    srv.resume_scratch();
     let sock = sock_path(&name);
     // the lock is ours: a socket there is a dead server's
     let _ = std::fs::remove_file(&sock);
@@ -1240,6 +1239,10 @@ impl Server {
         }
         self.ready()?;
         let mut out = String::new();
+        // reopened when first asked for, so it never holds up the painting's reopen
+        if self.scratch.is_none() && !new {
+            out += &self.resume_scratch();
+        }
         if new || (self.scratch.is_none() && cmd == "do") {
             out += &self.new_scratch()?;
         }
@@ -1260,19 +1263,25 @@ impl Server {
         Ok(())
     }
 
-    /// Reopen the scratch canvas the studio has (its log), if any. A scratch canvas that
-    /// can't be reopened is put aside, as `--new` does, and doesn't stop the painting.
-    fn resume_scratch(&mut self) {
+    /// Reopen the scratch canvas the studio has (its log), if any, at its first use after the
+    /// painting's reopen. A scratch canvas that can't be reopened is put aside, as `--new`
+    /// does, and doesn't stop the painting.
+    /// What happened, if the painter should know (a scratch canvas put aside).
+    fn resume_scratch(&mut self) -> String {
         let name = scratch_name(&self.name);
         if !(log_path(&name).exists() || witness_path(&name).exists()) {
-            return;
+            return String::new();
         }
         match Server::resume_as(name.clone(), Some(&self.s)) {
-            Ok(sc) => self.scratch = Some(Box::new(sc)),
+            Ok(sc) => {
+                self.scratch = Some(Box::new(sc));
+                String::new()
+            }
             Err(e) => {
                 eprintln!("warning: the scratch canvas couldn't be reopened ({e}); it is put aside");
-                if let Err(e) = put_aside(&name) {
-                    eprintln!("warning: {e}");
+                match put_aside(&name) {
+                    Ok(_) => "(the scratch canvas couldn't be reopened, so it is put aside)\n".into(),
+                    Err(e) => format!("(the scratch canvas couldn't be reopened, nor put aside: {e})\n"),
                 }
             }
         }

@@ -20,8 +20,10 @@ would have aged the painting).
 ## How it is built
 
 - `crates/easel/src/main.rs`: the painting's server holds the scratch canvas as a second
-  `Server` (`Server::scratch`), reopened from its log at startup (`resume_scratch`; a log that
-  fails to reopen is put aside, never stopping the painting). `--scratch` routes `do`, `look`,
+  `Server` (`Server::scratch`), reopened from its log at its first use after a reopen
+  (`resume_scratch`), so the painting's reopen doesn't wait for the scratch history; that first
+  scratch request replays it instead. A log that fails to reopen is put aside, never stopping
+  the painting. `--scratch` routes `do`, `look`,
   `status`, `log`, `globals` and `save`; `do --scratch --new` starts a fresh one. A stale
   scratch state (failed chunk, see `session.rs` `stale`) is rebuilt at once.
 - `harness/painter/easel-tools.ts`: the tool options.

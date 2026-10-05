@@ -543,6 +543,8 @@ impl Canvas {
         // a pixel (a stroke's furrows) shade by their slope, above, and don't
         // shadow the paint around them
         let shade_surf = crate::surface::box_blur(&surf, w, h, 1);
+        // Bound the actual sampled surface, including blur rounding.
+        let shade_hi = shade_surf.par_iter().copied().reduce(|| f32::MIN, f32::max);
         let sat = |x: isize, y: isize| shade_surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
         let hv = {
             let v = [lx, ly, lz + 1.0];
@@ -568,8 +570,9 @@ impl Canvas {
                 let mut lit = 1.0f32;
                 for s in 1..=steps {
                     let ray = h0 + rise * s as f32;
-                    // the ray is at or above the highest paint: nothing further shades it
-                    if ray >= hi {
+                    // the ray is at or above the highest paint it can meet (the
+                    // blurred surface it samples): nothing further shades it
+                    if ray >= shade_hi {
                         break;
                     }
                     let (px, py) = ((x as f32 + sx * s as f32).round() as isize, (y as f32 + sy * s as f32).round() as isize);
@@ -634,6 +637,28 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+    // Solvent contributes geometry under raking light, while remaining
+    // optically clear in the diffuse view. The same relief must shade alike
+    // whether its height comes from the dry support or the liquid film.
+    #[test]
+    #[cfg(tube_box)]
+    fn raking_light_includes_solvent_thickness() {
+        let mut liquid = crate::Style::oil().prepare(48, 1.0, 3);
+        let mut raised = crate::Style::oil().prepare(48, 1.0, 3);
+        let diffuse = liquid.seen();
+        liquid.wet.solv = vec![0.0; liquid.height.len()];
+        for i in 0..liquid.height.len() {
+            let x = i % liquid.f.w;
+            let thickness = if (16..32).contains(&x) { 600.0 } else { 0.0 };
+            liquid.wet.solv[i] = thickness;
+            raised.height[i] += thickness;
+        }
+        assert_eq!(liquid.seen(), diffuse, "clear solvent leaves diffuse color unchanged");
+        for azimuth in [0.0, 135.0, 270.0] {
+            assert!(liquid.seen_lit(azimuth, 10.0, 1.0) == raised.seen_lit(azimuth, 10.0, 1.0), "equal film geometry shades alike at {azimuth} degrees");
+        }
+    }
+
     #[cfg(tube_box)]
     use crate::color::hex;
     #[cfg(tube_box)]

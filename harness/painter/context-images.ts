@@ -12,6 +12,7 @@
  *   - at most MAX_IMAGES images, and
  *   - at most MAX_IMAGE_CHARS characters of base64 among them.
  *
+ * The newest tool result's images stay together when that group fits both limits.
  * The newest image is kept unless it alone is over MAX_IMAGE_CHARS; then it is dropped too,
  * and its line says it was left out and why.
  *
@@ -118,7 +119,16 @@ export function pruneImages<M extends Message>(messages: readonly M[], limits: P
 		});
 	});
 	const sizes = found.map((f) => f.chars);
-	const dropped = imagesToDrop(sizes, limits);
+	let dropped = imagesToDrop(sizes, limits);
+	// Cache-friendly step rounding must not cut into a fresh survey batch that fits.
+	const newestMessage = found.at(-1)?.m;
+	const firstNewest = found.findIndex((f) => f.m === newestMessage);
+	if (firstNewest >= 0 && messages[newestMessage!].role === "toolResult") {
+		const newest = sizes.slice(firstNewest);
+		if (newest.length <= limits.maxImages && newest.reduce((a, b) => a + b, 0) <= limits.maxImageChars) {
+			dropped = Math.min(dropped, firstNewest);
+		}
+	}
 	const keptChars = sizes.slice(dropped).reduce((a, b) => a + b, 0);
 	if (dropped === 0) return { messages: messages.slice(), images: found.length, dropped, keptChars };
 

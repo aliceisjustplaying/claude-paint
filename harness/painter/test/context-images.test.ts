@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { imagesToDrop, pruneImages } from "../context-images.ts";
+import { surveyReply } from "../easel-client.ts";
 
 const L = { maxImages: 20, maxImageChars: 12_000_000, step: 5 };
 
@@ -92,6 +93,54 @@ test("the same messages give the same request", () => {
 	const a = pruneImages(session(40), L);
 	const b = pruneImages(session(40), L);
 	assert.equal(JSON.stringify(a.messages), JSON.stringify(b.messages));
+});
+
+test("a fresh multi-image look that fits is delivered whole despite step rounding", () => {
+	const msgs = session(3);
+	const tiles = Array.from({ length: 8 }, (_, i) => ({ type: "image", data: String(i).repeat(10), mimeType: "image/png" }));
+	msgs.push({ role: "toolResult", toolName: "look", content: tiles });
+	for (const limits of [
+		{ maxImages: 8, maxImageChars: 1000, step: 5 },
+		{ maxImages: 20, maxImageChars: 80, step: 5 },
+	]) {
+		const r = pruneImages(msgs, limits);
+		assert.deepEqual(r.messages.at(-1).content, tiles);
+		assert.equal(r.dropped, 3);
+		assert.ok(r.images - r.dropped <= limits.maxImages);
+		assert.ok(r.keptChars <= limits.maxImageChars);
+	}
+	// Oversized groups still obey the hard limits.
+	const small = pruneImages(msgs, { maxImages: 2, maxImageChars: 15, step: 5 });
+	assert.ok(small.images - small.dropped <= 2);
+	assert.ok(small.keptChars <= 15);
+});
+
+test("a survey larger than the request budget delivers a complete first batch and names every unread tile", () => {
+	const paths = Array.from({ length: 20 }, (_, i) => `out/tile-${i + 1}.png`);
+	const tiles = paths.map((_, i) => ({ type: "image" as const, data: String(i % 10).repeat(750_000), mimeType: "image/png" }));
+	for (const [limits, expectedCount] of [
+		[L, 16],
+		[{ maxImages: 8, maxImageChars: 12_000_000, step: 5 }, 8],
+		[{ maxImages: 8, maxImageChars: 1_500_000, step: 5 }, 2],
+	] as const) {
+		const reply = surveyReply("survey: 20 tiles\n", paths, tiles, limits);
+		const r = pruneImages([...session(3), { role: "toolResult", toolName: "look", ...reply }], limits);
+		const delivered = r.messages.at(-1).content;
+		assert.deepEqual(delivered.filter((c: any) => c.type === "image"), tiles.slice(0, expectedCount));
+		assert.match(delivered[0].text, /Partial survey/);
+		assert.match(delivered[0].text, /separate turn/);
+		assert.equal(delivered[0].text.split("before assessing the whole canvas:\n")[1], paths.slice(expectedCount).join("\n") + "\n");
+		assert.ok(r.images - r.dropped <= limits.maxImages);
+		assert.ok(r.keptChars <= limits.maxImageChars);
+		// Every remaining original image fits on the next turn through the existing read tool.
+		for (const tile of tiles.slice(expectedCount)) {
+			const next = pruneImages([...r.messages, { role: "toolResult", toolName: "read", content: [tile] }], limits);
+			assert.deepEqual(next.messages.at(-1).content, [tile]);
+		}
+	}
+	assert.throws(() => surveyReply("survey", paths, tiles, { ...L, maxImageChars: 700_000 }), /survey incomplete: out\/tile-1.png alone exceeds/);
+	const complete = surveyReply("survey: 2 tiles", paths.slice(0, 2), tiles.slice(0, 2), L);
+	assert.deepEqual(complete.content, [{ type: "text", text: "survey: 2 tiles" }, ...tiles.slice(0, 2)]);
 });
 
 test("the limits come from PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB, else the defaults", async () => {

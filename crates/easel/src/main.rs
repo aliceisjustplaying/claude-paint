@@ -1420,13 +1420,17 @@ mod tests {
         use std::os::unix::fs::MetadataExt;
         let short = std::path::Path::new("/s/out/easel/p");
         assert_eq!(super::short_sock(short), short.join("sock"));
-        // under the temp dir, so its nearest existing ancestor is this user's
-        let long = std::env::temp_dir().join("d".repeat(120)).join("out/easel/p");
+        // under a directory this test makes, so its nearest existing ancestor is this
+        // user's (the temp dir itself may be root's, as /tmp is on Linux)
+        let mine = std::env::temp_dir().join(format!("easel-long-test-{}", std::process::id()));
+        std::fs::create_dir_all(&mine).unwrap();
+        let long = mine.join("d".repeat(120)).join("out/easel/p");
         let s = super::short_sock(&long);
         assert!(s.as_os_str().len() < 100, "{s:?}");
         let private = std::fs::symlink_metadata(s.parent().unwrap()).unwrap();
         assert!(private.is_dir() && private.mode() & 0o077 == 0, "the socket's directory is private");
         assert_eq!(s, super::short_sock(&long), "the same directory, the same socket");
+        std::fs::remove_dir(&mine).unwrap();
     }
     #[test]
     fn a_shared_socket_dir_is_not_used() {

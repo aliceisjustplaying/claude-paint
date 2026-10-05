@@ -1,0 +1,5 @@
+2026-10-04T23:30:28.572Z Watching Opus finished render; OBS remains live until 15 minutes afterward
+2026-10-05T02:15:19.117Z opus: preserved finished PNG and Lua with varnish and crackle
+2026-10-05T02:15:19.119Z Opus finished; OBS stop scheduled at 2026-10-05T02:30:13.243Z
+2026-10-05T02:30:20.264Z ERROR: OBS is still streaming after StopStream; will retry
+2026-10-05T02:30:35.288Z OBS stream confirmed stopped; watcher complete

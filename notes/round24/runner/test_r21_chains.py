@@ -37,15 +37,10 @@ def test_completion_requires_successful_whole_and_detail_review(tmp_path, views,
     assert (step is None) is finished
     if not finished:
         assert (step, reason) == ("new", 3)
-        assert "NOT FINISHED" in rc21.next_step([sitting], max_sittings=1)[1]
 
 
-@pytest.mark.parametrize("initial, edits, expected", [
-    ("1", ["3", "bad", "2"], 3),
-    ("4", ["1"], 1),
-    (None, ["-1", "", "4", "4"], 4),
-])
-def test_sitting_cap_changes_during_painting(tmp_path, monkeypatch, initial, edits, expected):
+@pytest.mark.parametrize("painted_sittings", [1, 5])
+def test_sittings_continue_until_reviewed_finish_despite_old_cap_file(tmp_path, monkeypatch, painted_sittings):
     monkeypatch.setattr(rc21, "RUN", tmp_path)
     monkeypatch.setattr(rc21, "LANES", {"T": rc21.lane("inness", rc21.OPUS)})
     messages = []
@@ -55,25 +50,27 @@ def test_sitting_cap_changes_during_painting(tmp_path, monkeypatch, initial, edi
     monkeypatch.setattr(rc21, "close_easel", lambda *a: None)
     monkeypatch.setattr(rc21, "session_dir", lambda *a: tmp_path)
     monkeypatch.setattr(rc21, "count_chunks", lambda *a: len(messages))
-    monkeypatch.setattr(rc21, "count_painting", lambda *a: len(messages))
-    cap = tmp_path / "max_sittings.txt"
-    if initial is not None:
-        cap.write_text(initial)
+    monkeypatch.setattr(rc21, "count_painting", lambda *a: min(len(messages), painted_sittings))
+    monkeypatch.setattr(rc21, "session_reviewed", lambda *a: True)
+    (tmp_path / "max_sittings.txt").write_text("1")
 
     def painter(cmd, cwd, out, err, env=None):
         messages.append(cmd[-1])
-        if len(messages) <= len(edits):
-            cap.write_text(edits[len(messages) - 1])
-        out.write_text("A painting.")
+        assert env.get("PAINTER_SITTING_RECOVERY") == ("1" if len(messages) > 1 else None)
+        out.write_text("Unresolved: oak base. Lesson: the rectangular blend dragged dark paint into sky.")
         err.write_text("")
         return 0
 
     monkeypatch.setattr(rc21, "run", painter)
     rc21.paint("T", 1, tmp_path / "studio", tmp_path)
     records = json.loads((tmp_path / "p1_sittings.json").read_text())
-    assert len(records) == expected
-    assert all(s["status"] == "completed" for s in records)
-    assert messages == [rc21.PAINTER_MSG] + [rc21.SITTING_MESSAGE] * (expected - 1)
+    assert len(records) == painted_sittings + 1
+    assert messages == [rc21.PAINTER_MSG] + [rc21.SITTING_MESSAGE +
+        "\n\nYour previous sitting\x27s reply:\nUnresolved: oak base. Lesson: the rectangular blend dragged dark paint into sky."] * painted_sittings
+    assert json.loads((tmp_path / "p1_outcome.json").read_text()) == {
+        "status": "finished",
+        "reason": f"the painter is done: sitting {painted_sittings + 1} reviewed whole and detail views and added no painting",
+    }
 
 
 def probe_waits(monkeypatch, tmp_path, *replies):

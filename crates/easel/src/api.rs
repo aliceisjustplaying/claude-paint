@@ -978,8 +978,8 @@ pub struct M(pub Rc<Mask>);
 
 pub(crate) fn mask_of(v: &Value) -> Result<Rc<Mask>> {
     match v {
-        Value::UserData(u) => Ok(u.borrow::<M>()?.0.clone()),
-        o => err(format!("want a mask, got {} (make one with mask(fn), ellipse, poly, rect, below, above, ribbon, everywhere)", o.type_name())),
+        Value::UserData(u) if u.is::<M>() => Ok(u.borrow::<M>()?.0.clone()),
+        o => err(format!("want a mask, got {}; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask", o.type_name())),
     }
 }
 fn mask_opt(v: Value) -> Result<Option<Rc<Mask>>> {

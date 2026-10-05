@@ -1,0 +1,146 @@
+{
+  "pullRequests": [
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 6,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/6",
+      "source": "agent",
+      "watching": false,
+      "state": "merged",
+      "title": "Looking at the painting: lit looks, surveys, comparisons; sketch sessions",
+      "headBranch": "split-1-looks",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 5,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/5",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "Raw canvas: canvas{raw=}, the bare cloth (soak-stain, part 1 of 4)",
+      "headBranch": "raw-canvas",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 7,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/7",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "Brushwork: part-loaded brushes, sized marks, graded color, gestures, spatter",
+      "headBranch": "split-2-brushwork",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 8,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/8",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "Two boxes from analyses of the paintings: giverny and impressionist",
+      "headBranch": "split-3-boxes",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 9,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/9",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "Engines 4 and 5: impasto that holds, and a painting knife",
+      "headBranch": "split-4-impasto-knife",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 10,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/10",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "Palette and materials: turpentine, oils, blotting, absorbent grounds, gloss, a palette board",
+      "headBranch": "split-5-palette-materials",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    },
+    {
+      "host": "github.com",
+      "repository": "aliceisjustplaying/claude-paint",
+      "number": 11,
+      "url": "https://github.com/aliceisjustplaying/claude-paint/pull/11",
+      "source": "agent",
+      "watching": false,
+      "state": "open",
+      "title": "SPECULATIVE: hold the loaded knife up to the canvas",
+      "headBranch": "split-6-hold-knife",
+      "baseBranch": "main",
+      "isDraft": false,
+      "stack": null
+    }
+  ],
+  "chains": [
+    {
+      "kind": "derived",
+      "numbers": [
+        6
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        5
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        7
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        8
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        9
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        10
+      ]
+    },
+    {
+      "kind": "derived",
+      "numbers": [
+        11
+      ]
+    }
+  ]
+}

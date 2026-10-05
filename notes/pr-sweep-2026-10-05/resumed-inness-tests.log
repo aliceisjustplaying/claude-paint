@@ -1,0 +1,24 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+   Compiling easel v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/easel)
+error[E0425]: cannot find function `fnv1a` in this scope
+    --> crates/easel/src/main.rs:211:40
+     |
+ 211 |     let file = format!("{:016x}.sock", fnv1a(dir.as_os_str().as_encoded_bytes()));
+     |                                        ^^^^^ not found in this scope
+     |
+note: found an item that was configured out
+    --> crates/easel/src/main.rs:1468:11
+     |
+1467 | #[cfg(feature = "replay")]
+     |       ------------------ the item is gated behind the `replay` feature
+1468 | use save::fnv1a;
+     |           ^^^^^
+help: consider importing this function
+     |
+  44 + use crate::save::fnv1a;
+     |
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `easel` (bin "easel") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `easel` (bin "easel" test) due to 1 previous error

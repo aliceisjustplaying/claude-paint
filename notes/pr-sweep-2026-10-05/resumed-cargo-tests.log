@@ -1,0 +1,438 @@
+     Running paint-lib (62.57 s wall)
+
+running 223 tests
+test bristle::cover_tests::probe_bare ... ignored
+test bristle::cover_tests::probe_mark_area ... ignored
+test bristle::part_tests::whole_part_is_an_ordinary_load ... ok
+test bristle::part_tests::streaks_keep_about_the_same_paint ... ok
+test bristle::part_tests::a_side_dip_reaches_only_that_side ... ok
+test bristle::kernel_traps::a_running_median_over_a_crop_with_its_window_is_bit_identical ... ok
+test bristle::tip_tests::feed_conserves_paint ... ok
+test bristle::tip_tests::fine_cover_conserves_area_on_the_lattice ... ok
+test bristle::kernel_traps::a_box_blur_over_a_crop_is_not_bit_identical ... ok
+test bristle::kernel_traps::a_plough_transfer_rereads_the_source_cure_after_each_take ... ok
+test bristle::knife_tests::knife_preserves_thinner_when_loading_laying_and_scraping ... ok
+test bristle::tip_tests::probe_ink_width ... ignored
+test bristle::spatter_tests::review_spatter_transfers_solvent_and_covers_its_drops ... ok
+test bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure ... ok
+test bristle::tip_tests::hairline_on_linen_is_continuous ... ok
+test canvas::tests::formed_film_is_smooth_and_monotone ... ok
+test bristle::spatter_tests::spatter_is_deterministic ... ok
+test canvas::review_lighting_tests::review_tall_relief_casts_shadows_beyond_64_pixels ... ok
+test bristle::spatter_tests::fluid_paint_flies_and_stiff_paint_stays ... ok
+test bristle::tip_tests::pointed_marks_are_resolution_independent ... ok
+test checkpoint::tests::drawing_survives_a_checkpoint ... ok
+test checkpoint::tests::engine_4_has_its_own_format_and_older_engines_keep_theirs ... ok
+test checkpoint::tests::malformed_geometry_is_invalid_data ... ok
+test checkpoint::tests::round_trip ... ok
+test crack::tests::a_raw_canvas_cracks_down_to_its_cloth ... ok
+test crack::tests::a_raw_canvas_cracks_only_through_its_paint ... ok
+test crack::tests::corner_cracks_cross_the_diagonal ... ok
+test crack::tests::cracks_in_darks_show_light ... ok
+test crack::tests::crop_cracks_like_the_whole ... ok
+test canvas::tests::masked_glaze_preserves_wet_paint_and_clock_elsewhere ... ok
+test crack::tests::deterministic_for_a_seed ... ok
+test crack::tests::first_cracks_open_widest ... ok
+test crack::tests::full_canvas_speed ... ignored
+test crack::tests::grain_turns_the_first_cracks_across ... ok
+test canvas::tests::glaze_through_blurred_mask_leaves_no_rectangle ... ok
+test crack::tests::junctions_are_mostly_t_shaped ... ok
+test canvas::tests::glaze_long_falloff_has_no_edge ... ok
+test crack::tests::median_island_matches_target ... ok
+test crack::tests::thin_grounds_follow_the_weave ... ok
+test drying::tests::an_infinite_wait_does_not_dry - should panic ... ok
+test crack::tests::patchy_development_leaves_quiet_passages ... ok
+test drying::tests::burnt_sienna_dries_before_raw_sienna ... ok
+test drying::tests::checkpoint_mid_drying_resumes_exactly ... ok
+test canvas::tests::a_thin_veil_is_laid ... ok
+test bristle::tip_tests::pointed_width_follows_pressure_and_tapers ... ok
+test bristle::tip_tests::presets_are_blunt_and_lay_their_width ... ok
+test drying::tests::brushes_feel_the_stage ... ok
+test crack::tests::first_cracks_open_widest_wherever_they_formed ... ok
+test drying::tests::splitting_a_wait_changes_nothing ... ok
+test drying::tests::stages_dont_depend_on_resolution ... ok
+test drying::tests::drying_is_deterministic_across_thread_counts ... ok
+test drying::tests::stages_follow_the_clock_and_the_pigment ... ok
+test drying::tests::thick_and_fat_films_dry_slower ... ok
+test bristle::tip_tests::translated_pointed_marks_look_alike ... ok
+test drying::tests::thick_films_dry_as_much_slower_as_goldens ... ok
+test crack::tests::height_changes_only_near_cracks ... ok
+test fence::tests::found_is_near_the_line_and_lost_runs_far ... ok
+test fence::tests::stroke_draws_spread_over_zero_one ... ok
+test form::tests::a_ball_lit_from_the_left ... ok
+test form::tests::a_block_casts_a_shadow_on_the_ground ... ok
+test form::tests::fracture_planes_are_facets_with_hard_edges ... ok
+test drying::tests::waiting_it_out_equals_dry ... ok
+test form::tests::turn_follows_its_contract ... ok
+test form::tests::turning_about_an_outside_pivot_keeps_the_body_in_bounds ... ok
+test graphite::probe::tooth_depths ... ignored
+test form::tests::thin_ellipsoids_keep_their_surface ... ok
+test graphite::tests::grades_parse ... ok
+test drying::tests::engine_3_keeps_paint_open_longer ... ok
+test drying::tests::splitting_a_wait_changes_nothing_under_the_brush ... ok
+test canvas::tests::raking_light_includes_solvent_thickness ... ok
+test bristle::tip_tests::a_stroke_over_dry_paint_covers_its_middle ... ok
+test graphite::tests::points_wear ... ok
+test graphite::tests::guide_is_the_same_in_a_crop ... ok
+test graphite::tests::no_drawing_no_change ... ok
+test graphite::tests::zero_pressure_lays_nothing ... ok
+test graphite::tests::softer_and_harder_pressed_is_darker ... ok
+test graphite::tests::thin_paint_shows_body_hides ... ok
+test handling::tests::a_pass_from_a_pile_lays_the_pile ... ok
+test bristle::tip_tests::a_lifted_stroke_paints_to_the_end_of_its_path ... ok
+test handling::tests::filling_requires_explicit_opt_in ... ok
+test handling::tests::negative_coverage_is_rejected - should panic ... ok
+test handling::tests::nonfinite_coverage_is_rejected - should panic ... ok
+test handling::tests::probe_edges_over_seeds ... ignored
+test handling::tests::strokes_bow_unless_ruled ... ok
+test handling::tests::tiles_keep_their_order_where_they_overlap ... ok
+test handling::tests::edges_are_covered_like_the_inside ... ok
+test mask::tests::distance_is_euclidean_and_signed ... ok
+test mask::tests::offset_grows_and_shrinks ... ok
+test mask::tests::rim_band_and_soften ... ok
+test graphite::tests::light_line_catches_the_tops ... ok
+test mask::tests::signed_distance_matches_brute_force ... ok
+test noise::tests::fbm_is_copy_and_unchanged ... ok
+test noise::tests::fields_are_copy ... ok
+test noise::tests::toolkit_is_copy_and_ranged ... ok
+test noise::tests::uneven_is_uneven_and_deterministic ... ok
+test noise::tests::worley_finds_the_true_nearest_features ... ok
+test outline::tests::amount_scales_lobes_set_after_it ... ok
+test mask::tests::roughen_moves_hard_edges_in_units ... ok
+test outline::tests::consumed_inset_is_an_empty_region ... ok
+test outline::tests::deterministic_and_seeded ... ok
+test outline::tests::line_stays_near_the_points_and_passes_the_corners ... ok
+test outline::tests::lobes_are_continuous_at_joins_and_the_seam ... ok
+test outline::tests::mask_edge_is_the_line ... ok
+test outline::tests::open_lines_mask_below ... ok
+test outline::tests::tiny_lobes_and_facets_end ... ok
+test palette::canvas_tests::glazes_stay_glazes ... ok
+test palette::canvas_tests::mixture_to_paint_preserves_scattering ... ok
+test palette::tests::a_pile_dries_at_its_tubes_rate ... ok
+test palette::tests::every_box_resolves_in_the_catalog ... ok
+test palette::tests::the_catalog_defines_each_tube_once ... ok
+test palette::tests::the_catalog_is_this_builds_boxes ... ok
+test palette::tests::the_tube_box_is_unchanged ... ok
+test path::tests::length_is_the_last_arclen_bit_for_bit ... ok
+test pigment::tests::masstone_is_a_fixed_point ... ok
+test pigment::tests::round_trips_unit_layer ... ok
+test pigment::tests::scatter_inverts_hiding ... ok
+test outline::tests::body_from_a_skeleton_and_offsets ... ok
+test rag::tests::a_rag_smear_preserves_the_paint_oil_and_turps ... ok
+test handling::tests::zero_coverage_is_a_no_op ... ok
+test handling::tests::blender_stays_in_its_region ... ok
+test rag::tests::table ... ignored
+test graphite::tests::erase_fix_and_seal ... ok
+test rag::tests::repeated_wipes_conserve_paint_and_a_second_damp_wipe_clears_more ... ok
+test scene::tests::a_distant_caster_does_not_panic_the_shadow_march ... ok
+test scene::tests::a_ribbon_narrows_as_it_recedes ... ok
+test scene::tests::a_thin_far_body_is_in_the_view ... ok
+test scene::tests::a_view_agrees_on_the_light_and_grounds_its_bodies ... ok
+test scene::tests::depth_masks_know_what_is_in_front ... ok
+test scene::tests::far_rays_meet_thin_bodies ... ok
+test scene::tests::front_weighs_coverage_and_every_selected_thing ... ok
+test scene::tests::off_the_panel_is_nothing ... ok
+test scene::tests::one_sun_casts_every_shadow_the_same_way ... ok
+test scene::tests::overlapping_bodies_are_ordered_by_world_depth ... ok
+test scene::tests::projection_round_trips_and_heights_scale_with_depth ... ok
+test scene::tests::reflections_beyond_the_backdrop_run_forward ... ok
+test scene::tests::soft_shadows_fall_off_without_rings ... ok
+test scene::tests::still_water_mirrors_a_pole_straight_down ... ok
+test scene::tests::sunk_surfaces_stay_below_the_waterline ... ok
+test sched::tests::batches_cut_the_order_by_hand_time ... ok
+test sched::tests::keeps_order_of_overlapping_items ... ok
+test soak::tests::a_cloth_of_ones_own_checkpoints ... ok
+test soak::tests::a_corrupt_soak_checkpoint_is_an_error ... ok
+test soak::tests::a_crop_render_cannot_be_raw - should panic ... ok
+test soak::tests::a_primed_canvas_cannot_be_made_raw - should panic ... ok
+test soak::tests::a_raw_canvas_checkpoints_exactly ... ok
+test soak::tests::a_raw_canvas_on_an_older_engine_is_not_written ... ok
+test soak::tests::an_invalid_fabric_is_refused - should panic ... ok
+test soak::tests::the_cloth_says_what_lies_on_it ... ok
+test soak::tests::the_raw_cloth_looks_its_colour ... ok
+test soak::tests::the_weave_shows_in_the_cloth ... ok
+test spectral::tests::layering_agrees_with_the_engine_where_it_must ... ok
+test spectral::tests::matches_spectral_js ... ok
+test spectral::tests::mixing_is_sane ... ok
+test spectral::tests::rgb_round_trips ... ok
+test stipple::tests::small_and_narrow_regions_are_not_skipped ... ok
+test stipple::tests::stipple_follows_coverage_and_mask ... ok
+test drying::tests::fast_pigments_dry_before_slow_ones ... ok
+test fence::tests::fences_carry_paint_past_the_edge_by_quality ... ok
+test drying::tests::strokes_dry_within_the_sources_ranges ... ok
+test handling::tests::a_long_timed_pass_fills_only_its_gaps ... ok
+test stipple::tests::touch_conserves_paint ... ok
+test graphite::tests::guide_follows_the_line ... ok
+test stipple::tests::touch_is_one_solid_patch ... ok
+test surface::tests::a_film_over_impasto_keeps_its_bounds_exactly ... ok
+test surface::tests::a_long_pinning_cascade_keeps_the_bounds ... ok
+test surface::tests::the_total_is_made_exact_within_the_bounds ... ok
+test stipple::tests::veil_reaches_its_tone_up_to_dark_shapes ... ok
+test tally::tests::a_knifed_pile_is_on_the_palette ... ok
+test tally::tests::fine_strokes_are_slower_per_mm ... ok
+test stipple::tests::touch_is_resolution_independent ... ok
+test stipple::tests::touch_footprint_bounds_every_touched_pixel ... ok
+test tally::tests::piles_reload_near_colors_and_mix_new_ones ... ok
+test tally::tests::since_is_the_difference ... ok
+test drying::tests::fresh_paint_over_setting_paint_is_open_before_the_next_wait ... ok
+test tally::tests::the_ledger_keeps_its_checkpoint_layout ... ok
+test stipple::tests::stipple_is_deterministic_across_thread_counts ... ok
+test tally::tests::touches_are_no_faster_than_tapping ... ok
+test bristle::cover_tests::loaded_passage_covers ... ok
+test tests::a_knife_laid_slab_tears_from_engine_4 ... ok
+test tally::tests::a_checkpoint_keeps_hand_time_and_the_ledger ... ok
+test tests::an_absorbent_ground_drinks_a_wash ... ok
+test tally::tests::the_slices_after_a_wait_are_fresh_work ... ok
+test tests::a_lean_film_dries_matte ... ok
+test tests::clipped_plough_stays_inside_mask ... ok
+test tally::tests::the_ledger_is_the_same_at_any_thread_count_and_in_a_crop ... ok
+test tests::diag_blend_bare_pixels ... ignored
+test tests::a_pass_keeps_a_blotted_pile_blotted ... ok
+test tests::cut_in_stays_near_the_region ... ok
+test tests::dry_is_idempotent_and_clears_wet ... ok
+test tally::tests::hand_time_ages_the_paint_as_it_goes_and_is_deterministic ... ok
+test rag::tests::the_spirits_in_a_dipped_rag_evaporate ... ok
+test tests::drag_conserves_paint ... ok
+test tests::invalid_tools_are_rejected ... ok
+test tests::km_zero_absorption_is_finite ... ok
+test tests::load_wipe_reload ... ok
+test tests::mismatched_mask_is_rejected - should panic ... ok
+test tests::mix_into_is_volume_weighted ... ok
+test tests::poppy_oil_dries_slower ... ok
+test tests::settle_conserves_paint ... ok
+test tests::sized_marks_are_timed_with_their_own_brush ... ok
+test tests::thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size ... ok
+test tests::thin_film_over_dry_impasto_coats_peaks_and_pools_a_little ... ok
+test tests::turpentine_leaves_a_thinner_film ... ok
+test tests::varnish_over_impasto_is_even ... ok
+test tests::footprint_bounds_extreme_valid_tools ... ok
+test thinner::tests::a_reused_stroke_id_starts_a_fresh_ceiling ... ok
+test thinner::tests::dry_with_solvent_waits_it_out_first ... ok
+test thinner::tests::thinned_paint_is_refused_before_engine_3 ... ok
+test wet::tests::a_partial_wet_mark_keeps_the_uncovered_surface_matte ... ok
+test wet::tests::bead_cover_floors_only_impossible_beads ... ok
+test wet::tests::sub_percent_cover_keeps_its_area ... ok
+test wet::tests::with_hiding_keeps_the_other_fields ... ok
+test tests::work_covers_the_edges ... ok
+test tests::footprint_bounds_every_touched_pixel ... ok
+test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... ok
+test tests::crop_matches_whole ... ok
+test tally::tests::hand_time_keeps_an_order_asked_for ... ok
+test tests::brushed_ground_honors_thickness ... ok
+test tests::fixture_matches_golden ... ok
+test stipple::tests::stippling_from_a_pile_lays_the_pile ... ok
+test tests::fixture_is_deterministic_across_thread_counts ... ok
+test rag::tests::the_rag_lifts_open_paint_from_the_tops_first ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point ... ok
+
+test result: ok. 215 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 62.30s
+
+     Running easel-bin (38.61 s wall)
+
+running 108 tests
+test api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges ... ok
+test api::tests::review_invalid_second_loads_are_rejected ... ok
+test api::tests::soaked_says_what_is_in_the_cloth ... ok
+test board::tests::a_clean_board_leaves_heaps_as_knifed ... ok
+test board::tests::a_dirty_board_carries_paint_between_heaps_up_to_a_cap ... ok
+test board::tests::a_heap_knifed_again_is_unchanged ... ok
+test board::tests::added_tube_paint_dilutes_the_turps_and_the_oil ... ok
+test board::tests::adding_to_a_heap_follows_its_recipes_units ... ok
+test board::tests::adding_to_a_scraped_heap_knifes_it_again ... ok
+test board::tests::an_addition_that_overflows_the_heap_is_refused_and_changes_nothing ... ok
+test board::tests::the_oldest_heap_is_scraped_and_knifed_again_when_used ... ok
+test check::tests::a_client_waiting_for_its_reply_is_there_and_one_that_closed_is_gone ... ok
+test api::tests::review_secondary_piles_keep_their_thinner ... ok
+test depth::tests::shadow_verbs_take_their_options ... ok
+test depth::tests::the_current_view_rolls_back ... ok
+test depth::tests::visible_takes_masks_and_mixed_lists ... ok
+test api::tests::review_refused_part_load_preserves_randomness ... ok
+test api::draw_rag::tests::the_rag_refuses_what_it_cannot_do ... ok
+test api::tests::older_engines_have_no_raw_canvas ... ok
+test draw_outline::tests::amount_zero_is_clean_even_with_explicit_lobes ... ok
+test draw_outline::tests::an_inset_that_consumes_the_shape_masks_nothing ... ok
+test draw_outline::tests::tiny_lobes_and_sizes_are_refused ... ok
+test finish::tests::a_varnish_of_no_coats_changes_nothing ... ok
+test api::draw_rag::tests::a_dipped_rag_dries_as_time_passes ... ok
+test legacy::tests::easel3_free_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel3_green_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel3_near_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_free_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_green_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_near_replays ... ignored, replays whole paintings: never run
+test finish::tests::finishing_waits_for_the_whole_picture_to_dry ... ok
+test look::tests::grids_finer_than_a_pixel_are_refused ... ok
+test look::tests::looks_draw_the_grid_without_touching_the_canvas ... ok
+test look::tests::the_relief_and_gallery_looks_take_a_light ... ok
+test look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis ... ok
+test look::tests::whole_looks_are_bounded_pngs_without_enlargement ... ok
+test look::tests::whole_pngs_reduce_dimensions_to_meet_the_byte_budget ... ok
+test form::tests::a_hard_shadow_covers_the_core_shadow ... ok
+test api::tests::review_gesture_rejects_excessive_sample_count ... ok
+test look::tests::the_relief_look_lights_the_paint_and_changes_nothing ... ok
+test session::tests::a_failed_chunk_cannot_change_pencil_methods ... ok
+test api::draw_rag::tests::the_cloth_can_t_be_cleaned_by_assignment ... ok
+test session::tests::a_default_log_names_no_box ... ok
+test session::tests::a_failed_chunk_leaves_brush_and_clock_alone ... ok
+test api::draw_rag::tests::a_failed_chunk_takes_back_the_rag ... ok
+test session::tests::a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it ... ok
+test session::tests::a_failed_chunk_leaves_the_knife_alone ... ok
+test session::tests::a_gesture_checks_its_points_and_keeps_a_press ... ok
+test session::tests::a_retained_palette_pile_can_be_added_after_many_new_heaps ... ok
+test session::tests::a_mix_prints_its_heaps_in_their_shares_and_adds_in_those_units ... ok
+test session::tests::after_a_failed_chunk_pairs_walks_tables_as_the_replay_does ... ok
+test session::tests::a_box_is_named_in_the_log_and_replays_with_it ... ok
+test session::tests::binary_chunks_are_refused_and_text_load_still_works ... ok
+test depth::tests::passes_keep_behind_what_is_in_front ... ok
+test session::tests::a_pile_s_oil_sets_its_drying_rate ... ok
+test session::tests::finalizers_and_weak_tables_are_refused ... ok
+test frames::tests::frames_follow_hand_time_and_leave_the_replay_alone ... ok
+test session::tests::a_failed_rollback_rebuilds_from_the_log_before_painting_again ... ok
+test session::tests::gmatch_matches_lua ... ok
+test api::tests::a_raw_canvas_refuses_a_ground ... ok
+test session::tests::logs_without_an_engine_line_replay_as_before ... ignored, replays whole paintings: never run
+test api::draw_rag::tests::the_rag_takes_hand_time ... ok
+test session::tests::no_memory_address_reaches_a_painting ... ok
+test session::tests::gmatch_iterators_roll_back ... ok
+test session::tests::a_chunk_whose_ending_fails_changes_nothing ... ok
+test session::tests::plain_tables_keep_lua_order ... ok
+test session::tests::real_failed_chunks ... ignored
+test session::tests::palette_add_refreshes_recipe_and_dilutes_materials ... ok
+test session::tests::engine_2_logs_replay_as_before ... ok
+test session::tests::terrain_refuses_huge_and_empty_areas_before_allocating ... ok
+test session::tests::the_box_line_is_read_from_the_head_only ... ok
+test session::tests::the_guide_shows_the_default_box ... ok
+test session::tests::globals_are_the_painting_s_as_the_state_holds_them_live_and_replayed ... ok
+test api::draw_rag::tests::an_older_log_sees_the_globals_it_saw ... ok
+test session::tests::under_engine_2_a_failed_chunk_that_grew_a_table_rebuilds ... ok
+test session::tests::the_knife_lays_and_scrapes ... ok
+test session::tests::under_engine_3_a_failed_chunk_that_moved_a_border_rebuilds ... ok
+test session::tests::under_engine_3_every_table_walks_in_a_fixed_order ... ok
+test session::tests::knife_rejects_invalid_loads_and_paths_without_changing_state ... ok
+test session::tests::an_older_engine_s_painting_refuses_turps_and_absorbent_grounds ... ok
+test tests::a_log_replays_at_the_width_it_was_painted_at ... ok
+test tests::a_long_session_dir_gets_a_short_socket ... ok
+test tests::a_look_above_the_last_number_is_refused ... ok
+test session::tests::view_form_counts_visible_parts_only ... ok
+test tests::a_request_from_an_older_client_is_refused_with_a_reason ... ok
+test tests::a_request_is_read_without_the_clients_end_of_file ... ok
+test tests::a_shared_socket_dir_is_not_used ... ok
+test tests::journal_entries_are_dated_lines ... ok
+test tests::save_takes_a_path_and_a_light ... ok
+test tests::the_lock_on_stdin_signal_is_not_passed_on ... ok
+test session::tests::object_keys_walk_in_creation_order ... ok
+test session::tests::rollback_restores_tables_and_upvalues_exactly ... ok
+test tests::a_palette_look_changes_nothing ... ok
+test session::tests::no_memory_address_escapes_a_callback ... ok
+test time::tests::the_clock_advances_by_the_hand_time_of_known_verbs ... ok
+test session::tests::replay_is_exact_and_failures_roll_back ... ok
+test time::tests::wait_returns_the_time_of_day ... ok
+test time::tests::hand_time_is_always_on ... ok
+test session::tests::a_sketch_s_log_says_so ... ok
+test session::tests::the_log_names_its_engine ... ok
+test tests::a_held_knife_shows_its_paint_over_the_passage_and_changes_nothing ... ok
+test time::tests::wait_refuses_what_is_not_a_span_of_up_to_ten_years ... ok
+test session::tests::double_loads_and_streaks_paint_and_replay ... ok
+test draw_edges::tests::edges_lose_and_the_clip_mask ... ok
+test session::tests::under_engine_3_a_failed_chunk_needs_no_rebuild ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick_dark ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick_earths ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick ... ok
+
+test result: ok. 100 passed; 0 failed; 8 ignored; 0 measured; 11 filtered out; finished in 38.32s
+
+     Running session_integrity (13.36 s wall)
+
+running 10 tests
+test replay_failure_is_fatal ... ok
+test live_resolution_is_fixed ... ok
+test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
+test journal_uses_the_selected_painting_clock ... ok
+test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
+test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
+test edited_or_truncated_logs_cannot_reopen ... ok
+test a_look_never_overwrites_an_earlier_observation ... ok
+test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
+test racing_opens_start_one_server ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.16s
+
+     Running smoke (22.10 s wall)
+
+running 1 test
+test a_short_session_at_the_easel ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.90s
+
+     Running determinism (21.08 s wall)
+
+running 7 tests
+test hand_time_is_deterministic_across_thread_counts_at_the_live_width ... ignored, slow
+test state_digests_are_the_same_in_every_replay_at_the_live_width ... ignored, slow
+test the_rag_replays_the_same_at_the_live_width ... ignored, slow
+test state_digests_are_the_same_in_every_replay ... ok
+test object_keyed_tables_replay_the_same_in_every_process ... ok
+test the_rag_replays_the_same ... ok
+test hand_time_is_deterministic_across_thread_counts ... ok
+
+test result: ok. 4 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 20.94s
+
+     Running delivery (19.51 s wall)
+
+running 2 tests
+test replays_render_at_the_live_width_unless_a_preview_width_is_given ... ok
+test save_delivers_the_wet_canvas_as_seen_and_replay_matches ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.37s
+
+     Running ground_grain (13.94 s wall)
+
+running 4 tests
+test print_ground_grain ... ignored
+test save_ground_crops ... ignored
+test thin_blend_bares_ground ... ignored, slow
+test the_brushed_ground_has_no_horizontal_grain ... ok
+
+test result: ok. 1 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 13.79s
+
+     Running boxes (3.83 s wall)
+
+running 5 tests
+test a_round_19_log_replays_as_before ... ignored, slow
+test the_replay_build_holds_every_box ... ok
+test the_box_file_and_easel_box_must_agree_on_a_box_there_is ... ok
+test a_log_without_a_box_line_is_the_default_box ... ok
+test a_new_painting_takes_the_studio_box_and_every_replay_uses_it ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.68s
+
+     Running curved_drag_nan (0.32 s wall)
+
+running 2 tests
+test a_nan_point_is_an_error - should panic ... ok
+test the_same_curve_with_finite_points_lays_paint ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running look_rim (0.18 s wall)
+
+running 2 tests
+test broad_pass ... ignored, a measurement for notes/look
+test single_stroke_rim ... ignored, a measurement for notes/look
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running look_sienna (0.16 s wall)
+
+running 2 tests
+test siennas_by_contrast_ratio ... ignored, a measurement for notes/look
+test siennas_side_by_side ... ignored, a picture for notes/look
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running painter (0.13 s wall)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

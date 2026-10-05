@@ -223,7 +223,7 @@
       <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette"></div></figure>
     </div>
     <div id="pband" hidden aria-label="Palette"></div>
-    <a id="finished" hidden>See the finished painting →</a>
+    <a id="finished" hidden>See the exported painting →</a>
   </section>
   <section class="pane" id="journal"><div id="jbody"></div></section>
 </main>
@@ -302,8 +302,9 @@ async function loadGallery() {
 const ACTIVE = 1800, RECENT = 6 * 3600;  // working now: an action in the last half hour; between sittings: quiet less than 6 h after its own words
 // the website lists the paintings in progress (working now, or between sittings) and the finished ones (in the gallery,
 // or signed off with a title), not the aborted or cut-off runs; the local studio lists every run. The same at every screen size.
-const listed = s => !STATIC || isLive(s) || ageOf(s) < RECENT && s.said || !!s.title || !!(GALLERY && GALLERY[s.p]) || qOf(s) === Q;
-const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => ageOf(s) < (s.said ? 120 : ACTIVE);
+const listed = s => !STATIC || !!s.outcome || isLive(s) || ageOf(s) < RECENT && s.said || !!s.title || !!(GALLERY && GALLERY[s.p]) || qOf(s) === Q;
+const outcomeLabel = s => ({finished:'Finished', cap_reached:'Sitting limit reached', crash_limit_reached:'Stopped after errors'})[s?.outcome?.status] || '';
+const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => !outcomeLabel(s) && ageOf(s) < (s.said ? 120 : ACTIVE);
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
 const models = s => (s.model || '').split(' → ').map(modelName).join(' → ');
@@ -325,6 +326,7 @@ function renderHeader() {
   if (cur && cur.painter) { const a = about(cur); w.querySelector('.t').textContent = a.title; w.querySelector('.m').textContent = a.model;
     w.title = `${a.title} · ${a.model}${subj(cur) ? ' · ' + subj(cur) : ''}: choose another painter`;
     $('finished').hidden = !a.url; if (a.url) $('finished').href = a.url;
+    $('finished').textContent = cur.outcome?.status === 'finished' ? 'See the finished painting →' : 'See the exported painting →';
     if (STATIC) document.title = `${a.title} · ${a.model} painting · stillwet studio`; }
   else { w.querySelector('.t').textContent = cur ? sessLabel(cur) : !Q ? 'Choose a painter' : Q.startsWith('s=') ? oneSitting() : events.length ? P() : 'Waiting for the painter to start'; w.querySelector('.m').textContent = ''; $('finished').hidden = true; }
 }
@@ -333,7 +335,7 @@ function card(s) {
   return `<button type="button" class="pk${on ? ' on' : ''}" data-q="${esc(qOf(s))}"${on ? ' aria-current="true"' : ''}>`
     + `<span class="pki">${a.thumb ? `<img src="${esc(a.thumb)}" data-own="${esc(a.own || '')}" alt="" loading="lazy">` : 'no picture yet'}</span>`
     + `<span class="pkx"><span class="pkt">${esc(a.title)}</span><span class="pkm">${esc(a.model)}</span>`
-    + `<span class="pks">${a.live ? '<span class="lv">● painting now</span> · ' : ''}${esc([subj(s), day(s.mtime)].filter(Boolean).join(' · '))}</span></span></button>`;
+    + `<span class="pks">${a.live ? '<span class="lv">● painting now</span> · ' : ''}${esc([outcomeLabel(s), subj(s), day(s.mtime)].filter(Boolean).join(' · '))}</span></span></button>`;
 }
 function renderPicker() {
   const ps = allSessions.filter(s => s.painter && listed(s)), order = [...ps.filter(isLive), ...ps.filter(s => !isLive(s))];  // (already newest first)
@@ -542,7 +544,7 @@ function status() {
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000, atLive = live && pos === events.length - 1;
   const b = $('badge'), active = !stopped();  // (as the picture: at work until its closing words are two minutes old, or half an hour quiet)
   if (atLive && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'last action ' + ago(age); }
-  else if (atLive) { b.className = ''; b.textContent = 'FINISHED'; b.title = 'last action ' + ago(age); }
+  else if (atLive) { const cur = allSessions.find(s => qOf(s) === Q); b.className = ''; b.textContent = outcomeLabel(cur) || 'Paused'; b.title = cur?.outcome?.reason || 'last action ' + ago(age); }
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY'; b.title = ''; }
   else { b.className = 'replay'; b.textContent = 'REWOUND'; b.title = (events.length - 1 - pos) + ' events behind live'; }
   // LIVE only while the painter works; after that the same control just goes to the end
@@ -849,6 +851,7 @@ function cropOf(req) {
 // the painter has stopped (finished, or between sittings): its closing words said and a couple of quiet minutes
 // since, or half an hour of nothing
 function stopped() {
+  if (outcomeLabel(allSessions.find(s => qOf(s) === Q))) return true;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000;
   return age >= ACTIVE || (last.kind === 'say' && age >= 120);
 }

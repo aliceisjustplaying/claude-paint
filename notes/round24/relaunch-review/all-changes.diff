@@ -1,0 +1,278 @@
+diff --git a/harness/painter/easel-tools.ts b/harness/painter/easel-tools.ts
+index 77c63db..f424a50 100644
+--- a/harness/painter/easel-tools.ts
++++ b/harness/painter/easel-tools.ts
+@@ -43,7 +43,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
+ 			label: "look",
+ 			description:
+ 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
+-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. " +
++				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at most 500 units on each side, shown at 1:1 pixels. " +
+ 				"mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. " +
+ 				"grid: true, or a spacing in canvas units. " +
+ 				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
+diff --git a/notes/easel_guide.md b/notes/easel_guide.md
+index be20d36..10b714f 100644
+--- a/notes/easel_guide.md
++++ b/notes/easel_guide.md
+@@ -285,6 +285,8 @@ m:at(x, y)   m:area()
+ ```
+ 
+ Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
++`below` selects larger y values, toward the bottom of the canvas;
++`above` selects smaller y values, toward the top.
+ 
+ Numbers and randomness: `rand(a, b)`, `randn(mean, sd)`, `math.random`,
+ `lerp(a, b, t)`, `clamp(x, lo, hi)`, `smoothstep(a, b, x)`;
+@@ -295,6 +297,10 @@ passed to `coverage=` or `load_at=`); `worley{seed=, period=, jitter=}`
+ a cell wall, and a stable 0..1 per cell); `uneven(n, lo, hi, irregular,
+ clump, seed)` (n positions from lo to hi with uneven, clumped gaps).
+ 
++The nested `warp` and `stretch` tables use positional values, not named
++fields: for example, `noise{period=180, stretch={0, 3}}` stretches along
++angle 0 by a factor of 3. `stretch={angle=0, k=3}` is not accepted.
++
+ **Drawn lines.** `outline{pts... or pts=, char=, seed=, closed=, open=,
+ corners=, corner_angle=60, size=, amount=, lobe=, edge=}` turns a few
+ points into a line drawn by hand (a smooth curve through them, broken at
+diff --git a/notes/round24/readiness/relaunch-runner-tests.log b/notes/round24/readiness/relaunch-runner-tests.log
+new file mode 100644
+index 0000000..90098ff
+--- /dev/null
++++ b/notes/round24/readiness/relaunch-runner-tests.log
+@@ -0,0 +1,5 @@
++........................................................................ [ 27%]
++........................................................................ [ 54%]
++........................................................................ [ 82%]
++...............................................                          [100%]
++263 passed in 21.21s
+diff --git a/notes/round24/runner/brief_template.md b/notes/round24/runner/brief_template.md
+index 553fab1..9e88908 100644
+--- a/notes/round24/runner/brief_template.md
++++ b/notes/round24/runner/brief_template.md
+@@ -30,9 +30,14 @@
+ - Keep a working journal with `note` as you go: your own working notes.
+   You can revise them.
+ - You may sign the painting.
+-- Before finishing, inspect the whole painting and its details. Continue
+-  while you can identify a change that would improve the painting you
+-  intend to make. Finish when you judge it resolved.
++- Before finishing, use `look` to inspect the whole painting and detail
++  crops in normal color after your last changes. Revisit passages you
++  identified as weak. Continue while you can identify a change that would
++  improve the painting you intend to make, then inspect the result again.
++  A signature, time spent or an earlier note calling it finished does not
++  establish that it is resolved. Finish when a fresh review identifies no
++  further improvement, and record that judgment and any remaining
++  limitations in your journal.
+ 
+ ## Your reply
+ When you stop working, reply with the painting's title if you give it one
+diff --git a/notes/round24/runner/r21_chains.py b/notes/round24/runner/r21_chains.py
+index 1bfaa40..09b4f8a 100644
+--- a/notes/round24/runner/r21_chains.py
++++ b/notes/round24/runner/r21_chains.py
+@@ -55,8 +55,9 @@ settings file in the studio.
+ Sittings: the painter works in sittings, each a new pi session (same harness and studio),
+ until it decides it's done. Sitting 1 gets PAINTER_MSG, later ones SITTING_MESSAGE. After each
+ sitting the chunks of the painting's log that put marks on the canvas are counted
+-(painting_chunks.py). The painter stops after a sitting it ended itself that added no such
+-chunks. MAX_SITTINGS completed sittings is only a safety cap (logged as NOT FINISHED).
++(painting_chunks.py). The painter finishes after a sitting it ended itself that added no such
++chunks and delivered whole-canvas and detail looks. MAX_SITTINGS completed sittings is only
++a safety cap (logged as NOT FINISHED).
+ A sitting that crashes (pi exits non-zero, or its session ends on a provider error) is no
+ judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the error says
+ "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
+@@ -155,12 +156,12 @@ BRANCH = "round-23"
+ # round 24 (engine 3): the code, harness, guide, export, check and finishing scripts of one tag on the final
+ # engine-3 commit, checked out detached at claude-paint-r24run; the export builds the inness easel in its
+ # target/studio-build, check and finishing build the replay easel in its target.
+-# PENDING, set by the integration owner at freeze: TAG names that tag (proposed: round-24). Before launch:
++# Round 24.1 keeps the engine and adds completion review and guide corrections. Before launch:
+ # `git tag -a <TAG> <commit>` in the shared repo and `git worktree add --detach ~/src/a/claude-paint-r24run <TAG>`.
+ # main() refuses to start while BASE isn't a clean checkout of TAG (checkout_problems).
+-TAG = "round-24"
++TAG = "round-24.1"
+ BRANCH = TAG
+-BASE = A / "claude-paint-r24run"
++BASE = A / "claude-paint-r24-1run"
+ EXPORT = BASE / "scripts/export_r16_studio"      # honors R16_BRANCH
+ FINISH = BASE / "scripts/finish_painting"
+ CHECK = BASE / "scripts/check_painting"
+@@ -181,9 +182,14 @@ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compac
+ PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
+                "painting's title if you give it one and a few sentences about the picture.")
+ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+-                   "Your brief is in BRIEF.md and your journal in notes/journal.md.")
++                   "Your brief is in BRIEF.md and your journal in notes/journal.md. "
++                   "Make a fresh assessment of the painting: a signature or an earlier journal entry "
++                   "calling it finished is not a reason to stop. Look at the whole canvas and detail "
++                   "crops in normal color, including passages you previously considered weak. "
++                   "If you identify a change that would improve the intended painting, make it and "
++                   "inspect the result. Finish only when that review identifies no further improvement.")
+ # A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
+-# earlier after a sitting it ends itself without adding paint
++# earlier after a sitting that reviews whole and detail views without adding paint
+ MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
+ MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
+ # only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
+@@ -379,7 +385,7 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
+ LANES = {
+     # round 22.1 and round 23: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
+     # round 24: thinking high (the owner's choice for the engine-3 painting)
+-    "INNS": lane("inness", model("anthropic", "claude-fable-5-1", "high", black=True), record_kind="none"),
++    "INNS": lane("inness", OPUS, record_kind="none"),
+ }
+ DRY = False
+ 
+@@ -611,8 +617,8 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
+     sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
+     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
+     repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
+-    The painter stops after a sitting it ended itself (status 'completed') that added no painting
+-    chunks (this includes a first sitting that painted nothing), or after max_sittings sittings:
++    The painter finishes after a sitting it ended itself (status 'completed') that added no painting
++    chunks and reviewed whole and detail views, or stops unfinished after max_sittings sittings:
+     completed ones, and crashed ones that added painting (cut off after it painted, not judged).
+     Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
+     nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
+@@ -623,12 +629,12 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
+     if not sittings:
+         return ("new", 1)
+     done = [s for s in sittings if s.get("status") == "completed"]
+-    if done and not added_painting(done[-1]):
+-        return (None, f"the painter is done: sitting {done[-1]['sitting']} added no painting")
++    if done and not added_painting(done[-1]) and done[-1].get("reviewed"):
++        return (None, f"the painter is done: sitting {done[-1]['sitting']} reviewed whole and detail views and added no painting")
+     counted = {s["sitting"] for s in sittings if s.get("status") == "completed"
+                or (s.get("status") == "crashed" and added_painting(s))}
+     if max_sittings and len(counted) >= max_sittings:
+-        return (None, f"stopped after {max_sittings} sittings (MAX_SITTINGS)")
++        return (None, f"NOT FINISHED: stopped after {max_sittings} sittings (MAX_SITTINGS)")
+     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
+         return (None, f"NOT FINISHED: {max_crashes} crashes (MAX_CRASHES)")
+     last = sittings[-1]
+@@ -652,6 +658,45 @@ def session_worked(files):
+     return False
+ 
+ 
++def session_reviewed(files):
++    """A normal whole-canvas look and detail crop delivered after the latest successful paint call.
++
++    Count returned images, not requested views, palette charts or the recovery snapshot.
++    Missing or unreadable evidence cannot establish completion.
++    """
++    whole = detail = False
++    for f in files:
++        calls = {}
++        try:
++            with open(f, errors="replace") as stream:
++                for line in stream:
++                    m = json.loads(line).get("message") or {}
++                    content = m.get("content") or []
++                    if not isinstance(content, list):
++                        continue
++                    if m.get("role") == "assistant":
++                        for c in content:
++                            if c.get("type") == "toolCall":
++                                calls[c.get("id")] = c
++                    if m.get("role") != "toolResult" or m.get("isError") is not False:
++                        continue
++                    if m.get("toolName") == "paint":
++                        whole = detail = False
++                    call = calls.pop(m.get("toolCallId"), {})
++                    if call.get("name") != "look" or not any(c.get("type") == "image" for c in content):
++                        continue
++                    args = call.get("arguments") or {}
++                    if args.get("palette") or args.get("mode"):
++                        continue
++                    if args.get("crop"):
++                        detail = True
++                    else:
++                        whole = True
++        except (OSError, ValueError):
++            return False
++    return whole and detail
++
++
+ def session_reply(files):
+     """The painter's reply: the last assistant message in the last of these session files that is
+     text with no pending tool call (a completed turn). pi --print emits the same text on stdout, but
+@@ -972,11 +1017,13 @@ def paint(name, n, d, rd):
+         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
+                    chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
+                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
+-                   worked=session_worked(new), final=final_reply)
++                   worked=session_worked(new), reviewed=session_reviewed(new), final=final_reply)
+         save_sittings(rd, n, sittings)
+         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
+             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
+             f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
++        if not crashed and not added_painting(rec) and not rec["reviewed"]:
++            log(f"{tag}: completion not established: missing successful whole-canvas or detail review")
+         if limited:
+             log(f"{tag}: sitting {k} ended on a usage limit ({gist(why)}): not a crash; the painter waits it out")
+         elif crashed:
+@@ -1323,7 +1370,7 @@ def chain(name):
+             show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
+             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
+             show(tag, f"after each sitting: count painting chunks;\n"
+-                      f"    more sittings until one the painter ends adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
++                      f"    more sittings until one reviews whole and detail views and adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
+                       f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
+                  painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
+             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)
+diff --git a/notes/round24/runner/studio_notes.md b/notes/round24/runner/studio_notes.md
+index 07f46a2..826ae15 100644
+--- a/notes/round24/runner/studio_notes.md
++++ b/notes/round24/runner/studio_notes.md
+@@ -125,6 +125,9 @@ are in canvas units (the canvas is 1000 units wide).
+     set or dry paint.
+ 39. `blend` stays inside its mask by default. Unclipped, it drags wet paint
+     across the mask's edge.
++    A local blend can leave a seam where lifted or moved paint meets the
++    untouched paint outside that mask. A soft mask does not prevent wet
++    dark and light passages inside it from mixing.
+ 40. Touches stippled into a wet layer and then blended fuse into it. Only
+     the strongest contrasts survive, as thin traces. Touches laid after the
+     blending pass stay on top as a lacy texture.
+diff --git a/notes/round24/runner/test_r21_chains.py b/notes/round24/runner/test_r21_chains.py
+index e8eaa1f..e28ad3f 100644
+--- a/notes/round24/runner/test_r21_chains.py
++++ b/notes/round24/runner/test_r21_chains.py
+@@ -12,6 +12,34 @@ import r21_chains as rc21
+ GO_LIMIT = '429: {"type":"GoUsageLimitError","message":"Go usage limit exceeded"}'      # round 19, KIMIF and MIMOF
+ 
+ 
++@pytest.mark.parametrize("views, finished", [
++    ([({}, False)], False),  # the first engine-3 painter's second sitting
++    ([({}, False), ({"crop": "0,0,300,300"}, False)], True),
++    ([({}, False), ({"crop": "0,0,600,600"}, True)], False),
++    ([({"palette": True}, False), ({"crop": "0,0,300,300"}, False)], False),
++    ([({"mode": "value"}, False), ({"crop": "0,0,300,300"}, False)], False),
++])
++def test_completion_requires_successful_whole_and_detail_review(tmp_path, views, finished):
++    session = tmp_path / "session.jsonl"
++    messages = []
++    for i, (args, failed) in enumerate(views):
++        messages += [
++            {"role": "assistant", "content": [{"type": "toolCall", "id": str(i),
++              "name": "look", "arguments": args}]},
++            {"role": "toolResult", "toolCallId": str(i), "toolName": "look",
++             "isError": failed, "content": [{"type": "text", "text": "crop too large"}]
++             if failed else [{"type": "image", "data": "fixture", "mimeType": "image/png"}]},
++        ]
++    session.write_text("\n".join(json.dumps({"message": m}) for m in messages))
++    sitting = dict(sitting=2, status="completed", painting_before=99, painting_after=99,
++                   reviewed=rc21.session_reviewed([session]))
++    step, reason = rc21.next_step([sitting])
++    assert (step is None) is finished
++    if not finished:
++        assert (step, reason) == ("new", 3)
++        assert "NOT FINISHED" in rc21.next_step([sitting], max_sittings=1)[1]
++
++
+ @pytest.mark.parametrize("initial, edits, expected", [
+     ("1", ["3", "bad", "2"], 3),
+     ("4", ["1"], 1),

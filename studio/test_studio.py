@@ -131,6 +131,41 @@ def export(tmp_path, out):
                           env=env, capture_output=True, text=True)
 
 
+@pytest.mark.parametrize("via", ["live server", "static export"])
+@pytest.mark.parametrize("status", ["finished", "cap_reached", "crash_limit_reached", "legacy cap", "legacy finished", "render only", "invalid"])
+def test_runner_outcome_reaches_viewer_without_treating_export_as_completion(home, server, monkeypatch, via, status):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + say("I'm leaving it here."))
+    run = tmp_path / "tmp" / "gallery-fixture" / "r24" / "run"
+    rd = run / "INNS"
+    rd.mkdir(parents=True)
+    (run / "studios.json").write_text(json.dumps({"INNS1": PAINTER}))
+    (rd / "p1.finished").write_text("render exported")
+    expected = None
+    if status == "legacy cap":
+        (rd / "p1.painted").write_text("NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)")
+        expected = "cap_reached"
+    elif status == "legacy finished":
+        (rd / "p1.painted").write_text("2 record(s): the painter is done: sitting 2 added no painting")
+        expected = "finished"
+    elif status != "render only":
+        (rd / "p1_outcome.json").write_text(json.dumps({"status": status, "reason": "fixture stop reason"}))
+        if status != "invalid":
+            expected = status
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "tmp" / "gallery-*" / "r*" / "run" / "studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    if via == "live server":
+        entries = json.loads(server("/api/sessions")[1])
+    else:
+        out = tmp_path / "out"
+        r = export(tmp_path, out)
+        assert r.returncode == 0, r.stderr
+        entries = json.loads((out / "data" / "sessions.json").read_text())
+        assert (out / "index.html").is_file()
+    painter = next(s for s in entries if s.get("p") == PAINTER)
+    assert (painter["outcome"]["status"] if painter["outcome"] else None) == expected
+
+
 def old_export(tmp_path, out):
     """out as the exporter before the list left it: index.html and data/, no .studio-export (and no stream.css)."""
     assert export(tmp_path, out).returncode == 0

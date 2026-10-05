@@ -1,0 +1,141 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+   Compiling easel v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 24.86s
+     Running unittests src/main.rs (target/debug/deps/easel-88791cd408c752e5)
+
+running 119 tests
+test api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges ... ok
+test api::tests::older_engines_have_no_raw_canvas ... ok
+test api::tests::soaked_says_what_is_in_the_cloth ... ok
+test board::tests::a_clean_board_leaves_heaps_as_knifed ... ok
+test board::tests::a_dirty_board_carries_paint_between_heaps_up_to_a_cap ... ok
+test board::tests::a_heap_knifed_again_is_unchanged ... ok
+test board::tests::added_tube_paint_dilutes_the_turps_and_the_oil ... ok
+test board::tests::adding_to_a_heap_follows_its_recipes_units ... ok
+test board::tests::adding_to_a_scraped_heap_knifes_it_again ... ok
+test board::tests::an_addition_that_overflows_the_heap_is_refused_and_changes_nothing ... ok
+test board::tests::the_oldest_heap_is_scraped_and_knifed_again_when_used ... ok
+test check::tests::a_client_waiting_for_its_reply_is_there_and_one_that_closed_is_gone ... ok
+test api::tests::review_refused_part_load_preserves_randomness ... ok
+test depth::tests::shadow_verbs_take_their_options ... ok
+test depth::tests::the_current_view_rolls_back ... ok
+test api::tests::review_gesture_rejects_excessive_sample_count ... ok
+test api::tests::review_secondary_piles_keep_their_thinner ... ok
+test draw_outline::tests::amount_zero_is_clean_even_with_explicit_lobes ... ok
+test depth::tests::visible_takes_masks_and_mixed_lists ... ok
+test draw_outline::tests::an_inset_that_consumes_the_shape_masks_nothing ... ok
+test draw_outline::tests::tiny_lobes_and_sizes_are_refused ... ok
+test finish::tests::finishing_waits_for_the_whole_picture_to_dry ... ok
+test form::tests::a_hard_shadow_covers_the_core_shadow ... ok
+test finish::tests::a_varnish_of_no_coats_changes_nothing ... FAILED
+test legacy::tests::easel3_free_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel3_green_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel3_near_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_free_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_green_replays ... ignored, replays whole paintings: never run
+test legacy::tests::easel4_near_replays ... ignored, replays whole paintings: never run
+test look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis ... ok
+test api::tests::review_invalid_second_loads_are_rejected ... ok
+test look::tests::grids_finer_than_a_pixel_are_refused ... ok
+test look::tests::the_relief_and_gallery_looks_take_a_light ... ok
+test look::tests::looks_draw_the_grid_without_touching_the_canvas ... ok
+test look::tests::whole_looks_are_bounded_pngs_without_enlargement ... ok
+test look::tests::whole_pngs_reduce_dimensions_to_meet_the_byte_budget ... ok
+test api::draw_rag::tests::the_rag_takes_hand_time ... ok
+test api::draw_rag::tests::the_rag_refuses_what_it_cannot_do ... ok
+test api::draw_rag::tests::a_failed_chunk_takes_back_the_rag ... ok
+test session::tests::a_failed_chunk_cannot_change_pencil_methods ... ok
+test look::tests::the_relief_look_lights_the_paint_and_changes_nothing ... ok
+test depth::tests::passes_keep_behind_what_is_in_front ... ok
+test api::draw_rag::tests::an_older_log_sees_the_globals_it_saw ... ok
+test api::tests::a_raw_canvas_refuses_a_ground ... ok
+test session::tests::a_live_chunk_over_the_limit_stops_and_keeps_nothing_but_a_replay_runs_it ... ok
+test api::draw_rag::tests::a_dipped_rag_dries_as_time_passes ... ok
+test session::tests::a_failed_chunk_leaves_brush_and_clock_alone ... ok
+test session::tests::a_failed_chunk_leaves_the_knife_alone ... ok
+test api::draw_rag::tests::the_cloth_can_t_be_cleaned_by_assignment ... ok
+test session::tests::a_retained_palette_pile_can_be_added_after_many_new_heaps ... ok
+test session::tests::after_a_failed_chunk_pairs_walks_tables_as_the_replay_does ... ok
+test session::tests::binary_chunks_are_refused_and_text_load_still_works ... ok
+test session::tests::a_gesture_checks_its_points_and_keeps_a_press ... ok
+test session::tests::engine_2_logs_replay_as_before ... ok
+test session::tests::finalizers_and_weak_tables_are_refused ... ok
+test session::tests::a_box_is_named_in_the_log_and_replays_with_it ... ok
+test session::tests::a_failed_rollback_rebuilds_from_the_log_before_painting_again ... ok
+test session::tests::gmatch_matches_lua ... ok
+test session::tests::gmatch_iterators_roll_back ... ok
+test session::tests::logs_without_an_engine_line_replay_as_before ... ignored, replays whole paintings: never run
+test session::tests::a_default_log_names_no_box ... ok
+test session::tests::no_memory_address_reaches_a_painting ... ok
+test session::tests::a_pile_s_oil_sets_its_drying_rate ... ok
+test session::tests::a_mix_prints_its_heaps_in_their_shares_and_adds_in_those_units ... ok
+test session::tests::plain_tables_keep_lua_order ... ok
+test session::tests::real_failed_chunks ... ignored
+test session::tests::palette_add_refreshes_recipe_and_dilutes_materials ... ok
+test session::tests::an_older_engine_s_painting_refuses_turps_and_absorbent_grounds ... ok
+test session::tests::terrain_refuses_huge_and_empty_areas_before_allocating ... ok
+test session::tests::the_box_line_is_read_from_the_head_only ... ok
+test session::tests::the_guide_shows_the_default_box ... ok
+test frames::tests::frames_follow_hand_time_and_leave_the_replay_alone ... ok
+test session::tests::double_loads_and_streaks_paint_and_replay ... ok
+test session::tests::under_engine_2_a_failed_chunk_that_grew_a_table_rebuilds ... ok
+test session::tests::object_keys_walk_in_creation_order ... ok
+test session::tests::under_engine_3_a_failed_chunk_that_moved_a_border_rebuilds ... ok
+test session::tests::under_engine_3_every_table_walks_in_a_fixed_order ... ok
+test session::tests::a_sketch_s_log_says_so ... ok
+test session::tests::globals_are_the_painting_s_as_the_state_holds_them_live_and_replayed ... ok
+test tests::a_log_replays_at_the_width_it_was_painted_at ... ok
+test tests::a_long_session_dir_gets_a_short_socket ... ok
+test tests::a_look_above_the_last_number_is_refused ... ok
+test session::tests::knife_rejects_invalid_loads_and_paths_without_changing_state ... ok
+test tests::a_request_from_an_older_client_is_refused_with_a_reason ... ok
+test tests::a_request_is_read_without_the_clients_end_of_file ... ok
+test tests::a_shared_socket_dir_is_not_used ... ok
+test tests::journal_entries_are_dated_lines ... ok
+test tests::save_takes_a_path_and_a_light ... ok
+test tests::the_lock_on_stdin_signal_is_not_passed_on ... ok
+test session::tests::replay_is_exact_and_failures_roll_back ... ok
+test tests::a_held_knife_shows_its_paint_over_the_passage_and_changes_nothing ... ok
+test session::tests::the_log_names_its_engine ... ok
+test thinner_tests::c01_the_card_raw_sienna_thinned_half_keeps_half_the_contrast_at_2400px ... ignored, slow
+test thinner_tests::c03_a_log_keeps_its_engine ... ok
+test thinner_tests::c03_af49348_engine_3_logs_still_replay ... ok
+test thinner_tests::c03_af49348_paintck8_saves_are_refused_naming_the_old_version ... ok
+test thinner_tests::c03_engines_1_and_2_have_no_thinner_and_engine_3_has ... ok
+test session::tests::the_knife_lays_and_scrapes ... ok
+test thinner_tests::c08_more_thinner_never_hides_the_card_more ... ignored, slow
+test session::tests::rollback_restores_tables_and_upvalues_exactly ... ok
+test tests::a_palette_look_changes_nothing ... ok
+test thinner_tests::c11_a_save_mid_evaporation_reopens_to_the_same_state_and_goes_on_the_same ... ok
+test thinner_tests::rag_study ... ignored, slow
+test session::tests::view_form_counts_visible_parts_only ... ok
+test session::tests::under_engine_3_a_failed_chunk_needs_no_rebuild ... ok
+test time::tests::the_clock_advances_by_the_hand_time_of_known_verbs ... ok
+test session::tests::no_memory_address_escapes_a_callback ... ok
+test session::tests::a_chunk_whose_ending_fails_changes_nothing ... ok
+test time::tests::wait_refuses_what_is_not_a_span_of_up_to_ten_years ... ok
+test time::tests::hand_time_is_always_on ... ok
+test thinner_tests::c12_the_same_log_saves_the_same_bytes_on_one_thread_and_four ... ok
+test time::tests::wait_returns_the_time_of_day ... ok
+test thinner_tests::c18_a_failed_chunk_after_thinned_paint_takes_everything_back ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick_earths ... ok
+test thinner_tests::c07_two_overlapping_thinned_passes_leave_more_paint_than_one ... ok
+test tests::the_thick_swatch_matches_paint_laid_thick_dark ... ok
+test draw_edges::tests::edges_lose_and_the_clip_mask ... ok
+
+failures:
+
+---- finish::tests::a_varnish_of_no_coats_changes_nothing stdout ----
+
+thread 'finish::tests::a_varnish_of_no_coats_changes_nothing' (1867267) panicked at crates/easel/src/finish.rs:178:13:
+runtime error: varnish: coats and vary must be finite and nonnegative
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    finish::tests::a_varnish_of_no_coats_changes_nothing
+
+test result: FAILED. 107 passed; 1 failed; 11 ignored; 0 measured; 0 filtered out; finished in 38.92s
+
+error: test failed, to rerun pass `-p easel --bin easel`

@@ -1,0 +1,153 @@
+--- a/studio/index.html
++++ b/studio/index.html
+@@ -86,6 +86,14 @@
+   #view.two.pal { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:'w w' 'o p' } #view.pal #whole { grid-area:w } #view.pal #other { grid-area:o } #view.pal #pal { grid-area:p }
+   #view.pal:not(.two) { grid-template-areas:'w' 'p' }
+   #pal { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center } #pal[hidden] { display:none }
++  #pband { flex:none; display:grid; grid-auto-flow:column; grid-template-rows:repeat(2,52px); grid-auto-columns:88px; grid-template-columns:14px; align-items:center; gap:8px; padding:7px 12px 9px; overflow-x:auto; border-top:1px solid var(--line); scrollbar-width:thin }
++  #pband[hidden] { display:none }
++  #pband .lbl { grid-row:span 2; writing-mode:vertical-rl; transform:rotate(180deg); font:600 10px -apple-system,sans-serif; color:#9fd0b4; text-transform:uppercase }
++  #pband .palette-chip { width:88px; height:52px; padding:0; border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px }
++  #pband canvas:first-child { width:80px; height:30px; border-radius:4px; box-shadow:0 1px 3px #0009 }
++  #pband .pile-name { height:16px; max-width:88px; image-rendering:pixelated }
++  #pband span.pile-name { height:18px; font:14px/18px ui-monospace,Menlo,monospace; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
++  @media(max-width:700px) { #pband { gap:6px; padding:5px 8px 6px } }
+   #pal .box { height:100% } #pal img { object-position:right center }
+   #cap3 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap3 b { display:block; color:#9fd0b4; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+   #view.two.pal #other, #view.two.pal #pal { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:4px } #view.two.pal #cap2, #view.two.pal #cap3 { order:0 } #view.two.pal #cap2 b, #view.two.pal #cap3 b { display:inline; margin-right:8px }
+@@ -149,10 +157,20 @@
+   /* phone: stacked panes, touch transport, home-indicator safe area. LAST in the sheet so it
+      overrides the base rules above (equal specificity, later wins). The 1920px stream is untouched. */
+   @media (max-width: 720px) {
+-    /* phone: painting + text take almost everything. Thin header, the look-strip as one row of
+-       thumbnails big enough to tap, one small transport line. The strip's height comes out of the
+-       journal's share (48:52 instead of 44:56), so the painting keeps its size. */
+-    main { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: minmax(0,48fr) minmax(0,52fr) }
++    /* Narrow windows scroll as one column; the palette never steals canvas height. */
++    main { display:block; overflow-y:auto }
++    #view { flex:none; display:flex; flex-direction:column }
++    #whole .box { flex:none }
++    #whole img { position:relative; display:block; width:100%; height:auto }
++    #whole .box:has(img:not([src])) { min-height:180px }
++    #other .box { height:auto }
++    #other img { position:relative; display:block; height:auto; max-height:180px }
++    #jbody { overflow:visible }
++    #pband { grid-auto-flow:row; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); grid-template-rows:none; grid-auto-columns:auto; gap:4px 6px; overflow:visible }
++    #pband .lbl { grid-column:1 / -1; grid-row:auto; writing-mode:horizontal-tb; transform:none }
++    #pband .palette-chip { width:100%; height:42px; min-width:0 }
++    #pband canvas:first-child { width:100%; max-width:80px; height:20px }
++    #pband .pile-name { max-width:100% }
+     #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:4px; gap:4px }
+     #view.two, #view.pal { grid-template-rows:minmax(0,2fr) minmax(0,1fr) } #cap3 { font-size:11.5px; line-height:1.3 } #cap3 b { font-size:10.5px } #cap { font-size:10.5px } #cap2 { font-size:11.5px; line-height:1.3 } #cap2 b { font-size:10.5px }
+     #finished { top:4px; right:6px; font-size:11.5px; padding:2px 7px }
+@@ -194,6 +212,7 @@
+       <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
+       <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette"></div></figure>
+     </div>
++    <div id="pband" hidden aria-label="Palette"></div>
+     <a id="finished" hidden>See the finished painting →</a>
+   </section>
+   <section class="pane" id="journal"><div id="jbody"></div></section>
+@@ -676,10 +695,99 @@
+ // the newest palette look at or before event i (-1: none yet)
+ function paletteAt(i) { for (let k = i; k >= 0; k--) if (isPalette(events[k])) return k; return -1; }
+ let viewI3 = -1;
++let paletteURL = '';
++// Read the original, lossless chart made by look.rs: white pile names at the
++// left, then thick and thin swatches. Never sample a resized web thumbnail.
++function paletteChips(im, eventIndex) {
++  if (im.naturalWidth !== 1124) return null;
++  const source = document.createElement('canvas');
++  source.width = im.naturalWidth; source.height = im.naturalHeight;
++  const ctx = source.getContext('2d'); ctx.drawImage(im, 0, 0);
++  const {data} = ctx.getImageData(0, 0, source.width, source.height), rows = [];
++  for (let y = 32; y < source.height; y++) {
++    let right = 0;
++    for (let x = 8; x < 532; x++) {
++      const i = (y * source.width + x) * 4;
++      if (data[i] === 255 && data[i + 1] === 255 && data[i + 2] === 255) right = x;
++    }
++    if (!right) continue;
++    const last = rows[rows.length - 1];
++    if (last && y - last.bottom <= 16) { last.bottom = y; last.right = Math.max(last.right, right); }
++    else rows.push({top:y, bottom:y, right});
++  }
++  if (!rows.length) return null;
++  // Match names present in the recorded code against the chart's exact 3x5
++  // font (look.rs::glyph). Ambiguous matches keep their original image label.
++  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
++  const glyphs = ['75557','26227','71747','71317','55711','74717','74757','71122','75757','75717',
++    '25755','65656','34443','65556','74647','74644','34553','55755','72227','11152','55655','44447',
++    '57755','65555','25552','65644','25563','65655','34216','72222','55557','55552','55775','55255','55222','71247','00007'];
++  const names = new Set(events.slice(0, eventIndex).flatMap(e => (e.code || '').match(/[A-Za-z_][A-Za-z0-9_]*/g) || []));
++  const signatures = new Map();
++  for (const name of names) {
++    if (name.length > 66) continue;
++    const pixels = [];
++    for (let y = 0; y < 5; y++) for (let x = 0; x < name.length * 4; x++) {
++      const glyph = glyphs[alphabet.indexOf(name[Math.floor(x / 4)].toUpperCase())];
++      if (x % 4 < 3 && (+glyph[y] & (4 >> (x % 4)))) pixels.push([x, y]);
++    }
++    const top = Math.min(...pixels.map(p => p[1]));
++    const key = pixels.map(([x,y]) => `${x},${y-top}`).join(';');
++    const found = signatures.get(key);
++    signatures.set(key, found === undefined || found === name ? name : null);
++  }
++  const chips = document.createDocumentFragment();
++  const label = document.createElement('span'); label.className = 'lbl'; label.textContent = 'Palette'; chips.append(label);
++  rows.forEach((row, i) => {
++    const next = rows[i + 1], y = Math.floor((row.top - 3 + (next ? next.top - 3 : source.height)) / 2);
++    const chip = document.createElement('button'); chip.className = 'palette-chip';
++    chip.title = 'Open palette chart'; chip.setAttribute('aria-label', `Palette pile ${i + 1}: open chart`);
++    chip.onclick = () => { $('zimg').src = im.src; $('zoom').style.display = 'flex'; };
++    const swatch = document.createElement('canvas'); swatch.width = 40; swatch.height = 30;
++    const sw = swatch.getContext('2d');
++    sw.drawImage(source, 608, y, 1, 1, 0, 0, 40, 18);
++    sw.drawImage(source, 752, y, 1, 1, 0, 18, 40, 12);
++    const name = document.createElement('canvas'); name.className = 'pile-name';
++    name.width = Math.min(88, row.right - 7); name.height = 16;
++    const nc = name.getContext('2d');
++    nc.drawImage(source, 8, row.top, name.width, 16, 0, 0, name.width, 16);
++    const letters = nc.getImageData(0, 0, name.width, 16);
++    for (let j = 0; j < letters.data.length; j += 4) {
++      if (letters.data[j] !== 255) letters.data[j + 3] = 0;
++    }
++    nc.putImageData(letters, 0, 0);
++    name.style.width = `${name.width}px`;
++    const pixels = [];
++    for (let y = row.top; y <= row.bottom; y += 2) for (let x = 10; x <= row.right; x += 2) {
++      const j = (y * source.width + x) * 4;
++      if (data[j] === 255 && data[j + 1] === 255 && data[j + 2] === 255) pixels.push(`${(x-10)/2},${(y-row.top)/2}`);
++    }
++    const matched = signatures.get(pixels.join(';'));
++    if (matched) {
++      const text = document.createElement('span'); text.className = 'pile-name'; text.textContent = matched;
++      chip.title = `${matched}: open palette chart`; chip.setAttribute('aria-label', chip.title);
++      chip.append(swatch, text);
++    } else chip.append(swatch, name);
++    chips.append(chip);
++  });
++  return chips;
++}
+ function palette(k) {
+-  const on = k >= 0; $('pal').hidden = !on; $('view').classList.toggle('pal', on); viewI3 = on ? events[k].img : -1;
+-  if (on) { const e = events[k]; setPic($('img3'), [viewURL(e.img), imgURL(e.img), thumbURL(e.img)]); $('cap3').querySelector('span').textContent = hhmm(e.ts); }
+-  else clearPic($('img3'));
++  viewI3 = k >= 0 ? events[k].img : -1;
++  const url = k >= 0 ? imgURL(viewI3) : '';
++  if (url === paletteURL) return;
++  paletteURL = url; $('pband').hidden = true; $('pband').replaceChildren();
++  $('pal').hidden = true; $('view').classList.remove('pal'); clearPic($('img3'));
++  if (!url) return;
++  const im = new Image();
++  im.onload = () => {
++    if (paletteURL !== url) return;
++    const chips = paletteChips(im, k);
++    if (chips) { $('pband').replaceChildren(chips); $('pband').hidden = false; }
++    else { $('pal').hidden = false; $('view').classList.add('pal'); $('img3').src = url; }
++  };
++  im.onerror = () => { if (paletteURL === url) paletteURL = ''; };
++  im.src = url;
+ }
+ // a look request in words: [title, what it's for, the chip's words]
+ function lookWords(req) {

@@ -1,0 +1,105 @@
+diff --git a/harness/painter/easel-tools.ts b/harness/painter/easel-tools.ts
+index 77c63db..f424a50 100644
+--- a/harness/painter/easel-tools.ts
++++ b/harness/painter/easel-tools.ts
+@@ -43,7 +43,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
+ 			label: "look",
+ 			description:
+ 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
+-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. " +
++				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at most 500 units on each side, shown at 1:1 pixels. " +
+ 				"mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. " +
+ 				"grid: true, or a spacing in canvas units. " +
+ 				"palette: true shows the palette instead: each pile a global holds, laid thick, as a thin and a very thin coat over the ground, and the thin coat over a black and white card.",
+diff --git a/notes/easel_guide.md b/notes/easel_guide.md
+index be20d36..10b714f 100644
+--- a/notes/easel_guide.md
++++ b/notes/easel_guide.md
+@@ -285,6 +285,8 @@ m:at(x, y)   m:area()
+ ```
+ 
+ Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
++`below` selects larger y values, toward the bottom of the canvas;
++`above` selects smaller y values, toward the top.
+ 
+ Numbers and randomness: `rand(a, b)`, `randn(mean, sd)`, `math.random`,
+ `lerp(a, b, t)`, `clamp(x, lo, hi)`, `smoothstep(a, b, x)`;
+@@ -295,6 +297,10 @@ passed to `coverage=` or `load_at=`); `worley{seed=, period=, jitter=}`
+ a cell wall, and a stable 0..1 per cell); `uneven(n, lo, hi, irregular,
+ clump, seed)` (n positions from lo to hi with uneven, clumped gaps).
+ 
++The nested `warp` and `stretch` tables use positional values, not named
++fields: for example, `noise{period=180, stretch={0, 3}}` stretches along
++angle 0 by a factor of 3. `stretch={angle=0, k=3}` is not accepted.
++
+ **Drawn lines.** `outline{pts... or pts=, char=, seed=, closed=, open=,
+ corners=, corner_angle=60, size=, amount=, lobe=, edge=}` turns a few
+ points into a line drawn by hand (a smooth curve through them, broken at
+diff --git a/notes/round24/runner/brief_template.md b/notes/round24/runner/brief_template.md
+index 553fab1..89ce28a 100644
+--- a/notes/round24/runner/brief_template.md
++++ b/notes/round24/runner/brief_template.md
+@@ -30,9 +30,16 @@
+ - Keep a working journal with `note` as you go: your own working notes.
+   You can revise them.
+ - You may sign the painting.
+-- Before finishing, inspect the whole painting and its details. Continue
+-  while you can identify a change that would improve the painting you
+-  intend to make. Finish when you judge it resolved.
++- Take your time and enjoy painting. You can keep working for hours,
++  exploring and revisiting passages until you are happy with the picture.
++- An oil painting can develop over simulated years. Whether yours takes
++  one simulated day or a thousand, that time is yours to use.
++- When you feel ready to finish, use `look` to enjoy the whole painting
++  and explore detail crops in normal color after your latest changes.
++  Ask yourself: is your heart happy with this? Is there something you
++  would enjoy taking further? Follow that interest for as long as you
++  like. When you are happy with the painting, record your reflections
++  in your journal and finish.
+ 
+ ## Your reply
+ When you stop working, reply with the painting's title if you give it one
+diff --git a/notes/round24/runner/studio_notes.md b/notes/round24/runner/studio_notes.md
+index 07f46a2..826ae15 100644
+--- a/notes/round24/runner/studio_notes.md
++++ b/notes/round24/runner/studio_notes.md
+@@ -125,6 +125,9 @@ are in canvas units (the canvas is 1000 units wide).
+     set or dry paint.
+ 39. `blend` stays inside its mask by default. Unclipped, it drags wet paint
+     across the mask's edge.
++    A local blend can leave a seam where lifted or moved paint meets the
++    untouched paint outside that mask. A soft mask does not prevent wet
++    dark and light passages inside it from mixing.
+ 40. Touches stippled into a wet layer and then blended fuse into it. Only
+     the strongest contrasts survive, as thin traces. Touches laid after the
+     blending pass stay on top as a lacy texture.
+diff --git a/notes/round24/runner/r21_chains.py b/notes/round24/runner/r21_chains.py
+index 1bfaa40..c12106f 100644
+--- a/notes/round24/runner/r21_chains.py
++++ b/notes/round24/runner/r21_chains.py
+@@ -181,9 +182,14 @@ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compac
+ PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
+                "painting's title if you give it one and a few sentences about the picture.")
+ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+-                   "Your brief is in BRIEF.md and your journal in notes/journal.md.")
++                   "Your brief is in BRIEF.md and your journal in notes/journal.md. "
++                   "Take your time with a fresh look at the whole canvas and detail crops in normal color. "
++                   "Is your heart happy with this? Is there something you would enjoy taking further? "
++                   "You can keep working for hours if you like, and the painting's simulated time is "
++                   "yours to use, whether that means days or years. Enjoy it. When you are happy with "
++                   "the painting, record your reflections in your journal and finish.")
+ # A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
+-# earlier after a sitting it ends itself without adding paint
++# earlier after a sitting that reviews whole and detail views without adding paint
+ MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
+ MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
+ # only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
+@@ -379,7 +385,7 @@ BUNNY = model("opencode-go", "space-bunny-free", "max")
+ LANES = {
+     # round 22.1 and round 23: one Opus 5.5 painter (thinking xhigh, through the Claude subscription: pi-black) in Inness's studio
+     # round 24: thinking high (the owner's choice for the engine-3 painting)
+-    "INNS": lane("inness", model("anthropic", "claude-fable-5-1", "high", black=True), record_kind="none"),
++    "INNS": lane("inness", OPUS, record_kind="none"),
+ }
+ DRY = False
+ 

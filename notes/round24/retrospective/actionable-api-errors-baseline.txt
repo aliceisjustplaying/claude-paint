@@ -1,0 +1,46 @@
+Baseline production with new owner tests:
+
+Command: cargo test -p easel --profile iter --bin easel invalid_outline_masks_explain_executable_recovery -- --nocapture
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint/crates/easel)
+    Finished `iter` profile [optimized] target(s) in 14.10s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 1 test
+
+thread 'draw_outline::tests::invalid_outline_masks_explain_executable_recovery' (2402818) panicked at crates/easel/src/draw_outline.rs:395:13:
+local m = o - other: runtime error: [string "chunk 2"]:1: attempt to perform arithmetic on a OutlineU value (local 'o')
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test draw_outline::tests::invalid_outline_masks_explain_executable_recovery ... FAILED
+
+failures:
+
+failures:
+    draw_outline::tests::invalid_outline_masks_explain_executable_recovery
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 119 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p easel --bin easel`
+
+Exit: 101
+
+Command: cargo test -p easel --profile iter --bin easel crops_keep_native_pixels_and_reject_either_oversize_axis -- --nocapture
+    Finished `iter` profile [optimized] target(s) in 0.03s
+     Running unittests src/main.rs (target/iter/deps/easel-f59f14deaf8ad19f)
+
+running 1 test
+
+thread 'look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis' (2402854) panicked at crates/easel/src/look.rs:695:57:
+error provides valid coordinates
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis ... FAILED
+
+failures:
+
+failures:
+    look::tests::crops_keep_native_pixels_and_reject_either_oversize_axis
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 119 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p easel --bin easel`
+
+Exit: 101

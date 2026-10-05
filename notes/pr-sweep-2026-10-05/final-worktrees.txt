@@ -1,0 +1,3 @@
+/Users/alice/src/a/claude-paint          13c6e1d [rag]
+/Users/alice/src/a/claude-paint-r24-3run aeaf582 (detached HEAD)
+/Users/alice/src/a/claude-paint-r24run   d8a995b (detached HEAD)

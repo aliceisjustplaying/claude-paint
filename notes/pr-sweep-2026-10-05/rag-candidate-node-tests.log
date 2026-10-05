@@ -1,0 +1,79 @@
+✔ under both limits nothing is dropped (0.447375ms)
+✔ the count limit drops in steps, so the cut moves once every step images (0.34775ms)
+✔ the size limit drops enough old images (in steps) to fit (0.091041ms)
+✔ the newest image is kept when it fits the size limit, and dropped when it alone is over it (0.049667ms)
+✔ an image alone over the size limit leaves the request, and a line says so and why (0.221333ms)
+✔ old looks become a line naming the file; the newest stay; the input is untouched (0.264125ms)
+✔ an image without a matching read call gets a generic line (0.09225ms)
+✔ an image from the look tool gets a line saying it was a look (0.108416ms)
+✔ the same messages give the same request (0.217834ms)
+✔ a fresh multi-image look that fits is delivered whole despite step rounding (0.143166ms)
+✔ a survey larger than the request budget delivers a complete first batch and names every unread tile (0.633083ms)
+✔ the limits come from PAINTER_MAX_IMAGES and PAINTER_MAX_IMAGE_MB, else the defaults (0.181667ms)
+✔ read opens only studio files, however the path is spelled (2.485291ms)
+✔ a name that only begins with two dots is a studio file; a '..' folder step out is not (0.945084ms)
+✔ look's options become the easel's arguments (0.724083ms)
+✔ a long log keeps its end and says what was left out (0.103583ms)
+﹣ paint, look, note and status at a real easel (0.043292ms) # SKIP
+✔ a client that hangs is stopped and reported, not waited on forever (308.19575ms)
+✔ a tool's opening status keeps to the tool's time limit, and a busy easel isn't opened again (308.361791ms)
+✔ an abort stops the tool's chain: nothing after it runs, and no listener is left behind (475.6455ms)
+✔ look's errors name the tool's options, not the easel's flags (0.248083ms)
+✔ advancing rebuilds outlive the tool budget and leave a fresh budget for the command (3384.507875ms)
+✔ a rebuild returned by open is polled and a stalled count is bounded (448.994125ms)
+✖ abort during rebuild polling stops admission and removes listeners (439.23175ms)
+✔ invalid rebuild replies never admit a command or open another session (2241.898459ms)
+✔ an easel that exits before reading a large chunk is the tool's error, with its words (130.869209ms)
+✔ the easel gets the operator's RAYON_NUM_THREADS and nothing else of the painter's environment (188.676417ms)
+✔ no reply counts the painter's work or times the machine (0.862208ms)
+✔ a look is renamed at random and shown without the machine's seconds (4.749083ms)
+✔ every look a survey names is renamed, in order (5.368625ms)
+✔ a revision replaces one passage and keeps what was there in the revisions log (6.297208ms)
+✔ a passage that isn't there, is there twice or is empty changes nothing (0.612792ms)
+✔ a usage limit is the runner's: Go's and Zen's limit errors, not an empty balance (0.4435ms)
+✔ the wait is the reset time the error names plus a minute, else the probe interval (1.023791ms)
+✔ after a day of limits in a row the run settles on the error (0.067834ms)
+✔ PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense is refused (0.523708ms)
+✔ a run cut off by usage limits goes on when they lift, asking with the conversation as it was (683.518542ms)
+✔ requests wait until the last minute's input tokens plus the next fit the budget (1.282792ms)
+✔ a request's input tokens are new plus cached (13.627458ms)
+✔ a per-minute quota 429 becomes a rate limit pi's retry takes (0.718417ms)
+✔ daily quotas, billing errors and other errors are left alone (0.165709ms)
+✔ a request over the whole budget goes at once when the window is empty (0.122125ms)
+✔ a later sitting opens with the brief, journal, globals, clock and a fresh look at the canvas (797.901583ms)
+✔ a first sitting's message is left as it is (450.343667ms)
+✔ after a compaction the painter sees the canvas as it was when the summary was written (1675.933458ms)
+✔ the summary lists the globals the easel reports, not names read off the log (191.259333ms)
+✔ when the easel can't answer, the summary says so and guesses nothing (166.4855ms)
+✔ the painting time comes only from paint results that succeeded, and only a valid time (0.4975ms)
+✔ the journal is quoted as the painter's own notes: its headings can't pass for the summary's (152.587166ms)
+✔ a carriage return in the journal starts a new quoted line, not an unquoted one (64.949ms)
+✔ a journal stamp counts only when it is a valid time of day (0.231375ms)
+✔ a Gemini tool result's image moves to a user turn after it, at the ultra-high resolution (0.758667ms)
+✔ every OpenAI input_image gets the detail, wherever it sits (0.071875ms)
+✔ an Anthropic payload is left as it is (0.076792ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 52
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 8483.36425
+
+✖ failing tests:
+
+test at harness/painter/test/easel-client.test.ts:206:1
+✖ abort during rebuild polling stops admission and removes listeners (439.23175ms)
+  Error: ENOENT: no such file or directory, open '/var/folders/6k/24182wv136749r3p852rft740000gn/T/studio-XpsJOy/calls'
+      at readFileSync (node:fs:620:20)
+      at calls (file:///private/tmp/paint-sweep.KHTpId/worktree/harness/painter/test/easel-client.test.ts:131:35)
+      at TestContext.<anonymous> (file:///private/tmp/paint-sweep.KHTpId/worktree/harness/painter/test/easel-client.test.ts:212:13)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/var/folders/6k/24182wv136749r3p852rft740000gn/T/studio-XpsJOy/calls'
+  }

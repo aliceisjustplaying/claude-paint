@@ -1,0 +1,34 @@
+Unmodified main baseline measurement
+
+Main SHA: 6b8ec1823150f5eae3c135c927df332c8d5c1056
+Candidate SHA: 66f465f (codex/pr-sweep-integration)
+Build: cargo build --release -p easel
+Build result: PASS, release optimized profile, 1m47s
+Check: scripts/tests/baseline_state.sh target/release/easel
+Check result: exit 1
+
+Main measurement log: main-6b8ec18-baseline-state.log
+SHA256: e84f602156bf5a0aae53cf31c622c9897c52c6cfeb7576ce5139580ee7ac4179
+
+Comparison: diff -u main-baseline.log candidate-baseline-state.log
+Result: the candidate log contains one additional first line:
+$ scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
+After excluding that command line, main and candidate output are byte-identical.
+
+Both: rag chunks 004 through 008 differ (5 of 8); the other five scenes
+match every baseline state field and PNG. First rag wipe divergence:
+wet.vol 382/8192 values, largest difference 2.67131 at index 1310,
+0.9863235950469971 -> 3.6576344966888428.
+
+Owning main commits: b612503 (textured rag), d18168f (contact bounds),
+5288a4a (engine-3 integration). Candidate rag source only extends three
+material loops from 3 entries to the expanded Prop length, preserving the
+first three arithmetic operations. PR7 and its review fix do not edit rag.rs.
+
+Existing source documents this inherited failure:
+notes/engine3/HANDOVER.md:22, 198-202
+notes/engine3/START_HERE.md:11-14
+notes/rag/README.md:19-23
+The owner explicitly left the rag baseline red pending rag work, and current
+engine-3 behavior explicitly includes folds, frayed edges and rim smearing.
+No production change or baseline expectation change made during this audit.

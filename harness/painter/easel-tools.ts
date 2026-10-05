@@ -13,11 +13,10 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { LIMITS, type PruneLimits } from "./context-images.ts";
-import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords } from "./easel-client.ts";
+import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
+import type { PruneLimits } from "./context-images.ts";
 
-/** `limits`: the painter's image budget (painter.ts reads it from the environment, context-images.ts). */
-export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits = LIMITS): void {
+export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
 
 	pi.registerTool({
@@ -49,9 +48,9 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
 				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
-				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
-				"compare: the path of an earlier look, shown left of the same view now. " +
-				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade, seen in the same light and mode as the passage (240 units square, clipped at the canvas's edges; crop sets it instead). It takes mode value, squint, relief or gallery, and light; not mirror, grid, size or palette. It shows the paint on the knife, not how it would look laid. " +
+				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
+				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
+				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade, seen in the same light and mode as the passage (240 units square, clipped at the canvas's edges; crop sets it instead). It takes mode value, squint, relief or gallery, and light; not mirror, grid, size, palette, survey or compare. It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
@@ -88,14 +87,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				const reads = [];
 				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
 				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
-				// a survey's tiles must all stay in view: old images leave the request a step at a
-				// time (context-images.ts), so more than maxImages - step + 1 tiles could lose the first
-				if (paths.length > 1) {
-					const chars = images.reduce((n, c) => n + ((c as { data?: string }).data?.length ?? 0), 0);
-					if (images.length > limits.maxImages - limits.step + 1 || chars > limits.maxImageChars) {
-						throw new Error(`look: the survey is ${images.length} tiles, more than can stay in view at once; look at the canvas in parts with crop instead`);
-					}
-				}
+				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
 				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
 			},
 		}),

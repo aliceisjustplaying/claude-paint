@@ -633,12 +633,16 @@ and nothing on the canvas or the clock changes.
 | `look` with | shows |
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
-| `compare: "<an earlier look's path>"` | that earlier look on the left and the canvas now on the right, at the same height: what a change did. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop and mode |
-| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size` or `palette`). A knife shows what is on it, as full as it is; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `compare: "<an earlier look's path>"` | that earlier look on the left and the canvas now on the right, at the same height: what a change did. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid to compare the same view |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
 
-A whole view is at most 1000 pixels on its long side, about 42% of a
-2400-pixel canvas's width: small marks, beads of paint and stray strokes
-may not show in it. Survey the canvas after
+A survey can arrive in a partial batch to fit the painter's image budget.
+The reply lists the remaining tile paths; read them one at a time to inspect
+the rest of the canvas.
+
+A whole view defaults to 1000 pixels on its long side (`size` up to 1600),
+about 42% of a 2400-pixel canvas's width: small marks, beads of paint and
+stray strokes can be hard to see in it. Survey the canvas after
 each campaign, and compare before and after.
 
 ## How chunks behave

@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { PruneLimits } from "./context-images.ts";
 
 export interface Ran {
 	code: number | null;
@@ -170,6 +171,22 @@ export function toolWords(t: string): string {
 	return t
 		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
 		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
+}
+
+/** Deliver a survey in order within the request budget, keeping every original tile on disk. */
+export function surveyReply<I extends { type: "image"; data: string }>(said: string, paths: string[], images: I[], limits: PruneLimits) {
+	if (images.length !== paths.length) throw new Error("look: a survey tile could not be read; the survey is incomplete");
+	const oversized = images.findIndex((image) => image.data.length > limits.maxImageChars);
+	if (oversized >= 0) throw new Error(`look: survey incomplete: ${paths[oversized]} alone exceeds the configured image budget; full-detail tiles remain on disk, but this budget cannot deliver them`);
+	let count = 0;
+	let chars = 0;
+	while (count < images.length && count < limits.maxImages && chars + images[count].data.length <= limits.maxImageChars) {
+		chars += images[count++].data.length;
+	}
+	if (count < images.length) {
+		said += `\nPartial survey: showing tiles 1–${count} of ${images.length} within the image budget. The remaining full-detail tiles have not been shown. Read each remaining file in a separate turn before assessing the whole canvas:\n${paths.slice(count).join("\n")}\n`;
+	}
+	return { content: [{ type: "text" as const, text: said }, ...images.slice(0, count)] };
 }
 
 /**

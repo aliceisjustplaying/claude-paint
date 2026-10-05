@@ -462,7 +462,7 @@ impl Canvas {
     /// pile, `Handling::piled`) and the canvas's engine is before 3.
     pub fn work_with(&mut self, piles: &mut Piles, mask: &Mask, hd: &Handling, seed: u64) {
         hd.tool.assert_valid();
-        self.assert_thinner_supported((hd.thinner > 0.0 && hd.pile.is_some()) || hd.second.as_ref().is_some_and(|s2| s2.thinner > 0.0), "Canvas::work");
+        self.assert_thinner_supported((hd.thinner > 0.0 && hd.pile.is_some()) || (hd.pile.is_some() && hd.second.as_ref().is_some_and(|s2| s2.thinner > 0.0)), "Canvas::work");
         if let Some(t) = &hd.cut_in {
             t.assert_valid();
         }
@@ -1224,7 +1224,11 @@ const SCALE_RANGE: (f32, f32) = (0.15, 6.0);
 /// The size of the marks at (`x`, `y`) (`Handling::scale_at`, held to
 /// `SCALE_RANGE`); 1 without it.
 fn scale_of(hd: &Handling, f: Frame, x: f32, y: f32) -> f32 {
-    hd.scale_at.as_ref().map_or(1.0, |sf| sf(x.clamp(0.0, f.width()), y.clamp(0.0, f.height())).clamp(SCALE_RANGE.0, SCALE_RANGE.1))
+    // (a size that is no number, NaN, counts as the plain size, 1: it would pass the clamp)
+    hd.scale_at.as_ref().map_or(1.0, |sf| {
+        let k = sf(x.clamp(0.0, f.width()), y.clamp(0.0, f.height()));
+        if k.is_nan() { 1.0 } else { k.clamp(SCALE_RANGE.0, SCALE_RANGE.1) }
+    })
 }
 
 fn mask_at(mask: &Mask, x: f32, y: f32) -> f32 {

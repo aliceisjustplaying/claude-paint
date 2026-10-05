@@ -2201,9 +2201,10 @@ impl Canvas {
                         }
                         *sf.stroke.add(i) = id;
                     }
+                    grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
+                    // (a droplet has landed only where it laid paint: not under a mask's zero)
+                    landed = true;
                 }
-                grow(&mut bounds, x - sf.ox, y - sf.oy, x - sf.ox + 1, y - sf.oy + 1);
-                landed = true;
             }
             if landed {
                 count += 1;
@@ -2920,11 +2921,12 @@ impl Knife {
     }
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
     /// False, and nothing picked up, for an amount whose volume is not a
-    /// number (NaN, or so large it overflows).
+    /// number (NaN, or so large it overflows, alone or with what the blade
+    /// already carries).
     pub fn load(&mut self, paint: Paint, amount: f32) -> bool {
         // (it would leave the blade's paint NaN; and NaN.max(0) is 0, so test the amount too)
         let v = amount.max(0.0) * self.full();
-        if !(amount.is_finite() && v.is_finite()) {
+        if !(amount.is_finite() && v.is_finite() && (self.vol + v).is_finite()) {
             return false;
         }
         let lat = paint.latent();

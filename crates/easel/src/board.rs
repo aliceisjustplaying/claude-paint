@@ -226,6 +226,11 @@ impl Board {
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
+        // (amounts that overflow the heap, together or with it, would leave its proportions NaN)
+        let more: f32 = add.iter().map(|&(_, v)| v * k).sum();
+        if !(more.is_finite() && (before + more).is_finite()) {
+            return Err("p:add: more paint than the heap can count".into());
+        }
         let mut added = 0.0;
         for &(i, v) in add {
             let v = v * k;

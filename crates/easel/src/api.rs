@@ -617,9 +617,10 @@ impl UserData for Brush {
             if let Some(o) = &o {
                 check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
                 wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
-                // (an endless wobble would throw the checked points off to nowhere)
-                if !wobble.is_finite() {
-                    return err("gesture: wobble is a number of units, not infinite");
+                // (a hand's drift: a huge one would throw the checked points off to
+                // nowhere and the curve's length past any count)
+                if !(wobble <= GESTURE_WOBBLE) {
+                    return err(format!("gesture: wobble is the hand's drift, 0 to {GESTURE_WOBBLE} units"));
                 }
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
@@ -1212,6 +1213,10 @@ const WORK_KEYS: &[&str] = &[
 /// canvas is 1000 wide and at most 5000 high).
 const GESTURE_REACH: f32 = 20_000.0;
 
+/// The most a gesture's hand drifts sideways (`wobble`, units): a tenth of
+/// the canvas's width.
+const GESTURE_WOBBLE: f32 = 100.0;
+
 /// The most samples a gesture's curve takes (one every 1.5 units or so:
 /// about 300 000 units of curve).
 const GESTURE_SAMPLES: usize = 200_000;
@@ -1398,6 +1403,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
                 w => scalar_field(st, w, b, "work piles weight")?,
             };
             ps.push((p.mix.clone(), p.medium, f));
+            h.piles_thinner.push(p.thinner());
         }
         h.piles_at = Some(ps);
     }
@@ -1898,7 +1904,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 thinner += p.thinner() * w;
                 oil += p.mix.oil_rate * w;
                 wsum += w;
-                given.extend(p.parts.iter().map(|(n, k)| (n.clone(), k * w)));
+                // (its recipe as given, scaled to its share of the mix: each source's parts sum to w)
+                let k = w / p.given_sum.max(1e-9);
+                given.extend(p.parts.iter().map(|(n, q)| (n.clone(), q * k)));
             }
             if wsum <= 0.0 {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
@@ -1910,9 +1918,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
-            let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
+            // (the recipe printed sums to the shares: p:add counts its parts in those units)
+            let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, given_sum: 1.0, heap, st: Some(st.clone()) })
+            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, given_sum: wsum, heap, st: Some(st.clone()) })
         })?)?;
     }
     // palette{dirty=0..1, set_out={"tube name", ...}, clean=true}: how the board
@@ -2189,7 +2198,8 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
         let absorbent = match l.get::<Value>("absorbent")? {
             Value::Nil => 0.0,
             Value::Boolean(b) => if b { 1.0 } else { 0.0 },
-            Value::Number(n) => (n as f32).clamp(0.0, 1.0),
+            // (NaN passes a clamp, and would leave the ground's gloss NaN)
+            Value::Number(n) if !n.is_nan() => (n as f32).clamp(0.0, 1.0),
             Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
             _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
         };

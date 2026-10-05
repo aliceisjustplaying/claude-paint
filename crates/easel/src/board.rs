@@ -351,6 +351,18 @@ mod tests {
     }
 
     #[test]
+    fn an_addition_that_overflows_the_heap_is_refused_and_changes_nothing() {
+        let mut b = Board::default();
+        // a tiny recipe sum makes each added part a vast volume
+        let a = b.knife(vec![(0, 1.0)], 1e-30, 0.0, 0.0, 1.0, None);
+        let before = b.heap(a).unwrap().clone();
+        assert!(b.add(a, &[(0, f32::MAX)], 0.0).is_err());
+        let h = b.heap(a).unwrap();
+        assert_eq!((h.parts.clone(), h.medium, h.solvent, h.oil_rate), (before.parts, before.medium, before.solvent, before.oil_rate));
+        assert!(h.fractions().iter().all(|p| p.1.is_finite()));
+    }
+
+    #[test]
     fn adding_to_a_scraped_heap_knifes_it_again() {
         let mut b = Board { dirty: 1.0, ..Default::default() };
         let first = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.0, 1.0, None);

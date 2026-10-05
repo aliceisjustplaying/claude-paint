@@ -1,4 +1,4 @@
-//! Drawing on the ground: graphite pencils and black chalk.
+//! Drawing on the ground: graphite pencils, black chalk and colored pastels.
 //!
 //! The model, from first principles and kept simple:
 //! - **A point dragged over the tooth.** The point rides on the local tops of
@@ -20,8 +20,19 @@
 //!   eraser no longer lifts it; once paint has gone over it, it is sealed in
 //!   the picture.
 //!
+//! - **Pastel** is a stick of pigment bound with a little gum and extended
+//!   with chalk: colored, soft and dry. Unlike graphite it lays on itself:
+//!   a new stroke covers a share of what is there, the earlier pastel
+//!   included, so colors laid across each other mix optically, stroke by
+//!   stroke. Each stroke also fills the tooth (`Cell::fill`), and a filled
+//!   tooth takes less: the paper refuses more pastel. Fixative binds the
+//!   layer and gives back some tooth (and darkens it a little), so more can
+//!   go on top; a finger or stump (`smudge`) pushes it into the hollows and
+//!   drags neighboring colors together.
+//!
 //! The bookkeeping (`Drawing`) exists only on a canvas that has been drawn
-//! on, so paintings without a drawing are unchanged.
+//! on, so paintings without a drawing are unchanged; a drawing with no
+//! pastel in it keeps its old layout (`to_f32s`) bit for bit.
 
 use crate::canvas::Canvas;
 use crate::color::Rgb;
@@ -35,16 +46,19 @@ use crate::surface::vnoise;
 pub enum Medium {
     Graphite,
     Chalk,
+    Pastel,
 }
 
-/// A drawing point: a graphite pencil of some grade, or black chalk.
+/// A drawing point: a graphite pencil of some grade, black chalk, or a
+/// colored pastel.
 #[derive(Clone, Debug)]
 pub struct Lead {
     pub medium: Medium,
     /// Grade as softness: 2H = -2, H = -1, F = -0.5, HB = 0, B = 1, 4B = 4.
     pub soft: f32,
-    /// Reflectance of the laid flakes (linear, gray).
-    pub flake: f32,
+    /// Reflectance of the laid flakes (linear RGB; gray for graphite and
+    /// chalk).
+    pub flake: Rgb,
     /// Coverage laid in one pass at full contact and pressure (fraction of
     /// what is still bare).
     pub rate: f32,
@@ -95,7 +109,7 @@ impl Lead {
             soft: s,
             // clay-rich hard leads lay a pale silvery gray; soft ones a dark
             // gray (graphite is never black: its sheen keeps it gray)
-            flake: 0.30 - 0.25 * t.powf(0.8),
+            flake: [0.30 - 0.25 * t.powf(0.8); 3],
             rate: (0.8 * 1.1f32.powf(s)).min(1.0),
             cap: (0.64 + 0.035 * s).clamp(0.35, 0.92),
             point_mm: 0.32 + 0.04 * s.max(0.0),
@@ -113,7 +127,46 @@ impl Lead {
     /// Natural black chalk: carbon black in clay. Deep, matte, broad and
     /// crumbly; it wears fast.
     pub fn chalk() -> Lead {
-        Lead { medium: Medium::Chalk, soft: 6.0, flake: 0.022, rate: 1.0, cap: 0.93, point_mm: 0.9, blunt_mm: 350.0, bite_um: 150.0, crumble: 0.5 }
+        Lead { medium: Medium::Chalk, soft: 6.0, flake: [0.022; 3], rate: 1.0, cap: 0.93, point_mm: 0.9, blunt_mm: 350.0, bite_um: 150.0, crumble: 0.5 }
+    }
+
+    /// A pastel stick of the color `masstone` (linear RGB, as the pigments
+    /// look bound in oil) and softness `soft` (0 a hard pastel, 1 a very
+    /// soft one). Dry pigment in air scatters more than in oil, so the stick
+    /// is a little paler and grayer than the same pigments' masstone
+    /// (`dry_color`). A soft stick lays more, covers more, fills the tooth
+    /// faster, crumbles more and wears down faster; a hard one keeps an edge
+    /// and lays a lighter, more broken line. The end of a stick is a few mm
+    /// across; laid on its side (`side`) it is as wide as the length laid
+    /// down. Estimates, not measurements.
+    pub fn pastel(masstone: Rgb, soft: f32) -> Lead {
+        let s = soft.clamp(0.0, 1.0);
+        Lead {
+            medium: Medium::Pastel,
+            soft: s,
+            flake: dry_color(masstone),
+            rate: 0.7 + 0.25 * s,
+            cap: 0.93 + 0.05 * s,
+            point_mm: 1.6 + 1.6 * s,
+            blunt_mm: 900.0 - 650.0 * s,
+            bite_um: 120.0 + 120.0 * s,
+            crumble: 0.35 + 0.35 * s,
+        }
+    }
+
+    /// This stick laid on its side, `width_mm` of it touching: a broad band
+    /// that rides on the tops of the tooth (it bites much less than the
+    /// end), lays less per pass and doesn't wear to a wider mark.
+    pub fn side(&self, width_mm: f32) -> Lead {
+        Lead { point_mm: width_mm.max(0.5), blunt_mm: f32::INFINITY, bite_um: 0.45 * self.bite_um, rate: 0.85 * self.rate, ..self.clone() }
+    }
+
+    /// How much of the tooth one full stroke fills (pastel only).
+    fn fills(&self) -> f32 {
+        match self.medium {
+            Medium::Pastel => 0.05 + 0.06 * self.soft,
+            _ => 0.0,
+        }
     }
 
     /// Width of the line (mm) after `worn_mm` of drawing since sharpening.
@@ -126,8 +179,22 @@ impl Lead {
         match self.medium {
             Medium::Graphite => 0.9,
             Medium::Chalk => 0.72,
+            Medium::Pastel => 0.55,
         }
     }
+}
+
+/// How pigments that look `masstone` bound in oil look dry, in a pastel
+/// stick: in air the particles scatter more (a larger step in refractive
+/// index), so the dry color is paler and a little grayer. A gentle lift of
+/// the linear values, more for the darks; an estimate.
+pub fn dry_color(masstone: Rgb) -> Rgb {
+    let lum = 0.2126 * masstone[0] + 0.7152 * masstone[1] + 0.0722 * masstone[2];
+    masstone.map(|c| {
+        let c = c.clamp(0.0, 1.0).powf(0.9);
+        // a little gray from the surface scatter
+        (c * 0.96 + 0.04 * lum.powf(0.9)).clamp(0.0, 1.0)
+    })
 }
 
 /// One pixel of the drawing's bookkeeping.
@@ -135,8 +202,8 @@ impl Lead {
 struct Cell {
     /// Fraction of the pixel covered.
     a: f32,
-    /// Mean reflectance of the flakes.
-    r: f32,
+    /// Mean reflectance of the flakes (linear RGB).
+    r: Rgb,
     /// How readily an eraser lifts it (coverage-weighted).
     lift: f32,
     /// Fixed coverage: the eraser can't lift below this.
@@ -144,6 +211,8 @@ struct Cell {
     /// The canvas's film (coats) when this was drawn: once paint has gone
     /// over it the film is thicker, and the drawing is sealed.
     film: f32,
+    /// How full the tooth is with pastel (0 bare .. 1 it takes no more).
+    fill: f32,
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -160,6 +229,9 @@ pub struct Drawing {
     guide: Vec<f32>,
     /// What fixative bound of the guide: the eraser can't lift below this.
     guide_floor: Option<Vec<f32>>,
+    /// Whether any pastel (color) has been laid: the cells are then
+    /// serialized with their color and tooth (`to_f32s`).
+    color: bool,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -334,13 +406,22 @@ fn point_at(p: &[(f32, f32)], s: &[f32], a: f32) -> ((f32, f32), (f32, f32)) {
 /// `angle`, `spacing` units apart, each at most `length` units, bowed by up
 /// to 6% of its length, heavy where it starts and lifting off at the end.
 pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, seed: u64) -> Vec<Mark> {
+    hatch_marks_graded(m, angle, spacing, length, pressure, false, seed)
+}
+
+/// `hatch_marks`, and with `graded` the mask is a weight, not a shape:
+/// strokes run wherever it is above a trace (0.04), each pressed at every
+/// point in proportion to the mask's value there, so a hatched passage
+/// fades into the next instead of stopping at a line.
+pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64) -> Vec<Mark> {
+    let level = if graded { 0.04 } else { 0.5 };
     let f = m.f;
     let (w, h) = (f.width(), f.height());
     let (ca, sa) = (angle.cos(), angle.sin());
     // bounding box of the mask (units)
     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for (i, &v) in m.data.iter().enumerate() {
-        if v > 0.5 {
+        if v > level {
             let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
             x0 = x0.min(x);
             y0 = y0.min(y);
@@ -367,7 +448,7 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
     let step = (0.5 / f.scale).max(0.2);
     let inside = |u: f32, v: f32| {
         let (x, y) = (u * ca - v * sa, u * sa + v * ca);
-        x >= 0.0 && y >= 0.0 && x < w && y < h && m.sample(x, y) > 0.5
+        x >= 0.0 && y >= 0.0 && x < w && y < h && m.sample(x, y) > level
     };
     let mut out = Vec::new();
     let mut v = v0 + rng.range(0.0, spacing);
@@ -411,7 +492,18 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
                     .collect();
                 let p = pressure * rng.range(0.85, 1.12);
                 let s = arclen(&pts);
-                out.push(Mark { pressure: pressure_along(&[p * 0.8, p, p * 0.8, p * 0.25], &s), pts });
+                let mut pr = pressure_along(&[p * 0.8, p, p * 0.8, p * 0.25], &s);
+                if graded {
+                    // pressed as hard as the weight there asks
+                    for (q, pt) in pr.iter_mut().zip(&pts) {
+                        let (x, y) = (pt.0.clamp(0.0, w - 1e-3), pt.1.clamp(0.0, h - 1e-3));
+                        *q *= m.sample(x, y).clamp(0.0, 1.0);
+                    }
+                    if pr.iter().cloned().fold(0.0, f32::max) < 0.03 {
+                        continue;
+                    }
+                }
+                out.push(Mark { pressure: pr, pts });
             }
         }
         v += spacing;
@@ -421,30 +513,45 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
 
 impl Drawing {
     fn new(n: usize, whole: usize) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None }
+        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, color: false }
     }
 
-    /// Serialized as f32s: the window's cells (a, r, lift, floor, film), the
-    /// guide (whole canvas), then 0 or 1 and the guide's floor.
+    /// Whether any pastel has been laid (the serialized layout has color).
+    pub(crate) fn has_color(&self) -> bool {
+        self.color
+    }
+
+    /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
+    /// pastel, `has_color`: a, r, g, b, lift, floor, film, fill), the guide
+    /// (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
-        let cells = self.cells.iter().flat_map(|c| [c.a, c.r, c.lift, c.floor, c.film]);
+        let k = if self.color { 8 } else { 5 };
+        let color = self.color;
+        let cells = self.cells.iter().flat_map(move |c| {
+            let q = if color { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.fill] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0] };
+            q.into_iter().take(k)
+        });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
     }
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
-    /// pixels, `whole` canvas pixels. None if the data is inconsistent.
-    pub(crate) fn from_f32s<E>(n: usize, whole: usize, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
-        let raw = get(n * 5)?;
-        let cells: Vec<Cell> = raw.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: q[1], lift: q[2], floor: q[3], film: q[4] }).collect();
+    /// pixels, `whole` canvas pixels, `color` the layout with pastel. None if
+    /// the data is inconsistent.
+    pub(crate) fn from_f32s<E>(n: usize, whole: usize, color: bool, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
+        let cells: Vec<Cell> = if color {
+            get(n * 8)?.as_chunks::<8>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], fill: q[7] }).collect()
+        } else {
+            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], fill: 0.0 }).collect()
+        };
         let guide = get(whole)?;
         let has_floor = get(1)?[0];
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && ok(c.r) && ok(c.lift) && ok(c.floor) && c.film.is_finite())
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && c.film.is_finite() && ok(c.fill))
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, color }))
     }
 }
 
@@ -524,8 +631,9 @@ impl Canvas {
         // width per point (units): the point wears along the line and
         // flattens a little under pressure
         let wid: Vec<f32> = (0..pts.len()).map(|i| lead.width_mm(worn_mm + s[i] * mmu) * (0.8 + 0.4 * mark.pressure[i]) / mmu).collect();
-        // footprint: (pixel index, coverage, pressure)
-        let mut hits: Vec<(usize, f32, f32)> = Vec::new();
+        // footprint: (pixel index, coverage, pressure, how far out from the
+        // line's middle toward its edge, 0..1)
+        let mut hits: Vec<(usize, f32, f32, f32)> = Vec::new();
         for i in 0..pts.len() - 1 {
             let (a, b) = (pts[i], pts[i + 1]);
             let hw = 0.5 * wid[i].max(wid[i + 1]).max(pxu) + pxu;
@@ -546,7 +654,7 @@ impl Canvas {
                     let cov = (0.5 - (d - (0.5 * w).max(0.5 * pxu)) / pxu).clamp(0.0, 1.0) * (w / pxu).min(1.0);
                     if cov > 0.0 {
                         let p = mark.pressure[i] + (mark.pressure[i + 1] - mark.pressure[i]) * t;
-                        hits.push((y * f.w + x, cov, p));
+                        hits.push((y * f.w + x, cov, p, (d / (0.5 * w).max(1e-6)).min(1.0)));
                     }
                 }
             }
@@ -569,7 +677,7 @@ impl Canvas {
             m
         };
         // how far each pixel lies below the tops the point rides on (µm)
-        let depths: Vec<f32> = hits.iter().map(|&(i, _, _)| top(i) - height[i]).collect();
+        let depths: Vec<f32> = hits.iter().map(|&(i, _, _, _)| top(i) - height[i]).collect();
         let lift = lead.lift();
         // a pixel coarser than the weave's threads holds tops of its own
         // (its averaged height overstates how far the point is from them)
@@ -578,11 +686,14 @@ impl Canvas {
         let (depth_k, crumble) = (sub.powf(0.6), lead.crumble * sub.sqrt());
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);
-        let wetv: Vec<bool> = hits.iter().map(|&(i, _, _)| self.wet.vol[i] > 1e-5).collect();
+        let wetv: Vec<bool> = hits.iter().map(|&(i, _, _, _)| self.wet.vol[i] > 1e-5).collect();
         let mut px = std::mem::take(&mut self.px);
+        let pastel = lead.medium == Medium::Pastel;
+        let fills = lead.fills();
         {
             let d = self.drawing_mut();
-            for (k, &(i, cov, p)) in hits.iter().enumerate() {
+            d.color |= pastel;
+            for (k, &(i, cov, p, edge)) in hits.iter().enumerate() {
                 if wetv[k] {
                     continue;
                 }
@@ -592,19 +703,50 @@ impl Canvas {
                     *c = Cell { film: film[i], ..Cell::default() };
                 }
                 let depth = depths[k] * depth_k;
-                let bite = lead.bite_um * p.powf(1.2) + 3.0;
+                // a pastel's pressure falls off toward the edge of the
+                // stick's contact: there it rides on the tops only, so the
+                // mark's edge breaks up in the tooth (graphite as it was)
+                let rim = if pastel { 1.0 - 0.9 * edge * edge } else { 1.0 };
+                let bite = lead.bite_um * p.powf(1.2) * rim + 3.0;
                 let contact = (-depth.max(0.0) / bite).exp();
                 let (gx, gy) = ((i % f.w + f.x0) as i64, (i / f.w + f.y0) as i64);
                 let grain = 1.0 - crumble * hash2(gx, gy, seed);
                 let dep = (lead.rate * contact * cov * grain * touch(p)).clamp(0.0, 1.0);
                 let cap = lead.cap * (0.55 + 0.45 * p);
+                if pastel {
+                    // pastel lays on what is there, earlier pastel included,
+                    // as much as the tooth still takes: the share `q` of the
+                    // pixel it now covers hides the ground and the old
+                    // pastel alike
+                    // a stick drags over each point along its whole contact
+                    // (a few passes of the tooth, not one) and crumbles less
+                    // than its grain says: soft pastel pressed hard covers
+                    let dep = (lead.rate * contact * cov * (1.0 - 0.45 * (1.0 - grain)) * touch(p)).clamp(0.0, 1.0);
+                    let dep = 1.0 - (1.0 - dep) * (1.0 - dep);
+                    let q = (dep * (1.0 - c.fill).max(0.0).powf(1.5)).clamp(0.0, 0.98);
+                    if q <= 0.0 {
+                        continue;
+                    }
+                    let under = uncover(px[i], c.a, c.r);
+                    let a1 = (c.a + (1.0 - c.a) * q).min(cap.max(c.a));
+                    let mut r = [0.0; 3];
+                    for (k, v) in r.iter_mut().enumerate() {
+                        *v = ((c.a * (1.0 - q) * c.r[k] + q * lead.flake[k]) / (c.a * (1.0 - q) + q).max(1e-6)).clamp(0.0, 1.0);
+                    }
+                    c.lift = (c.a * (1.0 - q) * c.lift + q * lift) / (c.a * (1.0 - q) + q).max(1e-6);
+                    c.r = r;
+                    c.a = a1;
+                    c.fill = (c.fill + fills * q * (0.6 + 0.6 * p)).min(1.0);
+                    px[i] = cover(under, c.a, c.r);
+                    continue;
+                }
                 let da = (cap - c.a).max(0.0) * dep;
                 if da <= 0.0 {
                     continue;
                 }
                 let a1 = c.a + da;
                 let under = uncover(px[i], c.a, c.r);
-                c.r = (c.a * c.r + da * lead.flake) / a1;
+                c.r = [0, 1, 2].map(|k| (c.a * c.r[k] + da * lead.flake[k]) / a1);
                 c.lift = (c.a * c.lift + da * lift) / a1;
                 c.a = a1;
                 px[i] = cover(under, c.a, c.r);
@@ -659,7 +801,9 @@ impl Canvas {
     }
 
     /// Fixative over `m` (or all): binds the loose drawing so an eraser no
-    /// longer lifts it.
+    /// longer lifts it. Over pastel it also gives back some of the tooth (the
+    /// bound particles are a new, rough surface that takes more pastel) and
+    /// darkens it a little, as the resin wets the dry pigment.
     pub fn fix_drawing(&mut self, m: Option<&Mask>) {
         if let Some(m) = m {
             self.check_mask(m);
@@ -669,6 +813,12 @@ impl Canvas {
         for (i, c) in d.cells.iter_mut().enumerate() {
             if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) {
                 c.floor = c.a;
+                if c.fill > 0.0 && self.film[i] <= c.film + 1e-4 {
+                    let under = uncover(self.px[i], c.a, c.r);
+                    c.fill *= 0.4;
+                    c.r = c.r.map(|v| v * 0.97);
+                    self.px[i] = cover(under, c.a, c.r);
+                }
             }
         }
         let fl = d.guide_floor.get_or_insert_with(|| vec![0.0; d.guide.len()]);
@@ -677,6 +827,67 @@ impl Canvas {
                 *v = *g;
             }
         }
+    }
+
+    /// A finger or a paper stump rubbed over `m` (coverage 0..1) with
+    /// `strength` 0..1: loose pastel within about `radius` units is dragged
+    /// together (its colors average, weighted by how much of each is there)
+    /// and pressed into the hollows of the tooth (it covers more, up to the
+    /// stick's usual cap), and the rubbed layer is packed tighter, so it
+    /// takes less pastel afterwards. Only pastel that is loose: not fixed
+    /// (`fix`), not painted over, not under wet paint. Returns the number
+    /// of pixels it moved.
+    pub fn smudge(&mut self, m: &Mask, strength: f32, radius: f32) -> usize {
+        self.check_mask(m);
+        let f = self.f;
+        let st = strength.clamp(0.0, 1.0);
+        let Some(d) = self.drawing.as_mut() else { return 0 };
+        if !d.color || st <= 0.0 {
+            return 0;
+        }
+        let n = self.px.len();
+        // what can move: current, loose pastel
+        let live: Vec<bool> = (0..n).map(|i| {
+            let c = &d.cells[i];
+            c.fill > 0.0 && c.a > 0.0 && self.film[i] <= c.film + 1e-4 && self.wet.vol[i] <= 1e-5
+        }).collect();
+        let mut wa = vec![0.0f32; n];
+        let mut wr = [vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]];
+        for i in 0..n {
+            if live[i] {
+                let c = &d.cells[i];
+                let loose = (c.a - c.floor).max(0.0) + 0.25 * c.floor;
+                wa[i] = loose;
+                for k in 0..3 {
+                    wr[k][i] = loose * c.r[k];
+                }
+            }
+        }
+        let rpx = ((radius * f.scale).round() as usize).max(1);
+        let ba = crate::surface::box_blur(&wa, f.w, f.h, rpx);
+        let br: Vec<Vec<f32>> = wr.iter().map(|v| crate::surface::box_blur(v, f.w, f.h, rpx)).collect();
+        let mut moved = 0;
+        for i in 0..n {
+            let mv = m.data[f.whole_index(i)].min(1.0);
+            if mv <= 0.0 || !live[i] || ba[i] <= 1e-5 {
+                continue;
+            }
+            let c = &mut d.cells[i];
+            let t = st * mv * (1.0 - 0.75 * c.floor / c.a.max(1e-6));
+            if t <= 0.0 {
+                continue;
+            }
+            let under = uncover(self.px[i], c.a, c.r);
+            let mean = [br[0][i] / ba[i], br[1][i] / ba[i], br[2][i] / ba[i]];
+            c.r = [0, 1, 2].map(|k| (c.r[k] + (mean[k] - c.r[k]) * t).clamp(0.0, 1.0));
+            // pressed into the hollows: toward full cover, never past 0.97
+            let to = (c.a.max(ba[i]) * 1.25).min(0.97).max(c.a);
+            c.a += (to - c.a) * t;
+            c.fill = (c.fill + 0.35 * t).min(1.0);
+            self.px[i] = cover(under, c.a, c.r);
+            moved += 1;
+        }
+        moved
     }
 
     /// The graphite deposit as a mask: 1 on a firm line, fading with the
@@ -729,17 +940,17 @@ impl Canvas {
 }
 
 /// The ground under a deposit of coverage `a` and flake reflectance `r`.
-fn uncover(p: Rgb, a: f32, r: f32) -> Rgb {
+fn uncover(p: Rgb, a: f32, r: Rgb) -> Rgb {
     if a <= 0.0 {
         return p;
     }
     let k = 1.0 / (1.0 - a).max(1e-3);
-    [((p[0] - a * r) * k).max(0.0), ((p[1] - a * r) * k).max(0.0), ((p[2] - a * r) * k).max(0.0)]
+    [((p[0] - a * r[0]) * k).max(0.0), ((p[1] - a * r[1]) * k).max(0.0), ((p[2] - a * r[2]) * k).max(0.0)]
 }
 
 /// A deposit of coverage `a` and flake reflectance `r` over `under`.
-fn cover(under: Rgb, a: f32, r: f32) -> Rgb {
-    [under[0] * (1.0 - a) + a * r, under[1] * (1.0 - a) + a * r, under[2] * (1.0 - a) + a * r]
+fn cover(under: Rgb, a: f32, r: Rgb) -> Rgb {
+    [under[0] * (1.0 - a) + a * r[0], under[1] * (1.0 - a) + a * r[1], under[2] * (1.0 - a) + a * r[2]]
 }
 
 #[cfg(test)]
@@ -798,6 +1009,155 @@ mod tests {
 
     fn flat() -> Canvas {
         Canvas::new_window(400, 1.5, [0.8; 3], None).with_size_mm(440.0)
+    }
+
+    /// Mean color over a band of rows (units) of the window.
+    fn band_mean(c: &Canvas, y0: f32, y1: f32, x0: f32, x1: f32) -> Rgb {
+        let f = c.window();
+        let (mut s, mut n) = ([0.0f32; 3], 0.0);
+        for (i, q) in c.pixels().iter().enumerate() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            if x >= x0 && x < x1 && y >= y0 && y < y1 {
+                for k in 0..3 {
+                    s[k] += q[k];
+                }
+                n += 1.0;
+            }
+        }
+        s.map(|v| v / n)
+    }
+
+    /// A broad pastel band (many side strokes) across y 80..120.
+    fn pastel_band(c: &mut Canvas, lead: &Lead, p: f32, seed: u64) {
+        for k in 0..5 {
+            let y = 90.0 + 5.0 * k as f32;
+            let m = hand_line(&[(100.0, y), (900.0, y)], &[p], false, true, 0.0, seed + k);
+            c.draw(&lead.side(12.0), &m, 0.0, seed + 100 + k);
+        }
+    }
+
+    /// A pastel lays its own color, and colors laid across each other mix:
+    /// a yellow over a blue leaves a color between them, nearer the yellow
+    /// laid last (graphite would only fill what is left bare).
+    #[test]
+    fn pastel_lays_color_on_color() {
+        let blue = Lead::pastel([0.05, 0.1, 0.5], 0.8);
+        let yellow = Lead::pastel([0.8, 0.65, 0.05], 0.8);
+        let mut c = flat();
+        pastel_band(&mut c, &blue, 0.8, 3);
+        let b = band_mean(&c, 95.0, 105.0, 200.0, 800.0);
+        assert!(b[2] > b[0] + 0.15, "blue laid: {b:?}");
+        pastel_band(&mut c, &yellow, 0.8, 30);
+        let y = band_mean(&c, 95.0, 105.0, 200.0, 800.0);
+        assert!(y[0] > b[0] + 0.15 && y[2] < b[2] - 0.15, "yellow over blue: {b:?} -> {y:?}");
+        // the drawing keeps color: its serialized cells carry r, g, b
+        assert!(c.drawing.as_ref().unwrap().has_color());
+    }
+
+    /// The tooth fills: the same stroke laid again and again changes the
+    /// color less each time; fixative gives back tooth, so after it a stroke
+    /// lays more than it did just before.
+    #[test]
+    fn pastel_fills_the_tooth_and_fixative_restores_it() {
+        let dark = Lead::pastel([0.02, 0.02, 0.02], 0.7);
+        let light = Lead::pastel([0.85, 0.85, 0.8], 0.7);
+        let mut c = flat();
+        pastel_band(&mut c, &dark, 0.7, 5);
+        let mut change = Vec::new();
+        for k in 0..4 {
+            let before = band_mean(&c, 95.0, 105.0, 200.0, 800.0)[1];
+            pastel_band(&mut c, if k % 2 == 0 { &light } else { &dark }, 0.7, 50 + 10 * k);
+            change.push((band_mean(&c, 95.0, 105.0, 200.0, 800.0)[1] - before).abs());
+        }
+        assert!(change[2] < change[0], "the tooth fills: {change:?}");
+        let mut d = c.clone();
+        d.fix_drawing(None);
+        let (b0, b1) = (band_mean(&c, 95.0, 105.0, 200.0, 800.0)[1], band_mean(&d, 95.0, 105.0, 200.0, 800.0)[1]);
+        pastel_band(&mut c, &light, 0.7, 99);
+        pastel_band(&mut d, &light, 0.7, 99);
+        let (gc, gd) = (band_mean(&c, 95.0, 105.0, 200.0, 800.0)[1] - b0, band_mean(&d, 95.0, 105.0, 200.0, 800.0)[1] - b1);
+        assert!(gd > gc * 1.2, "fixed takes more: {gc} vs {gd}");
+        assert!(b1 < b0, "fixative darkens a little: {b0} -> {b1}");
+    }
+
+    /// The side of the stick lays a wider band than its end, and a light
+    /// touch of it leaves more of the ground than a firm one.
+    #[test]
+    fn pastel_side_is_broad_and_skips_at_a_light_touch() {
+        let lead = Lead::pastel([0.05, 0.05, 0.05], 0.7);
+        // near the start of the line, before the soft end wears wider
+        let width = |c: &Canvas| (0..c.window().h).filter(|&y| c.pixels()[y * c.window().w + c.window().w * 3 / 25][0] < 0.7).count();
+        let mut tip = flat();
+        tip.draw(&lead, &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.6], false, true, 0.0, 5), 0.0, 9);
+        let mut side = flat();
+        side.draw(&lead.side(12.0), &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.6], false, true, 0.0, 5), 0.0, 9);
+        assert!(width(&side) > 2 * width(&tip), "side {} tip {}", width(&side), width(&tip));
+        let mut light = flat();
+        light.draw(&lead.side(12.0), &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.2], false, true, 0.0, 5), 0.0, 9);
+        let (l, f) = (band_mean(&light, 97.0, 103.0, 200.0, 800.0)[0], band_mean(&side, 97.0, 103.0, 200.0, 800.0)[0]);
+        assert!(l > f + 0.05, "light touch {l} firm {f}");
+    }
+
+    /// A stump drags neighboring colors together where it rubs, and leaves
+    /// fixed pastel alone.
+    #[test]
+    fn smudge_drags_colors_together() {
+        let red = Lead::pastel([0.7, 0.05, 0.05], 0.8);
+        let green = Lead::pastel([0.05, 0.5, 0.1], 0.8);
+        let mut c = flat();
+        for k in 0..60 {
+            let x = 300.0 + 2.0 * k as f32;
+            let m = hand_line(&[(x, 40.0), (x, 160.0)], &[0.8], false, true, 0.0, k);
+            c.draw(if (k / 4) % 2 == 0 { &red } else { &green }, &m, 0.0, 200 + k);
+        }
+        let f = c.frame();
+        let spread = |c: &Canvas| {
+            let w = c.window();
+            let row = (100.0 * w.scale) as usize;
+            let v: Vec<f32> = (((320.0 * w.scale) as usize)..((400.0 * w.scale) as usize)).map(|x| c.pixels()[row * w.w + x][0]).collect();
+            v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min)
+        };
+        let mut fixed = c.clone();
+        fixed.fix_drawing(None);
+        let s0 = spread(&c);
+        assert!(c.smudge(&Mask::full(f), 0.9, 4.0) > 0);
+        assert!(spread(&c) < 0.6 * s0, "smudged {} -> {}", s0, spread(&c));
+        let snap = fixed.pixels().to_vec();
+        fixed.smudge(&Mask::full(f), 0.9, 4.0);
+        let moved = fixed.pixels().iter().zip(&snap).map(|(a, b)| (a[0] - b[0]).abs()).fold(0.0, f32::max);
+        let free = c.pixels().iter().zip(&snap).map(|(a, b)| (a[0] - b[0]).abs()).fold(0.0, f32::max);
+        assert!(moved < 0.5 * free, "fixed pastel barely moves: {moved} vs {free}");
+    }
+
+    /// Graded hatching presses each stroke by the weight under it: over a
+    /// ramp it lays more where the weight is high, nothing where it is zero,
+    /// and the passage fades with no line where an ungraded hatch stops.
+    #[test]
+    fn graded_hatching_follows_the_weight() {
+        let f = flat().frame();
+        let ramp = Mask::from_fn(f, |x, _| ((x - 200.0) / 600.0).clamp(0.0, 1.0));
+        let mut c = flat();
+        let lead = Lead::pastel([0.05, 0.05, 0.05], 0.7);
+        for m in hatch_marks_graded(&ramp, 1.2, 4.0, 30.0, 0.8, true, 3) {
+            c.draw(&lead, &m, 0.0, 7);
+        }
+        let dark = |x0: f32, x1: f32| 0.8 - band_mean(&c, 60.0, 600.0, x0, x1)[0];
+        let (d0, d1, d2, d3) = (dark(100.0, 190.0), dark(300.0, 400.0), dark(500.0, 600.0), dark(700.0, 800.0));
+        assert!(d0 < 1e-4, "no weight, nothing laid: {d0}");
+        assert!(d1 < d2 && d2 < d3, "graded: {d1} {d2} {d3}");
+        // the old call is unchanged: hatch_marks is the ungraded one
+        assert_eq!(hatch_marks(&ramp, 1.2, 4.0, 30.0, 0.8, 3).len(), hatch_marks_graded(&ramp, 1.2, 4.0, 30.0, 0.8, false, 3).len());
+    }
+
+    /// A drawing in graphite alone keeps its old serialized layout (five
+    /// numbers a cell), so older states and digests are unchanged.
+    #[test]
+    fn graphite_drawing_keeps_its_layout() {
+        let (c, _) = laid(&[0.6]);
+        let d = c.drawing.as_ref().unwrap();
+        assert!(!d.has_color());
+        let n = c.pixels().len();
+        assert_eq!(d.to_f32s().count(), n * 5 + c.frame().w * c.frame().h + 1);
     }
 
     /// Darkening laid by one 2B line at pressure `p` on a flat ground.

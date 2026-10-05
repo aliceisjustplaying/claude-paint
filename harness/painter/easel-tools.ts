@@ -18,6 +18,8 @@ import type { PruneLimits } from "./context-images.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
+	const target = Type.Optional(Type.Union([Type.Literal("painting"), Type.Literal("scratch")], { description: "destination; defaults to painting. Scratch is a separate persistent canvas, palette and Lua state. Both canvases share time." }));
+	const label = (name: string | undefined, reply: ReturnType<typeof text>) => ({ ...reply, content: [{ type: "text" as const, text: `[target ${name ?? "painting"}]` }, ...reply.content], details: { ...reply.details, target: name ?? "painting" } });
 
 	pi.registerTool({
 		...defineTool({
@@ -26,10 +28,10 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			description:
 				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
 				"A chunk that stops with an error changes nothing.",
-			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }) }),
+			parameters: Type.Object({ lua: Type.String({ description: "the chunk" }), target }),
 			async execute(_id, p, signal) {
 				try {
-					return text(paintReply(await atEasel(studio, ["do", "-"], p.lua, signal)));
+					return label(p.target, text(paintReply(await atEasel(studio, ["do", "-", "--target", p.target ?? "painting"], p.lua, signal))));
 				} catch (e) {
 					throw new Error(hideCounters((e as Error).message));
 				}
@@ -53,6 +55,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
+				target,
 				crop: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),
 				light: Type.Optional(Type.String()),
@@ -81,13 +84,14 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				}
 				let paths: string[];
 				({ said, paths } = renameLooks(studio, said));
+				said = `[target ${p.target ?? "painting"}]\n${said}`;
 				if (paths.length === 0) throw new Error(said);
 				// (a survey names several looks: each is read, in order)
 				const reads = [];
 				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
 				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
-				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
-				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
+				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits), details: { target: p.target ?? "painting" } };
+				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images], details: { target: p.target ?? "painting" } };
 			},
 		}),
 		executionMode: "sequential",
@@ -113,9 +117,9 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			name: "status",
 			label: "status",
 			description: "The canvas's setup.",
-			parameters: Type.Object({}),
-			async execute(_id, _p, signal) {
-				return text(statusReply(await atEasel(studio, ["status"], undefined, signal)));
+			parameters: Type.Object({ target }),
+			async execute(_id, p, signal) {
+				return label(p.target, text(statusReply(await atEasel(studio, ["status", "--target", p.target ?? "painting"], undefined, signal))));
 			},
 		}),
 		executionMode: "sequential",
@@ -126,9 +130,9 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			name: "log",
 			label: "log",
 			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
-			parameters: Type.Object({}),
-			async execute(_id, _p, signal) {
-				return text(tail(logReply(await atEasel(studio, ["log"], undefined, signal))));
+			parameters: Type.Object({ target }),
+			async execute(_id, p, signal) {
+				return label(p.target, text(tail(logReply(await atEasel(studio, ["log", "--target", p.target ?? "painting"], undefined, signal)))));
 			},
 		}),
 		executionMode: "sequential",

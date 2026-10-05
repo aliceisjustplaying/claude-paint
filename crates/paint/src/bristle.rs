@@ -814,19 +814,7 @@ impl Surf {
             // the paint just laid, until its pores are full: a thin wash goes
             // lean (stiff, matte, quick to set), thick paint barely notices
             if !self.absorb.is_null() {
-                let cap = &mut *self.absorb.add(i);
-                if *cap > 0.0 {
-                    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
-                    let take = (*cap).min(0.8 * oil_in);
-                    if take > 0.0 {
-                        *cap -= take;
-                        let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
-                        let lean = (take / film_oil).min(0.9);
-                        hd[4] *= 1.0 - lean;
-                        hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
-                        *vol = (t - take).max(0.0);
-                    }
-                }
+                *vol = ground_draw(&mut *self.absorb.add(i), v, t, hd);
             }
         }
     }
@@ -2947,6 +2935,31 @@ mod part_tests {
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
 const OIL_SHARE: f32 = 0.4;
+
+/// An absorbent ground draws oil out of `v` coats of paint just laid on a
+/// film now `t` coats thick (engine 4), until its pores (`cap`, coats of oil
+/// it can still take) are full: up to 0.8 of the oil laid, the film's oil
+/// share (`hide[4]`) falling and its stiffness rising by what it lost.
+/// Returns the film's thickness after. Paint laid by a brush (`Surf::add`)
+/// and smeared back by a rag (`rag_lay`) are drawn alike: the ground's
+/// capillary pull, far stronger than a hand's pressure, doesn't care how the
+/// paint arrived.
+pub(crate) fn ground_draw(cap: &mut f32, v: f32, t: f32, hd: &mut Prop) -> f32 {
+    if *cap <= 0.0 {
+        return t;
+    }
+    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
+    let take = (*cap).min(0.8 * oil_in);
+    if take <= 0.0 {
+        return t;
+    }
+    *cap -= take;
+    let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
+    let lean = (take / film_oil).min(0.9);
+    hd[4] *= 1.0 - lean;
+    hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
+    (t - take).max(0.0)
+}
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).

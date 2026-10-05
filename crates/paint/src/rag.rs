@@ -730,6 +730,12 @@ impl Canvas {
         }
         self.wet.cover[i] = 1.0;
         self.wet.vol[i] = t;
+        // engine 4: an absorbent ground draws oil out of the smear, as out of
+        // paint a brush lays (`bristle::ground_draw`)
+        if self.engine >= 4 && self.absorb_any {
+            let hd = &mut self.wet.hide[i];
+            self.wet.vol[i] = crate::bristle::ground_draw(&mut self.absorb[i], v, t, hd);
+        }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)
         {
@@ -1163,6 +1169,36 @@ mod tests {
             }
         }
         assert!(laid > 0, "the rag must carry paint onto the initially bare half");
+    }
+
+    /// From engine 4 an absorbent ground draws oil out of what a rag smears
+    /// onto it, as out of paint a brush lays (`bristle::ground_draw`): on
+    /// bare absorbent ground the smear goes leaner and stiffer than the paint
+    /// it came from; where the ground's pores are already full it keeps its
+    /// material (`a_rag_smear_preserves_the_paint_oil_and_turps`).
+    #[test]
+    fn an_absorbent_ground_draws_oil_from_a_rag_smear() {
+        let mut c = Canvas::new(240, 1.0, [0.3, 0.2, 0.1]).with_engine(4);
+        c.ground_finish(1.0);
+        for i in 0..c.wet.vol.len() {
+            if i % 240 < 120 {
+                c.wet.vol[i] = 0.8;
+                c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 0.6];
+                c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+                // (painted on before: its ground's pores are full)
+                c.absorb[i] = 0.0;
+            }
+        }
+        let mut rag = Rag::new(50.0, 2);
+        assert!(c.rag_wipe(&mut rag, &[(100.0, 200.0), (900.0, 200.0)], &[0.8], 19) > 0.0);
+        let mut laid = 0;
+        for (i, (&v, h)) in c.wet.vol.iter().zip(&c.wet.hide).enumerate() {
+            if i % 240 >= 130 && v > 1e-5 {
+                laid += 1;
+                assert!(h[4] < 0.6 - 1e-3 && h[1] > 0.6 + 1e-3, "a smear on bare absorbent ground goes lean: {h:?}");
+            }
+        }
+        assert!(laid > 0, "the rag must carry paint onto the bare half");
     }
 
     /// A 440 mm canvas on 15-thread linen with a thin brushed ground, the

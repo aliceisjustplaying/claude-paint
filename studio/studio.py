@@ -40,6 +40,7 @@ def scrub(body):
 HERE = os.path.dirname(os.path.abspath(__file__))
 VIEWER_ASSETS = {
     "stream.css": "text/css; charset=utf-8",
+    "code-display.js": "text/javascript; charset=utf-8",
     "code-format.js": "text/javascript; charset=utf-8",
     "vendor/stylua/stylua_lib_web.js": "text/javascript; charset=utf-8",
     "vendor/stylua/stylua_lib_bg.wasm": "application/wasm",

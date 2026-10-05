@@ -1,0 +1,129 @@
+{
+  "verified_at_utc": "2026-10-05T15:14:04Z",
+  "state": "running; provider responded and studio tools succeeded",
+  "studio": "paint-studio-7c4dd1",
+  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-7c4dd1",
+  "source_commit": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+  "provider": "anthropic",
+  "model": "claude-opus-5-5",
+  "thinking": "high",
+  "transport": "pi-black",
+  "engine": 5,
+  "live_width_px": 2400,
+  "box": "hopper",
+  "tube_count": 13,
+  "reader": false,
+  "sitting_limit": null,
+  "support_and_proportions": "painter chosen",
+  "launcher": "launchd art.stillwet.painter.r27",
+  "launchd_state": "running",
+  "runner_log": "~/tmp/gallery-fcf9c110/r27/run/runner.HOPR.out",
+  "session_id": "01a10c9e-e9e1-723b-b297-114062917975",
+  "session_basename": "2026-10-05T15-11-43-586Z_01a10c9e-e9e1-723b-b297-114062917975.jsonl",
+  "prompt": "~/src/a/paint-studio-7c4dd1/BRIEF.md",
+  "successful_tools": [
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:11:47.938Z",
+      "isError": false
+    },
+    {
+      "tool": "status",
+      "timestamp": "2026-10-05T15:11:47.958Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:11:50.737Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:11:50.740Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:11:50.744Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:11:53.956Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T15:12:38.540Z",
+      "isError": false
+    },
+    {
+      "tool": "note",
+      "timestamp": "2026-10-05T15:12:45.418Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T15:12:45.805Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T15:13:22.758Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T15:13:24.671Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T15:13:46.967Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T15:13:53.313Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T15:14:02.958Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T15:14:03.116Z",
+      "isError": false
+    }
+  ],
+  "first_paint_pending": false,
+  "viewer_http_status": 200,
+  "viewer_api_entry": {
+    "p": "paint-studio-7c4dd1",
+    "model": "claude-opus-5-5",
+    "thinking": "high",
+    "artist": "Edward Hopper",
+    "round": "r27",
+    "lane": "HOPR"
+  },
+  "tailnet_verification": "Full URL and API listing verified on serving M3 through its actual tailnet hostname/IP; access from another Mac not independently checked",
+  "public_studio": "https://near-range-ips-fighter.trycloudflare.com/?p=paint-studio-7c4dd1",
+  "public_status": "existing tunnel hostname DNS resolution failed; local public studio on port 8769 HTTP200; tunnel unchanged",
+  "browser_verification": "T3 preview status and open both reported no automation host; HTTP/API verification used",
+  "production_deployment": "not performed",
+  "painting_completion": "not awaited",
+  "finishing": "Original automatic dry/varnish/cracks output remains separate from the normal painter view",
+  "prior_hopper_comparison": "prior Hopper used Sol; this is not a controlled comparison",
+  "source_worktree": "~/src/a/claude-paint-r27run retained for active painter harness and later check/finish",
+  "saved_lua_header": [
+    "-- easel session \"painting\": a painting replayed chunk by chunk.",
+    "-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.",
+    "--@ box hopper",
+    "--@ engine 5",
+    "",
+    "--@ chunk 1",
+    "canvas{size=1000, aspect=1.6, linen={18,16}, seed=4117,"
+  ]
+}

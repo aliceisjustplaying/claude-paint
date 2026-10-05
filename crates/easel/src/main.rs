@@ -208,7 +208,7 @@ fn short_sock(dir: &Path) -> PathBuf {
         return p;
     }
     // fnv1a, not DefaultHasher: client and server must agree across Rust releases
-    let file = format!("{:016x}.sock", fnv1a(dir.as_os_str().as_encoded_bytes()));
+    let file = format!("{:016x}.sock", save::fnv1a(dir.as_os_str().as_encoded_bytes()));
     // the user is whoever owns the studio (the nearest existing ancestor of the session dir)
     let owner = dir.ancestors().find_map(|a| std::fs::metadata(a).ok()).map(|m| std::os::unix::fs::MetadataExt::uid(&m));
     let Some(uid) = owner else { return p };

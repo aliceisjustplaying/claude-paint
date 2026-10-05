@@ -56,8 +56,7 @@ Sittings: the painter works in sittings, each a new pi session (same harness and
 until it decides it's done. Sitting 1 gets PAINTER_MSG, later ones SITTING_MESSAGE. After each
 sitting the chunks of the painting's log that put marks on the canvas are counted
 (painting_chunks.py). The painter finishes after a sitting it ended itself that added no such
-chunks and delivered whole-canvas and detail looks. MAX_SITTINGS completed sittings is only
-a safety cap (logged as NOT FINISHED).
+chunks and delivered whole-canvas and detail looks. There is no sitting-count cap.
 A sitting that crashes (pi exits non-zero, or its session ends on a provider error) is no
 judgment and counts for nothing: the runner waits (CRASH_WAITS, or longer if the error says
 "retry in Ns") and starts another sitting; after MAX_CRASHES crashes the painter stops (NOT
@@ -180,17 +179,36 @@ HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compac
            "--system-prompt", str(H / "system_prompt.md"), "--tools", TOOLS,
            "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
 PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
-               "painting's title if you give it one and a few sentences about the picture.")
+               "painting's title if you give it one and a few sentences about the picture. "
+               "At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, "
+               "practical lessons to carry forward from what you observed and recipes that failed. Before retrying "
+               "a failed recipe, identify what has changed and why that could address the observed failure. "
+               "Record what you observed and what remains uncertain.")
 SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "Your brief is in BRIEF.md and your journal in notes/journal.md. "
                    "Take your time with a fresh look at the whole canvas and detail crops in normal color. "
+                   "Read your journal handoff and apply its practical lessons before acting. "
+                   "Inspect each passage you previously acknowledged as unresolved in an appropriate "
+                   "detail crop, then explicitly judge it in your journal: improve it or accept it as it is, "
+                   "with your reason. You may finish with imperfections you deliberately accept. "
+                   "Before retrying a failed recipe, identify what has changed and why that could "
+                   "address the observed failure. Record what you observed and what remains uncertain. "
                    "Is your heart happy with this? Is there something you would enjoy taking further? "
                    "You can keep working for hours if you like, and the painting's simulated time is "
                    "yours to use, whether that means days or years. Enjoy it. When you are happy with "
-                   "the painting, record your reflections in your journal and finish.")
-# A painter works in up to MAX_SITTINGS sittings (completed ones, and crashed ones that painted); it stops
-# earlier after a sitting that reviews whole and detail views without adding paint
-MAX_SITTINGS = 4                                 # default; run/max_sittings.txt is read between sittings
+                   "the painting, record your reflections and an updated handoff in your journal "
+                   "and last reply, carrying forward the practical lessons that still apply, then finish.")
+
+
+def return_message(sittings):
+    """Carry painter-owned observations verbatim; do not infer lessons from prose."""
+    message = SITTING_MESSAGE
+    final = next((s.get("final") for s in reversed(sittings)
+                  if s.get("status") == "completed" and s.get("final")), None)
+    if final:
+        message += "\n\nYour previous sitting's reply:\n" + final
+    return message
+# Completion is a reviewed no-paint sitting, with no sitting-count cap.
 MAX_CRASHES = 6                                   # crashed sittings (in all) before a painter is stopped
 # only after a usage limit that held for a day (painter.ts waits out shorter ones with nothing added)
 CONTINUE_MESSAGE = "Carry on where you left off."
@@ -586,7 +604,7 @@ def painter_env(m, message):
     """The painter's environment: a later sitting (SITTING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
     so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
     and a fresh look at the canvas."""
-    return {**(m["env"] or {}), **({"PAINTER_SITTING_RECOVERY": "1"} if message == SITTING_MESSAGE else {})}
+    return {**(m["env"] or {}), **({"PAINTER_SITTING_RECOVERY": "1"} if message.startswith(SITTING_MESSAGE) else {})}
 
 
 def probe_cmd(m):
@@ -616,7 +634,7 @@ def added_painting(s):
     return s.get(after) is not None and s.get(before) is not None and s[after] > s[before]
 
 
-def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
+def next_step(sittings, max_crashes=MAX_CRASHES):
     """What the painter does next: ("new", k) a fresh sitting numbered k, ("continue", k) the
     session of sitting k, cut off by a usage limit, carries on, or (None, why) the painter is done.
 
@@ -624,8 +642,7 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
     repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
     The painter finishes after a sitting it ended itself (status 'completed') that added no painting
-    chunks and reviewed whole and detail views, or stops unfinished after max_sittings sittings:
-    completed ones, and crashed ones that added painting (cut off after it painted, not judged).
+    chunks and reviewed whole and detail views. There is no sitting-count cap.
     Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
     nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
     carries on (a limited one once the limit lifts); otherwise a fresh sitting follows. After
@@ -637,10 +654,6 @@ def next_step(sittings, max_sittings=MAX_SITTINGS, max_crashes=MAX_CRASHES):
     done = [s for s in sittings if s.get("status") == "completed"]
     if done and not added_painting(done[-1]) and done[-1].get("reviewed"):
         return (None, f"the painter is done: sitting {done[-1]['sitting']} reviewed whole and detail views and added no painting")
-    counted = {s["sitting"] for s in sittings if s.get("status") == "completed"
-               or (s.get("status") == "crashed" and added_painting(s))}
-    if max_sittings and len(counted) >= max_sittings:
-        return (None, f"NOT FINISHED: stopped after {max_sittings} sittings (MAX_SITTINGS)")
     if sum(1 for s in sittings if s.get("status") == "crashed") >= max_crashes:
         return (None, f"NOT FINISHED: {max_crashes} crashes (MAX_CRASHES)")
     last = sittings[-1]
@@ -958,19 +971,8 @@ def paint(name, n, d, rd):
         if s.get("status") == "limited" and "worked" not in s:      # an older runner didn't record it
             s["worked"] = session_worked(s.get("sessions") or [])
     save_sittings(rd, n, sittings)
-    sitting_cap = MAX_SITTINGS
-    cap_file = RUN / "max_sittings.txt"
     while True:
-        try:
-            cap = int(cap_file.read_text().strip())
-            if cap < 1:
-                raise ValueError("expected a positive integer")
-            sitting_cap = cap
-        except FileNotFoundError:
-            pass
-        except (OSError, ValueError) as e:
-            log(f"{tag}: keeping sitting cap {sitting_cap}; {cap_file.name}: {e}")
-        step, k = next_step(sittings, max_sittings=sitting_cap)
+        step, k = next_step(sittings)
         if step is None:
             why_done = k
             log(f"{tag}: {why_done}")
@@ -995,7 +997,7 @@ def paint(name, n, d, rd):
             first = dict(chunks_before=cont["chunks_before"], painting_before=cont["painting_before"])
         else:
             part, session = 1, None
-            msg = PAINTER_MSG if before == 0 else SITTING_MESSAGE
+            msg = PAINTER_MSG if before == 0 else return_message(sittings)
             first = dict(chunks_before=before, painting_before=painting_before)
         stem = f"p{n}_s{k}" + (f"_part{part}" if part > 1 else "")
         known = set(session_dir(d).glob("*.jsonl"))
@@ -1043,6 +1045,9 @@ def paint(name, n, d, rd):
                 time.sleep(wait)
     close_easel(d)
     shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
+    outcome = "finished" if not why_done.startswith("NOT FINISHED") else "crash_limit_reached"
+    (rd / f"p{n}_outcome.json").write_text(json.dumps(
+        {"status": outcome, "reason": why_done}, indent=2) + "\n")
     (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} record(s): {why_done}\n")
     return sittings
 
@@ -1189,7 +1194,7 @@ def finish(name, n, d):
         rc = run(finish_cmd(d, name, n), RUN, rd / f"p{n}_finish.log", rd / f"p{n}_finish_err.txt")
         if rc == 0:
             (rd / f"p{n}.finished").write_text(time.strftime("%F %T"))
-            log(f"{tag}: finished painting written")
+            log(f"{tag}: final render written (painter outcome is in p{n}_outcome.json)")
         else:
             log(f"{tag}: FINISHING FAILED (exit {rc}, see {rd}/p{n}_finish_err.txt)")
 
@@ -1376,7 +1381,7 @@ def chain(name):
             show(tag, f"open the easel ({d / 'bin/easel'} open); it stays open across sittings", [str(d / "bin/easel"), "open"], d)
             show(tag, "sitting 1 (painter)", painter_cmd(t["model"]), d, t["model"]["env"])
             show(tag, f"after each sitting: count painting chunks;\n"
-                      f"    more sittings until one reviews whole and detail views and adds no painting chunks (safety cap {MAX_SITTINGS}; a usage limit continues its session),\n"
+                      "    more sittings until one reviews whole and detail views and adds no painting chunks (no sitting cap; a usage limit continues its session),\n"
                       f"    at the same open easel (reopened, replaying the log, only if its server is gone); closed after the last",
                  painter_cmd(t["model"], SITTING_MESSAGE), d, painter_env(t["model"], SITTING_MESSAGE))
             show(tag, "check (background, after the last sitting; result in the log)", check_cmd(d, name, n), RUN)

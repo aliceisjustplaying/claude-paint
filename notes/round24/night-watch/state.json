@@ -1,0 +1,18 @@
+{
+  "fable": {
+    "sha256": "35c949ea52677e53f4640bb79641ad6de9b50845e710794ec61163760118b9da",
+    "width": 2400,
+    "height": 1600,
+    "preservedAt": "2026-10-04T23:30:04.209Z"
+  },
+  "opus": {
+    "sha256": "04510601e405366a50121af0acbb93a64961fccf71d85ab0eafab1a2388428fe",
+    "width": 2400,
+    "height": 1600,
+    "preservedAt": "2026-10-05T02:15:19.114Z"
+  },
+  "finishedAt": "2026-10-05T02:15:13.243Z",
+  "stopAt": "2026-10-05T02:30:13.243Z",
+  "stoppedAt": "2026-10-05T02:30:35.288Z",
+  "outputActive": false
+}

@@ -1,0 +1,26 @@
+(・_・) Publication completed.
+
+Local rag and verified remote rag: f522ca69e7f7da1642f0412e6aff8e0e383ac81e.
+Public report: https://github.com/aliceisjustplaying/claude-paint/blob/f522ca69e7f7da1642f0412e6aff8e0e383ac81e/notes/pr-sweep-2026-10-05/PUBLISHED.md
+No force push. Main was not changed. Privacy hooks remained enabled.
+Privacy preflight: 49 outgoing commits, 431 changed blobs, zero prohibited matches.
+
+PR comments and final host states:
+5: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/5#issuecomment-5991310781
+6: MERGED https://github.com/aliceisjustplaying/claude-paint/pull/6#issuecomment-5991311531
+7: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/7#issuecomment-5991312049
+8: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/8#issuecomment-5991312892
+9: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/9#issuecomment-5991313688
+10: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/10#issuecomment-5991314554
+11: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/11#issuecomment-5991315338
+12: CLOSED https://github.com/aliceisjustplaying/claude-paint/pull/12#issuecomment-5991316171
+
+GitHub reports zero open PRs: publication-open-prs.json.
+PR 6 merge commit 6b8ec1823150f5eae3c135c927df332c8d5c1056 is contained in published rag.
+Existing push.followTags=true also published preexisting reachable tags round-24.1, round-24.2 and round-24.3.
+Exact refs: publication-remote-refs.txt. Tag annotations passed identity inspection.
+The seven other PRs were manually closed because their GitHub base remains main.
+All published report/log changes contain no executable code beyond tested 73df20d.
+User-deferred rag failure remains; all nondeferred verification passed.
+T3 links exist for PRs 5–12; its cached states still showed open after host closure.
+All temporary publication files and the virtual environment were removed.

@@ -55,9 +55,9 @@ impl View {
                         .split(',')
                         .map(|t| t.trim().parse::<f32>())
                         .collect::<std::result::Result<_, _>>()
-                        .map_err(|_| format!("--crop {s}: want x0,y0,x1,y1 in units"))?;
-                    if p.len() != 4 {
-                        return Err(format!("--crop {s}: want x0,y0,x1,y1 in units"));
+                        .map_err(|_| format!("--crop {s}: want four numeric canvas-unit coordinates x0,y0,x1,y1 (opposite corners, not width/height or pixels); example: --crop 100,100,200,200"))?;
+                    if p.len() != 4 || p.iter().any(|n| !n.is_finite()) {
+                        return Err(format!("--crop {s}: want four numeric canvas-unit coordinates x0,y0,x1,y1 (opposite corners, not width/height or pixels); example: --crop 100,100,200,200"));
                     }
                     v.crop = Some([p[0].min(p[2]), p[1].min(p[3]), p[0].max(p[2]), p[1].max(p[3])]);
                 }
@@ -394,7 +394,15 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
     let (cw, ch) = (x1 - x0, y1 - y0);
     let long = cw.max(ch);
     if v.crop.is_some() && (cw > 1200 || ch > 1200) {
-        return Err("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)".into());
+        let units = 1200.0 / f.scale;
+        let side = (units / 2.0).floor().max(1.0);
+        let a = wx0 as f32 / f.scale;
+        let b = wy0 as f32 / f.scale;
+        return Err(format!(
+            "--crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
+            a + side,
+            b + side
+        ));
     }
     if long == 0 || cw == 0 || ch == 0 {
         return Err("look: canvas is empty".into());
@@ -690,6 +698,13 @@ mod tests {
 
     #[test]
     fn crops_keep_native_pixels_and_reject_either_oversize_axis() {
+        for bad in ["100,100,wide,200", "100,100,200", "NaN,100,200,200"] {
+            let err = View::parse(&["--crop".into(), bad.into()]).err().expect("invalid coordinates refused");
+            let example = err.split("example: ").nth(1).expect("error provides valid coordinates");
+            let args = example.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+            assert_eq!(View::parse(&args).unwrap().crop, Some([100.0, 100.0, 200.0, 200.0]));
+            println!("{err}");
+        }
         let mut c = Canvas::new_window(1300, 1.0, [0.0; 3], None).with_engine(2); // (pure colors: no engine-4 matte veil)
         c.apply(|x, y, _| if x < 500.0 && y < 500.0 { [1.0, 0.0, 0.0] } else { [0.0, 0.0, 1.0] });
         let out = out_dir().join("native-crop.png");
@@ -712,6 +727,11 @@ mod tests {
             };
             let err = look(&c, &v, &out).expect_err("oversize crop must not silently scale");
             assert!(err.contains("1200"), "{err}");
+            let example = err.split("example: ").nth(1).expect("error provides a recovery crop");
+            let args = example.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+            let recovery = View::parse(&args).unwrap();
+            assert!(look(&c, &recovery, &out).is_ok(), "{err}");
+            println!("{err}");
         }
     }
 

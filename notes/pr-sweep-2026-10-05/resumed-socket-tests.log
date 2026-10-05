@@ -1,0 +1,28 @@
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+   Compiling easel v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 21.97s
+     Running unittests src/main.rs (target/debug/deps/easel-88791cd408c752e5)
+
+running 1 test
+test tests::a_long_session_dir_gets_a_short_socket ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 118 filtered out; finished in 0.00s
+
+   Compiling easel v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 13.72s
+     Running tests/session_integrity.rs (target/debug/deps/session_integrity-9734e3da1bca4986)
+
+running 10 tests
+test a_failed_look_after_a_chunk_still_reports_the_chunk ... ok
+test live_resolution_is_fixed ... ok
+test replay_failure_is_fatal ... ok
+test a_running_session_refuses_every_request_while_its_log_is_edited ... ok
+test a_second_server_is_refused_and_a_dead_ones_socket_is_recovered ... ok
+test edited_or_truncated_logs_cannot_reopen ... ok
+test a_look_never_overwrites_an_earlier_observation ... ok
+test journal_uses_the_selected_painting_clock ... ok
+test rebuilding_serves_progress_and_refuses_nonstatus_requests ... ok
+test racing_opens_start_one_server ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.66s
+

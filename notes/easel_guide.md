@@ -465,7 +465,7 @@ r = rag{width=<units>}
 r:wipe(m, {pressure=0.5, angle=<radians>, passes=1, refold=<load>})   -- wiped over a mask
 r:wipe(pts, {pressure={0.4, 0.8}})       -- one wipe along a path
 r:blot(x, y, {pressure=0.6})             -- pressed straight down and lifted off
-r:refold()                               -- a cleaner, dry part of the cloth turned outward
+r:refold()                               -- a cleaner part of the cloth turned outward; retains dampness
 r:dip(0.5)                               -- the part in use dipped into spirits, 0..1
 print(r)                                 -- rag(width <units>, load <0..1>); also r.load, r.soaked, r.damp, r.fold
 ```

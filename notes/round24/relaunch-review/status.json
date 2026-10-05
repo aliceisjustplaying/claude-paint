@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-10-04T22:55:31.267Z",
+  "painter": "paint-studio-2f7993",
+  "state": "stopped",
+  "remainingProcesses": [],
+  "committedChunks": 1,
+  "configuredModel": "claude-opus-5-5",
+  "thinking": "high",
+  "opusStarted": false
+}

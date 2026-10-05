@@ -1,0 +1,58 @@
+(・_・) Completed local integration into rag.
+
+Final rag: 73df20d4d33f68766e66c145fdc4fb48a0ef3f8c.
+Previous rag: 13c6e1dbc376192629c6b331b4ad9fd63deb629d.
+The tested isolated candidate was fast-forwarded into the original rag checkout.
+Tracked checkout is clean; existing untracked notes were preserved. No pushes or remote PR merges.
+Main was not changed. The integrated history includes the already-merged PR 6.
+Target provenance: branch-provenance.txt and notes/round24/LAUNCH.md:5.
+
+All open PRs excluding 6 were reviewed and locally integrated:
+5: 2e77c286bdcb612b0159c84ab7e0e8c37e3cfa13; local reviewed merge 143bd42.
+7: c8117d39d66a93940eaf24eac06a9343d52d6cdb; local reviewed merge c268f5b,
+   latest physical and validation repairs c21f3aa, 5059b1a, 7d2f8f5.
+8: 762b63888a4f03c4f3db84674237173e6caa0cd6; local reviewed merge 630f4e2,
+   historical pigment fixture and expanded catalog guard 2e8a2e3.
+9: cf3c3fa44146aac7fdf73bc221f01164f4bf504f; local reviewed merge 7e4b8ec.
+10: 08736c24ac977996ff3256bfd08022079600fa28; local reviewed merge 6dc4566,
+    finite material validation and mix recipe unit repairs 7d7fb7b, 7945827.
+    New upstream rag-deposition work was reverted/deferred per the owner's instruction.
+11: 85e44e13a0a7b75a9e405f99ab80038c42430f15; local reviewed merge f1bf422.
+12: 866142cf6f9c7a50eecb16c696b02b7ec7d9c225; local merge 2307b94.
+    Fixed its painter-build hash compilation defect in abb3a93.
+The final integration merge into rag is 8fe61fc; cancellation fixture repair is 73df20d.
+Current host heads: resumed-pr-heads.json. Original reviews and earlier checks: report.txt.
+New remote changes were incorporated selectively where needed rather than overwriting
+corrected local behavior with stacked upstream branches.
+
+Verification of combined rag candidate:
+- Rust batch: 341 passed, 1 failure confined to deferred rag, 36 ignored.
+  rag-candidate-cargo-tests.log. No other failure.
+- The exact rag test also fails on untouched rag 13c6e1d, with identical failing
+  film tuple (0.9744869296698226, 0.8993446396277543, 0.9429845376359838).
+  rag-base-known-test.log:25 and rag-candidate-cargo-tests.log:246.
+- Slow blend: passed, 110.30 seconds. rag-candidate-slow-blend.log.
+- Painter Inness build: 24 unit and 3 integration tests passed, 1 ignored.
+  rag-candidate-inness-tests.log.
+- Node: 53 passed, 0 failed, 1 skipped. rag-candidate-node-fixed.log.
+  First combined run exposed a scheduling race; the existing cancellation
+  test now waits for two actual status subprocess calls before aborting.
+- Studio and R24 runner: 289 passed. rag-candidate-python-tests.log.
+- Pigment suite: 3 passed, 1 ignored. rag-candidate-pigment-tests.log.
+  Existing owner-approved sienna resolution on rag was preserved.
+- PR12: actual 200-byte session-directory path successfully opened, answered
+  status and closed: resumed-long-socket-bind.log. Socket unit and 10 session
+  integrity checks passed: resumed-socket-tests.log.
+- Profile scripts pass bash syntax checks; git diff --check passed.
+
+The guarded promotion-to-main gate was not changed or represented as green.
+The owner authorized local integration with rag and sienna work deferred.
+Rag baseline/check-2 work remains deferred. No new sienna work was applied.
+Independent final code review found no additional nondeferred blocker.
+Independent fixture review verified original catalog fields and legacy box
+order/values unchanged; historical fixture restored byte-exact and current
+expansion has its own snapshot. No builder recorded a self-approval.
+
+Existing private viewer API http://100.82.115.34:8765/api/sessions answered HTTP 200.
+No existing services or Serve routes were changed. The viewer process predates
+this merge; its loaded Python backend was not restarted.

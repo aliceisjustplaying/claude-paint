@@ -1,0 +1,334 @@
+    Blocking waiting for file lock on build directory
+   Compiling paint v0.1.0 (/private/tmp/paint-sweep.KHTpId/worktree/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 33.33s
+     Running unittests src/lib.rs (target/debug/deps/paint-152efb23d426f6b2)
+
+running 223 tests
+test bristle::cover_tests::probe_bare ... ignored
+test bristle::cover_tests::probe_mark_area ... ignored
+test bristle::part_tests::whole_part_is_an_ordinary_load ... ok
+test bristle::part_tests::a_side_dip_reaches_only_that_side ... ok
+test bristle::kernel_traps::a_running_median_over_a_crop_with_its_window_is_bit_identical ... ok
+test bristle::tip_tests::feed_conserves_paint ... ok
+test bristle::part_tests::streaks_keep_about_the_same_paint ... ok
+test bristle::tip_tests::fine_cover_conserves_area_on_the_lattice ... ok
+test bristle::kernel_traps::a_plough_transfer_rereads_the_source_cure_after_each_take ... ok
+test bristle::knife_tests::knife_preserves_thinner_when_loading_laying_and_scraping ... ok
+cropped box blur: 1370 of 1600 pixels differ, by up to 7.6293945e-5
+test bristle::kernel_traps::a_box_blur_over_a_crop_is_not_bit_identical ... ok
+test bristle::tip_tests::probe_ink_width ... ignored
+test bristle::tip_tests::hairline_on_linen_is_continuous ... ok
+test bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure ... ok
+test canvas::review_lighting_tests::review_tall_relief_casts_shadows_beyond_64_pixels ... ok
+test canvas::tests::formed_film_is_smooth_and_monotone ... ok
+test bristle::spatter_tests::review_spatter_transfers_solvent_and_covers_its_drops ... ok
+test bristle::spatter_tests::fluid_paint_flies_and_stiff_paint_stays ... ok
+test bristle::spatter_tests::spatter_is_deterministic ... ok
+test bristle::tip_tests::pointed_width_follows_pressure_and_tapers ... ok
+test bristle::tip_tests::pointed_marks_are_resolution_independent ... ok
+test checkpoint::tests::engine_4_has_its_own_format_and_older_engines_keep_theirs ... ok
+test checkpoint::tests::malformed_geometry_is_invalid_data ... ok
+test checkpoint::tests::round_trip ... ok
+test checkpoint::tests::drawing_survives_a_checkpoint ... ok
+test bristle::tip_tests::presets_are_blunt_and_lay_their_width ... ok
+corner: 1.00 of crack length within 30° of perpendicular to the diagonal
+test crack::tests::corner_cracks_cross_the_diagonal ... ok
+test crack::tests::a_raw_canvas_cracks_down_to_its_cloth ... ok
+test crack::tests::a_raw_canvas_cracks_only_through_its_paint ... ok
+test crack::tests::deterministic_for_a_seed ... ok
+opening by generation: even [1.01, 0.99, 0.78, 0.56, 0.41], hierarchy [2.55, 1.68, 0.94, 0.42, 0.15]
+test crack::tests::first_cracks_open_widest ... ok
+test crack::tests::crop_cracks_like_the_whole ... ok
+test crack::tests::full_canvas_speed ... ignored
+opening by generation [first in its passage, subdividing]: [[0.00, 0.00], [1.72, 0.00], [1.48, 1.30], [1.53, 0.78], [1.53, 0.55]]
+test crack::tests::first_cracks_open_widest_wherever_they_formed ... ok
+dark paint 0.0200: crack pixels, soot 0.0152, grime and ground 0.0429
+test crack::tests::cracks_in_darks_show_light ... ok
+T-junction ends 670, free ends 31 (0.96)
+junctions within 30° of square: 0.93
+test crack::tests::junctions_are_mostly_t_shaped ... ok
+first cracks within 30° of vertical: grain 0 0.34, 0.15 0.56, 1 0.94 (uniform 0.33)
+test crack::tests::grain_turns_the_first_cracks_across ... ok
+island 2 mm, ground 150 µm: median 2.14 mm over 189 islands
+island 4 mm, ground 150 µm: median 4.32 mm over 181 islands
+island 3 mm, ground 0 µm: median 3.26 mm over 180 islands
+crack length per 20 mm cell: even cv 0.04 (quiet 0.00), patchy cv 0.25 (quiet 0.07)
+test crack::tests::patchy_development_leaves_quiet_passages ... ok
+island 6 mm, ground 60 µm: median 6.84 mm over 169 islands
+test crack::tests::median_island_matches_target ... ok
+near warp/weft: thin ground 0.96, thick ground 0.33 (uniform 0.22)
+test crack::tests::thin_grounds_follow_the_weave ... ok
+
+thread 'drying::tests::an_infinite_wait_does_not_dry' (1869072) panicked at crates/paint/src/drying.rs:387:9:
+Canvas::wait: minutes must be finite (got inf); use dry() to wait until touch-dry
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test drying::tests::an_infinite_wait_does_not_dry - should panic ... ok
+test crack::tests::height_changes_only_near_cracks ... ok
+test bristle::tip_tests::a_lifted_stroke_paints_to_the_end_of_its_path ... ok
+test drying::tests::burnt_sienna_dries_before_raw_sienna ... ok
+test drying::tests::checkpoint_mid_drying_resumes_exactly ... ok
+test drying::tests::drying_is_deterministic_across_thread_counts ... ok
+test drying::tests::brushes_feel_the_stage ... ok
+test drying::tests::splitting_a_wait_changes_nothing ... ok
+test drying::tests::fresh_paint_over_setting_paint_is_open_before_the_next_wait ... ok
+test bristle::tip_tests::a_stroke_over_dry_paint_covers_its_middle ... ok
+test drying::tests::stages_follow_the_clock_and_the_pigment ... ok
+test canvas::tests::raking_light_includes_solvent_thickness ... ok
+test drying::tests::thick_and_fat_films_dry_slower ... ok
+test bristle::tip_tests::translated_pointed_marks_look_alike ... ok
+test drying::tests::waiting_it_out_equals_dry ... ok
+test drying::tests::splitting_a_wait_changes_nothing_under_the_brush ... ok
+test fence::tests::found_is_near_the_line_and_lost_runs_far ... ok
+test fence::tests::stroke_draws_spread_over_zero_one ... ok
+test form::tests::a_ball_lit_from_the_left ... ok
+test form::tests::a_block_casts_a_shadow_on_the_ground ... ok
+test form::tests::fracture_planes_are_facets_with_hard_edges ... ok
+test form::tests::thin_ellipsoids_keep_their_surface ... ok
+test form::tests::turn_follows_its_contract ... ok
+test form::tests::turning_about_an_outside_pivot_keeps_the_body_in_bounds ... ok
+test graphite::probe::tooth_depths ... ignored
+test graphite::tests::erase_fix_and_seal ... ok
+test graphite::tests::grades_parse ... ok
+test drying::tests::thick_films_dry_as_much_slower_as_goldens ... ok
+test drying::tests::fast_pigments_dry_before_slow_ones ... ok
+test canvas::tests::glaze_long_falloff_has_no_edge ... ok
+test graphite::tests::no_drawing_no_change ... ok
+test graphite::tests::points_wear ... ok
+test graphite::tests::softer_and_harder_pressed_is_darker ... ok
+test drying::tests::stages_dont_depend_on_resolution ... ok
+test graphite::tests::zero_pressure_lays_nothing ... ok
+test canvas::tests::masked_glaze_preserves_wet_paint_and_clock_elsewhere ... ok
+test canvas::tests::a_thin_veil_is_laid ... ok
+bare contrast 0.29340103 vs 0.57133794
+test handling::tests::a_pass_from_a_pile_lays_the_pile ... ok
+test drying::tests::engine_3_keeps_paint_open_longer ... ok
+disk false clip false: bare edge 0.0000, edge L excess -0.0012, spill 0.001 (hug off None)
+test graphite::tests::light_line_catches_the_tops ... ok
+
+thread 'handling::tests::negative_coverage_is_rejected' (1870608) panicked at crates/paint/src/handling.rs:279:9:
+Handling::coverage must be finite and ≥ 0, got -1
+test handling::tests::negative_coverage_is_rejected - should panic ... ok
+
+thread 'handling::tests::nonfinite_coverage_is_rejected' (1870609) panicked at crates/paint/src/handling.rs:279:9:
+Handling::coverage must be finite and ≥ 0, got NaN
+test handling::tests::nonfinite_coverage_is_rejected - should panic ... ok
+test handling::tests::probe_edges_over_seeds ... ignored
+test handling::tests::strokes_bow_unless_ruled ... ok
+test handling::tests::tiles_keep_their_order_where_they_overlap ... ok
+disk false clip true: bare edge 0.0000, edge L excess -0.0014, spill 0.000 (hug off None)
+test canvas::tests::glaze_through_blurred_mask_leaves_no_rectangle ... ok
+test mask::tests::distance_is_euclidean_and_signed ... ok
+test mask::tests::offset_grows_and_shrinks ... ok
+test mask::tests::rim_band_and_soften ... ok
+blend: light passage darkened by 0.0000 (default), 0.5869 (clip(false))
+test handling::tests::blender_stays_in_its_region ... ok
+test mask::tests::signed_distance_matches_brute_force ... ok
+test noise::tests::fbm_is_copy_and_unchanged ... ok
+test noise::tests::fields_are_copy ... ok
+test noise::tests::toolkit_is_copy_and_ranged ... ok
+test noise::tests::uneven_is_uneven_and_deterministic ... ok
+test noise::tests::worley_finds_the_true_nearest_features ... ok
+test outline::tests::amount_scales_lobes_set_after_it ... ok
+test outline::tests::body_from_a_skeleton_and_offsets ... ok
+test graphite::tests::guide_follows_the_line ... ok
+test outline::tests::deterministic_and_seeded ... ok
+test outline::tests::line_stays_near_the_points_and_passes_the_corners ... ok
+test outline::tests::lobes_are_continuous_at_joins_and_the_seam ... ok
+test outline::tests::mask_edge_is_the_line ... ok
+test graphite::tests::thin_paint_shows_body_hides ... ok
+test outline::tests::consumed_inset_is_an_empty_region ... ok
+test palette::canvas_tests::glazes_stay_glazes ... ok
+test palette::canvas_tests::mixture_to_paint_preserves_scattering ... ok
+test palette::tests::a_pile_dries_at_its_tubes_rate ... ok
+test outline::tests::open_lines_mask_below ... ok
+test palette::tests::the_catalog_defines_each_tube_once ... ok
+test palette::tests::every_box_resolves_in_the_catalog ... ok
+test palette::tests::the_tube_box_is_unchanged ... ok
+test path::tests::length_is_the_last_arclen_bit_for_bit ... ok
+test pigment::tests::masstone_is_a_fixed_point ... ok
+test pigment::tests::round_trips_unit_layer ... ok
+test pigment::tests::scatter_inverts_hiding ... ok
+test palette::tests::the_catalog_is_this_builds_boxes ... ok
+test outline::tests::tiny_lobes_and_facets_end ... ok
+
+thread 'rag::tests::a_rag_smear_preserves_the_paint_oil_and_turps' (1870687) panicked at crates/paint/src/rag.rs:894:17:
+smearing the same paint must preserve its material: [0.8, 0.6000001, 1.0, 0.0, 0.6000001]
+test rag::tests::a_rag_smear_preserves_the_paint_oil_and_turps ... FAILED
+test handling::tests::filling_requires_explicit_opt_in ... ok
+test rag::tests::table ... ignored
+damp=false pass=1: paint left 90.1%, tone left 74.8%
+damp=false pass=2: paint left 88.2%, tone left 65.4%
+damp=true pass=1: paint left 86.9%, tone left 64.2%
+damp=true pass=2: paint left 85.9%, tone left 57.2%
+test rag::tests::repeated_wipes_conserve_paint_and_a_second_damp_wipe_clears_more ... ok
+bare: body 0.01%, broad 0.10% (4.88% without looking), dry brush 40.9%
+test bristle::cover_tests::loaded_passage_covers ... ok
+test scene::tests::a_distant_caster_does_not_panic_the_shadow_march ... ok
+test scene::tests::a_ribbon_narrows_as_it_recedes ... ok
+test scene::tests::a_thin_far_body_is_in_the_view ... ok
+test scene::tests::a_view_agrees_on_the_light_and_grounds_its_bodies ... ok
+test scene::tests::depth_masks_know_what_is_in_front ... ok
+test scene::tests::far_rays_meet_thin_bodies ... ok
+test scene::tests::front_weighs_coverage_and_every_selected_thing ... ok
+test scene::tests::off_the_panel_is_nothing ... ok
+test scene::tests::one_sun_casts_every_shadow_the_same_way ... ok
+test scene::tests::overlapping_bodies_are_ordered_by_world_depth ... ok
+test scene::tests::projection_round_trips_and_heights_scale_with_depth ... ok
+test scene::tests::reflections_beyond_the_backdrop_run_forward ... ok
+test scene::tests::soft_shadows_fall_off_without_rings ... ok
+test scene::tests::still_water_mirrors_a_pole_straight_down ... ok
+test scene::tests::sunk_surfaces_stay_below_the_waterline ... ok
+test sched::tests::batches_cut_the_order_by_hand_time ... ok
+test sched::tests::keeps_order_of_overlapping_items ... ok
+test soak::tests::a_cloth_of_ones_own_checkpoints ... ok
+test soak::tests::a_corrupt_soak_checkpoint_is_an_error ... ok
+
+thread 'soak::tests::a_crop_render_cannot_be_raw' (1870725) panicked at crates/paint/src/soak.rs:151:9:
+a raw canvas is painted whole, not as a crop render: the weave is measured over the whole cloth
+test soak::tests::a_crop_render_cannot_be_raw - should panic ... ok
+
+thread 'soak::tests::a_primed_canvas_cannot_be_made_raw' (1870726) panicked at crates/paint/src/soak.rs:154:9:
+a raw canvas is set up bare: no ground, no paint
+test soak::tests::a_primed_canvas_cannot_be_made_raw - should panic ... ok
+test soak::tests::a_raw_canvas_checkpoints_exactly ... ok
+test soak::tests::a_raw_canvas_on_an_older_engine_is_not_written ... ok
+
+thread 'soak::tests::an_invalid_fabric_is_refused' (1870731) panicked at crates/paint/src/soak.rs:153:9:
+an invalid fabric: Fabric { name: "cotton duck", color: [0.7681513, 0.6938719, 0.5520115], cap_um: NaN, warp_bias: 1.3 }
+test soak::tests::an_invalid_fabric_is_refused - should panic ... ok
+test soak::tests::the_cloth_says_what_lies_on_it ... ok
+test handling::tests::zero_coverage_is_a_no_op ... ok
+test soak::tests::the_weave_shows_in_the_cloth ... ok
+test spectral::tests::layering_agrees_with_the_engine_where_it_must ... ok
+test spectral::tests::matches_spectral_js ... ok
+test spectral::tests::mixing_is_sane ... ok
+test spectral::tests::rgb_round_trips ... ok
+test soak::tests::the_raw_cloth_looks_its_colour ... ok
+test stipple::tests::stipple_follows_coverage_and_mask ... ok
+test stipple::tests::small_and_narrow_regions_are_not_skipped ... ok
+disk true clip false: bare edge 0.0017, edge L excess +0.0012, spill 0.122 (hug off None)
+test handling::tests::a_long_timed_pass_fills_only_its_gaps ... ok
+test stipple::tests::touch_conserves_paint ... ok
+disk true clip true: bare edge 0.0000, edge L excess -0.0008, spill 0.000 (hug off None)
+stencil 0.000 0.000 rim 0.99 | found 0.227 0.000 rim 0.99 | lost 0.350 0.177 rim 0.99
+test fence::tests::fences_carry_paint_past_the_edge_by_quality ... ok
+test stipple::tests::touch_is_one_solid_patch ... ok
+thin clipped band: bare edge 0.0017 (hug off None)
+test handling::tests::edges_are_covered_like_the_inside ... ok
+test stipple::tests::stipple_is_deterministic_across_thread_counts ... ok
+test surface::tests::a_film_over_impasto_keeps_its_bounds_exactly ... ok
+test surface::tests::a_long_pinning_cascade_keeps_the_bounds ... ok
+test surface::tests::the_total_is_made_exact_within_the_bounds ... ok
+test stipple::tests::touch_footprint_bounds_every_touched_pixel ... ok
+test tally::tests::a_knifed_pile_is_on_the_palette ... ok
+test tally::tests::fine_strokes_are_slower_per_mm ... ok
+veil darkening: 0.2877 near the shapes, 0.3130 in the open
+test stipple::tests::veil_reaches_its_tone_up_to_dark_shapes ... ok
+test drying::tests::strokes_dry_within_the_sources_ranges ... ok
+test tally::tests::piles_reload_near_colors_and_mix_new_ones ... ok
+test tally::tests::since_is_the_difference ... ok
+test mask::tests::roughen_moves_hard_edges_in_units ... ok
+test tally::tests::the_ledger_keeps_its_checkpoint_layout ... ok
+test stipple::tests::touch_is_resolution_independent ... ok
+test tally::tests::touches_are_no_faster_than_tapping ... ok
+test tests::a_knife_laid_slab_tears_from_engine_4 ... ok
+test tests::a_lean_film_dries_matte ... ok
+test graphite::tests::guide_is_the_same_in_a_crop ... ok
+test tests::an_absorbent_ground_drinks_a_wash ... ok
+test tally::tests::the_slices_after_a_wait_are_fresh_work ... ok
+test rag::tests::the_spirits_in_a_dipped_rag_evaporate ... ok
+test tests::clipped_plough_stays_inside_mask ... ok
+test tests::a_pass_keeps_a_blotted_pile_blotted ... ok
+test tests::diag_blend_bare_pixels ... ignored
+test tally::tests::the_ledger_is_the_same_at_any_thread_count_and_in_a_crop ... ok
+test tests::cut_in_stays_near_the_region ... ok
+test tests::dry_is_idempotent_and_clears_wet ... ok
+test tally::tests::a_checkpoint_keeps_hand_time_and_the_ledger ... ok
+test tests::drag_conserves_paint ... ok
+test tally::tests::hand_time_ages_the_paint_as_it_goes_and_is_deterministic ... ok
+
+thread 'tests::invalid_tools_are_rejected' (1885027) panicked at crates/paint/src/bristle.rs:926:19:
+invalid tool: want length >= 0 (Tool { kind: Round, width: 10.0, bristles: 80, length: -1.0, stiffness: 0.2, hair: 1.3, run: 100.0, lay: 1.0, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 0.0 })
+
+thread 'tests::invalid_tools_are_rejected' (1885027) panicked at crates/paint/src/bristle.rs:1928:19:
+invalid tool: want length >= 0 (Tool { kind: Round, width: 10.0, bristles: 80, length: -1.0, stiffness: 0.2, hair: 1.3, run: 100.0, lay: 1.0, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 0.0 })
+
+thread 'tests::invalid_tools_are_rejected' (1885027) panicked at crates/paint/src/handling.rs:466:17:
+invalid tool: want length >= 0 (Tool { kind: Round, width: 10.0, bristles: 80, length: -1.0, stiffness: 0.2, hair: 1.3, run: 100.0, lay: 1.0, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 0.0 })
+
+thread 'tests::invalid_tools_are_rejected' (1885027) panicked at crates/paint/src/handling.rs:469:15:
+invalid tool: want length >= 0 (Tool { kind: Round, width: 10.0, bristles: 80, length: -1.0, stiffness: 0.2, hair: 1.3, run: 100.0, lay: 1.0, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 0.0 })
+
+thread 'tests::invalid_tools_are_rejected' (1885027) panicked at crates/paint/src/stipple.rs:234:17:
+invalid tool: want length >= 0 (Tool { kind: Round, width: 10.0, bristles: 80, length: -1.0, stiffness: 0.2, hair: 1.3, run: 100.0, lay: 1.0, pickup: 0.1, push: 0.05, splay: 0.45, ragged: 0.15, point: 0.0 })
+test tests::invalid_tools_are_rejected ... ok
+test tests::km_zero_absorption_is_finite ... ok
+test tests::load_wipe_reload ... ok
+
+thread 'tests::mismatched_mask_is_rejected' (1885035) panicked at crates/paint/src/bristle.rs:931:18:
+mask 120x120 does not match canvas 100x100 (build masks with canvas.frame())
+test tests::mismatched_mask_is_rejected - should panic ... ok
+test tests::mix_into_is_volume_weighted ... ok
+test tests::poppy_oil_dries_slower ... ok
+test tests::settle_conserves_paint ... ok
+test tests::sized_marks_are_timed_with_their_own_brush ... ok
+test rag::tests::the_rag_lifts_open_paint_from_the_tops_first ... ok
+test tests::thin_film_over_dry_impasto_coats_peaks_and_pools_a_little ... ok
+test tests::turpentine_leaves_a_thinner_film ... ok
+test tests::varnish_over_impasto_is_even ... ok
+test tests::thick_paint_from_a_pointed_hatch_hides_the_ground_at_full_size ... ok
+test thinner::tests::a_reused_stroke_id_starts_a_fresh_ceiling ... ok
+test thinner::tests::dry_with_solvent_waits_it_out_first ... ok
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::drag: thinned paint needs engine 3 (this canvas is engine 1, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::drag: thinned paint needs engine 3 (this canvas is engine 2, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::touch: thinned paint needs engine 3 (this canvas is engine 1, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::touch: thinned paint needs engine 3 (this canvas is engine 2, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::work: thinned paint needs engine 3 (this canvas is engine 1, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::work: thinned paint needs engine 3 (this canvas is engine 2, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::stipple: thinned paint needs engine 3 (this canvas is engine 1, which has no solvent in its film)
+
+thread 'thinner::tests::thinned_paint_is_refused_before_engine_3' (1887108) panicked at crates/paint/src/bristle.rs:918:9:
+Canvas::stipple: thinned paint needs engine 3 (this canvas is engine 2, which has no solvent in its film)
+test thinner::tests::thinned_paint_is_refused_before_engine_3 ... ok
+test wet::tests::a_partial_wet_mark_keeps_the_uncovered_surface_matte ... ok
+test wet::tests::bead_cover_floors_only_impossible_beads ... ok
+test wet::tests::sub_percent_cover_keeps_its_area ... ok
+test wet::tests::with_hiding_keeps_the_other_fields ... ok
+tone 0.481; dry rag: tint 0.163 (34% of the tone), film off tops 97% hollows 83%; with spirits: tint 0.056 (12%), film off tops 98% hollows 98%
+test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... ok
+test tests::footprint_bounds_extreme_valid_tools ... ok
+test tests::work_covers_the_edges ... ok
+test tests::footprint_bounds_every_touched_pixel ... ok
+test tally::tests::hand_time_keeps_an_order_asked_for ... ok
+test tests::fixture_matches_golden ... ok
+crop vs whole (color max, mean, height max µm): margin 20 (0.052306145, 0.0022130413, 88.354126), margin 120 (0.040908456, 0.0006275765, 23.590057)
+test tests::crop_matches_whole ... ok
+brushed ground (asked, laid µm): [(30.0, 35.69797), (60.0, 68.44114), (90.0, 101.82712)]
+test tests::brushed_ground_honors_thickness ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point has been running for over 60 seconds
+test stipple::tests::stippling_from_a_pile_lays_the_pile ... ok
+test tests::fixture_is_deterministic_across_thread_counts ... ok
+test rag::tests::nothing_is_lifted_past_the_gel_point ... ok
+
+failures:
+
+failures:
+    rag::tests::a_rag_smear_preserves_the_paint_oil_and_turps
+
+test result: FAILED. 214 passed; 1 failed; 8 ignored; 0 measured; 0 filtered out; finished in 77.11s
+
+error: test failed, to rerun pass `-p paint --lib`

@@ -1,0 +1,4 @@
+/Users/alice/src/a/claude-paint          73df20d [rag]
+/private/tmp/paint-sweep.KHTpId/worktree 73df20d [codex/pr-sweep-rag-candidate]
+/Users/alice/src/a/claude-paint-r24-3run aeaf582 (detached HEAD)
+/Users/alice/src/a/claude-paint-r24run   d8a995b (detached HEAD)

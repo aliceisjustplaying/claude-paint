@@ -203,7 +203,7 @@ fn the_box_file_and_easel_box_must_agree_on_a_box_there_is() {
 #[test]
 fn the_replay_build_holds_every_box() {
     use paint::palette::{Palette, catalog};
-    assert_eq!(Palette::box_names(), ["tube box", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist"]);
+    assert_eq!(Palette::box_names(), ["tube box", "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist"]);
     let mut want: Vec<&str> = Palette::box_names().into_iter().flat_map(|b| Palette::named_box(b).unwrap().tubes.into_iter().map(|t| t.name)).collect();
     want.sort();
     want.dedup();

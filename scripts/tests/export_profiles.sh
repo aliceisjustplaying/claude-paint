@@ -34,7 +34,7 @@ fi
 for profile in "${profiles[@]}"; do
   dest=$work/$profile
   "$repo/scripts/export_r16_studio" "$profile" "$dest" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
-  case $profile in blank|friedrich) box= ;; *) box=$profile ;; esac
+  case $profile in blank) box= ;; *) box=$profile ;; esac
   if [ -z "$box" ]; then
     [ ! -e "$dest/bin/box" ] || { echo "$profile: has a bin/box" >&2; exit 1; }
     [ "$(cat "$dest/notes/easel_guide.md")" = "$committed" ] || { echo "$profile: the guide isn't the committed one" >&2; exit 1; }

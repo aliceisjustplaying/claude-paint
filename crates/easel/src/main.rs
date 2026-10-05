@@ -1297,6 +1297,11 @@ impl Server {
         if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
             return Err("--compare: the combined picture is too large".into());
         }
+        // (an earlier look far wider or far narrower at this height is of another
+        // crop: side by side, the two would pass for the same view)
+        if !same_shape(bw, now.width()) {
+            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (its shape is far from this one's); repeat its --crop", prev.display()));
+        }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;
         let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
@@ -1523,6 +1528,14 @@ pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
         return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 3 to 89)"));
     }
     Ok((p[0], p[1]))
+}
+
+/// Whether an earlier look `before_w` wide, scaled to this look's height, is
+/// of the same view as this look `now_w` wide: within four times wider or
+/// narrower (a crop of another shape is a different view).
+fn same_shape(before_w: u32, now_w: u32) -> bool {
+    let (b, n) = (u64::from(before_w), u64::from(now_w));
+    b <= 4 * n && 4 * b >= n
 }
 
 /// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
@@ -2299,6 +2312,12 @@ mod tests {
     #[test]
     fn journal_entries_are_dated_lines() {
         assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
+    }
+
+    #[test]
+    fn compare_takes_a_look_of_the_same_shape_only() {
+        assert!(same_shape(800, 800) && same_shape(3200, 800) && same_shape(200, 800));
+        assert!(!same_shape(3201, 800) && !same_shape(199, 800));
     }
 
     #[test]

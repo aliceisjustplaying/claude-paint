@@ -576,11 +576,15 @@ other option, and nothing on the canvas or the clock changes.
 | `look` with | shows |
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
-| `compare: "<an earlier look's path>"` | that earlier look on the left and the canvas now on the right, at the same height: what a change did. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop and mode |
+| `compare: "<an earlier look's path>"` | that earlier look on the left and the canvas now on the right, at the same height: what a change did. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid to compare the same view |
 
-A whole view is at most 1000 pixels on its long side, about 42% of a
-2400-pixel canvas's width: small marks, beads of paint and stray strokes
-may not show in it. Survey the canvas after
+A survey can arrive in a partial batch to fit the painter's image budget.
+The reply lists the remaining tile paths; read them one at a time to inspect
+the rest of the canvas.
+
+A whole view defaults to 1000 pixels on its long side (`size` up to 1600),
+about 42% of a 2400-pixel canvas's width: small marks, beads of paint and
+stray strokes can be hard to see in it. Survey the canvas after
 each campaign, and compare before and after.
 
 ## How chunks behave

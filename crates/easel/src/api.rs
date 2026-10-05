@@ -609,6 +609,10 @@ impl UserData for Brush {
             if let Some(o) = &o {
                 check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
                 wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
+                // (an endless wobble would throw the checked points off to nowhere)
+                if !wobble.is_finite() {
+                    return err("gesture: wobble is a number of units, not infinite");
+                }
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
                 shake = num(o, "shake")?;

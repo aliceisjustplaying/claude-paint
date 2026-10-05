@@ -99,6 +99,13 @@ and at most 12 MB of base64. Old images go 5 at a time, so the request prefix
 newest image stays unless it alone is over the size limit; then it goes too,
 and its line says it was left out and why (its size and the limit).
 
+A survey returns as many full-detail tiles as fit the lane's count and byte
+limits. If more remain, its reply says the survey is partial and lists the
+remaining files to read in separate turns before assessing the whole canvas.
+The newest tool result's images stay together when they fit both limits,
+so dropping old images in steps cannot cut into that batch. A tile that alone
+exceeds the byte limit produces an explicit incomplete-survey error.
+
 Checked 2026-09-27 on a fake session holding the 74 looks of that session,
 resumed with Haiku 4.5 and a probe extension logging `before_provider_request`:
 without the handler the request was 33,797,791 characters with 74 images (413,

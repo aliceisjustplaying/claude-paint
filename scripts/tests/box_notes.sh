@@ -10,8 +10,8 @@
 #   scripts/tests/box_notes.sh [<studio>...]
 #
 # With no studios, exports sargent, inness, alma-tadema, tonn, hopper, giverny and impressionist from
-# R16_BRANCH (scripts/export_r16_studio), each whose materials note that branch has (an older branch
-# lacks the newer boxes), and checks those. The catalog's
+# R16_BRANCH (scripts/export_r16_studio) and checks those; giverny and impressionist only if that
+# branch has their materials notes (an older branch lacks them). The catalog's
 # tube names come from R16_BRANCH's palette.rs (HEAD if unset).
 #
 # Requires a caller-provided persistent scratch directory (TMPDIR).
@@ -23,10 +23,14 @@ work=$(mktemp -d "$TMPDIR/box-notes.XXXXXX")
 if [ $# -eq 0 ]; then
   : "${R16_BRANCH:?set R16_BRANCH to the branch to export, or name exported studios}"
   for profile in sargent inness alma-tadema tonn hopper giverny impressionist; do
-    git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${profile//-/_}_materials.md" 2>/dev/null || continue
+    # (only the two newest boxes may be missing, from an older branch; a missing note of the others fails the export)
+    case $profile in
+      giverny|impressionist) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${profile}_materials.md" 2>/dev/null || continue ;;
+    esac
     "$repo/scripts/export_r16_studio" "$profile" "$work/$profile" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
     set -- "$@" "$work/$profile"
   done
+  [ $# -gt 0 ] || { echo "box_notes: no studio exported from $R16_BRANCH" >&2; exit 1; }
 fi
 git -C "$repo" show "${R16_BRANCH:-HEAD}:crates/paint/src/palette.rs" | sed -n 's/^ *tube("\([^"]*\)".*/\1/p' >"$work/catalog"
 [ "$(wc -l <"$work/catalog")" -ge 14 ] || { echo "box_notes: can't read the tube catalog from palette.rs" >&2; exit 1; }

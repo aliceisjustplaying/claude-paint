@@ -12,7 +12,8 @@
 #   1. opens it, which replays the log (a chunk that fails to replay fails
 #      here),
 #   2. saves the replayed canvas (<workdir>/replayed.png) and compares it
-#      byte for byte with the live canvas the painter's session saved when it
+#      exactly for the same build, or with the bounded cross-build image
+#      tolerance (notes/workflow.md), with the live canvas saved when it
 #      closed (<studio>/out/easel/painting/live.png; live.txt says how many
 #      chunks it holds and how many of those the session had replayed from
 #      the log rather than painted), and with the painter's last save
@@ -22,7 +23,8 @@
 #      with the save the painter's session wrote at close
 #      (<studio>/out/easel/painting/live.ckpt, or live.ckpt.zst / .gz once
 #      scripts/finish_painting has compressed it). The replay's copy is
-#      deleted after.
+#      deleted after. Across builds the checkpoint difference is diagnostic
+#      when the live PNG meets the image tolerance; same-build checks stay exact.
 # It also says whether the studio's committed record
 # (out/easel/painting/committed.lua) equals its log.
 #
@@ -85,6 +87,10 @@ t2=$(date +%s)
 
 live=$studio/out/easel/painting/live.png
 livetxt=$studio/out/easel/painting/live.txt
+livebuild=$(awk '$1 == "build" { print $2 }' "$livetxt" 2>/dev/null || true)
+replaybuild=$(awk '$1 == "build" { print $2 }' "$work/out/easel/painting/live.txt")
+samebuild=false
+[ -n "$livebuild" ] && [ "$livebuild" = "$replaybuild" ] && samebuild=true
 lk=none
 lchunks=; lrep=
 [ -f "$livetxt" ] && lchunks=$(awk '$1 == "chunks" { print $2 }' "$livetxt") && lrep=$(awk '$1 == "replayed" { print $2 }' "$livetxt")
@@ -95,6 +101,9 @@ else
     livecmp="the live canvas saved at close holds ${lchunks:-an unknown number of} chunks, the log $chunks"
   elif cmp -s "$live" "$work/replayed.png"; then
     livecmp="the replay equals the live canvas saved at close"
+    lk=same
+  elif [ "$samebuild" = false ] && uv run --script "$repo/scripts/compare_images.py" "$live" "$work/replayed.png"; then
+    livecmp="the cross-build replay matches the live canvas within the image tolerance"
     lk=same
   else
     livecmp="the replay DIFFERS from the live canvas saved at close"
@@ -159,7 +168,7 @@ echo "times: reopen $((t1 - t0)) s, save and close $((t2 - t1)) s"
 if [ $lk = differs ]; then
   echo "check: DIFFERS from the live canvas: $livecmp; $savecmp; $png; $record"
   exit 1
-elif [ $sk = differs ]; then
+elif [ $sk = differs ] && { [ "$samebuild" = true ] || [ "$lk" != same ]; }; then
   echo "check: DIFFERS from the live save: $savecmp; $livecmp; $png; $record"
   exit 1
 elif [ $lk = same ] || [ $sk = same ]; then

@@ -133,7 +133,8 @@ fn a_log_without_a_box_line_is_the_default_box() {
 }
 
 /// A log from round 19 (no box line, the fourteen tubes) replays to the
-/// picture and surface round 19's easel made of it (recorded with r19-base,
+/// picture (bounded cross-build image tolerance) and exact surface that
+/// round 19's easel made of it (recorded with r19-base,
 /// 5069814). At the live width it takes about 27 s: `scripts/test --all` runs
 /// it; `scripts/test` runs the same log at 320 px against af49348's release
 /// replay (scripts/tests/old_logs.sh, case r19).
@@ -146,12 +147,25 @@ fn a_round_19_log_replays_as_before() {
     let out = ok(&plain(), &dir, None, &["run", fixture, "--out", png.to_str().unwrap(), "--dump-surface", surf.to_str().unwrap()]);
     assert!(out.starts_with("lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's green, copper green\n"), "{out}");
     let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for b in std::fs::read(&png).unwrap().into_iter().chain(std::fs::read(&surf).unwrap()) {
+    for b in std::fs::read(&surf).unwrap() {
         h ^= b as u64;
         h = h.wrapping_mul(0x100_0000_01b3);
     }
-    let want = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/r19_default_box.golden")).unwrap();
-    assert_eq!(format!("{h:016x}"), want.trim(), "the round 19 log no longer replays as it did");
+    let want = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/r19_default_box.surface-fnv")).unwrap();
+    assert_eq!(format!("{h:016x}"), want.trim(), "the round 19 surface changed");
+    let got = image::open(&png).unwrap().to_rgb8();
+    let want = image::open(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/r19_default_box.png")).unwrap().to_rgb8();
+    assert_eq!(got.dimensions(), want.dimensions());
+    let mut changed = 0usize;
+    let mut maximum = 0u8;
+    for (a, b) in got.pixels().zip(want.pixels()) {
+        let delta = a.0.into_iter().zip(b.0).map(|(x, y)| x.abs_diff(y)).max().unwrap();
+        changed += usize::from(delta != 0);
+        maximum = maximum.max(delta);
+    }
+    let pixels = got.width() as usize * got.height() as usize;
+    assert!(maximum <= 1 && changed * 10_000 <= pixels,
+            "round 19 image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <=0.01% pixels and <=1/255 per channel");
 }
 
 /// Where the box is set: the file next to the easel, else EASEL_BOX, else the

@@ -122,3 +122,43 @@ Estimates in use (no measurement of pastel itself exists): σp from 30 MPa
 crust roughness 3 µm, crust wear 0.5, the finger's 20%/25%, the felt's cells
 (0.8 mm, 20 µm), the resin wetting 15% of the particles. The research notes
 end with bench measurements that would replace them.
+
+## Engine 7: crumbs, dry blacks, the eraser (2026-10-05, the dandiya painting)
+
+Three changes found while painting; each is gated to engine 7, so engine-6
+logs replay as they were.
+
+- **Crumbs** (`pastel::SHED`, `lay_crumbs`). Engine 6 laid all the pastel a
+  contact abrades on the pixels in contact, so the paper's hollows never took
+  any: two heavy passes of a soft stick covered about 30–60 % and the tooth
+  then read "full". Measured (Archambault, in pastel_stick_tribology.md): a
+  stroke covers about 6.6 times its real contact area, the debris spreading,
+  fragmenting and collecting in the texture. Now 1/6.6 of what a contact
+  abrades stays there; the rest rides under the face as crumbs and settles
+  (1 − e^(−ds/3 mm) a step) into the pixels under the face that lie within a
+  crumb's size (150 µm) of it, the deeper ones taking more. Each crumb is one
+  agglomerate, its area drawn from the measured P(A) ∝ A^(−3/2) (cut-off 80–300
+  µm by softness and force), pressed flat to PARTICLE_UM like the contact's
+  own deposit; what is still carried at lift-off drops there. Result: two
+  heavy passes cover about 90 %, a light stroke stays broken, and the
+  crumbs are discrete specks, not a veil.
+- **Dry carbon blacks** (`pastel::carbon_ratio`). For pigments below n 1.9
+  engine 6 sets the dry scattering to dry white's, while their absorption
+  comes from their small oil scattering: dry bone black came out sRGB ~160,
+  as light as a tan paper. A black's colour is its carbon, on the same
+  particles: bone black now takes the measured air/oil ratio of its apatite
+  matrix (×9 at 1 µm, dry_pigment_optics.md table 2.2) and vine black the
+  carbon ratio (×2.4, §2.4: "a little greyer, never pale"); pure dry bone
+  black is now about sRGB 90. The other low-index pigments (ultramarine,
+  Prussian blue, the lakes, viridian) still dry very pale (the research's own
+  worked example for ultramarine agrees); left as they were, an open
+  question.
+- **The eraser lifts the particles** (`Canvas::erase`). It lowered pastel's
+  coverage but left its volume in the tooth, so an erased patch stayed
+  "full" and refused new pastel. Now the loose volume falls with the
+  coverage taken.
+
+Also learned (no change made): a paint film thicker than the paper's pore
+depth has the paint's micro-roughness (0.3–2 µm for lean paint, as the
+research gives), so pastel over a heavy essence lay-in fills its tooth in one
+light pass. Keep essence thin where pastel will go, or leave the paper bare.

@@ -81,6 +81,20 @@ const MAX_FACETS: usize = 48;
 /// force always starts from nothing at landing).
 pub const LAND_S: f32 = 0.05;
 pub const LIFT_S: f32 = 0.04;
+/// Engine 7: the share of what a contact abrades that comes away as crumbs
+/// riding under the stick's face (a third body) rather than staying on the
+/// asperity it came from. Measured: a stroke covers about 6.6 times its real
+/// contact area (Archambault: "debris spreads, fragments and collects in
+/// texture"), so about 1/6.6 stays where it was abraded.
+pub const SHED: f32 = 1.0 - 1.0 / 6.6;
+/// Engine 7: crumbs settle where the face passes within a crumb's size of
+/// the surface, µm (soft pastel crumbs on toothy paper: a few µm to 100–300).
+const CRUMB_UM: f32 = 150.0;
+/// Engine 7: the smallest crumb counted, µm across (finer grains go with it).
+const CRUMB_MIN_UM: f32 = 5.0;
+/// Engine 7: how far a crumb rides under the face before it settles, mm (an
+/// estimate; the finger's smear runs 1–10 mm).
+const SETTLE_MM: f32 = 3.0;
 
 impl Stick {
     /// Hardness (MPa) and wear coefficient of a stick of softness `soft`
@@ -263,6 +277,64 @@ pub struct Laid {
     pub on_wet: f32,
 }
 
+/// Engine 7: settle `vol` (µm over a pixel, summed) of crumbs of `color` into
+/// a bed of pixels under the face. Each crumb is one agglomerate, its area
+/// drawn from P(A) ∝ A^(-3/2) up to `dmax` µm across; it falls into one pixel
+/// of the bed, the deeper hollows taking more (they collect in the
+/// texture). The face going over presses it flat, so it covers what its
+/// volume (a sphere's) makes as particles PARTICLE_UM thick, within that
+/// pixel; it is loose pastel in the pores. Crumbs that fall on wet paint are lost in it;
+/// returns how much.
+#[allow(clippy::too_many_arguments)]
+fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+    let mut cum = Vec::with_capacity(bed.len());
+    let mut total = 0.0f32;
+    for &(_, g, _) in bed {
+        total += g;
+        cum.push(total);
+    }
+    if vol <= 0.0 || total <= 0.0 {
+        return 0.0;
+    }
+    let (amin, amax) = (CRUMB_MIN_UM * CRUMB_MIN_UM, dmax * dmax);
+    let r = (amin / amax).sqrt();
+    let mut left = vol * px_um2; // µm³
+    let mut lost = 0.0;
+    while left > 0.0 {
+        // inverse CDF of A^(-3/2) on [amin, amax]
+        let u = rng.f();
+        let a = amin / (1.0 - u * (1.0 - r)).powi(2);
+        let dia = a.sqrt();
+        let v = (std::f32::consts::FRAC_PI_6 * dia * dia * dia).min(left);
+        left -= v;
+        // where it falls: a pixel of the bed by its depth
+        let t = rng.f() * total;
+        let k = cum.partition_point(|&c| c < t).min(bed.len() - 1);
+        let (i, _, wet) = bed[k];
+        let dv = v / px_um2;
+        if wet {
+            lost += dv;
+            continue;
+        }
+        let c = &mut d.cells[i];
+        if c.film < 0.0 || film[i] > c.film + 1e-4 {
+            *c = Cell { film: film[i], ..Cell::default() };
+        }
+        // pressed flat into the hollow by the face going over it: particles
+        // about PARTICLE_UM thick, as the contact's own deposit
+        let q = 1.0 - (-dv / PARTICLE_UM).exp();
+        let under_px = uncover(pxs[i], c.a, c.r);
+        let old = c.a * (1.0 - q);
+        let w = old + q;
+        c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * color[k]) / w.max(1e-6)).clamp(0.0, 1.0));
+        c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
+        c.a = (c.a + (1.0 - c.a) * q).min(0.995);
+        c.loose += dv;
+        pxs[i] = cover(under_px, c.a, c.r);
+    }
+    lost
+}
+
 /// The material ratio a surface of exponential pore depths (mean `mu`)
 /// offers at an overlap `o` below its top envelope.
 #[inline]
@@ -347,6 +419,20 @@ impl Canvas {
             }
         };
         let rmax = stick.radius();
+        let crumbs = self.engine >= 7;
+        // the crumbs riding under the face: volume (µm over a pixel) and where
+        // the face last was over the paper (pixels and their gaps, µm)
+        let mut carried = 0.0f32;
+        let mut last_bed: Vec<(usize, f32, bool)> = Vec::new();
+        let settle = 1.0 - (-ds / SETTLE_MM).exp();
+        // the crumbs' sizes: a power law in area, P(A) ∝ A^(-3/2) (measured
+        // over four decades), its upper cut-off larger for a softer stick
+        // and a heavier hand (an estimate within the measured 100–300 µm)
+        let soft = ((30.0 / stick.hardness).ln() / 15f32.ln()).clamp(0.0, 1.0);
+        let fmean = pts.iter().map(|p| p.pose.force).sum::<f32>() / pts.len() as f32;
+        let crumb_max = (80.0 + 220.0 * soft) * (fmean / 2.0).clamp(0.25, 2.0).powf(0.25);
+        let mut rng = crate::rng::Rng::new((pts[0].x.to_bits() as u64) << 32 ^ pts[0].y.to_bits() as u64 ^ (steps as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        let px_um2 = (px * 1000.0) * (px * 1000.0);
         for k in 0..=steps {
             let t = k as f32 * ds;
             let mut sp = at(t);
@@ -453,11 +539,16 @@ impl Canvas {
                     let a_paper = bearing(o.min(fill_at), mu);
                     let a_fill = if o > fill_at { (-fill_at / mu).exp() * bearing(o - fill_at, CRUST_UM) } else { 0.0 };
                     let bound_share = if v > 0.0 { c.bound / v } else { 0.0 };
-                    let dv = ds_um * stick.wear * (a_paper + CRUST_WEAR * bound_share * a_fill);
+                    let mut dv = ds_um * stick.wear * (a_paper + CRUST_WEAR * bound_share * a_fill);
                     if dv <= 0.0 {
                         continue;
                     }
                     worn_um3 += dv;
+                    if crumbs {
+                        // most of it comes away as crumbs under the face
+                        carried += dv * SHED;
+                        dv *= 1.0 - SHED;
+                    }
                     if wetv[j] {
                         wet_um3 += dv;
                         continue;
@@ -473,6 +564,20 @@ impl Canvas {
                     c.loose += dv;
                     pxs[i] = cover(under_px, c.a, c.r);
                 }
+                if crumbs {
+                    // the bed the crumbs can settle in: the paper under the
+                    // face, not in contact, within a crumb's size of it
+                    last_bed.clear();
+                    for (j, &(i, b)) in under.iter().enumerate() {
+                        let gap = b * 1000.0 - delta - surf[j].0;
+                        if gap > 0.0 && gap < CRUMB_UM {
+                            last_bed.push((i, gap, wetv[j]));
+                        }
+                    }
+                    let give = carried * settle;
+                    wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give, stick.color, &mut rng, crumb_max, px_um2);
+                    carried -= give;
+                }
             }
             self.px = pxs;
             self.film = film;
@@ -484,6 +589,17 @@ impl Canvas {
             let bmin = under.iter().map(|&(_, b)| b).fold(f32::MAX, f32::min);
             let face = under.iter().filter(|&&(_, b)| b - bmin < FACE_MM).count().max(1) as f32 * a_px_mm2;
             stick.wear_face(nb, -bmin, worn_mm3 / face);
+        }
+        if crumbs && carried > 0.0 && !last_bed.is_empty() {
+            // lifted off: what the face still carried drops where it was
+            let a_px_mm2 = px * px;
+            let film = std::mem::take(&mut self.film);
+            let mut pxs = std::mem::take(&mut self.px);
+            let lost = lay_crumbs(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, &mut rng, crumb_max, px_um2);
+            self.px = pxs;
+            self.film = film;
+            out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
+            out.on_wet += lost * a_px_mm2 * 1e-3;
         }
         if out.volume_mm3 + out.on_wet > 0.0 {
             out.on_wet /= out.volume_mm3 + out.on_wet;
@@ -746,6 +862,22 @@ fn mie_air(n: f32) -> (f32, f32) {
 /// matches the pigment and its oil value says little, from the dry Mie
 /// scattering itself, scaled to lead white's (n = 2: its oil S × 1.9).
 /// `parts`: (masstone, s_oil, n, share by volume).
+/// Engine 7: the air/oil scattering ratio of a carbon black, whose
+/// absorption comes from carbon on (or in) its particles: bone black's
+/// apatite matrix ×9 at 1 µm (dry_pigment_optics.md, table 2.2), a carbon
+/// (vine) black's ×2.4 (§2.4: "a dry carbon black is a little greyer, never
+/// pale"). None for any other tube.
+pub fn carbon_ratio(name: &str) -> Option<f32> {
+    match name {
+        "bone black" | "bone brown" | "ivory black" => Some(9.0),
+        "vine black" | "lamp black" => Some(2.4),
+        _ => None,
+    }
+}
+
+/// Each part is (masstone in oil, scattering in oil, refractive index,
+/// share). A negative index is a carbon black's air/oil ratio
+/// (`carbon_ratio`), taken as it is.
 pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
     let total: f32 = parts.iter().map(|p| p.3).sum::<f32>().max(1e-9);
     let (sigma_white, r_white) = mie_air(2.0);
@@ -756,8 +888,12 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
         for &(m, s_oil, n, c) in parts {
             let r = m[q].clamp(1e-4, 0.9999);
             let ks = (1.0 - r) * (1.0 - r) / (2.0 * r);
-            let (sigma, ratio) = mie_air(n);
-            let s_dry = if n >= 1.9 { ratio * s_oil } else { s_dry_white * sigma / sigma_white };
+            let s_dry = if n < 0.0 {
+                -n * s_oil
+            } else {
+                let (sigma, ratio) = mie_air(n);
+                if n >= 1.9 { ratio * s_oil } else { s_dry_white * sigma / sigma_white }
+            };
             k += c / total * ks * s_oil;
             s += c / total * s_dry;
         }

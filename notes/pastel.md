@@ -162,3 +162,48 @@ Also learned (no change made): a paint film thicker than the paper's pore
 depth has the paint's micro-roughness (0.3–2 µm for lean paint, as the
 research gives), so pastel over a heavy essence lay-in fills its tooth in one
 light pass. Keep essence thin where pastel will go, or leave the paper bare.
+
+
+## Engine 7 tools (2026-10-05, after the dandiya)
+
+Tools only where each is a physical process modelled from the research,
+no undo-like conveniences. Paint's `sheet.rs`:
+
+- **Stick hold** (`look --hold <stick> --at x,y [--pose f,alt,az[,roll] |
+  --side dir]`, main.rs `stick_hold_look`). Reads only. It calls the stroke's
+  own seating (`Canvas::seat_stick`, factored out of `stick_stroke` with the
+  arithmetic unchanged, so replays are identical) through
+  `Canvas::stick_contact`: where the stick touches at that force, and where
+  its face lies within a crumb's size of the surface.
+- **Paper mask** (`lay_sheet(mask, {grammage=, tone=})`, `lift_sheet()`). A
+  raised surface `caliper` µm thick (the paper physics' caliper for that
+  grammage) with the support's mean pore depth: `Canvas::surface_point`
+  feeds the contact solver, so the stick bridges its edge by its own geometry.
+  What lands on it (contact deposit and crumbs, by the crumb bed's depths) is
+  the sheet's (`sheet_catch`), shown in the look and gone at lift. The
+  finger, eraser and fixative skip it. Wet-paint and graphite verbs refuse
+  while it is down (`time::verb_dry` marks the verbs modelled for it); a
+  chunk must lift what it laid (session.rs).
+- **Blade on pastel** (`k:scrape`, `Canvas::scrape_pastel`). The knife's
+  geometry: the blade rests on the highest point within 4 mm of steel flex
+  and stands off by 300 µm·(1−p)^1.5. Pastel fills the pores (mean depth µ)
+  from the bottom; v − µ is heaped above the envelope. The blade takes what
+  stands above its plane, loose first, then the crust; coverage follows the
+  volume as a deposit's (Poisson, PARTICLE_UM). No paper damage modelled.
+- **Dry brush** (`b:dust`, `Canvas::dust_pastel`;
+  notes/research/pastel_brushing.md). Force is not the limit (a tip pushes
+  10³–10⁶ times the rolling force of a particle): reach is. Tip radius r
+  (hog 50 µm, the research's 25–75) over inter-fibre gaps of width w (the
+  paper's fibre width) sinks h = r − √(r² − w²/4); with pores of exponential
+  depth (mean µ) filled from the bottom, the pastel deeper than h is
+  µ·e^(−h/µ), and that stays, with all fixed pastel. Lifted pastel: half
+  carried and let go over 3 mm downstream, half pushed ahead and dropped
+  within 0.5 mm; the brush meets it again and sweeps it on, so it ends as a
+  darker lip where the brush lifts, the ghost behind (estimates: 30–70 %, 1–5 mm, 0.1–1 mm; no measurement exists;
+  the research note's bench test would set them). The tips' band is the
+  brush's mark width across and 2 mm along.
+
+Not built, and why: wet pastel and steam (the deposit and consolidation of a
+water-softened pastel compact and its gum are unmeasured; only the water
+transport could be modelled), pastel paste/gouache (a water-borne binder
+drying by evaporation to a porous film: physics known, a large job).

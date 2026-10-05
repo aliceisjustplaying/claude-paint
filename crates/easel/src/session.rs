@@ -322,6 +322,10 @@ impl Session {
             // through prelude.lua's guard: an error value is shown without its address
             guard.call::<()>(chunk.into_function()?)?;
             check.call::<()>(())?;
+            // a paper mask is laid and lifted within one sitting's chunk (paint's sheet.rs)
+            if self.st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
+                return Err(mlua::Error::runtime("the chunk ended with a sheet laid on the picture: lift it (lift_sheet()) in the chunk that laid it"));
+            }
             // the hand time the chunk spent goes on the clock before it ends
             if self.inject("flush").is_err() {
                 panic!("injected failure: flush");
@@ -477,6 +481,28 @@ impl Session {
             .collect();
         names.sort();
         Err(format!("look --hold {name}: no global of that name holds a knife or a pile ({})", if names.is_empty() { "there is none yet".to_string() } else { names.join(", ") }))
+    }
+
+    /// The pastel stick a global (or a field of one: `P.glow`) holds, and how
+    /// far it has been turned in the fingers (degrees): `look --hold`'s.
+    pub fn held_stick(&self, name: &str) -> Result<(paint::pastel::Stick, f32), String> {
+        let mut parts = name.split('.');
+        let first = parts.next().unwrap_or("");
+        let mut v: Value = self.lua.globals().raw_get(first).map_err(|e| e.to_string())?;
+        for p in parts {
+            v = match v {
+                Value::Table(t) => t.raw_get(p).map_err(|e| e.to_string())?,
+                _ => Value::Nil,
+            };
+        }
+        match v {
+            Value::Table(t) if t.raw_get::<Option<String>>("kind").ok().flatten().as_deref() == Some("stick") => {
+                let s = crate::api::draw_pencil::stick_of(&t).map_err(|e| e.to_string())?;
+                let turned = t.raw_get::<Option<f32>>("turned").ok().flatten().unwrap_or(0.0);
+                Ok((s, turned))
+            }
+            _ => Err(format!("look --hold {name}: that holds no pastel stick")),
+        }
     }
 
     /// The ground's color, from the `canvas{}` layers: each layer's paint over the raw linen

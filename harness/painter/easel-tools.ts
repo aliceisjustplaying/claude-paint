@@ -51,6 +51,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"compare: the path of an earlier look, shown left of the same view now. " +
 				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
 				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade, seen in the same light and mode as the passage (crop sets the passage). It shows the paint on the knife, not how it would look laid. " +
+				"hold can also name a pastel stick (a field of a table too: \"P.glow\"), with at, and pose: \"force,alt,azimuth\" (N, degrees) or side: \"<direction in degrees>\" (laid flat across a stroke going that way): the stick held there seen from above, where it rests on the tooth at that force in its colour and where its crumbs would settle tinted. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				crop: Type.Optional(Type.String()),
@@ -61,6 +62,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				ref: Type.Optional(Type.String()),
 				hold: Type.Optional(Type.String()),
 				at: Type.Optional(Type.String()),
+				pose: Type.Optional(Type.String()),
+				side: Type.Optional(Type.String()),
 				palette: Type.Optional(Type.Boolean()),
 				size: Type.Optional(Type.Number()),
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),

@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 #[path = "draw_pencil.rs"]
-mod draw_pencil;
+pub(crate) mod draw_pencil;
 #[path = "draw_rag.rs"]
 mod draw_rag;
 
@@ -431,7 +431,13 @@ impl UserData for KnifeU {
                     }
                 }
                 time::verb(&k.st, Verb::Marks, |s| {
-                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                    let width = k.k.borrow().width;
+                    c.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    if !lay {
+                        // engine 7: the blade takes the pastel heaped above the paper too (sheet.rs)
+                        c.scrape_pastel(width, &pts, pressure, angle);
+                    }
                     Ok(())
                 })
             });
@@ -492,6 +498,43 @@ impl UserData for Brush {
         m.add_method("fullness", |_, b, ()| Ok(b.held.borrow().fullness()));
         // pointed tips: how wide a mark at this pressure, what pressure for this width
         m.add_method("mark_width", |_, b, p: f32| Ok(b.held.borrow().tool.mark_width(p)));
+        // b:dust(pts, {pressure=0.6, tip=}): the brush, dry, drawn over pastel
+        // (engine 7, paint's sheet.rs): loose pastel its tips reach comes away,
+        // dropped behind it; what lies deeper in the tooth, and fixed pastel,
+        // stays. `tip` is the bristles' tip radius in µm (a hog's 50; finer
+        // hair reaches deeper). Returns the volume lifted, mm³.
+        m.add_method("dust", |_, b, (pts, o): (Value, Option<Table>)| {
+            let pts = points(&pts)?;
+            if pts.len() < 2 {
+                return err("b:dust: needs at least two points");
+            }
+            let (mut p, mut tip) = (0.6f32, paint::sheet::HOG_TIP_UM);
+            if let Some(o) = &o {
+                check_keys(o, &["pressure", "tip"], "b:dust")?;
+                if let Some(v) = num(o, "pressure")? {
+                    p = v.clamp(0.0, 1.0);
+                }
+                if let Some(v) = num(o, "tip")? {
+                    if !(2.0..=200.0).contains(&v) {
+                        return err("b:dust: tip is the bristles' tip radius, µm (2 to 200; a hog bristle's about 50)");
+                    }
+                    tip = v;
+                }
+            }
+            let width = b.held.borrow().tool.mark_width(p);
+            if b.held.borrow().fullness() > 0.02 {
+                return err("b:dust: the brush has paint on it; a dry brush brushes pastel off (b:wipe(1) first)");
+            }
+            time::verb_dry(&b.st, Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                if c.engine() < 7 {
+                    return err("b:dust: brushing pastel off needs engine 7");
+                }
+                let (v, secs) = c.dust_pastel(width, tip, &pts);
+                c.tally_mut().secs += secs as f64;
+                Ok(v)
+            })
+        });
         m.add_method("pressure_for", |_, b, w: f32| Ok(b.held.borrow().tool.pressure_for(w)));
         // b:stroke(points, {pressure=, ramps=, orient=, shake=, swell=, clip=})
         m.add_method("stroke", |_, b, (pts, o): (Value, Option<Table>)| {
@@ -826,7 +869,7 @@ fn fmt_num(v: f32) -> String {
 /// Parts of tubes from `{{"lead white", 6}, {"smalt", 1}, ...}` (the table's
 /// array part): tube indices and fractions by volume summing to 1, and the
 /// parts as given.
-fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
+pub(crate) fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
     let mut parts: Vec<(usize, f32)> = Vec::new();
     let mut given = Vec::new();
     for e in t.sequence_values::<Value>() {

@@ -407,8 +407,9 @@ impl UserData for KnifeU {
                 return err(format!("k:load: {amount} full loads is more paint than can be counted"));
             }
             let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load")?;
+            // (with what the blade already carries)
             if !k.k.borrow_mut().load(paint, amount) {
-                return err(format!("k:load: {amount} full loads is more paint than can be counted"));
+                return err(format!("k:load: {amount} full loads on top of the blade's paint is more than can be counted"));
             }
             time::trip(&k.st, color);
             Ok(())

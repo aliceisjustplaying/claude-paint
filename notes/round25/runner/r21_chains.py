@@ -4,7 +4,7 @@
 # ///
 """Round 25 preparation: one original winter Friedrich landscape, Claude Opus 5.5,
 thinking high, pi-black, engine 5, named Friedrich box. No reader or sitting cap.
-All code, harness and exported materials come from the frozen round-25 tag.
+All code, harness and exported materials come from the frozen source commit.
 --dry and --briefs render preparation only; neither invokes a provider.
 """
 import argparse
@@ -31,7 +31,7 @@ os.environ.pop("EASEL_BOX", None)
 
 HOME = Path.home()
 A = HOME / "src/a"
-TAG = "round-25"
+TAG = "e017df8e0394fbe520b41ddac112e69e46621cd2"
 BRANCH = TAG
 BASE = A / "claude-paint-r25run"
 EXPORT = BASE / "scripts/export_r16_studio"
@@ -1358,7 +1358,7 @@ def chain(name):
             log(f"{tag}: record written"
                 + (f" ({len(flags)} flagged lines went on with it, not a review of what it says)" if flags else ""))
         (rd / f"p{n}.done").write_text(time.strftime("%F %T"))
-    log(f"lane {name} finished")
+    log(f"lane {name} processing ended; painter status is in p<n>_outcome.json")
 
 
 def round_number():
@@ -1664,7 +1664,7 @@ def main():
     for x in background:
         x.join()
     stop.set()
-    log("all lanes finished")
+    log("all lane processes stopped; painter completion is recorded separately")
 
 
 if __name__ == "__main__":

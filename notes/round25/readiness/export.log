@@ -1,0 +1,7 @@
+lockrun: job c65e8b56 started (process group 63786, timeout 1800 s, log /tmp/lockrun-501/logs/20261005-124141-c65e8b56.log)
+exported the friedrich studio from e017df8e0394fbe520b41ddac112e69e46621cd2 (e017df8) to ~/src/a/claude-paint-r25run/prepared/friedrich
+  easel: ~/src/a/claude-paint-r25run/prepared/friedrich/bin/easel (checked in /var/folders/6k/24182wv136749r3p852rft740000gn/T//studio-probe.d5KKaP)
+  notices: ~/src/a/claude-paint-r25run/prepared/friedrich/bin/THIRD_PARTY_NOTICES.md
+  box: friedrich
+  notes: easel_guide.md journal.md research/friedrich_materials.md research/oil_paint_physics.md techniques.md 
+lockrun: finished: exit 0 in 3.6 s; log /tmp/lockrun-501/logs/20261005-124141-c65e8b56.log

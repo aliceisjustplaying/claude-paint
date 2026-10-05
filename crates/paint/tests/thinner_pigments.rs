@@ -7,7 +7,8 @@
 //!   cargo test -p paint --release --test thinner_pigments -- --show-output
 //!
 //! `tests/thinner/tubes_af49348.txt` is `tube_table()` as unchanged af49348
-//! prints it (`print_tube_table`; commands in ACCEPTANCE.md).
+//! prints it. `tubes_current.txt` separately freezes the expanded catalog and
+//! current box engine labels.
 
 use paint::color::luminance;
 use paint::pigment::{hiding_of, scatter_for};
@@ -39,16 +40,42 @@ fn print_tube_table() {
     std::fs::write(&out, tube_table()).unwrap_or_else(|e| panic!("{out}: {e}"));
 }
 
-/// Check 13 (a): every pigment value, in the catalog and in every box,
-/// equals af49348's exactly.
+/// Check 13 (a): historical pigment fields and legacy box tube ordering remain
+/// exact. New catalog tubes, new boxes and current engine labels are allowed,
+/// but the expanded current table has its own exact reviewed snapshot.
 #[test]
 fn c13_every_pigment_value_is_af49348s() {
-    let want = include_str!("thinner/tubes_af49348.txt");
-    let got = tube_table();
-    if got != want {
-        let at = got.lines().zip(want.lines()).position(|(a, b)| a != b);
-        panic!("the tube table differs from af49348's (first differing line {at:?}: now {:?}, then {:?})", at.and_then(|i| got.lines().nth(i)), at.and_then(|i| want.lines().nth(i)));
+    fn sections(table: &str) -> std::collections::BTreeMap<&str, Vec<&str>> {
+        let mut result = std::collections::BTreeMap::new();
+        let mut section = "catalog";
+        for line in table.lines() {
+            if line == "catalog" {
+                result.insert(section, Vec::new());
+            } else if let Some(header) = line.strip_prefix("box ") {
+                section = header.split_once(" (engine ").expect("box engine label").0;
+                assert!(result.insert(section, Vec::new()).is_none(), "duplicate box {section}");
+            } else {
+                result.get_mut(section).expect("table section").push(line.trim_start());
+            }
+        }
+        result
     }
+    let got = tube_table();
+    let old = sections(include_str!("thinner/tubes_af49348.txt"));
+    let now = sections(&got);
+    for (section, tubes) in old {
+        let current = now.get(section).unwrap_or_else(|| panic!("missing historical section {section}"));
+        if section == "catalog" {
+            for tube in tubes {
+                let name = tube.split_once(", pigment:").expect("tube name").0;
+                let actual = current.iter().find(|line| line.split_once(", pigment:").expect("tube name").0 == name);
+                assert_eq!(actual.copied(), Some(tube), "historical catalog fields changed: {name}");
+            }
+        } else {
+            assert_eq!(current, &tubes, "historical box tube values/order changed: {section}");
+        }
+    }
+    assert_eq!(got, include_str!("thinner/tubes_current.txt"), "current expanded tube table changed");
 }
 
 /// A tube of the Sargent box (it has both siennas), straight from the tube.

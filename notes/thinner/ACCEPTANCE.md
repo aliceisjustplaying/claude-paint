@@ -440,12 +440,14 @@ end.
 `crates/paint/tests/thinner_pigments.rs`. It uses only af49348's API, so it
 runs on today's code.
 
-**(a) `c13_every_pigment_value_is_af49348s`.** The tube table must equal
-`crates/paint/tests/thinner/tubes_af49348.txt` byte for byte:
+**(a) `c13_every_pigment_value_is_af49348s`.** The unchanged historical
+`crates/paint/tests/thinner/tubes_af49348.txt` independently guards every original
+catalog tube's fields and every original box's tube values and order. New
+catalog tubes and boxes are allowed; historical engine labels are excluded
+from this comparison because the current boxes use newer engines.
 
-- the catalog: each tube's name, pigment, masstone, hiding, stiffness,
-  strength and both drying rates, floats in shortest exact form;
-- every box, with its tubes and engine.
+The complete current catalog, including added tubes, boxes and engine labels,
+must also equal `crates/paint/tests/thinner/tubes_current.txt` byte for byte.
 
 The file is the output of the ignored `print_tube_table` test. It was run
 on a detached worktree of af49348 (`af49348239421791509f7b7c36e9dc39305b26fe`)

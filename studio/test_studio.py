@@ -240,6 +240,14 @@ def say(text):
     return line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
 
 
+def test_a_held_knife_is_never_the_picker_fallback(home):
+    pytest.importorskip("PIL")
+    _, studio, log = home
+    log.write_text(start(str(studio)) + looks_at_once(
+        ("hold", {"hold": "p", "at": "50,50"}, png_of("blue"))))
+    assert S.glance([str(log)])["look"] is None
+
+
 @pytest.mark.parametrize("via", ["live server", "static export"])
 def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_reply(home, server, via):
     # a whole look, then a whole look and a squint asked for together: the picture is the second whole look,
@@ -312,14 +320,27 @@ def test_a_reference_picture_is_marked_and_is_never_the_painters_picture(home, s
     p, picture, _ = painter_and_events()
     assert (p["look"], picture) == (None, None)
 
+    # Diagnostic looks cannot become the picker image through its legacy fallback.
+    with open(log, "a") as fh:
+        fh.write(looks_at_once(("s1", {"survey": True}, png_of("red")),
+                              ("c1", {"compare": "out/earlier.png"}, png_of("green"))))
+    p, picture, _ = painter_and_events()
+    assert (p["look"], picture) == (None, None)
+
+    # Older painters read their renders; that fallback still works without a whole look.
+    with open(log, "a") as fh:
+        fh.write(read_picture("old", "out/easel/look-0000.png", png_of("red")))
+    p, picture, _ = painter_and_events()
+    assert (p["look"], picture) == (3, png_of("red"))
+
     # its own canvas, then the reference again (by its full path), then a render it reads as the early painters did
     with open(log, "a") as fh:
         fh.write(look("l1", png_of("blue")) + read_picture("r2", f"{studio}/reference/his.png", png_of("green"))
                  + read_picture("r3", "out/easel/look-0001.png", png_of("red")))
     p, picture, events = painter_and_events()
-    assert (p["look"], picture) == (1, png_of("blue"))
-    assert [bool(e.get("ref")) for e in events if e["kind"] == "image"] == [True, False, True, False]
-    assert [bool(e.get("ref")) for e in events if e["kind"] == "read"] == [True, True, False]
+    assert (p["look"], picture) == (4, png_of("blue"))
+    assert [bool(e.get("ref")) for e in events if e["kind"] == "image"] == [True, False, False, False, False, True, False]
+    assert [bool(e.get("ref")) for e in events if e["kind"] == "read"] == [True, False, True, False]
 
 
 TONN = ("Compose and paint one original picture in the manner of Kendric Tonn, at\nthe easel, a simulator of oil paint "
@@ -359,6 +380,13 @@ def test_a_palette_look_is_not_the_painting():
     assert S.is_whole(S.look_text({"size": 800}))
     assert not S.is_whole(S.look_text({"palette": True}))
     assert S.is_whole(S.look_text({"palette": False}))
+    # nor is a survey's tile, a comparison or a lit look
+    assert not S.is_whole(S.look_text({"survey": True}))
+    assert S.is_whole(S.look_text({"survey": False}))
+    assert not S.is_whole(S.look_text({"compare": "out/easel/painting/a.png"}))
+    assert not S.is_whole(S.look_text({"light": "45,15"}))
+    assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
+    assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
 
 
 @pytest.mark.parametrize("ending, said", [

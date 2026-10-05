@@ -132,7 +132,8 @@ fn rebuilding_serves_progress_and_refuses_nonstatus_requests() {
     let name = "rebuild-boundary";
     let dir = root().join("out/easel").join(name);
     std::fs::create_dir_all(&dir).unwrap();
-    let socket = dir.join("sock");
+    let socket = sock_of(&dir);
+    let _ = std::fs::remove_file(&socket); // a previous run's, if the socket lives in the temp dir
     let mut server = Server(Command::new(env!("CARGO_BIN_EXE_easel"))
         .args(["serve", name])
         .env("EASEL_ROOT", root())
@@ -297,7 +298,7 @@ fn a_second_server_is_refused_and_a_dead_ones_socket_is_recovered() {
     let _reaper = Reaper(name);
     ok(&["open", name]);
     ok(&["-s", name, "do", "x = 1"]);
-    let sock = root().join("out/easel/owner/sock");
+    let sock = sock_of(&root().join("out/easel/owner"));
     let ino = std::fs::metadata(&sock).unwrap().ino();
     let o = Command::new(env!("CARGO_BIN_EXE_easel")).args(["serve", name]).env("EASEL_ROOT", root()).output().unwrap();
     assert!(!o.status.success() && String::from_utf8_lossy(&o.stderr).contains("another easel serves"), "{}", String::from_utf8_lossy(&o.stderr));
@@ -316,4 +317,40 @@ fn a_second_server_is_refused_and_a_dead_ones_socket_is_recovered() {
     assert_eq!(servers(name).len(), 1);
     ok(&["-s", name, "do", "assert(x == 1)"]);
     ok(&["-s", name, "close"]);
+}
+
+/// The server's socket for a session directory, by the rule in main.rs's
+/// short_sock: a long checkout path puts it in a private directory in the
+/// temp dir (or /tmp), or leaves it where it was if no private one is to be had.
+fn sock_of(dir: &std::path::Path) -> std::path::PathBuf {
+    use std::os::unix::fs::MetadataExt;
+    let p = dir.join("sock");
+    if p.as_os_str().len() < 100 {
+        return p;
+    }
+    // the server hashes its canonical root (session.rs's root())
+    std::fs::create_dir_all(dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let mut h: u64 = 0xcbf29ce484222325; // save.rs's fnv1a
+    for &b in dir.as_os_str().as_encoded_bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    let uid = std::fs::metadata(&dir).unwrap().uid();
+    let file = format!("{h:016x}.sock");
+    for base in [std::env::temp_dir(), std::path::PathBuf::from("/tmp")] {
+        let private = base.join(format!("easel-{uid}"));
+        let s = private.join(&file);
+        if s.as_os_str().len() < 100 {
+            // the server makes it (0700) on first use, and uses it only if it is private
+            use std::os::unix::fs::DirBuilderExt;
+            let _ = std::fs::DirBuilder::new().mode(0o700).create(&private);
+            if let Ok(m) = std::fs::symlink_metadata(&private)
+                && m.is_dir() && m.uid() == uid && m.mode() & 0o077 == 0
+            {
+                return s;
+            }
+        }
+    }
+    p
 }

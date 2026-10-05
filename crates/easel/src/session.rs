@@ -25,6 +25,12 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
+/// A log replays at the width it was painted at, whatever its file is named.
+pub const SKETCH_MARK: &str = "--@ sketch";
+/// A sketch's width (px): a quarter of the live width, some 16 times faster,
+/// for trying out a composition before the painting.
+pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
 
 /// What the engine version (`paint::ENGINE`) changes in the easel's Lua: from
 /// engine 3, `pairs` and `next` walk every table in a fixed order, not only
@@ -57,11 +63,13 @@ struct Snap {
     clock: f64,
     clock0: f64,
     hand: crate::time::Hand,
+    board: crate::board::Board,
     /// The last world view made (depth options resolve against it).
     view: Option<crate::world::ViewU>,
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
     brushes: Vec<(Rc<RefCell<Held>>, Held)>,
+    knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
     /// The rags in the hand, as the brushes.
     rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
 }
@@ -210,11 +218,15 @@ impl Session {
             let h = b.borrow().clone();
             (b, h)
         }).collect();
+        let knives = s.live_knives().into_iter().map(|k| {
+            let h = k.borrow().clone();
+            (k, h)
+        }).collect();
         let rags = s.live_rags().into_iter().map(|r| {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), view: s.view.clone(), heap, brushes, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -225,6 +237,9 @@ impl Session {
         self.inject("restore")?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
+        }
+        for (k, h) in &snap.knives {
+            *k.borrow_mut() = h.clone();
         }
         for (r, v) in &snap.rags {
             *r.borrow_mut() = *v;
@@ -237,6 +252,7 @@ impl Session {
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
         s.hand = snap.hand.clone();
+        s.board = snap.board.clone();
         s.view = snap.view.clone();
         Ok(mismatches)
     }
@@ -381,6 +397,9 @@ impl Session {
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
         }
+        if self.st.borrow().width == SKETCH_WIDTH {
+            let _ = writeln!(s, "{SKETCH_MARK}");
+        }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
             s.push_str(&c.src);
@@ -430,6 +449,47 @@ impl Session {
                 _ => None,
             })
             .collect()
+    }
+
+    /// What the global `name` puts on a knife held up to the canvas (the look
+    /// `--hold`): a knife's own load, with its blade's length and how full it
+    /// is, or a pile as its heap is on the board now, as a fresh full load on
+    /// a blade 30 units long. Reads only: no Lua runs and nothing changes.
+    pub fn held(&self, name: &str) -> Result<(paint::Paint, f32, f32), String> {
+        let found = self.globals.get(name).filter(|(_, c)| *c > 0).map(|(v, _)| v);
+        if let Some(Value::UserData(u)) = found {
+            if let Ok(k) = u.borrow::<api::KnifeU>() {
+                let k = k.k.borrow();
+                return match k.paint() {
+                    Some(p) => Ok((p, k.width, k.fullness().clamp(0.0, 1.0))),
+                    None => Err(format!("look --hold {name}: the knife is clean; load it first (k:load(pile))")),
+                };
+            }
+            if let Ok(p) = u.borrow::<api::PileU>() {
+                // Project the same fresh visit as a knife load, without changing
+                // the live board's dirt, ordering or last-carried paint.
+                let st = self.st.borrow();
+                let mut board = st.board.clone();
+                board.visit(p.heap, 0.0);
+                let mut projected = p.clone();
+                if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
+                    projected.mix = st.tubes.pile(h.fractions());
+                    projected.mix.solvent = h.solvent;
+                    projected.mix.oil_rate = h.oil_rate;
+                    projected.medium = h.medium;
+                    projected.thinner = projected.thinner.map(|_| h.thinner);
+                }
+                return Ok((projected.paint(), 30.0, 1.0));
+            }
+        }
+        let mut names: Vec<&str> = self
+            .globals
+            .iter()
+            .filter(|(k, (v, c))| *c > 0 && is_name(k) && matches!(v, Value::UserData(u) if u.borrow::<api::KnifeU>().is_ok() || u.borrow::<api::PileU>().is_ok()))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        names.sort();
+        Err(format!("look --hold {name}: no global of that name holds a knife or a pile ({})", if names.is_empty() { "there is none yet".to_string() } else { names.join(", ") }))
     }
 
     /// The ground's color, from the `canvas{}` layers: each layer's paint over the raw linen
@@ -829,6 +889,12 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
     Ok(found.unwrap_or(1))
 }
 
+/// Whether a session file's head marks it a sketch (a `SKETCH_MARK` line
+/// before the first chunk).
+pub fn logged_sketch(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -950,6 +1016,37 @@ pub fn root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(tube_box)]
+    fn palette_add_refreshes_recipe_and_dilutes_materials() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 2}, oil="poppy", turps=0.6, thinner=0.4}
+            p = p:add{{"cobalt blue", 2}}
+            local parts = p:parts()
+            assert(#parts == 2 and parts[1][2] == 2 and parts[2][2] == 2)
+            assert(math.abs(p.thinner - 0.2) < 0.00001)
+            assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert!((p.mix.solvent - 0.3).abs() < 1e-5);
+        assert!((p.mix.oil_rate - 0.8).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn a_retained_palette_pile_can_be_added_after_many_new_heaps() {
+        let mut s = Session::new(48).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"p = pile{{"lead white", 1}}
+            for i = 1, 100 do pile{{"cobalt blue", 1}} end
+            p = p:add{{"cobalt blue", 1}}
+            assert(#p:parts() == 2)"#).unwrap();
+        let st = s.st.borrow();
+        assert_eq!(st.board.live().len(), crate::board::LIVE);
+        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+        assert_eq!(st.board.live().last().unwrap().id, p.heap);
+    }
 
     #[cfg(tube_box)]
     const W: usize = 160;
@@ -1704,7 +1801,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 3\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -1827,6 +1924,172 @@ mod tests {
             let (s, _) = replay_fixture(&format!("engine1/{name}"));
             assert_eq!(canvas_hash(&s), want, "{name} no longer replays as it did");
         }
+    }
+
+    /// The knife lays paint from its bead and scrapes wet paint back onto it.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_knife_lays_and_scrapes() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let bare = bits(&s);
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()
+                  k:lay({{200, 300}, {600, 300}}, {pressure=0.4})
+                  assert(k:fullness() < full0, "laying takes paint off the blade")"#).unwrap();
+        assert_ne!(bare, bits(&s), "the knife laid paint");
+        s.run(r#"k:wipe(); assert(k:fullness() == 0)
+                  k:scrape({{200, 300}, {600, 300}})
+                  assert(k:fullness() > 0, "scraping takes wet paint onto the blade")"#).unwrap();
+        let e = s.run("knife{width=1}").unwrap_err();
+        assert!(e.contains("2 to 200"), "{e}");
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn knife_rejects_invalid_loads_and_paths_without_changing_state() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; p = pile{{"bone black", 1}}; k:load(p, 0.5)"#).unwrap();
+        for call in ["k:load(p, 3.4e38)", "k:lay({{100, 300}, {0/0, 300}})", "k:scrape({{100, 300}, {1e9, 300}})", "k:lay({{100, 300}}, {angle=math.huge})", "local pts = {}; for i = 1, 24 do pts[i] = {i % 2 == 0 and 20000 or -20000, 300} end; k:lay(pts)"] {
+            let before = bits(&s);
+            let e = s.run(call).unwrap_err();
+            assert!(e.contains("k:"), "{call}: {e}");
+            assert_eq!(before, bits(&s), "{call}");
+        }
+    }
+
+    /// A failed chunk leaves a knife as it was, as it leaves a brush.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_failed_chunk_leaves_the_knife_alone() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30}; k:load(pile{{"bone black", 1}}, 0.5); full0 = k:fullness()"#).unwrap();
+        let before = bits(&s);
+        let e = s.run("k:lay({{200, 300}, {600, 300}}); error('stop')").unwrap_err();
+        assert!(e.contains("stop"), "{e}");
+        assert_eq!(before, bits(&s));
+        s.run("assert(k:fullness() == full0)").unwrap();
+    }
+
+    /// A double-loaded, streaky pass paints something else than the plain
+    /// pass, and the same again in a second session; a part-loaded brush too.
+    #[test]
+    #[cfg(tube_box)]
+    fn double_loads_and_streaks_paint_and_replay() {
+        let paint = |opts: &str| {
+            let mut s = Session::new(W).unwrap();
+            s.run(CANVAS).unwrap();
+            s.run(&format!(
+                r#"p = pile{{{{"lead white", 3}}, {{"cobalt blue", 1}}}}; q = pile{{{{"vermilion", 1}}}}
+                   work(rect(100, 100, 600, 300), {{pile=p{opts}}})
+                   b = brush("flat", 12); b:load(p, 0.8); b:load(q, 0.5, {{side=1, share=0.4, streak=0.5}}); b:stroke({{{{150, 500}}, {{700, 500}}}})"#
+            ))
+            .unwrap();
+            bits(&s)
+        };
+        let double = paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}");
+        assert_eq!(double, paint(", streak=0.8, second={pile=q, load=0.4, side=1, share=0.5}"));
+        assert_ne!(double, paint(""));
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"b = brush("flat", 12); b:load(pile{{"vermilion", 1}}, 0.5, {side=2})"#).unwrap_err();
+        assert!(e.contains("side is -1..1"), "{e}");
+        let e = s.run(r#"work(everywhere(), {pile=pile{{"vermilion", 1}}, second={load=0.4}})"#).unwrap_err();
+        assert!(e.contains("work second"), "{e}");
+    }
+
+    /// A sketch's log says it is one, so it replays at its width under any
+    /// file name; a painting's log doesn't.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_sketch_s_log_says_so() {
+        let mut a = Session::new(SKETCH_WIDTH).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("sketch-1");
+        assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
+        assert!(logged_sketch(&prog));
+        let mut b = Session::new(W).unwrap();
+        b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
+        assert!(!logged_sketch(&b.program("sketchbook")));
+    }
+
+    /// What only engine 4 models is refused in a painting painted with an
+    /// older engine, where it would do nothing.
+    #[test]
+    #[cfg(tube_box)]
+    fn an_older_engine_s_painting_refuses_turps_and_absorbent_grounds() {
+        let old = || {
+            let mut tubes = Palette::tube_box();
+            tubes.engine = 2;
+            Session::with_box(W, tubes).unwrap()
+        };
+        let mut s = old();
+        let e = s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap_err();
+        assert!(e.contains("absorbent= needs engine 4"), "{e}");
+        s.run(CANVAS).unwrap();
+        let e = s.run(r#"pile{{"lead white", 1}, turps=0.5}"#).unwrap_err();
+        assert!(e.contains("turps= needs engine 4"), "{e}");
+        // (nor has it the knife: its globals are the ones it was painted with)
+        s.run("assert(knife == nil)").unwrap();
+        let mut s = Session::new(W).unwrap();
+        s.run(&CANVAS.replace(r#"apply="brush"}"#, r#"apply="brush", absorbent=true}"#)).unwrap();
+        s.run(r#"pile{{"lead white", 1}, turps=0.5}; pile{{"lead white", 1}, blot=0.3, oil="poppy"}; pile{{"lead white", 1}, thinner=0.5}"#).unwrap();
+    }
+
+    /// A mix's printed recipe gives each heap its share, whatever its own
+    /// recipe sums to, and p:add counts in the units that recipe prints.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_mix_prints_its_heaps_in_their_shares_and_adds_in_those_units() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"local a = pile{{"lead white", 3}, {"cobalt blue", 1}}; local b = pile{{"vermilion", 1}}
+                 m = mix{{a, 1}, {b, 1}}
+                 local w = {}; for _, p in ipairs(m:parts()) do w[p[1]] = p[2] end
+                 assert(math.abs(w["vermilion"] - 1) < 1e-5 and math.abs(w["lead white"] - 0.75) < 1e-5, "half of the mix is vermilion")
+                 m2 = m:add{{"vermilion", 2}}
+                 local v = {}; for _, p in ipairs(m2:parts()) do v[p[1]] = p[2] end
+                 assert(math.abs(v["vermilion"] - 3) < 1e-5, "two parts more in the printed units")"#).unwrap();
+    }
+
+    /// pile{oil=} grinds the paint in that oil: its drying rate against
+    /// linseed's (paint's oil_rate_scales_drying has what the rate does).
+    #[test]
+    #[cfg(tube_box)]
+    fn a_pile_s_oil_sets_its_drying_rate() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"pl = pile{{"lead white", 1}}; pli = pile{{"lead white", 1}, oil="linseed"}
+                 pw = pile{{"lead white", 1}, oil="walnut"}; pp = pile{{"lead white", 1}, oil="poppy"}"#).unwrap();
+        let rate = |n: &str| match &s.globals[n].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.oil_rate,
+            o => panic!("{n} is {o:?}"),
+        };
+        assert_eq!([rate("pl"), rate("pli"), rate("pw"), rate("pp")], [1.0, 1.0, 0.8, 0.6]);
+        let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
+        assert!(e.contains("linseed"), "{e}");
+    }
+
+    /// A gesture's points are checked before its curve is sampled (a point
+    /// that is nowhere would be sampled without end), and its pressure keeps
+    /// a press that falls between its evenly spaced knots.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_gesture_checks_its_points_and_keeps_a_press() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"b = brush("round", 6); b:load(pile{{"bone black", 1}}, 0.9); full0 = b:fullness()"#).unwrap();
+        for bad in ["{{100, 300}, {math.huge, 300}}", "{{100, 300}, {0/0, 300}}", "{{100, 300}, {1e9, 300}}"] {
+            let e = s.run(&format!("b:gesture({bad})")).unwrap_err();
+            assert!(e.contains("not on or near the canvas"), "{bad}: {e}");
+        }
+        let bare = bits(&s);
+        // one pressed point among 33, the others lifted: it paints
+        s.run(r#"local pts = {}; for i = 0, 32 do pts[#pts + 1] = {100 + 20 * i, 300, i == 1 and 1 or 0} end
+                  b:gesture(pts, {ramps={0, 0}})
+                  assert(b:fullness() < full0, "the pressed point laid paint")"#).unwrap();
+        assert_ne!(bare, bits(&s));
     }
 
     /// An engine-2 painting replays as engine 2, bit for bit as it did before

@@ -28,6 +28,7 @@ pub mod pigment;
 pub mod rng;
 mod sched;
 pub mod shape;
+pub mod soak;
 pub mod spectral;
 pub mod wet;
 pub mod bristle;
@@ -44,13 +45,14 @@ pub mod thinner;
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex, shift};
-pub use bristle::{Gesture, Held, Kind, Orient, Tool, Touch};
+pub use bristle::{Gesture, Held, Kind, Knife, Orient, Part, Spatter, Tool, Touch};
 pub use wet::Paint;
 pub use drying::Stage;
 pub use palette::{Mixture, Palette, Tube};
 pub use handling::{Handling, Order};
 pub use stipple::Stipple;
 pub use tally::Tally;
+pub use soak::Fabric;
 pub use style::{Apply, Ground, Style};
 pub use hand::{Hand, Mark};
 pub use outline::{Bone, Character, Outline};
@@ -85,7 +87,10 @@ pub use shape::Shape;
 ///   session.rs `canonical_tables`);
 ///   and the easel has a rag (`rag`, crates/easel/src/draw_rag.rs); an older
 ///   log replays with exactly the globals it had.
-pub const ENGINE: u32 = 3;
+/// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
+///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
+/// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
+pub const ENGINE: u32 = 5;
 
 /// Hermite smoothstep.
 #[inline]

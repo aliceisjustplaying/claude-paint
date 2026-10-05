@@ -1353,7 +1353,19 @@ impl Canvas {
         // cracks are the same ones); only the window is rasterized
         let net = network(k, [f.full_w as f32 * px, f.full_h as f32 * px], pitch);
         let local = self.crack_local(k);
-        let r = raster_window(&net, k, &local, (f.x0, f.y0, f.w, f.h), px);
+        let mut r = raster_window(&net, k, &local, (f.x0, f.y0, f.w, f.h), px);
+        // a raw canvas (`crate::soak`) has no ground: the bare cloth has
+        // nothing brittle to break, so cracks run only through its paint
+        // and stop where the paint ends (fading out over the thinnest films)
+        if self.soak.is_some() {
+            let film = &self.film;
+            (&mut r.cover, &mut r.shoulder, &mut r.dz).into_par_iter().enumerate().for_each(|(i, (c, sh, dz))| {
+                let t = crate::smoothstep(0.0, RAW_FILM, film[i]);
+                *c *= t;
+                *sh *= t;
+                *dz *= t;
+            });
+        }
         self.surf_gen += 1;
         self.height.par_iter_mut().zip(&r.dz).for_each(|(z, d)| *z += d);
         // an open crack is a deep narrow slot: it traps light (its walls and
@@ -1364,6 +1376,8 @@ impl Canvas {
         let amber = Pigment::from_appearance([0.62, 0.45, 0.2], [0.02, 0.016, 0.01]);
         let th = 2.5 * k.dirt;
         let gr = k.grime.clamp(0.0, 1.0);
+        // a raw canvas's cracks cut down to its cloth, not to a ground
+        let under = self.soak.as_ref().map_or(GROUND_WALL, |s| s.fabric.color);
         let (w, x0, y0) = (f.w, f.x0, f.y0);
         self.px.par_iter_mut().enumerate().for_each(|(i, p)| {
             let c = (r.cover[i] + 0.25 * (r.shoulder[i] - r.cover[i])).min(1.0);
@@ -1371,10 +1385,11 @@ impl Canvas {
                 let slot = [p[0] * SLOT, p[1] * SLOT, p[2] * SLOT];
                 let mut d = dirt.over(slot, th);
                 if gr > 0.0 {
-                    // the walls: paint above, the pale ground below, in shadow
+                    // the walls: paint above, the pale ground (or the raw
+                    // cloth) below, in shadow
                     let q = [((i % w + x0) as f32 + 0.5) * px, ((i / w + y0) as f32 + 0.5) * px];
                     let fg = local.wall(q);
-                    let wall: [f32; 3] = std::array::from_fn(|ch| SLOT * (p[ch] + (GROUND_WALL[ch] - p[ch]) * fg));
+                    let wall: [f32; 3] = std::array::from_fn(|ch| SLOT * (p[ch] + (under[ch] - p[ch]) * fg));
                     let (amt, am) = (th * r.grime[i], r.amber[i]);
                     let g = amber.over(grime.over(wall, amt * (1.0 - am)), 0.6 * amt * am);
                     for ch in 0..3 {
@@ -1466,6 +1481,9 @@ impl Canvas {
         let resolve = 1.0 - crate::smoothstep(0.5 * cell, 1.5 * cell, px);
         let seed = k.seed ^ 0x82;
         let milk = [0.52f32, 0.53, 0.55];
+        // on a raw canvas the varnish soaks into the bare cloth: only over
+        // its paint is there a film to craze
+        let film = self.soak.is_some().then_some(&self.film);
         self.px.par_chunks_mut(f.w).enumerate().for_each(|(y, row)| {
             let gy = (y + f.y0) as f32 * px + 0.5 * px;
             for (x, p) in row.iter_mut().enumerate() {
@@ -1480,7 +1498,7 @@ impl Canvas {
                 } else {
                     mean
                 };
-                let a = VEIL * patch * lines;
+                let a = VEIL * patch * lines * film.map_or(1.0, |m| crate::smoothstep(0.0, RAW_FILM, m[y * f.w + x]));
                 for ch in 0..3 {
                     p[ch] += (milk[ch] - p[ch]) * a;
                 }
@@ -1500,6 +1518,10 @@ const WALL_THIN: f32 = 0.5;
 const WALL_THICK: f32 = 0.15;
 /// Reflectance left in an open crack (its shadowed slot) before grime.
 const SLOT: f32 = 0.35;
+/// On a raw canvas, the film (coats) over which cracks (and the varnish's
+/// veil) reach their full strength: they fade out over thinner paint and
+/// stop at the bare cloth.
+const RAW_FILM: f32 = 0.2;
 /// The color a crack's walls show where they cut the ground, a
 /// fixed value independent of the canvas's ground color: a yellowed lead
 /// white and chalk layer over warm ocher and red earth layers (an
@@ -1978,6 +2000,51 @@ mod tests {
     /// That includes the paint sampled under the cracks: its averaging grid
     /// is anchored to the canvas, not to the crop's corner, so the test crop
     /// deliberately does not start on a cell boundary.
+    /// A raw canvas cracks only through its paint: the bare cloth beside a
+    /// band of paint keeps its colour and relief, the band cracks as on any
+    /// canvas.
+    #[test]
+    fn a_raw_canvas_cracks_only_through_its_paint() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(60.0);
+        c.raw_canvas(crate::soak::Fabric::cotton_duck(), 3);
+        let w = c.f.w;
+        let band = |i: usize| (100..200).contains(&(i / w));
+        for i in 0..c.px.len() {
+            if band(i) {
+                c.film[i] = 1.0;
+                c.px[i] = [0.3, 0.25, 0.2];
+            }
+        }
+        let (px0, h0) = (c.px.clone(), c.height.clone());
+        // (with the varnish's veil and grime: neither reaches bare cloth)
+        c.crack(&Cracks { vary: 0.0, veil: 1.0, grime: 1.0, patchy: 0.0, ..Cracks::aged(3) });
+        let changed = |i: usize| c.px[i] != px0[i] || c.height[i] != h0[i];
+        let bare = (0..c.px.len()).filter(|&i| !band(i)).filter(|&i| changed(i)).count();
+        let paint = (0..c.px.len()).filter(|&i| band(i)).filter(|&i| changed(i)).count();
+        assert_eq!(bare, 0, "the bare cloth cracked");
+        assert!(paint > 100 * w / 50, "the paint barely cracked: {paint} pixels");
+    }
+
+    /// A crack through paint on raw cloth cuts down to the cloth: its walls
+    /// show the cloth's colour, not a primed ground's.
+    #[test]
+    fn a_raw_canvas_cracks_down_to_its_cloth() {
+        let cracked = |fabric: crate::soak::Fabric| {
+            let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(60.0);
+            c.raw_canvas(fabric, 3);
+            for i in 0..c.px.len() {
+                c.film[i] = 1.0;
+                c.px[i] = [0.3, 0.25, 0.2];
+            }
+            c.crack(&Cracks { vary: 0.0, veil: 0.0, grime: 1.0, patchy: 0.0, ..Cracks::aged(3) });
+            c.px
+        };
+        let (duck, linen) = (cracked(crate::soak::Fabric::cotton_duck()), cracked(crate::soak::Fabric::linen()));
+        let lum = |p: &[f32; 3]| p.iter().sum::<f32>();
+        let (d, l): (f32, f32) = (duck.iter().map(lum).sum(), linen.iter().map(lum).sum());
+        assert!(d > l, "the walls of cracks down to pale cotton duck are lighter than down to linen: {d} vs {l}");
+    }
+
     #[test]
     fn crop_cracks_like_the_whole() {
         let k = Cracks::aged(4);

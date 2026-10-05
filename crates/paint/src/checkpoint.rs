@@ -17,14 +17,21 @@
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
 //! The format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
-//! version 9 (`PAINTCK9`) for engine 3; files of any other version are
-//! refused (re-run to checkpoint again). Version 9 is version 8's bytes
-//! after the magic, then the thinner's section: the solvent in the open
-//! film, one f32 (µm) per buffer pixel, row major, as the file's last 4 ×
-//! pixels bytes (`crate::thinner`; that it comes last is part of the
-//! format). An engine-3 canvas saved as version 8 (by the easel before the
+//! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
+//! (below); files of any other version are refused (re-run to checkpoint
+//! again). Version 9 is version 8's bytes after the magic, then the
+//! thinner's section: the solvent in the open film, one f32 (µm) per buffer
+//! pixel, row major, as the file's last 4 × pixels bytes (`crate::thinner`;
+//! that it comes last is part of version 9; version 10 adds its section
+//! after it). An engine-3 canvas saved as version 8 (by the easel before the
 //! thinner, af49348) is refused, naming that version: it has no solvent
-//! section, and this easel doesn't convert old saves. After the header the
+//! section, and this easel doesn't convert old saves. Version 11
+//! (`PAINTC11`) is engine 4's and later: version 9 with two more properties
+//! (solvent and oil) to each pixel of wet paint and, after the engine version and before
+//! the solvent (still last), the surface's gloss and the ground's remaining
+//! absorbency, one f32 each per pixel. An older engine's canvas is written
+//! as it always was. Version 12 combines version 11 with the raw canvas's
+//! soak section after the solvent. After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -38,6 +45,16 @@
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
 //! painted with (`crate::ENGINE`).
+//!
+//! A raw canvas (`crate::soak`, engine 3) is version 10 (`PAINTC10`):
+//! version 9's bytes after the magic, then its soak section, which is the
+//! file's last: a `SOAK` mark and the section's own version (1, `SOAK_V`),
+//! the fabric (name, colour, pore volume, warp bias), the clock and seed the
+//! cloth was set up with, and the weave per buffer pixel, row major. The
+//! dry cloth's absorption isn't stored: it follows from the fabric's colour.
+//! Every other canvas writes version 8 or 9 as before, so a reader that
+//! doesn't know version 10 refuses a raw canvas instead of loading it
+//! without its cloth. A section of any other version is refused too.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -47,6 +64,15 @@ use std::io::{self, Read, Write};
 const MAGIC: &[u8; 8] = b"PAINTCK8";
 /// Engine 3, with the thinner's section (`crate::thinner`).
 const MAGIC9: &[u8; 8] = b"PAINTCK9";
+/// A raw canvas: version 9, then its soak section (`crate::soak`).
+const MAGIC10: &[u8; 8] = b"PAINTC10";
+/// Engine 4 material properties, gloss and absorbency.
+const MAGIC11: &[u8; 8] = b"PAINTC11";
+/// Engine 4 materials followed by the raw canvas's soak section.
+const MAGIC12: &[u8; 8] = b"PAINTC12";
+/// Marks the soak section ("SOAK"), and its version.
+const SOAK_MARK: u64 = 0x4b414f53;
+const SOAK_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -91,21 +117,78 @@ fn bad(msg: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
 }
 
+fn write_soak(w: &mut impl Write, s: &crate::soak::Soak) -> io::Result<()> {
+    let name = s.fabric.name.as_bytes();
+    // (a fabric the reader would refuse is an error here, not a save that
+    // can't be opened)
+    if !s.fabric.is_valid() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("the raw canvas's fabric is invalid: {:?}", s.fabric)));
+    }
+    put_u64(w, SOAK_MARK)?;
+    put_u64(w, SOAK_V)?;
+    put_u64(w, name.len() as u64)?;
+    w.write_all(name)?;
+    let f = &s.fabric;
+    for v in [f.color[0], f.color[1], f.color[2], f.cap_um, f.warp_bias] {
+        put_f32(w, v)?;
+    }
+    put_u64(w, s.t0.to_bits())?;
+    put_u64(w, s.seed)?;
+    put_all(w, s.weave.iter().copied())
+}
+
+fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
+    if get_u64(r)? != SOAK_MARK {
+        return Err(bad("checkpoint soak mark is wrong"));
+    }
+    match get_u64(r)? {
+        SOAK_V => {}
+        v => return Err(bad(&format!("checkpoint soak section is version {v}; this easel reads version {SOAK_V} only"))),
+    }
+    let len = get_u64(r)?;
+    if len > crate::soak::NAME_MAX as u64 {
+        return Err(bad("checkpoint fabric name is invalid"));
+    }
+    let mut name = vec![0u8; len as usize];
+    r.read_exact(&mut name)?;
+    let name = String::from_utf8(name).map_err(|_| bad("checkpoint fabric name is not UTF-8"))?;
+    let mut v = [0.0f32; 5];
+    for x in v.iter_mut() {
+        *x = get_f32(r)?;
+    }
+    let t0 = f64::from_bits(get_u64(r)?);
+    let seed = get_u64(r)?;
+    let weave = get_all(r, n)?;
+    // (a corrupt file is an error here, not a panic or NaN pixels later)
+    // a cloth of the caller's own keeps its name, spelt as it was; its
+    // numbers come from the file, as a named one's do
+    let fabric = crate::soak::Fabric { name: name.into(), color: [v[0], v[1], v[2]], cap_um: v[3], warp_bias: v[4] };
+    let amp = crate::soak::WEAVE_AMP;
+    if !(fabric.is_valid() && t0.is_finite() && weave.iter().all(|&q| (1.0 - amp..=1.0 + amp).contains(&q))) {
+        return Err(bad("checkpoint soak is invalid"));
+    }
+    Ok(crate::soak::Soak::new(fabric, t0, seed, weave))
+}
+
 /// Read just the header of a checkpoint (to validate it before loading).
 pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
 }
 
-/// The magic (true: PAINTCK9) and the header. An engine-3 canvas in a
+/// The format version (8, 9 or 10) and the header. An engine-3 canvas in a
 /// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
 /// does) is refused here, before anything else is read.
-fn read_magic_header(r: &mut impl Read) -> io::Result<(bool, String)> {
+fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
     let mut m = [0u8; 8];
     r.read_exact(&mut m)?;
-    let nine = &m == MAGIC9;
-    if !nine && &m != MAGIC {
-        return Err(bad("not a canvas checkpoint (or an older format)"));
-    }
+    let version = match &m {
+        m if m == MAGIC => 8,
+        m if m == MAGIC9 => 9,
+        m if m == MAGIC10 => 10,
+        m if m == MAGIC11 => 11,
+        m if m == MAGIC12 => 12,
+        _ => return Err(bad("not a canvas checkpoint (or an older format)")),
+    };
     let n = get_u64(r)? as usize;
     if n > 1 << 20 {
         return Err(bad("checkpoint header too long"));
@@ -113,17 +196,34 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(bool, String)> {
     let mut h = vec![0u8; n];
     r.read_exact(&mut h)?;
     let head = String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))?;
-    if !nine && head.lines().filter_map(|l| l.strip_prefix("engine=")).any(|v| v.trim().parse::<u32>().is_ok_and(|e| e >= 3)) {
+    if version == 8 && head.lines().filter_map(|l| l.strip_prefix("engine=")).any(|v| v.trim().parse::<u32>().is_ok_and(|e| e >= 3)) {
         return Err(bad(OLD_ENGINE3));
     }
-    Ok((nine, head))
+    Ok((version, head))
 }
 
 impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        w.write_all(if self.engine >= 3 { MAGIC9 } else { MAGIC })?;
+        // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
+        if self.soak.is_some() && self.engine < 3 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
+        }
+        let version = match (self.engine, self.soak.is_some()) {
+            (3, true) => 10,
+            (3, false) => 9,
+            (4.., true) => 12,
+            (4.., false) => 11,
+            _ => 8,
+        };
+        w.write_all(match version {
+            12 => MAGIC12,
+            11 => MAGIC11,
+            10 => MAGIC10,
+            9 => MAGIC9,
+            _ => MAGIC,
+        })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         let f = self.f;
@@ -159,7 +259,12 @@ impl Canvas {
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
-        put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        if version >= 11 {
+            put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        } else {
+            // (three properties, as before engine 4: its paint is a tube's in oil)
+            put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2]]))?;
+        }
         put_all(w, wt.stroke.iter().map(|&v| f32::from_bits(v)))?;
         put_all(w, wt.touched.iter().map(|&v| f32::from_bits(v)))?;
         let ck = &wt.clock;
@@ -199,6 +304,11 @@ impl Canvas {
             put_u64(w, v)?;
         }
         put_u64(w, self.engine as u64)?;
+        // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
+        if version >= 11 {
+            put_all(w, self.gloss.iter().copied())?;
+            put_all(w, self.absorb.iter().copied())?;
+        }
         // the thinner's section (version 9), last: the solvent per pixel
         if self.engine >= 3 {
             let n = self.f.w * self.f.h;
@@ -208,12 +318,16 @@ impl Canvas {
                 put_all(w, std::iter::repeat_n(0.0f32, n))?;
             }
         }
+        // a raw canvas's soak section (version 10), last
+        if let Some(s) = &self.soak {
+            write_soak(w, s)?;
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
-        let (nine, header) = read_magic_header(r)?;
+        let (version, header) = read_magic_header(r)?;
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -280,8 +394,12 @@ impl Canvas {
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        let hide = get_all(r, n * 3)?;
-        wet.hide = hide.as_chunks::<3>().0.to_vec();
+        wet.hide = if version >= 11 {
+            get_all(r, n * 5)?.as_chunks::<5>().0.to_vec()
+        } else {
+            // (before engine 4: a tube paint's oil)
+            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0]).collect()
+        };
         wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.current = current;
@@ -336,9 +454,27 @@ impl Canvas {
             v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
-        match (nine, c.engine >= 3) {
+        if version >= 11 {
+            if c.engine < 4 {
+                return Err(bad("checkpoint material format holds a canvas of an engine before 4"));
+            }
+            c.gloss = get_all(r, n)?;
+            c.absorb = get_all(r, n)?;
+            if !c.gloss.iter().chain(&c.absorb).all(|v| v.is_finite() && *v >= 0.0) {
+                return Err(bad("checkpoint gloss or absorbency is invalid"));
+            }
+        } else {
+            if c.engine >= 4 {
+                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11 or PAINTC12"));
+            }
+            // (an older engine's canvas: an oil ground's gloss, nothing absorbent)
+            c.gloss = vec![crate::canvas::OIL_GROUND_GLOSS; n];
+            c.absorb = vec![0.0; n];
+        }
+        c.absorb_any = c.absorb.iter().any(|&a| a > 0.0);
+        match (version >= 9, c.engine >= 3) {
             (false, true) => return Err(bad(OLD_ENGINE3)),
-            (true, false) => return Err(bad("checkpoint version 9 holds an engine-1 or engine-2 canvas")),
+            (true, false) => return Err(bad(&format!("checkpoint version {version} holds an engine-1 or engine-2 canvas"))),
             (true, true) => {
                 let s = get_all(r, n)?;
                 if !s.iter().all(|v| v.is_finite() && *v >= 0.0) {
@@ -349,6 +485,16 @@ impl Canvas {
                 c.wet.solv = s;
             }
             (false, false) => {}
+        }
+        // raw formats go on with the soak section, which ends the file
+        if version == 10 || version == 12 {
+            if !c.f.is_whole() {
+                return Err(bad("checkpoint soak is on a crop render"));
+            }
+            c.soak = Some(Box::new(read_soak(r, n)?));
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
         }
         Ok((c, header))
     }
@@ -387,6 +533,34 @@ mod tests {
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
         b
+    }
+
+    /// An engine-4 canvas is written as version 11 and keeps its gloss, its
+    /// ground's absorbency and the oil in its wet paint; an older engine's
+    /// canvas is written as before (version 8 or 9, three properties, no
+    /// gloss) and read with an oil ground's gloss and a tube paint's oil.
+    #[test]
+    fn engine_4_has_its_own_format_and_older_engines_keep_theirs() {
+        let canvas = |engine: u32| {
+            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
+            c.gloss.iter_mut().for_each(|g| *g = 0.9);
+            c.absorb.iter_mut().for_each(|a| *a = 0.3);
+            c.wet.vol[0] = 1.5;
+            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5];
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let b = canvas(crate::ENGINE);
+        assert_eq!(&b[..8], b"PAINTC11");
+        let d = load(b).unwrap();
+        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5]));
+        for (engine, magic) in [(2, b"PAINTCK8"), (3, b"PAINTCK9")] {
+            let b = canvas(engine);
+            assert_eq!(&b[..8], magic);
+            let d = load(b).unwrap();
+            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0]), "engine {engine}");
+        }
     }
 
     #[test]

@@ -31,7 +31,7 @@ os.environ.pop("EASEL_BOX", None)
 
 HOME = Path.home()
 A = HOME / "src/a"
-TAG = "e017df8e0394fbe520b41ddac112e69e46621cd2"
+TAG = "3c7bf92d3f046bf64db863916487c0fa703d1e19"
 BRANCH = TAG
 BASE = A / "claude-paint-r26run"
 EXPORT = BASE / "scripts/export_r16_studio"

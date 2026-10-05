@@ -437,3 +437,29 @@ def test_the_export_says_whether_a_run_stopped_on_its_own_words(home, ending, sa
     assert r.returncode == 0, r.stderr
     p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
     assert p["said"] is said
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_viewer_preserves_readable_names_and_paint_colors_from_physical_palette_board(home, server, via):
+    # Captured Fable palette: ten labeled piles, including a third partial row.
+    # The old chart decoder dropped all metadata for this 1000px board.
+    pytest.importorskip("PIL.Image")
+    tmp_path, studio, log = home
+    with open(os.path.join(HERE, "fixtures", "fable-palette-board.png"), "rb") as f:
+        png = f.read()
+    log.write_text(start(str(studio)) + looks_at_once(("palette", {"palette": True}, png)))
+    if via == "static export":
+        out = tmp_path / "out"
+        r = export(tmp_path, out)
+        assert r.returncode == 0, r.stderr
+        events = json.loads((out / "data" / PAINTER / "events.json").read_text())["events"]
+    else:
+        status, data = server(f"/api/events?p={PAINTER}")
+        assert status == 200
+        events = json.loads(data)["events"]
+    piles = next(e for e in events if e["kind"] == "image")["palette"]
+    assert [p["name"] for p in piles] == [
+        "PILE 1", "WATER1", "WILLOW1", "SKY1", "WATER2", "WILLOW2", "SKY2", "DEEP", "MIDW", "LILAC"]
+    # Swatches show the colored paint, rather than the almost-black opacity cards.
+    assert all(max(int(p[k][i:i + 2], 16) for i in (1, 3, 5)) > 80
+               for p in piles for k in ("thick", "thin"))

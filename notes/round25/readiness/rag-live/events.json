@@ -1,0 +1,530 @@
+{
+  "captured": "2026-10-05T12:11:02Z",
+  "events": [
+    {
+      "ts": "2026-10-05T11:53:57.168Z",
+      "kind": "image",
+      "img": 0,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:54:23.099Z",
+      "kind": "image",
+      "img": 1,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:54:33.457Z",
+      "kind": "image",
+      "img": 2,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:54:38.728Z",
+      "kind": "image",
+      "img": 3,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:55:08.566Z",
+      "kind": "image",
+      "img": 4,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:56:16.012Z",
+      "kind": "image",
+      "img": 5,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:56:22.468Z",
+      "kind": "image",
+      "img": 6,
+      "look": "crop 300,0,700,300",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:56:39.851Z",
+      "kind": "image",
+      "img": 7,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:57:13.171Z",
+      "kind": "image",
+      "img": 8,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:57:26.692Z",
+      "kind": "image",
+      "img": 9,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:57:32.430Z",
+      "kind": "image",
+      "img": 10,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:57:52.921Z",
+      "kind": "image",
+      "img": 11,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:58:28.460Z",
+      "kind": "image",
+      "img": 12,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:58:40.712Z",
+      "kind": "image",
+      "img": 13,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:58:56.762Z",
+      "kind": "image",
+      "img": 14,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:59:08.549Z",
+      "kind": "image",
+      "img": 15,
+      "look": "crop 0,380,500,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:59:30.453Z",
+      "kind": "image",
+      "img": 16,
+      "look": "crop 500,380,1000,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:59:39.514Z",
+      "kind": "image",
+      "img": 17,
+      "look": "crop 500,380,1000,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T11:59:49.097Z",
+      "kind": "image",
+      "img": 18,
+      "look": "crop 0,400,500,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:04.457Z",
+      "kind": "image",
+      "img": 19,
+      "look": "crop 0,400,500,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:18.245Z",
+      "kind": "image",
+      "img": 20,
+      "look": "crop 0,400,500,600",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:25.160Z",
+      "kind": "image",
+      "img": 21,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:41.646Z",
+      "kind": "image",
+      "img": 22,
+      "look": "hold sn2_crest, at 500,560",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:41.733Z",
+      "kind": "image",
+      "img": 23,
+      "look": "hold sn2_low, at 300,660",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:00:49.519Z",
+      "kind": "image",
+      "img": 24,
+      "look": "hold sn2_crest, at 500,540",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:01:16.826Z",
+      "kind": "image",
+      "img": 25,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:01:49.668Z",
+      "kind": "image",
+      "img": 26,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:02:02.656Z",
+      "kind": "image",
+      "img": 27,
+      "look": "crop 250,200,750,520",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:02:13.693Z",
+      "kind": "image",
+      "img": 28,
+      "look": "crop 250,200,750,520",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:02:54.445Z",
+      "kind": "image",
+      "img": 29,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:03:16.440Z",
+      "kind": "image",
+      "img": 30,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:03:23.533Z",
+      "kind": "image",
+      "img": 31,
+      "look": "crop 250,50,750,420",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:03:45.720Z",
+      "kind": "image",
+      "img": 32,
+      "look": "crop 300,180,700,540",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:01.445Z",
+      "kind": "image",
+      "img": 33,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:06.903Z",
+      "kind": "image",
+      "img": 34,
+      "look": "crop 400,380,620,530",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:15.040Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r = rag{width=14}\nlocal stubzone = (ribbon({{528,444},{540,438},{552,428},{558,420}}, 18) - trunk2:grow(1))\nr:wipe(stubzone, {pressure=0.7, angle=-0.6, passes=2, refold=0.3})\nprint(drying(545,432))"
+    },
+    {
+      "ts": "2026-10-05T12:04:15.385Z",
+      "kind": "image",
+      "img": 35,
+      "look": "crop 400,380,620,530",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:22.035Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r:refold(); r:dip(0.6)\nlocal stubzone = (ribbon({{530,446},{540,438},{552,428},{560,418}}, 20) - trunk2:grow(1.5))\nr:wipe(stubzone, {pressure=0.8, angle=-0.6, passes=2, refold=0.2})"
+    },
+    {
+      "ts": "2026-10-05T12:04:22.443Z",
+      "kind": "image",
+      "img": 36,
+      "look": "crop 400,380,620,530",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:27.611Z",
+      "kind": "image",
+      "img": 37,
+      "look": "hold patch, at 580,425, crop 480,360,680,500",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:34.603Z",
+      "kind": "image",
+      "img": 38,
+      "look": "crop 400,380,620,530",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:41.166Z",
+      "kind": "image",
+      "img": 39,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:04:56.286Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r2 = rag{width=9}\nr2:dip(0.5)\nlocal paths = {\n {{392,240},{378,214},{352,196},{344,170}},\n {{470,186},{452,166},{456,140},{442,118}},\n {{612,244},{628,218},{652,204},{660,178}},\n {{534,160},{556,154},{566,128},{586,110},{596,92},{594,74}},\n}\nfor _,p in ipairs(paths) do\n  for k=1,3 do r2:wipe(p, {pressure=0.75}); r2:refold() end\n  r2:dip(0.4)\nend"
+    },
+    {
+      "ts": "2026-10-05T12:04:56.860Z",
+      "kind": "image",
+      "img": 40,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:06.372Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r3 = rag{width=12}\nr3:dip(0.8)\nlocal paths = {\n {{398,280},{388,262},{392,240},{378,214},{352,196},{344,170}},\n {{503,238},{478,214},{470,186},{452,166},{456,140},{442,118}},\n {{612,290},{622,268},{612,244},{628,218},{652,204},{660,178}},\n {{514,180},{534,160},{556,154},{566,128},{586,110},{596,92},{594,74}},\n}\nfor _,p in ipairs(paths) do\n  for k=1,4 do r3:wipe(p, {pressure=0.9}); r3:refold() end\n  r3:dip(0.6)\nend\nprint(drying(380,220), drying(300,120))"
+    },
+    {
+      "ts": "2026-10-05T12:05:06.990Z",
+      "kind": "image",
+      "img": 41,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:20.049Z",
+      "kind": "image",
+      "img": 42,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:26.000Z",
+      "kind": "image",
+      "img": 43,
+      "look": "hold s_top, at 380,150, crop 300,60,500,260",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:34.733Z",
+      "kind": "image",
+      "img": 44,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:43.812Z",
+      "kind": "image",
+      "img": 45,
+      "look": "hold sky_a, at 560,120, crop 460,40,700,240",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:43.898Z",
+      "kind": "image",
+      "img": 46,
+      "look": "hold sky_c, at 660,270, crop 560,180,760,340",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:05:59.955Z",
+      "kind": "image",
+      "img": 47,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:07.722Z",
+      "kind": "image",
+      "img": 48,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:16.639Z",
+      "kind": "image",
+      "img": 49,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:22.405Z",
+      "kind": "image",
+      "img": 50,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:41.648Z",
+      "kind": "image",
+      "img": 51,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:46.999Z",
+      "kind": "image",
+      "img": 52,
+      "look": "hold g_hi, at 640,110, crop 520,20,760,220",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:06:57.875Z",
+      "kind": "image",
+      "img": 53,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:04.052Z",
+      "kind": "image",
+      "img": 54,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:08.376Z",
+      "kind": "image",
+      "img": 55,
+      "look": "palette True",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:21.940Z",
+      "kind": "image",
+      "img": 56,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:35.987Z",
+      "kind": "image",
+      "img": 57,
+      "look": "hold up1, at 470,150, crop 380,60,600,260",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:42.473Z",
+      "kind": "image",
+      "img": 58,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:07:55.896Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r4 = rag{width=12}\nr4:dip(0.7)\nlocal p1 = {{486,131},{510,126},{535,120},{562,114}}\nlocal p2 = {{560,114},{600,112},{640,112},{680,113}}\nfor k=1,4 do r4:wipe(p1,{pressure=0.8}); r4:refold(); r4:wipe(p2,{pressure=0.8}); r4:refold() end"
+    },
+    {
+      "ts": "2026-10-05T12:07:56.249Z",
+      "kind": "image",
+      "img": 59,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:08:12.987Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r5 = rag{width=10}\nlocal p1 = {{484,131},{510,126},{535,120},{562,115}}\nlocal p2 = {{556,116},{600,113},{640,112},{684,113}}\nlocal p3 = {{484,124},{520,119},{560,111}}\nfor k=1,5 do r5:dip(0.8); r5:wipe(p1,{pressure=0.9}); r5:refold(); r5:wipe(p2,{pressure=0.9}); r5:refold(); r5:wipe(p3,{pressure=0.9}); r5:refold() end"
+    },
+    {
+      "ts": "2026-10-05T12:08:13.641Z",
+      "kind": "image",
+      "img": 60,
+      "look": "crop 450,40,700,250",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:08:27.210Z",
+      "kind": "image",
+      "img": 61,
+      "look": "",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:08:37.793Z",
+      "kind": "image",
+      "img": 62,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:08:51.110Z",
+      "kind": "image",
+      "img": 63,
+      "look": "hold sky_b, at 330,200, crop 250,120,450,300",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:09:00.579Z",
+      "kind": "image",
+      "img": 64,
+      "look": "hold sky_a, at 640,95, crop 540,20,740,200",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:09:15.163Z",
+      "kind": "image",
+      "img": 65,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:09:34.178Z",
+      "kind": "paint",
+      "img": null,
+      "look": null,
+      "code": "r6 = rag{width=16}\nfor k=1,3 do r6:dip(0.8); r6:wipe(scar, {pressure=0.85, angle=0, refold=0.2, passes=1}) end\nr6 = rag{width=16}\nfor k=1,2 do r6:dip(0.9); r6:wipe(scar, {pressure=0.95, angle=0.5, refold=0.15, passes=1}) end"
+    },
+    {
+      "ts": "2026-10-05T12:09:35.544Z",
+      "kind": "image",
+      "img": 66,
+      "look": "crop 300,40,700,330",
+      "code": null
+    },
+    {
+      "ts": "2026-10-05T12:09:49.868Z",
+      "kind": "image",
+      "img": 67,
+      "look": "mode squint, size 700",
+      "code": null
+    }
+  ]
+}

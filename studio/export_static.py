@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
 try:
     from PIL import Image
+    from palette_board import palette_board
 except ImportError:  # the web copies are an optimization: without Pillow the viewer shows the originals
     Image = None
 
@@ -40,6 +41,8 @@ VIEW = 1600         # the main view's copy, long side
 def palette_chips(data, names):
     """Match look.rs chart glyphs before browser color processing or canvas protections."""
     im = Image.open(io.BytesIO(data)).convert("RGB")
+    if im.width == 1000:
+        return palette_board(data)
     if im.width != 1124:
         return None
     px, rows = im.load(), []

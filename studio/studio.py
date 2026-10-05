@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["pillow"]
 # ///
 """The studio: watch a painter paint, live or replayed.
 
@@ -25,6 +25,7 @@ import re
 import threading
 import urllib.parse
 from datetime import datetime
+from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
@@ -359,6 +360,10 @@ def _parse(path):
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                    if re.search(r"palette (?!False)", ev.get("look", "")):
+                        chips = palette_board(base64.b64decode(x["data"]))
+                        if chips:
+                            ev["palette"] = chips
                     if parent is not None and c["events"][parent].get("ref"):
                         ev["ref"] = True  # a reference picture: never the painting
                     c["events"].append(ev)

@@ -1898,7 +1898,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 thinner += p.thinner() * w;
                 oil += p.mix.oil_rate * w;
                 wsum += w;
-                given.extend(p.parts.iter().map(|(n, k)| (n.clone(), k * w)));
+                // (its recipe as given, scaled to its share of the mix: each source's parts sum to w)
+                let k = w / p.given_sum.max(1e-9);
+                given.extend(p.parts.iter().map(|(n, q)| (n.clone(), q * k)));
             }
             if wsum <= 0.0 {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
@@ -1910,9 +1912,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
-            let heap = st.borrow_mut().board.knife(parts, 1.0, medium, solvent, oil, name);
+            // (the recipe printed sums to the shares: p:add counts its parts in those units)
+            let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
             time::knife(&st, mix.color);
-            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, given_sum: 1.0, heap, st: Some(st.clone()) })
+            Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, given_sum: wsum, heap, st: Some(st.clone()) })
         })?)?;
     }
     // palette{dirty=0..1, set_out={"tube name", ...}, clean=true}: how the board
@@ -2189,7 +2192,8 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
         let absorbent = match l.get::<Value>("absorbent")? {
             Value::Nil => 0.0,
             Value::Boolean(b) => if b { 1.0 } else { 0.0 },
-            Value::Number(n) => (n as f32).clamp(0.0, 1.0),
+            // (NaN passes a clamp, and would leave the ground's gloss NaN)
+            Value::Number(n) if !n.is_nan() => (n as f32).clamp(0.0, 1.0),
             Value::Integer(n) => (n as f32).clamp(0.0, 1.0),
             _ => return err("canvas: a ground layer's absorbent= is true or 0..1"),
         };

@@ -1951,6 +1951,22 @@ mod tests {
         s.run(r#"pile{{"lead white", 1}, turps=0.5}; pile{{"lead white", 1}, blot=0.3, oil="poppy"}; pile{{"lead white", 1}, thinner=0.5}"#).unwrap();
     }
 
+    /// A mix's printed recipe gives each heap its share, whatever its own
+    /// recipe sums to, and p:add counts in the units that recipe prints.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_mix_prints_its_heaps_in_their_shares_and_adds_in_those_units() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"local a = pile{{"lead white", 3}, {"cobalt blue", 1}}; local b = pile{{"vermilion", 1}}
+                 m = mix{{a, 1}, {b, 1}}
+                 local w = {}; for _, p in ipairs(m:parts()) do w[p[1]] = p[2] end
+                 assert(math.abs(w["vermilion"] - 1) < 1e-5 and math.abs(w["lead white"] - 0.75) < 1e-5, "half of the mix is vermilion")
+                 m2 = m:add{{"vermilion", 2}}
+                 local v = {}; for _, p in ipairs(m2:parts()) do v[p[1]] = p[2] end
+                 assert(math.abs(v["vermilion"] - 3) < 1e-5, "two parts more in the printed units")"#).unwrap();
+    }
+
     /// pile{oil=} grinds the paint in that oil: its drying rate against
     /// linseed's (paint's oil_rate_scales_drying has what the rate does).
     #[test]

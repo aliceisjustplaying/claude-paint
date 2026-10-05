@@ -2064,10 +2064,29 @@ unsafe fn lay_droplet(sf: &Surf, i: usize, v: f32, phi: f32, cap: f32, capped: b
     d
 }
 
+impl Spatter {
+    /// Check that every number in the flick is finite (see `Gesture::validate`).
+    pub fn validate(&self) -> Result<(), String> {
+        let nums = [("at.x", self.at.0), ("at.y", self.at.1), ("toward.x", self.toward.0), ("toward.y", self.toward.1), ("spread", self.spread), ("force", self.force)];
+        match nums.iter().find(|(_, v)| !v.is_finite()) {
+            Some((name, v)) => Err(format!("Spatter {name} is not finite: {v}")),
+            None => Ok(()),
+        }
+    }
+
+    #[track_caller]
+    pub(crate) fn assert_valid(&self) {
+        if let Err(e) = self.validate() {
+            panic!("{e}");
+        }
+    }
+}
+
 impl Canvas {
     /// Flick a held brush (see `Spatter`); returns how many droplets landed.
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
         held.tool.assert_valid();
+        sp.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
         }
@@ -2075,9 +2094,8 @@ impl Canvas {
             self.check_mask(m);
         }
         self.tally.touch();
-        let _id = self.next_stroke_ids(1);
-        let mm_per_px = self.px_mm();
         let id = self.next_stroke_ids(1);
+        let mm_per_px = self.px_mm();
         let sf = self.surf();
         let s = sf.scale;
         let mut rng = Rng::new(sp.seed);
@@ -2913,7 +2931,7 @@ mod part_tests {
 }
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
-pub(crate) const OIL_SHARE: f32 = 0.4;
+const OIL_SHARE: f32 = 0.4;
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).

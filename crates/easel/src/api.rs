@@ -584,7 +584,8 @@ impl UserData for Brush {
             let (mut ramps, mut shake, mut clip) = (None, None, None);
             if let Some(o) = &o {
                 check_keys(o, &["wobble", "orient", "ramps", "shake", "clip"], "gesture")?;
-                wobble = num(o, "wobble")?.unwrap_or(0.0).max(0.0);
+                wobble = num(o, "wobble")?.unwrap_or(0.0);
+                if !(wobble.is_finite() && (0.0..=100.0).contains(&wobble)) { return err("gesture: wobble must be 0 to 100 units"); }
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
                 shake = num(o, "shake")?;

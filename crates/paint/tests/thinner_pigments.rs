@@ -41,8 +41,9 @@ fn print_tube_table() {
 }
 
 /// Check 13 (a): historical pigment fields and legacy box tube ordering remain
-/// exact. New catalog tubes, new boxes and current engine labels are allowed,
-/// but the expanded current table has its own exact reviewed snapshot.
+/// exact. New catalog tubes, new boxes, current engine labels and engine 6's
+/// new fields (oil absorption, density, drain) are allowed, but the expanded
+/// current table has its own exact reviewed snapshot.
 #[test]
 fn c13_every_pigment_value_is_af49348s() {
     fn sections(table: &str) -> std::collections::BTreeMap<&str, Vec<&str>> {
@@ -60,6 +61,10 @@ fn c13_every_pigment_value_is_af49348s() {
         }
         result
     }
+    // a tube's line as af49348 prints it: without the fields engine 6 adds
+    fn historical(line: &str) -> String {
+        line.split_once(", oa: ").map_or_else(|| line.to_string(), |(a, _)| format!("{a} }}"))
+    }
     let got = tube_table();
     let old = sections(include_str!("thinner/tubes_af49348.txt"));
     let now = sections(&got);
@@ -69,10 +74,11 @@ fn c13_every_pigment_value_is_af49348s() {
             for tube in tubes {
                 let name = tube.split_once(", pigment:").expect("tube name").0;
                 let actual = current.iter().find(|line| line.split_once(", pigment:").expect("tube name").0 == name);
-                assert_eq!(actual.copied(), Some(tube), "historical catalog fields changed: {name}");
+                assert_eq!(actual.map(|l| historical(l)).as_deref(), Some(tube), "historical catalog fields changed: {name}");
             }
         } else {
-            assert_eq!(current, &tubes, "historical box tube values/order changed: {section}");
+            let current: Vec<String> = current.iter().map(|l| historical(l)).collect();
+            assert_eq!(current, tubes, "historical box tube values/order changed: {section}");
         }
     }
     assert_eq!(got, include_str!("thinner/tubes_current.txt"), "current expanded tube table changed");

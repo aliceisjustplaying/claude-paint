@@ -470,7 +470,7 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5, 1.0, 0.0, 1.0],
+                    hide: [0.5, 0.5, 1.0, 0.0, 1.0, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0],
                     cure: 0.0,
                     solvent: 0.0,
                 }
@@ -519,12 +519,12 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -549,12 +549,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, paint.wax]);
         }
     }
 
@@ -751,6 +751,10 @@ pub(crate) struct Surf {
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
     absorb: *mut f32,
+    /// Engine 6: the ground drains the film as its pigment packs
+    /// (`ground_drain`); before, it draws from the paint just laid
+    /// (`ground_draw`).
+    drain: bool,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
@@ -801,6 +805,9 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
+            // (engine 6: paint laid is fluid however packed it was where the
+            // brush took it up; the film's packed share, by volume, thins)
+            let hide = if self.drain { fluid_of(hide) } else { hide };
             for k in 0..hd.len() {
                 hd[k] += (hide[k] - hd[k]) * a;
             }
@@ -812,23 +819,29 @@ impl Surf {
             *vol = t;
             // engine 4: an absorbent ground under the film draws oil out of
             // the paint just laid, until its pores are full: a thin wash goes
-            // lean (stiff, matte, quick to set), thick paint barely notices
+            // lean (stiff, matte, quick to set), thick paint barely notices.
+            // Engine 6: it drains the film as its pigment packs, from the
+            // ground up (`ground_drain`)
             if !self.absorb.is_null() {
-                *vol = ground_draw(&mut *self.absorb.add(i), v, t, hd);
+                *vol = if self.drain { ground_drain(&mut *self.absorb.add(i), t, hd) } else { ground_draw(&mut *self.absorb.add(i), v, t, hd) };
             }
         }
     }
 
-    /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
-    /// left bare (as `wait` judges it) holds no film to have one.
+    /// Lift `v` coats off pixel `i`, and return the properties of the paint
+    /// lifted (engine 6: from the top down, `take_from`; before, the film's).
+    /// The paint left keeps its cure; a pixel left bare (as `wait` judges
+    /// it) holds no film to have one.
     #[inline]
-    unsafe fn take(&self, i: usize, v: f32) {
+    unsafe fn take(&self, i: usize, v: f32) -> Prop {
         unsafe {
             let vol = &mut *self.vol.add(i);
+            let got = if self.drain { take_from(&mut *self.hide.add(i), *vol, v) } else { *self.hide.add(i) };
             *vol -= v;
             if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
                 (*self.dry.add(i)).cure = 0.0;
             }
+            got
         }
     }
 }
@@ -881,6 +894,7 @@ impl Canvas {
             clump: self.engine >= 4,
             lean: self.engine >= 4,
             absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
+            drain: self.engine >= 6,
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
@@ -1005,7 +1019,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 10], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         ts += b.solvent;
@@ -1023,7 +1037,7 @@ fn feed(bristles: &mut [Bristle], k: f32) {
     for l in &mut lat {
         *l /= tv;
     }
-    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
+    hide = hide.map(|h| h / tv);
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
     let share_s = k * ts / bristles.len() as f32;
@@ -1617,7 +1631,7 @@ unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0; 5];
+        let mut got_h: Prop = [0.0; 10];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
@@ -1652,10 +1666,6 @@ unsafe fn exchange(
                         for k in 0..LAT {
                             got_l[k] += l[k] * tv;
                         }
-                        let hp = *sf.hide.add(i);
-                        for k in 0..hp.len() {
-                            got_h[k] += hp[k] * tv;
-                        }
                         if !sf.dry.is_null() {
                             got_c += (*sf.dry.add(i)).cure * tv;
                         }
@@ -1670,7 +1680,10 @@ unsafe fn exchange(
                                 got_s += ts / COAT_UM * px_area;
                             }
                         }
-                        sf.take(i, take);
+                        let hp = sf.take(i, take);
+                        for k in 0..hp.len() {
+                            got_h[k] += hp[k] * tv;
+                        }
                     }
                 }
                 if dep_per_w > 0.0 && !capped && phi <= 0.0 {
@@ -1729,11 +1742,12 @@ unsafe fn exchange(
                             1
                         };
                         // the source's paint, read once: nothing below writes
-                        // lat or hide at `i` (`take` lowers its volume, `add`
-                        // writes `j != i`). Its cure is read per destination:
-                        // `take` zeroes it when the film goes bare (see the
-                        // kernel_traps tests)
-                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
+                        // lat at `i` (`take` lowers its volume and, engine 6,
+                        // its packed share, and returns the paint it lifts;
+                        // `add` writes `j != i`). Its cure is read per
+                        // destination: `take` zeroes it when the film goes
+                        // bare (see the kernel_traps tests)
+                        let l = *sf.lat.add(i);
                         for &(tx, ty, share) in &to[..n_to] {
                             if share <= 0.0 {
                                 continue;
@@ -1777,7 +1791,7 @@ unsafe fn exchange(
                                     // (its film there thins but still covers it)
                                     let cj = &mut *sf.cover.add(j);
                                     *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
-                                    sf.take(i, m);
+                                    let hd = sf.take(i, m);
                                     sf.add(j, m, &l, hd, cure);
                                 }
                             }
@@ -2933,18 +2947,18 @@ mod part_tests {
     }
 }
 
-/// The share of a tube paint's volume that is oil (about 30–45%).
+/// The share of a tube paint's volume that is oil, as engines 4 and 5 take
+/// it (`ground_draw`). Real tube paint is 45–75% oil by volume; engine 6
+/// takes each paint's own (`Paint::oil_volume`, `ground_drain`).
 const OIL_SHARE: f32 = 0.4;
 
 /// An absorbent ground draws oil out of `v` coats of paint just laid on a
 /// film now `t` coats thick (engine 4), until its pores (`cap`, coats of oil
 /// it can still take) are full: up to 0.8 of the oil laid, the film's oil
 /// share (`hide[4]`) falling and its stiffness rising by what it lost.
-/// Returns the film's thickness after. Paint laid by a brush (`Surf::add`)
-/// and smeared back by a rag (`rag_lay`) are drawn alike: the ground's
-/// capillary pull, far stronger than a hand's pressure, doesn't care how the
-/// paint arrived.
+/// Returns the film's thickness after.
 pub(crate) fn ground_draw(cap: &mut f32, v: f32, t: f32, hd: &mut Prop) -> f32 {
+    // (engine 4 and 5; engine 6 drains the film, `ground_drain`)
     if *cap <= 0.0 {
         return t;
     }
@@ -2959,6 +2973,84 @@ pub(crate) fn ground_draw(cap: &mut f32, v: f32, t: f32, hd: &mut Prop) -> f32 {
     hd[4] *= 1.0 - lean;
     hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
     (t - take).max(0.0)
+}
+
+/// Engine 6: an absorbent ground drains the wet film over it, `t` coats of
+/// paint whose properties are `hd`, until its pores (`cap`, coats of oil)
+/// are full or the paint is down to its drained floor (`hd[6]`, of the
+/// oil `hd[4]` counts). Its capillary pull, far stronger than a hand's
+/// pressure, takes the oil at once, and the pigment packs from the ground
+/// up as a filter cake does: the packed share of the film (`hd[7]`, of its
+/// thickness) holds the floor's oil, the paint above it keeps all its own,
+/// and the surface keeps its gloss and its flow until the packed layer
+/// reaches it (`Canvas::bake`). The film's oil (`hd[4]`) is the two's, by
+/// volume, as paint mixes. Returns the film's thickness after.
+pub(crate) fn ground_drain(cap: &mut f32, t: f32, hd: &mut Prop) -> f32 {
+    if *cap <= 0.0 || t <= 0.0 {
+        return t;
+    }
+    let (floor, packed) = (hd[6].max(0.0), hd[7].clamp(0.0, 1.0));
+    let top = surface_oil(hd);
+    if packed >= 1.0 || top <= floor {
+        return t;
+    }
+    // each coat of the paint above gives up this much oil as it packs (its
+    // pigment, a share 1 − q of its tube paint's volume, holds q/(1 − q) of
+    // oil per unit of `oil`; q is the tube's own, `Paint::oil_volume`)
+    let q = hd[8].clamp(0.05, 0.95);
+    let r = q * (top - floor) / (1.0 - q + q * top);
+    let fluid = t * (1.0 - packed);
+    let take = (*cap).min(fluid * r);
+    if take <= 0.0 {
+        return t;
+    }
+    *cap -= take;
+    // the paint that packed, the packed layer it adds to, the film after
+    let u = (take / r).min(fluid);
+    let (left, under) = ((t - take).max(1e-9), packed * t + u - take);
+    hd[7] = (under / left).clamp(0.0, 1.0);
+    hd[4] = ((under * floor + (fluid - u) * top) / left).max(0.0);
+    t - take
+}
+
+/// Engine 6: `v` coats taken off a film `vol` coats thick whose properties
+/// are `hd`, from the top down: the paint above its packed layer first, at
+/// the surface's oil, then the packed paint, at its drained floor's. Leaves
+/// `hd` the film's after and returns the paint taken, broken up and fluid
+/// (none of it packed).
+pub(crate) fn take_from(hd: &mut Prop, vol: f32, v: f32) -> Prop {
+    let mut got = fluid_of(*hd);
+    let packed = hd[7].clamp(0.0, 1.0);
+    if packed <= 0.0 || vol <= 0.0 || v <= 0.0 {
+        return got;
+    }
+    let (o, floor, top) = (hd[4].max(0.0), hd[6].max(0.0), surface_oil(hd));
+    let v = v.min(vol);
+    let from_top = v.min(vol * (1.0 - packed));
+    let from_packed = v - from_top;
+    got[4] = (top * from_top + floor.min(o) * from_packed) / v;
+    let left = vol - v;
+    if left > 1e-9 {
+        hd[4] = ((o * vol - got[4] * v) / left).max(0.0);
+        hd[7] = ((packed * vol - from_packed) / left).clamp(0.0, 1.0);
+    }
+    got
+}
+
+/// Paint `hd` broken up and fluid: none of it packed (engine 6: paint laid,
+/// or taken up and laid again, `ground_drain`).
+#[inline]
+pub(crate) fn fluid_of(hd: Prop) -> Prop {
+    let mut h = hd;
+    h[7] = 0.0;
+    h
+}
+
+/// The oil at the surface of a film whose properties are `hd`: the paint's
+/// own above its packed layer (`ground_drain`; engine 6).
+pub(crate) fn surface_oil(hd: &Prop) -> f32 {
+    let (o, floor, packed) = (hd[4].max(0.0), hd[6].max(0.0), hd[7].clamp(0.0, 1.0));
+    if packed < 0.999 { ((o - packed * floor) / (1.0 - packed)).max(floor.min(o)) } else { o }
 }
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
@@ -2999,7 +3091,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 10], cure: 0.0 }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -3027,7 +3119,7 @@ impl Knife {
         }
         let color = mixbox::latent_to_linear_float_rgb(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { solvent: self.hide[3], oil: self.hide[4], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], wax: self.hide[9], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
@@ -3166,9 +3258,9 @@ impl Canvas {
                         if ex <= 1e-7 {
                             continue;
                         }
-                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
+                        let l = *sf.lat.add(i);
                         let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
-                        sf.take(i, ex);
+                        let hd = sf.take(i, ex);
                         if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
                         // pressed out past the blade's end into a ridge (off
                         // the canvas's edge there is nowhere to press it: it

@@ -31,7 +31,10 @@
 //! the solvent (still last), the surface's gloss and the ground's remaining
 //! absorbency, one f32 each per pixel. An older engine's canvas is written
 //! as it always was. Version 12 combines version 11 with the raw canvas's
-//! soak section after the solvent. After the header the
+//! soak section after the solvent. Versions 13 and 14 are engine 6's:
+//! versions 11 and 12 with three more properties to each pixel of wet paint
+//! (its packed oil, its drained floor and the share of the film packed on
+//! an absorbent ground, `crate::wet::Prop`). After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -70,6 +73,10 @@ const MAGIC10: &[u8; 8] = b"PAINTC10";
 const MAGIC11: &[u8; 8] = b"PAINTC11";
 /// Engine 4 materials followed by the raw canvas's soak section.
 const MAGIC12: &[u8; 8] = b"PAINTC12";
+/// Engine 6: version 11 with each wet pixel's packing (`crate::wet::Prop`).
+const MAGIC13: &[u8; 8] = b"PAINTC13";
+/// Engine 6 on a raw canvas: version 12 with each wet pixel's packing.
+const MAGIC14: &[u8; 8] = b"PAINTC14";
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
@@ -187,6 +194,8 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC10 => 10,
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
+        m if m == MAGIC13 => 13,
+        m if m == MAGIC14 => 14,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -213,11 +222,15 @@ impl Canvas {
         let version = match (self.engine, self.soak.is_some()) {
             (3, true) => 10,
             (3, false) => 9,
+            (6.., true) => 14,
+            (6.., false) => 13,
             (4.., true) => 12,
             (4.., false) => 11,
             _ => 8,
         };
         w.write_all(match version {
+            14 => MAGIC14,
+            13 => MAGIC13,
             12 => MAGIC12,
             11 => MAGIC11,
             10 => MAGIC10,
@@ -259,8 +272,11 @@ impl Canvas {
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
-        if version >= 11 {
+        if version >= 13 {
             put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+        } else if version >= 11 {
+            // (five properties: engines 4 and 5 have no ground's draw)
+            put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2], h[3], h[4]]))?;
         } else {
             // (three properties, as before engine 4: its paint is a tube's in oil)
             put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2]]))?;
@@ -394,11 +410,15 @@ impl Canvas {
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        wet.hide = if version >= 11 {
-            get_all(r, n * 5)?.as_chunks::<5>().0.to_vec()
+        let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
+        wet.hide = if version >= 13 {
+            get_all(r, n * 10)?.as_chunks::<10>().0.to_vec()
+        } else if version >= 11 {
+            // (engines 4 and 5: no ground's draw)
+            get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|h| [h[0], h[1], h[2], h[3], h[4], p, f, 0.0, q, 0.0]).collect()
         } else {
             // (before engine 4: a tube paint's oil)
-            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0]).collect()
+            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0, p, f, 0.0, q, 0.0]).collect()
         };
         wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
@@ -458,6 +478,9 @@ impl Canvas {
             if c.engine < 4 {
                 return Err(bad("checkpoint material format holds a canvas of an engine before 4"));
             }
+            if (version >= 13) != (c.engine >= 6) {
+                return Err(bad("checkpoint format and engine disagree: engine 6 and later save as PAINTC13 or PAINTC14, engines 4 and 5 as PAINTC11 or PAINTC12"));
+            }
             c.gloss = get_all(r, n)?;
             c.absorb = get_all(r, n)?;
             if !c.gloss.iter().chain(&c.absorb).all(|v| v.is_finite() && *v >= 0.0) {
@@ -487,7 +510,7 @@ impl Canvas {
             (false, false) => {}
         }
         // raw formats go on with the soak section, which ends the file
-        if version == 10 || version == 12 {
+        if version == 10 || version == 12 || version == 14 {
             if !c.f.is_whole() {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
@@ -535,31 +558,42 @@ mod tests {
         b
     }
 
-    /// An engine-4 canvas is written as version 11 and keeps its gloss, its
-    /// ground's absorbency and the oil in its wet paint; an older engine's
-    /// canvas is written as before (version 8 or 9, three properties, no
-    /// gloss) and read with an oil ground's gloss and a tube paint's oil.
+    /// An engine-6 canvas is written as version 13 and keeps all ten
+    /// properties of its wet paint (its packed and drained oil, the share
+    /// packed on its ground, its tube oil by volume and its wax); an engine-4 canvas is written as version
+    /// 11 and keeps its gloss, its ground's absorbency and the oil in its
+    /// wet paint, read with a paint naming no tubes' packing and nothing
+    /// packed; an older engine's canvas is written as before (version 8 or
+    /// 9, three properties, no gloss) and read with an oil ground's gloss and
+    /// a tube paint's oil.
     #[test]
-    fn engine_4_has_its_own_format_and_older_engines_keep_theirs() {
+    fn engine_4_and_6_have_their_own_formats_and_older_engines_keep_theirs() {
         let canvas = |engine: u32| {
             let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
             c.gloss.iter_mut().for_each(|g| *g = 0.9);
             c.absorb.iter_mut().for_each(|a| *a = 0.3);
             c.wet.vol[0] = 1.5;
-            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5];
+            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
             let mut b = Vec::new();
             c.write_state(&mut b, "").unwrap();
             b
         };
         let b = canvas(crate::ENGINE);
-        assert_eq!(&b[..8], b"PAINTC11");
+        assert_eq!(&b[..8], b"PAINTC13");
         let d = load(b).unwrap();
-        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5]));
+        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2]));
+        let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
+        for engine in [4, 5] {
+            let b = canvas(engine);
+            assert_eq!(&b[..8], b"PAINTC11");
+            let d = load(b).unwrap();
+            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5, p, f, 0.0, q, 0.0]), "engine {engine}");
+        }
         for (engine, magic) in [(2, b"PAINTCK8"), (3, b"PAINTCK9")] {
             let b = canvas(engine);
             assert_eq!(&b[..8], magic);
             let d = load(b).unwrap();
-            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0]), "engine {engine}");
+            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0, p, f, 0.0, q, 0.0]), "engine {engine}");
         }
     }
 

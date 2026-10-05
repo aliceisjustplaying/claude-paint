@@ -824,7 +824,15 @@ impl PileU {
         if self.mix.solvent > 0.0 {
             tail += &format!(", turps {}", fmt_num(self.mix.solvent));
         }
-        if self.mix.oil_rate != 1.0 {
+        if self.mix.engine >= 6 {
+            // (from engine 6 relative to the tubes' own oils: name the oil it is in now)
+            if (self.mix.oil_rate - 1.0).abs() > 1e-6 {
+                let r = self.mix.oil_rate * self.mix.tube_oil_rate;
+                let oils = [(1.0, "linseed"), (paint::palette::WALNUT_RATE, "walnut"), (paint::palette::POPPY_RATE, "poppy")];
+                let near = oils.iter().min_by(|a, b| (a.0 - r).abs().total_cmp(&(b.0 - r).abs())).unwrap();
+                tail += &format!(", in {} oil", near.1);
+            }
+        } else if self.mix.oil_rate != 1.0 {
             tail += if self.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
         }
         format!("pile({}; {tail})", parts.join(", "))
@@ -1803,16 +1811,22 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             } else {
                 None
             };
-            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy"
-            let oil_rate = match t.get::<Option<String>>("oil")?.as_deref() {
-                None | Some("linseed") => 1.0,
-                Some("walnut") => 0.8,
-                Some("poppy") => 0.6,
+            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy".
+            // From engine 6 the tubes come in their box's own oils (`palette::grind_of`) and
+            // oil= regrinds them: the rate is relative to theirs (`Mixture::oil_rate`)
+            let oil = t.get::<Option<String>>("oil")?;
+            let tubes = st.borrow().tubes.clone();
+            let six = tubes.engine >= 6;
+            let oil_rate = match oil.as_deref() {
+                None => 1.0,
+                Some("linseed") => 1.0,
+                Some("walnut") => if six { paint::palette::WALNUT_RATE } else { 0.8 },
+                Some("poppy") => if six { paint::palette::POPPY_RATE } else { 0.6 },
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
-            let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mut mix = tubes.pile(parts.clone());
+            let oil_rate = if six && oil.is_some() { oil_rate / mix.tube_oil_rate.max(1e-6) } else { oil_rate };
             mix.solvent = turps;
             mix.oil_rate = oil_rate;
             if st.borrow().canvas.is_none() {

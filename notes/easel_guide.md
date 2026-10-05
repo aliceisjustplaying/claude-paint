@@ -63,9 +63,14 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   cloth there (`"raw"`), and whether paint lies on it.
 - A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
   ground: it draws oil out of the paint laid straight on it until its pores
-  are full, so thin paint there goes lean, stiff, quick to set and matte,
-  while thick paint barely notices. Paint that has dried over it seals it.
-  An oil ground (the default) absorbs nothing and is semi-matte.
+  are full, so thin paint there goes lean, quick to set and matte, while
+  thick paint barely notices. The pigment packs from the ground up: the
+  paint above keeps its oil, its flow and its gloss until the packed layer
+  reaches the surface, and how far a thin film drains is its pigment's
+  (fine pigments keep the oil they pack with and dry semi-matte; coarse
+  ones, such as smalt, drain further and dry matte). Each box's tubes hold
+  as much oil as its period ground them with. Paint that has dried over it
+  seals it. An oil ground (the default) absorbs nothing and is semi-matte.
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -105,14 +110,18 @@ scraped off to make room.
 evaporates as the paint is laid, so it leaves a film that much thinner, of
 the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
-and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
-little slower) or `"poppy"` (dries much slower, yellows least).
+and leaves over painting time.) Your tubes come ground in the oils your
+box's colourmen used, some with a little wax (it dries slower and more
+matte). `oil` grinds the pile in another: `"linseed"`, `"walnut"` (dries a
+little slower) or `"poppy"` (dries slower still, yellows least).
 
 `blot` is the opposite of medium: the paint laid out on blotting paper
 first, which draws out that share of its own oil (0 to 0.5):
 `pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
 more opaque and much stiffer: it holds the ridges and furrows of the brush
-as it dries. A pile takes medium or blot, not both.
+as it dries. The paper draws no more than the pigment lets go: a paint
+already ground stiff, or of a fine pigment that holds its oil, gives up
+less than you ask. A pile takes medium or blot, not both.
 
 **The palette board.** Every pile is a heap on the board beside the easel.
 

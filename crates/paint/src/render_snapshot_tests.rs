@@ -135,6 +135,8 @@ fn native_roundtrip_is_bit_exact_for_every_engine_and_crop() {
                 (15.0, 8.0, 1.0),
                 (270.0, 89.0, 0.0),
                 (45.0, 3.0, 0.4),
+                (200.0, 90.0, 1.0),
+                (30.0, 0.0, 1.0),
             ] {
                 assert_eq!(
                     rgb_bits(&restored.lit(az, el, strength)),

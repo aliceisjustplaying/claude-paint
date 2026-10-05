@@ -325,13 +325,19 @@ impl RenderSnapshot {
         let (w, h) = (self.frame.w, self.frame.h);
         let um_px = self.um_px;
         let surf = &self.surface;
-        let (az, el) = (
-            azimuth.to_radians(),
-            elevation.clamp(3.0, 89.0).to_radians(),
-        );
-        let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
+        // 0 to 90 degrees, both ends exact (as `Canvas::seen_lit`)
+        let elevation = elevation.clamp(0.0, 90.0);
+        let (overhead, grazing) = (elevation >= 90.0, elevation <= 1e-3);
+        let (az, el) = (azimuth.to_radians(), elevation.to_radians());
+        let (lx, ly, lz) = if overhead {
+            (0.0, 0.0, 1.0)
+        } else if grazing {
+            (az.cos(), -az.sin(), 0.0)
+        } else {
+            (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin())
+        };
         let k = 0.5 / um_px;
-        let rise = el.tan() * um_px;
+        let rise = if overhead || grazing { 0.0 } else { el.tan() * um_px };
         let (hi, lo) = surf
             .par_iter()
             .fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v)))
@@ -339,13 +345,18 @@ impl RenderSnapshot {
                 || (f32::MIN, f32::MAX),
                 |(a, b), (c, d)| (a.max(c), b.min(d)),
             );
-        let steps = (((hi - lo) / rise).ceil() as usize)
-            .max(1)
-            .min(w.saturating_add(h));
-        let (sx, sy) = {
-            let m = (lx * lx + ly * ly).sqrt().max(1e-6);
-            (lx / m, ly / m)
+        let m = (lx * lx + ly * ly).sqrt();
+        let march = m > 1e-6 && (rise > 0.0 || grazing);
+        let steps = if !march {
+            0
+        } else if grazing {
+            w.saturating_add(h)
+        } else {
+            (((hi - lo) / rise).ceil() as usize)
+                .max(1)
+                .min(w.saturating_add(h))
         };
+        let (sx, sy) = if march { (lx / m, ly / m) } else { (0.0, 0.0) };
         let at = |x: isize, y: isize| {
             surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize]
         };
@@ -376,7 +387,7 @@ impl RenderSnapshot {
                 let mut lit = 1.0f32;
                 for s in 1..=steps {
                     let ray_height = h0 + rise * s as f32;
-                    if ray_height > shade_hi || lit == 0.0 {
+                    if ray_height >= shade_hi || lit == 0.0 {
                         break;
                     }
                     let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
@@ -385,10 +396,15 @@ impl RenderSnapshot {
                     }
                     let over = sat(px.round() as isize, py.round() as isize) - ray_height;
                     if over > 0.0 {
-                        lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
+                        lit = if grazing {
+                            0.0
+                        } else {
+                            lit.min(1.0 - (over / (0.5 * rise)).min(1.0))
+                        };
                     }
                 }
-                let diffuse = (ambient + (1.0 - ambient) * ndl * lit / lz).min(1.6);
+                let direct = if grazing { ndl * lit } else { ndl * lit / lz };
+                let diffuse = (ambient + (1.0 - ambient) * direct).min(1.6);
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 let wet = (self.wet[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);

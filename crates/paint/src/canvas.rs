@@ -212,6 +212,13 @@ pub struct Canvas {
     /// `Cracks::aged` fits its craquelure to).
     pub(crate) ground_um: f32,
     pub(crate) linen: Option<Linen>,
+    /// A paper support (engine 6), instead of linen.
+    pub(crate) paper: Option<crate::paper::Paper>,
+    /// The micro-roughness under a pixel, µm: the mean depth of the pores
+    /// below the surface's top envelope (`paper`), what a pastel stick and
+    /// a finger meet. Empty unless the support is paper; elsewhere it
+    /// follows the surface's gloss (`Canvas::micro_um`).
+    pub(crate) micro: Vec<f32>,
     /// Physical size: millimeters per unit (the canvas is 1000 units wide).
     pub(crate) mm_per_unit: f32,
     /// Wet paint on top of the dry picture.
@@ -233,6 +240,8 @@ pub struct Canvas {
     pub(crate) engine: u32,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
+    /// A sheet of paper laid over part of the picture (engine 7, `sheet.rs`).
+    pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
 
 impl Canvas {
@@ -271,6 +280,8 @@ impl Canvas {
             absorb_any: false,
             ground_um: 0.0,
             linen: None,
+            paper: None,
+            micro: Vec::new(),
             mm_per_unit: 0.7,
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
@@ -280,6 +291,7 @@ impl Canvas {
             hand_slice: None,
             engine: crate::ENGINE,
             soak: None,
+            sheet: None,
         }
     }
 
@@ -298,6 +310,50 @@ impl Canvas {
         self.mm_per_unit = width_mm / Frame::WIDTH_UNITS;
         self.build_support();
         self
+    }
+
+    /// Use a sheet of paper as the support (engine 6): its surface from its
+    /// fibres, flocs, mould, felt and pressing (`paper::lay`), its pores
+    /// taking oil as an absorbent ground does.
+    pub fn with_paper(mut self, p: crate::paper::Paper) -> Self {
+        self.linen = None;
+        self.paper = Some(p);
+        self.build_support();
+        // the pores take oil: the sheet's pore volume, in coats
+        let cap = p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um() / crate::surface::COAT_UM;
+        self.absorb.iter_mut().for_each(|v| *v = cap);
+        self.absorb_any = cap > 0.0;
+        // bare paper is matte
+        self.gloss.iter_mut().for_each(|v| *v = 0.05);
+        self
+    }
+
+    /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
+    /// paper's where paper is bare or only stained; over a paint film, the
+    /// film's own, which follows its gloss (a glossy film is smooth, about
+    /// 0.1 µm; a lean, matte one has its pigment standing proud, about
+    /// 2 µm: notes/research/dry_pigment_optics.md §4, estimates).
+    pub(crate) fn micro_um(&self, i: usize) -> f32 {
+        let paint = crate::lerp(2.0, 0.1, self.gloss[i].clamp(0.0, 1.0));
+        match self.micro.get(i) {
+            // a film thinner than the pores leaves them open
+            Some(&m) => {
+                let film_um = self.film[i] * crate::surface::COAT_UM;
+                let t = (film_um / m.max(1e-3)).min(1.0);
+                crate::lerp(m, paint, t)
+            }
+            None => paint,
+        }
+    }
+
+    /// How stiffly the surface at pixel `i` gives under a point load, MPa
+    /// per µm (a Winkler foundation: the sheet's z modulus over its
+    /// caliper). A canvas on its stretcher, or a board, is all but rigid.
+    pub(crate) fn give_mpa_per_um(&self, _i: usize) -> f32 {
+        match self.paper {
+            Some(p) => p.z_mpa / p.caliper_um().max(10.0),
+            None => 10.0,
+        }
     }
 
     /// Use a woven linen support.

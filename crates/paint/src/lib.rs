@@ -24,8 +24,11 @@ pub mod graphite;
 pub mod rag;
 pub mod scene;
 pub mod palette;
+pub mod paper;
+pub mod pastel;
 pub mod pigment;
 pub mod rng;
+pub mod sheet;
 mod sched;
 pub mod shape;
 pub mod soak;
@@ -90,14 +93,21 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-/// - 6: an absorbent ground drains paint as its pigment allows
+/// - 6: paper as a support (`paper`); pastel as a stick that rests on the
+///   tooth, wears to facets and sheds what it abrades (`pastel`); the stump
+///   moves pastel; a pastel's colour is its pigments' dry (`pastel::dry_color`).
+///   An engine-5 log's pastel replays as it was painted (`graphite`).
+///   An absorbent ground drains paint as its pigment allows
 ///   (`bristle::ground_drain`): to the oil left when the pigment packs, and
 ///   below it only for pigments coarser than the ground's pores, the packed
 ///   layer growing up from the ground while the surface keeps its oil, flow
-///   and gloss; the tubes hold the oil their box's period ground them with
-///   (`palette::Period`), and a rag's smear is drained as a brush's paint is
-///   (notes/research/pigment_oil.md).
-pub const ENGINE: u32 = 6;
+///   and gloss; the tubes hold the oil their box's colourmen ground them with
+///   (`palette::Period`, `palette::grind_of`), and a rag's smear is drained
+///   as a brush's paint is (notes/research/pigment_oil.md).
+/// - 7: most of what a pastel stick abrades comes away as crumbs that ride
+///   under its face and settle in the paper's hollows (`pastel::SHED`), so a
+///   stroke covers several times its real contact, as measured.
+pub const ENGINE: u32 = 7;
 
 /// Hermite smoothstep.
 #[inline]

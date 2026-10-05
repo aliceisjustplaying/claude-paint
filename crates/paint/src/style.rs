@@ -172,10 +172,23 @@ impl Style {
     }
 
     fn prepare_on(&self, c: Canvas, seed: u64) -> Canvas {
-        let mut c = c
+        let c = c
             .with_engine(self.palette.engine)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
+        self.ground_on(c, seed)
+    }
+
+    /// A sheet of paper (engine 6) of this style's width, with its ground
+    /// layers (if any) laid on it.
+    pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_size_mm(self.width_mm).with_paper(paper);
+        self.ground_on(c, seed)
+    }
+
+    /// This style's ground layers laid on `c`, bottom first.
+    fn ground_on(&self, c: Canvas, seed: u64) -> Canvas {
+        let mut c = c;
         // the canvas is prepared alike in every engine: engine 4's stiffer
         // films and clumping hair are the painting's, not the primer's
         let engine = c.engine;

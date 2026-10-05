@@ -230,6 +230,14 @@ impl Canvas {
     /// Lay the bare support: woven linen height in µm, averaged over each
     /// pixel's footprint so threads finer than a pixel don't alias.
     pub(crate) fn build_support(&mut self) {
+        if let Some(p) = self.paper {
+            let f = self.f;
+            let s = crate::paper::lay(&p, f.x0, f.y0, f.w, f.h, self.px_mm());
+            self.height = s.height;
+            self.micro = s.micro;
+            self.surf_gen += 1;
+            return;
+        }
         let Some(l) = self.linen else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);

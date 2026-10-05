@@ -194,7 +194,43 @@ fn session_dir(name: &str) -> PathBuf {
     root().join("out/easel").join(name)
 }
 fn sock_path(name: &str) -> PathBuf {
-    session_dir(name).join("sock")
+    short_sock(&session_dir(name))
+}
+/// The session's socket, in its directory when the path fits a sockaddr_un
+/// (104 bytes on macOS, 108 on Linux), else under a private directory in the
+/// temp dir (or /tmp, if the temp dir's own path is too long), named by a hash
+/// of the session directory: a studio checked out deep in a tree fails to bind
+/// with "path must be shorter than SUN_LEN" otherwise. If no private directory
+/// is to be had, the long path stands, and bind says why.
+fn short_sock(dir: &Path) -> PathBuf {
+    let p = dir.join("sock");
+    if p.as_os_str().len() < 100 {
+        return p;
+    }
+    // fnv1a, not DefaultHasher: client and server must agree across Rust releases
+    let file = format!("{:016x}.sock", fnv1a(dir.as_os_str().as_encoded_bytes()));
+    // the user is whoever owns the studio (the nearest existing ancestor of the session dir)
+    let owner = dir.ancestors().find_map(|a| std::fs::metadata(a).ok()).map(|m| std::os::unix::fs::MetadataExt::uid(&m));
+    let Some(uid) = owner else { return p };
+    for base in [std::env::temp_dir(), PathBuf::from("/tmp")] {
+        let private = base.join(format!("easel-{uid}"));
+        let s = private.join(&file);
+        if s.as_os_str().len() < 100 && private_dir(&private, uid) {
+            return s;
+        }
+    }
+    p
+}
+/// Whether dir is a directory only uid can enter, making it (0700) if it is
+/// missing. In a shared temp dir another user could make it first, or make
+/// it a symlink: then it isn't private, and isn't used.
+fn private_dir(dir: &Path, uid: u32) -> bool {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    let _ = std::fs::DirBuilder::new().mode(0o700).create(dir);
+    match std::fs::symlink_metadata(dir) {
+        Ok(m) => m.is_dir() && m.uid() == uid && m.mode() & 0o077 == 0,
+        Err(_) => false,
+    }
 }
 fn log_path(name: &str) -> PathBuf {
     root().join("paintings/lua").join(format!("{name}.lua"))
@@ -1484,6 +1520,43 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_long_session_dir_gets_a_short_socket() {
+        use std::os::unix::fs::MetadataExt;
+        let short = std::path::Path::new("/s/out/easel/p");
+        assert_eq!(super::short_sock(short), short.join("sock"));
+        // under a directory this test makes, so its nearest existing ancestor is this
+        // user's (the temp dir itself may be root's, as /tmp is on Linux)
+        let mine = std::env::temp_dir().join(format!("easel-long-test-{}", std::process::id()));
+        std::fs::create_dir_all(&mine).unwrap();
+        let long = mine.join("d".repeat(120)).join("out/easel/p");
+        let s = super::short_sock(&long);
+        assert!(s.as_os_str().len() < 100, "{s:?}");
+        let private = std::fs::symlink_metadata(s.parent().unwrap()).unwrap();
+        assert!(private.is_dir() && private.mode() & 0o077 == 0, "the socket's directory is private");
+        assert_eq!(s, super::short_sock(&long), "the same directory, the same socket");
+        // The private <tmp>/easel-<uid> it made stays: it is the one live servers use,
+        // and removing it under a running easel would take its socket away.
+        std::fs::remove_dir(&mine).unwrap();
+    }
+    #[test]
+    fn a_shared_socket_dir_is_not_used() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let d = std::env::temp_dir().join(format!("easel-shared-test-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let me = std::fs::metadata(&d).unwrap().uid();
+        assert!(!super::private_dir(&d, me), "open to others");
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(super::private_dir(&d, me));
+        assert!(!super::private_dir(&d, me.wrapping_add(1)), "another user's");
+        let link = d.with_extension("link");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&d, &link).unwrap();
+        assert!(!super::private_dir(&link, me), "a symlink");
+        std::fs::remove_file(&link).unwrap();
+        std::fs::remove_dir(&d).unwrap();
+    }
     use super::*;
 
     /// A stray look numbered at the top of u64 leaves no number above it: the look is

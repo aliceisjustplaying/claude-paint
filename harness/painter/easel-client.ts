@@ -146,11 +146,12 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; ref?: string; hold?: string; at?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette) return ["--palette"];
 	if (p.survey) a.push("--survey");
 	if (p.compare) a.push("--compare", p.compare);
+	if (p.ref) a.push("--ref", p.ref);
 	if (p.hold) a.push("--hold", p.hold);
 	if (p.at) a.push("--at", p.at);
 	if (p.crop) a.push("--crop", p.crop);

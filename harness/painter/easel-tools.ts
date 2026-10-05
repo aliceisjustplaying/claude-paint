@@ -49,6 +49,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true shows the whole canvas at full detail, as several tiles (with mode, not crop or size). " +
 				"compare: the path of an earlier look, shown left of the same view now. " +
+				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
 				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade, seen in the same light and mode as the passage (crop sets the passage). It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
@@ -57,6 +58,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 				light: Type.Optional(Type.String()),
 				survey: Type.Optional(Type.Boolean()),
 				compare: Type.Optional(Type.String()),
+				ref: Type.Optional(Type.String()),
 				hold: Type.Optional(Type.String()),
 				at: Type.Optional(Type.String()),
 				palette: Type.Optional(Type.Boolean()),
@@ -66,6 +68,13 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 			async execute(id, p, signal, onUpdate, ctx) {
 				let said: string;
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				if (p.ref && (p.survey || p.compare || p.hold)) throw new Error("look: ref is a look of its own: no survey, compare or hold");
+				// ref: a picture of the motif in this studio, nothing outside it (as `read`)
+				let ref = p.ref || undefined;
+				if (ref !== undefined) {
+					ref = studioPath(studio, ref);
+					if (ref === undefined) throw new Error("look: ref is the path of a picture of the motif in this studio");
+				}
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)
 				if (compare !== undefined) {
@@ -73,7 +82,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string): void {
 					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
 				}
 				try {
-					said = await atEasel(studio, ["look", ...lookArgs({ ...p, compare })], undefined, signal);
+					said = await atEasel(studio, ["look", ...lookArgs({ ...p, compare, ref })], undefined, signal);
 				} catch (e) {
 					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
 				}

@@ -518,6 +518,15 @@ impl Palette {
         Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0 }
     }
 
+    /// How the parts (tube index, fraction by volume) look dry, in a pastel
+    /// stick (engine 6): `pastel::dry_color` from each tube's masstone,
+    /// scattering in oil and refractive index.
+    pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
+        let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(|| self.scat.iter().cloned().fold(0.0, f32::max), |i| self.scat[i]);
+        let list: Vec<(crate::Rgb, f32, f32, f32)> = parts.iter().map(|&(i, f)| (self.tubes[i].color, self.scat[i], crate::pastel::refractive_index(self.tubes[i].name), f)).collect();
+        crate::pastel::dry_color(&list, white)
+    }
+
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
     /// piles of one recipe vary.
     pub fn remix(&self, m: &Mixture, amount: f32, rng: &mut Rng) -> Mixture {

@@ -215,8 +215,9 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                // 2: a drawing with pastel, its cells in color (graphite.rs)
-                put_u64(w, if d.has_color() { 2 } else { 1 })?;
+                // 2: a drawing with pastel, its cells in color; 3: engine 6's pastel,
+        // with what lies in the tooth (graphite.rs)
+                put_u64(w, d.layout())?;
                 put_all(w, d.to_f32s())?;
             }
         }
@@ -244,6 +245,38 @@ impl Canvas {
                 put_all(w, self.wet.solv.iter().copied())?;
             } else {
                 put_all(w, std::iter::repeat_n(0.0f32, n))?;
+            }
+        }
+        // engine 6's section: the paper (if the support is paper) and its
+        // micro-roughness per pixel
+        if self.engine >= 6 {
+            match self.paper {
+                None => put_u64(w, 0)?,
+                Some(p) => {
+                    put_u64(w, 1)?;
+                    for v in [p.grammage, p.fibre_mm, p.fibre_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
+                        put_f32(w, v)?;
+                    }
+                    put_u64(w, p.seed)?;
+                    match p.felt {
+                        None => put_u64(w, 0)?,
+                        Some(f) => {
+                            put_u64(w, 1)?;
+                            put_f32(w, f.cell_mm)?;
+                            put_f32(w, f.depth_um)?;
+                        }
+                    }
+                    match p.laid {
+                        None => put_u64(w, 0)?,
+                        Some(l) => {
+                            put_u64(w, 1)?;
+                            put_f32(w, l.per_cm)?;
+                            put_f32(w, l.chain_mm)?;
+                            put_f32(w, l.deficit)?;
+                        }
+                    }
+                    put_all(w, self.micro.iter().copied())?;
+                }
             }
         }
         Ok(())
@@ -357,9 +390,9 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            v @ (1 | 2) => {
+            v @ (1..=3) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
-                let d = crate::graphite::Drawing::from_f32s(n, whole, v == 2, |k| get_all(r, k))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
@@ -409,6 +442,40 @@ impl Canvas {
                 c.wet.solv = s;
             }
             (false, false) => {}
+        }
+        if c.engine >= 6 {
+            match get_u64(r)? {
+                0 => {}
+                1 => {
+                    let mut v = [0.0f32; 12];
+                    for x in v.iter_mut() {
+                        *x = get_f32(r)?;
+                    }
+                    if !v.iter().all(|x| x.is_finite()) {
+                        return Err(bad("checkpoint paper is invalid"));
+                    }
+                    let seed = get_u64(r)?;
+                    let felt = match get_u64(r)? {
+                        0 => None,
+                        1 => Some(crate::paper::Felt { cell_mm: get_f32(r)?, depth_um: get_f32(r)? }),
+                        _ => return Err(bad("checkpoint paper felt flag is invalid")),
+                    };
+                    let laid = match get_u64(r)? {
+                        0 => None,
+                        1 => Some(crate::paper::Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
+                        _ => return Err(bad("checkpoint paper laid flag is invalid")),
+                    };
+                    c.paper = Some(crate::paper::Paper {
+                        grammage: v[0], fibre_mm: v[1], fibre_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
+                        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+                    });
+                    c.micro = get_all(r, n)?;
+                    if !c.micro.iter().all(|x| x.is_finite() && *x >= 0.0) {
+                        return Err(bad("checkpoint micro-roughness is invalid"));
+                    }
+                }
+                _ => return Err(bad("checkpoint paper flag is invalid")),
+            }
         }
         Ok((c, header))
     }
@@ -485,6 +552,29 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// Engine 6: a sheet of paper with stick pastel in its tooth survives a
+    /// checkpoint bit for bit (the paper, its micro-roughness, the loose and
+    /// bound pastel), and goes on taking pastel as it would have.
+    #[test]
+    fn paper_and_stick_pastel_survive_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_engine(6).with_paper(crate::paper::Paper::drawing(2));
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(200.0));
+        c.fix_pastel(None, 0.15);
+        c.stick_stroke(&mut st, &line(260.0));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
+        assert!(r.pixels() == c.pixels() && r.height == c.height && r.micro == c.micro && r.paper == c.paper);
+        let mut st2 = st.clone();
+        c.stick_stroke(&mut st, &line(300.0));
+        r.stick_stroke(&mut st2, &line(300.0));
+        assert!(r.pixels() == c.pixels() && st == st2);
     }
 
     /// A pastel drawing (in color, with its tooth) survives a checkpoint bit

@@ -482,6 +482,77 @@ fix(mask)                             -- fixative between layers
 The numbers (how much a stroke lays, how fast the tooth fills, what dry
 pigment looks like) are estimates, not measurements.
 
+**Pastel in engine 6.** From engine 6 (a painting begun now) a pastel is a
+stick: a solid that rests on the tooth, wears and sheds what it abrades.
+An older painting's pastel draws as above.
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
+h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
+q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
+p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
+p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
+p:line(pts, {pressure=0.5})    -- a pencil's call: pressure as force (5 N at 1), held at 60°
+smudge(pts, {force=1, pad=})   -- a finger drawn along a path (pad: a stump's few mm²)
+fix(mask)                      -- binds what is there, and darkens it a little
+feel(x, y)                     -- what a fingertip feels there
+```
+
+- **One stroke at a time.** `stroke` is a single movement of the hand:
+  `force` in newtons (a feathered touch 0.1–0.5, normal 0.5–2, heavy 2–5),
+  `alt` the stick's angle to the paper in degrees (upright 90, on its side 0),
+  `azimuth` where its upper end points (degrees: 0 to the right, 90 down the
+  canvas; a right hand holds it at about 45), `roll` turned about its axis,
+  `speed` in mm/s. Each is a number or a list along the points. The hand
+  lands and lifts as a hand does: its force comes up from nothing over about
+  50 ms of the stroke and falls back over about 40 ms.
+- **The stick rests on the tooth.** Under the force it sinks into the paper's
+  micro-relief until the material it meets carries the force: the paper gives
+  a little (it is compressible), and the soft pastel yields on the tops it
+  touches. A light stroke touches only the highest fibres and leaves the
+  paper's grain broken through the mark; a heavy one reaches into the pores.
+- **It wears.** It lays what it abrades, in proportion to the force and the
+  distance (Archard's law), and wears flat against the paper: a stick held
+  one way grows a facet and draws wider as it does; rolled or tilted it cuts a
+  new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
+  says how many facets it has and how long it is.
+- **The tooth fills.** Loose pastel in the pores is a third body the stick
+  slides on: the more there is, the less a stroke lays, until the paper
+  refuses it. Fixative binds it into a rough crust that files the stick again,
+  so a fixed passage takes more pastel; and darkens it a little, as the resin
+  wets the particles.
+- **The finger** picks up loose pastel and lays it down along its path as fine
+  grains pressed into the pores: colours drag into each other and the passage
+  covers more for its thickness. It leaves fixed pastel where it is.
+- **Colour.** A stick is its pigments as they look dry: absorption as in oil,
+  scattering raised by the contrast between each pigment and air (much for
+  ultramarine, Prussian blue, the lakes and the earths' clays; little for
+  vermilion and the chromes). Dry blacks are greyer than in oil.
+- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+  far it has set) and the pastel in the tooth (loose or fixed; a little, the
+  tooth taking it, half full and more, full).
+
+**Paper (engine 6).** `canvas{size=, aspect=, paper={...}}` instead of
+`linen=`: a sheet laid from its fibres (a random fibre network, with flocs),
+pressed on a felt (its grain) and calendered. Every key has a default (a
+160 g/m² cotton drawing paper with a felt grain):
+
+| key | |
+|---|---|
+| `tone` | the sheet's colour: parts of tubes, as a ground's paste (`{{"cobalt blue", 1}, {"lead white", 3}}`), seen dry |
+| `grammage` | g/m² (90–250 for drawing papers) |
+| `fibre`, `fibre_width`, `thickness`, `coarseness` | fibre length (mm), width (µm), collapsed thickness (µm), mass per length (mg/m) |
+| `porosity`, `floc`, `floc_size`, `press`, `calender` | the sheet's pore share; the share of fibres in flocs and their size (mm); how much of the thickness variation the press turns into density (0.5–0.8); calendering 0..1 |
+| `felt` | `{cell=mm, depth=µm}`, or `false` for none |
+| `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mould's wires |
+| `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+
+A ground is optional on paper. Thin oil paint on it goes lean and matte, as
+on an absorbent ground. The numbers come from paper physics and, where no
+measurement of artists' papers exists, are estimates
+(notes/research/paper_surface.md).
+
 ## The rag
 
 ```lua
@@ -666,6 +737,7 @@ other option, and nothing on the canvas or the clock changes.
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier look on the left and the same view now on the right, at the same height: what a change did |
+| `ref: "<a picture in the studio>"` | the motif (a photograph, a study) pinned beside the easel: fitted to the canvas's shape, on the left, beside the same view of the canvas: the same crop, size, mode and grid |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage. A knife shows what is on it; a pile, a fresh load. It shows the paint on the knife, not how it would look laid |
 
 A whole view is the canvas scaled down to a fifth or less: small marks,

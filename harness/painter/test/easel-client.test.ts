@@ -206,12 +206,18 @@ test("a rebuild returned by open is polled and a stalled count is bounded", asyn
 test("abort during rebuild polling stops admission and removes listeners", async () => {
 	const studio = stubStudio("echo 'rebuilding from the log (0 of 9 chunks)'");
 	const ac = new AbortController();
-	const timer = setTimeout(() => ac.abort(), 250);
+	const rejected = assert.rejects(atEasel(studio, ["look"], undefined, ac.signal), /aborted/i);
 	try {
-		await assert.rejects(atEasel(studio, ["look"], undefined, ac.signal), /aborted/i);
+		const deadline = Date.now() + 5000;
+		while (!existsSync(join(studio, "calls")) || calls(studio).length < 2) {
+			assert.ok(Date.now() < deadline, "the client must enter rebuild polling before abort");
+			await new Promise(resolve => setTimeout(resolve, 10));
+		}
+		ac.abort();
+		await rejected;
 		assert.ok(calls(studio).every(c => c === "status"));
 		assert.equal(getEventListeners(ac.signal, "abort").length, 0);
-	} finally { clearTimeout(timer); }
+	} finally { ac.abort(); await rejected; }
 });
 
 test("invalid rebuild replies never admit a command or open another session", async () => {

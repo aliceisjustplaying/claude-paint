@@ -1,0 +1,924 @@
+{
+  "verified_at": "2026-10-05T15:57:05.275205+00:00",
+  "interpretation": "Live studio presence without a final gallery entry counts as gallery missing. Assets only; no new gallery entries or descriptions.",
+  "manifest_count": 75,
+  "live_gallery_ids": [
+    "r01-coast",
+    "r01-mountains",
+    "r01-winter",
+    "r02-coast",
+    "r02-mountains",
+    "r02-winter",
+    "r03-free",
+    "r03-green",
+    "r03-near",
+    "r04-free",
+    "r04-green",
+    "r04-near",
+    "r07-1",
+    "r07-2",
+    "r07-3",
+    "r07-python",
+    "r08-1",
+    "r08-2",
+    "r08-3",
+    "r09-1",
+    "r09-2",
+    "r09-3",
+    "r10-1",
+    "r10-2",
+    "r10-3",
+    "r11-astra",
+    "r11-fable",
+    "r11-flash",
+    "r12-tree1",
+    "r12-tree2",
+    "r12-tree3",
+    "r13-tree1",
+    "r13-tree2",
+    "r13-tree3",
+    "r14-p1",
+    "r14-p1a",
+    "r14-p2",
+    "r14-p3",
+    "r15-p1",
+    "r15-p2",
+    "r15-p3",
+    "r16-a1",
+    "r16-a2",
+    "r16-a3",
+    "r16-b1",
+    "r16-b2",
+    "r16-b3",
+    "r16-c1",
+    "r16-c2",
+    "r16-c3",
+    "r16-d2",
+    "r16-d3",
+    "r17-f1",
+    "r17-f2",
+    "r17-f3",
+    "r17-o1",
+    "r17-o2",
+    "r17-o3",
+    "r18-bun",
+    "r18-dsk",
+    "r18-gem",
+    "r18-glm",
+    "r18-mimo",
+    "r18-muse",
+    "r19-gemb",
+    "r19-gemf",
+    "r19-kimif",
+    "r19-lunab",
+    "r19-lunaf",
+    "r19-musef",
+    "r19-newf",
+    "r19-selfh",
+    "r19-sonf",
+    "r20-new",
+    "r21.5-sonf"
+  ],
+  "manifest_ids": [
+    "r01-coast",
+    "r01-mountains",
+    "r01-winter",
+    "r02-coast",
+    "r02-mountains",
+    "r02-winter",
+    "r03-free",
+    "r03-green",
+    "r03-near",
+    "r04-free",
+    "r04-green",
+    "r04-near",
+    "r07-1",
+    "r07-2",
+    "r07-3",
+    "r07-python",
+    "r08-1",
+    "r08-2",
+    "r08-3",
+    "r09-1",
+    "r09-2",
+    "r09-3",
+    "r10-1",
+    "r10-2",
+    "r10-3",
+    "r11-astra",
+    "r11-fable",
+    "r11-flash",
+    "r12-tree1",
+    "r12-tree2",
+    "r12-tree3",
+    "r13-tree1",
+    "r13-tree2",
+    "r13-tree3",
+    "r14-p1",
+    "r14-p1a",
+    "r14-p2",
+    "r14-p3",
+    "r15-p1",
+    "r15-p2",
+    "r15-p3",
+    "r16-a1",
+    "r16-a2",
+    "r16-a3",
+    "r16-b1",
+    "r16-b2",
+    "r16-b3",
+    "r16-c1",
+    "r16-c2",
+    "r16-c3",
+    "r16-d2",
+    "r16-d3",
+    "r17-f1",
+    "r17-f2",
+    "r17-f3",
+    "r17-o1",
+    "r17-o2",
+    "r17-o3",
+    "r18-bun",
+    "r18-dsk",
+    "r18-gem",
+    "r18-glm",
+    "r18-mimo",
+    "r18-muse",
+    "r19-gemb",
+    "r19-gemf",
+    "r19-kimif",
+    "r19-lunab",
+    "r19-lunaf",
+    "r19-musef",
+    "r19-newf",
+    "r19-selfh",
+    "r19-sonf",
+    "r20-new",
+    "r21.5-sonf"
+  ],
+  "manifest_live_match": true,
+  "unique_runner_studios": 57,
+  "items": [
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "A1",
+      "studio": "paint-studio-9aae10",
+      "status": "already published",
+      "gallery_id": "r16-a1",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 01:59:13 A1: reader",
+        "2026-09-27 02:01:34 A1: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "B1",
+      "studio": "paint-studio-cd267e",
+      "status": "already published",
+      "gallery_id": "r16-b1",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 01:58:18 B1: reader",
+        "2026-09-27 02:00:52 B1: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "C1",
+      "studio": "paint-studio-3be9e8",
+      "status": "already published",
+      "gallery_id": "r16-c1",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:14:01 C1: reader",
+        "2026-09-27 02:16:13 C1: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "D1",
+      "studio": "paint-studio-6399ad",
+      "status": "excluded: failed",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 01:18:45 D1: reader",
+        "2026-09-27 01:20:57 D1: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "D2",
+      "studio": "paint-studio-7b31aa",
+      "status": "already published",
+      "gallery_id": "r16-d2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 01:41:05 D2: reader",
+        "2026-09-27 01:43:25 D2: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "D3",
+      "studio": "paint-studio-b5323f",
+      "status": "already published",
+      "gallery_id": "r16-d3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 01:43:27 D3: painting (google/gemini-3.8-flash)",
+        "2026-09-27 02:02:11 D3: painter finished (exit 0) after 19 min"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "B2",
+      "studio": "paint-studio-7ace8e",
+      "status": "already published",
+      "gallery_id": "r16-b2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:45:19 B2: reader",
+        "2026-09-27 02:45:44 B2: record MISSING"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "A2",
+      "studio": "paint-studio-9cf69b",
+      "status": "already published",
+      "gallery_id": "r16-a2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:42:35 A2: reader",
+        "2026-09-27 02:44:16 A2: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "C2",
+      "studio": "paint-studio-75c237",
+      "status": "already published",
+      "gallery_id": "r16-c2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:55:23 C2: reader",
+        "2026-09-27 02:57:13 C2: record written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "A3",
+      "studio": "paint-studio-7ff345",
+      "status": "already published",
+      "gallery_id": "r16-a3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:44:18 A3: painting (claude-opus-5-5)",
+        "2026-09-27 03:32:58 A3: painter finished (exit 0) after 49 min"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "B3",
+      "studio": "paint-studio-774267",
+      "status": "already published",
+      "gallery_id": "r16-b3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:45:46 B3: painting (claude-opus-5-5)",
+        "2026-09-27 03:32:50 B3: painter finished (exit 0) after 47 min"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r16/run",
+      "lane": "C3",
+      "studio": "paint-studio-96b5e4",
+      "status": "already published",
+      "gallery_id": "r16-c3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 02:57:14 C3: painting (claude-opus-5-5)",
+        "2026-09-27 03:27:43 C3: painter finished (exit 0) after 30 min"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "F1",
+      "studio": "paint-studio-cfa19c",
+      "status": "already published",
+      "gallery_id": "r17-f1",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 15:04:43 F1: finished painting written",
+        "2026-09-27 21:17:52 F1: done already"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "F2",
+      "studio": "paint-studio-497bcf",
+      "status": "already published",
+      "gallery_id": "r17-f2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 16:36:07 F2: finished painting written",
+        "2026-09-27 21:17:52 F2: done already"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "F3",
+      "studio": "paint-studio-358aea",
+      "status": "already published",
+      "gallery_id": "r17-f3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 21:48:50 F3: finishing in the background -> ~/tmp/gallery-fcf9c110/r17/run/F3_finished.png",
+        "2026-09-27 22:05:55 F3: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "O1",
+      "studio": "paint-studio-1def1a",
+      "status": "already published",
+      "gallery_id": "r17-o1",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 12:40:04 O1: record written",
+        "2026-09-27 12:42:58 O1: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "O2",
+      "studio": "paint-studio-4fb403",
+      "status": "already published",
+      "gallery_id": "r17-o2",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 14:00:02 O2: record written",
+        "2026-09-27 14:04:59 O2: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r17/run",
+      "lane": "O3",
+      "studio": "paint-studio-c6b5dd",
+      "status": "already published",
+      "gallery_id": "r17-o3",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 15:13:34 O3: finishing in the background -> ~/tmp/gallery-fcf9c110/r17/run/O3_finished.png",
+        "2026-09-27 15:21:47 O3: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18/run",
+      "lane": "MIMO",
+      "studio": "paint-studio-f705c2",
+      "status": "already published",
+      "gallery_id": "r18-mimo",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 22:13:47 MIMO: finishing in the background -> ~/tmp/gallery-fcf9c110/r18/run/MIMO_finished.png",
+        "2026-09-27 22:24:25 MIMO: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18/run",
+      "lane": "GLM",
+      "studio": "paint-studio-3f743e",
+      "status": "already published",
+      "gallery_id": "r18-glm",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 23:57:05 GLM: finishing in the background -> ~/tmp/gallery-fcf9c110/r18/run/GLM_finished.png",
+        "2026-09-28 00:24:25 GLM: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18/run",
+      "lane": "DSK",
+      "studio": "paint-studio-c766c5",
+      "status": "already published",
+      "gallery_id": "r18-dsk",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-28 01:22:11 DSK: finishing in the background -> ~/tmp/gallery-fcf9c110/r18/run/DSK_finished.png",
+        "2026-09-28 01:58:12 DSK: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18/run",
+      "lane": "BUN",
+      "studio": "paint-studio-520026",
+      "status": "already published",
+      "gallery_id": "r18-bun",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-28 01:59:17 BUN: finishing in the background -> ~/tmp/gallery-fcf9c110/r18/run/BUN_finished.png",
+        "2026-09-28 03:25:18 BUN: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18/run",
+      "lane": "MUSE",
+      "studio": "paint-studio-2564f4",
+      "status": "already published",
+      "gallery_id": "r18-muse",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 13:28:20 MUSE: finishing in the background -> ~/tmp/gallery-fcf9c110/r18/run/MUSE_finished.png",
+        "2026-09-27 13:31:40 MUSE: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r18g/run",
+      "lane": "GEM",
+      "studio": "paint-studio-c71699",
+      "status": "already published",
+      "gallery_id": "r18-gem",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-27 15:11:42 GEM: finishing in the background -> ~/tmp/gallery-fcf9c110/r18g/run/GEM_finished.png",
+        "2026-09-27 15:18:54 GEM: finished painting written"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "LUNAF1",
+      "studio": "paint-studio-f0e4ab",
+      "status": "already published",
+      "gallery_id": "r19-lunaf",
+      "completion_receipt": [],
+      "check": "check: ok: 36 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 00:32:00 LUNAF1: finished painting written",
+        "2026-09-28 00:34:11 LUNAF1: check: ok: 36 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 4 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "LUNAB1",
+      "studio": "paint-studio-db6324",
+      "status": "already published",
+      "gallery_id": "r19-lunab",
+      "completion_receipt": [],
+      "check": "check: ok: 18 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 00:17:14 LUNAB1: finished painting written",
+        "2026-09-28 00:18:30 LUNAB1: check: ok: 18 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 3 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "GEMF1",
+      "studio": "paint-studio-851a37",
+      "status": "already published",
+      "gallery_id": "r19-gemf",
+      "completion_receipt": [],
+      "check": "check: ok: 141 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 03:39:14 GEMF1: finished painting written",
+        "2026-09-28 04:12:31 GEMF1: check: ok: 141 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 70 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "GEMB1",
+      "studio": "paint-studio-69c343",
+      "status": "already published",
+      "gallery_id": "r19-gemb",
+      "completion_receipt": [],
+      "check": "check: ok: 172 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 02:43:47 GEMB1: finished painting written",
+        "2026-09-28 02:54:53 GEMB1: check: ok: 172 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 23 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "KIMIF1",
+      "studio": "paint-studio-919cfd",
+      "status": "already published",
+      "gallery_id": "r19-kimif",
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-29 18:45:01 KIMIF1: usage limit; asking the provider again in 30 min (not a crash)",
+        "2026-09-29 19:15:02 KIMIF1: the usage limit hasn't lifted in 24 h; painter stops (rerun to go on)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "MIMOF1",
+      "studio": "paint-studio-11997b",
+      "status": "excluded: failed",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-29 18:45:01 MIMOF1: usage limit; asking the provider again in 30 min (not a crash)",
+        "2026-09-29 19:15:02 MIMOF1: the usage limit hasn't lifted in 24 h; painter stops (rerun to go on)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "MUSEF1",
+      "studio": "paint-studio-2a634e",
+      "status": "already published",
+      "gallery_id": "r19-musef",
+      "completion_receipt": [],
+      "check": "check: ok: 155 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 02:47:01 MUSEF1: finished painting written",
+        "2026-09-28 02:53:40 MUSEF1: check: ok: 155 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 14 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "CTEST1",
+      "studio": "paint-studio-ebf843",
+      "status": "excluded: compaction test",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-09-28 14:21:43 CTEST1: the painter is done: sitting 3 added no painting"
+      ],
+      "check": "check: ok: 34 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 14:24:54 CTEST1: finished painting written",
+        "2026-09-28 14:27:39 CTEST1: check: ok: 34 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 6 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-58dfc6",
+      "status": "already published",
+      "gallery_id": "r19-sonf",
+      "completion_receipt": [
+        "2026-09-28 23:19:41 SONF1: the painter is done: sitting 3 added no painting"
+      ],
+      "check": "check: ok: 323 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-28 23:41:58 SONF1: finished painting written",
+        "2026-09-29 00:04:04 SONF1: check: ok: 323 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 44 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "SONB1",
+      "studio": "paint-studio-bfd78b",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": "check: ok: 350 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-29 03:51:44 SONB1: finish exit 0",
+        "2026-09-29 05:47:47 SONB1: check exit 0"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "SELF1",
+      "studio": "paint-studio-6e8898",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-09-29 01:00:37 SELF1: sitting 2 (claude-sonnet-5, painter harness, 68 chunks on the easel, 62 painting)",
+        "2026-09-29 01:19:02 SELF1: stopped by hand in sitting 2 (104 chunks; started without the user's go-ahead): no more sittings"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "SELFH1",
+      "studio": "paint-studio-b3a3c7",
+      "status": "already published",
+      "gallery_id": "r19-selfh",
+      "completion_receipt": [
+        "2026-09-29 02:22:47 SELFH1: the painter is done: sitting 2 added no painting"
+      ],
+      "check": "check: ok: 72 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-29 02:34:09 SELFH1: finished painting written",
+        "2026-09-29 02:44:09 SELFH1: check: ok: 72 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 21 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r19/run",
+      "lane": "NEWF1",
+      "studio": "paint-studio-e708c7",
+      "status": "already published",
+      "gallery_id": "r19-newf",
+      "completion_receipt": [],
+      "check": "check: ok: 57 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-29 21:22:40 NEWF1: finished painting written",
+        "2026-09-29 21:32:02 NEWF1: check: ok: 57 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 21 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r20/run",
+      "lane": "NEW1",
+      "studio": "paint-studio-3cab71",
+      "status": "already published",
+      "gallery_id": "r20-new",
+      "completion_receipt": [
+        "2026-09-29 19:08:46 NEW1: the painter is done: sitting 2 added no painting"
+      ],
+      "check": "check: ok: 17 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-09-29 19:12:17 NEW1: finished painting written",
+        "2026-09-29 19:15:29 NEW1: check: ok: 17 chunks replay to the same canvas; the painter saved no picture; the studio's committed record equals its log (exit 0, 7 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r23/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-496bb9",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-03 11:29:46 INNS1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-03 11:29:46 INNS1: sitting 1 (claude-opus-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r24/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-ea8319",
+      "status": "completed, gallery missing",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-10-04 23:44:51 INNS1: the painter is done: sitting 2 added no painting"
+      ],
+      "check": "check: ok: 119 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-04 23:44:58 INNS1: finished painting written",
+        "2026-10-05 00:13:02 INNS1: check: ok: 119 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log (exit 0, 28 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r24.1/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-2f7993",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-04 23:53:16 INNS1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-04 23:53:16 INNS1: sitting 1 (claude-fable-5-1, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r24.2/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-8cc0b8",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-05 00:00:58 INNS1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-05 00:00:58 INNS1: sitting 1 (claude-opus-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r24.3/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-24be5f",
+      "status": "excluded: sitting cap reached, no runner completion",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": "check: ok: 415 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-05 03:15:13 INNS1: finished painting written",
+        "2026-10-05 04:43:16 INNS1: check: ok: 415 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log (exit 0, 89 min)"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r25/run",
+      "lane": "FRDC1",
+      "studio": "paint-studio-d95ea6",
+      "status": "completed, gallery missing",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-10-05 14:10:19 FRDC1: the painter is done: sitting 6 reviewed whole and detail views and added no painting"
+      ],
+      "check": "check: ok: 234 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-05 16:56:52 FRDC1: done already",
+        "2026-10-05 16:57:02 FRDC1: done already"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r26/run",
+      "lane": "MONT1",
+      "studio": "paint-studio-12e572",
+      "status": "completed, gallery missing",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-10-05 14:33:57 MONT1: the painter is done: sitting 3 reviewed whole and detail views and added no painting"
+      ],
+      "check": "check: ok: 147 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-05 16:56:52 MONT1: done already",
+        "2026-10-05 16:57:02 MONT1: done already"
+      ]
+    },
+    {
+      "run": "~/tmp/gallery-fcf9c110/r27/run",
+      "lane": "HOPR1",
+      "studio": "paint-studio-7c4dd1",
+      "status": "completed, gallery missing",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-10-05 16:44:23 HOPR1: the painter is done: sitting 3 reviewed whole and detail views and added no painting"
+      ],
+      "check": "check: ok: 137 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-05 16:45:28 HOPR1: final render written (painter outcome is in p1_outcome.json)",
+        "2026-10-05 16:48:17 HOPR1: check: ok: 137 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log (exit 0, 4 min)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21/runner/run",
+      "lane": "FRDC1",
+      "studio": "paint-studio-35c488",
+      "status": "excluded: sitting cap reached, no runner completion",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": "check: ok: 571 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 503 of its 571 chunks from the log); the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-02 20:01:11 FRDC1: finished painting written",
+        "2026-10-02 23:45:20 FRDC1: check: ok: 571 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 503 of its 571 chunks from the log); the painter saved no picture; the studio's committed record equals its log (exit 0, 438 min)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-106bf6",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-01 23:44:32 SONF1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-01 23:44:32 SONF1: sitting 1 (claude-sonnet-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21/runner/run",
+      "lane": "FRDC2",
+      "studio": "paint-studio-f99282",
+      "status": "excluded: sitting cap reached, no runner completion",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": "check: ok: 323 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 278 of its 323 chunks from the log); the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-02 23:24:04 FRDC2: finished painting written",
+        "2026-10-02 23:55:16 FRDC2: check: ok: 323 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 278 of its 323 chunks from the log); the painter saved no picture; the studio's committed record equals its log (exit 0, 70 min)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21/runner/run",
+      "lane": "FRDC3",
+      "studio": "paint-studio-3f29bf",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-03 05:35:08 FRDC3: reattached to \"painting\": 383 chunks \u00b7 2400px \u00b7 size=720, aspect=0.8, linen={13, 12}, seed=1824",
+        "2026-10-03 05:35:08 FRDC3: sitting 3 (space-bunny-free, painter harness, 383 chunks on the easel, 297 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21.1/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-125996",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-02 00:04:08 SONF1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-02 00:04:08 SONF1: sitting 1 (claude-sonnet-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21.2/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-482665",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-02 00:16:56 SONF1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-02 00:16:56 SONF1: sitting 1 (claude-sonnet-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21.3/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-6f0308",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-02 00:23:33 SONF1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-02 00:23:33 SONF1: sitting 1 (claude-sonnet-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21.4/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-b08dc3",
+      "status": "excluded: no runner completion, interrupted or abandoned",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": null,
+      "runner_tail": [
+        "2026-10-02 00:29:06 SONF1: easel \"painting\" open: 0 chunks \u00b7 2400px \u00b7 no canvas yet",
+        "2026-10-02 00:29:06 SONF1: sitting 1 (claude-sonnet-5-5, painter harness, 0 chunks on the easel, 0 painting)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round21.5/runner/run",
+      "lane": "SONF1",
+      "studio": "paint-studio-3a958c",
+      "status": "already published",
+      "gallery_id": "r21.5-sonf",
+      "completion_receipt": [
+        "2026-10-02 09:33:09 SONF1: the painter is done: sitting 3 added no painting"
+      ],
+      "check": "check: ok: 510 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 332 of its 510 chunks from the log); the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-02 11:11:39 SONF1: finished painting written",
+        "2026-10-02 13:43:42 SONF1: check: ok: 510 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 332 of its 510 chunks from the log); the painter saved no picture; the studio's committed record equals its log (exit 0, 251 min)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round22/runner/run",
+      "lane": "BUNT1",
+      "studio": "paint-studio-ba1453",
+      "status": "excluded: sitting cap reached, no runner completion",
+      "gallery_id": null,
+      "completion_receipt": [],
+      "check": "check: ok: 436 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 428 of its 436 chunks from the log); the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-03 03:58:27 BUNT1: finished painting written",
+        "2026-10-03 04:58:38 BUNT1: check: ok: 436 chunks replay to the live canvas; the replay equals the live canvas saved at close (the session had replayed 428 of its 436 chunks from the log); the painter saved no picture; the studio's committed record equals its log (exit 0, 153 min)"
+      ]
+    },
+    {
+      "run": "~/src/a/claude-paint/notes/round22.1/runner/run",
+      "lane": "INNS1",
+      "studio": "paint-studio-33a5bf",
+      "status": "completed, gallery missing",
+      "gallery_id": null,
+      "completion_receipt": [
+        "2026-10-02 22:48:10 INNS1: the painter is done: sitting 3 added no painting"
+      ],
+      "check": "check: ok: 311 chunks replay to the live canvas; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log",
+      "runner_tail": [
+        "2026-10-02 23:21:08 INNS1: finished painting written",
+        "2026-10-02 23:47:28 INNS1: check: ok: 311 chunks replay to the live canvas; the replay equals the live canvas saved at close; the painter saved no picture; the studio's committed record equals its log (exit 0, 59 min)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,151 @@
+{
+  "verified_at_utc": "2026-10-05T19:45:03.333Z",
+  "state": "running; provider responded and painting tools succeeded",
+  "studio": "paint-studio-aef22d",
+  "source_commit": "3f3f21150249688c4421aa763c7f4e3f5ed3ff91",
+  "baseline_engine_source": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+  "source_change_scope": "notes/round28 and notes/round29 prompt/runner snapshots only; engine,harness,materials unchanged",
+  "model_receipt": {
+    "type": "model_change",
+    "id": "87529de8",
+    "parentId": null,
+    "timestamp": "2026-10-05T19:43:21.415Z",
+    "provider": "anthropic",
+    "modelId": "claude-opus-5-5"
+  },
+  "thinking_receipt": {
+    "type": "thinking_level_change",
+    "id": "d6312502",
+    "parentId": "87529de8",
+    "timestamp": "2026-10-05T19:43:21.415Z",
+    "thinkingLevel": "high"
+  },
+  "provider": "anthropic",
+  "model": "claude-opus-5-5",
+  "thinking": "high",
+  "transport": "pi-black",
+  "engine": 5,
+  "box": "giverny",
+  "tube_count": 15,
+  "reader": false,
+  "sitting_limit": null,
+  "support_and_proportions": "painter chosen",
+  "launcher": "launchd art.stillwet.painter.r29",
+  "launchd_state": "running",
+  "session_basename": "2026-10-05T19-43-21-155Z_01a10d97-9842-74bc-8ba2-3fffdbec00cd.jsonl",
+  "session_id": "01a10d97-9842-74bc-8ba2-3fffdbec00cd",
+  "successful_tools": [
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:24.753Z",
+      "isError": false
+    },
+    {
+      "tool": "status",
+      "timestamp": "2026-10-05T19:43:24.774Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:27.835Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:27.837Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:27.840Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:30.878Z",
+      "isError": false
+    },
+    {
+      "tool": "read",
+      "timestamp": "2026-10-05T19:43:30.881Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:44:38.292Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:44:53.059Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T19:44:53.183Z",
+      "isError": false
+    },
+    {
+      "tool": "paint",
+      "timestamp": "2026-10-05T19:44:58.538Z",
+      "isError": false
+    },
+    {
+      "tool": "look",
+      "timestamp": "2026-10-05T19:44:58.668Z",
+      "isError": false
+    }
+  ],
+  "read_requests": [
+    {
+      "path": "BRIEF.md",
+      "offset": null,
+      "limit": null
+    },
+    {
+      "path": "notes/easel_guide.md",
+      "offset": null,
+      "limit": null
+    },
+    {
+      "path": "notes/studio_notes.md",
+      "offset": null,
+      "limit": null
+    },
+    {
+      "path": "notes/research/giverny_materials.md",
+      "offset": null,
+      "limit": null
+    },
+    {
+      "path": "notes/journal.md",
+      "offset": null,
+      "limit": null
+    },
+    {
+      "path": "notes/research/oil_paint_physics.md",
+      "offset": null,
+      "limit": null
+    }
+  ],
+  "private_viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-aef22d",
+  "private_viewer_http": 200,
+  "private_picker_contains_r29_mont": true,
+  "remote_mac_verification": "not independently checked from another Mac",
+  "reference_directory_present": false,
+  "approved_template_matches_r28": true,
+  "classifier_matches_r27": true,
+  "sha256": {
+    "binary": "6a1b88c24b8286962c60e9ee1dc64695daa635332e6a929fa8e63c5e6feff543",
+    "brief": "fac49550c09758fa4d7cc2dbf1a22f532bc3241dbb6ba67ec3ddab127ad66a90",
+    "runtime_runner": "75a492fc125f0beb64680217c958de21bd9ef9e3805ec58fa21f15c28008b74b",
+    "materials": "eee9425c465aed938b8f56b603828efd0491d5580076212efd4e0c35029204c4",
+    "guide": "0d3cf01547d125bbedcef71bba7f08cef132d893fb027bfed80c6c32ca18146c"
+  },
+  "runtime_pin_note": "Runnable copy sets TAG to frozen source snapshot; source copy retains preceding snapshot pin. All approved prompt text is frozen in snapshot.",
+  "previous_new_hopper": "R28 stopped and preserved; service removed, saved canvas/session retained",
+  "actual_saved_log_header": [
+    "--@ box giverny",
+    "--@ engine 5"
+  ]
+}

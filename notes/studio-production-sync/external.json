@@ -1,0 +1,133 @@
+{
+  "checkedUTC": "2026-10-05T15:34:33.768Z",
+  "revision": "fa2a0f10300b55d93473b021f297916523e890b8",
+  "assets": [
+    {
+      "url": "https://stillwet.art/studio/code-display.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "sha256": "49ae3c9ab637449ce57ef113231c20a3a5b230b1ce0f02d8bf7254f1ff4e97ea"
+    },
+    {
+      "url": "https://stillwet.art/studio/code-format.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "sha256": "a8f7f29b9d0c05964e41fab660574a0eb4ff1ba5582aa9f7c7b807c8da25b8a1"
+    },
+    {
+      "url": "https://stillwet.art/studio/index.html",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "sha256": "f2612b1b4a8e614b4d3665a359fcb9517dde4f72dd427c172706fbc769c1c297"
+    },
+    {
+      "url": "https://stillwet.art/studio/stream.css",
+      "status": 200,
+      "type": "text/css; charset=utf-8",
+      "sha256": "cb67ab9545d56e032ae8307e4e52ac33c8a3ae9d4e4b9ddf0fac88d1671324ca"
+    },
+    {
+      "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_bg.wasm",
+      "status": 200,
+      "type": "application/wasm",
+      "sha256": "d19a7a72e30beed2639e1ff268c31263ded381323d30afbeadad156e52d0417d"
+    },
+    {
+      "url": "https://stillwet.art/studio/vendor/stylua/stylua_lib_web.js",
+      "status": 200,
+      "type": "text/javascript; charset=utf-8",
+      "sha256": "5a5f3e2dd8403a6983322b3586f77d62b3b29765981fa24d47d56b6060e32e19"
+    }
+  ],
+  "inventory": 80,
+  "runs": [
+    {
+      "painter": "paint-studio-7c4dd1",
+      "round": "r27",
+      "lane": "HOPR",
+      "outcome": null,
+      "events": 354,
+      "images": 75,
+      "lastEvent": "2026-10-05T15:33:22.950Z",
+      "eventsURL": "https://stillwet.art/studio/data/paint-studio-7c4dd1/events.json",
+      "deepLink": "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+      "sourceStatus": 200,
+      "sourceBytes": 45765,
+      "imagesChecked": [
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/img/73.png",
+          "status": 200,
+          "type": "image/png",
+          "bytes": 389502
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/73.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 61657
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/t/73.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 3826
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/img/74.png",
+          "status": 200,
+          "type": "image/png",
+          "bytes": 79774
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/v/74.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 13480
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-7c4dd1/t/74.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 2731
+        }
+      ]
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "round": "r26",
+      "lane": "MONT",
+      "outcome": {
+        "status": "finished",
+        "reason": "the painter is done: sitting 3 reviewed whole and detail views and added no painting"
+      },
+      "events": 702,
+      "images": 156,
+      "lastEvent": "2026-10-05T13:33:57.756Z",
+      "eventsURL": "https://stillwet.art/studio/data/paint-studio-12e572/events.json",
+      "deepLink": "https://stillwet.art/studio/?p=paint-studio-12e572",
+      "sourceStatus": 200,
+      "sourceBytes": 63829,
+      "imagesChecked": [
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/img/155.png",
+          "status": 200,
+          "type": "image/png",
+          "bytes": 1200272
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/v/155.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 182231
+        },
+        {
+          "url": "https://stillwet.art/studio/data/paint-studio-12e572/t/155.jpg",
+          "status": 200,
+          "type": "image/jpeg",
+          "bytes": 3879
+        }
+      ]
+    }
+  ],
+  "galleryUnchanged": true
+}

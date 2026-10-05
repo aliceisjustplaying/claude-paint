@@ -1,0 +1,164 @@
+{
+  "id": "r22.1-inns",
+  "status": "ready substitute",
+  "verified_at": "2026-10-05T17:47:26.722432+00:00",
+  "provenance": "User-authorized closest historical substitute; unavailable original source 0e00118 remains unverified. This video shows the substitute replay, not a guaranteed exact original engine replay.",
+  "source_commit": "f334aef11d0c069b083371d2cb8ceb4865664e83",
+  "source_archive_sha256": "b2e5d73547121754a9257a29b9704f7b6416d0d71756ccbb9f96e5e6ecf87287",
+  "source_build_inputs": {
+    "crates": "31a597ce72b6469eea9abcbc8ffaba15f737c14e",
+    ".cargo": "5c84b761634ef22c668dae552223290c2409a635",
+    "Cargo.toml": "ce974d34b0d54916251d9b4e9dd52231f7ab964b",
+    "Cargo.lock": "e6b2577e4593707170116ac3f32c587fc1d362ff"
+  },
+  "engine_sha256": "38c4fc4c8614a05863207f379b69fea3394ab25754a4749c43b82ad26c7af7df",
+  "workflow_sha256": {
+    "scripts/replay_clip": "dc9a2ad00979449c116dbf66c21c597b069907751708aba7954b0fed1a94ca4a",
+    "scripts/replay_pace.py": "432d8968c3d1c80e16b10aa6f66f62cbcf5d20bff86ba3466357e8196f70cc7b"
+  },
+  "original_sha256": {
+    "source_log": "1d6858a926a1661e33588874331e50d06349bd8ea6e7d5ef49a81a7d92d57c60",
+    "finished_log": "2605f98a8066fff1a664ae10b6d4b7cd3582a6a7dfaa8b0e7b551bbf26fb830b",
+    "finished_png": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+    "normal_png": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+    "check_png": "96a9eb41d3db541b249c2868b788f71a5ba16c485d9198d0d34631567918d97f",
+    "check_log": "0c3555834e895f452343d6dcc1b292104e12b376890669df90d8299a1115ee05"
+  },
+  "original_chunks": 311,
+  "automatic_finishing_chunks": 1,
+  "full_replay_chunks": 312,
+  "full_replay_success": true,
+  "sampled_frames": 1404,
+  "image_difference": {
+    "comparison": "Original finished PNG versus full-resolution substitute finished replay",
+    "width": 2400,
+    "height": 1600,
+    "pixels": 3840000,
+    "rgb_byte_range": [
+      0,
+      255
+    ],
+    "mean_absolute_channel_difference": 0.0,
+    "root_mean_square_channel_difference": 0.0,
+    "maximum_channel_difference": 0,
+    "changed_channels": 0,
+    "changed_pixels": 0,
+    "changed_pixel_percent": 0.0,
+    "png_byte_exact": true,
+    "rgb_pixel_exact": true,
+    "interpretation": "Measured image difference; not proof of exact source or physical equivalence."
+  },
+  "substitute_png": {
+    "width": 2400,
+    "height": 1600,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "22257ee33b47d8261cfe39f75a2379f44478a068f6e7b461fa6cc57e85a36ebd",
+    "bytes": 3444825
+  },
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "High",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.640032",
+        "width": 1920,
+        "height": 1280,
+        "coded_width": 1920,
+        "coded_height": 1280,
+        "has_b_frames": 2,
+        "pix_fmt": "yuv420p",
+        "level": 50,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "time_base": "1/12288",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 245760,
+        "duration": "20.000000",
+        "bit_rate": "1149658",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "480",
+        "extradata_size": 46,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.101 libx264"
+        }
+      }
+    ],
+    "format": {
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "20.000000",
+      "size": "2880752",
+      "bit_rate": "1152300",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.101"
+      }
+    },
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6590,
+      "mdat": 6598
+    },
+    "sha256": "006632b23900f200af0743b46018d9e51bf37d9ca46914b357abe137b532a9e6"
+  },
+  "options": {
+    "length": 20,
+    "width": 1920,
+    "every": 60,
+    "pace": "dynamic",
+    "gamma": 0.4,
+    "ramp": 0.3,
+    "open_hold": 0.25,
+    "fps": 24,
+    "crf": 23
+  },
+  "elapsed_seconds": 1838.027,
+  "visual_review": "Pending inspection of exact substitute PNG and video contact sheet before delivery."
+}

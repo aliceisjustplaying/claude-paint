@@ -1,0 +1,42 @@
+{
+  "verified_at_utc": "2026-10-05T19:40:42.954Z",
+  "source_commit": "f2b324457e36fe762cb65dc30aefd0428b735d79",
+  "baseline_source": "4b9bef6a5872803f4f20623c15b7677a152db70c",
+  "source_changes": "notes/round28 files only; engine,harness,materials unchanged",
+  "studio": "paint-studio-002de5",
+  "provider": "anthropic",
+  "model": "claude-opus-5-5",
+  "thinking": "high",
+  "transport": "pi-black",
+  "engine": 5,
+  "box": "hopper",
+  "tubes": [
+    "lead white",
+    "zinc white",
+    "pale cadmium",
+    "cadmium yellow",
+    "deep cadmium",
+    "yellow ochre",
+    "red earth",
+    "burnt sienna",
+    "bone black",
+    "cerulean blue",
+    "cobalt blue",
+    "ultramarine blue",
+    "viridian"
+  ],
+  "reader": false,
+  "sitting_limit": null,
+  "artistic_agency_hours_simulated_years_and_finish_language_preserved": true,
+  "classifier_matches_r27": true,
+  "reference_directory_present": false,
+  "sha256": {
+    "binary": "0c515b6a3419aa59083545ea4914dc7a3916ae211abd19a077b365d173b5b3aa",
+    "brief": "2b1cf8af75a25378e1ecc22f9b8ef70f27137a15f7f399c477bc1e7c2f26019c",
+    "template": "1a25742dd96363acb84cd51ec12df7a8a8a8f1c5f3343a65821f95b803c0c18c",
+    "runtime_runner": "80fc7c2d53e4ccf18f1fab3c9f69426727d817795938b3c6f353dc66034461f5",
+    "materials": "1f5de23ecdd7bee4daf27567fa35f7fba57902157cb3fd9a0d1df479c4507898",
+    "guide": "c09d4c9ae39aaa2500a34fb79330b851abc80c56f9eda7fc39ade9bbe3dd7060"
+  },
+  "runtime_pin_note": "Source snapshot contains approved prompts. Runnable copy sets TAG to that snapshot and round_number to28; no engine code changes."
+}

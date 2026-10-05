@@ -1,0 +1,148 @@
+{
+  "verifiedUTC": "2026-10-05T15:37:15.996Z",
+  "revision": "fa2a0f10300b55d93473b021f297916523e890b8",
+  "integrates": "66312efebbf4453cf9e80bfeadb92e60d303833e",
+  "newFix": "The code button stays disabled until the initial formatted and highlighted DOM is ready. Opening reuses that DOM with no fetch or worker request; active changes replace complete prepared displays.",
+  "previousState": "Production and loopback port 8769 served code that rendered raw and started formatting on open, with an 1100-pixel cap. The tailnet candidate already served 66312ef at 720 pixels but allowed cold opening before preparation completed.",
+  "sync": {
+    "label": "art.stillwet.studio.sync",
+    "startIntervalSeconds": 60,
+    "runs": 3,
+    "lastExitCode": 0,
+    "recentSuccessfulUploadsLocalTime": [
+      "2026-10-05 16:11:55",
+      "2026-10-05 16:13:22",
+      "2026-10-05 16:14:50",
+      "2026-10-05 16:16:18",
+      "2026-10-05 16:17:46",
+      "2026-10-05 16:19:15",
+      "2026-10-05 16:20:44",
+      "2026-10-05 16:22:13",
+      "2026-10-05 16:23:42",
+      "2026-10-05 16:25:12",
+      "2026-10-05 16:26:41",
+      "2026-10-05 16:28:10",
+      "2026-10-05 16:33:57",
+      "2026-10-05 16:35:23",
+      "2026-10-05 16:36:50"
+    ],
+    "observedIntervalsSeconds": [
+      87,
+      88,
+      88,
+      88,
+      89,
+      89,
+      89,
+      89,
+      90,
+      89,
+      89,
+      86,
+      87
+    ],
+    "rangeSeconds": [
+      86,
+      90
+    ],
+    "viewerEventsRefreshSeconds": 60
+  },
+  "inventory": 80,
+  "deepLinks": [
+    "https://stillwet.art/studio/?p=paint-studio-7c4dd1",
+    "https://stillwet.art/studio/?p=paint-studio-12e572"
+  ],
+  "verification": {
+    "studioTests": {
+      "passed": 47,
+      "seconds": 18.52
+    },
+    "browserChecks": 6,
+    "productionHashesMatch": true,
+    "publicEventsSourcesImagesHTTP200": true,
+    "readyFromNavigationMs": [
+      3006.1999999955297,
+      2605.89999999851,
+      2502.10000000149,
+      3032.5,
+      2937.7000000029802,
+      4536.70000000298
+    ],
+    "openHandlerMs": [
+      1.1000000014901161,
+      0.30000000447034836,
+      0.29999999701976776,
+      0.20000000298023224,
+      0.20000000298023224,
+      0.30000000447034836
+    ],
+    "openPaintOpportunityMs": [
+      59.70000000298023,
+      91.10000000149012,
+      42.899999998509884,
+      91,
+      122.79999999701977,
+      14.700000002980232
+    ],
+    "privacyFiles": 29420,
+    "privacyBytes": 4107914171,
+    "imageMetadataChecked": 29259,
+    "privacyFailures": [],
+    "naturalActiveHopperRefresh": [
+      {
+        "stream": false,
+        "initial": {
+          "events": 385,
+          "sourceBytes": 51239
+        },
+        "update": {
+          "closedDuringUpdate": true,
+          "cachedDOMReused": true,
+          "events": 400,
+          "sourceBytes": 53602,
+          "elapsedMs": 61404,
+          "label": "formatted · display only",
+          "width": 720
+        },
+        "errors": []
+      },
+      {
+        "stream": true,
+        "initial": {
+          "events": 385,
+          "sourceBytes": 51239
+        },
+        "update": {
+          "closedDuringUpdate": true,
+          "cachedDOMReused": true,
+          "events": 400,
+          "sourceBytes": 53602,
+          "elapsedMs": 61309,
+          "label": "formatted · display only",
+          "width": 720
+        },
+        "errors": []
+      }
+    ]
+  },
+  "scope": {
+    "upload": "/studio/ only using documented SSH rsync destination",
+    "galleryHTMLUnchanged": true,
+    "galleryManifestEdited": false,
+    "painterJobsModified": false,
+    "worktreesCreatedOrRemoved": false,
+    "unrelatedUntrackedNotesPreserved": true
+  },
+  "evidenceFiles": [
+    "baseline.jsonl",
+    "candidate.json",
+    "static.json",
+    "production.json",
+    "privacy.json",
+    "external.json",
+    "live-update.json",
+    "hopper.png",
+    "monet-code.png",
+    "active-refresh.json"
+  ]
+}

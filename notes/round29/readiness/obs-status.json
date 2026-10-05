@@ -1,0 +1,45 @@
+{
+  "checked_at": "2026-10-05T19:46:46.588Z",
+  "input": {
+    "inputKind": "browser_source",
+    "inputSettings": {
+      "css": "",
+      "fps": 30,
+      "fps_custom": true,
+      "height": 1080,
+      "reroute_audio": false,
+      "restart_when_active": false,
+      "shutdown": false,
+      "url": "http://127.0.0.1:8766/?p=paint-studio-aef22d&stream=1",
+      "width": 1920
+    }
+  },
+  "video": {
+    "baseHeight": 1080,
+    "baseWidth": 1920,
+    "fpsDenominator": 1,
+    "fpsNumerator": 30,
+    "outputHeight": 1080,
+    "outputWidth": 1920
+  },
+  "stream": {
+    "outputActive": true,
+    "outputBytes": 140692202,
+    "outputCongestion": 0,
+    "outputDuration": 182866,
+    "outputReconnecting": false,
+    "outputSkippedFrames": 0,
+    "outputTimecode": "00:03:02.866",
+    "outputTotalFrames": 5486
+  },
+  "record": {
+    "outputActive": false,
+    "outputBytes": 0,
+    "outputDuration": 0,
+    "outputPaused": false,
+    "outputTimecode": "00:00:00.000"
+  },
+  "actions_by_agent": [
+    "SetInputSettings URL to Monet; no StartStream or StartRecord"
+  ]
+}

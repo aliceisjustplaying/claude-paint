@@ -1,0 +1,44 @@
+{
+  "files": 29420,
+  "bytes": 4107914171,
+  "images_metadata_checked": 29259,
+  "seconds": 106.10870475000411,
+  "failures": [],
+  "inventory": 80,
+  "hashes": {
+    "code-display.js": "49ae3c9ab637449ce57ef113231c20a3a5b230b1ce0f02d8bf7254f1ff4e97ea",
+    "code-format.js": "a8f7f29b9d0c05964e41fab660574a0eb4ff1ba5582aa9f7c7b807c8da25b8a1",
+    "index.html": "f2612b1b4a8e614b4d3665a359fcb9517dde4f72dd427c172706fbc769c1c297",
+    "stream.css": "cb67ab9545d56e032ae8307e4e52ac33c8a3ae9d4e4b9ddf0fac88d1671324ca",
+    "vendor/stylua/stylua_lib_bg.wasm": "d19a7a72e30beed2639e1ff268c31263ded381323d30afbeadad156e52d0417d",
+    "vendor/stylua/stylua_lib_web.js": "5a5f3e2dd8403a6983322b3586f77d62b3b29765981fa24d47d56b6060e32e19"
+  },
+  "runs": [
+    {
+      "painter": "paint-studio-7c4dd1",
+      "round": "r27",
+      "lane": "HOPR",
+      "events": 276,
+      "images": 56,
+      "latest_event": "2026-10-05T15:29:38.832Z",
+      "whole_image": 45,
+      "outcome": null,
+      "palette_events": 3
+    },
+    {
+      "painter": "paint-studio-12e572",
+      "round": "r26",
+      "lane": "MONT",
+      "events": 702,
+      "images": 156,
+      "latest_event": "2026-10-05T13:33:57.756Z",
+      "whole_image": 155,
+      "outcome": {
+        "status": "finished",
+        "reason": "the painter is done: sitting 3 reviewed whole and detail views and added no painting"
+      },
+      "palette_events": 10
+    }
+  ],
+  "built_in_guard": "export_static.main sets PUBLIC and uses text() for HTML, events, sessions and painter source; text() scrubs then rejects remaining home or case-insensitive account name"
+}

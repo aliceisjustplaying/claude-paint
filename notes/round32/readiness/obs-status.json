@@ -1,0 +1,41 @@
+{
+ "0:GetInputSettings": {
+  "inputKind": "browser_source",
+  "inputSettings": {
+   "css": "",
+   "fps": 30,
+   "fps_custom": true,
+   "height": 1080,
+   "reroute_audio": false,
+   "restart_when_active": false,
+   "shutdown": false,
+   "url": "http://127.0.0.1:8766/?p=paint-studio-158ce1&stream=1",
+   "width": 1920
+  }
+ },
+ "1:GetVideoSettings": {
+  "baseHeight": 1080,
+  "baseWidth": 1920,
+  "fpsDenominator": 1,
+  "fpsNumerator": 30,
+  "outputHeight": 1080,
+  "outputWidth": 1920
+ },
+ "2:GetStreamStatus": {
+  "outputActive": false,
+  "outputBytes": 0,
+  "outputCongestion": 0.0,
+  "outputDuration": 0,
+  "outputReconnecting": false,
+  "outputSkippedFrames": 0,
+  "outputTimecode": "00:00:00.000",
+  "outputTotalFrames": 0
+ },
+ "3:GetRecordStatus": {
+  "outputActive": false,
+  "outputBytes": 0,
+  "outputDuration": 0,
+  "outputPaused": false,
+  "outputTimecode": "00:00:00.000"
+ }
+}

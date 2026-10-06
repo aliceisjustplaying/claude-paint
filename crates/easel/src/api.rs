@@ -423,8 +423,15 @@ impl UserData for KnifeU {
                     return err(format!("k:{name}: needs points"));
                 }
                 let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                let mut edge = 100.0f32;
                 if let Some(o) = &o {
-                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    check_keys(o, if lay { &["pressure", "angle", "lift"] } else { &["pressure", "angle", "lift", "edge"] }, &format!("k:{name}"))?;
+                    if let Some(e) = num(o, "edge")? {
+                        if !(1.0..=1000.0).contains(&e) {
+                            return err("k:scrape: edge is the blade's edge radius, µm (a painting knife's 20–500; a scalpel's about 1)");
+                        }
+                        edge = e;
+                    }
                     if let Some(p) = pair(o, "pressure")? {
                         pressure = p;
                     }
@@ -445,7 +452,7 @@ impl UserData for KnifeU {
                     c.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
                     if !lay {
                         // engine 7: the blade takes the pastel heaped above the paper too (sheet.rs)
-                        c.scrape_pastel(width, &pts, pressure, angle);
+                        c.scrape_pastel(width, edge, &pts, pressure, angle);
                     }
                     Ok(())
                 })
@@ -535,6 +542,7 @@ impl UserData for Brush {
                 }
             }
             let width = b.held.borrow().tool.mark_width(p);
+            let full_w = b.held.borrow().tool.width;
             if b.held.borrow().fullness() > 0.02 {
                 return err("b:dust: the brush has paint on it; a dry brush brushes pastel off (b:wipe(1) first)");
             }
@@ -547,7 +555,12 @@ impl UserData for Brush {
                 if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
                     return err(format!("b:dust: {e}"));
                 }
-                let (v, secs) = c.dust_pastel(width, tip, &pts);
+                // what its loaded tip holds: 2 mm of it, its width by a third of that thick
+                let w_mm = full_w * c.mm_per_unit();
+                let cap = paint::sheet::BRUSH_HOLDS_MG_MM3 * w_mm * 2.0 * 0.3 * w_mm;
+                let mut held = b.held.borrow().pastel_mg;
+                let (v, secs) = c.dust_pastel(width, tip, &pts, &mut held, cap);
+                b.held.borrow_mut().pastel_mg = held;
                 c.tally_mut().secs += secs as f64;
                 Ok(v)
             })

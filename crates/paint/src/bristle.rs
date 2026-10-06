@@ -359,17 +359,24 @@ pub struct Held {
     /// Painting with engine 4 or later: its `Debug` gives each bristle's
     /// paint its solvent and oil too. Not printed itself.
     shows_oil: bool,
+    /// Engine 6 or later: and engine 6's five (the packing, the oil by
+    /// volume, the wax).
+    shows_packing: bool,
+    /// Engine 7: dry pastel held in the bristles, mg (`Canvas::dust_pastel`);
+    /// a wipe takes its share off. Printed only when there is some.
+    pub pastel_mg: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
 /// thinner, field for field, plus `solvent` when `show` (engine 3); the
-/// paint's properties without solvent and oil unless `oil` (engine 4).
-struct BristleText<'a>(&'a Bristle, bool, bool);
+/// paint's properties without solvent and oil unless `oil` (engine 4), and
+/// without engine 6's five unless `packing`.
+struct BristleText<'a>(&'a Bristle, bool, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
-        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
+        let hide: &[f32] = if self.3 { &b.hide } else if self.2 { &b.hide[..5] } else { &b.hide[..3] };
         let mut d = f.debug_struct("Bristle");
         d.field("rx", &b.rx)
             .field("ry", &b.ry)
@@ -391,7 +398,7 @@ impl std::fmt::Debug for BristleText<'_> {
 
 impl std::fmt::Debug for Bristle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        BristleText(self, true, true).fmt(f)
+        BristleText(self, true, true, true).fmt(f)
     }
 }
 
@@ -401,13 +408,18 @@ impl std::fmt::Debug for Bristle {
 /// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
 impl std::fmt::Debug for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct List<'a>(&'a [Bristle], bool, bool);
+        struct List<'a>(&'a [Bristle], bool, bool, bool);
         impl std::fmt::Debug for List<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2, self.3))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
+        let mut d = f.debug_struct("Held");
+        d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing));
+        if self.pastel_mg > 0.0 {
+            d.field("pastel_mg", &self.pastel_mg);
+        }
+        d.finish()
     }
 }
 
@@ -476,7 +488,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, pastel_mg: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -485,6 +497,7 @@ impl Held {
     pub fn with_engine(mut self, v: u32) -> Self {
         self.shows_solvent = v >= 3;
         self.shows_oil = v >= 4;
+        self.shows_packing = v >= 6;
         self
     }
 
@@ -560,6 +573,7 @@ impl Held {
 
     /// Wipe the brush on a rag: remove `frac` of the paint in it.
     pub fn wipe(&mut self, frac: f32) {
+        self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);

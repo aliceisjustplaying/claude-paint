@@ -562,7 +562,7 @@ feel(x, y)                     -- what a fingertip feels there
   far it has set) and the pastel in the tooth (loose or fixed; a little, the
   tooth taking it, half full and more, full).
 
-**Pastel tools in engine 7.** Four more, each a physical process
+**Pastel tools in engine 7.** Six more, each a physical process
 (paint's sheet.rs; the research behind them in notes/research/):
 
 ```lua
@@ -588,7 +588,7 @@ tap({g=100})                          -- the board's edge struck on the table (a
   (about 50 µm) reaches only the top micrometres of the pores, so what fills
   them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
   The bristles keep what they lift until they are full (a brush a centimetre
-  wide holds a few milligrams; `b:wipe` empties it); then the rest is pushed
+  wide holds a few milligrams; `b:wipe(1)` empties it); then the rest is pushed
   ahead and left as a ridge of crumbs where the brush lifts. Over a
   speckled passage it smears more than it cleans.
 - **The knife** (`k:scrape`) over pastel: the hand's force (1–5 N by

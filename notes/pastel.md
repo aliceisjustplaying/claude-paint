@@ -231,7 +231,8 @@ sheet.rs:
   proportion to its room (capacity 0.06 mg per mm³ of a 2 mm loaded tip,
   width × 2 × 0.3·width: a fur brush's pile holds 5–7 % of its volume in
   toner); the rest is pushed 0.5 mm ahead as crumbs (lay_crumbs, up to
-  100 µm) and met again, so it ends as a ridge at the lift. `b:wipe` empties it.
+  100 µm) and met again, so it ends as a ridge at the lift. `b:wipe(1)`
+  empties it (`b:wipe()` takes 85 %).
 - **blow(x, y, {distance, speed, nozzle})**: Phares et al.'s peak wall shear
   of an impinging jet, τ = 44.6ρU²Re^(−½)(h/d)^(−2) (h/d ≥ 6), on a ring at
   0.09h, rising linearly inside it and falling as r^(−2.3) outside (a radial
@@ -241,7 +242,7 @@ sheet.rs:
   the fine grains (Shao & Lu at 5 µm, ~0.8 m/s) go down to z = (w/2.1)·ln(u*/u*t).
   Redeposition (0–20 %) left out.
 - **tap({g})**: crumbs heaped on the tooth with m·a > F_adh fall (F_adh 50
-  nN, crumbs 1250 kg/m³: at 100 g, d_c ≈ 33 µm; at 1 g, ~150 µm); with
+  nN, crumbs 1250 kg/m³: at 100 g, d_c ≈ 43 µm; at 1 g, ~200 µm); with
   crumb sizes P(A) ∝ A^(−3/2) up to 300 µm the falling share of the heap is
   (A_max − A_c)/(A_max − A_min). Pore-held grains and fixed pastel stay.
 

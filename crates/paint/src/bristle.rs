@@ -3064,7 +3064,9 @@ pub(crate) fn fluid_of(hd: Prop) -> Prop {
 /// own above its packed layer (`ground_drain`; engine 6).
 pub(crate) fn surface_oil(hd: &Prop) -> f32 {
     let (o, floor, packed) = (hd[4].max(0.0), hd[6].max(0.0), hd[7].clamp(0.0, 1.0));
-    if packed < 0.999 { ((o - packed * floor) / (1.0 - packed)).max(floor.min(o)) } else { o }
+    // (the surface is the paint above until the packed layer reaches it; at
+    // the last ten-thousandth the division is no longer exact in f32)
+    if packed < 1.0 - 1e-4 { ((o - packed * floor) / (1.0 - packed)).max(floor.min(o)) } else { o }
 }
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the

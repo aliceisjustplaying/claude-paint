@@ -194,7 +194,7 @@ struct Pool {
 /// already. mm³ of paint, its mean color, hiding and cure, mm³ of solvent,
 /// and when it was last brought up to date: minutes of painting time
 /// (`Canvas::now_min`) and hand seconds (`Tally::secs`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct Mobile {
     pub mm3: f32,
     pub lat: crate::wet::Latent,
@@ -203,6 +203,23 @@ pub struct Mobile {
     pub solv_mm3: f32,
     pub at_min: f64,
     pub at_secs: f64,
+}
+
+impl std::fmt::Debug for Mobile {
+    /// As derived, but the paint's properties without engine 6's five while
+    /// it carries none (a rag before engine 6 prints as it always did).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = if self.hide[5..].iter().all(|&v| v == 0.0) { 5 } else { self.hide.len() };
+        f.debug_struct("Mobile")
+            .field("mm3", &self.mm3)
+            .field("lat", &self.lat)
+            .field("hide", &&self.hide[..n])
+            .field("cure", &self.cure)
+            .field("solv_mm3", &self.solv_mm3)
+            .field("at_min", &self.at_min)
+            .field("at_secs", &self.at_secs)
+            .finish()
+    }
 }
 
 /// One contact of the pad (`rag_contact`): how long it lasts (s) and how
@@ -615,7 +632,9 @@ impl Canvas {
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
                         }
-                        for q in 0..h.len() {
+                        // (before engine 6 the rag carries engine 4's five
+                        // properties; the packing's are engine 6's)
+                        for q in 0..if self.engine >= 6 { h.len() } else { 5 } {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {

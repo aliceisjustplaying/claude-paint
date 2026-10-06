@@ -362,11 +362,12 @@ def main():
         # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
         # quiet run as in progress only then
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"
-        if s["look"] is None:  # painters from before the look tool read their renders as files: the last picture they
-            # saw (a reference picture, read from the studio's reference/, is never the painter's picture)
-            s["look"] = next((e["img"] for e in reversed(ev)
-                              if e["kind"] == "image" and "look" not in e and not e.get("ref")
-                              and 0 <= e["img"] < n and web[e["img"]]), None)
+        if s["look"] is None:  # painters from before the look tool read their renders as files: the last whole one
+            # they saw (studio.py mark_whole), else the last (a reference picture, read from the studio's reference/,
+            # is never the painter's picture)
+            mine = [e for e in reversed(ev) if e["kind"] == "image" and "look" not in e and not e.get("ref")
+                    and 0 <= e["img"] < n and web[e["img"]]]
+            s["look"] = next((e["img"] for e in mine if e.get("whole") is not False), mine[0]["img"] if mine else None)
         # Reuse the latest whole snapshot's web copy, re-encoded without source metadata. The content
         # version changes even if a session rewrites the same image index.
         s["og_image"] = None

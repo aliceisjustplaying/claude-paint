@@ -1041,16 +1041,17 @@ const resting = () => live && events.length > 0 && pos === events.length - 1 && 
 // what the view shows at event i: the painting (the newest whole look at or before it) and, if the painter is now on
 // another picture seen since (a close-up, a squint, a check in grays, or a reference picture it reads), that one too.
 // Only the painting when the view rests (rest), and from the start of a sitting until its first look: what the
-// painter studied before it stopped isn't what it's looking at now. Before the look tool, or with no whole look
-// yet: the last picture of its canvas. A reference picture is never the painting: with only reference pictures so
-// far there is no painting (-1), and the reference shows beside its empty place.
+// painter studied before it stopped isn't what it's looking at now. Before the look tool, the newest picture the
+// server marks whole (studio.py mark_whole), else the last picture of its canvas; with no whole look yet, the last
+// picture of its canvas. A reference picture is never the painting: with only reference pictures so far there is no
+// painting (-1), and the reference shows beside its empty place.
 // sc: the scratch canvas's pictures instead of the painting's.
 function picturesAt(i, rest, sc = false) {
   let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks || (sc ? isWholeScratch(e) : isWhole(e))) { whole = k; break; } } } }
+      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks ? e.whole !== false : sc ? isWholeScratch(e) : isWhole(e)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
   return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
 }
@@ -1145,7 +1146,7 @@ function show(i) {
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 // replay steps through the painting: each whole look in turn (before the look tool, each picture), with the thinking that led to it
-const steps = () => looks().filter(k => !events[k].ref && (!hasLooks || isWhole(events[k])));
+const steps = () => looks().filter(k => !events[k].ref && (!hasLooks ? events[k].whole !== false : isWhole(events[k])));
 function stop() { if (playing) { clearTimeout(playing); playing = null; } $('play').textContent = '▶ Replay'; $('play').title = 'watch the painting grow, one look at a time  space'; }
 function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {

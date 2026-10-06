@@ -88,7 +88,7 @@ def session_model(path):
 
 
 # Painters' sessions, by folder: round 16+ studios, the round 14-15 chain painters and the
-# earlier rounds' painter worktrees. Everything else (judges, tests, work on the project)
+# earlier rounds' painter worktrees (rounds 1-4 and 7-13). Everything else (judges, tests, work on the project)
 # shows only with "all".
 _thinking = {}  # path -> the session's thinking level
 
@@ -227,7 +227,13 @@ def in_reference(path, cwd):
     return len(parts) > 1 and parts[0].lower() == "reference"
 
 
-PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d))$")
+PAINTER = re.compile(r"^(paint-studio-[0-9a-f]+|paint-r\d+-p\d+|claude-paint-r\d+-(arm\d|tree\d|astra|fable|flash|p\d|python)"
+                     r"|claude-paint-amnesia-(winter|coast|mountains)|claude-paint-easel[34]-(free|green|near))$")
+# a folder whose session files are separate painters (round 1's three painters ran in one worktree): each its own
+# painter, named folder-<subject>, by the start of its session file's name
+SPLIT = {"claude-paint-fresh": {"claude-paint-fresh-winter": "2026-09-22T21-59-38-550Z",
+                                "claude-paint-fresh-coast": "2026-09-22T21-59-38-576Z",
+                                "claude-paint-fresh-mountains": "2026-09-22T21-59-38-610Z"}}
 
 
 def short(d):
@@ -246,6 +252,15 @@ def list_sessions():
         name = short(d)
         fs.sort(key=os.path.basename)  # session file names begin with the start time
         info = [{"path": f, "model": session_model(f), "mtime": os.path.getmtime(f), "size": os.path.getsize(f)} for f in fs]
+        if name in SPLIT:
+            for p, start in SPLIT[name].items():
+                for i in info:
+                    if os.path.basename(i["path"]).startswith(start):
+                        out.append({"p": p, "folder": p, "painter": True, "model": i["model"], "sittings": 1,
+                                    "thinking": session_thinking(i["path"]), **about_brief(name),
+                                    "round": "", "lane": "", "n": 0, "chain": 0, "outcome": None,
+                                    "files": [i["path"]], "mtime": i["mtime"], "size": i["size"]})
+            continue
         if PAINTER.match(name):
             models = []
             for i in info:
@@ -267,6 +282,9 @@ def painter_files(name):
     """The session files of a painter folder (given by its short name), in start order."""
     if not name or "/" in name or name.startswith("."):
         return []
+    for folder, ps in SPLIT.items():
+        if name in ps:
+            return sorted(glob.glob(os.path.join(SESSIONS, "*-src-a-" + folder + "--", ps[name] + "*.jsonl")))
     for d in glob.glob(os.path.join(SESSIONS, "*" + name + "*")):
         if short(os.path.basename(d)) == name:
             return sorted(glob.glob(os.path.join(d, "*.jsonl")), key=os.path.basename)

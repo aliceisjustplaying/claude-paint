@@ -207,29 +207,33 @@ const MAX_SUBSTEPS: usize = 64;
 const MAX_OUT: f32 = 0.5;
 
 impl Canvas {
-    /// `dt` minutes of the solvent's loss: each pixel keeps
-    /// `exp(-dt / τ(h))` of it, h its paint.
-    pub(crate) fn evaporate(&mut self, dt: f32) {
-        if dt <= 0.0 || self.wet.solv.is_empty() {
-            return;
-        }
-        let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
-        let w = self.f.w;
-        let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-        let wet = &mut self.wet;
-        let vol = &wet.vol;
-        wet.solv[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
-            for x in x0..x1 {
-                let s = &mut row[x];
-                if *s > 0.0 {
-                    let h = vol[(y0 + j) * w + x] * COAT_UM;
-                    let keep = (-(dt as f64) / evaporation_tau_min(h)).exp();
-                    *s = (*s as f64 * keep) as f32;
-                    if *s < SOLVENT_FLOOR {
-                        *s = 0.0;
-                    }
-                }
+    /// Maximum current flow mobility in the solvent work set.
+    pub(crate) fn peak_mobility(&self, solvent: &[usize]) -> f32 {
+        solvent.par_iter().map(|&i| {
+            let (h, s) = (self.wet.vol[i] * COAT_UM, self.wet.solv[i]);
+            if s <= 0.0 || h + s <= 0.0 { return 0.0; }
+            let fl = self.wet.clock.px.get(i).map_or(1.0, |p| crate::drying::fluid(p.cure));
+            spread_mm2_min(s / (h + s)) * fl * thin_film(h + s)
+        }).reduce(|| 0.0, f32::max)
+    }
+
+    /// The wait owns this work set: evaporation removes entries and flow
+    /// adds receivers. It is rebuilt at every wait, so brushwork and saves
+    /// need no cache invalidation or checkpoint-format change.
+    pub(crate) fn evaporate_indices(&mut self, dt: f32, solvent: &mut Vec<usize>) {
+        solvent.retain(|&i| {
+            let s = &mut self.wet.solv[i];
+            if *s > 0.0 {
+                let h = self.wet.vol[i] * COAT_UM;
+                *s = (*s as f64 * (-(dt as f64) / evaporation_tau_min(h)).exp()) as f32;
+                // Engine 5: a trace below ten parts per million of the
+                // local film is numerically gone. The 2 µm term keeps
+                // the threshold finite on bare weave. A numerical estimate,
+                // not a measured evaporation law; earlier engines keep 1e-8.
+                let floor = if self.engine >= 5 { SOLVENT_FLOOR.max(1e-5 * (h + THIN_FILM_UM)) } else { SOLVENT_FLOOR };
+                if *s < floor { *s = 0.0; }
             }
+            *s > 0.0
         });
     }
 
@@ -259,8 +263,8 @@ impl Canvas {
     /// at any thickness (`Canvas::wait_on_grid` dries it over the whole
     /// step); a bare pixel it reaches takes the drying thickness of the
     /// films it came from too.
-    pub(crate) fn spread(&mut self, dt: f32) {
-        let Some((bx0, by0, bx1, by1)) = self.wet.dirty else { return };
+    pub(crate) fn spread(&mut self, dt: f32, solvent: &mut Vec<usize>) {
+        if solvent.is_empty() { return; }
         let (w, h) = (self.f.w, self.f.h);
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
@@ -281,15 +285,11 @@ impl Canvas {
         type Acc = (f32, usize, usize, usize, usize);
         let none: Acc = (0.0, usize::MAX, usize::MAX, 0, 0);
         let join = |a: Acc, b: Acc| (a.0.max(b.0), a.1.min(b.1), a.2.min(b.2), a.3.max(b.3), a.4.max(b.4));
-        let (m0, ax0, ay0, ax1, ay1) = (by0..by1.min(h))
-            .into_par_iter()
-            .map(|y| {
-                (bx0..bx1.min(w)).fold(none, |a, x| {
-                    let m = mob(wet, y * w + x);
-                    if m > 0.0 { join(a, (m, x, y, x + 1, y + 1)) } else { a }
-                })
-            })
-            .reduce(|| none, join);
+        let (m0, ax0, ay0, ax1, ay1) = solvent.par_iter().map(|&i| {
+            let m = mob(wet, i);
+            let (x, y) = (i % w, i / w);
+            if m > 0.0 { (m, x, y, x + 1, y + 1) } else { none }
+        }).reduce(|| none, join);
         if m0 <= 0.0 || dt <= 0.0 {
             return;
         }
@@ -297,7 +297,10 @@ impl Canvas {
         let (mut x0, mut y0, mut x1, mut y1) = (ax0, ay0, ax1, ay1);
         // the box of the pixels the flow changed
         let mut moved: Option<(usize, usize, usize, usize)> = None;
+        let original_len = solvent.len();
+        let mut active: Vec<usize> = solvent.iter().copied().filter(|&i| mob(wet, i) > 0.0).collect();
         let mut m_max = m0;
+
         let mut left = dt;
         let mut used = 0;
         while left > 0.0 && m_max > 0.0 && used < MAX_SUBSTEPS {
@@ -313,13 +316,29 @@ impl Canvas {
             let (rw, rh) = (x1 - x0, y1 - y0);
             let wet = &self.wet;
             let height = &self.height;
+            let sparse = active.len() < rw * rh / 8;
+            let mut indices = Vec::new();
+            if sparse {
+                for &i in &active {
+                    let (x, y) = (i % w, i / w);
+                    indices.push(i);
+                    if x > 0 { indices.push(i - 1); }
+                    if x + 1 < w { indices.push(i + 1); }
+                    if y > 0 { indices.push(i - w); }
+                    if y + 1 < h { indices.push(i + w); }
+                }
+                indices.sort_unstable();
+                indices.dedup();
+            }
+            let len = if sparse { indices.len() } else { rw * rh };
+            let index = |k: usize| if sparse { indices[k] } else { (y0 + k / rw) * w + x0 + k % rw };
             // pass 1: each pixel's outflow (coats of liquid) to its four
             // neighbors (left, right, up, down)
-            let out: Vec<[f32; 4]> = (0..rw * rh)
+            let out: Vec<[f32; 4]> = (0..len)
                 .into_par_iter()
                 .map(|k2| {
-                    let (x, y) = (x0 + k2 % rw, y0 + k2 / rw);
-                    let i = y * w + x;
+                    let i = index(k2);
+                    let (x, y) = (i % w, i / w);
                     let l = wet.vol[i] + wet.solv[i] / COAT_UM;
                     let m = mob(wet, i);
                     if m <= 0.0 || l <= 0.0 {
@@ -358,15 +377,15 @@ impl Canvas {
             // in, each part with the paint and solvent of where it came from
             let cure_of = |i: usize| if timed { wet.clock.px[i].cure } else { 0.0 };
             let th_of = |i: usize| if timed { wet.clock.px[i].th } else { 0.0 };
-            let at = |x: usize, y: usize| (y - y0) * rw + x - x0;
+            let at = |x: usize, y: usize| if sparse { indices.binary_search(&(y * w + x)).ok() } else { Some((y - y0) * rw + x - x0) };
             // (and the mobility it then has, for the next substep's length,
             // and the drying thickness of the paint that came in)
             type Cell = (f32, f32, Latent, Prop, f32, bool, f32, f32);
-            let next: Vec<Cell> = (0..rw * rh)
+            let next: Vec<Cell> = (0..len)
                 .into_par_iter()
                 .map(|k2| {
-                    let (x, y) = (x0 + k2 % rw, y0 + k2 / rw);
-                    let i = y * w + x;
+                    let i = index(k2);
+                    let (x, y) = (i % w, i / w);
                     let (v, s) = (wet.vol[i], wet.solv[i] / COAT_UM);
                     let l = v + s;
                     let gone: f32 = out[k2].iter().sum();
@@ -379,7 +398,8 @@ impl Canvas {
                     let from = [(x > 0 && x > x0).then(|| (x - 1, y, 1usize)), (x + 1 < x1).then(|| (x + 1, y, 0usize)), (y > 0 && y > y0).then(|| (x, y - 1, 3usize)), (y + 1 < y1).then(|| (x, y + 1, 2usize))];
                     for f in from.iter().flatten() {
                         let (fx, fy, d) = *f;
-                        let q = out[at(fx, fy)][d];
+                        let Some(k) = at(fx, fy) else { continue };
+                        let q = out[k][d];
                         if q <= 0.0 {
                             continue;
                         }
@@ -409,20 +429,22 @@ impl Canvas {
             // region (the next substep reaches one pixel further, where
             // nothing has any yet)
             m_max = next.par_iter().map(|c| c.6).reduce(|| 0.0, f32::max);
+            active = next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))).collect();
             // write back
             let px_ok = timed;
             for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.into_iter().enumerate() {
                 if !changed {
                     continue;
                 }
-                let (x, y) = (x0 + k2 % rw, y0 + k2 / rw);
-                let i = y * w + x;
+                let i = index(k2);
+                let (x, y) = (i % w, i / w);
                 moved = Some(match moved {
                     None => (x, y, x + 1, y + 1),
                     Some((a, b, c, d)) => (a.min(x), b.min(y), c.max(x + 1), d.max(y + 1)),
                 });
                 let was_bare = self.wet.vol[i] < 1e-5;
                 self.wet.vol[i] = pv;
+                if ps > 0.0 && self.wet.solv[i] <= 0.0 { solvent.push(i); }
                 self.wet.solv[i] = ps * COAT_UM;
                 self.wet.lat[i] = lat;
                 self.wet.hide[i] = hide;
@@ -449,6 +471,11 @@ impl Canvas {
                 }
             }
         }
+        if solvent.len() != original_len {
+            solvent.sort_unstable();
+            solvent.dedup();
+        }
+        solvent.retain(|&i| self.wet.solv[i] > 0.0);
         if let Some((a, b, c, d)) = moved {
             self.wet.touch(a, b, c, d);
         }
@@ -746,7 +773,8 @@ mod tests {
             for _ in 0..super::FLOW_TICKS {
                 let s0 = su(&c);
                 let mut d = c.clone();
-                d.evaporate(1.0 / super::FLOW_TICKS as f32);
+                let mut solvent = d.wet.solv.iter().enumerate().filter_map(|(i, &s)| (s > 0.0).then_some(i)).collect();
+                d.evaporate_indices(1.0 / super::FLOW_TICKS as f32, &mut solvent);
                 let se = su(&d);
                 c.wait(1.0 / super::FLOW_TICKS as f32);
                 let s1 = su(&c);

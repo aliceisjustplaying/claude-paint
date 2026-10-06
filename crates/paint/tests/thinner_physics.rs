@@ -589,12 +589,18 @@ fn c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio() {
 /// Zero rule: values both no further from zero than `ZERO_UM` (paint,
 /// solvent) or `ZERO_CURE` (cure) agree.
 #[test]
-fn c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4() {
+fn c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded() {
+    for engine in [3, 5] {
+        check_wait_split(engine);
+    }
+}
+
+fn check_wait_split(engine: u32) {
     let mut base = canvas(160);
     thinned_patch(&mut base, raw_sienna(), 0.5, (200.0, 800.0), (300.0, 700.0), 91);
     thinned_patch(&mut base, lead_white(), 0.3, (200.0, 800.0), (500.0, 900.0), 92);
     assert_eq!(base.clock().fract(), 0.0, "the waits start on a whole minute");
-    let copy = || with_solvent_scaled(&base, 1.0);
+    let copy = || with_solvent_scaled(&base, 1.0).with_engine(engine);
     let exact = |what: &str, a: &Canvas, b: &Canvas| {
         assert_eq!(a.clock(), b.clock(), "{what}: clocks");
         let (sa, sb) = (state(a), state(b));
@@ -603,10 +609,13 @@ fn c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4() {
             panic!("{what}: the saves differ (sizes {} and {}, first differing byte {first:?}); paint equal: {}, solvent equal: {}, cure equal: {}", sa.len(), sb.len(), paint_um(a) == paint_um(b), solvent_um(a) == solvent_um(b), cure(a) == cure(b));
         }
     };
+    // Engine 5 deliberately trades finer flow integration for bounded
+    // error: 0.1% relative, or 1 nm of paint/solvent. Engine 3 retains
+    // its 1e-4 contract and cure's original zero floor is unchanged.
     let near = |what: &str, a: &Canvas, b: &Canvas| {
         assert_eq!(a.clock(), b.clock(), "{what}: clocks");
         for (q, x, y, floor) in [("paint µm", paint_um(a), paint_um(b), ZERO_UM), ("solvent µm", solvent_um(a), solvent_um(b), ZERO_UM), ("cure", cure(a), cure(b), ZERO_CURE)] {
-            let bad: Vec<(usize, f32, f32)> = x.iter().zip(&y).enumerate().filter(|&(_, (p, r))| !close(*p as f64, *r as f64, 1e-4, floor)).map(|(i, (p, r))| (i, *p, *r)).collect();
+            let bad: Vec<(usize, f32, f32)> = x.iter().zip(&y).enumerate().filter(|&(_, (p, r))| !((engine >= 5 && q != "cure" && (*p - *r).abs() <= 1e-3) || close(*p as f64, *r as f64, if engine >= 5 { 1e-3 } else { 1e-4 }, floor))).map(|(i, (p, r))| (i, *p, *r)).collect();
             assert!(bad.is_empty(), "{what}: {q} differs at {} pixels, e.g. {:?}", bad.len(), &bad[..bad.len().min(5)]);
         }
     };

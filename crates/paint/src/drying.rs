@@ -402,6 +402,11 @@ impl Canvas {
     /// is there before the next stroke or look), and a wait split on the
     /// grid is exactly the wait in one; split off the grid, the flow's
     /// substeps fall differently, within rounding of the same.
+    /// Engine 5 keeps this grid while mobility is high, then uses aligned
+    /// quarter minutes at a diffusion number <= 0.0025. Fractional splits
+    /// consequently have a 1e-3 relative allowance (and 0.001 µm absolute
+    /// for paint/solvent); the exact split cases with solvent throughout
+    /// remain exact. See notes/thinner/ACCEPTANCE.md, check 17.
     /// The oil's drying steps as before, in steps that end on whole minutes
     /// (or the wait's end), and brushwork's hand time (which waits too)
     /// keeps the same grid; each drying step precedes that tick's flow. Once
@@ -421,10 +426,15 @@ impl Canvas {
         let end = start + dt as f64;
         let mut t = start;
         let mut aged = start;
+        let mut solvent: Vec<usize> = self.wet.solv.iter().enumerate().filter_map(|(i, &s)| (s > 0.0).then_some(i)).collect();
         while t < end {
-            let tick = ((t * TICKS).floor() + 1.0) / TICKS;
+            // Engine 5 may use the quarter-minute grid once its explicit
+            // diffusion number is <= 0.0025 (80 times below the stability
+            // limit). Always include minute boundaries for oil aging.
+            let ticks = if self.engine >= 5 && self.peak_mobility(&solvent) * 0.25 / self.px_mm().powi(2) <= 0.0025 { 4.0 } else { TICKS };
+            let tick = ((t * ticks).floor() + 1.0) / ticks;
             let next = tick.min(end);
-            self.evaporate((next - t) as f32);
+            self.evaporate_indices((next - t) as f32, &mut solvent);
             // the oil dries in the steps it always has: to each whole
             // minute and to the wait's end
             let minute = (aged.floor() + 1.0).min(end);
@@ -432,10 +442,10 @@ impl Canvas {
                 self.age_from((next - aged) as f32, true);
                 aged = next;
             }
-            self.spread((next - t) as f32);
+            self.spread((next - t) as f32, &mut solvent);
             t = next;
             self.wet.clock.now = t;
-            if !self.wet.has_solvent(self.f.w) {
+            if solvent.is_empty() {
                 if end > aged {
                     self.age_from((end - aged) as f32, true);
                 }
@@ -681,7 +691,7 @@ impl Canvas {
         let now = self.engine >= 2;
         let worked = |wet: &crate::wet::Wet, i: usize| wet.touched[i] > mark || wet.stroke[i] > mark || (now && wet.clock.px[i].seen != wet.vol[i]);
         let fresh = |wet: &crate::wet::Wet, i: usize| worked(wet, i) || wet.clock.px[i].th <= 0.0;
-        let any = (y0..y1).any(|y| (x0..x1).any(|x| self.wet.vol[y * w + x] >= 1e-5 && fresh(&self.wet, y * w + x)));
+        let any = (y0..y1).into_par_iter().any(|y| (x0..x1).any(|x| self.wet.vol[y * w + x] >= 1e-5 && fresh(&self.wet, y * w + x)));
         let th = if any { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
         let bw = x1 - x0;
         let wet = &mut self.wet;
@@ -739,6 +749,16 @@ impl Canvas {
         let pad = ((2.0 / self.px_mm()).ceil() as usize).max(2);
         let ex = (x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
         let (ew, eh) = (ex.2 - ex.0, ex.3 - ex.1);
+        // Most minute steps set no film. Avoid allocating the five full
+        // buffers in that case; this is the same selection as below.
+        if !all && !(ex.1..ex.3).into_par_iter().any(|y| {
+            (ex.0..ex.2).any(|x| {
+                let i = y * w + x;
+                self.wet.vol[i] >= 1e-5 && self.wet.clock.px.get(i).is_some_and(|p| p.cure >= GEL)
+            })
+        }) {
+            return;
+        }
         let mut add = vec![0.0f32; ew * eh];
         let mut stiff = vec![0.5f32; ew * eh];
         let mut oil = vec![1.0f32; ew * eh];

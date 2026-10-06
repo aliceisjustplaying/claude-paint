@@ -1121,8 +1121,12 @@ function pictures() {
   else noPicture();
   palette(paletteAt(pos));
   const curK = o >= 0 ? o : w;
-  for (const t of $('strip').children) { const on = +t.dataset.i === curK; t.classList.toggle('on', on); if (on && !live) t.scrollIntoView({ inline:'center', block:'nearest' }); }
+  // the strip follows: to the current thumbnail, else the last one before this point, else its start (before the first look)
+  let cur = null, near = null;
+  for (const t of $('strip').children) { const on = +t.dataset.i === curK; t.classList.toggle('on', on); if (on) cur = t; if (+t.dataset.i <= pos) near = t; }
   if (live) stripEnd();
+  else if (cur || near) (cur || near).scrollIntoView({ inline:'center', block:'nearest' });
+  else $('strip').scrollLeft = 0;
 }
 // the other canvas in the corner (k: its picture's event, -1 none); sc: the big picture is the scratch canvas
 let pipI = -1;

@@ -601,6 +601,8 @@ before `ok`.
 - **`drying(x, y)`** tells you what the paint there is like to the touch:
   `"open"` (workable: it blends and lifts), `"setting"` (stiff, barely
   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
+  It reads the top film at that point: where no wet paint lies there (a
+  gap between strokes, a wiped spot), it reads the layer beneath.
 
 Each film dries at its own pace, set by its pigments, its thickness and
 its oil. It is open for the first 30% of its time to touch-dry, setting

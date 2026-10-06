@@ -7,10 +7,11 @@ the picture is yours.
 
 ## Plan before you paint
 
-- **Sketch sessions (developer replay build).** A session named `sketch…`
-  (`easel open sketch-1`) paints at a quarter of the width, with one
-  sixteenth as many pixels. The painter's studio has one painting and does
-  not expose separate sketch sessions.
+- **Try it on the scratch canvas** (`scratch: true`): a mix, a stroke, a
+  glaze, a wipe. Lay the underlayer it will go over, let it dry as long as
+  it has on the painting, and compare the trial with the passage in a detail
+  crop. Then paint it on the painting with the same pile and the same
+  handling.
 - **Plan in values.** `look` with `mode: "value,squint"` shows the picture as
   big masses of light and dark. If the masses don't hold there, no detail
   will save them.
@@ -44,9 +45,10 @@ the picture is yours.
   what it is for (height, glare, distance, weather), not only whether the
   last thing you fixed is fixed. Then `survey` it at full detail: what you
   can't see in a whole view is still on the canvas.
-- **The full value range.** Check `mode: "value,squint"`: there should be
-  real darks and real lights, not everything in the middle. A picture of
-  light needs darks for the light to read against.
+- **Values.** Check `mode: "value,squint"`: do the large lights, middles
+  and darks give the effect you want? A picture of light needs darks for the
+  light to read against; a misty or high-key picture can keep a narrow range
+  on purpose.
 - **The sky is a light source.** It has a gradient (warmer, lighter toward
   the light) and it explains every light and shadow below it. A flat band of
   one tone is dead; a ruler-straight horizon is too hard: lose it in places.
@@ -107,6 +109,9 @@ the picture is yours.
   stains or one that hides show there, before they cost a passage.
 - **Steer a mix by eye**: `p:add{}` a touch at a time, looking between,
   rather than knifing a new recipe blind.
+- **Matching a passage** for a repair: start from its recipe in the log and
+  lay a trial beside it. The layers since may have shifted the passage, so
+  judge the laid trial in a detail crop.
 - **Set out a limited palette** for a picture that should hang together; a
   few tubes mixed every way give related colors by themselves.
 - **A dirty board unifies.** `palette{dirty=0.2}` to `0.4` lets each heap
@@ -128,6 +133,9 @@ the picture is yours.
   to set for crisp, separate strokes on top.
 - **Watch the white.** Every pile with much lead white is chalky. Keep white
   for the lights; let the darks and middles be pigment.
+- **Corrections stay close in value.** Keep a correction within a value step
+  of what surrounds it, and small accents near their surroundings' value: a
+  pale blade or rim light against a dark reads as a crack.
 - **Vary the touch.** One stroke length and one brush over a whole canvas
   reads as a mechanical texture, however good the colors. Change brush size,
   stroke length, direction and pressure from passage to passage; leave some
@@ -165,16 +173,34 @@ the picture is yours.
 - `k:scrape(points, {pressure=1})` takes wet paint off down to what is dry:
   to restate a passage, or to leave a ghost of it.
 
+## Blending
+
+- **Blend inside one passage.** Shape the mask like the passage, with its
+  edge where the paint already matches. Keep everything you want to keep
+  outside the mask, dry shapes included: the blender carries wet paint onto
+  them.
+- **Look after each pass.** The blender lifts paint as it moves it. When
+  darks go pale, texture flattens or the weave shows through, stop.
+- **A seam that keeps coming back** needs another method. A smaller patch
+  blended again rebuilds the box. Try something else across the whole
+  transition on the scratch canvas: a thin tint of the original recipe,
+  interlocking strokes of the two neighboring colors over dry paint, or the
+  connected passage repainted up to its natural edges.
+
 ## Glazing and scumbling (over dry paint)
 
 - **Glaze**: a transparent paint (lakes, viridian, ultramarine, a little of
   anything) with plenty of medium (0.7 to 0.85), `hand="glaze"`, over a dry
   passage. It deepens and saturates without hiding the light underneath; it
   rescues a chalky passage. Over impasto it pools in the valleys and thins
-  on the ridges, which then shine through.
-- **Scumble**: an opaque light paint dragged thin (`hand="scumble"`, little
-  load) over a dry darker one, broken by the surface: air, haze, light on
-  water.
+  on the ridges, which then shine through. Too much pigment, or any white,
+  lays an opaque veil: try it small first. A glaze over the whole picture
+  to pull it together has gone wrong more often than right.
+- **Scumble**: light paint dragged thin over a dry darker passage, broken
+  by the surface: air, haze, light on water. A light load and
+  `hand="scumble"` often lay opaque dabs. The veils that blended in came
+  from paint thinned with `thinner`, laid in several light passes. Try it
+  on the scratch canvas first.
 - Glazes and scumbles want the passage under them **dry** (`wait` until
   `drying` says so): over open paint they just mix.
 
@@ -183,21 +209,62 @@ the picture is yours.
 - **Clip** a pass near anything it must not touch (`clip=` a mask). The body
   hands carry paint past their mask's edge by as much as a stroke's length:
   without a clip they paint over what is next to them.
+- **Protect what is there now.** Paint fine things (twigs, grass tips,
+  figures) after the passages behind them where you can. In every later
+  pass over that area, subtract each of them from the mask (`m - twigs`),
+  and subtract again after `grow` or `blur`, which spread the mask back
+  over them.
+- **Check a mask before painting through it**: `print(m:at(x, y))` at a few
+  points inside the target and just outside it, past each end of a band.
 - **Masks from earlier chunks**: a `local` mask is gone in the next chunk.
-  Keep what later chunks need as globals; keep big temporary masks local
-  (memory).
+  Keep what later chunks need as globals: paths, recipes, protection masks.
+  Before redrawing something by eye, look for its saved path. Keep big
+  temporary masks local (memory).
 - **Small things** (a blossom, a figure, a sail) drawn as a neat diagram of
   petals or parts read as icons. A few thick, irregular touches of two or
   three colors read as the thing.
-- **No undo**: a mistake is painted over, glazed, scraped or let dry and
-  restated, as on any canvas. It costs painted time, not the picture.
+- **Taking paint off**: wet paint comes off with the rag (below) or the
+  knife, down to the first set layer. Set paint stays: paint over it or
+  glaze it. Either way it costs painted time, not the picture.
+
+## The rag
+
+- **It lifts wet paint down to the first set layer.** Before a wipe, check
+  `drying(x, y)` under the paint as well as in it: where the layer beneath
+  is still open, the rag takes that too, to the ground.
+- **Dip it for a lift.** A dry rag mostly moves paint and leaves its color
+  in the weave: useful for wiping lights out of a wet glaze or lay-in. To
+  take a passage off, dip well (`r:dip(0.9)`), press firmly, give it two or
+  three passes, then go over it again across the first direction with a
+  fresh, dipped rag.
+- **The spirits go in minutes.** Dampness halves every three minutes of
+  painting time, and a long mask wipe takes minutes. Dip just before each
+  wipe; `print(r.damp)` says how much is left.
+- **A loaded face puts paint back.** `print(r.load)`: near 1, the face
+  lifts little and smears. Refold (`refold=` in a mask wipe) or take a
+  fresh rag.
+- **The rag isn't clipped.** Its rim reaches past the mask and lays lifted
+  paint on what is next to it, dry shapes included. Keep the mask clear of
+  edges you need crisp. Along an edge, wipe a path parallel to it with a
+  rag narrower than the strip.
+- **Shape the mask like the passage.** Mask wipes start and stop a little
+  inside the mask, so a rectangle leaves a frame of the wiped color. If a
+  frame shows, wipe along its sides with a path.
+- **Expect a trace.** Even a good lift leaves a tint, streaks along the
+  wipe or a rim where it stopped. Look at a detail crop before you call it
+  clean, and before you paint over it. Thick paint takes many fresh, dipped
+  wipes.
+- **One lift, then a new plan.** If the same passage needs lifting twice,
+  change what goes on it before painting it again.
 
 ## Time
 
 - Time passes only as you paint or `wait`. Paint dries on its own clock:
   lead white and umber fast, lakes and vermilion slow, thin paint faster than
-  thick. Added medium slows drying; oil species and ground absorbency are
-  not drying controls in this easel.
+  thick. Added medium and the slower oils (walnut, poppy) slow it; an
+  absorbent ground sets thin paint laid straight on it quickly.
+- **Check `drying(x, y)` at several points** along the next pass, its edges
+  included: thick and thin parts of one passage dry at different rates.
 - A painting can take months of painted time. Let layers dry between
   campaigns; that is what lets the next one sit on top.
 

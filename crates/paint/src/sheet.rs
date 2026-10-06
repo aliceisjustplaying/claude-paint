@@ -64,6 +64,9 @@ pub const HOG_TIP_UM: f32 = 50.0;
 /// (estimates: 30–70 %, 1–5 mm, 0.1–1 mm; pastel_brushing.md §6).
 const CARRY: f32 = 0.5;
 const CARRY_MM: f32 = 3.0;
+/// The largest crumb a dry brush drops, µm across: agglomerates of 50–150 µm
+/// are partly broken up by a bristle (pastel_brushing.md §4).
+const BRUSH_CRUMB_UM: f32 = 100.0;
 const DROP_MM: f32 = 0.5;
 
 /// The steel flexes over broad relief and bridges fine hollows: the blade
@@ -322,27 +325,20 @@ impl Canvas {
             let sheet = self.sheet.as_ref();
             let film = &self.film;
             let wet = &self.wet.vol;
+            let height = &self.height;
             let cov = |v: f32| 1.0 - (-v / PARTICLE_UM).exp();
-            let lay = |cells: &mut [crate::graphite::Cell], pxs: &mut [Rgb], trail: &[usize], vol: f32, col: Rgb| {
-                if trail.is_empty() || vol <= 0.0 {
+            // what drops falls as crumbs (agglomerates broken by the bristles
+            // to some 100 µm and less: pastel_brushing.md §4), into the
+            // hollows more than onto the tops
+            let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0xD057);
+            let px_um2 = (s_mm * 1000.0) * (s_mm * 1000.0);
+            let lay = |cells: &mut crate::graphite::Drawing, pxs: &mut [Rgb], zone: &[usize], vol: f32, col: Rgb, rng: &mut crate::rng::Rng| {
+                if zone.is_empty() || vol <= 0.0 {
                     return;
                 }
-                let dv = vol / trail.len() as f32;
-                let q = cov(dv);
-                for &i in trail {
-                    let c = &mut cells[i];
-                    if c.film < 0.0 || film[i] > c.film + 1e-4 {
-                        *c = crate::graphite::Cell { film: film[i], ..crate::graphite::Cell::default() };
-                    }
-                    let under = uncover(pxs[i], c.a, c.r);
-                    let old = c.a * (1.0 - q);
-                    let w = old + q;
-                    c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * col[k]) / w.max(1e-6)).clamp(0.0, 1.0));
-                    c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
-                    c.a = (c.a + (1.0 - c.a) * q).min(0.995);
-                    c.loose += dv;
-                    pxs[i] = cover(under, c.a, c.r);
-                }
+                let hmax = zone.iter().map(|&i| height[i]).fold(f32::MIN, f32::max);
+                let bed: Vec<(usize, f32, bool)> = zone.iter().map(|&i| (i, 1.0 + (hmax - height[i]), false)).collect();
+                crate::pastel::lay_crumbs(cells, film, pxs, &bed, vol, col, rng, BRUSH_CRUMB_UM, px_um2);
             };
             for t in 0..=n {
                 let dd = total * t as f32 / n as f32;
@@ -410,15 +406,17 @@ impl Canvas {
                 }
                 // what drops just ahead, and a share of what is carried
                 let give = drop + carry * release;
-                lay(&mut dr.cells, &mut pxs, &trail, give, col);
+                lay(&mut dr, &mut pxs, &trail, give, col, &mut rng);
                 carry -= carry * release;
                 drop = 0.0;
-                if !trail.is_empty() {
-                    last_trail = trail;
+                band.retain(|&i| !sheet.is_some_and(|s| s.over[i]) && wet[i] <= 1e-5);
+                if !band.is_empty() {
+                    last_trail = band;
                 }
             }
-            // lifted off: what is left on the bristles drops where they leave
-            lay(&mut dr.cells, &mut pxs, &last_trail, carry, col);
+            // lifted off: what is left on the bristles falls off them where
+            // they leave, over the band the tips last touched
+            lay(&mut dr, &mut pxs, &last_trail, carry, col, &mut rng);
         }
         self.drawing = Some(dr);
         self.px = pxs;

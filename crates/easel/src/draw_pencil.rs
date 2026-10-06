@@ -784,6 +784,52 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(())
         })?)?;
     }
+    // blow(x, y, {distance=50, speed=12, nozzle=8}): a puff of air at the
+    // picture from `distance` mm, leaving the lips (or a bulb's nozzle,
+    // `nozzle` mm) at `speed` m/s (blowing hard: 12 on average, 6–64); tap({g=100}):
+    // the board's edge struck on the table (50–400 g; an upright sheet: 1).
+    // Engine 7 (paint's sheet.rs). Each returns the volume shed, mm³.
+    {
+        let st1 = st.clone();
+        g.set("blow", lua.create_function(move |_, (x, y, o): (f32, f32, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, &["distance", "speed", "nozzle"], "blow")?;
+            }
+            let get = |k: &str, d: f32| -> Result<f32> { Ok(o.as_ref().map(|o| num(o, k)).transpose()?.flatten().unwrap_or(d)) };
+            let (h, u, d) = (get("distance", 50.0)?, get("speed", 12.0)?, get("nozzle", 8.0)?);
+            if !(5.0..=500.0).contains(&h) || !(1.0..=80.0).contains(&u) || !(1.0..=40.0).contains(&d) {
+                return err("blow: distance 5–500 mm, speed 1–80 m/s (a hard blow 12, peaks to 64; a bulb 20–60), nozzle 1–40 mm (lips about 8)");
+            }
+            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                if c.engine() < 7 {
+                    return Err(mlua::Error::runtime("blow needs engine 7"));
+                }
+                let v = c.blow_pastel(x, y, h, u, d);
+                c.tally_mut().secs += 1.5;
+                Ok(v)
+            })
+        })?)?;
+        let st1 = st.clone();
+        g.set("tap", lua.create_function(move |_, o: Option<Table>| {
+            if let Some(o) = &o {
+                check_keys(o, &["g"], "tap")?;
+            }
+            let a = o.as_ref().map(|o| num(o, "g")).transpose()?.flatten().unwrap_or(100.0);
+            if !(0.1..=1000.0).contains(&a) {
+                return err("tap: g, the board's acceleration in gravities (a tapped edge 50–400; an upright sheet 1)");
+            }
+            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                if c.engine() < 7 {
+                    return Err(mlua::Error::runtime("tap needs engine 7"));
+                }
+                let v = c.tap_pastel(a);
+                c.tally_mut().secs += 3.0;
+                Ok(v)
+            })
+        })?)?;
+    }
     // feel(x, y): what a fingertip feels there (engine 6): the surface, and the
     // pastel in the tooth
     {

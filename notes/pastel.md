@@ -207,3 +207,41 @@ Not built, and why: wet pastel and steam (the deposit and consolidation of a
 water-softened pastel compact and its gum are unmeasured; only the water
 transport could be modelled), pastel paste/gouache (a water-borne binder
 drying by evaporation to a porous film: physics known, a large job).
+
+### Engine 7 tools, second pass (2026-10-06; notes/research/pastel_removal_air_blade.md)
+
+The brush, the blade and the loose dust made more physical. Paint's
+sheet.rs:
+
+- **The knife sinks** (`edge_sink_um`): a cylindrical edge (radius `edge`,
+  100 µm by default) on the sheet as a bed of springs with Chen et al.'s
+  (2020) compression curve σ = 0.636(e^(13.54ε) − 1) MPa, thickness the
+  paper's caliper; the hand's line load 0.05–0.5 N/mm by pressure. It takes
+  the loose pastel above that depth (35 % dropped where it lifts, an
+  estimate within the research's 20–50 %; the rest carried off), and
+  burnishes: the residual strain 0.49ε − 0.027 lowers the pixel's height and
+  its pore depth µ by the dent (the voids it closed), once per pixel. The
+  Winkler depth ignores the fibres' in-plane stiffness, so it is an upper
+  bound: a firm scrape strips the loose pastel to the paper. Fixed pastel
+  stays; nap raising and cutting (a scalpel) are not modelled.
+- **The brush fills** (`Held::pastel_mg`): it keeps what it lifts in
+  proportion to its room (capacity 0.06 mg per mm³ of a 2 mm loaded tip,
+  width × 2 × 0.3·width: a fur brush's pile holds 5–7 % of its volume in
+  toner); the rest is pushed 0.5 mm ahead as crumbs (lay_crumbs, up to
+  100 µm) and met again, so it ends as a ridge at the lift. `b:wipe` empties it.
+- **blow(x, y, {distance, speed, nozzle})**: Phares et al.'s peak wall shear
+  of an impinging jet, τ = 44.6ρU²Re^(−½)(h/d)^(−2) (h/d ≥ 6), on a ring at
+  0.09h, rising linearly inside it and falling as r^(−2.3) outside (a radial
+  wall jet). Heaped loose crumbs go past Shao & Lu's threshold for 100 µm
+  crumbs of 1250 kg/m³ (~0.21 m/s), on a ramp (the shear fluctuates); in the
+  pores the shear dies as exp(−4.21 z/w) (Moffatt), w the fibre width, so
+  the fine grains (Shao & Lu at 5 µm, ~0.8 m/s) go down to z = (w/2.1)·ln(u*/u*t).
+  Redeposition (0–20 %) left out.
+- **tap({g})**: crumbs heaped on the tooth with m·a > F_adh fall (F_adh 50
+  nN, crumbs 1250 kg/m³: at 100 g, d_c ≈ 33 µm; at 1 g, ~150 µm); with
+  crumb sizes P(A) ∝ A^(−3/2) up to 300 µm the falling share of the heap is
+  (A_max − A_c)/(A_max − A_min). Pore-held grains and fixed pastel stay.
+
+Still flat: a brushed ghost is an even tone, because the paper model gives
+every pixel the same pore depth (µ = the fibre thickness); letting µ vary
+with the local fibre count would need its own derivation.

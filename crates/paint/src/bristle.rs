@@ -359,6 +359,9 @@ pub struct Held {
     /// Painting with engine 4 or later: its `Debug` gives each bristle's
     /// paint its solvent and oil too. Not printed itself.
     shows_oil: bool,
+    /// Engine 7: dry pastel held in the bristles, mg (`Canvas::dust_pastel`);
+    /// a wipe takes its share off. Printed only when there is some.
+    pub pastel_mg: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -407,7 +410,12 @@ impl std::fmt::Debug for Held {
                 f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
+        let mut d = f.debug_struct("Held");
+        d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil));
+        if self.pastel_mg > 0.0 {
+            d.field("pastel_mg", &self.pastel_mg);
+        }
+        d.finish()
     }
 }
 
@@ -476,7 +484,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, pastel_mg: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -560,6 +568,7 @@ impl Held {
 
     /// Wipe the brush on a rag: remove `frac` of the paint in it.
     pub fn wipe(&mut self, frac: f32) {
+        self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);

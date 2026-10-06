@@ -540,7 +540,9 @@ feel(x, y)                     -- what a fingertip feels there
 lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
 lift_sheet()                                              -- taken away, with what it caught
 b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
-k:scrape(pts, {pressure=})            -- the blade also takes pastel heaped above the paper
+k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the paper, takes the loose
+blow(x, y, {distance=50, speed=12})   -- a puff of air (mm from the paper; m/s from the lips)
+tap({g=100})                          -- the board's edge struck on the table (an upright sheet: g=1)
 ```
 
 - **The sheet** keeps what it covers clean. It lies a paper's thickness
@@ -556,12 +558,23 @@ k:scrape(pts, {pressure=})            -- the blade also takes pastel heaped abov
   far as its bristles' tips reach into the tooth and no deeper: a hog's tip
   (about 50 µm) reaches only the top micrometres of the pores, so what fills
   them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
-  What it lifts it sweeps along ahead of it and leaves
-  as a darker lip where it lifts. It doesn't give the tooth back the way
-  fixative does: brushing out a correction leaves its ghost.
-- **The blade** (`k:scrape`) rides on the paper's high points and takes the
-  pastel heaped above them, a built-up layer or a fixed crust, the loose
-  first. What fills the pores lies below the blade and stays.
+  The bristles keep what they lift until they are full (a brush a centimetre
+  wide holds a few milligrams; `b:wipe` empties it); then the rest is pushed
+  ahead and left as a ridge of crumbs where the brush lifts. Over a
+  speckled passage it smears more than it cleans.
+- **The knife** (`k:scrape`) pressed over pastel sinks into the paper by the
+  sheet's compression (tens of µm at a hand's load, deeper than the pores:
+  an upper bound), takes the loose pastel down into the tooth, drops part of
+  it where it lifts, and leaves the paper it pressed burnished: flatter,
+  its pores shallower, so it takes less pastel after. `edge` is the edge's
+  radius in µm (an unsharpened painting knife 20–500; a scalpel about 1).
+  Fixed pastel stays.
+- **A puff** (`blow`) shears the surface in a ring around where it is aimed
+  (nothing at the very centre): loose crumbs heaped on the tooth go easily;
+  the pores' fine grains only under a hard blow close in, and only their
+  top few micrometres. What goes is gone.
+- **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
+  heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
 - **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
   `at: "x,y"` (see Looking).
 

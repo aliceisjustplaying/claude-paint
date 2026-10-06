@@ -1,0 +1,33 @@
+warning: variable does not need to be mutable
+   --> crates/paint/src/thinner.rs:900:21
+    |
+900 |                 let mut report = |name: &str, c: &mut Canvas, r: (f32, f32, f32, f32), brush: Option<f64>| {
+    |                     ----^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib test) generated 1 warning (run `cargo fix --lib -p paint --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.13s
+     Running unittests src/lib.rs (target/debug/deps/paint-4a9b55dd024f8bad)
+
+running 16 tests
+test drying::tests::splitting_a_wait_changes_nothing ... ok
+test drying::tests::an_infinite_wait_does_not_dry - should panic ... ok
+test drying::tests::thick_and_fat_films_dry_slower ... ok
+test drying::tests::drying_is_deterministic_across_thread_counts ... ok
+test drying::tests::stages_dont_depend_on_resolution ... ok
+test drying::tests::stages_follow_the_clock_and_the_pigment ... ok
+test drying::tests::fresh_paint_over_setting_paint_is_open_before_the_next_wait ... ok
+test drying::tests::checkpoint_mid_drying_resumes_exactly ... ok
+test drying::tests::engine_3_keeps_paint_open_longer ... ok
+test drying::tests::waiting_it_out_equals_dry ... ok
+test drying::tests::brushes_feel_the_stage ... ok
+test drying::tests::burnt_sienna_dries_before_raw_sienna ... ok
+test drying::tests::splitting_a_wait_changes_nothing_under_the_brush ... ok
+test drying::tests::thick_films_dry_as_much_slower_as_goldens ... ok
+test drying::tests::fast_pigments_dry_before_slow_ones ... ok
+test drying::tests::strokes_dry_within_the_sources_ranges ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 220 filtered out; finished in 15.16s

@@ -1,0 +1,95 @@
+{
+  "size": [
+    2400,
+    1800
+  ],
+  "changed_pixels": 21,
+  "total_pixels": 4320000,
+  "mean_absolute_rgb_levels": 4.012345679012345e-06,
+  "maximum_rgb_levels": 7,
+  "pixels_at_least_2": 3,
+  "cross_build_policy_pass": false,
+  "crop_px": [
+    228,
+    705,
+    740,
+    1217
+  ],
+  "checkpoint_bytes": [
+    518401013,
+    518401013
+  ],
+  "checkpoint_changed_bytes": 5206253,
+  "fields": {
+    "rgb": {
+      "changed_values": 12,
+      "max_absolute": 0.4118674248456955,
+      "mean_absolute": 1.1000604768295163e-07
+    },
+    "height_um": {
+      "changed_values": 23,
+      "max_absolute": 2029.5429077148438,
+      "mean_absolute": 0.0009273007710774739
+    },
+    "film": {
+      "changed_values": 14,
+      "max_absolute": 50.730313301086426,
+      "mean_absolute": 2.7302709994492706e-05
+    },
+    "wet_coats": {
+      "changed_values": 550639,
+      "max_absolute": 50.73031234741211,
+      "mean_absolute": 2.7370440636721528e-05
+    },
+    "latent": {
+      "changed_values": 322504,
+      "max_absolute": 0.5911450609564781,
+      "mean_absolute": 4.784946354019597e-05
+    },
+    "properties": {
+      "changed_values": 74272,
+      "max_absolute": 2.389694005250931,
+      "mean_absolute": 0.0002036666867778533
+    },
+    "stroke": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "touched": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "drying": {
+      "changed_values": 1356120,
+      "max_absolute": 899.9764263629913,
+      "mean_absolute": 0.007580399767802167
+    },
+    "cover": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "engine": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "gloss": {
+      "changed_values": 2,
+      "max_absolute": 1.5497207641601562e-06,
+      "mean_absolute": 5.105027446040401e-13
+    },
+    "absorbency": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "solvent_um": {
+      "changed_values": 515764,
+      "max_absolute": 1.228549640836718,
+      "mean_absolute": 1.7630981617242245e-06
+    }
+  }
+}

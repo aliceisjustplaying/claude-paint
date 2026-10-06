@@ -509,9 +509,21 @@ def test_the_brief_names_the_artist_and_whose_paintings_the_reference_pictures_a
     ("I'm stopping here. The painting is finished as far as I can take it.\n\n**Quinces, Raking Light**\n\nA low-key still life.", "Quinces, Raking Light"),
     ("I'll start by reading the brief.", None),
     ("Next I'll **glaze** the sky.\n\nThen the trees.", None),
+    # named in the first line (paint-studio-49b647, -12e572, -c8bb05), quotes inside the bold (-b3a3c7)
+    ("I've called the painting **Luncheonette, Four O'Clock**.\n\nA corner.", "Luncheonette, Four O'Clock"),
+    ("I've finished **Nymphéas, reflet du soir** (*Water Lilies, Evening Reflection*). The clock now stands at day 213.", "Nymphéas, reflet du soir"),
+    ("I've left **Grainstack, Evening** as it was at day 415.", "Grainstack, Evening"),
+    ("I'm leaving **Luncheonette, Four O'Clock** finished as it is.", "Luncheonette, Four O'Clock"),
+    ('**"Self-Portrait with Palette"**\n\nA half-length figure.', "Self-Portrait with Palette"),
+    ("I finished the sky, then **glazed** it.", None),
 ])
 def test_the_title_is_where_painters_put_it_in_their_closing_words(say, title):
     assert S.title_of(say) == title
+
+
+def test_a_last_sitting_that_only_looked_keeps_the_earlier_title():
+    # paint-studio-b3a3c7: the second sitting's closing words don't repeat the title
+    assert S.title_of_closings(["**The Blue Barn**\n\nA barn.", "The painting is exactly as the journal left it."]) == "The Blue Barn"
 
 
 def test_a_palette_look_is_not_the_painting():

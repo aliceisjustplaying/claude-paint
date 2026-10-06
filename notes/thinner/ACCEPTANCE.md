@@ -633,9 +633,9 @@ The movement guards (≥ 20 pixels gaining ≥ 1%) are model estimates.
 
 ### 17. Waits
 
-`c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4`.
+`c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded`.
 
-The clock counts one-minute steps from the canvas's start. Two thinned
+The oil clock counts one-minute steps from the canvas's start. Two thinned
 patches, starting on a whole minute. Expected:
 
 - `wait(15)` and 15 × `wait(1)` give the same save, byte for byte, with
@@ -660,6 +660,29 @@ patches, starting on a whole minute. Expected:
 
 All durations in the exact cases are exact in binary: 0.25 + 0.75 = 1
 exactly, and 15 s / 60 = 0.25.
+
+**Engine 5 wait acceleration (2026-10-06).** Engine 3 retains every bound
+above. Engine 5 uses the original 64 ticks/min while flow is appreciable,
+then aligned quarter minutes when `max_mobility * 0.25 / pixel_mm² <= 0.0025`.
+The flow solver still enforces its 0.2 stability limit and transports paint,
+solvent and cure together. The threshold is a chosen integration estimate,
+not a measured physical constant. Whole-minute and quarter-minute exact
+cases with solvent present throughout remain byte-exact. Off-grid engine-5
+splits now allow 1e-3 relative difference in paint, solvent and cure, or an
+absolute 0.001 µm difference in paint/solvent. Cure keeps `ZERO_CURE`.
+This deliberately revises the earlier 1e-4 fractional-split contract rather
+than claiming the coarser integration preserves it.
+
+Engine 5 also regards solvent below `max(1e-8, 1e-5 * (paint_um + 2))` µm
+as numerically gone. This removes trace solvent early; it does not give that
+residue its original closed-form evaporation or preserve its last flow.
+The exponential law and h³ mobility remain in force above the threshold.
+This is a numerical approximation, not a physical calibration. Earlier
+engines retain the 1e-8 µm cutoff and fine grid. Unlike the old `FLOW_MIN`
+removal recorded below, this explicitly changes engine-5 trace behavior
+and accepts replay drift to bound long waits. Existing engine-5 logs receive
+this speedup too, as authorized for the interrupted painting. The measured
+image comparisons and build receipts are in `research/wait-solvent/`.
 
 **Why a clock that restarts at each wait fails the exact cases.**
 

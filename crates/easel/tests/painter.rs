@@ -138,6 +138,8 @@ const OWN_BOX: Option<&str> = if cfg!(feature = "box-friedrich") {
     Some("giverny")
 } else if cfg!(feature = "box-impressionist") {
     Some("impressionist")
+} else if cfg!(feature = "box-every") {
+    Some("every")
 } else {
     None
 };

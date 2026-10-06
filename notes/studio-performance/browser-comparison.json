@@ -1,0 +1,950 @@
+{
+  "runs": [
+    {
+      "port": 8771,
+      "round": 0,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        13.200000017881393,
+        13.699999988079071,
+        13.799999982118607,
+        14.099999994039536,
+        12.200000017881393,
+        12.800000011920929,
+        10.799999982118607,
+        10.599999994039536,
+        10.399999976158142,
+        10.199999988079071,
+        9.300000011920929,
+        13.100000023841858,
+        12.5,
+        9.300000011920929
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 1,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8771/paintings.json",
+          "start": 12.5,
+          "duration": 2.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 13,
+          "duration": 2.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/events.json",
+          "start": 63.79999998211861,
+          "duration": 52.60000002384186
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 64.19999998807907,
+          "duration": 46.599999994039536
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 957.6999999880791,
+          "duration": 4.800000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 1674.699999988079,
+          "duration": 1.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 3450.9000000059605,
+          "duration": 1.5999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 3450.9000000059605,
+          "duration": 2.2999999821186066
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 3901.5,
+          "duration": 2.9000000059604645
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 4112.5999999940395,
+          "duration": 1.800000011920929
+        }
+      ],
+      "errors": []
+    },
+    {
+      "port": 8770,
+      "round": 0,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        9.599999994039536,
+        2.4000000059604645,
+        3,
+        1.9000000059604645,
+        1.5999999940395355,
+        1.699999988079071,
+        2.199999988079071,
+        2,
+        45.599999994039536,
+        1.4000000059604645,
+        1.7999999821186066,
+        11.099999994039536,
+        3.4000000059604645,
+        22.799999982118607
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 0,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg?v=775a72cb6e01a48dde076bae5f0f05497728fe6fce7995441cb6214479bd9f65",
+          "start": 3.9000000059604645,
+          "duration": 4.800000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/events.json",
+          "start": 13.300000011920929,
+          "duration": 5.699999988079071
+        },
+        {
+          "url": "http://100.82.115.34:8770/paintings.json",
+          "start": 13.5,
+          "duration": 1
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 13.599999994039536,
+          "duration": 4.700000017881393
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 81.2000000178814,
+          "duration": 21.5
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 943,
+          "duration": 3.300000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 1250.800000011921,
+          "duration": 1.5
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 2154.2000000178814,
+          "duration": 3
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 2154.2000000178814,
+          "duration": 3.199999988079071
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 2395,
+          "duration": 3.2000000178813934
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 2570.2000000178814,
+          "duration": 0.7999999821186066
+        }
+      ],
+      "errors": []
+    },
+    {
+      "port": 8771,
+      "round": 1,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        21.899999976158142,
+        25.299999982118607,
+        18.30000001192093,
+        29.299999982118607,
+        14.899999976158142,
+        13.599999994039536,
+        13,
+        18.900000005960464,
+        10.099999994039536,
+        13.899999976158142,
+        10.400000005960464,
+        16.700000017881393,
+        15.099999994039536,
+        12.800000011920929
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 1,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8771/paintings.json",
+          "start": 9.300000011920929,
+          "duration": 2
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 9.5,
+          "duration": 1.5999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/events.json",
+          "start": 63.30000001192093,
+          "duration": 48.19999998807907
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 63.400000005960464,
+          "duration": 46.30000001192093
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 1565.7000000178814,
+          "duration": 2.899999976158142
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 2487.7000000178814,
+          "duration": 1.399999976158142
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 4505.300000011921,
+          "duration": 3.5999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 4505.300000011921,
+          "duration": 3.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 5018.9000000059605,
+          "duration": 1.9000000059604645
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 5258.700000017881,
+          "duration": 1.699999988079071
+        }
+      ],
+      "errors": []
+    },
+    {
+      "port": 8770,
+      "round": 1,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        11.099999994039536,
+        2.5,
+        3.9000000059604645,
+        2.5999999940395355,
+        1.800000011920929,
+        1.300000011920929,
+        1.699999988079071,
+        1.5,
+        2.2999999821186066,
+        0.8999999761581421,
+        1.0999999940395355,
+        6.799999982118607,
+        1.9000000059604645,
+        7.700000017881393
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 0,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg?v=775a72cb6e01a48dde076bae5f0f05497728fe6fce7995441cb6214479bd9f65",
+          "start": 4.200000017881393,
+          "duration": 4.5999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/events.json",
+          "start": 12.800000011920929,
+          "duration": 5.699999988079071
+        },
+        {
+          "url": "http://100.82.115.34:8770/paintings.json",
+          "start": 13.200000017881393,
+          "duration": 4.0999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 13.5,
+          "duration": 5.700000017881393
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 98,
+          "duration": 10.599999994039536
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 1184,
+          "duration": 1.800000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 1487.800000011921,
+          "duration": 1.5999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 2403.2000000178814,
+          "duration": 1.899999976158142
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 2403.2000000178814,
+          "duration": 2.0999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 2603.9000000059605,
+          "duration": 1.5
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 2738.7000000178814,
+          "duration": 0.8999999761581421
+        }
+      ],
+      "errors": []
+    },
+    {
+      "port": 8771,
+      "round": 2,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        14.600000023841858,
+        16.599999994039536,
+        19,
+        18.899999976158142,
+        13.300000011920929,
+        13.099999994039536,
+        10,
+        9.5,
+        10.900000005960464,
+        19.200000017881393,
+        10.900000005960464,
+        12.599999994039536,
+        11.5,
+        8.599999994039536
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 1,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8771/paintings.json",
+          "start": 49.69999998807907,
+          "duration": 1.300000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 49.900000005960464,
+          "duration": 1.9000000059604645
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/events.json",
+          "start": 72.90000000596046,
+          "duration": 45.599999994039536
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 73,
+          "duration": 43.599999994039536
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 1080.5,
+          "duration": 4.9000000059604645
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 1810.800000011921,
+          "duration": 1.399999976158142
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 3909,
+          "duration": 2
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 3909.0999999940395,
+          "duration": 1.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 4438.5999999940395,
+          "duration": 0.5
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 4438.5999999940395,
+          "duration": 1.300000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8771/studio/data/sessions.json",
+          "start": 4658.199999988079,
+          "duration": 1.7000000178813934
+        }
+      ],
+      "errors": []
+    },
+    {
+      "port": 8770,
+      "round": 2,
+      "painter": "paint-studio-c8bb05",
+      "events": 1148,
+      "samples": [
+        8.5,
+        3.0999999940395355,
+        3.0999999940395355,
+        2.100000023841858,
+        1.199999988079071,
+        1.4000000059604645,
+        2.699999988079071,
+        1.7000000178813934,
+        1.0999999940395355,
+        2.0999999940395355,
+        2.199999988079071,
+        8.400000005960464,
+        2.300000011920929,
+        8.299999982118607
+      ],
+      "snapshots": [
+        {
+          "pos": 1117,
+          "source": "9797115c86a181f895220917acd75a8f3b9b0691a5ef63a3a0ea03d83e12c27d",
+          "journal": "cbfb40b7cad85daad97d34455fde8da2f42e7fc6e291452c21223feaa54852e7"
+        },
+        {
+          "pos": 1118,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "f3243b4a9c3f1e2747e07a17ab75b35c7bacdcb7d1ad8abbcf3d927a62e2d28c"
+        },
+        {
+          "pos": 1119,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "5cdd9ba21903db4185a84135e974c5923c06fbd3f29607b84cb08a8f6a0a131c"
+        },
+        {
+          "pos": 1120,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33a0a8f3a15f3cba00ddc92173bb2269eb50bfb6f7074e5864f8817aa9c9d163"
+        },
+        {
+          "pos": 1121,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "97c881e9483c2ad00ab4db773c5eb55ca97b0de427fd1e68bb902741fb1d1750"
+        },
+        {
+          "pos": 1122,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "06b3bb6120e697ceb84e16e14210846cda82bace86952c85bfee32f1b46ab44a"
+        },
+        {
+          "pos": 1123,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "e64b799bccf98f63837fb1f04ce4b1f5271b4983f7587bafb17841bffe3c99d1"
+        },
+        {
+          "pos": 1124,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "4baf35f5c5c3909a7e6c7bbdc3a53237731258544a4133eac1d082b27237bf83"
+        },
+        {
+          "pos": 1125,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "33625863a33b39a34f2fb07297168814528e5757d49dfd0a7f87e07b0ff25ea1"
+        },
+        {
+          "pos": 1126,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1127,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "3a8931965d7a8264035cc14e507b0e2af16fd462cbb4b32038631c2be107db29"
+        },
+        {
+          "pos": 1107,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "b90b73bd44773f67f56dd1b0f75c75c7c540400705756bbe8c66ad10cc71345f"
+        },
+        {
+          "pos": 1108,
+          "source": "405fb3ed462be278ffcda9978a808d86da87f781c30db65ca42ac29bef6603ff",
+          "journal": "53e74f9ce9b874152a17701eac845b7c5370ca7aaecae79126244f1b1255ab01"
+        },
+        {
+          "pos": 1147,
+          "source": "f5fb4642d303c016b2beda5f04881c1791acba41082d93ff4a0c9067e7c54aad",
+          "journal": "040f001f00e68dc150e60da103e1d101ac29eca226598b88fb0afac97bfc9a90"
+        }
+      ],
+      "pickerMutations": 0,
+      "requests": [
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg?v=775a72cb6e01a48dde076bae5f0f05497728fe6fce7995441cb6214479bd9f65",
+          "start": 3.300000011920929,
+          "duration": 3.7999999821186066
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/events.json",
+          "start": 10.300000011920929,
+          "duration": 7
+        },
+        {
+          "url": "http://100.82.115.34:8770/paintings.json",
+          "start": 10.300000011920929,
+          "duration": 3.0999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 10.5,
+          "duration": 9.400000005960464
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/265.jpg",
+          "start": 86.90000000596046,
+          "duration": 26.799999982118607
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/263.jpg",
+          "start": 946,
+          "duration": 2.800000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/264.jpg",
+          "start": 1292.4000000059605,
+          "duration": 1.5
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/252.jpg",
+          "start": 2092.5999999940395,
+          "duration": 2.5
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/260.jpg",
+          "start": 2092.699999988079,
+          "duration": 2.300000011920929
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/paint-studio-c8bb05/v/270.jpg",
+          "start": 2304.800000011921,
+          "duration": 1.0999999940395355
+        },
+        {
+          "url": "http://100.82.115.34:8770/studio/data/sessions.json",
+          "start": 2420.800000011921,
+          "duration": 1.0999999940395355
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "views": [
+    {
+      "name": "desktop",
+      "geometry": {
+        "x": 12,
+        "y": 67.09375,
+        "width": 839,
+        "height": 553.65625
+      }
+    },
+    {
+      "name": "mobile",
+      "geometry": {
+        "x": 4,
+        "y": 47.75,
+        "width": 382,
+        "height": 293.75
+      }
+    },
+    {
+      "name": "stream",
+      "geometry": {
+        "x": 12,
+        "y": 80.5,
+        "width": 1011.796875,
+        "height": 746.5
+      }
+    },
+    {
+      "name": "mobile-stream",
+      "geometry": {
+        "x": 4,
+        "y": 71.5,
+        "width": 382,
+        "height": 293.75
+      }
+    }
+  ]
+}

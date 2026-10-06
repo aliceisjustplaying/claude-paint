@@ -1,0 +1,2616 @@
+{
+  "comparison": {
+    "runs": 36,
+    "hashes": [
+      "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf"
+    ],
+    "browser": "154.0.8037.98",
+    "groups": [
+      {
+        "profile": "mobile-1.5Mbps",
+        "groups": {
+          "current": {
+            "runs": 5,
+            "overlapRuns": 1,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 1272.8,
+                "min": 1255.1,
+                "max": 1391.8
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 1388,
+                "min": 1288,
+                "max": 1504
+              },
+              "lcp": {
+                "n": 5,
+                "median": 2604,
+                "min": 2508,
+                "max": 2736
+              },
+              "videoStart": {
+                "n": 5,
+                "median": 2575,
+                "min": 2507.2,
+                "max": 2597.8
+              },
+              "videoFrame": {
+                "n": 5,
+                "median": 2736,
+                "min": 2697.2,
+                "max": 2749.6
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 1288.6,
+                "min": 1273.2,
+                "max": 1391.2
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 1270.9,
+                "min": 1254.4,
+                "max": 1389.3
+              },
+              "overlap": {
+                "n": 5,
+                "median": 0,
+                "min": 0,
+                "max": 34
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 617.8,
+                "min": 530.6,
+                "max": 701.2
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 1838.4,
+                "min": 1750.6,
+                "max": 1933.8
+              },
+              "afterDocumentVideo": {
+                "n": 5,
+                "median": 1772.2,
+                "min": 1749.8,
+                "max": 1824.9
+              }
+            }
+          },
+          "candidate": {
+            "runs": 5,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 1303.4,
+                "min": 1287,
+                "max": 1495.1
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 1364,
+                "min": 1300,
+                "max": 1540
+              },
+              "lcp": {
+                "n": 5,
+                "median": 2664,
+                "min": 2544,
+                "max": 2856
+              },
+              "videoStart": {
+                "n": 5,
+                "median": 2581.4,
+                "min": 2537,
+                "max": 2782.3
+              },
+              "videoFrame": {
+                "n": 5,
+                "median": 2687.4,
+                "min": 2650.5,
+                "max": 2966.1
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 1364.3,
+                "min": 1324.2,
+                "max": 1537
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 1302.7,
+                "min": 1286,
+                "max": 1493.9
+              },
+              "overlap": {
+                "n": 5,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 612.9,
+                "min": 550.9,
+                "max": 777.1
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 1869.6,
+                "min": 1794.9,
+                "max": 2093.1
+              },
+              "afterDocumentVideo": {
+                "n": 5,
+                "median": 1830.3,
+                "min": 1787.9,
+                "max": 2019.4
+              }
+            }
+          }
+        },
+        "pairedDelta": {
+          "heroLoad": {
+            "median": 23.6,
+            "values": [
+              23.6,
+              222.3,
+              -88.4,
+              42,
+              21.4
+            ]
+          },
+          "heroPaint": {
+            "median": 76,
+            "values": [
+              96,
+              204,
+              -164,
+              76,
+              -88
+            ]
+          },
+          "lcp": {
+            "median": 60,
+            "values": [
+              60,
+              268,
+              -68,
+              80,
+              -160
+            ]
+          },
+          "videoStart": {
+            "median": 63.8,
+            "values": [
+              63.8,
+              274.5,
+              -17.3,
+              74.2,
+              -49.8
+            ]
+          },
+          "afterDocumentHeroPaint": {
+            "median": 74.5,
+            "values": [
+              74.5,
+              190.7,
+              -124.2,
+              82.3,
+              -66.9
+            ]
+          },
+          "afterDocumentLCP": {
+            "median": 38.5,
+            "values": [
+              38.5,
+              254.7,
+              -28.2,
+              86.3,
+              -138.9
+            ]
+          },
+          "afterDocumentVideo": {
+            "median": 42.3,
+            "values": [
+              42.3,
+              261.2,
+              22.5,
+              80.5,
+              -28.7
+            ]
+          }
+        }
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "groups": {
+          "current": {
+            "runs": 5,
+            "overlapRuns": 5,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 1373.2,
+                "min": 1316.1,
+                "max": 1440.2
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 1416,
+                "min": 1412,
+                "max": 1560
+              },
+              "lcp": {
+                "n": 5,
+                "median": 3452,
+                "min": 3428,
+                "max": 3564
+              },
+              "videoStart": {
+                "n": 5,
+                "median": 3399.5,
+                "min": 3382.8,
+                "max": 3555.9
+              },
+              "videoFrame": {
+                "n": 5,
+                "median": 3500.2,
+                "min": 3435.6,
+                "max": 3663.2
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 1274.3,
+                "min": 1248.9,
+                "max": 1437.2
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 1372.1,
+                "min": 1315.5,
+                "max": 1438.3
+              },
+              "overlap": {
+                "n": 5,
+                "median": 80.2,
+                "min": 1.1,
+                "max": 121.1
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 668.8,
+                "min": 666.6,
+                "max": 754.3
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 2698.6,
+                "min": 2674.3,
+                "max": 2759.5
+              },
+              "afterDocumentVideo": {
+                "n": 5,
+                "median": 2652.7,
+                "min": 2621.8,
+                "max": 2745
+              }
+            }
+          },
+          "candidate": {
+            "runs": 5,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 1404.6,
+                "min": 1374.9,
+                "max": 2086.5
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 1508,
+                "min": 1388,
+                "max": 2164
+              },
+              "lcp": {
+                "n": 5,
+                "median": 3556,
+                "min": 3444,
+                "max": 3632
+              },
+              "videoStart": {
+                "n": 5,
+                "median": 3513.4,
+                "min": 3433.5,
+                "max": 3628
+              },
+              "videoFrame": {
+                "n": 5,
+                "median": 3633.2,
+                "min": 3545,
+                "max": 3768.6
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 1499.5,
+                "min": 1387,
+                "max": 2157.3
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 1403.6,
+                "min": 1374.3,
+                "max": 2085.8
+              },
+              "overlap": {
+                "n": 5,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 736.5,
+                "min": 623.1,
+                "max": 1408.7
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 2755.2,
+                "min": 2672.5,
+                "max": 2876.7
+              },
+              "afterDocumentVideo": {
+                "n": 5,
+                "median": 2730.2,
+                "min": 2668,
+                "max": 2872.7
+              }
+            }
+          }
+        },
+        "pairedDelta": {
+          "heroLoad": {
+            "median": 49.3,
+            "values": [
+              -15.9,
+              193.6,
+              49.3,
+              646.3,
+              1.7
+            ]
+          },
+          "heroPaint": {
+            "median": 36,
+            "values": [
+              -24,
+              204,
+              36,
+              604,
+              -24
+            ]
+          },
+          "lcp": {
+            "median": 68,
+            "values": [
+              -8,
+              156,
+              12,
+              68,
+              128
+            ]
+          },
+          "videoStart": {
+            "median": 72.1,
+            "values": [
+              40,
+              197.8,
+              130.6,
+              72.1,
+              13.3
+            ]
+          },
+          "afterDocumentHeroPaint": {
+            "median": 19.7,
+            "values": [
+              -17.8,
+              83.7,
+              19.7,
+              659.6,
+              -45.7
+            ]
+          },
+          "afterDocumentLCP": {
+            "median": 35.7,
+            "values": [
+              -1.8,
+              35.7,
+              -4.3,
+              123.6,
+              106.3
+            ]
+          },
+          "afterDocumentVideo": {
+            "median": 77.5,
+            "values": [
+              46.2,
+              77.5,
+              114.3,
+              127.7,
+              -8.4
+            ]
+          }
+        }
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "groups": {
+          "current": {
+            "runs": 5,
+            "overlapRuns": 5,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 10272.7,
+                "min": 8418.4,
+                "max": 11692.7
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 10308,
+                "min": 8448,
+                "max": 11700
+              },
+              "lcp": {
+                "n": 5,
+                "median": 10308,
+                "min": 8448,
+                "max": 11700
+              },
+              "videoStart": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              },
+              "videoFrame": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 2194.4,
+                "min": 1958.4,
+                "max": 2298.8
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 10269.6,
+                "min": 8417.4,
+                "max": 11692.1
+              },
+              "overlap": {
+                "n": 5,
+                "median": 7970.8,
+                "min": 6232.5,
+                "max": 9733.8
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 9095.3,
+                "min": 7276.9,
+                "max": 10475.8
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 9095.3,
+                "min": 7276.9,
+                "max": 10475.8
+              },
+              "afterDocumentVideo": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              }
+            }
+          },
+          "candidate": {
+            "runs": 5,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 5,
+                "median": 10056.8,
+                "min": 6531.7,
+                "max": 10647.7
+              },
+              "heroPaint": {
+                "n": 5,
+                "median": 10116,
+                "min": 6556,
+                "max": 10716
+              },
+              "lcp": {
+                "n": 5,
+                "median": 10116,
+                "min": 6556,
+                "max": 10716
+              },
+              "videoStart": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              },
+              "videoFrame": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              },
+              "videoRequest": {
+                "n": 5,
+                "median": 10099.8,
+                "min": 6543.1,
+                "max": 10682.8
+              },
+              "imageEnd": {
+                "n": 5,
+                "median": 10053.5,
+                "min": 6530.3,
+                "max": 10646.7
+              },
+              "overlap": {
+                "n": 5,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 5,
+                "median": 9031.3,
+                "min": 5437.8,
+                "max": 9628.6
+              },
+              "afterDocumentLCP": {
+                "n": 5,
+                "median": 9031.3,
+                "min": 5437.8,
+                "max": 9628.6
+              },
+              "afterDocumentVideo": {
+                "n": 0,
+                "median": null,
+                "min": null,
+                "max": null
+              }
+            }
+          }
+        },
+        "pairedDelta": {
+          "heroLoad": {
+            "median": -496,
+            "values": [
+              -1635.9,
+              42.4,
+              -496,
+              -1886.7,
+              270.4
+            ]
+          },
+          "heroPaint": {
+            "median": -464,
+            "values": [
+              -1584,
+              28,
+              -464,
+              -1892,
+              244
+            ]
+          },
+          "lcp": {
+            "median": -464,
+            "values": [
+              -1584,
+              28,
+              -464,
+              -1892,
+              244
+            ]
+          },
+          "videoStart": {
+            "median": null,
+            "values": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "afterDocumentHeroPaint": {
+            "median": -472.3,
+            "values": [
+              -1408.4,
+              -18.7,
+              -472.3,
+              -1839.1,
+              363.1
+            ]
+          },
+          "afterDocumentLCP": {
+            "median": -472.3,
+            "values": [
+              -1408.4,
+              -18.7,
+              -472.3,
+              -1839.1,
+              363.1
+            ]
+          },
+          "afterDocumentVideo": {
+            "median": null,
+            "values": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        }
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "groups": {
+          "current": {
+            "runs": 3,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 1454,
+                "min": 1077.6,
+                "max": 1632.9
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 1460,
+                "min": 1088,
+                "max": 1644
+              },
+              "lcp": {
+                "n": 3,
+                "median": 1996,
+                "min": 1580,
+                "max": 2396
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 1984.5,
+                "min": 1442.3,
+                "max": 2301.1
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 2146.8,
+                "min": 1690.5,
+                "max": 2394.7
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1491.5,
+                "min": 1136.1,
+                "max": 1634.9
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 1418,
+                "min": 1040.6,
+                "max": 1595.4
+              },
+              "overlap": {
+                "n": 3,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 400.5,
+                "min": 396.4,
+                "max": 422.3
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 888.4,
+                "min": 752.5,
+                "max": 1358.3
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 750.7,
+                "min": 741,
+                "max": 1263.4
+              }
+            }
+          },
+          "candidate": {
+            "runs": 3,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 1073.1,
+                "min": 1071.7,
+                "max": 1179
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 1080,
+                "min": 1080,
+                "max": 1188
+              },
+              "lcp": {
+                "n": 3,
+                "median": 1544,
+                "min": 1532,
+                "max": 1544
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 1440.4,
+                "min": 1436.3,
+                "max": 1540.9
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 1621,
+                "min": 1578.9,
+                "max": 1690.6
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1081.4,
+                "min": 1075.1,
+                "max": 1256.2
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 1037.7,
+                "min": 1033.6,
+                "max": 1136.2
+              },
+              "overlap": {
+                "n": 3,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 394.1,
+                "min": 393.8,
+                "max": 437.6
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 846.1,
+                "min": 793.6,
+                "max": 857.8
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 754.2,
+                "min": 750.4,
+                "max": 790.5
+              }
+            }
+          }
+        },
+        "pairedDelta": {
+          "heroLoad": {
+            "median": -275,
+            "values": [
+              -559.8,
+              -275,
+              -5.9
+            ]
+          },
+          "heroPaint": {
+            "median": -272,
+            "values": [
+              -564,
+              -272,
+              -8
+            ]
+          },
+          "lcp": {
+            "median": -452,
+            "values": [
+              -452,
+              -852,
+              -48
+            ]
+          },
+          "videoStart": {
+            "median": -544.1,
+            "values": [
+              -544.1,
+              -760.2,
+              -6
+            ]
+          },
+          "afterDocumentHeroPaint": {
+            "median": -2.3,
+            "values": [
+              -6.7,
+              15.3,
+              -2.3
+            ]
+          },
+          "afterDocumentLCP": {
+            "median": -42.3,
+            "values": [
+              105.3,
+              -564.7,
+              -42.3
+            ]
+          },
+          "afterDocumentVideo": {
+            "median": -0.3,
+            "values": [
+              13.2,
+              -472.9,
+              -0.3
+            ]
+          }
+        }
+      }
+    ],
+    "rows": [
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 1,
+        "variant": "current",
+        "at": "2026-10-06T15:04:08.829Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1323.3,
+        "heroPaint": 1412,
+        "lcp": 2604,
+        "lcpTag": "VIDEO",
+        "videoStart": 2597.8,
+        "videoFrame": 2749.6,
+        "videoRequest": 1288.6,
+        "imageStart": 775,
+        "imageEnd": 1322.6,
+        "overlap": 34,
+        "afterDocumentHeroPaint": 639.1,
+        "afterDocumentLCP": 1831.1,
+        "afterDocumentVideo": 1824.9,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 1,
+        "variant": "candidate",
+        "at": "2026-10-06T15:04:15.453Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1346.9,
+        "heroPaint": 1508,
+        "lcp": 2664,
+        "lcpTag": "VIDEO",
+        "videoStart": 2661.6,
+        "videoFrame": 2884.7,
+        "videoRequest": 1465.6,
+        "imageStart": 798.6,
+        "imageEnd": 1346.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 713.6,
+        "afterDocumentLCP": 1869.6,
+        "afterDocumentVideo": 1867.2,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 2,
+        "variant": "candidate",
+        "at": "2026-10-06T15:04:22.313Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1495.1,
+        "heroPaint": 1540,
+        "lcp": 2856,
+        "lcpTag": "VIDEO",
+        "videoStart": 2782.3,
+        "videoFrame": 2966.1,
+        "videoRequest": 1537,
+        "imageStart": 766.1,
+        "imageEnd": 1493.9,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 777.1,
+        "afterDocumentLCP": 2093.1,
+        "afterDocumentVideo": 2019.4,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 2,
+        "variant": "current",
+        "at": "2026-10-06T15:04:28.943Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1272.8,
+        "heroPaint": 1336,
+        "lcp": 2588,
+        "lcpTag": "VIDEO",
+        "videoStart": 2507.8,
+        "videoFrame": 2697.2,
+        "videoRequest": 1273.2,
+        "imageStart": 752.3,
+        "imageEnd": 1270.9,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 586.4,
+        "afterDocumentLCP": 1838.4,
+        "afterDocumentVideo": 1758.2,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 3,
+        "variant": "current",
+        "at": "2026-10-06T15:04:35.577Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1391.8,
+        "heroPaint": 1504,
+        "lcp": 2736,
+        "lcpTag": "VIDEO",
+        "videoStart": 2575,
+        "videoFrame": 2735.3,
+        "videoRequest": 1391.2,
+        "imageStart": 807.3,
+        "imageEnd": 1389.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 701.2,
+        "afterDocumentLCP": 1933.2,
+        "afterDocumentVideo": 1772.2,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 3,
+        "variant": "candidate",
+        "at": "2026-10-06T15:04:42.223Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1303.4,
+        "heroPaint": 1340,
+        "lcp": 2668,
+        "lcpTag": "VIDEO",
+        "videoStart": 2557.7,
+        "videoFrame": 2657.4,
+        "videoRequest": 1324.2,
+        "imageStart": 769.3,
+        "imageEnd": 1302.7,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 577,
+        "afterDocumentLCP": 1905,
+        "afterDocumentVideo": 1794.7,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 4,
+        "variant": "candidate",
+        "at": "2026-10-06T15:04:48.832Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1297.1,
+        "heroPaint": 1364,
+        "lcp": 2588,
+        "lcpTag": "VIDEO",
+        "videoStart": 2581.4,
+        "videoFrame": 2687.4,
+        "videoRequest": 1364.3,
+        "imageStart": 755.8,
+        "imageEnd": 1296.6,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 612.9,
+        "afterDocumentLCP": 1836.9,
+        "afterDocumentVideo": 1830.3,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 4,
+        "variant": "current",
+        "at": "2026-10-06T15:04:55.499Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1255.1,
+        "heroPaint": 1288,
+        "lcp": 2508,
+        "lcpTag": "VIDEO",
+        "videoStart": 2507.2,
+        "videoFrame": 2736,
+        "videoRequest": 1279.4,
+        "imageStart": 760.9,
+        "imageEnd": 1254.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 530.6,
+        "afterDocumentLCP": 1750.6,
+        "afterDocumentVideo": 1749.8,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 5,
+        "variant": "current",
+        "at": "2026-10-06T15:05:02.140Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1265.6,
+        "heroPaint": 1388,
+        "lcp": 2704,
+        "lcpTag": "VIDEO",
+        "videoStart": 2586.8,
+        "videoFrame": 2740.3,
+        "videoRequest": 1389.1,
+        "imageStart": 774.7,
+        "imageEnd": 1258.5,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 617.8,
+        "afterDocumentLCP": 1933.8,
+        "afterDocumentVideo": 1816.6,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 5,
+        "variant": "candidate",
+        "at": "2026-10-06T15:05:08.803Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1287,
+        "heroPaint": 1300,
+        "lcp": 2544,
+        "lcpTag": "VIDEO",
+        "videoStart": 2537,
+        "videoFrame": 2650.5,
+        "videoRequest": 1345.2,
+        "imageStart": 753.7,
+        "imageEnd": 1286,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 550.9,
+        "afterDocumentLCP": 1794.9,
+        "afterDocumentVideo": 1787.9,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 1,
+        "variant": "current",
+        "at": "2026-10-06T15:05:16.983Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1406.2,
+        "heroPaint": 1532,
+        "lcp": 3452,
+        "lcpTag": "VIDEO",
+        "videoStart": 3399.5,
+        "videoFrame": 3438.5,
+        "videoRequest": 1284.5,
+        "imageStart": 779.9,
+        "imageEnd": 1405.6,
+        "overlap": 121.1,
+        "afterDocumentHeroPaint": 754.3,
+        "afterDocumentLCP": 2674.3,
+        "afterDocumentVideo": 2621.8,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 1,
+        "variant": "candidate",
+        "at": "2026-10-06T15:05:25.128Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1390.3,
+        "heroPaint": 1508,
+        "lcp": 3444,
+        "lcpTag": "VIDEO",
+        "videoStart": 3439.5,
+        "videoFrame": 3545,
+        "videoRequest": 1499.5,
+        "imageStart": 774.9,
+        "imageEnd": 1387.6,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 736.5,
+        "afterDocumentLCP": 2672.5,
+        "afterDocumentVideo": 2668,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 2,
+        "variant": "candidate",
+        "at": "2026-10-06T15:05:33.321Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1509.7,
+        "heroPaint": 1616,
+        "lcp": 3600,
+        "lcpTag": "VIDEO",
+        "videoStart": 3595.9,
+        "videoFrame": 3768.6,
+        "videoRequest": 1616.5,
+        "imageStart": 868.4,
+        "imageEnd": 1508.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 750.3,
+        "afterDocumentLCP": 2734.3,
+        "afterDocumentVideo": 2730.2,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 2,
+        "variant": "current",
+        "at": "2026-10-06T15:05:41.498Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1316.1,
+        "heroPaint": 1412,
+        "lcp": 3444,
+        "lcpTag": "VIDEO",
+        "videoStart": 3398.1,
+        "videoFrame": 3435.6,
+        "videoRequest": 1248.9,
+        "imageStart": 750.1,
+        "imageEnd": 1315.5,
+        "overlap": 66.6,
+        "afterDocumentHeroPaint": 666.6,
+        "afterDocumentLCP": 2698.6,
+        "afterDocumentVideo": 2652.7,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 3,
+        "variant": "current",
+        "at": "2026-10-06T15:05:49.623Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1355.3,
+        "heroPaint": 1416,
+        "lcp": 3508,
+        "lcpTag": "VIDEO",
+        "videoStart": 3382.8,
+        "videoFrame": 3500.2,
+        "videoRequest": 1274.3,
+        "imageStart": 750.9,
+        "imageEnd": 1354.5,
+        "overlap": 80.2,
+        "afterDocumentHeroPaint": 667.5,
+        "afterDocumentLCP": 2759.5,
+        "afterDocumentVideo": 2634.3,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 3,
+        "variant": "candidate",
+        "at": "2026-10-06T15:05:57.789Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1404.6,
+        "heroPaint": 1452,
+        "lcp": 3520,
+        "lcpTag": "VIDEO",
+        "videoStart": 3513.4,
+        "videoFrame": 3659.3,
+        "videoRequest": 1447.5,
+        "imageStart": 766.9,
+        "imageEnd": 1403.6,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 687.2,
+        "afterDocumentLCP": 2755.2,
+        "afterDocumentVideo": 2748.6,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 4,
+        "variant": "candidate",
+        "at": "2026-10-06T15:06:05.942Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 2086.5,
+        "heroPaint": 2164,
+        "lcp": 3632,
+        "lcpTag": "VIDEO",
+        "videoStart": 3628,
+        "videoFrame": 3633.2,
+        "videoRequest": 2157.3,
+        "imageStart": 761.9,
+        "imageEnd": 2085.8,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 1408.7,
+        "afterDocumentLCP": 2876.7,
+        "afterDocumentVideo": 2872.7,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 4,
+        "variant": "current",
+        "at": "2026-10-06T15:06:14.154Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1440.2,
+        "heroPaint": 1560,
+        "lcp": 3564,
+        "lcpTag": "VIDEO",
+        "videoStart": 3555.9,
+        "videoFrame": 3663.2,
+        "videoRequest": 1437.2,
+        "imageStart": 818.3,
+        "imageEnd": 1438.3,
+        "overlap": 1.1,
+        "afterDocumentHeroPaint": 749.1,
+        "afterDocumentLCP": 2753.1,
+        "afterDocumentVideo": 2745,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 5,
+        "variant": "current",
+        "at": "2026-10-06T15:06:22.307Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1373.2,
+        "heroPaint": 1412,
+        "lcp": 3428,
+        "lcpTag": "VIDEO",
+        "videoStart": 3420.2,
+        "videoFrame": 3531.9,
+        "videoRequest": 1260,
+        "imageStart": 745.4,
+        "imageEnd": 1372.1,
+        "overlap": 112.1,
+        "afterDocumentHeroPaint": 668.8,
+        "afterDocumentLCP": 2684.8,
+        "afterDocumentVideo": 2677,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 5,
+        "variant": "candidate",
+        "at": "2026-10-06T15:06:30.530Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1374.9,
+        "heroPaint": 1388,
+        "lcp": 3556,
+        "lcpTag": "VIDEO",
+        "videoStart": 3433.5,
+        "videoFrame": 3550.6,
+        "videoRequest": 1387,
+        "imageStart": 767.5,
+        "imageEnd": 1374.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 623.1,
+        "afterDocumentLCP": 2791.1,
+        "afterDocumentVideo": 2668.6,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 1,
+        "variant": "current",
+        "at": "2026-10-06T15:06:44.705Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 11692.7,
+        "heroPaint": 11700,
+        "lcp": 11700,
+        "lcpTag": "IMG",
+        "videoRequest": 1958.4,
+        "imageStart": 1227.6,
+        "imageEnd": 11692.1,
+        "overlap": 9733.8,
+        "afterDocumentHeroPaint": 10475.8,
+        "afterDocumentLCP": 10475.8,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 1,
+        "variant": "candidate",
+        "at": "2026-10-06T15:06:58.912Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10056.8,
+        "heroPaint": 10116,
+        "lcp": 10116,
+        "lcpTag": "IMG",
+        "videoRequest": 10099.8,
+        "imageStart": 1051.3,
+        "imageEnd": 10053.5,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 9067.4,
+        "afterDocumentLCP": 9067.4,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 2,
+        "variant": "candidate",
+        "at": "2026-10-06T15:07:13.830Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10126.4,
+        "heroPaint": 10164,
+        "lcp": 10164,
+        "lcpTag": "IMG",
+        "videoRequest": 10156.2,
+        "imageStart": 1141.3,
+        "imageEnd": 10125.5,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 9031.3,
+        "afterDocumentLCP": 9031.3,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 2,
+        "variant": "current",
+        "at": "2026-10-06T15:07:28.445Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10084,
+        "heroPaint": 10136,
+        "lcp": 10136,
+        "lcpTag": "IMG",
+        "videoRequest": 2194.4,
+        "imageStart": 1090.3,
+        "imageEnd": 10070.1,
+        "overlap": 7875.7,
+        "afterDocumentHeroPaint": 9050,
+        "afterDocumentLCP": 9050,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 3,
+        "variant": "current",
+        "at": "2026-10-06T15:07:43.157Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10272.7,
+        "heroPaint": 10308,
+        "lcp": 10308,
+        "lcpTag": "IMG",
+        "videoRequest": 2298.8,
+        "imageStart": 1219.5,
+        "imageEnd": 10269.6,
+        "overlap": 7970.8,
+        "afterDocumentHeroPaint": 9095.3,
+        "afterDocumentLCP": 9095.3,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 3,
+        "variant": "candidate",
+        "at": "2026-10-06T15:07:57.543Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 9776.7,
+        "heroPaint": 9844,
+        "lcp": 9844,
+        "lcpTag": "IMG",
+        "videoRequest": 9832.9,
+        "imageStart": 1225.4,
+        "imageEnd": 9775.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 8623,
+        "afterDocumentLCP": 8623,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 4,
+        "variant": "candidate",
+        "at": "2026-10-06T15:08:11.763Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 6531.7,
+        "heroPaint": 6556,
+        "lcp": 6556,
+        "lcpTag": "IMG",
+        "videoRequest": 6543.1,
+        "imageStart": 1124.3,
+        "imageEnd": 6530.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 5437.8,
+        "afterDocumentLCP": 5437.8,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 4,
+        "variant": "current",
+        "at": "2026-10-06T15:08:25.924Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 8418.4,
+        "heroPaint": 8448,
+        "lcp": 8448,
+        "lcpTag": "IMG",
+        "videoRequest": 2184.9,
+        "imageStart": 1174.7,
+        "imageEnd": 8417.4,
+        "overlap": 6232.5,
+        "afterDocumentHeroPaint": 7276.9,
+        "afterDocumentLCP": 7276.9,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 5,
+        "variant": "current",
+        "at": "2026-10-06T15:08:40.093Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10377.3,
+        "heroPaint": 10472,
+        "lcp": 10472,
+        "lcpTag": "IMG",
+        "videoRequest": 2267.6,
+        "imageStart": 1210.5,
+        "imageEnd": 10375.9,
+        "overlap": 8108.3,
+        "afterDocumentHeroPaint": 9265.5,
+        "afterDocumentLCP": 9265.5,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 5,
+        "variant": "candidate",
+        "at": "2026-10-06T15:08:54.244Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10647.7,
+        "heroPaint": 10716,
+        "lcp": 10716,
+        "lcpTag": "IMG",
+        "videoRequest": 10682.8,
+        "imageStart": 1090.4,
+        "imageEnd": 10646.7,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 9628.6,
+        "afterDocumentLCP": 9628.6,
+        "afterDocumentVideo": null,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 1,
+        "variant": "current",
+        "at": "2026-10-06T15:08:59.390Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1632.9,
+        "heroPaint": 1644,
+        "lcp": 1996,
+        "lcpTag": "VIDEO",
+        "videoStart": 1984.5,
+        "videoFrame": 2146.8,
+        "videoRequest": 1634.9,
+        "imageStart": 1246.1,
+        "imageEnd": 1595.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 400.5,
+        "afterDocumentLCP": 752.5,
+        "afterDocumentVideo": 741,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 1,
+        "variant": "candidate",
+        "at": "2026-10-06T15:09:04.533Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1073.1,
+        "heroPaint": 1080,
+        "lcp": 1544,
+        "lcpTag": "VIDEO",
+        "videoStart": 1440.4,
+        "videoFrame": 1578.9,
+        "videoRequest": 1081.4,
+        "imageStart": 688.4,
+        "imageEnd": 1037.7,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 393.8,
+        "afterDocumentLCP": 857.8,
+        "afterDocumentVideo": 754.2,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 2,
+        "variant": "candidate",
+        "at": "2026-10-06T15:09:09.681Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1179,
+        "heroPaint": 1188,
+        "lcp": 1544,
+        "lcpTag": "VIDEO",
+        "videoStart": 1540.9,
+        "videoFrame": 1690.6,
+        "videoRequest": 1256.2,
+        "imageStart": 752.8,
+        "imageEnd": 1136.2,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 437.6,
+        "afterDocumentLCP": 793.6,
+        "afterDocumentVideo": 790.5,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 2,
+        "variant": "current",
+        "at": "2026-10-06T15:09:14.821Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1454,
+        "heroPaint": 1460,
+        "lcp": 2396,
+        "lcpTag": "VIDEO",
+        "videoStart": 2301.1,
+        "videoFrame": 2394.7,
+        "videoRequest": 1491.5,
+        "imageStart": 1040.2,
+        "imageEnd": 1418,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 422.3,
+        "afterDocumentLCP": 1358.3,
+        "afterDocumentVideo": 1263.4,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 3,
+        "variant": "current",
+        "at": "2026-10-06T15:09:19.980Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1077.6,
+        "heroPaint": 1088,
+        "lcp": 1580,
+        "lcpTag": "VIDEO",
+        "videoStart": 1442.3,
+        "videoFrame": 1690.5,
+        "videoRequest": 1136.1,
+        "imageStart": 694,
+        "imageEnd": 1040.6,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 396.4,
+        "afterDocumentLCP": 888.4,
+        "afterDocumentVideo": 750.7,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 3,
+        "variant": "candidate",
+        "at": "2026-10-06T15:09:25.143Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 1071.7,
+        "heroPaint": 1080,
+        "lcp": 1532,
+        "lcpTag": "VIDEO",
+        "videoStart": 1436.3,
+        "videoFrame": 1621,
+        "videoRequest": 1075.1,
+        "imageStart": 689.9,
+        "imageEnd": 1033.6,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 394.1,
+        "afterDocumentLCP": 846.1,
+        "afterDocumentVideo": 750.4,
+        "errors": [],
+        "playing": 1
+      }
+    ]
+  },
+  "extended": {
+    "runs": 6,
+    "hashes": [
+      "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf"
+    ],
+    "browser": "154.0.8037.98",
+    "groups": [
+      {
+        "profile": "desktop-0.4Mbps",
+        "groups": {
+          "current": {
+            "runs": 3,
+            "overlapRuns": 3,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 10731.3,
+                "min": 10668.8,
+                "max": 11427.8
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 10816,
+                "min": 10720,
+                "max": 11440
+              },
+              "lcp": {
+                "n": 3,
+                "median": 15312,
+                "min": 15288,
+                "max": 15388
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 15280.4,
+                "min": 15260.7,
+                "max": 15306.7
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 15402.8,
+                "min": 15399.4,
+                "max": 15445.9
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1958.8,
+                "min": 1808.6,
+                "max": 2018.5
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 10730.7,
+                "min": 10668,
+                "max": 11426.9
+              },
+              "overlap": {
+                "n": 3,
+                "median": 8771.9,
+                "min": 8649.5,
+                "max": 9618.3
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 9766.2,
+                "min": 9649,
+                "max": 10301.4
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 14241,
+                "min": 14149.4,
+                "max": 14338.2
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 14210.9,
+                "min": 14141.8,
+                "max": 14235.7
+              }
+            }
+          },
+          "candidate": {
+            "runs": 3,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 9657.7,
+                "min": 9267.2,
+                "max": 10528.5
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 9672,
+                "min": 9296,
+                "max": 10568
+              },
+              "lcp": {
+                "n": 3,
+                "median": 15536,
+                "min": 15452,
+                "max": 15584
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 15527.8,
+                "min": 15317.8,
+                "max": 15578.9
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 15638.5,
+                "min": 15519.8,
+                "max": 15742.2
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 9672.3,
+                "min": 9291.6,
+                "max": 10563.8
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 9656.3,
+                "min": 9266.7,
+                "max": 10527.5
+              },
+              "overlap": {
+                "n": 3,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 8614.5,
+                "min": 8127.1,
+                "max": 9220.7
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 14367.1,
+                "min": 14236.7,
+                "max": 14394.5
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 14260.3,
+                "min": 14231.6,
+                "max": 14358.9
+              }
+            }
+          }
+        },
+        "pairedDelta": {
+          "heroLoad": {
+            "median": -1401.6,
+            "values": [
+              -1401.6,
+              -202.8,
+              -1770.1
+            ]
+          },
+          "heroPaint": {
+            "median": -1424,
+            "values": [
+              -1424,
+              -248,
+              -1768
+            ]
+          },
+          "lcp": {
+            "median": 196,
+            "values": [
+              224,
+              196,
+              164
+            ]
+          },
+          "videoStart": {
+            "median": 221.1,
+            "values": [
+              221.1,
+              318.2,
+              37.4
+            ]
+          },
+          "afterDocumentHeroPaint": {
+            "median": -1521.9,
+            "values": [
+              -1521.9,
+              -545.5,
+              -1686.9
+            ]
+          },
+          "afterDocumentLCP": {
+            "median": 126.1,
+            "values": [
+              126.1,
+              -101.5,
+              245.1
+            ]
+          },
+          "afterDocumentVideo": {
+            "median": 118.5,
+            "values": [
+              123.2,
+              20.7,
+              118.5
+            ]
+          }
+        }
+      }
+    ],
+    "rows": [
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 1,
+        "variant": "current",
+        "at": "2026-10-06T15:09:55.836Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10668.8,
+        "heroPaint": 10720,
+        "lcp": 15312,
+        "lcpTag": "VIDEO",
+        "videoStart": 15306.7,
+        "videoFrame": 15402.8,
+        "videoRequest": 2018.5,
+        "imageStart": 1073.3,
+        "imageEnd": 10668,
+        "overlap": 8649.5,
+        "afterDocumentHeroPaint": 9649,
+        "afterDocumentLCP": 14241,
+        "afterDocumentVideo": 14235.7,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 1,
+        "variant": "candidate",
+        "at": "2026-10-06T15:10:12.640Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 9267.2,
+        "heroPaint": 9296,
+        "lcp": 15536,
+        "lcpTag": "VIDEO",
+        "videoStart": 15527.8,
+        "videoFrame": 15638.5,
+        "videoRequest": 9291.6,
+        "imageStart": 1171.1,
+        "imageEnd": 9266.7,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 8127.1,
+        "afterDocumentLCP": 14367.1,
+        "afterDocumentVideo": 14358.9,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 2,
+        "variant": "candidate",
+        "at": "2026-10-06T15:10:29.571Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10528.5,
+        "heroPaint": 10568,
+        "lcp": 15584,
+        "lcpTag": "VIDEO",
+        "videoStart": 15578.9,
+        "videoFrame": 15742.2,
+        "videoRequest": 10563.8,
+        "imageStart": 1350.5,
+        "imageEnd": 10527.5,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 9220.7,
+        "afterDocumentLCP": 14236.7,
+        "afterDocumentVideo": 14231.6,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 2,
+        "variant": "current",
+        "at": "2026-10-06T15:10:46.241Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 10731.3,
+        "heroPaint": 10816,
+        "lcp": 15388,
+        "lcpTag": "VIDEO",
+        "videoStart": 15260.7,
+        "videoFrame": 15399.4,
+        "videoRequest": 1958.8,
+        "imageStart": 1052.7,
+        "imageEnd": 10730.7,
+        "overlap": 8771.9,
+        "afterDocumentHeroPaint": 9766.2,
+        "afterDocumentLCP": 14338.2,
+        "afterDocumentVideo": 14210.9,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 3,
+        "variant": "current",
+        "at": "2026-10-06T15:11:02.850Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 11427.8,
+        "heroPaint": 11440,
+        "lcp": 15288,
+        "lcpTag": "VIDEO",
+        "videoStart": 15280.4,
+        "videoFrame": 15445.9,
+        "videoRequest": 1808.6,
+        "imageStart": 1141.5,
+        "imageEnd": 11426.9,
+        "overlap": 9618.3,
+        "afterDocumentHeroPaint": 10301.4,
+        "afterDocumentLCP": 14149.4,
+        "afterDocumentVideo": 14141.8,
+        "errors": [],
+        "playing": 1
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 3,
+        "variant": "candidate",
+        "at": "2026-10-06T15:11:19.626Z",
+        "htmlHash": "29582040383f57d4b31b72354012bafae69a913c966ff48e642b98dfab58c7bf",
+        "heroLoad": 9657.7,
+        "heroPaint": 9672,
+        "lcp": 15452,
+        "lcpTag": "VIDEO",
+        "videoStart": 15317.8,
+        "videoFrame": 15519.8,
+        "videoRequest": 9672.3,
+        "imageStart": 1063.8,
+        "imageEnd": 9656.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 8614.5,
+        "afterDocumentLCP": 14394.5,
+        "afterDocumentVideo": 14260.3,
+        "errors": [],
+        "playing": 1
+      }
+    ]
+  },
+  "live": {
+    "runs": 12,
+    "hashes": [
+      null
+    ],
+    "browser": "154.0.8037.98",
+    "groups": [
+      {
+        "profile": "mobile-1.5Mbps",
+        "groups": {
+          "live": {
+            "runs": 3,
+            "overlapRuns": 1,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 1239.4,
+                "min": 1221.9,
+                "max": 1492.5
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 1388,
+                "min": 1344,
+                "max": 1596
+              },
+              "lcp": {
+                "n": 3,
+                "median": 2576,
+                "min": 2532,
+                "max": 2628
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 2516.2,
+                "min": 2400.1,
+                "max": 2570.6
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 2717.6,
+                "min": 2553.3,
+                "max": 2771.8
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1223.9,
+                "min": 1043.5,
+                "max": 1242.2
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 1237.4,
+                "min": 1217.3,
+                "max": 1491
+              },
+              "overlap": {
+                "n": 3,
+                "median": 0,
+                "min": 0,
+                "max": 447.5
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 636.9,
+                "min": 616.2,
+                "max": 836.7
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 1824.9,
+                "min": 1772.7,
+                "max": 1900.2
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 1788.4,
+                "min": 1640.8,
+                "max": 1819.5
+              }
+            }
+          }
+        },
+        "pairedDelta": {}
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "groups": {
+          "live": {
+            "runs": 3,
+            "overlapRuns": 3,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 1362.8,
+                "min": 1314.1,
+                "max": 1378.8
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 1400,
+                "min": 1384,
+                "max": 1404
+              },
+              "lcp": {
+                "n": 3,
+                "median": 3412,
+                "min": 3392,
+                "max": 3440
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 3404.8,
+                "min": 3387.2,
+                "max": 3430.1
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 3536,
+                "min": 3498.7,
+                "max": 3568
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1291.7,
+                "min": 1279.6,
+                "max": 1312
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 1361.8,
+                "min": 1313.4,
+                "max": 1377.5
+              },
+              "overlap": {
+                "n": 3,
+                "median": 70.1,
+                "min": 1.3,
+                "max": 98
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 630.7,
+                "min": 625.7,
+                "max": 650.3
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 2638.3,
+                "min": 2637.7,
+                "max": 2686.7
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 2633.5,
+                "min": 2630.5,
+                "max": 2676.8
+              }
+            }
+          }
+        },
+        "pairedDelta": {}
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "groups": {
+          "live": {
+            "runs": 3,
+            "overlapRuns": 3,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 10767,
+                "min": 10679.7,
+                "max": 10797
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 10784,
+                "min": 10708,
+                "max": 10868
+              },
+              "lcp": {
+                "n": 3,
+                "median": 15452,
+                "min": 15316,
+                "max": 15640
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 15453.4,
+                "min": 15310.5,
+                "max": 15546.2
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 15608.7,
+                "min": 15542.5,
+                "max": 15623
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 2077.9,
+                "min": 2017.2,
+                "max": 2111.4
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 10764.8,
+                "min": 10678.5,
+                "max": 10796.1
+              },
+              "overlap": {
+                "n": 3,
+                "median": 8684.7,
+                "min": 8661.3,
+                "max": 8686.9
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 9636.3,
+                "min": 9612.6,
+                "max": 9728.8
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 14304.3,
+                "min": 14220.6,
+                "max": 14500.8
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 14305.7,
+                "min": 14215.1,
+                "max": 14407
+              }
+            }
+          }
+        },
+        "pairedDelta": {}
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "groups": {
+          "live": {
+            "runs": 3,
+            "overlapRuns": 0,
+            "fields": {
+              "heroLoad": {
+                "n": 3,
+                "median": 1087.1,
+                "min": 1073.3,
+                "max": 1095.4
+              },
+              "heroPaint": {
+                "n": 3,
+                "median": 1100,
+                "min": 1080,
+                "max": 1104
+              },
+              "lcp": {
+                "n": 3,
+                "median": 1468,
+                "min": 1444,
+                "max": 1556
+              },
+              "videoStart": {
+                "n": 3,
+                "median": 1448.7,
+                "min": 1435.4,
+                "max": 1456.9
+              },
+              "videoFrame": {
+                "n": 3,
+                "median": 1667.6,
+                "min": 1604.8,
+                "max": 1667.8
+              },
+              "videoRequest": {
+                "n": 3,
+                "median": 1091.3,
+                "min": 1076.9,
+                "max": 1107.5
+              },
+              "imageEnd": {
+                "n": 3,
+                "median": 1030.4,
+                "min": 1027.4,
+                "max": 1043.2
+              },
+              "overlap": {
+                "n": 3,
+                "median": 0,
+                "min": 0,
+                "max": 0
+              },
+              "afterDocumentHeroPaint": {
+                "n": 3,
+                "median": 410.5,
+                "min": 395.9,
+                "max": 415
+              },
+              "afterDocumentLCP": {
+                "n": 3,
+                "median": 774.5,
+                "min": 759.9,
+                "max": 871
+              },
+              "afterDocumentVideo": {
+                "n": 3,
+                "median": 763.4,
+                "min": 751.3,
+                "max": 763.7
+              }
+            }
+          }
+        },
+        "pairedDelta": {}
+      }
+    ],
+    "rows": [
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 1,
+        "variant": "live",
+        "at": "2026-10-06T15:11:24.282Z",
+        "htmlHash": null,
+        "heroLoad": 1239.4,
+        "heroPaint": 1388,
+        "lcp": 2576,
+        "lcpTag": "VIDEO",
+        "videoStart": 2570.6,
+        "videoFrame": 2771.8,
+        "videoRequest": 1242.2,
+        "imageStart": 752.2,
+        "imageEnd": 1237.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 636.9,
+        "afterDocumentLCP": 1824.9,
+        "afterDocumentVideo": 1819.5,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 2,
+        "variant": "live",
+        "at": "2026-10-06T15:11:28.227Z",
+        "htmlHash": null,
+        "heroLoad": 1221.9,
+        "heroPaint": 1344,
+        "lcp": 2628,
+        "lcpTag": "VIDEO",
+        "videoStart": 2516.2,
+        "videoFrame": 2717.6,
+        "videoRequest": 1223.9,
+        "imageStart": 729.5,
+        "imageEnd": 1217.3,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 616.2,
+        "afterDocumentLCP": 1900.2,
+        "afterDocumentVideo": 1788.4,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "mobile-1.5Mbps",
+        "pair": 3,
+        "variant": "live",
+        "at": "2026-10-06T15:11:32.015Z",
+        "htmlHash": null,
+        "heroLoad": 1492.5,
+        "heroPaint": 1596,
+        "lcp": 2532,
+        "lcpTag": "VIDEO",
+        "videoStart": 2400.1,
+        "videoFrame": 2553.3,
+        "videoRequest": 1043.5,
+        "imageStart": 760.3,
+        "imageEnd": 1491,
+        "overlap": 447.5,
+        "afterDocumentHeroPaint": 836.7,
+        "afterDocumentLCP": 1772.7,
+        "afterDocumentVideo": 1640.8,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 1,
+        "variant": "live",
+        "at": "2026-10-06T15:11:36.742Z",
+        "htmlHash": null,
+        "heroLoad": 1378.8,
+        "heroPaint": 1400,
+        "lcp": 3412,
+        "lcpTag": "VIDEO",
+        "videoStart": 3404.8,
+        "videoFrame": 3498.7,
+        "videoRequest": 1279.6,
+        "imageStart": 775.7,
+        "imageEnd": 1377.5,
+        "overlap": 98,
+        "afterDocumentHeroPaint": 625.7,
+        "afterDocumentLCP": 2637.7,
+        "afterDocumentVideo": 2630.5,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 2,
+        "variant": "live",
+        "at": "2026-10-06T15:11:41.513Z",
+        "htmlHash": null,
+        "heroLoad": 1362.8,
+        "heroPaint": 1384,
+        "lcp": 3440,
+        "lcpTag": "VIDEO",
+        "videoStart": 3430.1,
+        "videoFrame": 3568,
+        "videoRequest": 1291.7,
+        "imageStart": 755.1,
+        "imageEnd": 1361.8,
+        "overlap": 70.1,
+        "afterDocumentHeroPaint": 630.7,
+        "afterDocumentLCP": 2686.7,
+        "afterDocumentVideo": 2676.8,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "desktop-1.5Mbps",
+        "pair": 3,
+        "variant": "live",
+        "at": "2026-10-06T15:11:46.268Z",
+        "htmlHash": null,
+        "heroLoad": 1314.1,
+        "heroPaint": 1404,
+        "lcp": 3392,
+        "lcpTag": "VIDEO",
+        "videoStart": 3387.2,
+        "videoFrame": 3536,
+        "videoRequest": 1312,
+        "imageStart": 756.5,
+        "imageEnd": 1313.4,
+        "overlap": 1.3,
+        "afterDocumentHeroPaint": 650.3,
+        "afterDocumentLCP": 2638.3,
+        "afterDocumentVideo": 2633.5,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 1,
+        "variant": "live",
+        "at": "2026-10-06T15:12:03.018Z",
+        "htmlHash": null,
+        "heroLoad": 10679.7,
+        "heroPaint": 10708,
+        "lcp": 15316,
+        "lcpTag": "VIDEO",
+        "videoStart": 15310.5,
+        "videoFrame": 15542.5,
+        "videoRequest": 2017.2,
+        "imageStart": 1097.6,
+        "imageEnd": 10678.5,
+        "overlap": 8661.3,
+        "afterDocumentHeroPaint": 9612.6,
+        "afterDocumentLCP": 14220.6,
+        "afterDocumentVideo": 14215.1,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 24000,
+        "otherImageCount": 17
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 2,
+        "variant": "live",
+        "at": "2026-10-06T15:12:19.879Z",
+        "htmlHash": null,
+        "heroLoad": 10767,
+        "heroPaint": 10784,
+        "lcp": 15452,
+        "lcpTag": "VIDEO",
+        "videoStart": 15453.4,
+        "videoFrame": 15608.7,
+        "videoRequest": 2077.9,
+        "imageStart": 1148.6,
+        "imageEnd": 10764.8,
+        "overlap": 8686.9,
+        "afterDocumentHeroPaint": 9636.3,
+        "afterDocumentLCP": 14304.3,
+        "afterDocumentVideo": 14305.7,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 24000,
+        "otherImageCount": 17
+      },
+      {
+        "profile": "desktop-0.4Mbps",
+        "pair": 3,
+        "variant": "live",
+        "at": "2026-10-06T15:12:36.659Z",
+        "htmlHash": null,
+        "heroLoad": 10797,
+        "heroPaint": 10868,
+        "lcp": 15640,
+        "lcpTag": "VIDEO",
+        "videoStart": 15546.2,
+        "videoFrame": 15623,
+        "videoRequest": 2111.4,
+        "imageStart": 1141.3,
+        "imageEnd": 10796.1,
+        "overlap": 8684.7,
+        "afterDocumentHeroPaint": 9728.8,
+        "afterDocumentLCP": 14500.8,
+        "afterDocumentVideo": 14407,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 24000,
+        "otherImageCount": 17
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 1,
+        "variant": "live",
+        "at": "2026-10-06T15:12:39.492Z",
+        "htmlHash": null,
+        "heroLoad": 1087.1,
+        "heroPaint": 1100,
+        "lcp": 1556,
+        "lcpTag": "VIDEO",
+        "videoStart": 1448.7,
+        "videoFrame": 1604.8,
+        "videoRequest": 1091.3,
+        "imageStart": 686.7,
+        "imageEnd": 1030.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 415,
+        "afterDocumentLCP": 871,
+        "afterDocumentVideo": 763.7,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 2,
+        "variant": "live",
+        "at": "2026-10-06T15:12:42.363Z",
+        "htmlHash": null,
+        "heroLoad": 1073.3,
+        "heroPaint": 1080,
+        "lcp": 1444,
+        "lcpTag": "VIDEO",
+        "videoStart": 1435.4,
+        "videoFrame": 1667.6,
+        "videoRequest": 1076.9,
+        "imageStart": 685.1,
+        "imageEnd": 1027.4,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 395.9,
+        "afterDocumentLCP": 759.9,
+        "afterDocumentVideo": 751.3,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      },
+      {
+        "profile": "mobile-unthrottled",
+        "pair": 3,
+        "variant": "live",
+        "at": "2026-10-06T15:12:45.253Z",
+        "htmlHash": null,
+        "heroLoad": 1095.4,
+        "heroPaint": 1104,
+        "lcp": 1468,
+        "lcpTag": "VIDEO",
+        "videoStart": 1456.9,
+        "videoFrame": 1667.8,
+        "videoRequest": 1107.5,
+        "imageStart": 695.9,
+        "imageEnd": 1043.2,
+        "overlap": 0,
+        "afterDocumentHeroPaint": 410.5,
+        "afterDocumentLCP": 774.5,
+        "afterDocumentVideo": 763.4,
+        "errors": [],
+        "playing": 1,
+        "mediaBeforeHero": 0,
+        "otherImageCount": 6
+      }
+    ]
+  }
+}

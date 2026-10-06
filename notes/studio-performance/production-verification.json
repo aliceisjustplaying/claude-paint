@@ -1,0 +1,40 @@
+{
+  "checkedAt": "2026-10-06T15:33:51.173Z",
+  "browser": "154.0.8037.98",
+  "results": [
+    {
+      "route": "/studio/",
+      "width": 1440,
+      "height": 900,
+      "initial": {
+        "painter": "paint-studio-c8bb05",
+        "source": "https://stillwet.art/studio/data/paint-studio-c8bb05/v/265.jpg",
+        "events": 1148,
+        "title": "Grainstack, Evening"
+      },
+      "initialCanvasRequests": 1,
+      "codeOpenedWithoutRebuild": true,
+      "replayAndReturnPassed": true,
+      "unchangedPickerMutations": 0,
+      "switchTo": "paint-studio-49b647",
+      "pageErrors": []
+    },
+    {
+      "route": "/studio/?p=paint-studio-49b647&stream=1",
+      "width": 390,
+      "height": 844,
+      "initial": {
+        "painter": "paint-studio-49b647",
+        "source": "https://stillwet.art/studio/data/paint-studio-49b647/v/153.jpg",
+        "events": 690,
+        "title": "Luncheonette, Four O'Clock"
+      },
+      "initialCanvasRequests": 1,
+      "codeOpenedWithoutRebuild": true,
+      "replayAndReturnPassed": true,
+      "unchangedPickerMutations": 0,
+      "switchTo": "paint-studio-c8bb05",
+      "pageErrors": []
+    }
+  ]
+}

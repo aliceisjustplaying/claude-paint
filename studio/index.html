@@ -11,6 +11,7 @@
 <!-- STUDIO_META_END -->
 <link rel="icon" type="image/png" href="/favicon.png">
 <style>
+  html.studio-route-pending #who, html.studio-route-pending #badge, html.studio-route-pending #img { visibility:hidden }
   :root {
     --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
     --fg:#f0f0f2; --soft:#d4d4da; --dim:#aeaeb6; --faint:#85858e;
@@ -306,7 +307,7 @@ const modelName = m => NAMES[m] || m;
 const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
 const qOf = s => s.p ? 'p=' + encodeURIComponent(s.p) : 's=' + encodeURIComponent(s.s);
 
-let allSessions = [];
+let allSessions = [], sessionsLoaded = false;
 const when = t => new Date(t*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
 const day = t => new Date(t*1000).toLocaleDateString([], {month:'short', day:'numeric'});
 // the gallery's finished paintings (static: /paintings.json at the site root), by the painter's folder; null without it
@@ -356,6 +357,7 @@ function card(s) {
     + `<span class="pkx"><span class="pkt">${esc(a.title)}</span><span class="pkm">${esc(a.model)}</span>`
     + `<span class="pks">${a.live ? '<span class="lv">● painting now</span> · ' : ''}${esc([outcomeLabel(s), subj(s), day(s.mtime)].filter(Boolean).join(' · '))}</span></span></button>`;
 }
+let pickerHTML = null;
 function renderPicker() {
   const ps = allSessions.filter(s => s.painter && listed(s)), order = [...ps.filter(isLive), ...ps.filter(s => !isLive(s))];  // (already newest first)
   let html = '';
@@ -363,10 +365,12 @@ function renderPicker() {
   html += `<div class="pkgrid">${order.map(card).join('')}</div>`;
   if (!STATIC && $('all').checked) { const os = allSessions.filter(s => !s.painter);
     html += `<div class="pksec">Other sessions</div>` + os.map(s => `<button type="button" class="pkrow${qOf(s) === Q ? ' on' : ''}" data-q="${esc(qOf(s))}">${esc(sessLabel(s))}</button>`).join(''); }
-  $('pklist').innerHTML = html;
+  if (html === pickerHTML) return;  // includes current live/listed/date labels, not just the sessions bytes
+  pickerHTML = html; $('pklist').innerHTML = html;
   // a gallery picture that doesn't load: the painter's own newest look instead
   for (const im of $('pklist').querySelectorAll('img')) im.addEventListener('error', () => {
     if (im.dataset.own && !im.src.endsWith(im.dataset.own)) im.src = im.dataset.own; else im.replaceWith('no picture yet'); });
+  warmSoon();
 }
 const pickable = () => [...$('pklist').querySelectorAll('button')];
 function openPicker() {
@@ -376,7 +380,7 @@ function openPicker() {
 // the pictures the picker shows first, fetched ahead (once the painting is in) so it opens with them, not empty
 // boxes: a screenful, its columns and rows estimated as the CSS lays them out
 let warmed = null;
-const warmSoon = () => { const im = $('img'); if (!warmed && events.length && im.complete && im.naturalWidth && !im.src.includes('/t/')) warmed = setTimeout(warmPicker, 0); };  // (after the painting and its events)
+const warmSoon = () => { const im = $('img'); if (!warmed && $('pklist').children.length && events.length && im.complete && im.naturalWidth && !im.src.includes('/t/')) warmed = setTimeout(warmPicker, 0); };  // (after the painting, its events and the picker)
 function warmPicker() {
   const n = Math.max(1, Math.floor((Math.min(1040, innerWidth - 24) - 24) / 308)) * Math.ceil(innerHeight / 74);
   warmed = [...$('pklist').querySelectorAll('img')].slice(0, n).map(im => { const p = new Image(); p.src = im.src; return p; });
@@ -390,7 +394,7 @@ function choose(q) {
 // thumbnail at once (the picker has just shown it) and the view copy once it's in, so the place isn't black meanwhile
 function glimpse() {
   const s = allSessions.find(x => qOf(x) === Q), t = s && ownThumb(s); if (events.length || !t) return;
-  const im = $('img'); im.src = t;
+  const im = $('img'); if (!im.getAttribute('src')) im.src = t;
   if (STATIC) setPic(im, [`data/${encodeURIComponent(s.p)}/v/${s.look}.jpg`, t]);
 }
 // a picture into one of the view's places. The one there stays until the new one has loaded, so a place never goes
@@ -424,9 +428,9 @@ $('picker').onkeydown = e => {
 document.addEventListener('pointerdown', e => { if (!$('picker').hidden && !e.target.closest('#picker, #who')) closePicker(false); });
 $('picker').addEventListener('focusout', e => { if (e.relatedTarget && !e.relatedTarget.closest('#picker, #who')) closePicker(false); });
 async function loadSessions() {
-  allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-store'} : {})).json();
+  allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-cache'} : {})).json();
+  sessionsLoaded = true;
   if (Q === null) {
-    $('all').checked = localStorage.getItem('studio.all') === '1';
     const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter && listed(s));  // (only painters the list shows)
     // The exported page opens its featured card's painter. The local viewer chooses the active painter
     // furthest along (a blank ground minutes in shows nothing yet), else the newest with a picture.
@@ -469,7 +473,7 @@ async function poll() {
     for (let i = 0; i < events.length && i < r.events.length; i++) if (r.events[i].out !== events[i].out || r.events[i].err !== events[i].err) ups.push([i, r.events[i]]);
     r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
   epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext; if (r.web) WEB = r.web; if (r.nupdates !== undefined) nUpd = r.nupdates;
-  for (const [i, e] of ups) if (i < events.length) events[i] = e;
+  for (const [i, e] of ups) if (i < events.length) { events[i] = e; invalidateReplay(i); }
   if (ups.length && !(live && r.events.length)) show(pos);  // (at the live edge, the new events show below)
   if (r.events.length) {
     const base = events.length; events.push(...r.events);
@@ -480,7 +484,7 @@ async function poll() {
     $('strip').appendChild(f); if (live) stripEnd();  // (fixed thumbnail sizes in the CSS: the strip's width is known before they load)
     ticks();
     if (live) show(events.length - 1);
-    if (!base && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
+    if (!base && sessionsLoaded && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
   }
   if (live) refreshLiveCode();
   status(); warmSoon();
@@ -596,31 +600,58 @@ function doing(isLive) {
 // ---- code
 // easel tool sessions: the painting is the chunks that ran, in order
 const PAINTED = 'paintings/lua/painting.lua', SCRATCHED = 'paintings/lua/scratch.lua';
+let replayEvents = null, replayCwd = '', replayRevision = 0, fileScan = null, sourceViews = new Map(), paintCounted = 0, replayHasPaint = false;
+function invalidateReplay(i) {
+  replayRevision++;
+  paintCounted = 0; replayHasPaint = false;
+  if (fileScan && i <= fileScan.at) fileScan = null;
+  for (const [p, s] of sourceViews) if (i <= s.at) sourceViews.delete(p);
+  journalItems.delete(i + 1);  // image suppression and sitting gaps depend on the preceding event
+}
+function replayCache() {
+  if (replayEvents !== events || replayCwd !== cwd) {
+    replayEvents = events; replayCwd = cwd; fileScan = null; sourceViews.clear(); paintCounted = 0; replayHasPaint = false; replayRevision++;
+  }
+  for (; paintCounted < events.length; paintCounted++) if (events[paintCounted].kind === 'paint') replayHasPaint = true;
+}
 function paintingFile(upto) {
-  for (let k = 0; k <= upto; k++) if (events[k].kind === 'paint') return cwd + '/' + (scratchingAt(upto) ? SCRATCHED : PAINTED);
-  const n = {};
-  for (let k = 0; k <= upto; k++) { const e = events[k];
-    if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) n[e.path] = (n[e.path]||0) + 1;
-    if (e.kind === 'cmd') { const m = (e.text||'').match(/cargo paint (\w+)/); if (m) { const p = cwd + '/paintings/src/bin/' + m[1] + '.rs'; n[p] = (n[p]||0) + 0.5; } } }
-  let best = null, m = 0; for (const p in n) if (n[p] > m) { m = n[p]; best = p; } return best;
+  replayCache();
+  if (!fileScan || upto < fileScan.at) fileScan = { at:-1, paint:false, scratch:false, paths:new Map() };
+  const s = fileScan;
+  for (let k = s.at + 1; k <= upto; k++) { const e = events[k];
+    if (e.kind === 'paint') s.paint = true;
+    if (e.kind === 'paint' || e.kind === 'look') s.scratch = isScratch(e);
+    if ((e.kind === 'write' || e.kind === 'edit') && /\.(rs|lua)$/.test(e.path)) s.paths.set(e.path, (s.paths.get(e.path)||0) + 1);
+    if (e.kind === 'cmd') { const m = (e.text||'').match(/cargo paint (\w+)/); if (m) { const p = cwd + '/paintings/src/bin/' + m[1] + '.rs'; s.paths.set(p, (s.paths.get(p)||0) + 0.5); } } }
+  s.at = upto;
+  if (s.paint) return cwd + '/' + (s.scratch ? SCRATCHED : PAINTED);
+  let best = null, m = 0; for (const [p, n] of s.paths) if (n > m) { m = n; best = p; } return best;
 }
 function source(path, upto) {
+  replayCache();
   const sc = path.endsWith('/' + SCRATCHED);
-  if ((sc || path.endsWith('/' + PAINTED)) && events.some(e => e.kind === 'paint')) {
-    let text = '', before = '', changed = [], n = 0;
-    for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.kind !== 'paint' || !!e.scratch !== sc) continue;
-      if (sc && e.new_scratch) { text = ''; n = 0; }  // a fresh scratch canvas: a new log
-      if (!paintOK(e)) continue;
-      const head = `--@ chunk ${++n}\n`; before = text; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; }
-    return { text, before, changed, known: true };
+  const paint = (sc || path.endsWith('/' + PAINTED)) && replayHasPaint;
+  let s = sourceViews.get(path);
+  if (!s || upto < s.at || s.paint !== paint) {
+    s = { at:-1, paint, n:0, value:{ text:'', before:'', changed:[], known:!!paint } }; sourceViews.set(path, s);
   }
-  let text = '', before = '', changed = [], known = false;
-  for (let k = 0; k <= upto; k++) { const e = events[k]; if (e.path !== path) continue;
-    if ((e.kind === 'write' || e.kind === 'edit') && (e.err || e.out === undefined)) continue;  // failed, or no result yet
-    if (e.kind === 'write') { text = e.content; changed = []; known = true; }
-    else if (e.kind === 'edit') { before = text; changed = []; for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
-      text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } } }
-  return { text, before, changed, known };
+  let { text, before, changed, known } = s.value, touched = false;
+  for (let k = s.at + 1; k <= upto; k++) { const e = events[k];
+    if (paint) {
+      if (e.kind !== 'paint' || !!e.scratch !== sc) continue;
+      if (sc && e.new_scratch) { text = ''; s.n = 0; touched = true; }  // a fresh scratch canvas: a new log
+      if (!paintOK(e)) continue;
+      const head = `--@ chunk ${++s.n}\n`; before = text; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; touched = true;
+    } else {
+      if (e.path !== path || (e.kind === 'write' || e.kind === 'edit') && (e.err || e.out === undefined)) continue;
+      if (e.kind === 'write') { text = e.content; changed = []; known = true; touched = true; }
+      else if (e.kind === 'edit') { before = text; changed = []; touched = true; for (const ed of e.edits) { const at = text.indexOf(ed.oldText); if (at < 0) continue;
+        text = text.slice(0, at) + ed.newText + text.slice(at + ed.oldText.length); changed.push([at, at + ed.newText.length]); } }
+    }
+  }
+  s.at = upto;
+  if (touched) s.value = { text, before, changed, known };
+  return s.value;
 }
 let liveText = null;
 // Prepare the current view even while closed. Opening only reveals already laid-out code.
@@ -632,13 +663,13 @@ async function refreshLiveCode() {
   const t = await r.text(); if (q !== Q || g !== gen) return; if (t !== liveText) { const old = liveText; liveText = t; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
 }
 const { diffLines, lineHTML } = CodeDisplay;
-let codeWorker = null, codeRequest = 0, codeCache = null, codeBatch = null;
+let codeWorker = null, codeRequest = 0, codeCache = null, codeBatch = null, codeSelection = null;
 // MessageChannel yields between bounded DOM batches without depending on a hidden tab's paint rate.
 const codeChannel = new MessageChannel();
 codeChannel.port1.onmessage = () => codeBatch?.();
 function queueCodeBatch(batch) { codeBatch = batch; codeChannel.port2.postMessage(null); }
 function clearCode() {
-  ++codeRequest; codeCache = null;
+  ++codeRequest; codeCache = null; codeSelection = null;
   codeBatch = null; $('code').replaceChildren(); $('file').textContent = ''; $('codeformat').textContent = '';
   $('togglecode').disabled = true; $('togglecode').title = 'preparing code';
 }
@@ -698,40 +729,106 @@ function codeAt(i) {
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1;
   if (atLive && liveText != null) return renderCode(p, liveText, new Set());
-  const { text, before, changed, known } = source(p, i);
+  const s = source(p, i);
+  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest) return;
+  const { text, before, changed, known } = s;
   const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
   renderCode(p, known ? text : (liveText || ''), nl, before);
+  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest };
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips
-let typed = -1, typer = null, jgen = 0;
+let typed = -1, typer = null, jgen = 0, journalView = null, journalItems = new Map(), journalNodes = new Map(), typingThought = null;
 // (a look's chip shows that look)
 $('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i); } };
 function journal(i) {
-  const from = Math.max(0, i - 250); let html = [], chips = [], lastTm = 0, lastThink = -1;  // html: its blocks, in order
+  const jb = $('jbody');
+  if (journalView?.events !== events || journalView?.gen !== gen) {
+    clearInterval(typer); typingThought = null; journalItems.clear(); journalNodes.clear(); jb.replaceChildren();
+  }
+  if (journalView?.i === i && journalView.live === live && journalView.length === events.length && journalView.revision === replayRevision && journalView.gen === gen && journalView.events === events) return;
+  journalView = { i, live, length:events.length, revision:replayRevision, gen, events };
+  const from = Math.max(0, i - 250); let blocks = [], chips = [], firstChip = -1, lastTm = 0, lastThink = -1;
   for (let k = i; k >= from; k--) if (events[k].kind === 'think') { lastThink = k; break; }
-  const flush = () => { if (chips.length) { html.push(`<div class="chips">${chips.join('')}</div>`); chips = []; } };
+  const flush = () => { if (chips.length) { blocks.push({ key:'chips:' + firstChip, html:chips.join(''), cls:'chips' }); chips = []; } };
   for (let k = from; k <= i; k++) { const e = events[k], t = Date.parse(e.ts);
-    if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); html.push(`<span class="tm">${hhmm(e.ts)}</span>`); lastTm = t; }
-    if (e.kind === 'think') { flush(); const typing = k === lastThink && live && k === events.length - 1 && k !== typed;
-      html.push(`<div class="th${k === lastThink ? ' last' : ''}" data-k="${k}">${typing ? '' : md(e.text.trim())}</div>`); }
-    else if (e.kind === 'sitting') { flush(); const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
-      html.push(`<div class="sit">🪑 ${esc(sitLabel(e))}${gap > 120 ? ` <span>· after ${ago(gap).replace(' ago', '')} away</span>` : ''}</div>`); lastTm = t; }
-    else if (e.kind === 'say') { flush(); html.push(`<div class="say">${md(e.text.trim())}</div>`); }
-    else { const c = kindOf(e); if (!c || e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look'))) continue;
-      const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
-      chips.push(`<span class="chip ${c[0]}" title="${title}"${e.kind === 'image' ? ` data-i="${k}"` : ''}>${c[1]} ${esc(c[2])}</span>`); } }
+    let item = journalItems.get(k);
+    if (item?.event !== e) {
+      let html = '';
+      if (e.kind === 'think' || e.kind === 'say') html = md(e.text.trim());
+      else if (e.kind === 'sitting') { const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
+        html = '🪑 ' + esc(sitLabel(e)) + (gap > 120 ? ' <span>· after ' + ago(gap).replace(' ago', '') + ' away</span>' : ''); }
+      else { const c = kindOf(e);
+        if (c && !(e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')))) {
+          const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
+          html = '<span class="chip ' + c[0] + '" title="' + title + '"' + (e.kind === 'image' ? ' data-i="' + k + '"' : '') + '>' + c[1] + ' ' + esc(c[2]) + '</span>';
+        }
+      }
+      item = { event:e, html }; journalItems.set(k, item);
+    }
+    if (t - lastTm > 5 * 60e3 && (e.kind === 'think' || e.kind === 'say')) { flush(); blocks.push({ key:'tm:' + k, tag:'span', cls:'tm', html:hhmm(e.ts) }); lastTm = t; }
+    if (e.kind === 'think') { flush(); blocks.push({ key:'think:' + k, cls:'th' + (k === lastThink ? ' last' : ''), html:item.html, k }); }
+    else if (e.kind === 'sitting') { flush(); blocks.push({ key:'sit:' + k, cls:'sit', html:item.html }); lastTm = t; }
+    else if (e.kind === 'say') { flush(); blocks.push({ key:'say:' + k, cls:'say', html:item.html }); }
+    else if (item.html) { if (!chips.length) firstChip = k; chips.push(item.html); }
+  }
   flush();
-  // the newest blocks at once, the older ones above them a piece at a time, what's in view kept where it is: laying
-  // out a long painter's last 250 events at once blocks the page for a moment
-  const jb = $('jbody'), g = ++jgen, piece = () => { let n = 0, a = html.length; while (a > 0 && n < 12000) n += html[--a].length; return html.splice(a).join(''); };
-  jb.innerHTML = piece() || '<p class="jempty">The painter has just begun.<br>What it thinks and does will show here.</p>'; jb.scrollTop = 1e9;
-  const older = () => { if (g !== jgen || !html.length) return; const h = jb.scrollHeight; jb.insertAdjacentHTML('afterbegin', piece()); jb.scrollTop += jb.scrollHeight - h; setTimeout(older, 0); };
-  if (html.length) setTimeout(older, 0);
-  if (lastThink >= 0 && live && lastThink === events.length - 1 && lastThink !== typed) {
-    typed = lastThink; clearInterval(typer); const el = $('jbody').querySelector(`.th[data-k="${lastThink}"]`), txt = events[lastThink].text.trim(); let n = 0;
-    typer = setInterval(() => { n = Math.min(txt.length, n + Math.max(3, txt.length / 120 | 0)); if (!el.isConnected) return clearInterval(typer);
-      el.innerHTML = md(txt.slice(0, n)) + (n < txt.length ? '<span class="cursor"></span>' : ''); $('jbody').scrollTop = 1e9; if (n >= txt.length) clearInterval(typer); }, 30);
+  // Keep only the visible window's prepared prose and nodes, including during backward seeks.
+  for (const k of journalItems.keys()) if (k < from || k > i) journalItems.delete(k);
+  if (!blocks.length) blocks.push({ key:'empty', tag:'p', cls:'jempty', html:'The painter has just begun.<br>What it thinks and does will show here.' });
+  const wantsTyping = lastThink >= 0 && live && lastThink === events.length - 1;
+  const keepTyping = wantsTyping && typingThought?.k === lastThink && typingThought.gen === gen && typingThought.text === events[lastThink].text.trim();
+  if (!keepTyping) { clearInterval(typer); typingThought = null; }
+  const startTyping = wantsTyping && lastThink !== typed;
+  const keys = new Set(blocks.map(b => b.key));
+  for (const [key, entry] of journalNodes) if (!keys.has(key)) { entry.el.remove(); journalNodes.delete(key); }
+  // Newest content first; only new or changed blocks are parsed. Older work yields as before.
+  const g = ++jgen, generation = gen; let at = blocks.length, anchor = null;
+  const piece = () => {
+    if (g !== jgen || generation !== gen) return;
+    const h = jb.scrollHeight; let size = 0;
+    while (at > 0 && size < 12000) {
+      const b = blocks[--at]; let entry = journalNodes.get(b.key);
+      const typing = b.k === lastThink && (keepTyping || startTyping);
+      if (!entry) { entry = { el:document.createElement(b.tag || 'div'), html:null }; journalNodes.set(b.key, entry); }
+      const el = entry.el;
+      if (el.className !== b.cls) el.className = b.cls;
+      if (b.k !== undefined) el.dataset.k = b.k;
+      if (!typing && entry.html !== b.html) { el.innerHTML = b.html; entry.html = b.html; size += b.html.length; }
+      if (typing && startTyping) { el.replaceChildren(); entry.html = null; }
+      if (el.parentNode !== jb || el.nextSibling !== anchor) jb.insertBefore(el, anchor);
+      anchor = el;
+    }
+    jb.scrollTop += jb.scrollHeight - h;
+    if (at) setTimeout(piece, 0);
+  };
+  piece(); jb.scrollTop = 1e9;
+  if (startTyping) {
+    typed = lastThink;
+    const el = journalNodes.get('think:' + lastThink).el, txt = events[lastThink].text.trim();
+    const thought = typingThought = { k:lastThink, gen, text:txt };
+    const parser = markdownState(), drawn = [], cursor = document.createElement('span'); cursor.className = 'cursor';
+    let n = 0, offset = 0;
+    const timer = setInterval(() => {
+      if (generation !== gen || typingThought !== thought || !el.isConnected) { clearInterval(timer); return; }
+      n = Math.min(txt.length, n + Math.max(3, txt.length / 120 | 0));
+      let end;
+      while ((end = txt.indexOf('\n', offset)) >= 0 && end < n) { markdownLine(parser, txt.slice(offset, end)); offset = end + 1; }
+      const html = markdownBlocks(parser, txt.slice(offset, n));
+      for (let k = 0; k < html.length; k++) {
+        if (drawn[k]?.html === html[k]) continue;
+        const template = document.createElement('template'); template.innerHTML = html[k]; const node = template.content.firstChild;
+        if (drawn[k]) drawn[k].node.replaceWith(node); else el.insertBefore(node, cursor.parentNode === el ? cursor : null);
+        drawn[k] = { html:html[k], node };
+      }
+      while (drawn.length > html.length) drawn.pop().node.remove();
+      if (n < txt.length) el.appendChild(cursor); else {
+        cursor.remove(); clearInterval(timer); typingThought = null;
+        journalNodes.get('think:' + lastThink).html = html.join('');
+      }
+      jb.scrollTop = 1e9;
+    }, 30);
+    typer = timer;
   }
 }
 
@@ -744,21 +841,30 @@ function inline(s) {
        .replace(/(^|[^\w])_(?=\S)([^_\n]*?\S)_(?!\w)/g, '$1<i>$2</i>');
   return s.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code>${codes[+i]}</code>`);
 }
-function md(text) {
-  let html = '', para = [], list = null, m;
-  const flushP = () => { if (para.length) { html += `<p>${para.map(inline).join('<br>')}</p>`; para = []; } };
-  const flushL = () => { if (list) { html += `<${list.t}${list.start > 1 ? ` start="${list.start}"` : ''}>${list.items.map(x => `<li>${inline(x)}</li>`).join('')}</${list.t}>`; list = null; } };
-  for (const raw of esc(text).split('\n')) {
-    const l = raw.trimEnd();
-    if (!l.trim()) { flushP(); flushL(); }
-    else if (/^\s*([-*_])(\s*\1){2,}$/.test(l)) { flushP(); flushL(); html += '<hr>'; }
-    else if ((m = l.match(/^\s{0,3}#{1,6}\s+(.*?)\s*#*$/))) { flushP(); flushL(); html += `<div class="mh">${inline(m[1])}</div>`; }
-    else if ((m = l.match(/^\s*(?:([-*+•])|(\d{1,3})[.)])\s+(.*)$/))) {
-      const t = m[2] ? 'ol' : 'ul'; if (!list || list.t !== t) { flushP(); flushL(); list = {t, items: [], start: +m[2] || 1}; } list.items.push(m[3]); }
-    else if (list && /^\s{2,}\S/.test(l)) list.items[list.items.length - 1] += ' ' + l.trim();
-    else { flushL(); para.push(l); }
+function markdownState() { return { html:[], para:[], list:null }; }
+function markdownLine(s, raw) {
+  const flushP = () => { if (s.para.length) { s.html.push('<p>' + s.para.join('<br>') + '</p>'); s.para = []; } };
+  const flushL = () => { if (s.list) { const l = s.list; s.html.push('<' + l.t + (l.start > 1 ? ' start="' + l.start + '"' : '') + '>' + l.items.map(x => '<li>' + x.html + '</li>').join('') + '</' + l.t + '>'); s.list = null; } };
+  const l = esc(raw).trimEnd(); let m;
+  if (!l.trim()) { flushP(); flushL(); }
+  else if (/^\s*([-*_])(\s*\1){2,}$/.test(l)) { flushP(); flushL(); s.html.push('<hr>'); }
+  else if ((m = l.match(/^\s{0,3}#{1,6}\s+(.*?)\s*#*$/))) { flushP(); flushL(); s.html.push('<div class="mh">' + inline(m[1]) + '</div>'); }
+  else if ((m = l.match(/^\s*(?:([-*+•])|(\d{1,3})[.)])\s+(.*)$/))) {
+    const t = m[2] ? 'ol' : 'ul'; if (!s.list || s.list.t !== t) { flushP(); flushL(); s.list = { t, items:[], start:+m[2] || 1 }; }
+    s.list.items.push({ text:m[3], html:inline(m[3]) });
   }
-  flushP(); flushL(); return html;
+  else if (s.list && /^\s{2,}\S/.test(l)) { const item = s.list.items[s.list.items.length - 1]; item.text += ' ' + l.trim(); item.html = inline(item.text); }
+  else { flushL(); s.para.push(inline(l)); }
+}
+function markdownBlocks(s, tail) {
+  // Completed lines retain their inline markup; only the unfinished line is reparsed while typing.
+  const out = { html:s.html.slice(), para:s.para.slice(), list:s.list && { ...s.list, items:s.list.items.map(x => ({ ...x })) } };
+  if (tail !== undefined) markdownLine(out, tail);
+  markdownLine(out, ''); return out.html;
+}
+function md(text) {
+  const s = markdownState(); for (const line of text.split('\n')) markdownLine(s, line);
+  return markdownBlocks(s).join('');
 }
 // one line without its markdown marks, for the header
 const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, '').replace(/\*\*|__|`/g, '').replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?!\w)/g, '$1$2');
@@ -1068,9 +1174,21 @@ document.onkeydown = e => {
   else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); $('zoom').style.display = 'none'; } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
 // Load and compile StyLua while the initial session and pictures are arriving.
 try { codeWorker = new Worker('code-format.js', { type:'module' }); codeWorker.onerror = () => { codeWorker.terminate(); codeWorker = false; }; } catch (e) { codeWorker = false; }
-Promise.all([loadGallery(), loadSessions()]).then(() => { renderHeader(); if ($('picker').hidden) renderPicker(); glimpse(); poll(); setInterval(poll, 2000);
-  setInterval(() => { status(); if (events.length && resting() !== rested) pictures(); }, 1000);  // (a page left open comes to rest on its own when the painter stops)
-  setInterval(loadSessions, 30000); });
+$('all').checked = localStorage.getItem('studio.all') === '1';
+const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(location.search);
+Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;
+if (initial && qOf(initial) === Q) allSessions = [initial];
+else if (initial) { noPicture(); $('view').classList.remove('tall'); $('badge').textContent = ''; $('badge').className = ''; }
+renderHeader();
+document.documentElement.classList.remove('studio-route-pending');
+if (Q) { glimpse(); poll(); }
+// Gallery metadata can improve titles and links later; it never holds up the selected canvas or events.
+loadGallery().then(() => { renderHeader(); if (sessionsLoaded && $('picker').hidden) renderPicker();
+  if (otherK >= 0 && events[otherK]?.ref) second(otherK); });
+loadSessions().then(() => { glimpse(); poll(); }).catch(() => {});  // keep the exported view and retry the list on the next poll
+setInterval(poll, 2000);
+setInterval(() => { status(); if (events.length && resting() !== rested) pictures(); }, 1000);  // (a page left open comes to rest on its own when the painter stops)
+setInterval(() => loadSessions().catch(() => {}), 30000);
 if (STATIC) {
   document.body.classList.add('static');
   if (!localStorage.getItem('studio.intro') && !STREAM) $('intro').hidden = false;  // (not over a livestream)

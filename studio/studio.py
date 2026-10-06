@@ -405,7 +405,101 @@ def _parse(path):
                 if clock:
                     ev["clock"] = clock
                 c["events"].append(ev)
+    if not any(e["kind"] == "look" for e in c["events"]):
+        mark_whole(c, path)
     return c["events"], c["images"]
+
+
+def _signature(data):
+    """A picture's proportions, its 32 x 24 grays (centered, scaled to unit spread) and its mean chroma (0-255;
+    about 0 for a check in grays); None if it can't be read."""
+    from PIL import Image
+    import io
+    try:
+        with Image.open(io.BytesIO(base64.b64decode(data))) as im:
+            w, h = im.size
+            rgb = list(im.convert("RGB").resize((32, 24)).getdata())
+    except Exception:
+        return None
+    px = [0.299 * r + 0.587 * g + 0.114 * b for r, g, b in rgb]
+    m = sum(px) / len(px)
+    sd = (sum((v - m) ** 2 for v in px) / len(px)) ** 0.5 or 1.0
+    chroma = sum(max(c) - min(c) for c in rgb) / len(rgb)  # 0 for a picture in grays
+    return w / h, [(v - m) / sd for v in px], chroma
+
+
+# mark_whole's answers, by session file (its path, size and number of pictures), kept between runs: the export
+# runs every minute and decoding every early painter's pictures takes minutes
+WHOLE_CACHE = os.path.expanduser("~/.cache/claude-paint-studio/whole.json")
+_whole = {}
+
+
+def _whole_cache():
+    if "d" not in _whole:
+        try:
+            with open(WHOLE_CACHE) as fh:
+                _whole["d"] = json.load(fh)
+        except (OSError, ValueError):
+            _whole["d"] = {}
+    return _whole["d"]
+
+
+def _save_whole_cache():
+    os.makedirs(os.path.dirname(WHOLE_CACHE), exist_ok=True)
+    tmp = f"{WHOLE_CACHE}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(_whole["d"], fh)
+    os.replace(tmp, WHOLE_CACHE)
+
+
+def mark_whole(c, path):
+    """Before the look tool a painter opened its renders as image files, the whole canvas and close-ups alike; the
+    file's name doesn't say which. A picture is the whole canvas (e["whole"]) when its proportions are the canvas's
+    (the most common among its pictures, within 2%), it isn't in grays (a value check) and its 32 x 24 grays correlate at 0.75 or more with the next
+    whole picture after it. The chain starts, at the end, from the picture of the canvas's proportions most like the
+    others among the last eight. A close-up of the same proportions differs from the whole too much to pass; where
+    the painting changed a lot between two looks (an early lay-in) the chain stops, and before that the view shows
+    the last picture opened, as without this."""
+    ims = [e for e in c["events"] if e["kind"] == "image" and not e.get("ref")]
+    key = f"{path}:{os.path.getsize(path)}:{len(ims)}"
+    done = _whole_cache().get(key)
+    if done is not None and len(done) == len(ims):
+        for e, w in zip(ims, done):
+            e["whole"] = w
+        return
+    sig = c.setdefault("sig", {})
+    for e in ims:
+        if e["img"] not in sig:
+            sig[e["img"]] = _signature(c["images"][e["img"]][1])
+    shapes = [round(sig[e["img"]][0], 2) for e in ims if sig[e["img"]]]
+    if not shapes:
+        return
+    canvas = max(set(shapes), key=shapes.count)
+    fits = [e for e in ims if sig[e["img"]] and abs(sig[e["img"]][0] / canvas - 1) < 0.02]
+    # a check of the whole in grays (or blurred to grays) isn't the painting as it looks
+    chromas = sorted(sig[e["img"]][2] for e in fits)
+    if chromas and chromas[len(chromas) // 2] > 10:
+        fits = [e for e in fits if sig[e["img"]][2] > 3]
+    corr = lambda a, b: sum(x * y for x, y in zip(sig[a["img"]][1], sig[b["img"]][1])) / len(sig[a["img"]][1])
+    for e in ims:
+        e["whole"] = False
+    if not fits:
+        return
+    tail = fits[-8:]
+    anchor = max(tail, key=lambda a: sum(corr(a, b) for b in tail))
+    anchor["whole"] = True
+    later = anchor
+    for e in reversed(fits[:fits.index(anchor)]):
+        if corr(e, later) >= 0.75:
+            e["whole"] = True
+            later = e
+    later = anchor
+    for e in fits[fits.index(anchor) + 1:]:
+        if corr(e, later) >= 0.75:
+            e["whole"] = True
+            later = e
+    _whole_cache()[key] = [e["whole"] for e in ims]
+    _save_whole_cache()
 
 
 def summary_clock(text):

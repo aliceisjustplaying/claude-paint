@@ -26,6 +26,7 @@ import argparse, base64, glob, hashlib, html, io, json, os, re, shutil, subproce
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
+from urllib.parse import quote
 try:
     from PIL import Image
     from palette_board import palette_board
@@ -39,6 +40,15 @@ THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
 VIEW = 1600         # the main view's copy, long side
 SITE = "https://stillwet.art"
 DEFAULT_IMAGE = {"url": SITE + "/img/og-card.jpg", "width": 1200, "height": 630}
+# Keep the returned header's model names consistent with the interactive viewer.
+MODEL_NAMES = {
+    "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
+    "claude-sonnet-5": "Claude Sonnet 5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "gpt-6-astra": "GPT-6 Astra", "gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol",
+    "gemini-3.8-flash": "Gemini 3.8 Flash", "muse-spark-1.3": "Muse Spark 1.3",
+    "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3", "space-bunny-free": "Space Bunny",
+}
 
 
 def working_studios():
@@ -96,8 +106,8 @@ def featured(sessions):
 
 
 def card_page(page, painter, homepage=False):
-    """Crawler-visible metadata in the returned HTML. Every attribute and title is escaped."""
-    url = SITE + "/studio/" + ("?p=" + painter["p"] if painter and not homepage else "")
+    """Metadata and the selected painter's first view in the returned HTML, escaped and scrubbed."""
+    url = SITE + "/studio/" + ("?p=" + quote(painter["p"], safe="") if painter and not homepage else "")
     image = (painter or {}).get("og_image") or DEFAULT_IMAGE
     title, description = "The studio · stillwet", "AI models painting in a simulation of oil paint. Watch every brushstroke and how the picture grows."
     if painter:
@@ -122,11 +132,48 @@ def card_page(page, painter, homepage=False):
         attr = "property" if key.startswith("og:") else "name"
         tags.append(f'<meta {attr}="{key}" content="{esc(value)}">')
     # The default selection also opens the painting on direct access to a generated page.
-    tags.append('<script>window.STUDIO_FEATURED=' + json.dumps(painter["p"] if painter else None) + ';</script>')
+    initial = {k: v for k, v in painter.items() if k in (
+        "p", "painter", "folder", "mtime", "model", "title", "subject", "artist", "reference_artist",
+        "active", "outcome", "said", "look", "og_image",
+    )} if painter else None
+    # JSON in a script must not be able to close its element, even through a painting title.
+    script_json = lambda value: json.dumps(value).replace("<", "\\u003c")
+    tags.append('<script>window.STUDIO_FEATURED=' + script_json(painter["p"] if painter else None)
+                + ';window.STUDIO_INITIAL=' + script_json(initial) + ';'
+                + "(()=>{const u=new URLSearchParams(location.search),p=u.get('p');"
+                  "if(window.STUDIO_INITIAL&&((p&&p!==window.STUDIO_FEATURED)||(!p&&u.get('s')))){"
+                  "document.documentElement.classList.add('studio-route-pending');document.title='The studio · stillwet'}})();</script>")
     start, end = b"<!-- STUDIO_META_START -->", b"<!-- STUDIO_META_END -->"
     before, rest = page.split(start, 1)
     _, after = rest.split(end, 1)
-    return before + start + ("\n" + "\n".join(tags) + "\n").encode() + end + after
+    page = before + start + ("\n" + "\n".join(tags) + "\n").encode() + end + after
+    page = page.replace(b'<body class="nocode">', b'<body class="nocode static">', 1)
+    page = page.replace(b'<div id="clockbox">', b'<div id="clockbox" hidden>', 1)
+    if painter:
+        active = painter.get("active") is True and time.time() - painter["mtime"] < 1800
+        name = painter.get("title") or ("Untitled, in progress" if active else "Untitled")
+        model = " → ".join(MODEL_NAMES.get(m, m) for m in (painter.get("model") or "").split(" → "))
+        subject = painter.get("subject")
+        subject = {"Friedrich": "after Friedrich", "free": "free subject", "self-portrait": "self-portrait"}.get(
+            subject, "after " + (painter.get("artist") or subject)) if subject else ""
+        header = f'{name} · {model}' + (f' · {subject}' if subject else '') + ': choose another painter'
+        page = page.replace(b'title="choose another painter"', f'title="{esc(header)}"'.encode(), 1)
+        page = page.replace(b'<span class="t">Choose a painter</span><span class="m"></span>',
+                            f'<span class="t">{esc(name)}</span><span class="m">{esc(model)}</span>'.encode(), 1)
+        badge = "LIVE" if active else {
+            "finished": "Finished", "cap_reached": "Sitting limit reached", "crash_limit_reached": "Stopped after errors",
+        }.get((painter.get("outcome") or {}).get("status"), "Paused")
+        page = page.replace(b'<span id="badge"></span>',
+                            f'<span id="badge" class="{"live" if active else ""}">{badge}</span>'.encode(), 1)
+        if painter.get("og_image"):
+            pic = painter["og_image"]
+            page = page.replace(b'<img id="img" alt="the painting">',
+                                f'<img id="img" alt="the painting" src="{esc(pic["url"].removeprefix(SITE).split("?", 1)[0])}" fetchpriority="high">'.encode(), 1)
+            if pic["width"] < pic["height"] * 1.15:
+                page = page.replace(b'<div id="view">', b'<div id="view" class="tall">', 1)
+        else:
+            page = page.replace(b'<p id="nopic" hidden>', b'<p id="nopic">', 1)
+    return page
 
 
 def palette_chips(data, names):

@@ -1,0 +1,95 @@
+{
+  "size": [
+    2400,
+    1800
+  ],
+  "changed_pixels": 82694,
+  "total_pixels": 4320000,
+  "mean_absolute_rgb_levels": 0.017427083333333333,
+  "maximum_rgb_levels": 49,
+  "pixels_at_least_2": 18449,
+  "cross_build_policy_pass": false,
+  "crop_px": [
+    594,
+    893,
+    1106,
+    1405
+  ],
+  "checkpoint_bytes": [
+    518400360,
+    518400360
+  ],
+  "checkpoint_changed_bytes": 13147886,
+  "fields": {
+    "rgb": {
+      "changed_values": 2382779,
+      "max_absolute": 0.5224190354347229,
+      "mean_absolute": 5.3559915712577536e-05
+    },
+    "height_um": {
+      "changed_values": 796086,
+      "max_absolute": 4735.673828125,
+      "mean_absolute": 0.8608851333724128
+    },
+    "film": {
+      "changed_values": 799085,
+      "max_absolute": 159.19705200195312,
+      "mean_absolute": 0.00835473121702671
+    },
+    "wet_coats": {
+      "changed_values": 12487,
+      "max_absolute": 40.5189094543457,
+      "mean_absolute": 1.0061407749422398e-05
+    },
+    "latent": {
+      "changed_values": 177381,
+      "max_absolute": 0.3349321186542511,
+      "mean_absolute": 1.9348918937009142e-07
+    },
+    "properties": {
+      "changed_values": 18761,
+      "max_absolute": 0.8245464414358139,
+      "mean_absolute": 5.452117096218798e-07
+    },
+    "stroke": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "touched": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "drying": {
+      "changed_values": 1838640,
+      "max_absolute": 828.8452835083008,
+      "mean_absolute": 0.0012052966319516607
+    },
+    "cover": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "engine": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "gloss": {
+      "changed_values": 96455,
+      "max_absolute": 0.14765477180480957,
+      "mean_absolute": 9.751758838969249e-05
+    },
+    "absorbency": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "solvent_um": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    }
+  }
+}

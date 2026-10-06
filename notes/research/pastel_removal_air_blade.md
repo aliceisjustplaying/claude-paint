@@ -99,8 +99,8 @@ A particle leaves the surface when m·a > F_adh, with m = πd³ρ/6.
 
 - **Critical size:** d_c = (6F_adh/(πρa))^(1/3).
   - At 1 g (gravity alone, sheet inverted or vertical): d_c = 92–227 µm. At 50 % crumb porosity it is 116–286 µm.
-  - At 10 g: 43–133 µm.
-  - At 100 g: 20–62 µm.
+  - At 10 g: 43–105 µm (ρ = 2500 kg/m³); 54–133 µm at 50 % porosity.
+  - At 100 g: 20–49 µm (ρ = 2500 kg/m³); 25–62 µm at 50 % porosity.
 - So **heaps and crumbs larger than about 0.1–0.3 mm drop off a vertical easel by gravity alone.**
 - In-plane acceleration (tapping the board edge) acts by rolling. That lowers the threshold by a factor a_c/r ≈ 0.02–0.1, but fines only hop to the next pore.
 
@@ -226,7 +226,7 @@ Model: a Winkler (bed-of-springs) layer with Chen's curve, sheet T = 250 µm on 
    - Track loaded mass per brush and cap it at ≈ 0.06 g/cm³ × loaded-tip volume.
    - Pickup efficiency falls linearly to 0 at saturation. Above about 80 %, deposit back.
 4. **Knife.** Inputs: line load q, edge radius R.
-   - Compute dent depth δ₀(q, R) from the Winkler table, clipped by fibre-network spreading [E ×0.3–1].
+   - Compute dent depth δ₀(q, R) from the Winkler table, reduced by the fibre network's through-thickness shear: 0.17–0.80× Winkler (`paper_mechanics_and_transport.md`'s table; use its fit or table).
    - Remove all loose pastel above (envelope − δ₀) along the edge. Push 20–50 % of it ahead as a heap [E] and drop it at the stroke end.
    - Compact the remainder into pores (raise its bond to "pressed" adhesion, about ×3–10 [E]).
    - Permanently lower envelope peaks by ε_r·T from Chen's residual law.

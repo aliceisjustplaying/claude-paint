@@ -547,8 +547,9 @@ impl Canvas {
                             }
                         }
                     }
-                    let give = carried * settle;
                     let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
+                    // (no bed under the face: the crumbs ride on to the next step)
+                    let give = if gp + gs > 0.0 { carried * settle } else { 0.0 };
                     let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                     // (crumbs that settle on wet paint aren't laid in the tooth)
                     laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
@@ -592,6 +593,12 @@ impl Canvas {
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
             out.on_wet += lost * a_px_mm2 * 1e-3;
+            carried = 0.0;
+        }
+        if crumbs && carried > 0.0 {
+            // (no bed at the lift either: those crumbs fall clear of the
+            // picture, not laid)
+            out.volume_mm3 -= carried * px * px * 1e-3;
         }
         if out.volume_mm3 + out.on_wet > 0.0 {
             out.on_wet /= out.volume_mm3 + out.on_wet;

@@ -783,6 +783,9 @@ fn an_absorbent_ground_drains_a_film_from_the_ground_up() {
     assert!((t - 1.68).abs() < 1e-5 && (cap - 0.78).abs() < 1e-5, "{t} {cap}");
     assert!((hd[4] - 0.6).abs() < 1e-5 && (hd[7] - 1.0).abs() < 1e-5 && (surface_oil(&hd) - 0.6).abs() < 1e-5, "{hd:?}");
     assert_eq!(ground_drain(&mut cap, t, &mut hd), t, "nothing below the floor");
+    // nearly packed through, the surface still has the paint's own oil
+    let nearly = [0.8, 0.6, 1.0, 0.0, 0.9995 * 0.6 + 0.0005, 0.7, 0.6, 0.9995, 0.4, 0.0];
+    assert!((surface_oil(&nearly) - 1.0).abs() < 2e-3, "{}", surface_oil(&nearly));
     // packed through, it dries as lean as stiff paste (engine 6 only)
     assert!(crate::drying::lean_of(6, &hd) == 1.0 && crate::drying::lean_of(5, &hd) == hd[1], "{hd:?}");
     // a coarse pigment's floor is below its packed oil: it drains further

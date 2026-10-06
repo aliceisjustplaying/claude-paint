@@ -561,6 +561,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let kind: String = o.as_ref().map(|o| o.get::<Option<String>>("kind")).transpose()?.flatten().unwrap_or_else(|| "soft".into());
                 let soft = o.as_ref().map(|o| num(o, "soft")).transpose()?.flatten();
                 let dia = o.as_ref().map(|o| num(o, "diameter")).transpose()?.flatten();
+                // (clamp keeps a NaN: refuse it first)
+                if dia.is_some_and(|d| !d.is_finite()) {
+                    return err("pastel: diameter is the stick's width in mm, a number");
+                }
                 let color = tubes.dry_color(&pile.mix.parts);
                 let stick = match kind.as_str() {
                     "soft" => paint::pastel::Stick::round(color, soft.unwrap_or(0.75), dia.unwrap_or(12.0).clamp(4.0, 25.0)),

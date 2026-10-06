@@ -439,8 +439,11 @@ impl Canvas {
                     let keep = Self::below(v, mu, z + shave);
                     let r = cl.r;
                     if shave > 0.0 {
-                        // cut fibres take what is bound to them too
-                        cl.bound = cl.bound.min(keep);
+                        // cut fibres take what is bound to them too: freed,
+                        // it comes off with the loose (its coverage with it)
+                        let cut = (cl.bound - keep).max(0.0);
+                        cl.bound -= cut;
+                        cl.loose += cut;
                     }
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
@@ -485,9 +488,10 @@ impl Canvas {
             self.surf_gen += 1;
         }
         // what was pushed ahead drops where the blade lifts
-        if pushed > 0.0 && !last_band.is_empty() {
+        // (on open paper, not the sheet; crumbs on wet paint are lost in it)
+        let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
+        if pushed > 0.0 && !bed.is_empty() {
             let film = std::mem::take(&mut self.film);
-            let bed: Vec<(usize, f32, bool)> = last_band.iter().map(|&i| (i, 1.0, false)).collect();
             let mut rng = crate::rng::Rng::new((pts[0].0.to_bits() as u64) << 32 ^ pts[0].1.to_bits() as u64 ^ 0x5C2A);
             crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, pushed, col, &mut rng, CRUMB_MAX_UM, px_um2);
             self.film = film;
@@ -585,7 +589,14 @@ impl Canvas {
                 last_band = band;
             }
         }
-        let _ = last_band;
+        // what is still pushed ahead drops where the brush lifts (on open
+        // paper, not the sheet; crumbs on wet paint are lost in it)
+        let bed: Vec<(usize, f32, bool)> = last_band.iter().filter(|&&i| !self.sheet_over(i)).map(|&i| (i, 1.0, self.wet.vol[i] > 1e-5)).collect();
+        if ahead > 0.0 && !bed.is_empty() {
+            let film = std::mem::take(&mut self.film);
+            crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, ahead, col, &mut rng, BRUSH_CRUMB_UM, px_um2);
+            self.film = film;
+        }
         self.drawing = Some(dr);
         self.px = pxs;
         // hand time: brushing at about 100 mm/s

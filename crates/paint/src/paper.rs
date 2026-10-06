@@ -312,14 +312,20 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
     // its mean (near exponential, as measured). Pressing makes the denser
     // spots denser: the solid share follows the fibre count to the power
     // 1 − press. A pixel holds only a few dozen pores, so its mean scatters:
-    // Gamma(k = 6)/6 (the research's k ≈ 2–12, its middle).
+    // Gamma(k)/k, k = n/4.93 for the n = x²·τ²/π surface pores of a pixel x
+    // mm across, τ = ln(1/ε)/ω at the local porosity ε and fibre width ω
+    // (the research's §4: k ≈ 2–12 at 0.25–0.3 mm), so a finer render's
+    // pixels scatter more, as they hold fewer pores.
     let micro: Vec<f32> = (0..n)
         .map(|i| {
             let solid = ((1.0 - p.porosity) * (gram[i] / beta).max(0.05).powf(1.0 - p.press)).clamp(0.05, 0.95);
             let mean = p.thick_um * (1.0 - solid) / solid;
             let (x, y) = ((x0 + i % w) as u64, (y0 + i / w) as u64);
             let mut r = Rng::new(p.seed ^ 0x5EED_9031 ^ x.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ y.wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
-            let k = 6;
+            let tau = (1.0 / (1.0 - solid)).ln() / (p.fibre_um * 1e-3);
+            let pores = px_mm * px_mm * tau * tau / std::f32::consts::PI;
+            // (a whole number of pores' worth, at least one; past 256 the mean is as good as exact)
+            let k = (pores / 4.93).round().clamp(1.0, 256.0) as usize;
             let g: f32 = (0..k).map(|_| -(r.f().max(1e-7)).ln()).sum::<f32>() / k as f32;
             mean * g
         })

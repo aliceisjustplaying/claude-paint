@@ -5,7 +5,7 @@ Research notes for the pastel simulator. Compiled 2026-10-06. Builds on `paper_s
 **Tags:** **[M]** measured, cited. **[D]** derived here, arithmetic or method shown. **[E]** estimate; tunable.
 
 **Bottom line**
-- **Edge dents.** If the fibres' through-thickness shear stiffness is included, a knife edge at 0.05–0.5 N/mm sinks **3–32 µm**, against 9–54 µm for Winkler. That is **0.2–0.8× the Winkler depth**: the factor is smallest for sharp edges at light loads and nearest 1 for blunt edges at heavy loads. The dent spreads over a full width of **80–310 µm**, even where the contact itself is 10–200 µm. Permanent dents are 0–9 µm (Winkler gave 0–20 µm). At pen-ball pressures (>10 MPa) spreading stops mattering and Winkler with Chen's curve matches measured handwriting grooves.
+- **Edge dents.** If the fibres' through-thickness shear stiffness is included, a knife edge at 0.05–0.5 N/mm sinks **3–32 µm**, against 9–54 µm for Winkler. That is **0.17–0.80× the Winkler depth**: the factor is smallest for sharp edges at light loads and nearest 1 for blunt edges at heavy loads. The dent spreads over a full width of **80–310 µm**, even where the contact itself is 10–200 µm. Permanent dents are 0–9 µm (Winkler gave 0–20 µm). At pen-ball pressures (>10 MPa) spreading stops mattering and Winkler with Chen's curve matches measured handwriting grooves.
 - **Pore depth.** In a random layered network the mean surface pore height is **h̄ = t·ε/(1−ε)**. It depends on *local porosity*, not on the local fibre count. Flocs leave the z-structure unchanged. From pixel to pixel, density changes alter h̄ by only about 4–15 %. Sampling a few pores per pixel causes a much larger scatter of the per-pixel mean depth, CV about 0.5–1 under an independence assumption.
 - **Nap.** Torn-free fibre ends rise to roughly **20–100 µm**, the instrument class "short fibre rising" (≤0.1 mm). They are too stiff for pastel pressure to flatten, so they add tooth. They should raise Rz much more than Ra. No measured Ra/Rz change after scraping was found.
 - **Crumbs.** A puff's footprint is far shorter than the fetch saltation needs to sustain itself (0.1–1.4 m). Bagnold's 0.8 ratio therefore does not strictly apply; only rolling crumbs and single hops occur. Rolling crumbs stop where u* falls below their stopping threshold. That is about **1.15–1.6× the entrainment radius**, so they form an annulus, at about 2–7 cm for a hard blow from 10 cm. Fines ≤5 µm stay airborne (≤10 % redeposit within 10 cm). About 15–25 % of 20 µm fines redeposit within 10 cm.
@@ -88,7 +88,7 @@ Research notes for the pastel simulator. Compiled 2026-10-06. Builds on `paper_s
 
 **Simulator rule.**
 - Replace the Winkler depth with δ₀(q, R) from the fit or table.
-- Lower the surface by δ₀·e^(−|x−x_edge|/ℓ) with ℓ ≈ 0.2–0.35 mm, not only under the contact.
+- Lower the surface by δ₀·e^(−|x−x_edge|/ℓ) outside the contact, not only under it, with ℓ from the table's dent widths: ℓ ≈ (FWHM − contact width)/(2 ln 2) ≈ 50–85 µm. (The linear shear-lag length T√(G/3E_z), 0.2–0.35 mm, spreads dents 2–3× wider than the table: Chen's curve stiffens with strain, so the dent stays narrower.)
 - Make the permanent part the "res" column, concentrated within the contact width.
 - Keep Winkler with Chen's curve for wide or high-pressure contacts (p > 5 MPa, or contact width > 2ℓ).
 

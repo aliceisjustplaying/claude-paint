@@ -15,6 +15,9 @@
 #          hopper       painter can read names another painter (the
 #          giverny      impressionist studio's note names the painters
 #          impressionist in whose paintings its box was found)
+#          every        every tube in the catalog, the guide, the physics note and
+#                       the materials note on the box's paints
+#                       (notes/research/every_materials.md); nothing names a painter
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # dest gets:
@@ -48,7 +51,7 @@
 # box from the log.
 set -euo pipefail
 
-usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist <dest>" >&2; exit 2; }
+usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist|every <dest>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 profile=$1
 dest=$2
@@ -63,6 +66,7 @@ case "$profile" in
   tonn) box=tonn; materials=tonn_materials.md; own=(Tonn) ;;
   hopper) box=hopper; materials=hopper_materials.md; own=(Hopper) ;;
   giverny) box=giverny; materials=giverny_materials.md; own=(Monet) ;;
+  every) box=every; materials=every_materials.md; own=() ;;
   impressionist) box=impressionist; materials=impressionist_materials.md; own=(Monet Renoir Pissarro Sisley Morisot Degas Cézanne Seurat) ;;
   *) usage ;;
 esac

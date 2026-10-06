@@ -361,6 +361,8 @@ def _parse(path):
             if parent is not None and (txt or m.get("isError")):
                 if txt:
                     c["events"][parent]["out"] = txt[-1500:]
+                    if c["events"][parent]["kind"] == "look" and STICK_HELD.search(txt):
+                        c["events"][parent]["held"] = "stick"
                 if m.get("isError"):
                     c["events"][parent]["err"] = True
                 c["changed"].append(parent)
@@ -372,6 +374,8 @@ def _parse(path):
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                        if c["events"][parent].get("held"):
+                            ev["held"] = c["events"][parent]["held"]
                     if re.search(r"palette (?!False)", ev.get("look", "")):
                         chips = palette_board(base64.b64decode(x["data"]))
                         if chips:
@@ -403,6 +407,12 @@ def summary_clock(text):
 def look_text(args):
     """A look call's request as one line: "crop 110,540,610,900, size 800", "mode squint" ("" for the plain look)."""
     return ", ".join(f"{k} {v}" for k, v in args.items())
+
+
+# a look's reply when it held a pastel stick over the canvas ("<look> (WxH, 0.12s): P.glow held at 400,300: <what
+# it shows>", main.rs), not a knife or a pile ("... held up to the canvas at 400,300"): the request alone can't tell,
+# a stick held without pose or side taking the easel's default pose
+STICK_HELD = re.compile(r"\): .+ held at -?[0-9.]+,-?[0-9.]+: ")
 
 
 def is_whole(look):

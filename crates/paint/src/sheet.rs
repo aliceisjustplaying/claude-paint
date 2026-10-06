@@ -93,28 +93,108 @@ fn shao_lu(d_um: f32, rho: f32) -> f32 {
     (0.0123 * (rho / AIR_KG_M3 * 9.81 * d + 3e-4 / (AIR_KG_M3 * d))).sqrt()
 }
 
-/// Paper under a cylindrical edge of radius `r_um` pressed with line load
-/// `q` N/mm, the sheet `t_um` thick on a rigid board, as a bed of springs
-/// with Chen et al.'s (2020) compression curve σ = 0.636(e^(13.54 ε) − 1)
-/// MPa: how deep the edge sinks below the surface it rests on, µm.
-/// (Ignoring the fibres' in-plane stiffness: an upper bound.)
+/// Through-thickness shear modulus of a drawing paper, MPa: 16–127 measured
+/// in paperboard plies (Nygårds); for a drawing paper 15–50 [E], the middle
+/// (paper_mechanics_and_transport.md §1).
+const PAPER_GXZ_MPA: f32 = 30.0;
+/// Steel on paper, friction (0.2–0.4 [E]), and the strength of a fibre–fibre
+/// joint, N (1.1–6.5 mN measured: the middle).
+const STEEL_PAPER_MU: f32 = 0.3;
+const FIBRE_JOINT_N: f32 = 3.0e-3;
+/// Fibre wall hardness, MPa (0.27–0.42 GPa by nanoindentation [M]).
+const FIBRE_WALL_MPA: f32 = 350.0;
+/// A scalpel cutting shaves at most about a fibre layer a pass, µm (10–15 [D]).
+const SHAVE_UM: f32 = 12.0;
+/// Torn fibre ends standing proud deepen the tooth locally 1.3–2.5× [E]: at
+/// full nap, the middle.
+const NAP_TOOTH: f32 = 1.9;
+
+/// Chen et al.'s (2020) z-compression of paper: stress (MPa) at strain `e`.
+fn chen(e: f32) -> f32 {
+    0.636 * ((13.54 * e).exp() - 1.0)
+}
+
+/// How deep an edge of radius `r_um` sinks into a sheet `t_um` thick on a
+/// rigid board under line load `q` N/mm, µm. The sheet compresses by Chen's
+/// curve, and its fibrous surface, ~190 times stiffer in plane than through
+/// it, carries load sideways by its through-thickness shear: a Pasternak
+/// layer, p = σ(w/T) − (G_xz·T/3)·w″ (the spreading length T√(G/3E_z),
+/// some 0.2–0.6 mm). Solved on a grid across the edge with the contact
+/// found by an active set; the load matched by bisection on the depth.
+/// (Without the shear it is the bed of springs: 1.25–6× deeper at a knife's
+/// light loads, the same for a pen's hard ones; §1.)
 pub fn edge_sink_um(q: f32, r_um: f32, t_um: f32) -> f32 {
-    let line = |d0: f32| -> f32 {
-        // q = ∫ σ(δ(x)/T) dx, δ(x) = δ0 − x²/2R, over the contact (µm → mm: MPa·µm = 1e-3 N/mm)
-        let half = (2.0 * r_um * d0).sqrt();
-        let n = 64;
-        let mut sum = 0.0;
-        for k in 0..n {
-            let x = -half + 2.0 * half * (k as f32 + 0.5) / n as f32;
-            let d = (d0 - x * x / (2.0 * r_um)).max(0.0);
-            sum += 0.636 * ((13.54 * d / t_um).exp() - 1.0) * (2.0 * half / n as f32);
+    let gp = PAPER_GXZ_MPA * t_um / 3.0; // MPa·µm
+    let ell = t_um * (PAPER_GXZ_MPA / (3.0 * 8.6)).sqrt();
+    let half = (6.0 * ell).max(4.0 * (2.0 * r_um * t_um * 0.5).sqrt());
+    let n = 401usize;
+    let h = 2.0 * half / (n - 1) as f32;
+    let xs: Vec<f32> = (0..n).map(|i| -half + h * i as f32).collect();
+    // the load the sheet carries at depth `d0` under the edge's centre, N/mm
+    let load = |d0: f32| -> f32 {
+        let edge: Vec<f32> = xs.iter().map(|&x| d0 - x * x / (2.0 * r_um)).collect();
+        let mut w: Vec<f32> = edge.iter().map(|&e| e.max(0.0)).collect();
+        let mut contact: Vec<bool> = edge.iter().map(|&e| e > 0.0).collect();
+        for _ in 0..12 {
+            // Newton on the free nodes: gp·(w[i-1] − 2w[i] + w[i+1])/h² − σ(w[i]/T) = 0
+            for _ in 0..8 {
+                let (mut a, mut b, mut c, mut rhs) = (vec![0.0f32; n], vec![1.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
+                for i in 1..n - 1 {
+                    if contact[i] {
+                        continue;
+                    }
+                    let e = w[i] / t_um;
+                    let ds = 0.636 * 13.54 * (13.54 * e).exp() / t_um;
+                    a[i] = gp / (h * h);
+                    c[i] = gp / (h * h);
+                    b[i] = -2.0 * gp / (h * h) - ds;
+                    rhs[i] = -(gp * (w[i - 1] - 2.0 * w[i] + w[i + 1]) / (h * h) - chen(e));
+                }
+                // Thomas: the increments (fixed nodes: 0)
+                for i in 1..n {
+                    if b[i - 1].abs() < 1e-12 {
+                        continue;
+                    }
+                    let m = a[i] / b[i - 1];
+                    b[i] -= m * c[i - 1];
+                    rhs[i] -= m * rhs[i - 1];
+                }
+                let mut dw = vec![0.0f32; n];
+                for i in (0..n).rev() {
+                    let nxt = if i + 1 < n { dw[i + 1] } else { 0.0 };
+                    dw[i] = (rhs[i] - c[i] * nxt) / b[i];
+                }
+                for i in 1..n - 1 {
+                    if !contact[i] {
+                        w[i] = (w[i] + dw[i]).max(0.0);
+                    }
+                }
+            }
+            // the active set: free nodes the edge would pass join it; contact
+            // nodes pulling instead of pushing leave it
+            let mut changed = false;
+            for i in 1..n - 1 {
+                let p = chen(w[i] / t_um) - gp * (w[i - 1] - 2.0 * w[i] + w[i + 1]) / (h * h);
+                if !contact[i] && w[i] < edge[i] {
+                    contact[i] = true;
+                    w[i] = edge[i];
+                    changed = true;
+                } else if contact[i] && p < 0.0 {
+                    contact[i] = false;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
         }
-        sum * 1e-3
+        // the edge's load: the contact pressure over the contact (MPa·µm = 1e-3 N/mm)
+        (1..n - 1).filter(|&i| contact[i]).map(|i| (chen(w[i] / t_um) - gp * (w[i - 1] - 2.0 * w[i] + w[i + 1]) / (h * h)) * h).sum::<f32>() * 1e-3
     };
     let (mut lo, mut hi) = (0.0f32, t_um * 0.6);
-    for _ in 0..40 {
+    for _ in 0..30 {
         let m = 0.5 * (lo + hi);
-        if line(m) < q { lo = m } else { hi = m }
+        if load(m) < q { lo = m } else { hi = m }
     }
     0.5 * (lo + hi)
 }
@@ -270,7 +350,7 @@ impl Canvas {
 
     /// A blade `width` units long scraped along `pts` (units), held across the
     /// path or at `angle` (radians), pressed `pressure` (start, end; 0..1): a
-    /// hand's 0.05–0.5 N/mm along it (pastel_removal_air_blade.md §B4). Its
+    /// hand's 1–5 N over the edge's length (pastel_removal_air_blade.md §B4). Its
     /// edge, `edge_um` in radius (a painting knife's: unsharpened, 20–500 µm),
     /// rests on the highest point within the steel's flex and sinks into the
     /// paper by the sheet's measured compression (`edge_sink_um`): it takes
@@ -300,14 +380,34 @@ impl Canvas {
         let mut col = [0.0f32; 3];
         let mut last_band: Vec<usize> = Vec::new();
         let mut dent: Vec<(usize, f32)> = Vec::new();
+        let mut napped: Vec<(usize, f32)> = Vec::new();
+        let mut sinks: Vec<(i32, f32)> = Vec::new();
         for (t, &(c, dir)) in steps.iter().enumerate() {
             let e = match angle {
                 Some(a) => (a.cos(), a.sin()),
                 None => (-dir.1, dir.0),
             };
             let pr = pressure.0 + (pressure.1 - pressure.0) * t as f32 / n as f32;
-            let q = 0.05 + 0.45 * pr.clamp(0.0, 1.0);
-            let sink = edge_sink_um(q, edge_um.max(1.0), t_um);
+            // a hand's 1–5 N over the length of edge bearing [E]: a palette
+            // knife's 3 cm light, a scalpel's few mm heavy
+            let q = (1.0 + 4.0 * pr.clamp(0.0, 1.0)) / (width * self.mm_per_unit).max(0.5);
+            let qk = (q * 50.0).round() as i32;
+            let sink = match sinks.iter().find(|s| s.0 == qk) {
+                Some(s) => s.1,
+                None => {
+                    let v = edge_sink_um(qk as f32 / 50.0, edge_um.max(1.0), t_um);
+                    sinks.push((qk, v));
+                    v
+                }
+            };
+            // the edge cuts fibre walls past q = H·2R (a scalpel's 1 µm edge
+            // at 0.15–0.85 N/mm; a knife's never at a hand's load), shaving
+            // about a fibre layer
+            let shave = if q * 1000.0 > FIBRE_WALL_MPA * 2.0 * edge_um { SHAVE_UM } else { 0.0 };
+            // its drag on each fibre it crosses tears the fibre's joints past
+            // their strength: the torn ends stand proud (nap)
+            let drag = STEEL_PAPER_MU * q * paper.fibre_um * 1e-3;
+            let nap = ((drag - FIBRE_JOINT_N) / FIBRE_JOINT_N).clamp(0.0, 1.0);
             let nb = ((2.0 * half / 0.7).ceil() as usize).max(2);
             let mut blade: Vec<usize> = Vec::with_capacity(nb + 1);
             for k in 0..=nb {
@@ -336,8 +436,12 @@ impl Canvas {
                 if cl.film >= 0.0 && self.film[i] <= cl.film + 1e-4 {
                     let mu = self.micro_um(i);
                     let v = cl.loose + cl.bound;
-                    let keep = Self::below(v, mu, z);
+                    let keep = Self::below(v, mu, z + shave);
                     let r = cl.r;
+                    if shave > 0.0 {
+                        // cut fibres take what is bound to them too
+                        cl.bound = cl.bound.min(keep);
+                    }
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
                         let tot = pushed + ex * 0.35;
@@ -348,9 +452,12 @@ impl Canvas {
                 }
                 // pressed in by z: what stays of it after the edge has passed
                 let eps = z / t_um;
-                let resid = ((0.49 * eps - 0.027).max(0.0) * t_um).min(z);
+                let resid = ((0.49 * eps - 0.027).max(0.0) * t_um).min(z) + shave;
                 if resid > 0.0 {
                     dent.push((i, resid));
+                }
+                if nap > 0.0 {
+                    napped.push((i, nap));
                 }
             }
             last_band = blade;
@@ -363,6 +470,14 @@ impl Canvas {
             heights[i] -= r;
             if let Some(m) = self.micro.get_mut(i) {
                 *m = (*m - r).max(0.5);
+            }
+        }
+        // nap: the torn ends deepen the tooth there (once per pixel, by the most)
+        napped.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
+        napped.dedup_by_key(|d| d.0);
+        for &(i, f) in &napped {
+            if let Some(m) = self.micro.get_mut(i) {
+                *m *= 1.0 + (NAP_TOOTH - 1.0) * f;
             }
         }
         self.height = heights;
@@ -487,8 +602,9 @@ impl Canvas {
     /// crumbs (Shao & Lu 2000, ~0.2 m/s); in the pores the flow dies with
     /// depth as exp(−4.21 z/w) (Moffatt's eddies, w a fibre's width), so only
     /// the top few µm of the pores' filling, its fine grains (~0.8 m/s), can
-    /// go. What goes is airborne (redeposition, 0–20 % nearby, is left out).
-    /// Fixed pastel stays. Returns the volume blown off, mm³. Engine 7.
+    /// go. The crumbs roll out and settle in a ring past where the shear stops
+    /// lifting them; the fines mostly stay airborne. Fixed pastel stays.
+    /// Returns the volume blown off the picture, mm³. Engine 7.
     pub fn blow_pastel(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32) -> f32 {
         if self.engine < 7 || self.drawing.is_none() || !(h_mm > 0.0 && u > 0.0 && d_mm > 0.0) {
             return 0.0;
@@ -511,6 +627,11 @@ impl Canvas {
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut gone = 0.0f32;
+        // what rolls: heaped crumbs, by direction from the jet's centre (48
+        // sectors): volume and colour; and the fines blown out of the pores
+        let nsec = 48usize;
+        let mut rolled = vec![(0.0f32, [0.0f32; 3]); nsec];
+        let (mut fines, mut fcol) = (0.0f32, [0.0f32; 3]);
         let to = |v: f32| ((v / s_mm).floor() as isize).max(0) as usize;
         for py in to(cy - r_out).max(f.y0)..(to(cy + r_out) + 1).min(f.y0 + f.h) {
             for pxx in to(cx - r_out).max(f.x0)..(to(cx + r_out) + 1).min(f.x0 + f.w) {
@@ -531,12 +652,81 @@ impl Canvas {
                 let in_pores = v.min(mu);
                 let keep_pores = if z > 0.0 { Self::below(in_pores, mu, z) } else { in_pores };
                 let keep = keep_pores + (v - in_pores) - heap * heap_goes;
-                gone += Self::take_loose(cl, &mut pxs[i], keep);
+                let r = cl.r;
+                let ex = Self::take_loose(cl, &mut pxs[i], keep);
+                if ex > 0.0 {
+                    let crumbs = (heap * heap_goes).min(ex);
+                    let k = (((wy.atan2(wx) + std::f32::consts::PI) / std::f32::consts::TAU * nsec as f32) as usize).min(nsec - 1);
+                    let (ref mut v0, ref mut c0) = rolled[k];
+                    let t = *v0 + crumbs;
+                    *c0 = [0, 1, 2].map(|j| (c0[j] * *v0 + r[j] * crumbs) / t.max(1e-9));
+                    *v0 = t;
+                    let fv = ex - crumbs;
+                    let tf = fines + fv;
+                    fcol = [0, 1, 2].map(|j| (fcol[j] * fines + r[j] * fv) / tf.max(1e-9));
+                    fines = tf;
+                }
+                gone += ex;
             }
         }
+        // where they go (paper_mechanics_and_transport.md §4). A puff's few
+        // centimetres are too short for saltation to build up: the crumbs roll
+        // (and hop once) outward as the shear falls off (u* ∝ r^(−1.15)) and
+        // stop past where the shear no longer lifts them, at 1.15–1.56 times
+        // that radius (the impact threshold, 0.81–0.86 of the lifting one,
+        // and their momentum): a ring. The fines stay airborne; of 5 µm grains
+        // some 1–9 % settle within 10 cm (Wood's deposition fit): 5 %, thinly.
+        let ustar_max = (tau_max / AIR_KG_M3).sqrt();
+        let film = std::mem::take(&mut self.film);
+        let mut rng = crate::rng::Rng::new((x.to_bits() as u64) << 32 ^ y.to_bits() as u64 ^ 0xB10E);
+        let mut back = 0.0f32;
+        if ustar_max > ut_heap {
+            let r_th = r_peak * (ustar_max / ut_heap).powf(1.0 / 1.15);
+            for (k, &(v, col)) in rolled.iter().enumerate() {
+                if v <= 0.0 {
+                    continue;
+                }
+                let (a0, a1) = (k as f32 / nsec as f32 * std::f32::consts::TAU - std::f32::consts::PI, (k + 1) as f32 / nsec as f32 * std::f32::consts::TAU - std::f32::consts::PI);
+                let mut bed: Vec<(usize, f32, bool)> = Vec::new();
+                let (rmin, rmax) = (1.15 * r_th, 1.56 * r_th);
+                for py in to(cy - rmax).max(f.y0)..(to(cy + rmax) + 1).min(f.y0 + f.h) {
+                    for pxx in to(cx - rmax).max(f.x0)..(to(cx + rmax) + 1).min(f.x0 + f.w) {
+                        let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
+                        let (rr, aa) = ((wx * wx + wy * wy).sqrt(), wy.atan2(wx));
+                        let i = (py - f.y0) * f.w + (pxx - f.x0);
+                        if rr >= rmin && rr < rmax && aa >= a0 && aa < a1 && !self.sheet_over(i) && self.wet.vol[i] <= 1e-5 {
+                            bed.push((i, 1.0, false));
+                        }
+                    }
+                }
+                if !bed.is_empty() {
+                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, CRUMB_MAX_UM, px_um2);
+                    back += v;
+                }
+            }
+        }
+        if fines > 0.0 {
+            let rr = 100.0f32;
+            let mut bed: Vec<(usize, f32, bool)> = Vec::new();
+            for py in to(cy - rr).max(f.y0)..(to(cy + rr) + 1).min(f.y0 + f.h) {
+                for pxx in to(cx - rr).max(f.x0)..(to(cx + rr) + 1).min(f.x0 + f.w) {
+                    let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
+                    let i = (py - f.y0) * f.w + (pxx - f.x0);
+                    if wx * wx + wy * wy < rr * rr && !self.sheet_over(i) && self.wet.vol[i] <= 1e-5 {
+                        bed.push((i, 1.0, false));
+                    }
+                }
+            }
+            if !bed.is_empty() {
+                // (the whole disk's share, as fine grains: 20 µm and less)
+                crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, 0.05 * fines, fcol, &mut rng, 20.0, px_um2);
+                back += 0.05 * fines;
+            }
+        }
+        self.film = film;
         self.drawing = Some(dr);
         self.px = pxs;
-        gone * px_um2 * 1e-9
+        (gone - back).max(0.0) * px_um2 * 1e-9
     }
 
     /// The board tapped (its edge struck on the table, or the sheet held
@@ -761,36 +951,48 @@ mod tests {
         c.fix_pastel(Some(&low), 0.15);
         let (d0, f0) = (dark(&c, 450.0, 550.0, 230.0, 370.0), dark(&c, 450.0, 550.0, 630.0, 770.0));
         let (h0, m0) = (c.height.clone(), c.micro.clone());
-        let took = c.scrape_pastel(100.0, 100.0, &[(500.0, 180.0), (500.0, 820.0)], (0.6, 0.6), Some(0.0));
+        let took = c.scrape_pastel(100.0, 100.0, &[(500.0, 180.0), (500.0, 820.0)], (1.0, 1.0), Some(0.0));
         let (d1, f1) = (dark(&c, 470.0, 530.0, 230.0, 370.0), dark(&c, 470.0, 530.0, 630.0, 770.0));
-        assert!(took > 0.0 && d1 < 0.7 * d0, "the knife took the loose pastel: {d0} -> {d1}");
+        // (a stiff blade rides the paper's high spots and bridges its low ones:
+        // the scrape is mottled, so the passage lightens by part)
+        assert!(took > 0.0 && d1 < 0.95 * d0, "the knife took loose pastel: {d0} -> {d1}");
         assert!((f1 - f0).abs() < 0.05 * f0.max(1e-3), "the fixed stays: {f0} -> {f1}");
-        let pressed = (0..h0.len()).filter(|&i| c.height[i] < h0[i] - 0.5).count();
+        // a wide knife at a hand's force presses too lightly to set the paper
+        // (Chen's residual strain is 0 below ε ≈ 0.055); the same hand on a 3 mm
+        // edge burnishes it: the peaks stay lower, their pores shallower
+        let pressed = |c: &Canvas| (0..h0.len()).filter(|&i| c.height[i] < h0[i] - 0.5).count();
+        assert_eq!(pressed(&c), 0, "the light knife left no dent");
+        c.scrape_pastel(20.0, 100.0, &[(300.0, 180.0), (300.0, 420.0)], (1.0, 1.0), Some(0.0));
         let shallower = (0..m0.len()).filter(|&i| c.micro[i] < m0[i] - 0.5).count();
-        assert!(pressed > 0 && shallower > 0, "the paper burnished: {pressed} pixels pressed, {shallower} shallower");
+        assert!(pressed(&c) > 0 && shallower > 0, "pressed hard on a short edge, it burnished: {} pixels pressed, {shallower} shallower", pressed(&c));
     }
 
-    /// An ordinary puff from 10 cm (12 m/s: u* ≈ 0.7 m/s at the ring) takes
-    /// the loose heap and leaves the pores' filling (their fine grains need
-    /// ~0.8 m/s); a hard blow from 5 cm (21 m/s: u* ≈ 2.2) also clears the top
-    /// of the tooth under its ring (why blowers aren't used on friable pastel);
-    /// beyond the jet's reach nothing moves.
+    /// An ordinary puff from 10 cm (12 m/s: u* ≈ 0.7 m/s at the ring) lifts
+    /// the heaped crumbs inside its reach and rolls them out to a ring (here
+    /// 30–41 mm out), leaving the pores' filling (their fine grains need
+    /// ~0.8 m/s); a hard blow from 5 cm also takes the top of the tooth.
     #[test]
-    fn a_puff_takes_the_heap_and_a_hard_one_the_top_of_the_tooth() {
+    fn a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth() {
         let mut c = sheet7();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
-        dense(&mut c, &mut st, 200.0, 800.0);
+        dense(&mut c, &mut st, 100.0, 900.0);
         let mut hard = c.clone();
-        let heap = |c: &Canvas| -> f32 { (0..c.px.len()).map(|i| { let cl = &c.drawing.as_ref().unwrap().cells[i]; (cl.loose + cl.bound - c.micro_um(i)).max(0.0) }).sum() };
-        let pores = |c: &Canvas| -> f32 { (0..c.px.len()).map(|i| { let cl = &c.drawing.as_ref().unwrap().cells[i]; (cl.loose + cl.bound).min(c.micro_um(i)) }).sum() };
-        let (h0, p0, far0) = (heap(&c), pores(&c), dark(&c, 150.0, 200.0, 250.0, 300.0));
-        // (150 mm sheet: 1 unit = 0.15 mm)
-        let soft = c.blow_pastel(500.0, 500.0, 100.0, 12.0, 8.0);
-        let strong = hard.blow_pastel(500.0, 500.0, 50.0, 21.0, 8.0);
-        assert!(soft > 0.0 && heap(&c) < h0, "the puff took heaped pastel");
-        assert!((pores(&c) - p0).abs() < 1e-3 * p0, "an ordinary puff leaves the tooth's filling");
-        assert!(strong > soft && pores(&hard) < p0, "a hard blow close in takes more, into the tooth");
-        assert!((dark(&c, 150.0, 200.0, 250.0, 300.0) - far0).abs() < 1e-6, "out of its reach nothing moved");
+        let f = c.window();
+        let within = |c: &Canvas, r0: f32, r1: f32, heap: bool| -> f32 {
+            (0..c.px.len()).filter(|&i| { let (x, y) = (f.ux(i % f.w) - 500.0, f.uy(i / f.w) - 500.0); let r = (x * x + y * y).sqrt() * 0.15; r >= r0 && r < r1 }).map(|i| {
+                let cl = &c.drawing.as_ref().unwrap().cells[i];
+                let mu = c.micro_um(i);
+                if heap { (cl.loose + cl.bound - mu).max(0.0) } else { (cl.loose + cl.bound).min(mu) }
+            }).sum()
+        };
+        let (inner0, ring0, pores0) = (within(&c, 10.0, 20.0, true), within(&c, 31.0, 40.0, true), within(&c, 10.0, 20.0, false));
+        c.blow_pastel(500.0, 500.0, 100.0, 12.0, 8.0);
+        hard.blow_pastel(500.0, 500.0, 50.0, 21.0, 8.0);
+        let (inner1, ring1, pores1) = (within(&c, 10.0, 20.0, true), within(&c, 31.0, 40.0, true), within(&c, 10.0, 20.0, false));
+        assert!(inner1 < 0.5 * inner0, "the heap inside the reach went: {inner0} -> {inner1}");
+        assert!(ring1 > ring0, "and settled in the ring: {ring0} -> {ring1}");
+        assert!((pores1 - pores0).abs() < 1e-3 * pores0, "an ordinary puff leaves the tooth's filling");
+        assert!(within(&hard, 3.0, 8.0, false) < within(&c, 3.0, 8.0, false), "a hard blow close in takes into the tooth");
     }
 
     /// A tap sheds the heaped crumbs (a hard tap more than gravity) and never
@@ -810,6 +1012,64 @@ mod tests {
         assert!(heap(&c) < heap(&upright), "a hard tap sheds more than gravity: {} vs {}", heap(&c), heap(&upright));
         assert!(heap(&c) < 0.2 * h0, "most of the heap fell");
         assert!((pores(&c) - p0).abs() < 1e-3 * p0, "the pores keep theirs");
+    }
+
+    /// The edge's dent with the surface's shear: shallower than the bed of
+    /// springs at a knife's light load (research: 10.8–15.6 µm at 0.2 N/mm,
+    /// R 100 µm, T 250 µm, against Winkler's 29), deeper with load.
+    #[test]
+    fn an_edge_dents_paper_less_than_a_bed_of_springs() {
+        let d = super::edge_sink_um(0.2, 100.0, 250.0);
+        assert!(d > 9.0 && d < 18.0, "dent at 0.2 N/mm: {d} µm");
+        assert!(super::edge_sink_um(0.5, 100.0, 250.0) > d, "deeper with load");
+    }
+
+    /// Pores: a pixel's mean depth scatters (a few dozen pores in it), the
+    /// denser spots shallower, the sheet's mean about the fibre thickness.
+    #[test]
+    fn pores_vary_with_the_sheet() {
+        let c = sheet7();
+        let m = &c.micro;
+        let mean = m.iter().sum::<f32>() / m.len() as f32;
+        let sd = (m.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / m.len() as f32).sqrt();
+        assert!(mean > 4.0 && mean < 9.0, "mean pore depth {mean}");
+        assert!(sd / mean > 0.2, "they vary: cv {}", sd / mean);
+    }
+
+    /// A scalpel (a 1 µm edge on a short length) cuts: it shaves the surface
+    /// and takes even fixed pastel; a palette knife at the same hand doesn't.
+    #[test]
+    fn a_scalpel_cuts_a_knife_does_not() {
+        let mut c = sheet7();
+        let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+        dense(&mut c, &mut st, 300.0, 700.0);
+        c.fix_pastel(None, 0.15);
+        let mut k = c.clone();
+        let (h0, b0) = (c.height.clone(), c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>());
+        c.scrape_pastel(10.0, 1.0, &[(500.0, 280.0), (500.0, 720.0)], (0.5, 0.5), Some(0.0));
+        k.scrape_pastel(200.0, 100.0, &[(500.0, 280.0), (500.0, 720.0)], (0.5, 0.5), Some(0.0));
+        let shaved = (0..h0.len()).filter(|&i| c.height[i] < h0[i] - 10.0).count();
+        assert!(shaved > 0, "the scalpel shaved the surface");
+        assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() < b0, "and took fixed pastel");
+        assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
+    }
+
+    /// Blown crumbs roll out and settle in a ring past the cleared zone.
+    #[test]
+    fn blown_crumbs_settle_in_a_ring() {
+        let mut c = sheet7();
+        let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+        dense(&mut c, &mut st, 420.0, 580.0);
+        let before = c.pixels().to_vec();
+        // a hard blow from 5 cm at the passage's centre (1 unit = 0.15 mm)
+        c.blow_pastel(500.0, 500.0, 50.0, 21.0, 8.0);
+        let f = c.window();
+        // bare paper beside the passage, out along its line, gained crumbs somewhere
+        let gained = (0..before.len()).filter(|&i| {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            (y < 400.0 || y > 600.0) && c.pixels()[i] != before[i]
+        }).count();
+        assert!(gained > 0, "crumbs landed on the bare paper round the passage");
     }
 
     /// The hold's contact is where a stroke from there lays.

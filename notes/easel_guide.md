@@ -562,17 +562,23 @@ tap({g=100})                          -- the board's edge struck on the table (a
   wide holds a few milligrams; `b:wipe` empties it); then the rest is pushed
   ahead and left as a ridge of crumbs where the brush lifts. Over a
   speckled passage it smears more than it cleans.
-- **The knife** (`k:scrape`) pressed over pastel sinks into the paper by the
-  sheet's compression (tens of µm at a hand's load, deeper than the pores:
-  an upper bound), takes the loose pastel down into the tooth, drops part of
-  it where it lifts, and leaves the paper it pressed burnished: flatter,
-  its pores shallower, so it takes less pastel after. `edge` is the edge's
-  radius in µm (an unsharpened painting knife 20–500; a scalpel about 1).
-  Fixed pastel stays.
+- **The knife** (`k:scrape`) over pastel: the hand's force (1–5 N by
+  `pressure`) bears along the blade's edge, so a wide palette knife presses
+  lightly and a short edge hard. The edge sinks into the paper as far as
+  the sheet's compression and its surface's stiffness allow, and takes the
+  loose pastel above that depth; a stiff blade rides the paper's high spots
+  and bridges its low ones, so a scrape is mottled. Pressed hard enough it
+  sets the paper: burnished, flatter, the pores shallower (less tooth). Its
+  drag can tear fibres loose: raised nap, more tooth there. `edge` is the
+  edge's radius in µm (a painting knife 20–500; a scalpel about 1): a
+  scalpel on a short edge cuts, shaving a fibre layer and taking even fixed
+  pastel. Otherwise fixed pastel stays.
 - **A puff** (`blow`) shears the surface in a ring around where it is aimed
   (nothing at the very centre): loose crumbs heaped on the tooth go easily;
   the pores' fine grains only under a hard blow close in, and only their
-  top few micrometres. What goes is gone.
+  top few micrometres. The crumbs it lifts roll outward and settle in a
+  ring just past where it stops lifting them; most of the fine grains are
+  carried off.
 - **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
   heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
 - **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and

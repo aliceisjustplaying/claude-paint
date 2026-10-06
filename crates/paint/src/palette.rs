@@ -893,7 +893,9 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, ..Palette::new(self.name, self.tubes.clone()) }
+        // (its tubes' oil and grind as they are: a renamed palette, `named`,
+        // keeps its box's)
+        Palette { engine: self.engine, pack: self.pack.clone(), grind: self.grind.clone(), ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -1032,7 +1034,12 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, ..Palette::new(self.name, t) }
+        let mut p = Palette { engine: self.engine, ..Palette::new(self.name, t) };
+        // (the tubes it had keep their oil and grind: a renamed palette's
+        // are its box's, `named`)
+        p.pack[..self.pack.len()].copy_from_slice(&self.pack);
+        p.grind[..self.grind.len()].copy_from_slice(&self.grind);
+        p
     }
 
     /// How fast the tube `t` dries in this box's engine version.

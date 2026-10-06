@@ -270,8 +270,8 @@ Practice:
   1.5–3.0) are already part of the volume scattering. At the top grains they act as an
   extra spectrally flat diffuse term. **Engine suggestion [E]:** k2 = 0, plus an additive
   flat k1 ≈ 0.02–0.04. This caps the darkest dry blacks at R ≈ 0.03–0.05. Example: R_i
-  0.02 gives R_m ≈ 0.05 for powder vs 0.008 for an oil film, roughly 1.5 L* units against
-  ~7. That gap is why a black pastel never matches a black oil glaze.
+  0.02 gives R_m ≈ 0.05 for powder vs 0.008 for an oil film, about L* 27 against about
+  7. That gap is why a black pastel never matches a black oil glaze.
 
 ---
 

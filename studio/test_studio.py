@@ -527,6 +527,9 @@ def test_a_palette_look_is_not_the_painting():
     assert not S.is_whole(S.look_text({"light": "45,15"}))
     assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
     assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
+    # nor the motif pinned beside the canvas (look{ref=}), even with a size
+    assert not S.is_whole(S.look_text({"ref": "motif.jpg"}))
+    assert not S.is_whole(S.look_text({"size": 800, "ref": "motif.jpg"}))
 
 
 @pytest.mark.parametrize("ending, said", [

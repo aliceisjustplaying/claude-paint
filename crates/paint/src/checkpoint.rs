@@ -37,7 +37,8 @@
 //! absorbent ground, its tube paint's oil by volume and its wax,
 //! `crate::wet::Prop`), and after the solvent (before
 //! a raw canvas's soak section) the paper, if the support is paper, with
-//! its micro-roughness per pixel. After the header the
+//! its micro-roughness per pixel; an engine-7 canvas then gives the sheet of
+//! paper lying on it, if any (where it lies and the pastel on it). After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
 //! dirty box, then per pixel the color, relief, film, wet volume, pigment
@@ -372,6 +373,22 @@ impl Canvas {
                 }
             }
         }
+        // engine 7's section: a sheet of paper lying on the picture (sheet.rs),
+        // where it lies and the pastel caught on it
+        if self.engine >= 7 {
+            match &self.sheet {
+                None => put_u64(w, 0)?,
+                Some(s) => {
+                    put_u64(w, 1)?;
+                    for v in [s.caliper_um, s.micro_um, s.tone[0], s.tone[1], s.tone[2]] {
+                        put_f32(w, v)?;
+                    }
+                    put_all(w, s.over.iter().map(|&o| if o { 1.0 } else { 0.0 }))?;
+                    put_all(w, s.a.iter().copied())?;
+                    put_all(w, s.r.iter().flat_map(|c| *c))?;
+                }
+            }
+        }
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
             write_soak(w, s)?;
@@ -450,7 +467,12 @@ impl Canvas {
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
         let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
         wet.hide = if version >= 13 {
-            get_all(r, n * 10)?.as_chunks::<10>().0.to_vec()
+            let h = get_all(r, n * 10)?;
+            // (engine 6's five: the ground's drain would carry a non-finite one on)
+            if !h.as_chunks::<10>().0.iter().all(|p| p[5..].iter().all(|v| v.is_finite())) {
+                return Err(bad("checkpoint paint packing is invalid"));
+            }
+            h.as_chunks::<10>().0.to_vec()
         } else if version >= 11 {
             // (engines 4 and 5: no ground's draw)
             get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|h| [h[0], h[1], h[2], h[3], h[4], p, f, 0.0, q, 0.0]).collect()
@@ -565,11 +587,17 @@ impl Canvas {
                         1 => Some(crate::paper::Felt { cell_mm: get_f32(r)?, depth_um: get_f32(r)? }),
                         _ => return Err(bad("checkpoint paper felt flag is invalid")),
                     };
+                    if felt.is_some_and(|f| !(f.cell_mm.is_finite() && f.depth_um.is_finite())) {
+                        return Err(bad("checkpoint paper felt is invalid"));
+                    }
                     let laid = match get_u64(r)? {
                         0 => None,
                         1 => Some(crate::paper::Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
                         _ => return Err(bad("checkpoint paper laid flag is invalid")),
                     };
+                    if laid.is_some_and(|l| !(l.per_cm.is_finite() && l.chain_mm.is_finite() && l.deficit.is_finite())) {
+                        return Err(bad("checkpoint paper laid is invalid"));
+                    }
                     c.paper = Some(crate::paper::Paper {
                         grammage: v[0], fibre_mm: v[1], fibre_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
                         floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
@@ -580,6 +608,27 @@ impl Canvas {
                     }
                 }
                 _ => return Err(bad("checkpoint paper flag is invalid")),
+            }
+        }
+        // engine 7's section: the sheet
+        if c.engine >= 7 {
+            match get_u64(r)? {
+                0 => {}
+                1 => {
+                    let mut v = [0.0f32; 5];
+                    for x in v.iter_mut() {
+                        *x = get_f32(r)?;
+                    }
+                    let over: Vec<bool> = get_all(r, n)?.into_iter().map(|o| o > 0.5).collect();
+                    let a = get_all(r, n)?;
+                    let rgb = get_all(r, n * 3)?;
+                    if !v.iter().chain(&a).chain(&rgb).all(|x| x.is_finite()) {
+                        return Err(bad("checkpoint sheet is invalid"));
+                    }
+                    let r = rgb.as_chunks::<3>().0.to_vec();
+                    c.sheet = Some(crate::sheet::Sheet { over, caliper_um: v[0], micro_um: v[1], tone: [v[2], v[3], v[4]], a, r });
+                }
+                _ => return Err(bad("checkpoint sheet flag is invalid")),
             }
         }
         // raw formats go on with the soak section, which ends the file
@@ -678,6 +727,28 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// Engine 7: a sheet of paper laid on the picture survives a checkpoint,
+    /// with the pastel caught on it; none laid, none read back.
+    #[test]
+    fn a_laid_sheet_survives_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_engine(7).with_paper(crate::paper::Paper::drawing(2));
+        let back = |c: &Canvas| {
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            Canvas::read_state(&mut Cursor::new(b)).unwrap().0
+        };
+        assert!(back(&c).sheet.is_none());
+        let m = crate::mask::Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y: 300.0, pose, speed: 60.0 }, StrokePoint { x: 900.0, y: 300.0, pose, speed: 60.0 }]);
+        let r = back(&c);
+        assert!(r.sheet.is_some() && r.sheet == c.sheet && r.pixels() == c.pixels());
+        assert!(c.sheet.as_ref().unwrap().a.iter().any(|&a| a > 0.0), "the stroke caught on the sheet");
     }
 
     /// Engine 6: a sheet of paper with stick pastel in its tooth survives a

@@ -901,13 +901,19 @@ fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &
     }
     let half = 60.0f32;
     let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
+    // (as `hold_look`: the point in the passage shown)
+    if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
+        return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
+    }
     let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
     let (_, _, png) = look::render(&c, &seen_as)?;
     let mut img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     let p = paint::pastel::Pose { force: pose[0], alt: pose[1].to_radians(), az: pose[2].to_radians(), roll: (turned + pose[3]).to_radians() };
     let cells = c.stick_contact(&stick, at.0, at.1, p);
     let f = c.window();
-    let (cx0, cy0) = ((crop[0] * f.scale).round() as i64, (crop[1] * f.scale).round() as i64);
+    // (the passage as rendered: a crop past the canvas's edge is clipped, as in `hold_look`)
+    let cx0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
+    let cy0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
     let col = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as f32);
     let (mut touch, mut bed) = (0usize, 0usize);
     for &(i, k) in &cells {
@@ -1114,6 +1120,9 @@ impl Server {
         if survey && compare.is_some() {
             return Err("look: --survey and --compare are two looks; ask for one".into());
         }
+        if (pose.is_some() || side.is_some()) && hold.is_none() {
+            return Err("look: --pose and --side hold a pastel stick: they go with --hold <stick> --at x,y".into());
+        }
         if let Some(r) = reference {
             if survey || compare.is_some() || hold.is_some() || at.is_some() {
                 return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
@@ -1144,18 +1153,27 @@ impl Server {
                         [n[0], n[1], n[2], n.get(3).copied().unwrap_or(0.0)]
                     }
                     // laid flat across a stroke going that way (as p:side holds it)
-                    (None, Some(t)) => [2.0, 0.0, nums(t)?.first().copied().unwrap_or(0.0) + 90.0, 0.0],
+                    (None, Some(t)) => {
+                        let n = nums(t)?;
+                        if n.len() != 1 {
+                            return Err("--side: the stroke's direction, degrees".into());
+                        }
+                        [2.0, 0.0, n[0] + 90.0, 0.0]
+                    }
                     (None, None) => [1.5, 60.0, 45.0, 0.0],
                 };
                 if !(0.0..=20.0).contains(&ps[0]) || !(0.0..=90.0).contains(&ps[1]) {
                     return Err("--pose: force 0 to 20 N, alt 0 to 90 degrees".into());
+                }
+                if !(ps[2].is_finite() && ps[3].is_finite()) {
+                    return Err("--pose, --side: the azimuth, direction and roll are numbers (degrees)".into());
                 }
                 let (w, h, png, note) = stick_hold_look(&self.s, &pile, (p[0], p[1]), ps, &v)?;
                 let path = new_look(&session_dir(&self.name), &png)?;
                 return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held at {},{}: {note}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
             }
             if pose.is_some() || side.is_some() {
-                return Err(format!("look --hold {pile}: --pose and --side are a pastel stick's"));
+                return Err(format!("look --hold {pile}: --pose and --side hold a pastel stick, not a knife or a pile"));
             }
             let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;

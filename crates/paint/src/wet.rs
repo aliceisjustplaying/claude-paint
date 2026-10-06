@@ -32,7 +32,7 @@ pub type Latent = [f32; LAT];
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
 /// relative to average paint (see `drying::drier`). Solvent and oil are
 /// engine 4's (see `Paint`; engine 3's thinner keeps its solvent beside the
-/// paint, `crate::thinner`). The last three are engine 6's, for an absorbent
+/// paint, `crate::thinner`). The last five are engine 6's, for an absorbent
 /// ground's drain (`bristle::ground_drain`): the oil left, relative to tube
 /// paint as `oil` is, when the pigment packs (`Paint::packed`) and when a
 /// ground has drained all it can (`Paint::floor`), and the share of a film on

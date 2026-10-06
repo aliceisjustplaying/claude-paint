@@ -863,11 +863,12 @@ fn wax_dries_more_matte() {
 }
 
 /// Engine 6: only the fluid share of a film levels (`settle_for`'s
-/// `fluid`): a film packed through follows the relief under it.
+/// `fluid`): over the weave a film packed through follows the relief under
+/// it, as even as it was laid; a fluid one gathers in the hollows.
 #[test]
 fn a_packed_film_follows_the_relief() {
     let film = |fluid: Option<f32>| {
-        let mut c = Canvas::new(200, 1.0, [0.8; 3]);
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
         let (w, h) = (c.f.w, c.f.h);
         let add = vec![30.0f32; w * h];
         let stiff = vec![0.05f32; w * h];

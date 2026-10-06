@@ -65,7 +65,7 @@ Values for felt marks, honeycomb and laid-line relief are **[E]**. §8 lists mea
 - **[M] PPS geometry.** PPS reports the "cube-root-mean-cube gap" in µm between paper and a land **51 µm wide, 98 mm long**, at Δp = 6.2 or 19.6 kPa. Clamp is 0.5/1.0/2.0 MPa against a soft backing (ISO 8791-4).
 - **[D] Slot-flow inversion.** Plane-Poiseuille flow through a slot gives
 
-  **G = (12 η b Q / (L Δp))^(1/3)**, where η(air) = 1.81 × 10⁻⁵ Pa·s, b = land width, L = land length.
+  **G = (12 η b Q / (L Δp))^(1/3)**, where η(air) = 1.81 × 10⁻⁵ Pa·s, b = land width (the air's path, across the land), L = land length (the slot's extent, along the land): Q = L·G³·Δp/(12ηb).
 
 - **[M/E] Bendtsen land.** Width 0.15 mm, Δp = 1.47 kPa, on glass at about 0.1 MPa clamp (Singh et al. 1991, Table I). The land length L ≈ 99 mm (ring about 31.5 mm diameter) is **[E]**.
 - **[D] Bendtsen to equivalent gap:**

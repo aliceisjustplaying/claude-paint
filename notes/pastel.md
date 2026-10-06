@@ -35,10 +35,13 @@ dry picture, so paint laid later composites over it and seals it.
 - **Smudge.** `Canvas::smudge(mask, strength, radius)` drags loose pastel
   within `radius` units together: its colors average, weighted by the loose
   coverage. It also presses the pastel into the hollows (up to 0.97 coverage)
-  and packs the tooth. Fixed, painted-over and wet pastel doesn't move.
+  and packs the tooth. Fixed pastel moves a quarter as readily as loose;
+  painted-over and wet pastel doesn't move.
 - **Serialization.** A drawing without pastel keeps its old layout: five
   floats a cell, checkpoint flag 1. With pastel (`Drawing::color`) it is eight
-  floats a cell (`r, g, b` and `fill`), flag 2.
+  floats a cell (`r, g, b` and `fill`), flag 2. With engine 6's stick pastel
+  (`Drawing::sticks`) it is ten floats a cell (with the tooth's loose and
+  bound pastel), flag 3.
 
 ## Lua
 

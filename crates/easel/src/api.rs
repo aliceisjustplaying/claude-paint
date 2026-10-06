@@ -521,6 +521,10 @@ impl UserData for Brush {
             if let Some(o) = &o {
                 check_keys(o, &["pressure", "tip"], "b:dust")?;
                 if let Some(v) = num(o, "pressure")? {
+                    // (clamp keeps a NaN: refuse it first)
+                    if !v.is_finite() {
+                        return err("b:dust: pressure is a number, 0 to 1");
+                    }
                     p = v.clamp(0.0, 1.0);
                 }
                 if let Some(v) = num(o, "tip")? {
@@ -538,6 +542,10 @@ impl UserData for Brush {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                 if c.engine() < 7 {
                     return err("b:dust: brushing pastel off needs engine 7");
+                }
+                // (the path's work bounded before it is densified, as a knife's)
+                if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
+                    return err(format!("b:dust: {e}"));
                 }
                 let (v, secs) = c.dust_pastel(width, tip, &pts);
                 c.tally_mut().secs += secs as f64;
@@ -833,7 +841,21 @@ impl UserData for PileU {
             let tubes = st.borrow().tubes.clone();
             let add = tube_parts(&tubes, &t, "p:add")?;
             check_set_out(&st, &add, "p:add")?;
+            let before = resolve(&st, p.clone(), None).mix;
             st.borrow_mut().board.add(p.heap, &add, medium).map_err(mlua::Error::runtime)?;
+            // (engine 6: a reground heap's oil is relative to its tubes' own
+            // oils, which the added tubes change: its paint keeps its oil, the
+            // added paint comes as its tubes do, `Mixture::oil_rate`)
+            if tubes.engine >= 6 && (before.oil_rate - 1.0).abs() > 1e-6 {
+                let after = resolve(&st, p.clone(), None).mix;
+                let mut s = st.borrow_mut();
+                if let Some(h) = s.board.heap_mut(p.heap) {
+                    let kept = (1.0 - h.oil_rate) / (1.0 - before.oil_rate);
+                    let came = tubes.pile(add.clone()).tube_oil_rate;
+                    let oil = before.oil_rate * before.tube_oil_rate * kept + came * (1.0 - kept);
+                    h.oil_rate = oil / after.tube_oil_rate.max(1e-6);
+                }
+            }
             let now = resolve(&st, p.clone(), None);
             time::knife(&st, now.mix.color);
             Ok(now)
@@ -1949,7 +1971,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 medium += p.medium * w;
                 solvent += p.mix.solvent * w;
                 thinner += p.thinner() * w;
-                oil += p.mix.oil_rate * w;
+                // (from engine 6 each heap's oil as it is, its regrind times its
+                // tubes' own oils: `Mixture::oil_rate`)
+                oil += p.mix.oil_rate * p.mix.tube_oil_rate * w;
                 wsum += w;
             }
             if wsum <= 0.0 {
@@ -1961,6 +1985,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v * wsum)).collect();
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
+            // (relative again to the mix's own tubes, from engine 6; before, 1)
+            let oil = if tubes.engine >= 6 { oil / mix.tube_oil_rate.max(1e-6) } else { oil };
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
             let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
@@ -2239,7 +2265,12 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         Value::Boolean(false) => None,
         Value::Table(f) => {
             check_keys(&f, &["cell", "depth"], "paper felt")?;
-            Some(Felt { cell_mm: num(&f, "cell")?.unwrap_or(0.8).clamp(0.1, 5.0), depth_um: num(&f, "depth")?.unwrap_or(20.0).clamp(0.0, 200.0) })
+            let (cell, depth) = (num(&f, "cell")?.unwrap_or(0.8), num(&f, "depth")?.unwrap_or(20.0));
+            // (clamp keeps a NaN: refuse it first)
+            if !(cell.is_finite() && depth.is_finite()) {
+                return err("paper: felt= cell and depth are numbers (mm, µm)");
+            }
+            Some(Felt { cell_mm: cell.clamp(0.1, 5.0), depth_um: depth.clamp(0.0, 200.0) })
         }
         _ => return err("paper: felt= {cell=mm, depth=µm}, or false for none"),
     };
@@ -2247,7 +2278,11 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         Value::Nil | Value::Boolean(false) => None,
         Value::Table(l) => {
             check_keys(&l, &["per_cm", "chain", "deficit"], "paper laid")?;
-            Some(Laid { per_cm: num(&l, "per_cm")?.unwrap_or(10.0).clamp(2.0, 20.0), chain_mm: num(&l, "chain")?.unwrap_or(25.0).clamp(5.0, 60.0), deficit: num(&l, "deficit")?.unwrap_or(0.15).clamp(0.0, 0.5) })
+            let (per_cm, chain, deficit) = (num(&l, "per_cm")?.unwrap_or(10.0), num(&l, "chain")?.unwrap_or(25.0), num(&l, "deficit")?.unwrap_or(0.15));
+            if !(per_cm.is_finite() && chain.is_finite() && deficit.is_finite()) {
+                return err("paper: laid= per_cm, chain and deficit are numbers");
+            }
+            Some(Laid { per_cm: per_cm.clamp(2.0, 20.0), chain_mm: chain.clamp(5.0, 60.0), deficit: deficit.clamp(0.0, 0.5) })
         }
         _ => return err("paper: laid= {per_cm=, chain=mm, deficit=}"),
     };

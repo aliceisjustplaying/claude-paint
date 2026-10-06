@@ -1,3 +1,10 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["numpy"]
+# ///
+# The Mie scattering behind notes/research/dry_pigment_optics.md (Bohren &
+# Huffman's bhmie): uv run notes/research/dry_pigment_mie.py
 import numpy as np
 def bhmie(x, m):
     # Bohren & Huffman, returns qext, qsca, qabs, g

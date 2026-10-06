@@ -5,7 +5,7 @@ Research notes for the pastel simulator's "brush-off" tool. Compiled 2026-10-05.
 **Tags:** **[M]** measured, cited. **[D]** derived here from measured inputs, arithmetic shown. **[E]** estimate; treat as tunable.
 
 **Bottom line.**
-- A bristle tip pushes sideways with 10³–10⁵ times the force needed to roll a single pastel particle. Removal is therefore limited by **reach**, i.e. whether the tip touches the particle, not by force.
+- A bristle tip pushes sideways with 10³–10⁶ times the force needed to roll a single pastel particle. Removal is therefore limited by **reach**, i.e. whether the tip touches the particle, not by force.
 - Bristles also break loose soft-pastel crumbs (agglomerates) of about 100 µm.
 - Pastel sitting deeper in a pore than the tip can reach stays put. That is the "ghost" painters describe.
 - Nobody has measured redeposition for this case; it is a gap.

@@ -279,7 +279,8 @@ impl Canvas {
             let fl = if timed { crate::drying::fluid(cure) } else { 1.0 };
             spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
-        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i], wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
+        // (engine 6: of the liquid above any packed paint, which doesn't flow)
+        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i] * (1.0 - packed(wet, i)), wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
@@ -427,7 +428,8 @@ impl Canvas {
                     // (the drying thickness a bare pixel takes, by amount)
                     let own = th_of(i);
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
-                    (pv, ps, lat, hide, cure, changed, mob_of(pv, ps, cure), th_in)
+                    let flowing = if drain { pv * (1.0 - hide[7].clamp(0.0, 1.0)) } else { pv };
+                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in)
                 })
                 .collect();
             // the largest mobility now: every pixel that has any is in the

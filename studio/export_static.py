@@ -308,7 +308,10 @@ def main():
             if e["kind"] == "image" and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
                 s["look"] = e["img"]
         # the painting's title, if the painter's last words begin with one
-        s["title"] = S.title_of(next((e["text"] for e in reversed(ev) if e["kind"] == "say"), ""))
+        # (the closing words of each sitting: its last words before the next sitting starts, newest first)
+        closings = [e["text"] for k, e in enumerate(ev) if e["kind"] == "say"
+                    and all(x["kind"] != "say" for x in ev[k + 1:next((j for j in range(k + 1, len(ev)) if ev[j]["kind"] == "start"), len(ev))])]
+        s["title"] = S.title_of_closings(closings)
         # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
         # quiet run as in progress only then
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"

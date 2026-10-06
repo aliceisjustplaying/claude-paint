@@ -418,17 +418,33 @@ TITLE = re.compile(r"\s*(?:\([^)\n]{1,16}\)\S{0,3}\s+)?(?:#{1,6}\s*)?(\*\*?|__?)
 TITLE_LINE = re.compile(r"[ \t]*(?:#{1,6}[ \t]*)?(\*\*?|__?)([^*_\n]{2,100}?)\1[ \t]*")
 
 
+# or named in the first line of its closing words: "I've called it **Grainstack, Evening**.", "I've finished
+# **Nymphéas, reflet du soir** (...)", "I'm leaving **Luncheonette, Four O'Clock** finished as it is."
+NAMED = re.compile(r"[^\n*_]{0,40}?\b(?:call(?:ed|ing)?|title[ds]?|name[ds]?|finish(?:ed|ing)?|left|leav(?:e|ing)"
+                   r"|complet(?:ed|e|ing))(?:\s+(?:it|this|(?:the|this|my)\s+(?:painting|picture|canvas)))?\s+(\*\*?|__?)([^*_\n]{2,100}?)\1(?![*_\w])")
+
+
+def clean_title(t):
+    """A title without the quotation marks some painters put inside the bold."""
+    return t.strip().strip('"\u201c\u201d').strip() or None
+
+
 def title_of(say):
     """The painting's title from the painter's last words, if they begin with one or have one alone on a line among
     their first three paragraphs; else None."""
-    m = TITLE.match(say or "")
+    m = TITLE.match(say or "") or NAMED.match(say or "")
     if m:
-        return m.group(2).strip()
+        return clean_title(m.group(2))
     for para in [p for p in re.split(r"\n\s*\n", say or "") if p.strip()][1:3]:
         m = TITLE_LINE.fullmatch(para.strip("\n"))
         if m:
-            return m.group(2).strip()
+            return clean_title(m.group(2))
     return None
+
+
+def title_of_closings(says):
+    """The title in the newest closing words that name one (a last sitting that only looked may not repeat it)."""
+    return next((t for t in map(title_of, reversed(says)) if t), None)
 
 
 REFERENCE = object()  # in a glance's calls: a read of a reference picture
@@ -496,10 +512,10 @@ def glance(files):
         if g["last"]:
             last, lsrc = base + g["last"][0], (f,) + g["last"][1:]
         base += g["n"]
-    say = next((g["say"] for g in reversed(gs) if g["say"]), "")
+    title = title_of_closings([g["say"] for g in gs if g["say"]])
     if look is None:
         look, src = last, lsrc
-    return {"look": look, "title": title_of(say), "src": src}
+    return {"look": look, "title": title, "src": src}
 
 
 def glance_image(src):

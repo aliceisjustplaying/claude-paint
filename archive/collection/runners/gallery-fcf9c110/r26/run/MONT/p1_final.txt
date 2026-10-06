@@ -1,0 +1,23 @@
+I've finished **Nymphéas, reflet du soir** (*Water Lilies, Evening Reflection*). The clock now stands at day 213.
+
+We're looking straight down into a lily pond, with no horizon. Two dark willow reflections in ultramarine, violet and viridian hang from the top corners. Between them, a band of evening sky comes down through the water: cobalt blue near the top, then lavender cloud shadows, then a rose glow lower down. Rafts of pads float across it with rose and white blooms, smaller and closer together in the distance and larger near the bottom.
+
+This sitting I went back to the one passage I'd left uncertain. Up close, the pale lavender pad strokes in the foreground looked chalky, like flat opaque lilac pills.
+
+- **First try failed:** a medium-rich violet glaze over the pills came out as saturated violet bars. That's the same mistake I made on day 43, with too much pigment and not enough oil medium. A rag dipped in spirits lifted it cleanly off the dry paint.
+- **Second try worked:** this time I used much less pigment (about 0.6 parts in all), more medium (0.75), a lighter brush load (0.25–0.35), and covered only part of each pill. That left a cool, see-through shadow in the lilac, and I softened three of the patches with a lightly dipped rag. They now read as sky reflected on the pads, not as chalk.
+
+I chose to leave three things as they are:
+- the remaining ochre on the lower-right pads, which reads as warm evening light;
+- the lower diagonal edge of the light band, which reads as a bank of reflected foliage;
+- the short vertical reflection strokes in the right middle. Up close they're a little regular, but from a normal viewing distance they read as reeds.
+
+**Lessons I'm keeping**
+- Strokes placed by hand with my small helpers work better than filling masks with `work()`.
+- Blend only fresh wet marks. Never blend a pad inside its own outline, and never blend the whole canvas.
+- Over dry opaque paint, new colour needs strong pigment and a full brush load (0.65 or more) to show.
+- A glaze over dry paint needs medium of 0.7 or more, very little pigment and a light load, or it turns into a bar.
+- A rag dipped in spirits (0.85–0.9), pressed at about 0.85 for 2 passes, reliably lifts wet paint off a dry layer.
+- Check a close-up of what's already there before placing new marks.
+
+My heart is happy with this. The light runs down the pond like a river of sky between the two willows. The full handoff is in `notes/journal.md`.

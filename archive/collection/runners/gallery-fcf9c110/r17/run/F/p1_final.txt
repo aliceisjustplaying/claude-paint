@@ -1,0 +1,13 @@
+I've saved the painting as finished and closed the session.
+
+- **Painting:** `~/src/a/paint-studio-cfa19c/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-cfa19c/paintings/lua/painting.lua`
+- **Title:** *June Morning on the Meadows before the Town*
+
+A lone oak in full June leaf stands on a grassy rise at the left. Under it a couple, seen from behind, looks out over the river meadows toward a Hanseatic town. The town sits low on the horizon under a large summer cloud: a hall church with a needle spire, two more towers and a row of gabled houses. The silver river winds between pollard willows toward the town, with a barge under a red-brown sail. On the meadows, haymakers are loading a wagon among the hay cocks, a shepherd with his dog watches a flock of sheep, and two horses and three cattle graze by a post-and-rail fence. Buttercups, daisies and two weathered granite stones sit in the near grass. Post mills stand on the horizon and swifts fly high over the town. As in Friedrich, the sky takes most of the picture, and the figures are small and turned away.
+
+In this session I made one change. The shaded right side of the oak's crown had been a single flat dark. I stippled a dull olive onto the tops of about twenty small leaf clusters there, so it now reads as foliage in shade and still balances the sunlit left side.
+
+Some weaknesses remain: the cloud is soft rather than luminous, and it is streaky up close. The oak's leaf masses are still a little too round, and the willow reflections are rather blotchy. Taken as a whole, the picture holds together: the dark oak against the pale sky, the grey-violet town and cloud, and the river leading between them.
+
+I didn't run `bin/easel check` to confirm that the log still replays to the same canvas, because a full replay takes about 25 minutes.

@@ -1,0 +1,20 @@
+The painting is finished, saved and the session is closed. I didn't get a `bin/easel check` result: I ran it after closing, and it only replied that no painting was open.
+
+- **Painting:** `~/src/a/paint-studio-1def1a/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-1def1a/paintings/lua/painting.lua` (73 chunks)
+- **Journal:** `~/src/a/paint-studio-1def1a/notes/journal.md`
+
+**Title:** *Evening Tide, the Estuary*
+
+It's a Thames-style sailing barge with russet sails, dark against the gold light just after sunset. A mauve bank of cloud crosses the sky, and a low cool shore holds a clump of trees, a windmill and one far-off sail. The barge's reflection is broken into ripples. A dark mud spit with mooring stakes and marsh grass anchors the lower left. The water is calm and gold near the horizon and gets darker and choppier towards the viewer.
+
+The painting took a lot of correcting. One blend dragged the foresail into the sky, a glaze meant to be thin went on almost black, and a sheen on the mud turned into a pale mound. Each time I let the paint dry and painted over it, since nothing can be undone. Some of those accidents stayed: the dark glaze became the wind-ruffled foreground water.
+
+In the last session I:
+- darkened the reflection under the hull
+- dulled the puddles on the mud
+- broke up the mast's reflection
+- added four gulls
+- glazed the top of the sky and the lower-right water to keep the eye inside the picture
+
+The top glaze came out streaky. After one soft blend I kept it as windblown cloud.

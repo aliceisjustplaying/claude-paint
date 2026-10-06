@@ -1,0 +1,10 @@
+Done. Saved and closed the session.
+
+**Saved painting:** `~/src/a/paint-studio-c766c5/out/easel/painting/painting.png`
+**Log (the program that paints it):** `~/src/a/paint-studio-c766c5/paintings/lua/painting.lua`
+
+**Title:** *Still Life with a Dark Bottle and a Bowl of Lemons*
+
+The picture is a still life in a warm, dim key: a tall near‑black glass bottle carrying a soft left reflection and a crisp specular, a white bowl of two lemons, a single lemon at the left edge, and a pear at the right, all ranged along a broad table against a murky brown wall with a glow behind the bottle and the shadows falling short and soft to the lower right.
+
+I found it on the easel in a state the journal had already called finished, but looking at it plainly it was still flat — the fruit were pale blobs carrying a regular stipple mesh, the bowl a white ring, the bottle a muddy silhouette, the table blotchy. So I judged it unfinished and painted on. I repainted the fruit as opaque, rounded bodies with a cored shadow and a warm bounce; gave the bowl an exterior shadow side and a deeper interior; rebuilt the bottle as clean glass; and unified the table and wall, re‑laying the cast shadows and deepening the background so the objects carry the light. A useful lesson along the way: thin films of earth over a pale ground lighten rather than darken, so the shadows had to be built up in several full passes.

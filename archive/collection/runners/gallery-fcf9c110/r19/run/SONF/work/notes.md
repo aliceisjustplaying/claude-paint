@@ -1,0 +1,42 @@
+- canvas ground: 2-layer (knife red/ochre/white 120um, brushed white 60um) -> warm cream with brush striations, pinkish patches where lower layer shows. Weave not visible on bare ground.
+- smalt+white: pale muted bluish grays; smalt weak/translucent -> hard to get deep blue with white. cobalt+smalt no white: strong saturated blue. Prussian 0.3 in white 4: pale teal-gray. Hues generally muted.
+- glaze hand: long few soft-edged strokes, bristle texture, spill outside mask (unclipped).
+- stipple width 6 cov1: distinct round blobs, weave shows as dot texture.
+- blend over two adjacent wet glazes (blue/warm): smooth gradient, fine crosshatch weave texture, sharp cut edge at blend mask border.
+- pencil H at 0.2-0.3 pressure: nearly invisible at whole view.
+- broad hand coverage 1.6 leaves many gaps between strokes; coverage 3 + fill=true then blend -> smooth even band with ragged edge.
+- lead-white/smalt sky paint still open after ~1.5h.
+- adjacent broad bands (blue/teal/lime/pale/apricot) laid wet then one blend over whole: smooth gradient, painterly; lime (Prussian+chrome yellow+white) looked acidic before blending.
+- flat brush 5-9 wide single strokes of cloud color on wet sky: read as thin ruled lines like pencil; flat stroke shows striation, soft top edge; lightly loaded 2nd stroke streaks dry-brush. flat 8 after 2 strokes fullness 0.16.
+- outline char soft lobe 10 mask filled with body hand (filbert 9) cov 2.2 fill: blocky stacked 'logs', hard rectangular edges. blend over grown mask while wet -> smooth soft lumpy mass, but hard outline / pasted look remains.
+- thin wet stroke lines blended in a 16-wide ribbon -> soft diffuse bands.
+- worry: pale paint over wet dark streaks/muddies (painter reasoning, not shown yet)
+- blend over whole lower area dragged still-wet test swatches (blend acts on all wet paint under its mask).
+- after wait 24h: all sky/water (lead white rich, medium 0.1) dry.
+- value view: whole canvas compressed into light values.
+- deep glaze (smalt+trace Prussian+little white, medium .55) with hand=glaze coverage 2 load_at fading, over dry: patchy streaky brush marks (mackerel-sky look). blend then: irregular mottled blotches, lighter patches where blender lifted glaze; not smooth.
+- hard seam between two blended bands remained after first blend (visible stripe edge).
+- stipple width 6 over dry paint: dots clearly separate; blend afterward moved dots but seam line still visible.
+- stipple+blend radial glow over dry: stipple barely visible at whole view; on dry cloud bank left speckled lacy dots (blend can't dissolve into dry layer).
+- glaze hand medium .6 warm (white/chrome/vermilion) load_at radial + blend: orange patches, more saturated/garish than intended; covered far shore; after ~4 min still open; medium 0.6 glaze still 'open' while other areas 'setting' ~1h later? (open at glaze, setting elsewhere at 0.1 medium after ~25h? no: day2 12:21 -> check: open/open/setting/setting). After 20h wait all dry.
+- outline{closed=true}:mask() is only a thin stroke band along contour, not a filled shape (area tiny; values 0 inside). o:below(y number) also thin. Filled region: below(sorted path points of o:path(1)) * above(base) works.
+- work body horizontal strokes clip=true against a near-horizontal wavy mask edge: comb of dark vertical hairline spikes / bristle striations along top edge, hard straight base line. Horizontal blend in 9-wide ribbon along edge while wet -> soft lobed edge.
+- haze stipple into wet dark shore base + blend: softened but base still read hard/heavy at whole view.
+- body hand mostly-white mist (medium .05) over lower shore band + blend: flat milky opaque band, reads as paint strip; stroke ends made jagged lower edge; wider blend smoothed it.
+- stipple width 3 noise coverage into dry: faint; shore reads as scalloped cloud-like lobes.
+- pencil underdrawing no longer visible after sky paint laid over (sealed/covered).
+- glaze hand crisscross bristle strokes left scumbled texture in sky; stipple dots at seam read as pointillist noise close up.
+- warm veil glaze medium .7 + blend: pinkish strata in transition zone, muted the lime.
+- glaze core medium .45 + blend on grown ellipse: blend dragged far shore laid ~10 min before (still open) into grey smear; hard ellipse boundary left visible seam/arc where blend mask edge was.
+- after 22h: medium .45 glaze area 'tacky', others dry; after further 12h dry.
+- poly(pts,true) filled clipped body pass: flat-looking silhouette, pointed tip left.
+- noise-profile poly clipped fill (shore): flat slab with pasted domes; hard flat top.
+- stipple width 2.2 with drag up (2.6, -pi/2), cluster .5 along top edge: little change; band still flat gray with hard straight base.
+- thick shore paint (smalt/umber/red earth/white, medium .05, coverage 3 fill + stipple): tacky after 16h, 26h, 50h; dry after ~5 days total.
+- detail hand, clipped poly minus lancet cut-out, coverage 4 fill: clean silhouettes; cut-out hole shows the sky beneath; small shapes read cutout-like.
+- body hand filbert 5 mist with load_at ramp: visible white streaks, hard edges. 210 dashes flat 2.2 loaded 0.35-0.7: too dark and regular. Horizontal blend over both while open: smooth grey band, visible edge where blend mask stopped; opaque mist blobs remained.
+- below(pointlist) = region under curve (larger y). m:distance() signed: positive inside, negative outside. m:rim(24,16) gives band near inner edge. m:band(0,30,12) returned constant 0.56 (didn't work as expected).
+- dark body pass clipped cov 3.6 fill (umber/black/prussian/green earth): flat, dark, CG-looking with smooth uniform edge; color read flat neutral gray-green.
+- lighter olive strokes into open dark (LITZ band) : bright strip-like band, hard contrast. Blend twice (two angles) clipped to BANK while wet: smooth gradient, airbrushed/smoky, no texture.
+- glaze medium .35 + blend on (rect - BANK) mask while bank still open: badger dragged dark wet bank edge onto water as haze and pale streaks into bank; edge ragged/blurry. Blend mask excluding wet paint doesn't protect it at the boundary.
+- after 3 days: bank (umber/black/prussian, no medium) all dry.

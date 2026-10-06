@@ -1,0 +1,7 @@
+Saved painting: `out/easel/painting/painting.png`
+Log: `paintings/lua/painting.lua`
+
+Title: *Evening over the Marsh — Sun Path*
+
+A late-afternoon marsh in oil: pale blue sky warming to a golden horizon, a hazy far shore with a dark treeline, still water carrying a hand-painted sun glitter path and soft tree reflections, and a mottled foreground bank with three reed beds, tall stalks with seed heads, leaning grasses, and four distant birds high in the sky. Built in layered passes — broad sky, body land and water, rigger drawing for stalks and birds — with an overnight rest so the final drawing sits on tacky paint.
+

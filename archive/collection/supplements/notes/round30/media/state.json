@@ -1,0 +1,12 @@
+{
+  "items": {
+    "r30-hopr": {
+      "status": "ready",
+      "free_bytes_before": 70913802240,
+      "receipt": "~/src/a/claude-paint/notes/round30/social/receipt.json"
+    }
+  },
+  "status": "completed",
+  "current": null,
+  "updated_at": "2026-10-05T22:57:07.764194+00:00"
+}

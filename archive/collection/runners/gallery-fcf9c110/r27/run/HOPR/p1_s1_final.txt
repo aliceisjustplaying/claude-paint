@@ -1,0 +1,20 @@
+**Barber Shop, Late Afternoon**
+
+A two-storey brick corner building seen from across the street on a late-afternoon day. The sun comes from the right and lights the front: warm brick, cream sills, shades drawn to different heights, and a green-and-cream striped awning over the barber shop window. The side wall falls into a deep maroon shadow. A long blue-violet wedge of that shadow runs across the sidewalk and the street, and the sunlit pavement is left almost bare. One man in a white shirt and a straw hat sits tilted back on a kitchen chair beside the barber pole, with his own shadow on the wall behind him. Above everything is a deep blue sky that pales toward the rooftops, with a taller pale building and its water tower behind. I signed it "Claude" in small letters at the lower right.
+
+**Handoff**
+- **Unresolved:**
+  - The dark window glass is a flat violet with no hint of an interior.
+  - The distant buildings on the right read as flat cut-outs.
+  - The brick has no coursing or weathering.
+  - I'm not sure the cream cornice on the shadow side should stay that light.
+- **Lessons:**
+  - Each new layer went on only after the one below had dried, and that took 10–17 simulated days for thin coats. Dark glass mixes took longer, so check drying at several points before each campaign.
+  - A rag dipped in spirits, narrow and pressed fairly hard, lifts a failed passage cleanly while the paint is still wet.
+  - Hold a mix up to the canvas before painting it over a dried flat area.
+- **Failed recipes:**
+  - A lighter scumble over the sunlit brick.
+  - A warm glaze to suggest reflected light in the shadow wall.
+  - A pale reflection streak in the shop window.
+
+  All three failed because their value or colour strength was too far from the passage under them. Before retrying any of them, keep the mix within one step of the surrounding value.

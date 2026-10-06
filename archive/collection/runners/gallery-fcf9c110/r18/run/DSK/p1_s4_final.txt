@@ -1,0 +1,10 @@
+Done. I finished the picture at the easel and closed the session.
+
+**Saved painting:** `out/easel/painting/painting.png`
+**Log (the picture as a program):** `paintings/lua/painting.lua`
+
+**Title:** *Still Life with a Dark Bottle and Lemons*
+
+A dark green-black bottle stands left of centre against a dim umber wall; to its right a shallow white bowl holds two lemons, and a pale pear and a single lemon rest on the warm pool of the tabletop. The light comes from the upper left, so the bottle carries a broad reflection and a thin specular while the fruit hold the brightest notes and cast soft shadows to the right.
+
+This session I worked on dry ground: I repainted the pear as a solid body (it had gone transparent where the table showed through), evened the wall and table, relaid the cast shadows, and gave the bottle one clean vertical lay-in with its reflections. The table edge is drawn behind the bottle, and small speculars finish the fruit.

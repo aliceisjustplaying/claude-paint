@@ -1,0 +1,16 @@
+The painting is finished and saved, and the session is closed. `bin/easel check` confirmed that replaying the log's 112 chunks reproduces the canvas exactly.
+
+- **Painting:** `~/src/a/paint-studio-c6b5dd/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-c6b5dd/paintings/lua/painting.lua`
+- **Journal:** `notes/journal.md`
+- **Title:** *Evening on the Estuary*
+
+It's a quiet river at sunset, painted on a warm ochre-pink ground. On the left a big dark tree, a smaller tree at its foot and a low bank stand against the light. To the right the picture opens onto pale sky and water. A band of mauve cloud, lit peach from below, lies over a lemon-coloured glow above far lavender hills and a line of distant trees. The water picks up that glow and the cloud colour. A single figure poling a punt is the one small dark mark against the light on the water, with two birds above the hills. Reeds in the foreground cut across the pale water.
+
+Several accidents had to be painted out, and some still show:
+- An open-ended mask ran a dark column down through the water. I covered it by repainting all the open water as one fresh wet layer, because a local patch showed as a pale stripe.
+- Two unclipped passes spilled across edges, one of them a blend that dragged wet tree paint into the sky. Each time I let the paint dry and repainted the sky over it, clipped.
+- Some faults I left, because more patching would have done more harm:
+  - The tree's reflection is flat and a little green.
+  - The shaded bank under the tree runs as a straight dark wall.
+  - The weave shows through where I blended the boat's reflection over dry paint.

@@ -1,0 +1,48 @@
+<rules>
+- Use bash for file operations like ls, rg, find
+- You can inspect PI_* environment variables for current model and session details.
+- Use `todo` for complex work with 3+ steps, when the user gives you a list of tasks, or immediately after receiving new instructions to capture requirements. Skip it for single trivial tasks and purely conversational requests.
+- When starting a task from the todo list, mark it in_progress BEFORE beginning work. Mark it completed IMMEDIATELY when done — never batch completions. Exactly one task in_progress at a time.
+- Never mark a task completed if tests are failing, the implementation is partial, or you hit unresolved errors — keep it in_progress and create a new task for the blocker instead.
+- Task status is a 4-state machine: pending → in_progress → completed, plus deleted as a tombstone. Pass activeForm (present-continuous label, e.g. 'researching existing tool') when marking in_progress.
+- To change a task's status, call update with the task id and the target status, e.g. {"action":"update","id":3,"status":"completed"} or {"action":"update","id":3,"status":"in_progress","activeForm":"writing tests"}. status is the field that changes the task; an update without a mutable field (status or another) is rejected.
+- Use blockedBy to express dependencies (A is blocked by B). On create, pass blockedBy as the initial set. On update, use addBlockedBy / removeBlockedBy (additive merge — do not resend the full array). Cycles are rejected.
+- list hides tombstoned (deleted) tasks by default; pass includeDeleted:true to see them. Pass status to filter by a single status.
+- Subject must be short and imperative (e.g. 'Research existing tool'); description is for long-form detail. activeForm is a present-continuous label shown while in_progress.
+- Use bg_start only when the user explicitly requests background execution, the process must remain available for later interaction (for example, a server, watcher, or TUI), or you will perform independent useful work concurrently while it runs.
+- Do not use bg_start merely because a command may be slow. If background execution was not explicitly requested and you need its result before any independent work can proceed, use the bash tool with an appropriate timeout instead of bg_start → bg_wait → bg_logs.
+- Give each bg_start task a unique name; names are compared case-insensitively across all currently retained tasks.
+- Use the Environment returned by bg_start and later bg_* results as the task's immutable launch location; an SSH task stays on that target and cwd even if the active workspace changes.
+- Set bg_start pty=true only for terminal-aware or interactive TUI programs; keep the default pipe mode for ordinary builds and servers.
+- Once bg_start is justified, compose complete bg_* workflows in one assistant response. Every bg_* id accepts a task ID or unique name, and same-task calls execute strictly in source order, not in parallel. For example, emit bg_start(name="tests") → bg_wait(id="tests") → bg_logs(id="tests") together; for an existing task, emit bg_wait → bg_logs together. Different tasks execute in parallel, and bg_status without id is independent.
+- A running bg_start task survives ordinary agent runs but session reload or shutdown terminates it. A task finishing during a run is normally retained through that run; a task that was still running when the agent settled and then finishes while idle is normally retained through the next run.
+- Use bg_wait only for finite bg_start tasks whose completion is needed. bg_wait includes the latest pipe log line when available; place bg_logs immediately after bg_wait only when full or multiline pipe output or PTY terminal output is needed. Do not poll either tool.
+- Use bg_wait once when completion of an already-justified finite bg_start task is required; never create a bg_start task solely so you can wait on it.
+- bg_wait returns completion status plus the latest pipe log line when available. Emit bg_logs immediately after bg_wait only when full or multiline pipe output or PTY terminal output is needed; do not wait for the bg_wait result before emitting bg_logs.
+- A bg_wait timeout leaves the task running and still returns the latest pipe log line; a following same-response bg_logs call reads fuller output retained at that point.
+- Do not use bg_wait for persistent servers or watchers, and do not immediately wait again after a timeout unless the user asks you to keep waiting.
+- Do not poll bg_status after bg_start; use bg_wait once when a finite task's final status is required.
+- Use bg_status only for requested task metadata, recovering a missing task reference, or diagnosing task state.
+- Use bg_status without id only when the task ID or name is unknown and a retained-task list is needed.
+- bg_status includes the latest pipe log line when available; use bg_logs for full or multiline pipe output and for all PTY terminal output.
+- Use bg_logs when you need more than the latest pipe log line returned by bg_wait or bg_status, or when you need any PTY terminal output.
+- Use bg_logs with tail=N for recent output; omit stream to use the correct default for either pipe or PTY mode.
+- Do not poll with bg_logs. When fuller finite output is needed, emit bg_wait followed by bg_logs in the same assistant response; source ordering makes bg_logs run after bg_wait.
+- Provide exactly one of bg_send input or signal. bg_send input is exact text; wrap every terminal key in an angle-bracket token such as <C-d>, <A-f>, <Space>, or <Up>, and escape a literal '<' as \<.
+- Use bg_send input for terminal keys; use bg_send signal only when an OS process signal is explicitly intended.
+- For a pipe task, bg_send input=<C-d> or input=<EOF> closes stdin.
+- When bg_send is followed by waiting or output inspection, emit bg_send → bg_wait → bg_logs together in one assistant response so same-task source ordering avoids extra model rounds.
+- For a disconnected adapter task, bg_send input is unavailable because the local transport is gone, but bg_send signal may remain usable for cleanup.
+- Use bg_kill when a background task must be terminated.
+- Use bg_kill with force=true to send SIGKILL immediately; otherwise bg_kill sends SIGTERM.
+- bg_kill returns termination status only. When final output is needed, emit bg_kill followed by bg_logs in the same assistant response.
+- Default to a bare spawn: write the task (and, if useful, systemPrompt, tools or skills) for the job at hand. Use a named agent only when one listed below clearly fits.
+- Omit model and thinking when invoking a named agent so its configured defaults apply. Passing either field is an explicit one-off override and takes precedence over agent frontmatter.
+- For a bare spawn, omit model and thinking to inherit the parent runtime.
+- When an intentional runtime override is necessary, prefer changing thinking before changing models: minimal/low for bounded mechanical work, medium for ordinary implementation or review, and high+ for architecture, concurrency, security, or hard diagnosis.
+- When overriding a subagent model, use an exact authenticated provider/model-id from the live catalog below. Do not invent aliases or fuzzy names.
+- Available named subagent catalog becomes available after session start.
+- Authenticated subagent model catalog becomes available after session start.
+- Be concise in your responses
+- Show file paths clearly when working with files
+</rules>

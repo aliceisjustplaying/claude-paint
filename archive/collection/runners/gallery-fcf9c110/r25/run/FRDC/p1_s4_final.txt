@@ -1,0 +1,25 @@
+I've finished **The Oak in Snow at Evening**.
+
+One old oak stands on the central axis on top of a snow-covered rise, just after sunset. The sky runs in bands from cold smalt-cobalt overhead down to a warm Naples-yellow glow at the horizon. Beyond the snow there's only a band of forest in mist and a faint ridge.
+
+**Changes this sitting (days 332–338)**
+- **Darker branches:** I'd accepted the pale fine branches twice, believing their paths were never recorded. Last time I only searched the twig list (`SEG`). This time I looked through all the stored tables and found the paths and widths of the main branches in `GROUPS` and `CROWN`. Restating one branch first, in a new near-black mix, put it exactly on its old line without doubling it. So I restated:
+  - the hand-drawn secondary limbs at half their recorded width;
+  - every recorded branch path from its base until it thins to the finest twigs.
+
+  The crown now has a dark framework that fades into the paler fine twigs, which suits the dusk.
+- **Trunk:** one dark glaze removed a pale streak on the left side of the trunk, left by an old wipe.
+- **Crow:** I added one small crow far off in the empty left sky, opposite the crescent moon.
+
+**Flaws I'm keeping**
+- **The pale specks in the fork:** they read as light through the branches.
+- **The faint pale patch in the upper-left sky:** it passes for a thinning in the cloud.
+- **The raised slab of paint in the snow** (only visible under raking light) **and a tiny violet fleck at the corner:** a frame would cover the fleck.
+
+In each case a local patch would make things worse: paint dabbed over a dry, blended area dries paler and shows.
+
+**New lessons for the handoff** (the earlier ones still apply)
+- Before deciding a path wasn't recorded, check every stored table.
+- Repainting a branch along its recorded path with a pointed brush, at the width it was drawn, puts the new stroke exactly on the old line.
+
+My heart is happy with it. The oak finally has the dark structure it was missing, and the moon and the crow keep each other company across the sky.

@@ -1,0 +1,586 @@
+[
+ {
+  "name": "read",
+  "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "path"
+   ],
+   "properties": {
+    "path": {
+     "type": "string",
+     "description": "Path to the file to read (relative or absolute)"
+    },
+    "offset": {
+     "type": "number",
+     "description": "Line number to start reading from (1-indexed)"
+    },
+    "limit": {
+     "type": "number",
+     "description": "Maximum number of lines to read"
+    }
+   }
+  }
+ },
+ {
+  "name": "bash",
+  "description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "command"
+   ],
+   "properties": {
+    "command": {
+     "type": "string",
+     "description": "Shell command to execute"
+    },
+    "timeout": {
+     "type": "number",
+     "description": "Timeout in seconds (optional, no default timeout)"
+    }
+   }
+  }
+ },
+ {
+  "name": "edit",
+  "description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "path",
+    "edits"
+   ],
+   "properties": {
+    "path": {
+     "type": "string",
+     "description": "Path to the file to edit (relative or absolute)"
+    },
+    "edits": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "oldText",
+       "newText"
+      ],
+      "properties": {
+       "oldText": {
+        "type": "string",
+        "description": "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."
+       },
+       "newText": {
+        "type": "string",
+        "description": "Replacement text for this targeted edit."
+       }
+      }
+     },
+     "description": "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."
+    }
+   }
+  }
+ },
+ {
+  "name": "write",
+  "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "path",
+    "content"
+   ],
+   "properties": {
+    "path": {
+     "type": "string",
+     "description": "Path to the file to write (relative or absolute)"
+    },
+    "content": {
+     "type": "string",
+     "description": "Content to write to the file"
+    }
+   }
+  }
+ },
+ {
+  "name": "subagent",
+  "description": "Spawn a sub-agent in a dedicated terminal herdr pane. For Pi-backed OpenAI or OpenAI-Codex subagents, set fast: true to opt into service_tier: \"priority\" (fast mode). Omit fast or set it to false to force the standard service_tier: \"default\". This is a fire-and-forget async tool: the call returns immediately with only an acknowledgement. When the sub-agent finishes, the harness AUTOMATICALLY delivers its result as a steer message that wakes you up and starts a new turn — you do not need to do anything to receive it. DO NOT write polling loops, sleep/wait commands, tail/watch scripts, or repeatedly read session/log files to detect completion. DO NOT call subagents_list or any other tool to 'check' status. All of that is wasted work — the harness handles delivery for you. DO NOT fabricate, assume, or summarize results after calling this tool. After spawning, either end your turn immediately, or work on other independent tasks (including spawning more subagents in parallel). The harness will wake you with the result when it is ready.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "name",
+    "task"
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "Display name for the subagent"
+    },
+    "task": {
+     "type": "string",
+     "description": "Task/prompt for the sub-agent"
+    },
+    "agent": {
+     "type": "string",
+     "description": "Agent name to load defaults from the available named subagent catalog. Agent frontmatter can provide model, thinking, tools, skills, and role instructions."
+    },
+    "systemPrompt": {
+     "type": "string",
+     "description": "Appended to system prompt (role instructions)"
+    },
+    "model": {
+     "type": "string",
+     "description": "Exact authenticated provider/model-id. Omit to use a named agent's model default, then the configured or parent model. Passing a value explicitly overrides agent frontmatter for this spawn."
+    },
+    "fast": {
+     "type": "boolean",
+     "description": "Opt into OpenAI priority processing for this Pi-backed subagent. Set true for service_tier: \"priority\". Omit or set false to force the standard service_tier: \"default\". Ignored by non-Pi or non-OpenAI runtimes."
+    },
+    "thinking": {
+     "anyOf": [
+      {
+       "type": "string",
+       "const": "off"
+      },
+      {
+       "type": "string",
+       "const": "minimal"
+      },
+      {
+       "type": "string",
+       "const": "low"
+      },
+      {
+       "type": "string",
+       "const": "medium"
+      },
+      {
+       "type": "string",
+       "const": "high"
+      },
+      {
+       "type": "string",
+       "const": "xhigh"
+      },
+      {
+       "type": "string",
+       "const": "max"
+      }
+     ],
+     "description": "Pi thinking level. Omit to use a named agent's thinking default, then the parent level. Passing a value explicitly overrides agent frontmatter for this spawn."
+    },
+    "skills": {
+     "type": "string",
+     "description": "Comma-separated skills (overrides agent default)"
+    },
+    "tools": {
+     "type": "string",
+     "description": "Comma-separated tools (overrides agent default)"
+    },
+    "cwd": {
+     "type": "string",
+     "description": "Working directory for the sub-agent. The agent starts in this folder and picks up its local .pi/ config, CLAUDE.md, skills, and extensions. Use for role-specific subfolders."
+    },
+    "fork": {
+     "type": "boolean",
+     "description": "Force the full-context fork mode for this spawn. The sub-agent inherits the current session conversation, overriding any agent frontmatter session-mode."
+    },
+    "interactive": {
+     "type": "boolean",
+     "description": "Mark the subagent as interactive (long-running, user drives the conversation in its own pane). When true, the main session is not woken by status transitions (stalled/recovered) for this subagent. If omitted, falls back to the agent's `interactive` frontmatter, otherwise the inverse of `auto-exit` (agents that auto-exit are autonomous and get stall pings; agents that don't are interactive and stay quiet)."
+    },
+    "resumeSessionId": {
+     "type": "string",
+     "description": "Resume a previous Claude Code session by its ID. Loads the conversation history and continues where it left off. The session ID is returned in details of every claude tool call. Use this to retry cancelled runs or ask follow-up questions."
+    }
+   }
+  }
+ },
+ {
+  "name": "subagent_interrupt",
+  "description": "Send Escape to the active turn of a currently running Pi-backed subagent. The child pane, session, watcher, and running entry remain alive; this returns only a local acknowledgement and does not emit a subagent_result solely because of this request.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Exact running subagent id"
+    },
+    "name": {
+     "type": "string",
+     "description": "Exact running subagent display name"
+    }
+   }
+  }
+ },
+ {
+  "name": "subagents_list",
+  "description": "List all available subagent definitions. Scans project-local .pi/agents/ and global ~/.pi/agent/agents/. Project-local agents override global ones with the same name.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "subagent_resume",
+  "description": "Resume a previous sub-agent session in a new herdr pane. For Pi-backed OpenAI or OpenAI-Codex subagents, set fast: true to opt into service_tier: \"priority\" (fast mode). Omit fast or set it to false to force the standard service_tier: \"default\". This is a fire-and-forget async tool: the call returns immediately with only an acknowledgement. When the resumed sub-agent finishes, the harness AUTOMATICALLY delivers its result as a steer message that wakes you up and starts a new turn — you do not need to do anything to receive it. DO NOT write polling loops, sleep/wait commands, tail/watch scripts, or repeatedly read session/log files to detect completion. DO NOT poll for status. All of that is wasted work — the harness handles delivery for you. DO NOT fabricate or assume results. After resuming, either end your turn or work on other independent tasks; the harness will wake you when the result is ready. Use when a sub-agent was cancelled or needs follow-up work.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "sessionPath"
+   ],
+   "properties": {
+    "sessionPath": {
+     "type": "string",
+     "description": "Path to the session .jsonl file to resume"
+    },
+    "name": {
+     "type": "string",
+     "description": "Display name for the terminal tab. Default: 'Resume'"
+    },
+    "message": {
+     "type": "string",
+     "description": "Optional message to send after resuming (e.g. follow-up instructions)"
+    },
+    "autoExit": {
+     "type": "boolean",
+     "description": "Whether the resumed session should automatically exit after completing its response. Defaults to true for autonomous follow-up work; set false for interactive resumed sessions."
+    },
+    "fast": {
+     "type": "boolean",
+     "description": "Opt into OpenAI priority processing for this resumed Pi session. Set true for service_tier: \"priority\". Omit or set false to force the standard service_tier: \"default\"."
+    }
+   }
+  }
+ },
+ {
+  "name": "caller_ping",
+  "description": "Send a help request to the parent agent and exit this session. The parent will be notified with your message and can resume this session with a response. Use when you're stuck, need clarification, or need the parent to take action.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "message"
+   ],
+   "properties": {
+    "message": {
+     "type": "string",
+     "description": "What you need help with"
+    }
+   }
+  }
+ },
+ {
+  "name": "subagent_done",
+  "description": "Call this tool when you have completed your task. It will close this session and return your results to the main session. Your LAST assistant message before calling this becomes the summary returned to the caller.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "todo",
+  "description": "Manage a task list for tracking multi-step progress. Actions: create (new task), update (change status/fields/dependencies), list (all tasks, optionally filtered by status), get (single task details), delete (tombstone), clear (reset all). Status: pending → in_progress → completed, plus deleted tombstone. Use this to plan and track multi-step work like research, design, and implementation.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "action"
+   ],
+   "properties": {
+    "action": {
+     "type": "string",
+     "enum": [
+      "create",
+      "update",
+      "list",
+      "get",
+      "delete",
+      "clear"
+     ]
+    },
+    "subject": {
+     "type": "string",
+     "description": "Task subject line (required for create)"
+    },
+    "description": {
+     "type": "string",
+     "description": "Long-form task description"
+    },
+    "activeForm": {
+     "type": "string",
+     "description": "Present-continuous spinner label shown while status is in_progress (e.g. 'writing tests')"
+    },
+    "status": {
+     "type": "string",
+     "enum": [
+      "pending",
+      "in_progress",
+      "completed",
+      "deleted"
+     ],
+     "description": "Set this task's status (update): one of pending, in_progress, completed, deleted. When action is list, filters returned tasks by this status."
+    },
+    "blockedBy": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "description": "Initial blockedBy ids (create only)"
+    },
+    "addBlockedBy": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "description": "Task ids to add to blockedBy (update only, additive merge)"
+    },
+    "removeBlockedBy": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "description": "Task ids to remove from blockedBy (update only, additive merge)"
+    },
+    "owner": {
+     "type": "string",
+     "description": "Agent/owner assigned to this task"
+    },
+    "metadata": {
+     "type": "object",
+     "patternProperties": {
+      "^.*$": {}
+     },
+     "description": "Arbitrary metadata; pass null value for a key to delete that key on update"
+    },
+    "id": {
+     "type": "number",
+     "description": "Task id (required for update, get, delete)"
+    },
+    "includeDeleted": {
+     "type": "boolean",
+     "description": "If true, list action returns deleted (tombstoned) tasks as well. Default: false."
+    }
+   }
+  }
+ },
+ {
+  "name": "web_search",
+  "description": "Search the web using the current supported provider (Google Gemini, OpenAI, or Anthropic). Optionally include URLs to analyze alongside search results.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "query"
+   ],
+   "properties": {
+    "query": {
+     "type": "string",
+     "description": "The search query or question to answer"
+    },
+    "urls": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Additional URLs to analyze along with search (up to 20)",
+     "maxItems": 20
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_start",
+  "description": "Start a task asynchronously only when background execution is genuinely needed: for concurrent work, later interaction, or an explicit user request. Its unique name can immediately reference ordered follow-up bg_* calls in the same assistant response.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "name",
+    "command"
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "A short unique name for the task (case-insensitive among retained tasks)",
+     "minLength": 1
+    },
+    "command": {
+     "type": "string",
+     "description": "The shell command to run"
+    },
+    "cwd": {
+     "type": "string",
+     "description": "Working directory (defaults to current)"
+    },
+    "pty": {
+     "type": "boolean",
+     "description": "Run in a pseudoterminal for interactive/TUI programs (default: false)"
+    },
+    "cols": {
+     "type": "number",
+     "description": "Initial PTY columns (default: current terminal or 120)",
+     "minimum": 20,
+     "maximum": 500
+    },
+    "rows": {
+     "type": "number",
+     "description": "Initial PTY rows (default: current terminal or 30)",
+     "minimum": 5,
+     "maximum": 200
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_wait",
+  "description": "Wait for a finite task to finish or time out and include its latest pipe log line when available. Use bg_logs for full pipe output or PTY terminal output.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Task ID or unique name (case-insensitive)"
+    },
+    "timeout": {
+     "type": "number",
+     "description": "Maximum seconds to wait (default: 300)",
+     "minimum": 1,
+     "maximum": 3600
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_status",
+  "description": "Inspect task status and metadata or list current tasks, including each task's latest pipe log line when available. This is not a polling or waiting tool and does not return full or PTY output.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Task ID or unique name. If omitted, lists all retained tasks."
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_logs",
+  "description": "Read retained pipe or PTY output when the latest pipe line returned by bg_wait or bg_status is insufficient. Place bg_logs after bg_wait in the same response when fuller final output is needed.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Task ID or unique name (case-insensitive)"
+    },
+    "tail": {
+     "type": "number",
+     "description": "Read last N lines (default: 100)"
+    },
+    "stream": {
+     "type": "string",
+     "enum": [
+      "stdout",
+      "stderr",
+      "both",
+      "terminal"
+     ],
+     "description": "Which stream (default: 'both'); use terminal for explicit PTY output"
+    },
+    "from_line": {
+     "type": "number",
+     "description": "Start from this line (0-indexed). Overrides tail."
+    },
+    "max_lines": {
+     "type": "number",
+     "description": "Max lines with from_line (default: 500)"
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_send",
+  "description": "Send text and terminal keys to a running task, or signal a running/disconnected adapter-owned task.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Task ID or unique name (case-insensitive)"
+    },
+    "input": {
+     "type": "string",
+     "description": "Exact text; terminal keys must use <...> tokens, for example y<Enter>, <A-f>, or <C-d>",
+     "minLength": 1,
+     "maxLength": 65536
+    },
+    "signal": {
+     "type": "string",
+     "enum": [
+      "SIGABRT",
+      "SIGALRM",
+      "SIGBREAK",
+      "SIGBUS",
+      "SIGCHLD",
+      "SIGCONT",
+      "SIGFPE",
+      "SIGHUP",
+      "SIGILL",
+      "SIGINT",
+      "SIGIO",
+      "SIGIOT",
+      "SIGKILL",
+      "SIGPIPE",
+      "SIGPOLL",
+      "SIGPROF",
+      "SIGPWR",
+      "SIGQUIT",
+      "SIGSEGV",
+      "SIGSTKFLT",
+      "SIGSTOP",
+      "SIGSYS",
+      "SIGTERM",
+      "SIGTRAP",
+      "SIGTSTP",
+      "SIGTTIN",
+      "SIGTTOU",
+      "SIGURG",
+      "SIGUSR1",
+      "SIGUSR2",
+      "SIGVTALRM",
+      "SIGWINCH",
+      "SIGXCPU",
+      "SIGXFSZ"
+     ],
+     "description": "Named signal validated against the task's local or adapter execution environment"
+    }
+   }
+  }
+ },
+ {
+  "name": "bg_kill",
+  "description": "Terminate a running or disconnected background task and report the result. Sends SIGTERM by default or SIGKILL with force=true; does not return process output.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "id"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "Task ID or unique name (case-insensitive)"
+    },
+    "force": {
+     "type": "boolean",
+     "description": "Send SIGKILL instead of SIGTERM (default: false)"
+    }
+   }
+  }
+ }
+]

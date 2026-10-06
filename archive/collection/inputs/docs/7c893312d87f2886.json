@@ -1,0 +1,104 @@
+[
+ {
+  "name": "paint",
+  "description": "Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, then `ok`. A chunk that stops with an error changes nothing.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "lua"
+   ],
+   "properties": {
+    "lua": {
+     "type": "string",
+     "description": "the chunk"
+    }
+   }
+  }
+ },
+ {
+  "name": "look",
+  "description": "Look at the canvas as it is now. Without options: the whole canvas, scaled down. crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at 1:1 pixels. mode: \"value\", \"squint\", \"mirror\" or several, comma-separated. size: the long side in pixels. grid: true, or a spacing in canvas units.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "crop": {
+     "type": "string"
+    },
+    "mode": {
+     "type": "string"
+    },
+    "size": {
+     "type": "number"
+    },
+    "grid": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "number"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "note",
+  "description": "Add an entry to your journal, notes/journal.md, stamped with the painting's time. To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "text"
+   ],
+   "properties": {
+    "text": {
+     "type": "string"
+    },
+    "replaces": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "status",
+  "description": "The canvas's setup.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "log",
+  "description": "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "read",
+  "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+  "parameters": {
+   "type": "object",
+   "required": [
+    "path"
+   ],
+   "properties": {
+    "path": {
+     "type": "string",
+     "description": "Path to the file to read (relative or absolute)"
+    },
+    "offset": {
+     "type": "number",
+     "description": "Line number to start reading from (1-indexed)"
+    },
+    "limit": {
+     "type": "number",
+     "description": "Maximum number of lines to read"
+    }
+   }
+  }
+ }
+]

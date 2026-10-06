@@ -1,0 +1,3 @@
+- day 1, 09:00: Plan: "Evening, Montclair"-type late Inness. Canvas 1140mm, 3:2, off-white lead ground with a brushed raw umber stain (warm grey).
+  Composition: horizon ~y400. Large soft tree group left (x 60-380, top ~y90), one slender feathery tree right of center (x~700) against the afterglow, distant blue-grey tree line y360-420, meadow below with a pool reflecting the glow (x 520-820, y 455-510), small figure in red by the pool, path from lower left. Sky: warm yellow-rose glow low right fading to violet-grey above.
+  Method: charcoal-ish drawing, transparent umber scrub-in thinned with turps, wipe out lights with rag; then opaque sky, then masses, then glazes/scumbles over days.

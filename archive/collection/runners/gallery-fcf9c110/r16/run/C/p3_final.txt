@@ -1,0 +1,13 @@
+The painting is finished, varnished and saved, and the easel is closed. `bin/easel check` ran after the save but printed nothing, so I have no confirmation from it either way. Both output files are on disk.
+
+- **Painting:** `~/src/a/paint-studio-96b5e4/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-96b5e4/paintings/lua/painting.lua`
+- **Journal:** `notes/journal.md`, 7 entries
+
+**Title:** *The Punt at Sundown*
+
+It's an evening marsh with a low horizon. The sky runs from cool blue-gray at the top down to a pale lemon glow, with pink and mauve stratus across it. On the left, a group of elms stands dark against the light, and a lower copse balances them on the right. A bright creek winds out of the glow and down through the dark, grassy foreground to the bottom edge.
+
+The focal point is a small punt on the far bend of the creek. A standing figure with a pole shows as a silhouette against the reflected sunset, and a few birds cross the sky above.
+
+The foreground was the hardest part. It took four glazes to get it dark enough, and a second glaze to tone down some lit grass tips that had come out as scattered yellow flecks. In the last passes I painted grass leaning over the creek banks and pale reflections in the near water. I also broke up the straight edge where the meadow meets the foreground, which the mirror view showed was too even.

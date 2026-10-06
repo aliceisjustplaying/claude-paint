@@ -1,0 +1,12 @@
+I've finished the painting, saved it and closed the session.
+
+- **Painting:** `~/src/a/paint-studio-497bcf/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-497bcf/paintings/lua/painting.lua` (156 chunks)
+- **Journal:** `notes/journal.md`
+- **Title:** *June Morning on the Meadows before the Town*
+
+It's a flat Pomeranian meadow landscape in the spirit of Friedrich's Greifswald meadow pictures, but the arrangement is my own. More than half the canvas is sky. It shades from smalt and cobalt blue at the top to a warm cream at the low horizon, with long soft summer clouds across it. On the horizon, pale in the haze, stand a town's three church towers and a windmill, with a farmstead under three lime trees at the left. In front lie a strip of ripening rye and a hedgerow, a row of pollard willows, and a mown hayfield with haycocks where two men are loading a horse-drawn wagon. A river winds through the pasture, where cattle graze and a stork wades.
+
+In the foreground, a meadow in cloud shadow is full of buttercups, daisies, clover and a few poppies. A sandy cart track runs up it to the crest, where a man and a woman in a red shawl stand arm in arm, seen from behind, looking out toward the town. A split-rail fence runs down the left side, and a flowering elder closes the right edge.
+
+Two weaknesses I left in: the pollard willows stand in too regular a row, and the pasture green is a little sharp. Several things went wrong along the way and had to be painted over: the first try at the lime trees, the cattle and the far reach of the river. The journal records each of those repairs. I didn't run `bin/easel check`, the replay that confirms the log matches the canvas.

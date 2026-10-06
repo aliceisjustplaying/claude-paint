@@ -1,0 +1,9 @@
+The painting is finished, saved, and the session is closed. A replay check of the log matches the canvas exactly (77 chunks).
+
+- **Painting:** `~/src/a/paint-studio-1def1a/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-1def1a/paintings/lua/painting.lua`
+- **Title:** *Barge at Slack Water, Evening*
+
+It's a Thames-style sailing barge with tan sails, set dark against a low estuary sky just after sunset. The glow lies in a band of pale gold along the horizon. Above it a mauve-grey cloud bank crosses the sky, and a streak of cloud at the top was left the way the glaze fell. On the far shore there's a low line of tree clumps, a windmill and a small distant sail, which balance the barge across the empty right half. The barge's reflection is broken into horizontal dashes on the water. In the foreground a dark mud spit with mooring posts and marsh grass anchors the lower left.
+
+In this last session, the mainsail still looked flat, like a cut-out. I added a narrow broken edge of warm light along the outer edge of the mainsail and the head of the topsail, so the evening light seems to come through the cloth from behind. Some of that paint landed along the bottom of the sail as a pale patch, and I covered it with the deep sail colour. I left the rest as it was, because more work would only have muddied it.

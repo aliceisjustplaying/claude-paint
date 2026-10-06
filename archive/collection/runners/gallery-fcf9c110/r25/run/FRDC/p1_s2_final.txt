@@ -1,0 +1,17 @@
+**The Oak in Snow at Evening**
+
+The painting is finished. It shows one old oak on the central axis at the crest of a snow-covered rise, just after sunset. The sky is painted in bands, from cold smalt-cobalt overhead through a pale green-gray down to a warm Naples-yellow glow at the horizon. Beyond the edge of the snow there's only a band of forest in valley mist and a faint ridge rising on the right.
+
+**What I changed in this sitting (days 270–318)**
+- **Trunk:** the blocky trunk was the weakest passage. It now spreads into roots over the snow and narrows toward the forks. A small lip of snow lies against the roots so the tree sits in the ground instead of standing on it. A few pale specks are left in the fork from wiping off paint laid there by mistake. They read as light through the crotch, so I left them.
+- **Faint pale patch in the upper-left sky:** I tried covering it with a soft cloud stroke, but that read as a new pale bar and I wiped it off. I'm accepting the patch: at full view it passes for a thinning in the cloud.
+- **Fine branches:** I'm accepting that they're paler than a true silhouette. I only have the recorded paths for the later, finer twigs, not the paler first branches. One test of darkening a branch by eye landed about 2 units off and doubled the line. In the grayscale view the crown still reads clearly as dark lace against the light sky.
+- **Snow field:** a glaze meant to shade it quietly went on as separate violet blobs instead of an even veil, so I wiped it off while it was wet. The trace that's left is a faint cool deepening toward the bottom edge, which is the effect I was after, and I've left it.
+
+**Lessons for next time** (the earlier lessons in the journal still apply; these are new)
+- `below(curve) * rect` fills everything under the curve, so it can't cut a notch downward into a shape. Use `above`, or draw the notch as a polygon.
+- Wet paint laid over dry paint always comes off with fresh rags soaked in spirits. Small blots work for spots, and about ten wide passes clear a large accident.
+- A glaze worked over a large dry area at low load leaves separate strokes, not a veil. Test it on a corner first.
+- Restating a line by eye beside a dry one misses it and doubles it. Only restate a line when its path is recorded.
+
+I'm content with it: a still, solitary oak against the evening light, now rooted in the snow.

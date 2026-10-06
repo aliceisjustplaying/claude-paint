@@ -1008,11 +1008,13 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 med += wk * md;
                 thinner += wk * th;
                 solv += wk * m.solvent;
-                oilr += wk * m.oil_rate;
+                // (each pile's oil as it is: from engine 6 its regrind times
+                // its tubes' own oils, `Mixture::oil_rate`)
+                oilr += wk * m.oil_rate * m.tube_oil_rate;
             }
             let mut mix = pal.pile(parts);
             mix.solvent = solv;
-            mix.oil_rate = oilr;
+            mix.oil_rate = if pal.engine >= 6 { oilr / mix.tube_oil_rate.max(1e-6) } else { oilr };
             Some((mix, med, thinner, main, next))
         });
         let (pile, medium, thinner) = match &graded {

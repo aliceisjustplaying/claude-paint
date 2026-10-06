@@ -725,6 +725,12 @@ impl Canvas {
         let (pick, lay) = (0.2f32, 0.25f32);
         let mut secs = 0.0;
         let mut last = (path[0].0 * mmu, path[0].1 * mmu);
+        // (nothing drawn: nothing to move, only the hand's time along the path)
+        if self.drawing.is_none() {
+            let len: f32 = path.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt() * mmu).sum();
+            return len / speed.max(1.0);
+        }
+        let mut moved = false;
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);
         let mut pxs = std::mem::take(&mut self.px);
@@ -774,6 +780,7 @@ impl Canvas {
                         }
                         load = total;
                         cell.loose -= take;
+                        moved |= take > 0.0;
                     }
                     // lay a share of the load over the pad, as fine grains
                     let give = load * lay * share;
@@ -802,7 +809,8 @@ impl Canvas {
                     load -= give;
                 }
             }
-            d.sticks = true;
+            // (a stick drawing's layout once the finger has moved its pastel)
+            d.sticks |= moved;
         }
         self.px = pxs;
         self.film = film;

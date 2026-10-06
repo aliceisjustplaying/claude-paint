@@ -20,7 +20,7 @@ That yellow ochre is an exception, kept as the one earth, is this note's
 reading of a remark that he used it in the early twentieth century, a
 remark that rests on other studies, not on analysis [TB28 p.63]
 (*Uncertain*). In a painting of about 1897–99 (a date the paper itself gives
-inconsistently; see Sources) zinc white is mixed into
+inconsistently) zinc white is mixed into
 the colors [MM22]. The two paintings of 1899 to 1926 that were analyzed
 were painted from a short list: lead white, cobalt blue, French
 ultramarine, cobalt violet, viridian, the cadmium yellows and orange, zinc

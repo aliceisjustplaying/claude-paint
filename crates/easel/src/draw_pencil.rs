@@ -175,11 +175,10 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
     use paint::pastel::{Pose, StrokePoint};
     let mut stick = stick_of(p)?;
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
-    let mmu = {
-        let s = st.borrow();
-        mm_per_unit(s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?)
-    };
-    let _ = mmu;
+    // (a NaN angle finds no contact and lays nothing, without saying so)
+    if !base_roll.is_finite() || alt.iter().chain(az).chain(roll).chain(force).chain(speed).any(|v| !v.is_finite()) {
+        return err("a pastel stick's force, alt, azimuth, roll and speed are numbers");
+    }
     // (the hand's landing and lifting are the stroke's: pastel.rs)
     let sp: Vec<StrokePoint> = (0..pts.len())
         .map(|i| {
@@ -442,6 +441,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         if !is_stick(&p)? {
             return err("roll: a pastel stick (engine 6) turns in the fingers");
         }
+        if !d.is_finite() {
+            return err("roll: degrees, a number");
+        }
         let r: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
         p.raw_set("turned", (r + d).rem_euclid(360.0))?;
         Ok(())
@@ -533,10 +535,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // engine 6: pastel(pile, {kind="soft"|"hard"|"pencil", soft=, diameter=, length=}):
     // a stick of the pile's pigments as they look dry (pastel.rs), that rests on
     // the tooth, wears to facets and lays what it abrades
-    // pastel(pile, {soft=0.7, point=}): a pastel stick of the pile's color (its
-    // pigments as they look dry: paler than in oil); the pile's medium and
-    // thinner don't matter. soft: 0 hard .. 1 very soft; point (mm): a pastel
-    // pencil, its point that wide, keeping it
+    // before engine 6: pastel(pile, {soft=0.7, point=}): a pastel stick of the
+    // pile's color (its pigments as they look dry: paler than in oil); the
+    // pile's medium and thinner don't matter. soft: 0 hard .. 1 very soft;
+    // point (mm): a pastel pencil, its point that wide, keeping it (from
+    // engine 6 a pencil is kind="pencil" with a diameter)
     {
         let meta = meta.clone();
         let st1 = st.clone();
@@ -652,6 +655,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 let force = get("force")?.unwrap_or(1.0);
                 let pad = get("pad")?;
                 let speed = get("speed")?.unwrap_or(40.0);
+                if !(speed.is_finite() && speed > 0.0) {
+                    return err("smudge: speed is mm/s, a number above 0");
+                }
                 if !(0.05..=10.0).contains(&force) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
                     return err("smudge: force is newtons (0.05 to 10); pad, the contact in mm² (a stump: 2–10; a fingertip: about 135 at 1 N)");
                 }
@@ -788,10 +794,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // pastel in the tooth
     {
         let st1 = st.clone();
+        // (a query: the painting ages to now first, as `drying` does)
         g.set("feel", lua.create_function(move |_, (x, y): (f32, f32)| {
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-            Ok(c.feel(x, y))
+            crate::time::verb(&st1, crate::time::Verb::Query, |s| {
+                let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                Ok(c.feel(x, y))
+            })
         })?)?;
     }
     // drawing_guide(): the drawn lines as geometry over the whole canvas (1

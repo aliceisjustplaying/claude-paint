@@ -710,7 +710,8 @@ impl Canvas {
         let fills = lead.fills();
         {
             let d = self.drawing_mut();
-            d.color |= pastel;
+            // (the drawing is pastel's, laid out in colour, once pastel lands)
+            let mut laid = false;
             for (k, &(i, cov, p, edge)) in hits.iter().enumerate() {
                 if wetv[k] {
                     continue;
@@ -756,6 +757,7 @@ impl Canvas {
                     c.a = a1;
                     c.fill = (c.fill + fills * q * (0.6 + 0.6 * p)).min(1.0);
                     px[i] = cover(under, c.a, c.r);
+                    laid = true;
                     continue;
                 }
                 let da = (cap - c.a).max(0.0) * dep;
@@ -769,6 +771,7 @@ impl Canvas {
                 c.a = a1;
                 px[i] = cover(under, c.a, c.r);
             }
+            d.color |= laid;
         }
         self.px = px;
         self.film = film;
@@ -859,9 +862,9 @@ impl Canvas {
     /// together (its colors average, weighted by how much of each is there)
     /// and pressed into the hollows of the tooth (it covers more, up to the
     /// stick's usual cap), and the rubbed layer is packed tighter, so it
-    /// takes less pastel afterwards. Only pastel that is loose: not fixed
-    /// (`fix`), not painted over, not under wet paint. Returns the number
-    /// of pixels it moved.
+    /// takes less pastel afterwards. Only pastel not painted over and not
+    /// under wet paint; fixed pastel (`fix`, a workable fixative) moves a
+    /// quarter as readily as loose. Returns the number of pixels it moved.
     pub fn smudge(&mut self, m: &Mask, strength: f32, radius: f32) -> usize {
         self.check_mask(m);
         let f = self.f;

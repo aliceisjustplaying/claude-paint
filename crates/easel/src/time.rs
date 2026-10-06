@@ -61,10 +61,16 @@ thread_local! {
 /// `sheet.rs`): a pastel stick, the finger, a dry brush. Other marking verbs
 /// refuse while a sheet lies on the picture.
 pub fn verb_dry<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
-    DRY.with(|d| d.set(true));
-    let r = verb(st, kind, f);
-    DRY.with(|d| d.set(false));
-    r
+    // (put back as it was however the verb ends: a chunk's engine panic is
+    // caught and the session goes on)
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            DRY.with(|d| d.set(self.0));
+        }
+    }
+    let _restore = Restore(DRY.with(|d| d.replace(true)));
+    verb(st, kind, f)
 }
 
 /// Run a verb `f` on the studio under the hand clock's rules for its kind.

@@ -314,7 +314,9 @@ impl Canvas {
 
     /// Use a sheet of paper as the support (engine 6): its surface from its
     /// fibres, flocs, mould, felt and pressing (`paper::lay`), its pores
-    /// taking oil as an absorbent ground does.
+    /// taking oil as an absorbent ground does. A ground laid on it after
+    /// (`Style::prepare_paper`) is what the paint meets: an oil ground seals
+    /// the paper, as oil priming does (`ground_finish`).
     pub fn with_paper(mut self, p: crate::paper::Paper) -> Self {
         self.linen = None;
         self.paper = Some(p);
@@ -359,6 +361,14 @@ impl Canvas {
     /// Use a woven linen support.
     pub fn with_linen(mut self, l: Linen) -> Self {
         self.linen = Some(l);
+        // (linen instead of a sheet of paper: the paper's surface, pores and
+        // matte face go with it, as on a canvas new from `new_window`)
+        if self.paper.take().is_some() {
+            self.micro.clear();
+            self.absorb.iter_mut().for_each(|v| *v = 0.0);
+            self.absorb_any = false;
+            self.gloss.iter_mut().for_each(|v| *v = OIL_GROUND_GLOSS);
+        }
         self.build_support();
         self
     }

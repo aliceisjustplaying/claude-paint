@@ -141,7 +141,9 @@ impl Paper {
         let Some(l) = self.laid else { return 0.0 };
         // laid wires run across the sheet (horizontal), about 0.4 mm thick
         let pitch = 10.0 / l.per_cm.max(1.0);
-        let fy = (ym / pitch).fract();
+        // (a non-negative phase: fibres of the halo above the sheet's top
+        // edge see the same wires)
+        let fy = (ym / pitch).rem_euclid(1.0);
         let d = fy.min(1.0 - fy) * pitch;
         let laid = (1.0 - d / 0.2).max(0.0);
         // chain wires run down it, about 0.5 mm thick, wandering a little
@@ -193,9 +195,10 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
     let n = w * h;
     let mut gram = vec![0.0f32; n];
     let per_mm2 = p.fibres_per_mm2();
-    // the fibres' reach beyond their cell: half the longest fibre (3 means)
-    // and a floc's spread
-    let reach_mm = 1.5 * p.fibre_mm + 3.0 * p.floc_mm;
+    // the fibres' reach beyond their cell: half the longest fibre (lengths
+    // are held to 4 means) and a floc's widest spread (`Rng::normal` is at
+    // most 3.46), so a crop lays exactly the fibres the whole sheet does
+    let reach_mm = 2.0 * p.fibre_mm + 3.5 * p.floc_mm;
     let band = 48usize;
     let bands: Vec<(usize, usize)> = (0..h).step_by(band).map(|b| (b, (b + band).min(h))).collect();
     let mass_per_mm = p.coarseness * 1e-3; // mg per mm of fibre

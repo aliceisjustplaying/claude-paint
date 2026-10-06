@@ -403,8 +403,8 @@ def look_text(args):
 
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison and not a held knife."""
-    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:palette|survey) (?!False)", look)
+    not the palette, not a survey's tile, not a comparison, not a held knife and not the motif pinned beside it."""
+    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",

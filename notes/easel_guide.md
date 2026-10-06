@@ -135,8 +135,9 @@ less than you ask. A pile takes medium or blot, not both.
   heap, in the units its recipe was given in (a pile knifed as
   `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
   as a tenth of a part more): look, adjust, look again. It returns the pile,
-  its recipe with the added parts. The added paint is tube paint (linseed,
-  unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
+  its recipe with the added parts. The added paint is tube paint as the tubes
+  come (in their oil, unthinned), so it dilutes the heap's turpentine, its
+  `thinner` and any oil it was reground in;
   a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
@@ -458,7 +459,7 @@ h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
 h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
-h:hatch(w, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
+h:hatch(m, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
@@ -472,13 +473,13 @@ hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
 
 **Pastel.** A pastel is a stick of pigment with a little gum and chalk:
-colored, dry and soft.
+colored, dry and soft. In a painting begun before engine 6:
 
 ```lua
 p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {soft=0.7})  -- the pile's color; soft 0 (hard) .. 1 (very soft)
 p:line(pts, {pressure={0.6, 0.1}})    -- with the end of the stick (also sketch, hatch, rule, as a pencil)
 p:side(pts, {width=20, pressure=0.4}) -- laid on its side: a broad band (width in units, about 12 mm by default)
-q = pastel(pile{{"lead white", 1}}, {soft=0.2, point=0.6})  -- a pastel pencil: a fine point (mm) that keeps
+q = pastel(pile{{"lead white", 1}}, {soft=0.2, point=0.6})  -- a pastel pencil: a fine point (mm) that keeps its point
 smudge(mask or pts, {strength=0.6, width=, reach=})   -- a finger or stump rubbed over it
 fix(mask)                             -- fixative between layers
 ```
@@ -494,15 +495,16 @@ fix(mask)                             -- fixative between layers
   tops of the tooth and leaves the hollows; the edge of a mark, where the
   stick presses least, breaks up in the tooth.
 - Each stroke also fills the tooth, and a full tooth takes little more: the
-  paper refuses more pastel. `fix` binds what is there (the eraser and the
-  stump no longer move it), gives back more than half the tooth so more can
+  paper refuses more pastel. `fix` binds what is there (the eraser no longer
+  lifts it, the stump hardly moves it), gives back more than half the tooth so more can
   go on top, and darkens the layer a little.
 - `p:side` lays the stick flat: wide, riding on the tops of the tooth
   (speckled at a light touch), and it doesn't wear the end.
 - `smudge` drags loose pastel within `reach` units (about 2 mm) together,
   averaging its colors by how much of each is there, presses it into the
   hollows (it covers more) and packs it, so it takes less pastel afterwards.
-  It doesn't move pastel that is fixed, painted over or under wet paint.
+  Fixed pastel moves a quarter as readily as loose; pastel painted over or
+  under wet paint doesn't move.
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint
   laid over pastel seals it, as it seals a drawing.
 

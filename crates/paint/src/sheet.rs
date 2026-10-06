@@ -932,10 +932,64 @@ impl Canvas {
                 }
             }
         }
-        // (a bin a pixel wide, 1/nsec of the circle: a pixel's share of it)
-        let share = |b: usize| nsec as f32 / (std::f32::consts::PI * (2 * b + 1) as f32);
+        // Each cell (a sector's bin, a pixel wide) lays its deposit over the
+        // pixels whose centres lie in it: all of it where the cell lies wholly
+        // on the picture, and where it runs past the picture's edge only the
+        // share of its area on it (the rest is gone); a cell smaller than a
+        // pixel, near the centre, lays it in the pixel under its middle.
+        let (fx0, fy0, fx1, fy1) = (f.x0 as f32 * s_mm, f.y0 as f32 * s_mm, (f.x0 + f.w) as f32 * s_mm, (f.y0 + f.h) as f32 * s_mm);
+        let on_picture = |r: f32, a: f32| {
+            let (px, py) = (cx + r * a.cos(), cy + r * a.sin());
+            px >= fx0 && px < fx1 && py >= fy0 && py < fy1
+        };
+        let angle = |k: usize, t: f32| (k as f32 + t) / nsec as f32 * std::f32::consts::TAU - std::f32::consts::PI;
+        let mut count = vec![vec![0u32; nb]; nsec];
+        for k in 0..nsec {
+            for &(_, b, _) in &beds[k] {
+                count[k][b] += 1;
+            }
+            for &(_, b) in &on_mask[k] {
+                count[k][b] += 1;
+            }
+            for b in 0..nb {
+                if count[k][b] > 0 {
+                    continue;
+                }
+                let (r, a) = ((b as f32 + 0.5) * s_mm, angle(k, 0.5));
+                if !on_picture(r, a) {
+                    continue;
+                }
+                let (pxx, py) = (((cx + r * a.cos()) / s_mm) as usize, ((cy + r * a.sin()) / s_mm) as usize);
+                let i = (py - f.y0) * f.w + (pxx - f.x0);
+                if self.sheet_over(i) {
+                    on_mask[k].push((i, b));
+                } else {
+                    beds[k].push((i, b, self.wet.vol[i] > 1e-5));
+                }
+                count[k][b] = 1;
+            }
+        }
+        // (per pixel: the cell's deposit over its pixels, or over its area in
+        // pixels where it runs past the edge)
+        let per_px: Vec<Vec<f32>> = (0..nsec)
+            .map(|k| {
+                (0..nb)
+                    .map(|b| {
+                        let n = count[k][b] as f32;
+                        if n == 0.0 {
+                            return 0.0;
+                        }
+                        let (r0, r1) = (b as f32 * s_mm, (b + 1) as f32 * s_mm);
+                        let inside = [(r0, 0.0), (r0, 1.0), (r1, 0.0), (r1, 1.0)].iter().all(|&(r, t)| on_picture(r, angle(k, t)));
+                        let area = std::f32::consts::PI * (2 * b + 1) as f32 / nsec as f32;
+                        if inside { 1.0 / n } else { 1.0 / n.max(area) }
+                    })
+                    .collect()
+            })
+            .collect();
         let (mut laid, mut caught) = (0.0f32, Vec::new());
         for k in 0..nsec {
+            let share = |b: usize| per_px[k][b];
             let mut lay = |amount: &[f32], col: Rgb, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
                 let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
                 let v: f32 = bed.iter().map(|e| e.1).sum();
@@ -958,9 +1012,13 @@ impl Canvas {
         self.film = film;
         self.drawing = Some(dr);
         self.px = pxs;
+        let caught_v: f32 = caught.iter().map(|e| e.1).sum();
         for (i, v, col) in caught {
             self.sheet_catch(&[(i, v)], col);
         }
+        // (a puff only moves pastel: what it lays and the mask catches is at
+        // most what it lifted)
+        debug_assert!(laid + caught_v <= gone * 1.0001 + 1e-6, "blow laid {laid} + caught {caught_v} of {gone} lifted");
         (gone - laid).max(0.0) * px_um2 * 1e-9
     }
 
@@ -1346,9 +1404,14 @@ mod tests {
             }
         }
         masked.lay_sheet(&m, 150.0, 8.0, [0.85; 3]).unwrap();
-        for (c, mask) in [(&mut c, false), (&mut masked, true)] {
+        // (and one aimed near the picture's corner, whose cells run off its
+        // edge, and one from 5 mm, which lays much near its centre, in cells
+        // smaller than a pixel: there, sharing a cell's deposit by its area
+        // rather than over its pixels laid 1 % more than it lifted)
+        let (mut corner, mut close) = (c.clone(), c.clone());
+        for (c, mask, at, h) in [(&mut c, false, (500.0, 500.0), 50.0), (&mut masked, true, (500.0, 500.0), 50.0), (&mut corner, false, (120.0, 430.0), 50.0), (&mut close, false, (500.0, 500.0), 5.0)] {
             let before = held(c);
-            let off = c.blow_pastel(500.0, 500.0, 50.0, 21.0, 8.0);
+            let off = c.blow_pastel(at.0, at.1, h, 21.0, 8.0);
             let after = held(c);
             assert!(off > 0.0 && after < before, "the blow moved pastel");
             let lifted = (before - after) * um_mm3;

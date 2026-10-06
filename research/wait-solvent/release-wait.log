@@ -1,0 +1,21 @@
+BEFORE clock=39614.85060425475 engine=5 solvent_total=411.51931691578505
+WAIT_SECONDS 373.557495
+AFTER clock=43934.85060425475 solvent_total=0
+      375.74 real       333.05 user        38.10 sys
+          1705295872  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1443919  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 287  voluntary context switches
+             7318725  involuntary context switches
+       3136731580732  instructions retired
+       1022866693556  cycles elapsed
+          1855194984  peak memory footprint

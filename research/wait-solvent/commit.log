@@ -1,0 +1,5 @@
+[research/wait-solvent ff730e49] Bound engine-5 solvent wait work and accelerate sparse flow
+ 8 files changed, 303 insertions(+), 55 deletions(-)
+ create mode 100644 crates/paint/examples/wait_probe.rs
+ create mode 100755 research/wait-solvent/build.sh
+ create mode 100644 research/wait-solvent/compare.py

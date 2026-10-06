@@ -1,0 +1,12 @@
+Done. The easel is closed and the picture is saved.
+
+**Paths**
+- Painting: `~/src/a/paint-studio-520026/out/easel/painting/painting.png` (2400 × 1920)
+- Log: `~/src/a/paint-studio-520026/paintings/lua/painting.lua` (134 chunks; `bin/easel check` replays it and matches the live canvas exactly)
+- Journal: `~/src/a/paint-studio-520026/notes/journal.md`
+
+**Title:** *Apples in an Earthenware Bowl* (80 × 64 cm, dark ground)
+
+**About the picture.** A dark-ground still life in the old manner: a shallow ochre bowl holding three apples — red, yellow-green, red — with two more on a pale cloth in front of it, on a dark table against a wall that keeps a warm glow in its upper left corner. The single light comes from the upper left, so the fruit carries its light on the left and turns to near-black on the right, and the wall behind it stays dark enough to hold the silhouettes. The cloth is the only large cool mass; everything else is warm, which is what makes the fruit glow against it. The painting's clock ran thirty-one days: the fruit was modelled wet into wet and blended, then left to set before its highlights, stems and the bowl's rim light could be laid on top.
+
+**What I learned at this easel** (all in the journal): a pile only changes the value it looks like if the coat is opaque — coverage 1.5 over dry paint mostly disappears, 3 lands. Raw umber is a mid-brown, not a dark; the only near-blacks I had were bone-black-heavy piles, and I twice glazed the background with a mid pile thinking it was darker than it was. `hand="glaze"` drags pale streaks, `edge="lost"` over a tiny mask sprays paint far outside it, and nothing fine — a highlight, a stem — will stay on tacky paint: it has to be touch-dry.

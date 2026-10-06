@@ -1,0 +1,19 @@
+I've finished the painting. It's saved and the easel session is closed.
+
+- **Painting:** `~/src/a/paint-studio-7ace8e/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-7ace8e/paintings/lua/painting.lua`
+- **Title:** *Summer Evening on the Meadows before Greifswald*
+
+The sun has just set behind a low silhouette of the town: three church towers, stepped gables and two post mills against an apricot afterglow. Above, a deep smalt sky holds rose cloud bars, a thin crescent moon and the evening star. Evening mist lies at the foot of a dark grove on the left. The meadow runs toward the town in long bands, with mown strips and haycocks, two horses behind a post-and-rail fence and an open gate. A man in a greatcoat and top hat and a woman in a wine-red dress and shawl stand on the footpath with their backs to us, looking at the town. Rooks fly home over the grove, and cow parsley, sorrel, buttercups, a thistle and dock grow in the grass near the viewer.
+
+Three faults remain:
+- The Bodden water on the far plain still looks a little like ice.
+- The pale grass blades in the foreground are brighter than the hour would allow.
+- The seams between the meadow bands are softer than before but still visible.
+
+Several repairs near the end left their mark:
+- A darkening glaze spilled over the town's roofs, and cutting it back with sky colour left a halo. I repainted the whole silhouette crisply from its mask; what's left of the halo is a faint afterglow round the roofs.
+- One sky patch ate into the grove's right-hand crowns, so I rebuilt those from small leaf dabs.
+- The grey horse picked up streaks from a glaze I laid on while it was still tacky. It's now a muted dun, which I kept because it suits dusk better than the chalky white did.
+
+The optional `bin/easel check` did not finish: it ran past my two-minute limit and I didn't rerun it. `close` hung at first, but a later retry reported no painting open, so the session is closed. The journal is in `notes/journal.md`.

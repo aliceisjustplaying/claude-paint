@@ -1,0 +1,11 @@
+The painting is done and the session is closed.
+
+**Saved painting:** `out/easel/painting/painting.png`
+**Log (the program that paints it):** `paintings/lua/painting.lua`
+**Title:** *White Jug with Two Lemons*
+
+**About the picture.** A still life in oil on warm ochre ground: a white stoneware jug standing on a table against a dark brown wall, two lemons and a small green leaf at the lower left. Light enters from the upper left — it pools on the table in front of the fruit and glows faintly on the wall, while the right side of the room falls away into deep umber.
+
+The jug is the lightest mass and the focal point: warm lead white on its lit side, a cool smalt-and-umber shadow side with a core shadow where the form turns, a warm reflected light picked up along the right edge from the table, and small specular touches on the shoulder, rim and handle. Its shadow, and the lemons' shadows, run off to the right in soft glazed transparent darks. The lemons are chrome yellow and yellow ochre with olive shadows and a dark crease where the two fruits touch.
+
+The working journal is in `notes/journal.md`. Two things I learned at this easel: short scumble strokes over a mid-tone leave "worms" of contrast that read as dirt — transparent glazes unify far better than more opaque strokes; and blending a lean layer twice lifts paint off the weave and lets the ground show through as a pale lattice, so it's better to lay the paint you want and blend it once. (The picture-viewing pipeline also kept serving stale frames, so I calibrated views with temporary vermilion bars at known coordinates and painted over them again — they're gone.)

@@ -1,0 +1,9 @@
+The painting is finished, saved and closed. `bin/easel check` replayed all 94 chunks and matched the live canvas exactly.
+
+- **Painting:** `~/src/a/paint-studio-3be9e8/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-3be9e8/paintings/lua/painting.lua`
+- **Title:** *Stoneware Jug with Two Lemons and a Knife*
+
+It's a quiet still life in the manner of Chardin. A cream stoneware jug stands on a stone ledge against a smoky olive wall, lit from the upper left. Two lemons sit beside it, and a knife with a dark wooden handle hangs over the front edge. The jug's shadow side is mottled like salt glaze; it's made of thin umber glazes over dry light paint, blended only within the shadow half. The lemons were repainted in strokes that curve round the form, with pitted-skin stipple, small highlights and contact shadows. A light varnish at the end warmed the whole picture and tied it together.
+
+One chunk (55) had an endless loop and hung the easel. I stopped that easel process and reopened the same session, which replayed the 54 logged chunks. The failed chunk had painted nothing, and I wrote this up in the journal.

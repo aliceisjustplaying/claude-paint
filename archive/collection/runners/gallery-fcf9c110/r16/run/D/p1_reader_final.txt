@@ -1,0 +1,3 @@
+I wrote ~/tmp/gallery-fcf9c110/r16/run/D/p1_record.md
+
+The log breaks off with an error after the seventh chunk, so the record only covers that far. The painting was never saved.

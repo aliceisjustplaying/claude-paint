@@ -1,0 +1,11 @@
+The painting is finished, saved, and the session is closed.
+
+- **Painting:** `~/src/a/paint-studio-358aea/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-358aea/paintings/lua/painting.lua`
+- **Title:** *Morning on the Ryck Meadows*
+
+It's a June forenoon on the flat meadows by the Bodden, outside a small Pomeranian town. The town is my own invention. The horizon sits low, so the pale summer sky takes up about two thirds of the canvas. Two figures stand on a worn path, seen from behind in Friedrich's way: a man in a dark greatcoat and a woman in a red-brown dress with a cream shawl. They look across the meadows to the town, a grey-blue silhouette of towers and a spire with low houses and trees at their foot. On the left a row of pollard willows gives a dark frame, with a post mill on the rise showing through a gap and a stork hunting in the grass. On the right a split-rail fence runs back towards the river, with a grazing bay horse and a black horse behind it. The foreground is full of small things: tall grass stems, seed heads, buttercups, daisies, sorrel and clover, with cow parsley in both lower corners.
+
+In this last short sitting I only did small work on the figures. The man's coat got a half-belt with two buttons, a back vent and a few lit folds. The woman's dress got folds falling from the waist, and her shawl two soft folds running to its point. I left the pale mark around the black horse's head because it reads as a halter.
+
+The easel's replay check didn't run a full comparison this time: it reported the log intact and put off the final verification until delivery.

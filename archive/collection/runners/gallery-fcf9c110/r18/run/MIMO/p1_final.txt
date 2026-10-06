@@ -1,0 +1,8 @@
+The picture is finished and the session is closed.
+
+**Saved painting:** `out/easel/painting/painting.png`
+**Log (the painting's program):** `paintings/lua/painting.lua`
+
+**Title:** *White Jug with Two Lemons*
+
+A still life of a white stoneware jug with a strap handle and two lemons on a warm table, against a dark wall, lit from the upper left. The jug is the lightest mass: warm opaque white on its lit side, a soft cool smalt shadow with a darker core band where the form turns, and warm bounce light picked up along the right edge from the table — its cast shadow runs off to the right past the lemons. The two lemons answer it at the lower left in chrome yellow and ochre with olive shadows and small speculars, separated by the dark crease where they touch, with a single green leaf for a cool accent. The wall settles into a quiet warm dark brown with a faint glow at the upper left where the light enters; the table carries a pool of light at the front left. It was left deliberately loose — the marks are allowed to read as marks — and after a last look with the paint fully dry I judged it complete and left it alone rather than tightening it.

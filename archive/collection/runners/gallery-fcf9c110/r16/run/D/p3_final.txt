@@ -1,0 +1,10 @@
+### Saved Painting and Session Log
+
+- **Saved painting:** `~/src/a/paint-studio-b5323f/out/easel/painting/painting.png`
+- **Painting log:** `~/src/a/paint-studio-b5323f/paintings/lua/painting.lua`
+
+---
+
+### *Still Life with Terracotta Jug and Quince*
+
+Painted on a plain-weave linen canvas prepared with a knifed lead-white ground and a warm brushed ochre imprimatura, this still life draws upon Spanish *bodegón* and Chardin traditions of quiet, focused chiaroscuro. A generous baluster terracotta jug with an amber-glazed neck and arched handle anchors the left-center, lit by directional light from an unseen window above. To the right sits a golden, textured quince with a puckered dried calyx, and between them in the foreground rests a halved lemon whose delicate ribbon of peel curls forward over the lip of a weathered limestone ledge. The composition explores contrasting tactile surfaces—porous clay, reflective glaze, waxy rind, and cool stone—against a deep, atmospheric background where the shadows merge into the surrounding space.

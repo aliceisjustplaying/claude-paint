@@ -1,0 +1,18 @@
+[
+ {
+  "sitting": 1,
+  "part": 1,
+  "status": "running",
+  "start": "2026-10-05 20:39:42",
+  "end": null,
+  "chunks_after": null,
+  "painting_after": null,
+  "chunks_before": 0,
+  "painting_before": 0,
+  "message": "Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you give it one and a few sentences about the picture. At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, practical lessons to carry forward from what you observed and recipes that failed. Before retrying a failed recipe, identify what has changed and why that could address the observed failure. Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. Record what you observed and what remains uncertain.",
+  "sessions": [],
+  "exit": null,
+  "final_file": "~/tmp/gallery-fcf9c110/r28/run/HOPR/p1_s1_final.txt",
+  "final": null
+ }
+]

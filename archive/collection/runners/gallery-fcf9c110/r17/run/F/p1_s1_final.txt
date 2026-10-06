@@ -1,0 +1,16 @@
+The painting is finished and saved as **"June Morning on the Meadows before the Town."**
+
+- **Painting:** `~/src/a/paint-studio-cfa19c/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-cfa19c/paintings/lua/painting.lua` (147 chunks; `bin/easel check` confirms it replays to exactly this canvas)
+- **Journal:** `notes/journal.md`
+
+It's a flat Pomeranian river meadow, loosely after Friedrich's views of the Greifswald meadows but arranged my own way. A low horizon leaves most of the canvas to a sky that runs from cobalt and smalt at the top down to a warm cream. Against a pale summer cumulus stands the silhouette of a Hanseatic town: a hall church with a needle spire, a second spired church, a capped tower and gabled houses, with a post mill on either side. A silver river runs toward the town between pollard willows, each with its own reflection. Beside it are a mown hay meadow with hay cocks and tiny haymakers, and two grazing horses. In the foreground, a lone oak in full June leaf stands on a grassy rise, and under it a man and a woman seen from behind look out toward the town. Buttercups, daisies and sorrel grow in the near grass, and a few swifts fly high over the spires.
+
+Weaknesses I've left in:
+- The oak's leaf masses are still a little too ball-like.
+- The cloud is streaky when seen close up.
+- A faint pale halo follows the right edge of the crown.
+
+Two things you should know about:
+- **Early in the session**, a mistake of mine with an unset scratch variable made the easel run someone else's `c2.lua` from outside my studio. It put their pencil sketch on my ground, and I erased it before painting. A faint trace may remain under the paint, and it's in the log.
+- **Near the end**, a one-line rest file (`c147.lua`) briefly landed in `~/tmp` instead of my scratch folder. I deleted it and redid that step from scratch.

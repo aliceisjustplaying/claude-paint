@@ -1,0 +1,15 @@
+The painting is done: I varnished it, `bin/easel check` ran without complaint, and I saved it and closed the session.
+
+- **Painting:** `~/src/a/paint-studio-7ff345/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-7ff345/paintings/lua/painting.lua`
+- **Journal:** `notes/journal.md`
+- **Title:** *Evening at the Frozen Mere*
+
+It's a winter dusk just after sunset. The sky runs from smalt blue at the top down to a rose-amber glow on the horizon, where a faint Gothic church stands in a low mist. On a snowy knoll to the left is a stag-headed oak. It has two silvery dead limbs, a lightning scar and snow on its branches, a few withered leaves still hanging on, a crow on a limb and a fallen branch downhill. Three more crows fly in toward it, and a thin young moon hangs over the spruces on the right.
+
+A small walker with a staff stands at the edge of a frozen, slate-blue mere and looks toward the church. His footprints come back down a trodden path to the viewer. The near ground holds reed beds, dead grass, stones, a hare's track and a broken wire fence with snow on its posts, all in a cool dusk shadow under the lit sky.
+
+A few things didn't go to plan, and the journal records them:
+- **The mist:** it began as a failed attempt to cover a grey smear in the middle distance. It spread and swallowed a row of pollard willows I had just painted, so I smoothed it out and kept it as mist.
+- **The reeds:** two glazes on them went wrong, one an opaque brown and one a bright blue. I lifted both off with a clean brush while they were still wet.
+- **The oak's foot:** an old hard-edged box shape there is now covered by a snow drift. Up close it still shows faintly as texture.

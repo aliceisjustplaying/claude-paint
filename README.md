@@ -27,8 +27,10 @@ scripts/test --all                    # every required check (notes/speed/SKIPPE
 
 ## For developers
 
-- Full renders aren't committed (`out/` is ignored): every painting is a
-  replayable log.
+- Finished paintings, videos, prompts and painter notes are indexed in
+  [the painting collection](archive/collection/README.md). Raw sessions and
+  unredacted originals are preserved locally under the Git-ignored `.preservation/`
+  directory. Working renders under `out/` remain ignored; replay logs are retained.
 - Rounds are tags and folders, not branches. A tag holds the code a round's
   painters ran (`round-19`, `round-20`; older rounds' branches are kept as
   `archive/<branch>` tags); `notes/rN/BUILD.md` and `notes/roundN/` (runner,

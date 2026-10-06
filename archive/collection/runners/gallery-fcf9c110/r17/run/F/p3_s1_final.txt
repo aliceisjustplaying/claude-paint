@@ -1,0 +1,13 @@
+The painting is finished, saved, and the session is closed.
+
+- **Painting:** `~/src/a/paint-studio-358aea/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-358aea/paintings/lua/painting.lua` (140 chunks)
+- **Journal:** `notes/journal.md`
+
+I didn't run `bin/easel check` at the end, so the log hasn't been replayed against the finished canvas.
+
+**Title:** *June Morning on the Meadows by the Ryck*
+
+It's an invented Pomeranian coastal landscape. The horizon is low, so the sky takes up two thirds of the canvas, shading from smalt blue at the top to a warm, pale haze with a bank of cumulus low on the left. A man in a dark greatcoat and a woman in a red-brown dress with a cream shawl stand on a worn footpath with their backs to us. They look over the June grass, across a thin silver channel of river, to a small town: a baroque-capped tower, a squat tower, a slender spire and long church roofs, all in blue-grey. A row of pollard willows holds the left side, with a post mill showing between them. On the right a split-rail fence runs back toward the water, with a bay and a black horse in the pasture beyond it and a red sail far off. The small things are painted in the foreground: buttercups, daisies, sorrel, seed heads and cow parsley, plus birds and belfry openings in the distance.
+
+The sky took a second layer of eight graded bands to lose its stepped bands. I painted out the first willow row and redrew it at full size after measuring the figures against the eye height showed it was the size of shrubs, and I moved the horses farther back for the same reason. I also learned, more than once, not to blend next to fresh dark paint.

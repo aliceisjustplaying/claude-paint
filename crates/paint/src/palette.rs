@@ -923,7 +923,8 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, ..Palette::new(self.name, tubes) }
+        // (ground by its box's colourmen, as `clone` and `with`)
+        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -1390,6 +1391,8 @@ mod tests {
         // renamed, cloned or with a tube more, its tubes are still its box's
         let renamed = Palette::named_box("impressionist").unwrap().named("a study");
         let more = renamed.with(vec![renamed.tubes[0].clone()]);
+        let few = renamed.only(&["cobalt blue"]);
+        assert_eq!((few.name, few.grind[0], few.pack[0]), ("a study", (Oil::Poppy, true), renamed.pack[i]));
         for p in [renamed.clone(), more.clone()] {
             assert_eq!(p.name, "a study");
             assert_eq!(p.grind[i], (Oil::Poppy, true));

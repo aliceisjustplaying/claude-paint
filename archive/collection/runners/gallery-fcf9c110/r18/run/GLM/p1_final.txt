@@ -1,0 +1,10 @@
+Done.
+
+- **Painting:** `out/easel/painting/painting.png`
+- **Log:** `paintings/lua/painting.lua` (matches `out/easel/painting/committed.lua`; `bin/easel check` passed and the session is closed)
+
+**Title:** *The Last Light on the Flats*
+
+**About the picture:** A dusk estuary seen from an old mooring. A dark treeline crosses under a pale, warm haze sky with a cream horizon band; the water carries one amber path of the last light down from the far shore to the foreground, where the dark grassy bank sweeps in from the right and the mooring posts stand at the waterline, birds high and small in the sky. The palette is lead white, yellow ochre, raw umber, bone black, cobalt, green earth and a little vermilion, on a knife-textured pale 400×500 linen.
+
+It grew by accidents I chose to keep: a ruined full-sky blend became the misty silver evening; the furled-sail yacht I kept trying to place was finally painted out after eleven attempts, leaving the bank and the light-path to carry the picture alone. It ends as a hushed, silver-and-amber evening over falling water.

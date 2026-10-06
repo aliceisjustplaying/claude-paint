@@ -1,0 +1,24 @@
+I've called the painting **Luncheonette, Four O'Clock**.
+
+It shows a three-storey brick corner building in low afternoon sun from the left. The shadow of a building outside the picture cuts diagonally across the lower left of the front wall, the plate glass and the sidewalk. A counterman in a white coat stands with his arms folded in the dark doorway under the green LUNCHEONETTE sign. Directly above him and a little to the left, a woman leans on the sill of the one open upper window. Each is alone, and neither knows the other is there. To the right are a tall lamppost, a pale block of buildings farther off with a water tower on its roof, and a clear sky that goes from cerulean to cream near the horizon.
+
+I worked it the way Hopper did: a pencil drawing, a lay-in thinned almost entirely with turpentine, then opaque body paint laid wet over dry over about 200 days of the painting's clock.
+
+**Handoff (also in the journal):**
+
+**Still unresolved**
+- The surfaces are very even, close to poster-flat, with little visible brushwork.
+- The shaded sidewalk and the street are one uniform mauve-gray.
+- The lit shop windows are schematic: a band of slate glass, a brown band, then a cream curtain.
+- On the canvas the lamppost's shadow runs parallel to the big shadow edge on the sidewalk instead of converging with it in perspective. I left it because it reads well.
+- A faint rectangle shows in the sky where I repainted around the water tower.
+
+**Practical lessons**
+- Pale paint over a dark only covered well once the dark tested "dry", not "tacky". Over tacky dark glass, the window blinds broke into blotches. Over dry dark, two coats of the lead-white mix (medium 0.08, coverage 3, fill and clip) covered.
+- Filled, clipped body passes at coverage 2.5–3 gave clean flat fields with crisp edges, which suit this hard-edged style.
+- In small details, earth, cadmium and black mixes at medium 0.08 took about 10–20 days to dry. Fields rich in lead white took about 3–5 days.
+
+**Recipes that failed**
+- The `scumble` hand twice: on the dry brick (load 0.3, coverage 0.6) and on the dry sidewalk (load 0.25, coverage 0.5). Both times it laid separate opaque dabs, not a veil.
+- Wiping those off with a rag and spirits removed most of the paint. It smeared onto the crisp edges nearby and left whitish fragments.
+- My working assumption, not yet tested: broken layers on these flat fields will always read as spots. Next time I'd repaint the whole field, perhaps with a gradient between two piles, instead of retrying the scumble.

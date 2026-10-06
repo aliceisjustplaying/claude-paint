@@ -1,0 +1,13 @@
+I've finished the painting, saved it and closed the session. `bin/easel check` confirmed that replaying the log reproduces the canvas exactly (104 chunks).
+
+- **Painting:** `~/src/a/paint-studio-4fb403/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-4fb403/paintings/lua/painting.lua`
+- **Title:** *Low Water, Evening*
+
+It's an estuary at low tide in the evening, on a canvas 600 mm wide. A tarred boat with a red strake lies beached on dark mud, tied by a rope to a stake. A pale channel curves back past a line of old posts towards a low gold glow on the horizon. A church tower and a dark band of trees give the distance, and a heavy lilac cloud cover closes the top. The dark foreground wedge and the light channel carry the picture, and the lighter sky sits above them.
+
+The painting was already saved as finished when I came back to it. Looking again, I thought the near mud was too flat and empty and the bottom edge didn't hold the picture in. I did one more short session:
+- **Mud:** a thin umber-black glaze over the lower mud, getting darker toward the bottom edge.
+- **Puddles:** four small puddles in the mud. At first they came out as bright chalky patches, so I glazed them down, broke up their edges and added a short gleam of sky light. They now read as wet hollows at full size.
+
+A few flaws remain. Where I roughened the puddle edges, faint lighter rings were left in the mud. There's still a faint rectangular repaint by the stake, and the upper clouds are a little soft.

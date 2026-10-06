@@ -1,0 +1,23 @@
+The painting is finished, saved and the session is closed. `bin/easel check` replayed the log and it matches the live canvas exactly (115 chunks).
+
+- **Painting:** `~/src/a/paint-studio-774267/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-774267/paintings/lua/painting.lua`
+- **Journal:** `~/src/a/paint-studio-774267/notes/journal.md`
+- **Title:** *Summer Evening on the Meadows before the Town*
+
+It's a wide, flat Baltic plain late on a summer day, with the sun low on the left. The horizon sits low, so the smalt-and-cobalt sky takes three fifths of the canvas and warms to cream at the horizon. A small town with three brick church towers stands on the skyline between two post mills and rows of woods. A man and a woman are seen from behind on a worn footpath, looking toward the town, their shadows falling long to the right.
+
+Across the meadows there are:
+- a row of pollard willows along a ditch that reflects the sky, with a stork on the near bank
+- grazing horses and cows, and a post-and-rail fence crossing a band of cloud shadow
+- haycocks with rows of cut hay, and a hay wagon with a man forking hay up to another on the load
+- a far-off shepherd with his flock and dog, and a few birds flying home
+
+In the foreground a granite boulder sits in the grass among small flowers.
+
+Some parts took several tries, all recorded in the journal:
+- **The boulder** kept coming out too light or muddy while wet. It only came right once it had dried and I built it up with thin glazes.
+- **The ditch** was first a stark white diagonal line across the whole plain. I painted most of it out and kept only the stretch by the willows.
+- **The red dress glaze** ran under the woman's shawl, so I repainted the shawl once it was dry.
+
+Once everything was touch-dry I laid a light mastic varnish over the whole, so the colours sit a little warmer, as his pictures look today.

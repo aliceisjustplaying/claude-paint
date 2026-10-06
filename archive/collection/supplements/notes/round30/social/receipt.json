@@ -1,0 +1,140 @@
+{
+  "id": "r30-hopr",
+  "source_log_sha256": "5252d62b368dae8744b2a8d656d16a9ad01f9749f1952065607bf79ef3bb3966",
+  "chunks": 148,
+  "finished_log_sha256": "1d0bda9a34acd1a9af890873eb5bac0471680dd85cff0cfa397b9e7db8dce19b",
+  "finished_chunks": 149,
+  "existing_replay_check": "check: ok: 148 chunks replay to the live canvas; the replay equals the live canvas saved at close; the replay's canvas state equals the save written at close; the painter saved no picture; the studio's committed record equals its log",
+  "finished_png": {
+    "width": 2400,
+    "height": 1600,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "0550a2f27f00dac74990dac79f8263299055fddb8ca75f66a7071e3fb53c696d",
+    "bytes": 3578804
+  },
+  "normal_png": {
+    "width": 2400,
+    "height": 1600,
+    "chunks": [
+      "IHDR",
+      "IDAT",
+      "IEND"
+    ],
+    "text": [],
+    "sha256": "4ebd1d89d2ca1ce9408eef6dcf6a1343ea178a7dbc0bc4907903cf0b0ab52a46",
+    "bytes": 1507472
+  },
+  "finishing": "automatic drying, 0.4 varnish coats and cracks; no relief",
+  "privacy": "PNG text metadata inspected; visible image/video review required before publication",
+  "source_commit": "3f3f21150249688c4421aa763c7f4e3f5ed3ff91",
+  "engine_sha256": "57f79ae39caa9eb0fbde31e0317cf3e6b1cd94b12a8a55f6d6ef9847714ded22",
+  "status": "ready",
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "High",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.640032",
+        "width": 1920,
+        "height": 1280,
+        "coded_width": 1920,
+        "coded_height": 1280,
+        "has_b_frames": 2,
+        "pix_fmt": "yuv420p",
+        "level": 50,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "time_base": "1/12288",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 245760,
+        "duration": "20.000000",
+        "bit_rate": "550555",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "480",
+        "extradata_size": 46,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.101 libx264"
+        }
+      }
+    ],
+    "format": {
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "20.000000",
+      "size": "1383002",
+      "bit_rate": "553200",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.101"
+      }
+    },
+    "atoms": {
+      "ftyp": 0,
+      "moov": 32,
+      "free": 6598,
+      "mdat": 6606
+    },
+    "sha256": "c8c42cbf15347161d9ee8f1449524ea238a5dd29c1e2d5596ef3b2ae0a7bac20"
+  },
+  "frame_count": 561,
+  "replay_seconds": 1172.624,
+  "full_finished_replay_byte_exact": true,
+  "verified_at": "2026-10-05T22:57:07.478494+00:00",
+  "clip_options": {
+    "every": 60,
+    "pace": "dynamic",
+    "gamma": 0.4,
+    "ramp": 0.3,
+    "length": 20,
+    "open_hold": 0.25,
+    "width": 1920,
+    "crf": 23,
+    "fps": 24
+  }
+}

@@ -1,0 +1,106 @@
+S1 to line 1683:
+- 2H pencil sketch p0.2-0.3: barely visible in whole view; needs crop.
+- sky: 6 soft rect bands broad, coverage 2.2 fill edge soft -> stripy, scalloped seams; 2 clipped horizontal blends (cov 1.6, 1.0) -> soft slightly mottled; a dark streak remained.
+- scumble filbert on thin roughened ellipses, load .5 -> opaque bricks; crossing clipped blends while wet (2.2/1.2/1.2) -> soft.
+- land zones body+clip+fill from wavy boundaries -> hard stripes; crossing 16-wide badger along seams -> smeary zigzag seams.
+- drying: lead-white sky med .08 dry at 22h; lower areas tacky at 22h; mostly dry at 46h (one spot tacky)
+- detail hand fill edge firm on noise-bumped poly: small bumps good. clipped detail found: crisp silhouette.
+- rigger/round 1.4 point .9 thin sails ok but pale.
+- noise shadow mask perspective-scaled -> too fine near horizon, camouflage; blend cov2 -> soft mottle.
+- 4h after: setting/open; +16h tacky; tacky paint: new sits on top.
+- row of identical small gabled polys -> picket fence; covered with one ragged outline mass.
+- scumble with mask fade & threshold .25, clipped -> scalloped edge band.
+- body into wet lead-white scumble + 3 blends -> good gradient but hard seam where it met older set paint.
+- 2 days after lead-white-rich scumble: still tacky.
+S1 1684-2033:
+- mid meadow body two graded piles + dark shadow shapes body into it wet, then badger 28/20 -> shadows dissolved into pale; angled badger (0.12) left diagonal smears; old seam still showed.
+- scumble seam band (load .4) came out darker than band above: harder edge.
+- 26h after: tacky; +24h still tacky at 2 of 3 spots.
+- glaze-ish body medium .3 dark shadow shapes over dry pale -> far too dark & crisp (ponds); 3 heavy clipped blends while wet spread them: greener, blunt-ended, smeared rounded.
+- 2 days: dry.
+- lights body over most of area leaving tapered shapes: covered much, shadows only thin ragged lines.
+- foreground 3 graded body zones + blend -> crest too light, merged with beyond; repainted after dry darker -> separation.
+- ribbon river (round discs) -> uniform thick, snake/road; water detail over wet bank detail -> dragged bank paint into grey marble.
+- lead-white thick layer tacky after 30h and 50h; dry at 98h partly.
+- matching masstone detail fill over area covered cleanly (river erased).
+- round 2.4-3.2 point .2-.3, pressure falling .55->.15, reloads -> thin tapering gleam.
+- covering meadow detail painted into wet?? -> ate into river more than intended.
+- water lead white lean: tacky after 26h, 50h; dry at 98h.
+- water chalk white tubular; glaze medium .55 detail load .45 + small clipped blend (8) over dry -> bluish grey.
+- body fill shapes each clip grown 1 edge soft -> hard-edged trapezoid shapes.
+- willow: stippled round heads + clipped detail trunks -> lollipops, too even. 24h later tacky.
+S1 2034-2352:
+- rigger/round 1.3-1.6 wands pressure .75->.05 over tacky: dark wands blended into background, faint. 
+- lobed poly heads stippled 3 tones (mid, shadow side via mask, feathered highlights): read as pollards.
+- stipple width 3.2 cov 4.5 over roughened union of ellipses with punched ellipse holes -> flat blob with round holes.
+- wet-in-wet stipple fills holes.
+- sky-color detail patches for gaps -> round holes; sky mix slightly off.
+- limbs round 2.2 point .8 painted into wet sky gaps -> dissolved/barely visible; rim stipple drag+twist feather -> fuzzy weak halo.
+- tacky after 3 days (lead white sky patch), dry after 5.
+- repaint around new silhouette with sky mix, detail fill firm: works; lower patch mismatched color.
+- after 30h: sky patch dry, lower tacky.
+- trunks/limbs round 3.2 before foliage; stipple foliage dark; after 8h wait, lit stipple by whole-tree mask -> hard diagonal split, too yellow; shadow stipple under each clump + scatter across split -> better.
+- small stippled low clumps -> floating tufts.
+- detail water body into wet? -> pale uniform (wet-in-wet came up pale). Actually river was dry; body pile pale.
+- 40h tacky; 88h dry.
+- smalt glaze medium .6 detail load .35 twice + badger 6 clipped: blue-grey, darker near side. worked.
+- hand=glaze on path unclipped -> long brown smears across neighbor fields.
+S1 2353-2707:
+- repainting whole field passage (body clip grown .8 + badger) removed smears.
+- haycocks: detail clipped polys w/ lit mask + cast shadow: read, but grid-like/bun-like. windrows round 1.8 strokes: thin ruled lines.
+- figures clipped detail found: read at once. small cows (11 units) = blobs, shadow ellipses read as wheels.
+- painting out w/ detail patch: patches darker than surround.
+- tacky 20h, 2d, dry partly 3d.
+- repaint rect ran over neighbor shapes; left straight seam at rect edge; wet blend across seam softened but seam remained (color mismatch).
+- scumble low load over dry + blend: partial match.
+- round 2.4 strokes with reloads -> gleam slightly dashed.
+- body band fill -> flat block with hard edges; badger across ends while wet softened.
+- stipple 1.8 cov5 pale mix -> fog-like; after 30h darker stipple over & feathered lit stipple -> ok
+- hatch dark grass over dark underlayer -> disappears (masstone); lighter blades grM/grL rigger sparse coverage .35 -> read.
+- ruts: round 3.5 clip path strokes; crown hatch; sparse stipple pebbles.
+S1 2708-2997:
+- round 4 strokes stems then stipple roughened ellipse union -> black blobs, stems exposed. outline char soft closed mask + stipple -> big flat mass; drag/twist stipple on lit side.
+- dress repaint over pale while dry: still pale-ish (lavender); darker mix bone black etc over later reads.
+- round 1.4 touches of 6 small -> too tiny dots for umbels; small flat ellipses stipple 2 tones -> read.
+- pinnate sprays: stroke low pressure + paired dragged touches -> fern-like texture.
+- wagon wheels: round 1.1 circle strokes + spokes. horses/figures via clipped detail polys read small.
+- cows at ~40 units w/ shading, back light stroke: read but crude; white one too bright/toy.
+- fence detail polys+ribbon rails: flat; later lit strokes + grain + grass over feet -> better, lit line a bit bright/linear.
+- birds: rigger 1.1 two strokes pressure ramp -> read.
+- flower touches on tacky grass: tiny barely visible dots (tacky grabs light touches). After dry, larger brushes width=s -> specks; big near flowers ok.
+- dry after 3 days in many parts; figure area tacky 7 days after (dress dark bone black 5 days after: tacky).
+S1 2998-3379:
+- stipple dark-ish (lead white 1.1) at normal pressure over pale dry stipple -> barely changed; heavier: less white, width 2.6 cov 3 pressure .55-.8, dips {8,.8,.5} -> darkened; hard diagonal boundary -> intermediate band stipple cluster .7 softened.
+- hatch round 1.0 cov .25/.15 -> stubble; a bit busy.
+- figure repaint over shawl lost the red; restated.
+- cows: stipple shade over lower/right -> less flat.
+- hatch clump .6 low coverage tufts.
+- rigger hatch 16-34 bottom grass; seeding stems rigger + round head stroke.
+- elder lower: grass hatching painted over/near bush -> lower bush pale veil, grass showed through (bush looked floating). restated with dark stipple cov4.5 -> flat block swallowed umbels. then sprays and umbels over dry.
+- seam between two stipple masses -> feathered clustered stipple across seam.
+- bright rigger grass blades in shade too bright/spaghetti; after 30h darker hatch + hand glaze medium .7 load .35 cov .8 -> darkened region, solid dark mass. (glaze unclipped but over its region)
+- round 2.6 trunk stroke ran over roof -> dark streak; fixed after 40h (tacky) by repaint detail.
+- yard stipple pale mix barely registers; darker stipple later.
+- round .9 strokes for windows: small accents.
+- house fronts: row of rect blocks each different pile -> barcode; badger 6 clipped wet -> hazy mottled.
+- lead-white rich house paint tacky at 1, 2 days; dry at 4 days.
+- stipple with coverage function worked (stipple accepts function), darker track near.
+S1 3380-end:
+- body repaint of strip with clip mask excluding hedge shrunk .8 -> ran over thin (3-5u) hedge; seam at rect start.
+- continuous stipple hedge line + feathered lit rim: ok.
+- glaze medium .6 with lead white .4 detail load .35 over dry saturated shapes + tiny badger -> ghostly pinkish, red rims: lightened.
+- solid repaint no white -> better.
+- 7 day wait; save; didn't run check.
+S2:
+- open replayed 156 chunks; globals persisted (willows, masks) through close/reopen.
+- rigger 0.9 rods pale mix over pale background: too pale, stick-like; floating where head was painted out.
+- hatch clipped fan-angle (function) round 1.5 fill -> pollard crown; mask with sine-peaked top -> flame/cypress shapes; adding two lesser off-centre fans -> broad broom.
+- dark hatch into wet pale hatch -> barely showed (lifted/merged); after 26h (tacky) same pass showed -> shaded; light/dark split too diagonal & hard.
+- hatch cooler grey-green over acid pasture cov .9: far mix with more white -> frosty pale; hard seam at test-rect edge x=300 and at y split; noise-dithered split for boundary; still seam -> after 24h one full-width pass by depth, cov 1.3, threshold .5 -> seam fixed; but exclusion zones left haloes of old colour around shapes -> hatch ring cov 2 fill -> closed, but cast shadows and grass at hooves covered, needed restating.
+- haycock repaint overlapped bush foliage; restated foliage over after 24h (tacky).
+- hatch over region: strokes of pile matching underlying vanished (masstone); stronger contrast darker+lighter piles showed.
+- mask built from a buggy function (depth fn) put strokes in wrong place: "barely noticeable"; explicit below() mask fixed.
+- far river covered by hatch cov 2.4 fill (needed 2 passes, 36h apart; first lifted pale into it wet).
+- round 2.2 gleam over dark bank round 1.4 strokes: too white/crisp zigzag at crop but read in whole view.
+- small bush stipple same value as meadow -> blends; darker stipple after 30h -> reads.
+- skipped check (replay ~10+ min).

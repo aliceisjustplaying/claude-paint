@@ -1,0 +1,15 @@
+The painting is finished, saved and closed. `bin/easel check` replays all 183 chunks of the log and matches the canvas exactly.
+
+- **Painting:** `~/src/a/paint-studio-cfa19c/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-cfa19c/paintings/lua/painting.lua`
+- **Title:** *June Morning on the Meadows before the Town*
+
+A low horizon gives most of the canvas to a June sky, deep cobalt at the top paling to a warm cream at the horizon. On the right, a Hanseatic town stands against a summer cumulus in one soft violet-grey: a hall church with a needle spire, two smaller towers, gabled roofs, and a post mill at each side. A river runs toward the town, catching the sky, with pollard willows along it getting smaller with distance. On the meadows are hay cocks and small haymakers, two horses, and nearer, a post-and-rail fence along a ditch with three cattle. At left, a lone oak in full leaf stands on a grassy rise, with a dead limb breaking out of its crown. Under it, a man in a dark coat and a woman in a wine-red dress, seen from behind, look out toward the town. At their feet are buttercups, daisies and sorrel, and two grey field stones.
+
+The journal from the last session said the picture was done. Looking at it again, I didn't think the oak, the river or the cloud were good enough yet, so I worked on:
+- **The oak:** its leaves had been painted as separate balls. I rebuilt the crown as a few large masses, lit as one tree, with only small gaps of sky showing through.
+- **The river:** I repainted it so it reads as water, with thin reflections of the willows.
+- **The cloud:** I repainted it with a lit head at upper left and grey-violet shadow to the lower right.
+- **New details:** the dead limb, the fence and cattle, and the repainted field stones.
+
+Some weaknesses remain: the shaded right side of the oak is still a heavy, rather even dark, and the cloud is soft but not luminous.

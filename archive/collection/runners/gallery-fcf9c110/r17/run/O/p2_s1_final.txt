@@ -1,0 +1,11 @@
+The painting is finished, saved and the session is closed. `bin/easel check` replayed the log and it matched the live canvas exactly (95 chunks).
+
+- **Painting:** `~/src/a/paint-studio-4fb403/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-4fb403/paintings/lua/painting.lua`
+- **Title:** *Low Water, Evening*
+
+It's an estuary at low tide, just before sunset. The horizon sits low, so the sky gets most of the canvas: a heavy lilac-grey band of cloud across the top, thinning to pale gold where the sun is lost in haze on the right. A strip of dark trees with a small church spire runs along the horizon and gives the distance. Below it, a channel of water catches the sky's light and winds forward between banks of umber mud. A few weathered posts stand in it, with glints scattered under the glow. At lower left a small tarred boat with a red stripe lies on the mud, tied by a rope to a stake. It's the darkest note in the picture and anchors all the pale light.
+
+It needed several sittings over the painting's month-long clock. The first lay-in of the land came out wrong (a bulging bank and a channel that looked like a road), so I let it dry and redrew it. Later, unclipped blending smeared mud and water together at the shoreline and blurred the boat's bow, and I had to repaint both.
+
+A few flaws are still there: a faint lighter rectangle of repainted mud next to the stake, and some softness and swirling in the upper clouds. I stopped because more work was more likely to muddy the painting than improve it.

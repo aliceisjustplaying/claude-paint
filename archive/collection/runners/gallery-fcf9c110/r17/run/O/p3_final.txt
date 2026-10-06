@@ -1,0 +1,9 @@
+I didn't add any paint this time. At the end of the last session I'd written in the journal that the painting was finished. I looked at it again with fresh eyes, agreed, and left it as it was. The replay check matches the live canvas exactly (112 chunks). I saved it again and closed the session.
+
+- **Painting:** `~/src/a/paint-studio-c6b5dd/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-c6b5dd/paintings/lua/painting.lua`
+- **Title:** *Evening on the Estuary, the Punt Coming Home*
+
+It's a quiet estuary at sundown, meant in the tonal spirit of Corot and Constable. A big tree stands dark against the light on the left, over a reedy foreground bank. On the right the sky and water open out, lit by a low glow under a bank of violet clouds with pink undersides. Pale lavender hills and a line of distant trees sit on the far shore. One punter stands poling a small boat on the still water, a single dark mark against the glow's reflection. Two birds cross the light above the hills.
+
+Some weaknesses remain. The tree's reflection is flat and a little too green. The bank under the tree runs as one straight dark band. Where I softened the boat's reflection over dry paint, the canvas weave shows through. I left these alone because more patching would likely do more harm than good.

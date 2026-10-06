@@ -1,0 +1,19 @@
+~/src/a/paint-studio-106bf6/notes/journal.md  round=? lane=? engine=2 box=default
+~/src/a/paint-studio-b08dc3/notes/journal.md  round=? lane=? engine=2 box=default
+~/src/a/paint-studio-3a958c/notes/journal.md  round=? lane=? engine=2 box=default
+~/src/a/paint-studio-35c488/notes/journal.md  round=? lane=? engine=2 box=default
+~/src/a/paint-studio-f99282/notes/journal.md  round=? lane=? engine=2 box=default
+~/src/a/paint-studio-33a5bf/notes/journal.md  round=? lane=? engine=2 box=inness
+~/src/a/paint-studio-ba1453/notes/journal.md  round=? lane=? engine=2 box=tonn
+~/src/a/paint-studio-496bb9/notes/journal.md  round=r23 lane=INNS1 engine=2 box=inness
+~/src/a/paint-studio-ea8319/notes/journal.md  round=r24 lane=INNS1 engine=3 box=inness
+~/src/a/paint-studio-2f7993/notes/journal.md  round=r24.1 lane=INNS1 engine=3 box=inness
+~/src/a/paint-studio-8cc0b8/notes/journal.md  round=r24.2 lane=INNS1 engine=3 box=inness
+~/src/a/paint-studio-24be5f/notes/journal.md  round=r24.3 lane=INNS1 engine=3 box=inness
+~/src/a/paint-studio-d95ea6/notes/journal.md  round=r25 lane=FRDC1 engine=5 box=friedrich
+~/src/a/paint-studio-12e572/notes/journal.md  round=r26 lane=MONT1 engine=5 box=giverny
+~/src/a/paint-studio-7c4dd1/notes/journal.md  round=r27 lane=HOPR1 engine=5 box=hopper
+~/src/a/paint-studio-002de5/notes/journal.md  round=r28 lane=HOPR1 engine=5 box=hopper
+~/src/a/paint-studio-aef22d/notes/journal.md  round=r29 lane=MONT1 engine=5 box=giverny
+~/src/a/paint-studio-49b647/notes/journal.md  round=r30 lane=HOPR1 engine=5 box=hopper
+~/src/a/claude-paint/notes/journal-mining/yolo-r31-smoke-journal.md  round=r31-smoke lane=FREE engine=5 box=every (54 tubes) scratch canvas available

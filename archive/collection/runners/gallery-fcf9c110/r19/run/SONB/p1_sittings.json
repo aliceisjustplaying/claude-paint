@@ -1,0 +1,18 @@
+[
+ {
+  "sitting": 1,
+  "part": 1,
+  "status": "running",
+  "start": "2026-09-28 19:26:43",
+  "end": null,
+  "chunks_after": null,
+  "painting_after": null,
+  "chunks_before": 0,
+  "painting_before": 0,
+  "message": "Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you give it one and a few sentences about the picture.",
+  "sessions": [],
+  "exit": null,
+  "final_file": "~/tmp/gallery-fcf9c110/r19/run/SONB/p1_s1_final.txt",
+  "final": null
+ }
+]

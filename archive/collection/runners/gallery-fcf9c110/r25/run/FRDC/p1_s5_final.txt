@@ -1,0 +1,18 @@
+I've finished **The Oak in Snow at Evening**.
+
+One old oak stands on the central axis on top of a snow-covered rise, just after sunset. The sky runs in bands from cold smalt-cobalt overhead down to a warm Naples-yellow glow at the horizon. Beyond the snow there's only a forest band in valley mist and a faint ridge. A thin crescent moon on the right and a single crow far off on the left keep each other company across the empty sky.
+
+**Change this sitting (days 338–341)**
+- **Pale rectangle in the upper-left sky, around (110, 177): fixed.** It was left by an old wipe. Every earlier patch failed because it used opaque paint, which dries paler than the thin, blended sky. This time I used something none of those patches had tried: the sky's blue mix thinned with solvent (`thinner=0.6`, then 0.35). That lays a film only a few µm thick, which tints the pale patch instead of covering it. I built it up in four light, clipped passes plus one small blend. At full view the rectangle is gone. Close up, only a faint soft cloudlet remains, and under raking light there's no raised edge.
+
+**Flaws I'm keeping**
+- **The pale specks in the fork:** at full view they read as sky through the gap. Thinned paint might work there too, but they're surrounded by dark bark, where any slip would show, so they aren't worth the risk.
+- **The raised slab of paint in the snow:** it's only visible under raking light.
+- **The tiny violet fleck at the corner:** a frame would cover it.
+- **The pale fine twigs:** with the dark main branches now under them, they read as twigs dissolving into the dusk air.
+
+**New lessons for the handoff** (the earlier ones still apply)
+- Thinned paint can tint a dry pale patch in a thin, blended sky without laying new opaque paint on top. Match the colour of the surrounding sky, work in several light passes with waits, and clip to a slightly enlarged, softened mask. It's the first local sky repair that has worked at this easel. Opaque patches still fail.
+- In a `pile{}` call, `thinner=` goes inside the braces with the tubes, the same way as `medium`.
+
+My heart is happy with it. The last scar in the sky is gone, and the sky reads as one unbroken dusk behind the dark oak.

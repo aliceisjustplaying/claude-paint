@@ -39,6 +39,9 @@ pub struct Studio {
     pub style: Option<Rc<Style>>,
     /// Arguments `canvas{}` was called with (for status).
     pub setup: Option<String>,
+    /// The `canvas{...}` call that set this canvas up, as Lua (`lua_src`): the scratch
+    /// canvas beside the painting is set up with it (main.rs `Server::scratch`).
+    pub canvas_src: Option<String>,
     pub seed: u64,
     /// Index of the chunk being run (1-based), for seeds.
     pub chunk: u64,
@@ -69,7 +72,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
+        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -931,6 +934,53 @@ impl PileU {
 /// `p` thinned `t` (unchanged when `t` is 0).
 fn thinned(p: paint::Paint, t: f32) -> paint::Paint {
     if t > 0.0 { p.with_thinner(t) } else { p }
+}
+
+/// A Lua value as Lua source that makes it again: numbers, strings, booleans and tables of
+/// them (a table's sequence first, then its other keys in order). `canvas{}`'s arguments
+/// (`Studio::canvas_src`).
+pub(crate) fn lua_src(v: &Value) -> Result<String> {
+    Ok(match v {
+        Value::Nil => "nil".into(),
+        Value::Boolean(b) => b.to_string(),
+        Value::Integer(i) => i.to_string(),
+        Value::Number(n) if n.is_finite() => format!("{n:?}"),
+        Value::String(t) => {
+            let mut q = String::from("\"");
+            for b in t.as_bytes().iter() {
+                match *b {
+                    b'"' => q.push_str("\\\""),
+                    b'\\' => q.push_str("\\\\"),
+                    32..=126 => q.push(*b as char),
+                    o => q.push_str(&format!("\\{o:03}")),
+                }
+            }
+            q.push('"');
+            q
+        }
+        Value::Table(t) => {
+            let n = t.raw_len();
+            let mut items: Vec<String> = (1..=n).map(|i| lua_src(&t.raw_get::<Value>(i)?)).collect::<Result<_>>()?;
+            let mut keyed: Vec<(String, String)> = Vec::new();
+            for pair in t.clone().pairs::<Value, Value>() {
+                let (k, v) = pair?;
+                match &k {
+                    Value::Integer(i) if (1..=n as i64).contains(i) => continue,
+                    Value::String(s) => {
+                        let s = s.to_str()?.to_string();
+                        let ident = !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !s.starts_with(|c: char| c.is_ascii_digit());
+                        let key = if ident { s } else { format!("[{}]", lua_src(&k)?) };
+                        keyed.push((key, lua_src(&v)?));
+                    }
+                    _ => keyed.push((format!("[{}]", lua_src(&k)?), lua_src(&v)?)),
+                }
+            }
+            keyed.sort();
+            items.extend(keyed.into_iter().map(|(k, v)| format!("{k}={v}")));
+            format!("{{{}}}", items.join(", "))
+        }
+        o => return err(format!("{} can't be written as Lua", o.type_name())),
+    })
 }
 
 fn fmt_num(v: f32) -> String {
@@ -1855,6 +1905,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.hand = time::Hand::default();
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
+                    s.canvas_src = Some(format!("canvas{}", lua_src(&Value::Table(o.clone()))?));
                     s.setup = Some(format!("size={}, aspect={aspect}, {support}, seed={seed}", fmt_num(mm)));
                 }
                 let gl = lua.globals();

@@ -1,0 +1,17 @@
+I've saved and closed the painting. The easel's `check` confirmed that replaying the log reproduces the canvas exactly (97 chunks).
+
+- **Painting:** `~/src/a/paint-studio-9cf69b/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-9cf69b/paintings/lua/painting.lua`
+- **Title:** *Hünengrab im Schnee am Abend* (Dolmen in Snow at Evening)
+
+A stag-headed oak with dead silver limbs stands over a snow-covered Stone Age tomb (a dolmen) on a low mound. A small figure in a long coat, seen from behind, has walked out across the field; his footprints lead back toward us. The sky shades from cold smalt-grey at the top to a rose-ochre glow at the horizon, with a thin crescent moon and a few crows. A village church and a group of snowy spruces sit low on the right. I left the band of glowing sky above the far woods empty on purpose, since that open space carries most of the Friedrich mood.
+
+In the last stretch:
+- **Foreground:** I laid a very thin cool veil over it, so the snow darkens toward the viewer as the light fades.
+- **Footprints:** I shaded their far edges so they read as hollows rather than pale discs.
+- **Oak:** I painted out a burr on the trunk that looked like a button.
+- **Varnish:** I finished with a light coat once everything was dry.
+
+Two faults remain:
+- **Faint streaks:** the first test glaze (bottom-right corner) came out far too strong. I lifted it off and repainted, but a few faint marks may still show at the extreme bottom-right edge.
+- **Limb snow:** it's still a little bright, though at full size it reads as thin frost.

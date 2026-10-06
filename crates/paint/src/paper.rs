@@ -324,13 +324,33 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
             let mut r = Rng::new(p.seed ^ 0x5EED_9031 ^ x.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ y.wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
             let tau = (1.0 / (1.0 - solid)).ln() / (p.fibre_um * 1e-3);
             let pores = px_mm * px_mm * tau * tau / std::f32::consts::PI;
-            // (a whole number of pores' worth, at least one; past 256 the mean is as good as exact)
-            let k = (pores / 4.93).round().clamp(1.0, 256.0) as usize;
-            let g: f32 = (0..k).map(|_| -(r.f().max(1e-7)).ln()).sum::<f32>() / k as f32;
+            // (at least one pore's worth)
+            let k = (pores / 4.93).max(1.0);
+            let g = gamma(&mut r, k) / k;
             mean * g
         })
         .collect();
     Sheet { height, micro, grammage: gram }
+}
+
+/// A draw of Gamma(k, 1), k ≥ 1, in constant time: Marsaglia and Tsang's
+/// squeeze (ACM TOMS 26, 2000), its normal from Box–Muller.
+fn gamma(r: &mut Rng, k: f32) -> f32 {
+    let d = k - 1.0 / 3.0;
+    let c = 1.0 / (9.0 * d).sqrt();
+    loop {
+        let (u1, u2) = (r.f().max(1e-7), r.f());
+        let x = (-2.0 * u1.ln()).sqrt() * (std::f32::consts::TAU * u2).cos();
+        let v = 1.0 + c * x;
+        if v <= 0.0 {
+            continue;
+        }
+        let v = v * v * v;
+        let u = r.f().max(1e-7);
+        if u < 1.0 - 0.0331 * x * x * x * x || u.ln() < 0.5 * x * x + d * (1.0 - v + v.ln()) {
+            return d * v;
+        }
+    }
 }
 
 /// The felt's imprint at a point (mm), µm: cells pressed in, their rims
@@ -362,6 +382,20 @@ fn felt_um(xm: f32, ym: f32, f: &Felt, seed: u64) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    /// The pore-depth scatter's Gamma draw has the right mean and spread
+    /// (Gamma(k, 1): mean k, variance k), whatever k, in constant time.
+    #[test]
+    fn the_gamma_draw_has_its_mean_and_spread() {
+        let mut r = Rng::new(7);
+        for k in [1.0f32, 3.0, 50.0] {
+            let n = 40_000;
+            let xs: Vec<f32> = (0..n).map(|_| gamma(&mut r, k)).collect();
+            let mean = xs.iter().sum::<f32>() / n as f32;
+            let var = xs.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n as f32;
+            assert!((mean / k - 1.0).abs() < 0.03 && (var / k - 1.0).abs() < 0.06, "k {k}: mean {mean}, variance {var}");
+        }
+    }
+
     use super::*;
 
     fn stats(v: &[f32]) -> (f64, f64) {

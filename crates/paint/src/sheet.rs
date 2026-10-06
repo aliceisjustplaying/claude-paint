@@ -81,10 +81,96 @@ const CRUMB_MAX_UM: f32 = 300.0;
 /// Air: density kg/m³ and kinematic viscosity m²/s.
 const AIR_KG_M3: f32 = 1.2;
 const AIR_NU: f32 = 1.5e-5;
+/// Air's mean free path, µm (Cunningham's slip on the finest grains).
+const AIR_MFP_UM: f32 = 0.068;
+/// The heaped crumbs a puff sets moving, µm across: their threshold and hops
+/// are a 100 µm crumb's, the size of least threshold
+/// (pastel_removal_air_blade.md §A1).
+const HEAP_CRUMB_UM: f32 = 100.0;
+/// The share of a puff's moving crumbs that hop rather than roll, 10–30 %
+/// [E]: the middle (paper_mechanics_and_transport.md §4).
+const HOP_SHARE: f32 = 0.2;
+/// A radial wall jet's thickness over its radius, 0.08–0.1 [M] (Poreh,
+/// Tsuei & Cermak 1967): the middle.
+const JET_GROWTH: f32 = 0.09;
+/// How grains lifted by the wind leave the bed, from a direct simulation of
+/// aerodynamic entrainment (Jia & Wang 2020, arXiv 2012.07393, Table 3; its
+/// snow fit, whose grains (917 kg/m³, cohesive) are the nearest to a porous
+/// pastel crumb [E]): speed lognormal with mean 0.13 + 0.95 u* m/s and sd
+/// 0.21 of it; angle lognormal about 14.9° (log sd 0.63), not straight up.
+/// Cohesion leaves both unchanged.
+const LIFT_V0: (f32, f32) = (0.13, 0.95);
+const LIFT_V_CV: f32 = 0.21;
+const LIFT_ANGLE_DEG: f32 = 14.9;
+const LIFT_ANGLE_LOG_SD: f32 = 0.63;
+/// Von Kármán's constant.
+const KARMAN: f32 = 0.41;
+/// A wall jet's maximum speed over its friction velocity, ≈ 15 [E].
+const JET_U_OVER_USTAR: f32 = 15.0;
+/// How far the fines ride the wall jet before it has spread into a cloud,
+/// mm [E] (paper_mechanics_and_transport.md §4).
+const FINES_PATH_MM: f32 = 100.0;
 
 /// The steel flexes over broad relief and bridges fine hollows: the blade
 /// rests on the highest point within this many mm along it (as `Canvas::knife`).
 const FLEX_MM: f32 = 4.0;
+
+/// A grain of `d_um` and density `rho` (kg/m³) in still air: its settling
+/// speed, m/s, and its response time, s (Stokes with Schiller–Naumann's
+/// correction for its Reynolds number, and Cunningham's slip).
+fn settling(d_um: f32, rho: f32) -> (f32, f32) {
+    let d = d_um * 1e-6;
+    let cc = 1.0 + AIR_MFP_UM / d_um * (2.514 + 0.8 * (-0.55 * d_um / AIR_MFP_UM).exp());
+    let tau0 = rho * d * d * cc / (18.0 * AIR_NU * AIR_KG_M3);
+    let mut v = tau0 * 9.81;
+    for _ in 0..30 {
+        v = tau0 * 9.81 / (1.0 + 0.15 * (v * d / AIR_NU).powf(0.687));
+    }
+    (v, v / 9.81)
+}
+
+/// A grain's Brownian diffusivity in air at 20 °C, m²/s (Stokes–Einstein
+/// with Cunningham's slip).
+fn brownian_m2_s(d_um: f32) -> f32 {
+    let cc = 1.0 + AIR_MFP_UM / d_um * (2.514 + 0.8 * (-0.55 * d_um / AIR_MFP_UM).exp());
+    1.380649e-23 * 293.0 * cc / (3.0 * std::f32::consts::PI * AIR_NU * AIR_KG_M3 * d_um * 1e-6)
+}
+
+/// A grain of `d_um` and density `rho` launched off the bed at `v0` m/s and
+/// `angle` (radians) up from it, through a wind `wind(x_mm, z_m)` m/s along
+/// the bed (x out from where it left, z up): the drag of a sphere
+/// (Schiller–Naumann) and gravity, until it is back down. How far out it
+/// lands, mm.
+fn hop_flight(d_um: f32, rho: f32, v0: f32, angle: f32, wind: &dyn Fn(f32, f32) -> f32) -> f32 {
+    let d = d_um * 1e-6;
+    let (mut x, mut z) = (0.0f32, 0.5 * d);
+    let (mut vx, mut vz) = (v0 * angle.cos(), v0 * angle.sin());
+    let dt = 5e-5f32;
+    for _ in 0..10_000 {
+        let (rx, rz) = (vx - wind(x * 1e3, z), vz);
+        let vr = (rx * rx + rz * rz).sqrt();
+        let re = vr * d / AIR_NU;
+        // (3 ρ_a C_d |v| / 4 ρ_p d, C_d = 24/Re (1 + 0.15 Re^0.687))
+        let k = 18.0 * AIR_NU * AIR_KG_M3 * (1.0 + 0.15 * re.powf(0.687)) / (rho * d * d);
+        vx -= k * rx * dt;
+        vz -= (k * rz + 9.81) * dt;
+        x += vx * dt;
+        z += vz * dt;
+        if z <= 0.5 * d && vz < 0.0 {
+            break;
+        }
+    }
+    x.max(0.0) * 1e3
+}
+
+/// How fast grains carried in a wall layer reach a level sheet under it, m/s:
+/// Wood's (1981) deposition velocity at friction velocity `us`, v_d⁺ =
+/// 0.057 Sc^(−2/3) (`diff`, their diffusion) + 4.5×10⁻⁴ τ⁺² (τ⁺ = τ_p u*²/ν,
+/// their inertia), at most 0.13, plus their settling speed `vs`.
+fn fines_reach_paper(diff: f32, tau_p: f32, vs: f32, us: f32) -> f32 {
+    let tp = tau_p * us * us / AIR_NU;
+    (diff + 4.5e-4 * tp * tp).min(0.13) * us + vs
+}
 
 /// Shao & Lu (2000): the friction velocity that sets loose grains of `d_um`
 /// and density `rho` (kg/m³) moving on a bed, m/s (A_N = 0.0123, γ = 3e-4 N/m).
@@ -613,9 +699,13 @@ impl Canvas {
     /// crumbs (Shao & Lu 2000, ~0.2 m/s); in the pores the flow dies with
     /// depth as exp(−4.21 z/w) (Moffatt's eddies, w a fibre's width), so only
     /// the top few µm of the pores' filling, its fine grains (~0.8 m/s), can
-    /// go. The crumbs roll out and settle in a ring past where the shear stops
-    /// lifting them; the fines mostly stay airborne. Fixed pastel stays.
-    /// Returns the volume blown off the picture, mm³. Engine 7.
+    /// go. Where it goes (paper_mechanics_and_transport.md §4): most crumbs
+    /// roll out to where the shear no longer keeps each moving, a broad ring;
+    /// some hop, landing further out or rolling on; the fines ride the wall
+    /// jet and settle from it by their size, most leaving as a cloud. Fixed
+    /// pastel stays. Returns the volume blown off the picture, mm³ (what lands
+    /// on the paper mask goes with it; what falls on wet paint is lost in it,
+    /// on the picture). Engine 7.
     pub fn blow_pastel(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32) -> f32 {
         if self.engine < 7 || self.drawing.is_none() || !(h_mm > 0.0 && u > 0.0 && d_mm > 0.0) {
             return 0.0;
@@ -628,21 +718,85 @@ impl Canvas {
         let tau_max = 44.6 * AIR_KG_M3 * u * u / re.sqrt() / (hd * hd);
         let r_peak = 0.09 * h_mm;
         let w_um = self.paper.as_ref().map_or(30.0, |p| p.fibre_um);
-        let (ut_heap, ut_fine) = (shao_lu(100.0, CRUMB_KG_M3), shao_lu(5.0, 2500.0));
+        let (ut_heap, ut_fine) = (shao_lu(HEAP_CRUMB_UM, CRUMB_KG_M3), shao_lu(5.0, 2500.0));
         let tau_at = |r: f32| -> f32 {
             if r <= r_peak { tau_max * r / r_peak.max(1e-6) } else { tau_max * (r_peak / r).powf(2.3) }
         };
+        let ustar = |r: f32| (tau_at(r) / AIR_KG_M3).sqrt();
+        let ustar_max = (tau_max / AIR_KG_M3).sqrt();
         // out to where even the heaps stay
         let r_out = r_peak * (tau_max / (AIR_KG_M3 * ut_heap * ut_heap)).max(1.0).powf(1.0 / 2.3);
+        // The heap's crumbs are set moving from 0.8 to 1.25 times ut_heap (their
+        // adhesion varies and the shear fluctuates: the ramp below, in NQ bands
+        // of threshold q). A moving crumb rolls on while the shear (u* ∝
+        // r^(−1.15)) passes its stopping threshold, 0.6–0.85 of the one that set
+        // it going [E] (a puff is too short for saltation to build up, so the
+        // field's sustained 0.81–0.86 is its upper end): it stops at
+        // r_th(q)·c^(−1/1.15), c its stopping ratio.
+        const NQ: usize = 9;
+        let ramp = |q: f32| crate::smoothstep(0.8, 1.25, q);
+        let band = |j: usize| (0.8 + j as f32 * 0.45 / NQ as f32, 0.8 + (j + 1) as f32 * 0.45 / NQ as f32);
+        let r_th = |q: f32| r_peak * (ustar_max / (q * ut_heap)).max(1.0).powf(1.0 / 1.15);
+        // A hop: a crumb lifted off the tooth leaves it as Jia & Wang's
+        // aerodynamically entrained grains do (LIFT_*), at a few speeds and
+        // angles (3 × 3 Gauss–Hermite points of their lognormals), and flies
+        // through the jet's wind until it lands: its distance out, mm, and
+        // weight, for each start a half mm apart.
+        const HOP_GRID_MM: f32 = 0.5;
+        let gh = [(-3f32.sqrt(), 1.0 / 6.0), (0.0, 2.0 / 3.0), (3f32.sqrt(), 1.0 / 6.0)];
+        let sl_v = (1.0 + LIFT_V_CV * LIFT_V_CV).ln().sqrt();
+        let hops: Vec<[(f32, f32); 9]> = (0..(r_out / HOP_GRID_MM) as usize + 2)
+            .map(|o| {
+                let r0 = (o as f32 + 0.5) * HOP_GRID_MM;
+                let us0 = ustar(r0);
+                let med = (LIFT_V0.0 + LIFT_V0.1 * us0) / (1.0 + LIFT_V_CV * LIFT_V_CV).sqrt();
+                // the near-wall wind: the log law over a bed of crumbs (z0 = d/30)
+                // up to the jet's maximum, dying over the jet's upper half
+                let wind = |x_mm: f32, z: f32| -> f32 {
+                    let r = r0 + x_mm;
+                    let us = ustar(r);
+                    let (z0, delta) = (HEAP_CRUMB_UM * 1e-6 / 30.0, JET_GROWTH * r.max(r_peak) * 1e-3);
+                    if z <= z0 {
+                        return 0.0;
+                    }
+                    (us / KARMAN * (z / z0).ln()).min(JET_U_OVER_USTAR * us) * ((delta - z) / (0.5 * delta)).clamp(0.0, 1.0)
+                };
+                let mut out = [(0.0f32, 0.0f32); 9];
+                for (a, &(kv, wv)) in gh.iter().enumerate() {
+                    for (b, &(ka, wa)) in gh.iter().enumerate() {
+                        let v0 = med * (kv * sl_v).exp();
+                        let ang = (LIFT_ANGLE_DEG * (ka * LIFT_ANGLE_LOG_SD).exp()).min(89.0).to_radians();
+                        out[a * 3 + b] = (hop_flight(HEAP_CRUMB_UM, CRUMB_KG_M3, v0, ang, &wind), wv * wa);
+                    }
+                }
+                out
+            })
+            .collect();
+        let hop_at = |r: f32| &hops[((r / HOP_GRID_MM) as usize).min(hops.len() - 1)];
+        let longest = hops.iter().flat_map(|h| h.iter().map(|e| e.0)).fold(0.0f32, f32::max);
+        let reach = (1.56 * r_th(0.8)).max(r_out + longest).max(r_out + FINES_PATH_MM);
+        let nb = (reach / s_mm) as usize + 2;
+        let bin = |r: f32| (r / s_mm) as usize;
         let (cx, cy) = (x * self.mm_per_unit, y * self.mm_per_unit);
         let mut dr = self.drawing.take().unwrap();
         let mut pxs = std::mem::take(&mut self.px);
         let mut gone = 0.0f32;
-        // what rolls: heaped crumbs, by direction from the jet's centre (48
-        // sectors): volume and colour; and the fines blown out of the pores
+        // by direction from the jet's centre (48 sectors): the crumbs rolling
+        // in each band of threshold, the crumbs landing at each radius (bins a
+        // pixel wide) and the fines blown out of the pores from each radius;
+        // and each sector's colours
         let nsec = 48usize;
-        let mut rolled = vec![(0.0f32, [0.0f32; 3]); nsec];
-        let (mut fines, mut fcol) = (0.0f32, [0.0f32; 3]);
+        let mut rolled = vec![[0.0f32; NQ]; nsec];
+        let mut dep = vec![vec![0.0f32; nb]; nsec];
+        let mut fines_from = vec![vec![0.0f32; nb]; nsec];
+        let mut ccol = vec![(0.0f32, [0.0f32; 3]); nsec];
+        let mut fcol = vec![(0.0f32, [0.0f32; 3]); nsec];
+        let mix = |acc: &mut (f32, Rgb), v: f32, r: Rgb| {
+            let t = acc.0 + v;
+            acc.1 = [0, 1, 2].map(|j| (acc.1[j] * acc.0 + r[j] * v) / t.max(1e-9));
+            acc.0 = t;
+        };
+        let sector = |wx: f32, wy: f32| (((wy.atan2(wx) + std::f32::consts::PI) / std::f32::consts::TAU * nsec as f32) as usize).min(nsec - 1);
         let to = |v: f32| ((v / s_mm).floor() as isize).max(0) as usize;
         for py in to(cy - r_out).max(f.y0)..(to(cy + r_out) + 1).min(f.y0 + f.h) {
             for pxx in to(cx - r_out).max(f.x0)..(to(cx + r_out) + 1).min(f.x0 + f.w) {
@@ -651,93 +805,163 @@ impl Canvas {
                     continue;
                 }
                 let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
-                let ustar = (tau_at((wx * wx + wy * wy).sqrt()) / AIR_KG_M3).sqrt();
+                let rr = (wx * wx + wy * wy).sqrt();
+                let us = ustar(rr);
                 let mu = self.micro_um(i);
                 let cl = &mut dr.cells[i];
                 let v = cl.loose + cl.bound;
                 // the heap goes past its threshold (shear fluctuates: a ramp, not a cut)
-                let heap_goes = crate::smoothstep(0.8, 1.25, ustar / ut_heap);
+                let heap_goes = ramp(us / ut_heap);
                 let heap = (v - mu).max(0.0).min(cl.loose);
                 // and the pores' fine grains as deep as the flow keeps the shear
-                let z = if ustar > ut_fine { w_um / 2.105 * (ustar / ut_fine).ln() } else { 0.0 };
+                let z = if us > ut_fine { w_um / 2.105 * (us / ut_fine).ln() } else { 0.0 };
                 let in_pores = v.min(mu);
                 let keep_pores = if z > 0.0 { Self::below(in_pores, mu, z) } else { in_pores };
                 let keep = keep_pores + (v - in_pores) - heap * heap_goes;
                 let r = cl.r;
                 let ex = Self::take_loose(cl, &mut pxs[i], keep);
                 if ex > 0.0 {
+                    let k = sector(wx, wy);
                     let crumbs = (heap * heap_goes).min(ex);
-                    let k = (((wy.atan2(wx) + std::f32::consts::PI) / std::f32::consts::TAU * nsec as f32) as usize).min(nsec - 1);
-                    let (ref mut v0, ref mut c0) = rolled[k];
-                    let t = *v0 + crumbs;
-                    *c0 = [0, 1, 2].map(|j| (c0[j] * *v0 + r[j] * crumbs) / t.max(1e-9));
-                    *v0 = t;
+                    if crumbs > 0.0 {
+                        mix(&mut ccol[k], crumbs, r);
+                        let flights = hop_at(rr);
+                        for (j, roll) in rolled[k].iter_mut().enumerate() {
+                            // (the crumbs of this band that the shear here set going)
+                            let (lo, hi) = band(j);
+                            let sh = (ramp((us / ut_heap).min(hi)) - ramp(lo)).max(0.0) / heap_goes.max(1e-9);
+                            if sh <= 0.0 {
+                                continue;
+                            }
+                            let v = crumbs * sh;
+                            *roll += v * (1.0 - HOP_SHARE);
+                            // HOP_SHARE of them hop: one landing short of where it
+                            // would stop rolling rolls on with the rest
+                            let stop = 1.15 * r_th(0.5 * (lo + hi));
+                            for &(l, w) in flights {
+                                let land = rr + l;
+                                if land < stop {
+                                    *roll += v * HOP_SHARE * w;
+                                } else if bin(land) < nb {
+                                    dep[k][bin(land)] += v * HOP_SHARE * w;
+                                }
+                            }
+                        }
+                    }
                     let fv = ex - crumbs;
-                    let tf = fines + fv;
-                    fcol = [0, 1, 2].map(|j| (fcol[j] * fines + r[j] * fv) / tf.max(1e-9));
-                    fines = tf;
+                    if fv > 0.0 {
+                        mix(&mut fcol[k], fv, r);
+                        fines_from[k][bin(rr).min(nb - 1)] += fv;
+                    }
                 }
                 gone += ex;
             }
         }
-        // where they go (paper_mechanics_and_transport.md §4). A puff's few
-        // centimetres are too short for saltation to build up: the crumbs roll
-        // (and hop once) outward as the shear falls off (u* ∝ r^(−1.15)) and
-        // stop past where the shear no longer lifts them, at 1.15–1.56 times
-        // that radius (the impact threshold, 0.81–0.86 of the lifting one,
-        // and their momentum): a ring. The fines stay airborne; of 5 µm grains
-        // some 1–9 % settle within 10 cm (Wood's deposition fit): 5 %, thinly.
-        let ustar_max = (tau_max / AIR_KG_M3).sqrt();
-        let film = std::mem::take(&mut self.film);
-        let mut rng = crate::rng::Rng::new((x.to_bits() as u64) << 32 ^ y.to_bits() as u64 ^ 0xB10E);
-        let mut back = 0.0f32;
-        if ustar_max > ut_heap {
-            let r_th = r_peak * (ustar_max / ut_heap).powf(1.0 / 1.15);
-            for (k, &(v, col)) in rolled.iter().enumerate() {
+        // the rolled crumbs' stops: each band over its stopping ratios
+        for k in 0..nsec {
+            for (j, &v) in rolled[k].iter().enumerate() {
                 if v <= 0.0 {
                     continue;
                 }
-                let (a0, a1) = (k as f32 / nsec as f32 * std::f32::consts::TAU - std::f32::consts::PI, (k + 1) as f32 / nsec as f32 * std::f32::consts::TAU - std::f32::consts::PI);
-                let mut bed: Vec<(usize, f32, bool)> = Vec::new();
-                let (rmin, rmax) = (1.15 * r_th, 1.56 * r_th);
-                for py in to(cy - rmax).max(f.y0)..(to(cy + rmax) + 1).min(f.y0 + f.h) {
-                    for pxx in to(cx - rmax).max(f.x0)..(to(cx + rmax) + 1).min(f.x0 + f.w) {
-                        let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
-                        let (rr, aa) = ((wx * wx + wy * wy).sqrt(), wy.atan2(wx));
-                        let i = (py - f.y0) * f.w + (pxx - f.x0);
-                        if rr >= rmin && rr < rmax && aa >= a0 && aa < a1 && !self.sheet_over(i) && self.wet.vol[i] <= 1e-5 {
-                            bed.push((i, 1.0, false));
-                        }
+                let (lo, hi) = band(j);
+                let rt = r_th(0.5 * (lo + hi));
+                const NC: usize = 8;
+                for m in 0..NC {
+                    let c = 0.6 + (m as f32 + 0.5) / NC as f32 * 0.25;
+                    let b = bin(rt * c.powf(-1.0 / 1.15));
+                    if b < nb {
+                        dep[k][b] += v / NC as f32;
                     }
-                }
-                if !bed.is_empty() {
-                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, CRUMB_MAX_UM, px_um2);
-                    back += v;
                 }
             }
         }
-        if fines > 0.0 {
-            let rr = 100.0f32;
-            let mut bed: Vec<(usize, f32, bool)> = Vec::new();
-            for py in to(cy - rr).max(f.y0)..(to(cy + rr) + 1).min(f.y0 + f.h) {
-                for pxx in to(cx - rr).max(f.x0)..(to(cx + rr) + 1).min(f.x0 + f.w) {
-                    let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
-                    let i = (py - f.y0) * f.w + (pxx - f.x0);
-                    if wx * wx + wy * wy < rr * rr && !self.sheet_over(i) && self.wet.vol[i] <= 1e-5 {
-                        bed.push((i, 1.0, false));
+        // The fines (1–20 µm, their mass even in area, as the crumbs' sizes)
+        // ride the wall jet outward, a layer JET_GROWTH r thick moving at
+        // JET_U_OVER_USTAR u*: they reach the paper at Wood's (1981) deposition
+        // velocity, v_d⁺ = 0.057 Sc^(−2/3) + 4.5×10⁻⁴ τ⁺² (at most 0.13), plus
+        // their settling speed on a level sheet, so a sector's flux falls as
+        // dQ/dr = −(v_d + v_s)/(δ U) Q. Past FINES_PATH_MM the jet has spread
+        // into a cloud, and what it still holds leaves the picture.
+        const FINE_SIZES: [(f32, f32); 5] = [(1.0, 2.0), (2.0, 5.0), (5.0, 10.0), (10.0, 15.0), (15.0, 20.0)];
+        let mut depf = vec![vec![vec![0.0f32; nb]; FINE_SIZES.len()]; nsec];
+        let path = (FINES_PATH_MM / s_mm).ceil() as usize;
+        let any_fines: Vec<bool> = (0..nb).map(|o| (0..nsec).any(|k| fines_from[k][o] > 0.0)).collect();
+        for (sz, &(lo, hi)) in FINE_SIZES.iter().enumerate() {
+            let share = (hi * hi - lo * lo) / (20.0f32 * 20.0 - 1.0);
+            let d = (0.5 * (lo * lo + hi * hi)).sqrt();
+            let (vs, tau_p) = settling(d, 2500.0);
+            let diff = 0.057 * (AIR_NU / brownian_m2_s(d)).powf(-2.0 / 3.0);
+            for o in (0..nb).filter(|&o| any_fines[o]) {
+                let mut q = 1.0f32;
+                for b in o..(o + path).min(nb) {
+                    let rb = (b as f32 + 0.5) * s_mm;
+                    let us = ustar(rb);
+                    let vd = fines_reach_paper(diff, tau_p, vs, us);
+                    let carry = JET_GROWTH * rb.max(r_peak) * 1e-3 * JET_U_OVER_USTAR * us;
+                    let down = q * (1.0 - (-vd / carry.max(1e-9) * s_mm * 1e-3).exp());
+                    q -= down;
+                    for k in 0..nsec {
+                        if fines_from[k][o] > 0.0 {
+                            depf[k][sz][b] += fines_from[k][o] * share * down;
+                        }
                     }
                 }
             }
-            if !bed.is_empty() {
-                // (the whole disk's share, as fine grains: 20 µm and less)
-                crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, 0.05 * fines, fcol, &mut rng, 20.0, px_um2);
-                back += 0.05 * fines;
+        }
+        // Where they land, pixel by pixel: a bin's deposit spread over its area
+        // (its share of each pixel there); off the picture is gone; on the mask
+        // it is caught by the mask; on wet paint it is lost in it.
+        let film = std::mem::take(&mut self.film);
+        let mut rng = crate::rng::Rng::new((x.to_bits() as u64) << 32 ^ y.to_bits() as u64 ^ 0xB10E);
+        let reach = nb as f32 * s_mm;
+        let mut beds: Vec<Vec<(usize, usize, bool)>> = vec![Vec::new(); nsec];
+        let mut on_mask: Vec<Vec<(usize, usize)>> = vec![Vec::new(); nsec];
+        for py in to(cy - reach).max(f.y0)..(to(cy + reach) + 1).min(f.y0 + f.h) {
+            for pxx in to(cx - reach).max(f.x0)..(to(cx + reach) + 1).min(f.x0 + f.w) {
+                let (wx, wy) = ((pxx as f32 + 0.5) * s_mm - cx, (py as f32 + 0.5) * s_mm - cy);
+                let b = bin((wx * wx + wy * wy).sqrt());
+                if b >= nb {
+                    continue;
+                }
+                let i = (py - f.y0) * f.w + (pxx - f.x0);
+                let k = sector(wx, wy);
+                if self.sheet_over(i) {
+                    on_mask[k].push((i, b));
+                } else {
+                    beds[k].push((i, b, self.wet.vol[i] > 1e-5));
+                }
+            }
+        }
+        // (a bin a pixel wide, 1/nsec of the circle: a pixel's share of it)
+        let share = |b: usize| nsec as f32 / (std::f32::consts::PI * (2 * b + 1) as f32);
+        let (mut laid, mut caught) = (0.0f32, Vec::new());
+        for k in 0..nsec {
+            let mut lay = |amount: &[f32], col: Rgb, dmax: f32, laid: &mut f32, caught: &mut Vec<(usize, f32, Rgb)>| {
+                let bed: Vec<(usize, f32, bool)> = beds[k].iter().map(|&(i, b, wet)| (i, amount[b] * share(b), wet)).filter(|e| e.1 > 0.0).collect();
+                let v: f32 = bed.iter().map(|e| e.1).sum();
+                if v > 0.0 {
+                    // (what falls on wet paint is lost in it: still on the picture)
+                    crate::pastel::lay_crumbs(&mut dr, &film, &mut pxs, &bed, v, col, &mut rng, dmax, px_um2);
+                    *laid += v;
+                }
+                caught.extend(on_mask[k].iter().map(|&(i, b)| (i, amount[b] * share(b), col)).filter(|e| e.1 > 0.0));
+            };
+            if ccol[k].0 > 0.0 {
+                lay(&dep[k], ccol[k].1, CRUMB_MAX_UM, &mut laid, &mut caught);
+            }
+            if fcol[k].0 > 0.0 {
+                for (sz, &(_, hi)) in FINE_SIZES.iter().enumerate() {
+                    lay(&depf[k][sz], fcol[k].1, hi.max(crate::pastel::CRUMB_MIN_UM), &mut laid, &mut caught);
+                }
             }
         }
         self.film = film;
         self.drawing = Some(dr);
         self.px = pxs;
-        (gone - back).max(0.0) * px_um2 * 1e-9
+        for (i, v, col) in caught {
+            self.sheet_catch(&[(i, v)], col);
+        }
+        (gone - laid).max(0.0) * px_um2 * 1e-9
     }
 
     /// The board tapped (its edge struck on the table, or the sheet held
@@ -1063,6 +1287,75 @@ mod tests {
         assert!(shaved > 0, "the scalpel shaved the surface");
         assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() < b0, "and took fixed pastel");
         assert!((k.drawing.as_ref().unwrap().cells.iter().map(|c| c.bound).sum::<f32>() - b0).abs() < 1e-3 * b0, "the knife left the fixed");
+    }
+
+    /// The fines a puff lifts settle from the wall jet as the research's
+    /// table has them (paper_mechanics_and_transport.md §4): along 10 cm in a
+    /// 5 mm layer moving at 15 u*, the 1–2 µm grains hardly at all, 5 µm 1 %
+    /// at u* 0.3 m/s and 9 % at 1, 10 µm 4.5 % and 17 %, 20 µm 26 % and 19 %.
+    #[test]
+    fn blown_fines_settle_by_their_size() {
+        let settled = |d: f32, us: f32| {
+            let (vs, tau_p) = super::settling(d, 2500.0);
+            let diff = 0.057 * (super::AIR_NU / super::brownian_m2_s(d)).powf(-2.0 / 3.0);
+            let vd = super::fines_reach_paper(diff, tau_p, vs, us);
+            100.0 * (1.0 - (-vd * (0.1 / (15.0 * us)) / 0.005).exp())
+        };
+        for (d, us, pct) in [(5.0, 0.3, 1.0), (5.0, 1.0, 9.0), (10.0, 0.3, 4.5), (10.0, 1.0, 17.0), (20.0, 0.3, 26.0), (20.0, 1.0, 19.0)] {
+            let got = settled(d, us);
+            assert!((got - pct).abs() < 0.2 * pct + 0.3, "{d} µm at u* {us}: {got:.2} %, the research {pct} %");
+        }
+        assert!(settled(1.5, 0.3) < 0.1 && settled(1.5, 1.0) < 0.5, "the finest stay up");
+    }
+
+    /// A crumb the wind lifts (Jia & Wang's median take-off at u* 0.3 m/s,
+    /// 0.42 m/s at 15°) falls short of its range in a vacuum without wind, by
+    /// its drag; in the near-wall wind it is carried centimetres
+    /// (paper_mechanics_and_transport.md §4: hops of ≈ 0.3–15 cm).
+    #[test]
+    fn a_lifted_crumb_hops_centimetres_in_the_wind() {
+        let (us, d) = (0.3f32, super::HEAP_CRUMB_UM);
+        let v0 = (super::LIFT_V0.0 + super::LIFT_V0.1 * us) / (1.0 + super::LIFT_V_CV * super::LIFT_V_CV).sqrt();
+        let ang = super::LIFT_ANGLE_DEG.to_radians();
+        let still = super::hop_flight(d, super::CRUMB_KG_M3, v0, ang, &|_, _| 0.0);
+        let z0 = d * 1e-6 / 30.0;
+        let blown = super::hop_flight(d, super::CRUMB_KG_M3, v0, ang, &|_, z| if z > z0 { (us / super::KARMAN * (z / z0).ln()).min(15.0 * us) } else { 0.0 });
+        let vacuum = v0 * v0 * (2.0 * ang).sin() / 9.81 * 1e3;
+        assert!(still > 0.0 && still < vacuum, "drag shortens the hop: {still} mm against {vacuum}");
+        assert!(blown > still && (5.0..100.0).contains(&blown), "the wind carries it: {blown} mm");
+    }
+
+    /// Every crumb a puff lifts is somewhere after it: laid again on the
+    /// picture, caught by the mask, or blown off it (what it returns).
+    #[test]
+    fn a_blow_accounts_for_every_crumb() {
+        let mut c = sheet7();
+        let mut st = Stick::round([0.02; 3], 0.8, 12.0);
+        dense(&mut c, &mut st, 420.0, 580.0);
+        // (summed in f64: a million cells' f32 sum drifts by about a percent of this)
+        let held = |c: &Canvas| c.drawing.as_ref().unwrap().cells.iter().map(|c| (c.loose + c.bound) as f64).sum::<f64>();
+        let um_mm3 = (c.px_mm() * c.px_mm()) as f64 * 1e-3;
+        // (a mask over the right fifth, past the passage, where the crumbs
+        // blown that way roll and hop to)
+        let mut masked = c.clone();
+        let f = c.window();
+        let mut m = Mask::empty(f);
+        for y in 0..f.full_h {
+            for x in f.full_w * 4 / 5..f.full_w {
+                m.data[y * f.full_w + x] = 1.0;
+            }
+        }
+        masked.lay_sheet(&m, 150.0, 8.0, [0.85; 3]).unwrap();
+        for (c, mask) in [(&mut c, false), (&mut masked, true)] {
+            let before = held(c);
+            let off = c.blow_pastel(500.0, 500.0, 50.0, 21.0, 8.0);
+            let after = held(c);
+            assert!(off > 0.0 && after < before, "the blow moved pastel");
+            let lifted = (before - after) * um_mm3;
+            assert!((lifted - off as f64).abs() < 1e-3 * lifted, "lifted {lifted} mm³, off the picture {off} (mask {mask})");
+        }
+        let caught = masked.sheet.as_ref().unwrap().a.iter().filter(|&&a| a > 0.0).count();
+        assert!(caught > 0, "crumbs landed on the mask");
     }
 
     /// Blown crumbs roll out and settle in a ring past the cleared zone.

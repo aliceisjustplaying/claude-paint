@@ -91,7 +91,7 @@ pub const SHED: f32 = 1.0 - 1.0 / 6.6;
 /// the surface, µm (soft pastel crumbs on toothy paper: a few µm to 100–300).
 pub const CRUMB_UM: f32 = 150.0;
 /// Engine 7: the smallest crumb counted, µm across (finer grains go with it).
-const CRUMB_MIN_UM: f32 = 5.0;
+pub(crate) const CRUMB_MIN_UM: f32 = 5.0;
 /// Engine 7: how far a crumb rides under the face before it settles, mm (an
 /// estimate; the finger's smear runs 1–10 mm).
 const SETTLE_MM: f32 = 3.0;

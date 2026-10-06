@@ -275,9 +275,15 @@ for master, so engine 7 changed in place.
 - **The scalpel**: past q = H·2R (fibre wall 350 MPa) the edge cuts,
   shaving 12 µm (about a fibre layer, 10–15 [D]) a pass and taking the
   pastel in it, fixed too.
-- **Blown crumbs**: lifted heaped crumbs roll out in their direction (48
-  sectors) and settle between 1.15 and 1.56 times the radius where the shear
-  stops lifting them (u* ∝ r^(−1.15); impact threshold 0.81–0.86 of the
-  fluid one; a puff's few cm too short for saltation): a ring. 5 % of the
-  fine grains settle within 10 cm (Wood's fit: 1–9 % for 5 µm); the rest are
-  carried off. `blow` returns what left the picture.
+- **Blown crumbs** (paper_mechanics_and_transport.md §4): lifted heaped
+  crumbs go out in their direction (48 sectors). 80 % roll (70–90 % [E]):
+  a crumb set going at its threshold stops where u* (∝ r^(−1.15)) falls
+  under 0.6–0.85 of it, 1.15–1.56 times that radius, and the thresholds'
+  spread (0.8–1.25) makes a broad ring. 20 % hop: they leave the tooth as
+  Jia & Wang's (2020) aerodynamically lifted grains do (about 15°, at 0.13 +
+  0.95 u* m/s) and fly through the near-wall wind with their drag, landing
+  millimetres to centimetres out; a hop short of its crumb's stop rolls on.
+  The fine grains (1–20 µm) settle from the wall jet by size along 10 cm
+  (Wood's deposition velocity plus settling: ~0 % at 1–2 µm to ~25 % at
+  20 µm); the rest are carried off. On the paper mask, crumbs go with it; on
+  wet paint, they are lost in it. `blow` returns what left the picture.

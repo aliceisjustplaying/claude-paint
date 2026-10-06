@@ -226,10 +226,21 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
   | 100 µm, F_adh 10 nN | 0.14 m/s | r ≈ 54 mm | ≈ 65 mm |
 
   With adhesion spread over a decade, **a broad annulus of rolled crumbs at about 2–7 cm**, densest at its inner edge, rings a cleared centre.
-- **Hopping crumbs [D].**
-  - Settling speeds: v_s(100 µm, 1250 kg/m³) = 0.30 m/s; v_s(300 µm) = 1.4 m/s.
-  - Lifted into a wall jet 1–5 mm thick moving at 3–15 m/s, they fly for about 1–15 ms and travel **≈ 0.3–15 cm** per hop.
-  - So **hoppers land outside the ring or off the sheet**. **[E]** Assume 10–30 % of moved crumbs hop.
+- **Hopping crumbs.**
+  - **[M] Take-off** (Jia & Wang 2020, direct simulation of aerodynamic entrainment, arXiv 2012.07393, Table 3). A lifted grain first rolls, then takes its vertical speed from striking raised grains. It leaves the bed **at a shallow angle, lognormal about 15°** (log sd 0.63 for snow, 0.74 for sand), not straight up as models had assumed. Its **speed is lognormal, mean 0.13 + 0.95 u\* m/s** for snow (0.1 + 0.62 u\* for sand), sd 0.21 of the mean. Cohesion changes neither.
+  - **[E]** A porous pastel crumb (≈1250 kg/m³, cohesive) is nearer snow (917 kg/m³) than quartz sand: take the snow fit.
+  - Settling speeds: v_s(100 µm, 1250 kg/m³) = 0.30 m/s; v_s(300 µm) = 1.4 m/s. The 100 µm crumb's response time v_s/g is 31 ms, longer than most hops: **it does not fly at the jet's speed**, so a hop can't be had as jet speed × fall time.
+  - **[D] Hops**, integrating the flight (sphere drag, Schiller–Naumann; gravity) through the near-wall wind: the log law over a bed of crumbs, z0 = d/30 (Kok et al. 2012), up to the jet's maximum ≈ 15 u\* [E], dying over the jet's upper half.
+
+    | Puff | Lifted at u\* | Hop (9 take-offs) | Mean | Rises to |
+    |---|---|---|---|---|
+    | 12 m/s from 10 cm | 0.21–0.32 m/s (ring's edge) | 1–52 mm | 15–25 mm | 3–4 mm |
+    | 12 m/s from 10 cm | 0.72 m/s (at the peak) | 13–78 mm | 53 mm | 11 mm |
+    | 21 m/s from 5 cm | 0.21–0.31 m/s | 1–64 mm | 15–26 mm | 3–4 mm |
+    | 21 m/s from 5 cm | 1–2.2 m/s (near the peak) | 24–128 mm | 77–85 mm | 15–34 mm |
+
+    Most rise above the jet into still air and coast down through it.
+  - So **hoppers land across and beyond the ring, or off the sheet**. **[E]** Assume 10–30 % of moved crumbs hop.
 - **Vertical easel.** Gravity acts along the sheet. Rolled crumbs that stop are then unstable above d_c ≈ 0.1–0.3 mm (tapping note) and fall off.
 
 ### Fines (1–20 µm)
@@ -255,11 +266,14 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
   These are upper-side estimates, because u\* decays outward.
 - **The rest leaves as a cloud.** In still air 10 µm settles 0.3 m in about 40 s; 1–2 µm effectively does not settle. How much of the cloud returns to a horizontal sheet scales with sheet area over cloud footprint (gap).
 
-**Simulator rule.**
-1. Remove crumbs where u\* > u\*_ft.
-2. Deposit 70–90 % of them [E] in an annulus r_ft → r_stop.
-3. Throw 10–30 % [E] 0.3–15 cm outward.
-4. Fines: deposit size-dependent 0–25 % within 10 cm downstream, weighted toward 10–20 µm. Drop the rest.
+**Simulator rule** (`Canvas::blow_pastel`, crates/paint/src/sheet.rs).
+1. Lift heaped crumbs where u\* passes their threshold. The threshold is spread over 0.8–1.25 u\*_ft (adhesion varies, shear fluctuates), and the pores' fine grains go as deep as the shear reaches.
+2. 80 % of the moving crumbs (70–90 % [E]) roll. A crumb set going at threshold q·u\*_ft stops at r_th(q)·c^(−1/1.15), c its stopping ratio, 0.6–0.85 [E]: a broad ring.
+3. 20 % (10–30 % [E]) hop: Jia & Wang's take-off and the integrated flight above. A hop that lands short of where its crumb would stop rolling rolls on with the rest.
+4. Fines (1–20 µm, mass even in area, as the crumbs' size law): each size settles along the wall jet, a layer 0.09 r thick at 15 u\*, at Wood's v_d plus its settling speed, so a sector's flux falls as dQ/dr = −(v_d + v_s)/(δU) Q. After 10 cm [E] the rest leaves as a cloud.
+5. What lands on a paper mask goes with it; on wet paint, it is lost in the paint; past the sheet's edge, it is gone.
+
+Not modelled: a vertical easel (rolled crumbs falling off), the hops' lateral scatter (normal, sd 5.9°, Jia & Wang), and the cloud settling back after the puff.
 
 ---
 
@@ -324,6 +338,7 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
 - US 12,371,858 (raised fibre counts): https://patents.google.com/patent/US12371858B2/en
 - Kok, Parteli, Michaels & Karam 2012, Rep. Prog. Phys. 75:106901: https://sseh.uchicago.edu/doc/Kok_et_al_2012.pdf
 - Martin & Kok 2018, distinct fluid and impact thresholds: https://arxiv.org/abs/1610.10059
+- Jia & Wang 2020, Direct simulation of aerodynamic entrainment with inter-particle cohesions (take-off speed and angle, Table 3): https://arxiv.org/abs/2012.07393
 - Poreh, Tsuei & Cermak 1967 and wall-jet spread table, via: https://www.osti.gov/servlets/purl/2587227
 - Sharma et al. 2022, impinging-jet erosion (Phares τ_max): https://arxiv.org/abs/2206.01839
 - Wood 1981, J. Aerosol Sci. 12:275 (deposition-velocity fit; standard form, not re-fetched)

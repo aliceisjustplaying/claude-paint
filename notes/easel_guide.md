@@ -608,9 +608,10 @@ tap({g=100})                          -- the board's edge struck on the table (a
 - **A puff** (`blow`) shears the surface in a ring around where it is aimed
   (nothing at the very centre): loose crumbs heaped on the tooth go easily;
   the pores' fine grains only under a hard blow close in, and only their
-  top few micrometres. The crumbs it lifts roll outward and settle in a
-  ring just past where it stops lifting them; most of the fine grains are
-  carried off.
+  top few micrometres. Most crumbs it lifts roll outward and settle in a
+  broad ring past where it stops lifting them; some hop further, up to a
+  few centimetres; a little of the fine grains settles thinly further out,
+  and most are carried off. Crumbs landing on a paper mask go with it.
 - **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
   heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
 - **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and

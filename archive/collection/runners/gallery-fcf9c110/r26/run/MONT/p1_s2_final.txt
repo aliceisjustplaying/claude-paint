@@ -1,0 +1,21 @@
+**Nymphéas, reflet du soir** (*Water Lilies, Evening Reflection*)
+
+The painting is finished at day 208 on its clock. This sitting worked on the four passages I'd left unresolved, and three of them are better now.
+
+- **Sky band (improved):** the flat cream at the top now holds blue sky, lavender cloud shadows and a rose glow. My earlier tries barely showed over the dry paint. This time I used piles with much more pigment against the white and loaded the brush about twice as heavily, then blended only the fresh cloud patches.
+- **Band edges (mostly improved):** at both upper edges the willows now spill across the boundary in vertical strokes, with thin unblended fronds on top. A hard pale block appeared on the right edge, and the rag lifted it. I left the lower diagonal edge as it is because it reads as a bank of reflected foliage.
+- **Bottom-centre water (improved):** it's no longer woolly. It now has loose rafts of horizontal strokes with some sky blue among them.
+- **Lower-right pads (partly improved):** cooler strokes now break up the ochre slabs. I'm keeping the remaining warm ochre as evening light.
+
+I made two new mistakes. I put a pad right on top of an existing pad and its white flower without checking first, so I lifted it and repainted the flower. Then I blended a fresh pad inside its own outline, which flattened it into a green disc, the same failure I'd already noted in the journal. The rag lifted that cleanly while it was still wet.
+
+**Lessons still in force**
+- Strokes placed by hand with my small helpers work better than filling masks with `work()`.
+- Blend only fresh wet marks, never a pad inside its own outline, never the whole canvas.
+- Over dry opaque paint, new colour needs strong pigment and a full load (0.65 or more) to show.
+- A rag dipped in spirits (0.85–0.9), pressed at 0.8–0.85 for 2–3 passes, reliably lifts wet paint off a dry layer.
+- Check a crop of what's already there before placing new marks.
+
+**Still uncertain:** up close, the pale lavender strokes in the foreground look a little chalky.
+
+My heart is happy with this. The light moves down the band like evening sky reflected in water, and the willows let it through rather than walling it in. The full handoff is in `notes/journal.md`.

@@ -1,0 +1,18 @@
+I've finished the painting, saved it and closed the session. `bin/easel check` confirmed the log replays to exactly the saved canvas (120 chunks).
+
+- **Painting:** `~/src/a/paint-studio-4fb403/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-4fb403/paintings/lua/painting.lua`
+- **Title:** *Low Water, Evening*
+
+It's an estuary at low tide, just before sunset. A low horizon sits under a big soft sky, with a heavy lilac bank of cloud on top and a pale gold glow near the horizon. A dark tree line and a small church tower give the distance. A pale channel of water carries the sky's light from the bottom right up to the horizon, with a row of old posts standing in it. On the left, a tarred boat with a red strake lies on the dark mud, tied by a rope to a stake. The dark mud wedge and the boat hold the bottom of the picture, and the eye follows the channel back to the light.
+
+In this last sitting I fixed two things that still looked wrong with fresh eyes:
+- **Post reflections:** they had been pale stubs, lighter than the posts. I repainted them dark and broken so the posts stand in the water.
+- **Puddles on the mud:** their white scribbled gleams had looked like cracked plaster. I repainted them as quiet slivers of sky, darker on the near side, with a little mud dragged over their ends.
+
+A few flaws from earlier sittings are still there:
+- a faint rectangular repaint near the stake
+- some softness in the upper clouds
+- slightly smooth puddle edges when you look closely
+
+At full size the picture holds together, and more work risked muddying it.

@@ -1,0 +1,1 @@
+The connection dropped for a while. Carry on where you left off.

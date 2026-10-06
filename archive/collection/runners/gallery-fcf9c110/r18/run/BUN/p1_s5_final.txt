@@ -1,0 +1,9 @@
+The painting is finished and the session closed.
+
+**Saved painting:** `~/src/a/paint-studio-520026/out/easel/painting/painting.png`
+**Log:** `~/src/a/paint-studio-520026/paintings/lua/painting.lua`
+**Title:** *Apples in an Earthenware Bowl* (80 × 64 cm, day 37 of the painting clock)
+
+I picked the easel up expecting to sign off, but looking at it whole and at 1:1 I didn't agree with my own "finished" note from day 33: the fruit were flat poster-colour discs with cut edges, the cloth was a pale slab, the wall was a mottle. So I repainted the whole picture from the dark ground up — quiet warm wall with one soft light from the upper left, a table, a new cloth with folds, then the bowl, then the five apples, each laid in with a body colour, a soft light, a terminator, a core shadow and a quiet bounce off the cloth, and finished with a warm glaze over the group and a cool veil over the room.
+
+The picture is honest about its own weaknesses: the cloth's folds are the softest passage in it and the modelling is gentle rather than dramatic — but the group sits, the light is consistent, and the values hold together. I spent most of the session learning the same three things the hard way, and wrote them all into the journal: coverage is not opacity (burying a saturated colour took coverage 8–10, not 3); a thin film of lead white or vermilion over a dark ground blooms like a lamp, which is why I painted out three "highlights" that glowed; and cloth paint laid after the fruit paints straight over them, so all the cloth work now runs through a mask that respects the bowl and the fruit.

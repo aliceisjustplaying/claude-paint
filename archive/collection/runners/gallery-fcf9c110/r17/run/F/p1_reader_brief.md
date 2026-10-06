@@ -1,0 +1,26 @@
+# Read a painting session and write studio notes
+
+A painter worked at the easel of claude-paint, a simulator of oil paint on
+linen. It worked in one or more sittings, one session log each, in this
+order: ~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-cfa19c--/2026-09-27T10-41-24-604Z_01a0e274-8e7c-723f-8bb7-4e93a3bafc5c.jsonl, ~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-cfa19c--/2026-09-27T11-55-04-611Z_01a0e2b8-0022-715c-a6f9-b595d21b49a6.jsonl, ~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-cfa19c--/2026-09-27T12-29-34-090Z_01a0e2d7-940a-70fa-8246-00d031ee7aff.jsonl, ~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-cfa19c--/2026-09-27T13-02-45-627Z_01a0e2f5-f77a-7375-be04-e8b43524380a.jsonl (JSON lines: its messages, the commands it ran, what they
+printed and the images it looked at). Its working journal is ~/src/a/paint-studio-cfa19c/notes/journal.md.
+
+Read every log in that order, each from the first line to the last, taking
+notes as you go, then read the journal. Write ~/tmp/gallery-fcf9c110/r17/run/F/p1_record.md: a record of what the
+materials and tools did, for use in the same studio.
+
+- One fact per line or two: the operation, what the paint or tool did and
+  why, if the log shows it. Group by operation (mixing piles, strokes,
+  blending, wet into wet, glazing, stippling, drying and time, masks and
+  edges, brushes, looking at the canvas).
+- Only what the log shows happening, not guesses.
+- Nothing about varnish, cracks or relief: the easel the notes are for
+  doesn't have them.
+- Leave out the subject and everything about it: what was painted, the
+  composition, colors as recipes, the title, the painter's opinions of the
+  picture, and anything that tells a reader there was another painter or
+  another picture. Restate a fact as geometry when you need to ("a thin
+  band", "a dark mass against a light field").
+- Plain US English, no Oxford comma. Keep it under 60 lines.
+
+Reply only with the path of the file you wrote.

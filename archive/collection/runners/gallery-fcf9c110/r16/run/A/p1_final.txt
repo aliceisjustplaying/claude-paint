@@ -1,0 +1,12 @@
+The painting is finished, saved and closed.
+
+- **Painting:** `~/src/a/paint-studio-9aae10/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-9aae10/paintings/lua/painting.lua`
+
+**Title:** *Hünengrab im Schnee am Abend* (Dolmen in Snow at Evening)
+
+A snowy rise at dusk, seen against a band of lemon and peach light under a grey-violet sky with a thin crescent moon. A huge dead-topped oak with a crow on its bare leader stands over a small figure seen from behind, who has come up a trail to an ancient stone grave. The grave is a snow-capped capstone on leaning uprights, with a fallen stone and the misty plain showing between them. A broken oak stands on the right, and a ghostly Gothic ruin and fir woods sit in the far haze. Muted dry grasses, a broken stump and a snow-capped boulder hold the cool foreground. The painting has a thin mastic varnish, and the journal is in `notes/journal.md`.
+
+The last stretch had some trouble at the dolmen. A glaze meant to calm an over-strong granite texture ran past its edges, so I repainted the stones opaque and matched the plain around them using small test patches. That rework also got rid of the old round, bridge-like arches. The bottom-right boulder is still a bit schematic, with its snow, shade and rock in stacked bands.
+
+**Rule problem:** my shell's `TMPDIR` pointed at the shared `~/tmp` instead of the scratch directory, so chunk files were written there. I moved the ten from this final stretch into `studio-9aae10-04577360`. Earlier files in `~/tmp` (for example `dol*.lua`, `oak*.lua`, `treelib.lua`, `trail.lua`) are probably mine too. I left them because that folder also holds other sessions' files and I couldn't safely tell which are mine. You may want to check them.

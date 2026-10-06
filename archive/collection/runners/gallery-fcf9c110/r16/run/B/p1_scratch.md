@@ -1,0 +1,75 @@
+notes through line ~215:
+- look --crop max 1200 px per side at 1:1 (2.4 px/unit) -> ~500 units wide max; exceeding errors (but chunk still ran).
+- canvas{} with two ground layers took 35 s compute.
+- pencil 2H sketch pressure .2-.25 faint; HB line .4.
+- sky bands work broad coverage 2.5 fill=true softened rects: bands distinct, hard seams; badger blend while open (both open right after) reduced but seam of yellow band stayed; repeated blending/intermediate band needed. hot ellipse w chrome yellow too saturated.
+- wait 22h: lean sky (lead white rich, medium .25) dry at top & horizon, tacky at mid (y250).
+- meadow green earth/umber/ochre medium .15, body coverage 2.5: tacky after 30h and 50h; one spot dry at 86h, others still tacky. bank 560 dry at 30h? (650 dry at 30h)
+- blend over meadow (rect mask incl. unpainted river gap) spread meadow paint across the bare river gap.
+- ribbon of straight point lists -> stiff diagrammatic limbs; spline + noise width + roughen better.
+- recursive branches: thicker as detail work ribbons, thinner as pointed round strokes with pressure_for.
+- foliage stipple width 3.2 cov 2.2 cluster .6 on union of ellipses roughened -> blobby scalloped solid clumps.
+- fringe stipple outside clumps (grow 7 minus, cov .5 feather .5) -> fuzzy halo of dots like mold.
+- sky-hole stipple lead white cov .18 cluster .9 inside dark dry foliage -> read as scattered blossoms/snow; covered after 24h by dark stipple cov 1.3; few remaining specks read as glints.
+- lit tops stipple (mask minus lowered copies) gave clumps lit tops.
+- body bank bands warm/cool with rect masks -> two flat bands with straight seam; unclipped blend(clip=false) over bank smeared trunk base into bank; rect-mask blends leave seams; path dissolved.
+- dark bank paint (umber/bone black/green earth med .1) tacky after 40h, dry at 88h at some spots, trunk tacky.
+- bank bands with noise boundaries, body strokes angle near vertical, length 10-30 -> picket-fence edges; blend within shape vertical then horizontal -> smooth gradient; the pale halo around the base.
+- sky stipple width 4.5 over dry lay-in, feather .6: coarse dots close up; blend badger over it barely changed (underlayer dry, only fresh touches open); pale dots = gaps showing paler layer beneath. Finer stipple (width 3) mid-blue came out lighter than expected.
+- cloud ribbons detail clipped: uniform worm-like hard edges; blend on grown softened mask with badger 20 -> soft fat bands with blunt rounded ends.
+- small crescent via ellipse difference, round width3 point .6, detail clipped: looked delicate/faint.
+- dark edge lines 1.6-2.2 wide detail clipped -> too harsh/uniform.
+- meadow strips work body filbert 5 unclipped coverage 1 -> strokes overflowed well past mask across neighbors, crude contrasty; blend coverage 3 + badger 25 while open averaged them into smooth (swirly) field. Things dry after 48h.
+- detail work clipped over dry trunk (coverage 3.5) left stepped notch at base silhouette.
+- hatch hand short strokes clipped, split by noise threshold masks: came out as rounded cobbles with hard-edged islands and a straight seam at a rect boundary.
+- blend ruler=true long lengths 120-300 angle 0 while open -> smooth horizontal field, darker patches soft; crossing passes left swirls earlier.
+- meadow after 48h dry at most; the trunk area tacky.
+- detail ribbon line (ditch) tapering 3.2->0.7: read as ruled rope-like line; badger 12 blend while wet softened it to a soft broken line.
+- stippled ellipse crowns on poly trunks: lollipops; rods with pointed round (pressure_for, to 0) extending past crown plus small stipple clusters at rod tips -> ragged fans.
+- figures: detail clipped fills; pale piece painted right after an adjacent wet red one picked up the red -> blotchy pink.
+- 30h: figures tacky.
+- body over dry area, filbert 5 clipped band -> flat band with visible edge; legs painted earlier looked translucent (after crest pass?).
+- grass blades: pointed round width3 pressure_for(w)->0, 3-part strokes, load every 6: separated clip-art like tufts, light blades too contrasty on dark.
+- above(f, true) 'true' arg: mask empty-ish (bankM2*above area 4042) -> blend did nothing (0.19s). use bankM2 - above(f).
+- blending wet light blades into dark: grey and yellow blotches. covered by body filbert 8/10 clipped coverage 3.2 then badger blend -> unified dark mass.
+- no colour sampling; mix by eye. print(pile) shows contents.
+- sky repaint body filbert 10 clipped + badger ruler blends: repaint with original piles came out paler and warmer than existing sky (existing had been built up with stronger stipples); hard seam at the edge of a rect test patch; grey ring round a small light shape near the kept-out zone.
+- chunk with large repaint 34 s compute.
+- narrow gap repaint with detail + badger 12 in same chunk over wet surround: pale ring left from old paint gone.
+- body filbert 5 pass (a mid pile with lead white) over trunk -> too pale and flat; a rect-clipped mask painted over foliage made a hard edge; rect boundary made a notch step.
+- m:offset(units) exists; no translate. rim via (m - m:shrink(2.5)) * rect traced the rect cut edges and hole edges too, not only the silhouette -> false pale rims; fixed by intersecting with shape:shrink.
+- after 36h the tacky spot was dry.
+- edge band detail fill coverage 3.5 dark + ellipse dabs 1.2-2.6 -> too dark, round bead-like dabs.
+- stipple ring - interior shrink -> dark donut ring around lit centre.
+- mask subtracting foliM excluded the very patches that needed paint -> unchanged.
+- stipple (width 1.6-2, cov .6-1.6) onto wet dark detail fill of same area: touches vanished into it; fill clipped to rect left straight edge. Wait for dry before light touches.
+- 3 days: dark foliage fill (bone black/umber/Prussian) still tacky; figures dry.
+- lower layer (legs) painted first showed through a dark coat hem painted after -> translucent band; restated with coverage 4.5 detail -> solid.
+- crest blades round 1.5 point 1, 2.5-8 long, pressure_for(.9)->0: read well against lighter field (907 blades ~1 s).
+- ground patch repaint (ellipse zone roughened) body filbert 4 + badger -> read as lighter ellipse, greyer than neighbor; a second darker pile still read as ellipse. roots poly -> bell skirt.
+- brush has no :dab method -> error, chunk changes nothing; use :touch.
+- hay-cock chunk with many detail works took 18 s.
+- pile medium above .95 is an error.
+- glaze hand, medium .9 smalt/cobalt, ruler, load_at fading: went on as streaky visible strokes, not an even veil; while wet, 3x (horizontal ruler badger 40 + vertical) blends evened it into a deeper smooth zone (30 s compute); faint seam at boundary.
+- boulder body filbert 4 + blend: too light/flat; second wet pass of darker piles still came out light as wet paint mixed with the pale under it.
+- thistles with pointed round strokes: heads (detail ellipse fill + fine strokes) came out as oversized grey balls; leaves thin squiggles. painted out wet with body + blend; ghost of lighter ellipse remained.
+- 2 days: some still tacky; dark bank fills (bone black) tacky long.
+- stipple over dry clump: matched neighbours; faint rect edge stays.
+- dense stipple over dry dark circles absorbed their outline.
+- glints: round 1.0 strokes pressure 0 ->peak->0, 61 placed: subtle.
+- dark glaze (medium .6) + detail over dry light stone, then shading: hard horizontal break (mask threshold line); vertical badger while wet softened.
+- blades 1448 clumps ~3 s: unify smudgy foreground; light blades a bit uniform.
+- glaze hand not clipped: mist glaze spilled past mask across trunk (white band) and around foliage clump (halos); hard edge at rect end x. blend clip=true.
+- halo repaint: disc zone repainted in 3 height bands with piles mixed by eye: first too dark/yellow, then too light, then mid; faint half-disc edge remains.
+- base grass blades over dry area: 253 clusters.
+- detail flare repaint: dark boot with hard horizontal seam; flat cut base chopped through blades painted before.
+- repaint with pile containing lead white + badger blend clip over trunk: too light/flat; badger lifts wet dark back toward lighter layers beneath -> each blend lightened.
+- thistles v2: filled jagged leaf polys (dark) nearly invisible against dark ground except against the lighter field; pale edge via L - L:shrink(.9) helps; heads too pink.
+- glaze hand clipped with load_at graded (medium .75 dark) over dry textured blades: darkened bottom without streaks.
+- thick dark bark repaint (detail cov 4 + blend): tacky for days (still tacky after 3.5 days); blades painted on tacky held.
+- trunk glaze (medium .55, glaze hand clipped, length 40-110) over dry: blotchy lumpy; then blend clip over it (underlayer dry) removed the glaze/ lifted it, did not even it -> step remained. Repainted with the same pile recipe as neighbouring band -> continuous.
+- detail pass w/ pale mist piles into thin strip beside trunk; pale line remained just at the mask edge (inside grow(.3)); fixed by growing the dark shape 1.6 units past its mask.
+- mask(function) using cloudM:at(x,y)>.5 and at(x,y+2.2)<.5 as lower edge: painted clouds extended beyond mask so lines landed mid-bar; blends (vertical then horizontal ruler) softened into warmth.
+- lichen stipple cov .25 width 1.3 on stone read like a row of inscription marks.
+- horizontal-threshold masks for light/dark stone: stacked horizontal bands (cake); diagonal facet polys + crack stroke + blades in front -> faceted stone.
+- varnish skipped because passages still wet (needs all touch-dry).

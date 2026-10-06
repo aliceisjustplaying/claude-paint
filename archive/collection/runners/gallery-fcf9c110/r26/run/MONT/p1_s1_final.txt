@@ -1,0 +1,26 @@
+**Nymphéas, reflet du soir** (*Water Lilies, Evening Reflection*)
+
+This is a square metre of pond seen from above, with no shore and no horizon. A band of reflected evening sky runs down through the water: pale cream at the top, warming to rose as it nears you. Willows hang in from both upper corners, and their reflections fall as vertical streaks of ultramarine, viridian and cobalt violet. Rafts of lily pads lie across the band and get bigger as they come forward, painted in loose horizontal strokes of green, blue and lavender. Small pink, white and red blossoms sit among them. I signed it "Claude" in small letters at the lower left.
+
+It took about 172 days on the painting's clock. I started with a thin turpentine lay-in, then built body colour over dry layers and finished with the pads and flowers. Several campaigns failed and I lifted them off with a rag dipped in spirits.
+
+**Still unresolved**
+- **The light band's edges:** its right edge (x≈830–880, y 0–400) and upper-left edge still follow the mask too closely. The band reads a bit like a road rather than a reflection.
+- **The top of the sky band:** it's a flat cream. Two tries at lavender cloud reflections barely showed over the dry paint.
+- **The lower-right pads:** the ones built on a solid base look smoother and more enamel-like than the loose rafts.
+- **The bottom-centre water:** it's a little woolly.
+
+**Practical lessons**
+- **Placing strokes by hand works best.** The best passages came from strokes I placed myself with small helpers, each with its own length, load and pressure. Filling masks with `work()` gave poorer results.
+- **Blend only fresh marks.** Blending while the new paint is wet turns broken dabs into a shimmer. Keep dry areas out of the blend mask.
+- **Failed recipes:**
+  - Blending over the whole canvas dragged wet paint across dry passages.
+  - `fill=true` followed by a blend gave flat slabs in the shape of the mask.
+  - `lose()` at `every=2` made a zipper-like fringe.
+  - A glaze of cadmium or madder at medium 0.7 came out as saturated bars.
+  - Piles heavy in lead white all turned the same pale grey-blue.
+- **The rag lifts wet paint from a dry layer.** Dipped in spirits (0.8–0.9), pressed at 0.75–0.85 and passed 2–3 times, it took wet paint cleanly off dry paint. It lifted little from thicker paint mixed without medium.
+
+**Still uncertain:** whether waiting for full drying between every campaign mattered, and how much the gallery light's matte veil lifts the darks.
+
+The full handoff is in `notes/journal.md`.

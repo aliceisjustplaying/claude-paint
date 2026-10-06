@@ -1,0 +1,24 @@
+{
+  "verified_at": "2026-10-05",
+  "order": "r30 Hopper only",
+  "minimum_free_bytes": 21474836480,
+  "minimum_free_is_chosen_reserve": true,
+  "items": [
+    {
+      "id": "r30-hopr",
+      "studio": "paint-studio-49b647",
+      "run": "~/tmp/gallery-fcf9c110/r30/run",
+      "source_log": "~/src/a/paint-studio-49b647/paintings/lua/painting.lua",
+      "finished_log": "~/tmp/gallery-fcf9c110/r30/run/HOPR1_finished.lua",
+      "finished_png": "~/tmp/gallery-fcf9c110/r30/run/HOPR1_finished.png",
+      "normal_png": "~/src/a/paint-studio-49b647/out/easel/painting/live.png",
+      "check_png": "~/tmp/gallery-fcf9c110/r30/run/HOPR/p1_check/replayed.png",
+      "check_log": "~/tmp/gallery-fcf9c110/r30/run/HOPR/p1_check.log",
+      "output_dir": "~/src/a/claude-paint/notes/round30/social",
+      "checkout": "~/src/a/claude-paint-r29run",
+      "source_commit": "3f3f21150249688c4421aa763c7f4e3f5ed3ff91",
+      "engine": "~/src/a/claude-paint-r29run/target/release/easel",
+      "engine_sha256": "57f79ae39caa9eb0fbde31e0317cf3e6b1cd94b12a8a55f6d6ef9847714ded22"
+    }
+  ]
+}

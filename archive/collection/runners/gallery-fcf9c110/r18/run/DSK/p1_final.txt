@@ -1,0 +1,10 @@
+The painting is finished, saved and the session closed.
+
+**Saved painting:** `~/src/a/paint-studio-c766c5/out/easel/painting/painting.png`
+**Its log:** `~/src/a/paint-studio-c766c5/paintings/lua/painting.lua`
+
+**Title:** *Still Life with a Dark Bottle and a Bowl of Lemons*
+
+A tall, near-black bottle stands against a dim warm-grey wall on a broad ochre table; to its right a shallow white bowl holds two lemons, with a pear at the right edge and a single lemon lying at the left to close the composition. The light comes from the upper left, so the bottle carries one soft window reflection and the fruit turn from a lit upper-left into a soft olive shadow with a warm bounce along the lower edge. The picture is built almost entirely from lead white, yellow ochre, raw umber and bone black, with a little smalt cooling the wall — a quiet, low-key arrangement.
+
+It took many campaigns. The hard lessons, recorded in the journal: thin films of earth lighten over a pale base, so shadows have to be built in full passes; soft gradients painted into open paint fuse to mush; nested hard passes posterize into rings; and what finally made the fruit round was a soft-edged mask with clipping, so the lit passage dissolves into the shadow instead of ending on a line.

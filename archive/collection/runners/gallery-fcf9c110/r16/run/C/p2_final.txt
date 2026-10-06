@@ -1,0 +1,9 @@
+I finished the painting, saved it and closed the session. `bin/easel check` replayed all 80 chunks from the log and they match the live canvas exactly.
+
+- **Painting:** `~/src/a/paint-studio-75c237/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-75c237/paintings/lua/painting.lua`
+- **Title:** *Low Water, After Sunset*
+
+It's an estuary at low tide just after the sun has gone down. The sky runs from cool slate at the top, through violet-grey bands of cloud, to a pale lemon glow lying on a far, low shoreline. A spit of land with a dark clump of trees stands against that glow on the right, with its reflection hanging in the still water beneath. In the foreground, two dark banks of wet mud frame a slate-blue channel that narrows toward the light. A line of old stakes runs along the channel's edge, and a small boat with a bare mast lies stranded on the left bank.
+
+Much of the work went into the mud. The banks first read as hills, and later as raised slabs with cliff-like sides. I eventually saw the cause: the channel between them got wider toward the horizon instead of narrowing. Once I repainted it so its edges converged, the flats lay down. The whole painting was then left to dry for four months of painting time and given a light varnish.

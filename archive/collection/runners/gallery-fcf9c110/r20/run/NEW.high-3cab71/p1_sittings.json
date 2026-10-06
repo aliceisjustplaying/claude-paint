@@ -1,0 +1,37 @@
+[
+ {
+  "sitting": 1,
+  "part": 1,
+  "status": "interrupted",
+  "start": "2026-09-29 18:15:16",
+  "end": "2026-09-29 18:19:06",
+  "chunks_after": 0,
+  "painting_after": 0,
+  "chunks_before": 0,
+  "painting_before": 0,
+  "message": "Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you give it one and a few sentences about the picture.",
+  "sessions": [
+   "~/.pi/agent/sessions/--Users-alice-src-a-paint-studio-3cab71--/2026-09-29T17-15-16-713Z_01a0ee29-df69-7087-bf4f-dbb782d884aa.jsonl"
+  ],
+  "exit": null,
+  "final_file": "~/tmp/gallery-fcf9c110/r20/run/NEW/p1_s1_final.txt",
+  "final": null,
+  "worked": true
+ },
+ {
+  "sitting": 1,
+  "part": 2,
+  "status": "running",
+  "start": "2026-09-29 18:19:06",
+  "end": null,
+  "chunks_after": null,
+  "painting_after": null,
+  "chunks_before": 0,
+  "painting_before": 0,
+  "message": "The connection dropped for a while. Carry on where you left off.",
+  "sessions": [],
+  "exit": null,
+  "final_file": "~/tmp/gallery-fcf9c110/r20/run/NEW/p1_s1_part2_final.txt",
+  "final": null
+ }
+]

@@ -343,6 +343,10 @@ def _parse(path):
                             ev["ref"] = True  # it reads from reference/ (see in_reference)
                     elif name == "paint":  # the painter harness's easel tools (round 19 on)
                         ev.update(kind="paint", code=a.get("lua", ""))
+                        if a.get("scratch"):  # on the scratch canvas beside the painting
+                            ev["scratch"] = True
+                            if a.get("new_scratch"):
+                                ev["new_scratch"] = True
                     elif name == "look":
                         ev.update(kind="look", text=look_text(a))
                     elif name == "note":
@@ -403,8 +407,9 @@ def look_text(args):
 
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison, not a held knife and not the motif pinned beside it."""
-    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey) (?!False)", look)
+    not the palette, not a survey's tile, not a comparison, not a held knife, not the motif pinned beside it and not
+    the scratch canvas."""
+    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -414,17 +419,33 @@ TITLE = re.compile(r"\s*(?:\([^)\n]{1,16}\)\S{0,3}\s+)?(?:#{1,6}\s*)?(\*\*?|__?)
 TITLE_LINE = re.compile(r"[ \t]*(?:#{1,6}[ \t]*)?(\*\*?|__?)([^*_\n]{2,100}?)\1[ \t]*")
 
 
+# or named in the first line of its closing words: "I've called it **Grainstack, Evening**.", "I've finished
+# **Nymphéas, reflet du soir** (...)", "I'm leaving **Luncheonette, Four O'Clock** finished as it is."
+NAMED = re.compile(r"[^\n*_]{0,40}?\b(?:call(?:ed|ing)?|title[ds]?|name[ds]?|finish(?:ed|ing)?|left|leav(?:e|ing)"
+                   r"|complet(?:ed|e|ing))(?:\s+(?:it|this|(?:the|this|my)\s+(?:painting|picture|canvas)))?\s+(\*\*?|__?)([^*_\n]{2,100}?)\1(?![*_\w])")
+
+
+def clean_title(t):
+    """A title without the quotation marks some painters put inside the bold."""
+    return t.strip().strip('"\u201c\u201d').strip() or None
+
+
 def title_of(say):
     """The painting's title from the painter's last words, if they begin with one or have one alone on a line among
     their first three paragraphs; else None."""
-    m = TITLE.match(say or "")
+    m = TITLE.match(say or "") or NAMED.match(say or "")
     if m:
-        return m.group(2).strip()
+        return clean_title(m.group(2))
     for para in [p for p in re.split(r"\n\s*\n", say or "") if p.strip()][1:3]:
         m = TITLE_LINE.fullmatch(para.strip("\n"))
         if m:
-            return m.group(2).strip()
+            return clean_title(m.group(2))
     return None
+
+
+def title_of_closings(says):
+    """The title in the newest closing words that name one (a last sitting that only looked may not repeat it)."""
+    return next((t for t in map(title_of, reversed(says)) if t), None)
 
 
 REFERENCE = object()  # in a glance's calls: a read of a reference picture
@@ -494,10 +515,10 @@ def glance(files):
         if g["last"]:
             last, lsrc = base + g["last"][0], (f,) + g["last"][1:]
         base += g["n"]
-    say = next((g["say"] for g in reversed(gs) if g["say"]), "")
+    title = title_of_closings([g["say"] for g in gs if g["say"]])
     if look is None:
         look, src = last, lsrc
-    return {"look": look, "title": title_of(say), "src": src}
+    return {"look": look, "title": title, "src": src}
 
 
 def glance_image(src):
@@ -570,11 +591,14 @@ ARCHIVE = os.path.join(os.path.dirname(HERE), "archive", "sources")
 def painting_sources(events):
     """The folder to read the painting's source files from and those files, relative to it: the ones
     the page may ask for. The folder is the painter's (its last start) or, once that is gone,
-    archive/sources/<its name>. The files: paintings/lua/painting.lua and, from the events, every .lua
+    archive/sources/<its name>. The files: paintings/lua/painting.lua, paintings/lua/scratch.lua once the
+    painter paints there and, from the events, every .lua
     under paintings/lua/ and .rs under paintings/ the painter wrote or edited or rendered with
     `cargo paint <bin>`. Nothing else in the folder (the brief, notes, bin/, settings) is served."""
     cwd = next((e["cwd"] for e in reversed(events) if e["kind"] == "start"), "")
     rels = {"paintings/lua/painting.lua"}
+    if any(e["kind"] == "paint" and e.get("scratch") for e in events):
+        rels.add("paintings/lua/scratch.lua")
     for e in events:
         if e["kind"] in ("write", "edit"):
             p = e.get("path", "")

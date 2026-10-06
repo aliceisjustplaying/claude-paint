@@ -1,0 +1,11 @@
+I've finished the painting, saved it and closed the session.
+
+- **Painting:** `~/src/a/paint-studio-4fb403/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-4fb403/paintings/lua/painting.lua` (113 chunks; `bin/easel check` replayed it and it matches the canvas exactly)
+- **Title:** *Low Water, Evening*
+
+It's an estuary at low tide on a quiet evening, with the horizon set low. A heavy lilac cloud cover presses down over a band of pale gold light. A channel of water carries that light back from the lower right to the glow on the horizon, past a row of old posts. The far shore is a thin dark line of trees, and a small church tower gives the scale. In front, a tarred boat with a red strake lies on the dark mud, tied by a rope to a stake, beside a few puddles that catch the sky. The picture is mostly large quiet shapes: the dark wedge of mud against the pale water, with the small shapes of the boat, posts and a skein of birds set against them.
+
+In this last session I fixed one thing I saw up close: the boat seemed to float above its shadow. I painted mud over the bottom of the hull so it sits in the mud, and laid a thin warm glaze over the cool grey shadow under it. The glaze dragged some wet paint into faint horizontal streaks, which read as wet shine around the hull, so I left them.
+
+Some older flaws are still there: a faint square patch of repainting near the stake, softness in the upper clouds, and faint light halos around the puddles. Further work there risked muddying the picture more than it would help.

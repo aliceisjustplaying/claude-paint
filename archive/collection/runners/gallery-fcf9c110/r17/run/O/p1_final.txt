@@ -1,0 +1,11 @@
+The painting is finished, saved, and the session is closed.
+
+- **Painting:** `~/src/a/paint-studio-1def1a/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-1def1a/paintings/lua/painting.lua` (81 chunks; `bin/easel check` confirms the log replays to exactly this canvas)
+- **Title:** *Evening Tide, Barge off the Marsh*
+
+The picture is an estuary just after sunset, oil on linen, 600 × 400 mm. A Thames-style sailing barge with tan sails stands dark against a low gold sky. Its reflection breaks up in the water beneath it. The far shore is a thin cool strip with a clump of trees, a small windmill and one distant sail, which balance the barge across the empty right half. A muddy marsh spit with mooring posts anchors the lower left. The sky takes up about two thirds of the height and cools from the gold at the horizon through mauve cloud to grey-blue at the top.
+
+The sails are painted almost flat, as silhouettes against the light. Only a narrow warm edge along the right side of the mainsail (the leech) suggests the glow coming through the cloth.
+
+This last time I painted nothing. I looked at the canvas whole, close up and in the value and squint views, and it holds up. Working it again would only muddy it.

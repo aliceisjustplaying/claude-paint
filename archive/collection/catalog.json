@@ -1,0 +1,3245 @@
+{
+  "paintings": [
+    {
+      "id": "r01-winter",
+      "title": null,
+      "round": 1,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r01-winter/finished.png",
+      "video": "archive/collection/gallery/r01-winter/timelapse.mp4"
+    },
+    {
+      "id": "r01-coast",
+      "title": null,
+      "round": 1,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r01-coast/finished.png",
+      "video": "archive/collection/gallery/r01-coast/timelapse.mp4"
+    },
+    {
+      "id": "r01-mountains",
+      "title": null,
+      "round": 1,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r01-mountains/finished.png",
+      "video": "archive/collection/gallery/r01-mountains/timelapse.mp4"
+    },
+    {
+      "id": "r02-winter",
+      "title": "Winter Evening with a Ruined Choir",
+      "round": 2,
+      "studio": null,
+      "finished_image": "notes/round7/winter_port/original_3200.png",
+      "video": "archive/collection/gallery/r02-winter/timelapse.mp4"
+    },
+    {
+      "id": "r02-coast",
+      "title": "Morning on the Shore at Arkona",
+      "round": 2,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r02-coast/finished.png",
+      "video": "archive/collection/gallery/r02-coast/timelapse.mp4"
+    },
+    {
+      "id": "r02-mountains",
+      "title": "Daybreak in the Riesengebirge",
+      "round": 2,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r02-mountains/finished.png",
+      "video": "archive/collection/gallery/r02-mountains/timelapse.mp4"
+    },
+    {
+      "id": "r03-free",
+      "title": "Dolmen on the Baltic Shore at Evening",
+      "round": 3,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r03-free/finished.png",
+      "video": "archive/collection/gallery/r03-free/timelapse.mp4"
+    },
+    {
+      "id": "r03-green",
+      "title": "The Oak on the Common, Summer Morning",
+      "round": 3,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r03-green/finished.png",
+      "video": "archive/collection/gallery/r03-green/timelapse.mp4"
+    },
+    {
+      "id": "r03-near",
+      "title": null,
+      "round": 3,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r03-near/finished.png",
+      "video": "archive/collection/gallery/r03-near/timelapse.mp4"
+    },
+    {
+      "id": "r04-free",
+      "title": "Evening on the Heath: Dead Oak and Hünengrab",
+      "round": 4,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r04-free/finished.png",
+      "video": "archive/collection/gallery/r04-free/timelapse.mp4"
+    },
+    {
+      "id": "r04-green",
+      "title": "Summer Morning above the River Valley",
+      "round": 4,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r04-green/finished.png",
+      "video": "archive/collection/gallery/r04-green/timelapse.mp4"
+    },
+    {
+      "id": "r04-near",
+      "title": null,
+      "round": 4,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r04-near/finished.png",
+      "video": "archive/collection/gallery/r04-near/timelapse.mp4"
+    },
+    {
+      "id": "r07-1",
+      "title": "The Old Willow at Evening",
+      "round": 7,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r07-1/finished.png",
+      "video": "archive/collection/gallery/r07-1/timelapse.mp4"
+    },
+    {
+      "id": "r07-2",
+      "title": "Two Poplars at a Pond, Evening",
+      "round": 7,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r07-2/finished.png",
+      "video": "archive/collection/gallery/r07-2/timelapse.mp4"
+    },
+    {
+      "id": "r07-3",
+      "title": "Evening on the Bodden",
+      "round": 7,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r07-3/finished.png",
+      "video": "archive/collection/gallery/r07-3/timelapse.mp4"
+    },
+    {
+      "id": "r07-python",
+      "title": "The Chapel Gable at Evening",
+      "round": 7,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r07-python/finished.png",
+      "video": "archive/collection/gallery/r07-python/timelapse.mp4"
+    },
+    {
+      "id": "r08-1",
+      "title": "Winter Evening by a Frozen Pond, with a Wayside Cross",
+      "round": 8,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r08-1/finished.png",
+      "video": "archive/collection/gallery/r08-1/timelapse.mp4"
+    },
+    {
+      "id": "r08-2",
+      "title": "Winter Evening, the Way to the Ruined Choir",
+      "round": 8,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r08-2/finished.png",
+      "video": "archive/collection/gallery/r08-2/timelapse.mp4"
+    },
+    {
+      "id": "r08-3",
+      "title": "Winter Morning by a Frozen Pond",
+      "round": 8,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r08-3/finished.png",
+      "video": "archive/collection/gallery/r08-3/timelapse.mp4"
+    },
+    {
+      "id": "r09-1",
+      "title": "Winter Evening with Pollard Willows",
+      "round": 9,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r09-1/finished.png",
+      "video": "archive/collection/gallery/r09-1/timelapse.mp4"
+    },
+    {
+      "id": "r09-2",
+      "title": "Winter Morning on the Ryck",
+      "round": 9,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r09-2/finished.png",
+      "video": "archive/collection/gallery/r09-2/timelapse.mp4"
+    },
+    {
+      "id": "r09-3",
+      "title": "Winter Evening with a Wayside Cross",
+      "round": 9,
+      "studio": null,
+      "finished_image": "archive/collection/gallery/r09-3/finished.png",
+      "video": "archive/collection/gallery/r09-3/timelapse.mp4"
+    },
+    {
+      "id": "r10-1",
+      "title": "Dolmen in the Snow at Dusk",
+      "round": 10,
+      "studio": null,
+      "finished_image": "notes/round10/look/A_3200.png",
+      "video": "archive/collection/gallery/r10-1/timelapse.mp4"
+    },
+    {
+      "id": "r10-2",
+      "title": "Winter evening by a frozen pond",
+      "round": 10,
+      "studio": null,
+      "finished_image": "notes/round10/look/C_3200.png",
+      "video": "archive/collection/gallery/r10-2/timelapse.mp4"
+    },
+    {
+      "id": "r10-3",
+      "title": "Summer Afternoon: the Lime Tree on the Rise",
+      "round": 10,
+      "studio": null,
+      "finished_image": "notes/round10/look/B_3200.png",
+      "video": "archive/collection/gallery/r10-3/timelapse.mp4"
+    },
+    {
+      "id": "r11-astra",
+      "title": "The Ford Before Daybreak",
+      "round": 11,
+      "studio": null,
+      "finished_image": "notes/round11/look/E_3200.png",
+      "video": "archive/collection/gallery/r11-astra/timelapse.mp4"
+    },
+    {
+      "id": "r11-fable",
+      "title": "Winter dusk on the marsh",
+      "round": 11,
+      "studio": null,
+      "finished_image": "notes/round11/look/D_3200.png",
+      "video": "archive/collection/gallery/r11-fable/timelapse.mp4"
+    },
+    {
+      "id": "r11-flash",
+      "title": "Winter Twilight with Megalith and Spruces",
+      "round": 11,
+      "studio": null,
+      "finished_image": "notes/round11/look/F_3200.png",
+      "video": "archive/collection/gallery/r11-flash/timelapse.mp4"
+    },
+    {
+      "id": "r12-tree1",
+      "title": null,
+      "round": 12,
+      "studio": null,
+      "finished_image": "notes/round12/look/P_2400.png",
+      "video": null
+    },
+    {
+      "id": "r12-tree2",
+      "title": null,
+      "round": 12,
+      "studio": null,
+      "finished_image": "notes/round12/look/R_2400.png",
+      "video": null
+    },
+    {
+      "id": "r12-tree3",
+      "title": "Old Oak in Snow (a study)",
+      "round": 12,
+      "studio": null,
+      "finished_image": "notes/round12/look/Q_2400.png",
+      "video": null
+    },
+    {
+      "id": "r13-tree1",
+      "title": null,
+      "round": 13,
+      "studio": null,
+      "finished_image": "notes/round13/look/S_2400.png",
+      "video": null
+    },
+    {
+      "id": "r13-tree2",
+      "title": null,
+      "round": 13,
+      "studio": null,
+      "finished_image": "notes/round13/look/T_2400.png",
+      "video": null
+    },
+    {
+      "id": "r13-tree3",
+      "title": null,
+      "round": 13,
+      "studio": null,
+      "finished_image": "notes/round13/look/U_2400.png",
+      "video": null
+    },
+    {
+      "id": "r14-p1a",
+      "title": "Ploughed field before Greifswald, October morning",
+      "round": 14,
+      "studio": null,
+      "finished_image": "notes/round14/look/p1a_ploughed_field_2400.png",
+      "video": "archive/collection/gallery/r14-p1a/timelapse.mp4"
+    },
+    {
+      "id": "r14-p1",
+      "title": "Morning in the Mountains",
+      "round": 14,
+      "studio": null,
+      "finished_image": "notes/round14/look/p1_2400.png",
+      "video": "archive/collection/gallery/r14-p1/timelapse.mp4"
+    },
+    {
+      "id": "r14-p2",
+      "title": "Evening over the flat country",
+      "round": 14,
+      "studio": null,
+      "finished_image": "notes/round14/look/p2_2400.png",
+      "video": "archive/collection/gallery/r14-p2/timelapse.mp4"
+    },
+    {
+      "id": "r14-p3",
+      "title": "Evening on the Baltic shore",
+      "round": 14,
+      "studio": null,
+      "finished_image": "notes/round14/look/p3_2400.png",
+      "video": "archive/collection/gallery/r14-p3/timelapse.mp4"
+    },
+    {
+      "id": "r15-p1",
+      "title": "Evening over a Misty Valley in the Mountains",
+      "round": 15,
+      "studio": null,
+      "finished_image": "notes/round15/look/p1_2400.png",
+      "video": "archive/collection/gallery/r15-p1/timelapse.mp4"
+    },
+    {
+      "id": "r15-p2",
+      "title": "Oak in the snow at dusk",
+      "round": 15,
+      "studio": null,
+      "finished_image": "notes/round15/look/p2_2400.png",
+      "video": "archive/collection/gallery/r15-p2/timelapse.mp4"
+    },
+    {
+      "id": "r15-p3",
+      "title": "Morning on the Baltic shore",
+      "round": 15,
+      "studio": null,
+      "finished_image": "notes/round15/look/p3_2400.png",
+      "video": "archive/collection/gallery/r15-p3/timelapse.mp4"
+    },
+    {
+      "id": "r16-a1",
+      "title": "Hünengrab im Schnee am Abend (Dolmen in Snow at Evening)",
+      "round": 16,
+      "studio": "paint-studio-9aae10",
+      "finished_image": "notes/round16/look/A1_2400.png",
+      "video": "archive/collection/gallery/r16-a1/timelapse.mp4"
+    },
+    {
+      "id": "r16-a2",
+      "title": "Hünengrab im Schnee am Abend (Dolmen in Snow at Evening)",
+      "round": 16,
+      "studio": "paint-studio-9cf69b",
+      "finished_image": "notes/round16/look/A2_2400.png",
+      "video": "archive/collection/gallery/r16-a2/timelapse.mp4"
+    },
+    {
+      "id": "r16-a3",
+      "title": "Evening at the Frozen Mere",
+      "round": 16,
+      "studio": "paint-studio-7ff345",
+      "finished_image": "notes/round16/look/A3_2400.png",
+      "video": "archive/collection/gallery/r16-a3/timelapse.mp4"
+    },
+    {
+      "id": "r16-b1",
+      "title": "Summer Evening on the Elbe Meadows",
+      "round": 16,
+      "studio": "paint-studio-cd267e",
+      "finished_image": "notes/round16/look/B1_2400.png",
+      "video": "archive/collection/gallery/r16-b1/timelapse.mp4"
+    },
+    {
+      "id": "r16-b2",
+      "title": "Summer Evening on the Meadows before Greifswald",
+      "round": 16,
+      "studio": "paint-studio-7ace8e",
+      "finished_image": "notes/round16/look/B2_2400.png",
+      "video": "archive/collection/gallery/r16-b2/timelapse.mp4"
+    },
+    {
+      "id": "r16-b3",
+      "title": "Summer Evening on the Meadows before the Town",
+      "round": 16,
+      "studio": "paint-studio-774267",
+      "finished_image": "notes/round16/look/B3_2400.png",
+      "video": "archive/collection/gallery/r16-b3/timelapse.mp4"
+    },
+    {
+      "id": "r16-c1",
+      "title": "Stoneware Jug with Two Lemons and a Knife",
+      "round": 16,
+      "studio": "paint-studio-3be9e8",
+      "finished_image": "notes/round16/look/C1_2400.png",
+      "video": "archive/collection/gallery/r16-c1/timelapse.mp4"
+    },
+    {
+      "id": "r16-c2",
+      "title": "Low Water, After Sunset",
+      "round": 16,
+      "studio": "paint-studio-75c237",
+      "finished_image": "notes/round16/look/C2_2400.png",
+      "video": "archive/collection/gallery/r16-c2/timelapse.mp4"
+    },
+    {
+      "id": "r16-c3",
+      "title": "The Punt at Sundown",
+      "round": 16,
+      "studio": "paint-studio-96b5e4",
+      "finished_image": "notes/round16/look/C3_2400.png",
+      "video": "archive/collection/gallery/r16-c3/timelapse.mp4"
+    },
+    {
+      "id": "r16-d2",
+      "title": "Quince, Stoneware Pitcher, and Bay Leaves on a Wooden Ledge",
+      "round": 16,
+      "studio": "paint-studio-7b31aa",
+      "finished_image": "notes/round16/look/D2_2400.png",
+      "video": "archive/collection/gallery/r16-d2/timelapse.mp4"
+    },
+    {
+      "id": "r16-d3",
+      "title": "Still Life with Terracotta Jug and Quince",
+      "round": 16,
+      "studio": "paint-studio-b5323f",
+      "finished_image": "notes/round16/look/D3_2400.png",
+      "video": "archive/collection/gallery/r16-d3/timelapse.mp4"
+    },
+    {
+      "id": "r17-f1",
+      "title": "June Morning on the Meadows before the Town",
+      "round": 17,
+      "studio": "paint-studio-cfa19c",
+      "finished_image": "archive/collection/gallery/r17-f1/finished.png",
+      "video": "archive/collection/gallery/r17-f1/timelapse.mp4"
+    },
+    {
+      "id": "r17-f2",
+      "title": "June Morning on the Meadows before the Town",
+      "round": 17,
+      "studio": "paint-studio-497bcf",
+      "finished_image": "archive/collection/gallery/r17-f2/finished.png",
+      "video": "archive/collection/gallery/r17-f2/timelapse.mp4"
+    },
+    {
+      "id": "r17-o1",
+      "title": "Evening Tide, Barge off the Marsh",
+      "round": 17,
+      "studio": "paint-studio-1def1a",
+      "finished_image": "archive/collection/gallery/r17-o1/finished.png",
+      "video": "archive/collection/gallery/r17-o1/timelapse.mp4"
+    },
+    {
+      "id": "r17-o2",
+      "title": "Low Water, Evening",
+      "round": 17,
+      "studio": "paint-studio-4fb403",
+      "finished_image": "archive/collection/gallery/r17-o2/finished.png",
+      "video": "archive/collection/gallery/r17-o2/timelapse.mp4"
+    },
+    {
+      "id": "r17-o3",
+      "title": "Evening on the Estuary, the Punt Coming Home",
+      "round": 17,
+      "studio": "paint-studio-c6b5dd",
+      "finished_image": "archive/collection/gallery/r17-o3/finished.png",
+      "video": "archive/collection/gallery/r17-o3/timelapse.mp4"
+    },
+    {
+      "id": "r17-f3",
+      "title": "Morning on the Ryck Meadows",
+      "round": 17,
+      "studio": "paint-studio-358aea",
+      "finished_image": "archive/collection/gallery/r17-f3/finished.png",
+      "video": "archive/collection/gallery/r17-f3/timelapse.mp4"
+    },
+    {
+      "id": "r18-muse",
+      "title": "Evening Marsh",
+      "round": 18,
+      "studio": "paint-studio-2564f4",
+      "finished_image": "archive/collection/gallery/r18-muse/finished.png",
+      "video": "archive/collection/gallery/r18-muse/timelapse.mp4"
+    },
+    {
+      "id": "r18-glm",
+      "title": "The Last Light on the Flats",
+      "round": 18,
+      "studio": "paint-studio-3f743e",
+      "finished_image": "archive/collection/gallery/r18-glm/finished.png",
+      "video": "archive/collection/gallery/r18-glm/timelapse.mp4"
+    },
+    {
+      "id": "r18-mimo",
+      "title": "White Jug with Two Lemons",
+      "round": 18,
+      "studio": "paint-studio-f705c2",
+      "finished_image": "archive/collection/gallery/r18-mimo/finished.png",
+      "video": "archive/collection/gallery/r18-mimo/timelapse.mp4"
+    },
+    {
+      "id": "r18-dsk",
+      "title": "Still Life with a Dark Bottle and a Bowl of Lemons",
+      "round": 18,
+      "studio": "paint-studio-c766c5",
+      "finished_image": "archive/collection/gallery/r18-dsk/finished.png",
+      "video": "archive/collection/gallery/r18-dsk/timelapse.mp4"
+    },
+    {
+      "id": "r18-bun",
+      "title": "Apples in an Earthenware Bowl",
+      "round": 18,
+      "studio": "paint-studio-520026",
+      "finished_image": "archive/collection/gallery/r18-bun/finished.png",
+      "video": null
+    },
+    {
+      "id": "r18-gem",
+      "title": "Still Life with Earthenware Pitcher, Lemons, and Folded Linen",
+      "round": 18,
+      "studio": "paint-studio-c71699",
+      "finished_image": "archive/collection/gallery/r18-gem/finished.png",
+      "video": "archive/collection/gallery/r18-gem/timelapse.mp4"
+    },
+    {
+      "id": "r19-lunaf",
+      "title": "The Last Light Over the Lake",
+      "round": 19,
+      "studio": "paint-studio-f0e4ab",
+      "finished_image": "archive/collection/gallery/r19-lunaf/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-gemf",
+      "title": "Hünengrab im Abendlicht",
+      "round": 19,
+      "studio": "paint-studio-851a37",
+      "finished_image": "archive/collection/gallery/r19-gemf/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-musef",
+      "title": "Watcher at the Edge of Fog",
+      "round": 19,
+      "studio": "paint-studio-2a634e",
+      "finished_image": "archive/collection/gallery/r19-musef/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-kimif",
+      "title": "Contemplating the Young Moon",
+      "round": 19,
+      "studio": "paint-studio-919cfd",
+      "finished_image": "archive/collection/gallery/r19-kimif/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-sonf",
+      "title": "The Old Oak, Evening on the Lagoon",
+      "round": 19,
+      "studio": "paint-studio-58dfc6",
+      "finished_image": "archive/collection/gallery/r19-sonf/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-newf",
+      "title": "The Silent Shore",
+      "round": 19,
+      "studio": "paint-studio-e708c7",
+      "finished_image": "archive/collection/gallery/r19-newf/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-lunab",
+      "title": "The Lamp at the Inlet",
+      "round": 19,
+      "studio": "paint-studio-db6324",
+      "finished_image": "archive/collection/gallery/r19-lunab/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-gemb",
+      "title": "Still Life with Clay Pitcher, Quince, and Knife",
+      "round": 19,
+      "studio": "paint-studio-69c343",
+      "finished_image": "archive/collection/gallery/r19-gemb/finished.png",
+      "video": null
+    },
+    {
+      "id": "r19-selfh",
+      "title": "Self-Portrait with Palette",
+      "round": 19,
+      "studio": "paint-studio-b3a3c7",
+      "finished_image": "archive/collection/gallery/r19-selfh/finished.png",
+      "video": null
+    },
+    {
+      "id": "r20-new",
+      "title": "Between Customers",
+      "round": 20,
+      "studio": "paint-studio-3cab71",
+      "finished_image": "archive/collection/gallery/r20-new/finished.png",
+      "video": null
+    },
+    {
+      "id": "r21.5-sonf",
+      "title": "The Oak above the Sea of Fog",
+      "round": 21.5,
+      "studio": "paint-studio-3a958c",
+      "finished_image": "notes/round21.5/runner/run/SONF/finished.png",
+      "video": null
+    }
+  ],
+  "studios": [
+    {
+      "id": "paint-studio-002de5",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "notes/round28/readiness/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/journal.md"
+        },
+        {
+          "role": "notes/research/hopper_materials.md",
+          "path": "archive/collection/inputs/docs/1f5de23ecdd7bee4.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-002de5/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r28",
+          "lane": "HOPR1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r28/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-106bf6",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-106bf6/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-11997b",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-11997b/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-11997b/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-11997b/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "MIMOF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-125996",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-125996/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "description/verification/evidence/live-bunny/clock-provider.log"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-125996/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-12e572",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "notes/round26/readiness/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-12e572/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-12e572/notes/journal.md"
+        },
+        {
+          "role": "notes/research/giverny_materials.md",
+          "path": "notes/round26/readiness/materials-painter.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-12e572/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r26",
+          "lane": "MONT1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r26/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r26/run/MONT1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r26/run/MONT1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-1def1a",
+      "gallery_ids": [
+        "r17-o1"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ecfa6eae597f71d7.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-o1.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-1def1a/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "O1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-o1/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/O1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-24be5f",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-24be5f/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r24.3",
+          "lane": "INNS1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r24.3/run/studios.json",
+          "finished_image": "notes/round24/finished/opus.png",
+          "finished_replay": "notes/round24/finished/opus.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-2564f4",
+      "gallery_ids": [
+        "r18-muse"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/aaa7bb9dab9e052a.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-muse.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-2564f4/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18",
+          "lane": "MUSE",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-muse/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18/run/MUSE_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-2a634e",
+      "gallery_ids": [
+        "r19-musef"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/2955dda93f177f1e.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-musef.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-2a634e/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "MUSEF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-musef/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/MUSEF1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-2f7993",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-2f7993/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-2f7993/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-2f7993/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r24.1",
+          "lane": "INNS1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r24.1/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-33a5bf",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-33a5bf/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-33a5bf/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-33a5bf/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-33a5bf/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-358aea",
+      "gallery_ids": [
+        "r17-f3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/4a09dafd0ed3e60c.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-f3.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/6cfc699f141c354a.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-358aea/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "F3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-f3/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/F3_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-35c488",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-35c488/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-35c488/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-35c488/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-3a958c",
+      "gallery_ids": [
+        "r21.5-sonf"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/b02ddf06dd4b451b.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/44d4a0df811cd251.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "notes/round21.5/runner/run/SONF/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/inputs/docs/b80977c8538992a8.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-3a958c/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-3be9e8",
+      "gallery_ids": [
+        "r16-c1"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/4ca258998c82fb08.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-c1.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/6c156fdb54a940f8.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-3be9e8/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "C1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-3cab71",
+      "gallery_ids": [
+        "r20-new"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/708afcd8c0b12ee9.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/618bc5ca78b6bff6.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r20-new.md"
+        },
+        {
+          "role": "notes/research/hopper_materials.md",
+          "path": "archive/collection/inputs/docs/1f5de23ecdd7bee4.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/19a02e1aac974428.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/b785e5aec909ad94.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-3cab71/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r20",
+          "lane": "NEW1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r20/run/studios.json",
+          "finished_image": "archive/collection/gallery/r20-new/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r20/run/NEW1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-3f743e",
+      "gallery_ids": [
+        "r18-glm"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/16a9c03d753bf874.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-glm.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-3f743e/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18",
+          "lane": "GLM",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-glm/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18/run/GLM_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-482665",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-482665/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "description/verification/evidence/live-bunny/clock-provider.log"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-482665/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-496bb9",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-496bb9/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-496bb9/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-496bb9/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-496bb9/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r23",
+          "lane": "INNS1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r23/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-497bcf",
+      "gallery_ids": [
+        "r17-f2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ed587b524b8ace81.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-f2.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/811c715dff4efe9e.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-497bcf/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "F2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-f2/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/F2_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-49b647",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-49b647/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-49b647/notes/journal.md"
+        },
+        {
+          "role": "notes/research/hopper_materials.md",
+          "path": "archive/collection/inputs/docs/1f5de23ecdd7bee4.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-49b647/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r30",
+          "lane": "HOPR1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r30/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r30/run/HOPR1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r30/run/HOPR1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-4fb403",
+      "gallery_ids": [
+        "r17-o2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/be441b5bdd755d6a.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-o2.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/8703e9fb650d5b17.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-4fb403/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "O2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-o2/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/O2_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-520026",
+      "gallery_ids": [
+        "r18-bun"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/e3b570565b8f8d7d.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-bun.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-520026/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18",
+          "lane": "BUN",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-bun/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18/run/BUN_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-58dfc6",
+      "gallery_ids": [
+        "r19-sonf"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/2bcbd0fd71d83bae.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-sonf.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-58dfc6/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "SONF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-sonf/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/SONF1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-6399ad",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-6399ad/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-6399ad/notes/journal.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/6c156fdb54a940f8.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "crates/easel/tests/engine1/studio_6399ad.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "D1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-69c343",
+      "gallery_ids": [
+        "r19-gemb"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/3f6c8ed96ce38ed8.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-gemb.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-69c343/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "GEMB1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-gemb/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/GEMB1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-6e8898",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-6e8898/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-6e8898/notes/journal.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-6e8898/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "SELF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-6f0308",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-6f0308/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-6f0308/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "description/verification/evidence/live-bunny/clock-provider.log"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-6f0308/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-75c237",
+      "gallery_ids": [
+        "r16-c2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ea681d9e2555828c.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-c2.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/253c6f25bf5cdbc6.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-75c237/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "C2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-774267",
+      "gallery_ids": [
+        "r16-b3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/c3a0667e855a4a4e.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-b3.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/3d0deb95aba91dfc.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-774267/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "B3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-7ace8e",
+      "gallery_ids": [
+        "r16-b2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ddd32537fa50af99.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-b2.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/3d0deb95aba91dfc.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-7ace8e/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "B2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-7b31aa",
+      "gallery_ids": [
+        "r16-d2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/472c68be7609410b.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-d2.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/e6dc61b6407364f2.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-7b31aa/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "D2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-7c4dd1",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "notes/round27/readiness/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-7c4dd1/notes/journal.md"
+        },
+        {
+          "role": "notes/research/hopper_materials.md",
+          "path": "archive/collection/inputs/docs/1f5de23ecdd7bee4.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-7c4dd1/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r27",
+          "lane": "HOPR1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r27/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r27/run/HOPR1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r27/run/HOPR1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-7ff345",
+      "gallery_ids": [
+        "r16-a3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/378f51d1fdd2e090.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-a3.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/67b4933e90a85324.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-7ff345/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "A3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-851a37",
+      "gallery_ids": [
+        "r19-gemf"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/1fee46186cbf752a.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-gemf.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-851a37/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "GEMF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-gemf/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/GEMF1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-8cc0b8",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-8cc0b8/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-8cc0b8/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-8cc0b8/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r24.2",
+          "lane": "INNS1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r24.2/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-919cfd",
+      "gallery_ids": [
+        "r19-kimif"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/43c795886c0267f9.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-kimif.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-919cfd/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "KIMIF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-96b5e4",
+      "gallery_ids": [
+        "r16-c3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/da4f3d0bb4772c2e.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-c3.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/3da9e2f9e517fcf3.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-96b5e4/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "C3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-9aae10",
+      "gallery_ids": [
+        "r16-a1"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/3f27e60320c073bb.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-a1.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/6c156fdb54a940f8.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-9aae10/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "A1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-9cf69b",
+      "gallery_ids": [
+        "r16-a2"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ca216e3f8260bafb.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-a2.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/a50e94807b2bba3e.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-9cf69b/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "A2",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-aef22d",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "notes/round29/readiness/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-12e572/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-aef22d/notes/journal.md"
+        },
+        {
+          "role": "notes/research/giverny_materials.md",
+          "path": "notes/round26/readiness/materials-painter.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-aef22d/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r29",
+          "lane": "MONT1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r29/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r29/run/MONT1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r29/run/MONT1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-b08dc3",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-b08dc3/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/44d4a0df811cd251.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-b08dc3/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-b08dc3/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-b3a3c7",
+      "gallery_ids": [
+        "r19-selfh"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/6e1f6702aefad3da.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-selfh.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-b3a3c7/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "SELFH1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-selfh/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/SELFH1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-b5323f",
+      "gallery_ids": [
+        "r16-d3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/5e09c86a846de480.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-d3.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/48ed0f1d5884980e.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-b5323f/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "D3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-ba1453",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-ba1453/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-ba1453/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-ba1453/notes/journal.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/tonn_materials.md",
+          "path": "archive/collection/studios/paint-studio-ba1453/notes/research/tonn_materials.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round21.1/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-ba1453/paintings/lua/painting.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-bfd78b",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-bfd78b/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-bfd78b/notes/journal.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-bfd78b/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "SONB1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r19/run/SONB1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/SONB1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-c6b5dd",
+      "gallery_ids": [
+        "r17-o3"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/3c9eb06dd3520f78.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-o3.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/f1d03e9b93155b72.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-c6b5dd/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "O3",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-o3/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/O3_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-c71699",
+      "gallery_ids": [
+        "r18-gem"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/ad2fb285d988c180.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-gem.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-c71699/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18g",
+          "lane": "GEM",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18g/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-gem/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18g/run/GEM_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-c766c5",
+      "gallery_ids": [
+        "r18-dsk"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/f209175247204ada.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-dsk.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-c766c5/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18",
+          "lane": "DSK",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-dsk/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18/run/DSK_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-c8bb05",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-c8bb05/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-c8bb05/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "notes/journal-mining/yolo-r31-smoke-journal.md"
+        },
+        {
+          "role": "notes/research/every_materials.md",
+          "path": "archive/collection/studios/paint-studio-c8bb05/notes/research/every_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/painting.lua"
+        },
+        {
+          "role": "paintings/lua/scratch-1.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch-1.lua"
+        },
+        {
+          "role": "paintings/lua/scratch-2.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch-2.lua"
+        },
+        {
+          "role": "paintings/lua/scratch-3.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch-3.lua"
+        },
+        {
+          "role": "paintings/lua/scratch-4.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch-4.lua"
+        },
+        {
+          "role": "paintings/lua/scratch-5.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch-5.lua"
+        },
+        {
+          "role": "paintings/lua/scratch.lua",
+          "path": "archive/collection/studios/paint-studio-c8bb05/paintings/lua/scratch.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r31-smoke",
+          "lane": "FREE1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r31-smoke/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r31-smoke/run/FREE1_finished.png",
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-cd267e",
+      "gallery_ids": [
+        "r16-b1"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/f888ce79baa6d2fc.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/4a725c54a8f7ca21.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r16-b1.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/inputs/docs/6c156fdb54a940f8.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-cd267e/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r16",
+          "lane": "B1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r16/run/studios.json",
+          "finished_image": null,
+          "finished_replay": null
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-cfa19c",
+      "gallery_ids": [
+        "r17-f1"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/32240faec742938f.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r17-f1.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/828addba682c6d8a.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round17/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-cfa19c/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r17",
+          "lane": "F1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r17/run/studios.json",
+          "finished_image": "archive/collection/gallery/r17-f1/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r17/run/F1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-d95ea6",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-d95ea6/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-d95ea6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-d95ea6/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "notes/round24/retrospective/friedrich-materials-painter.md"
+        },
+        {
+          "role": "notes/research/friedrich_painter.md",
+          "path": "archive/collection/studios/paint-studio-d95ea6/notes/research/friedrich_painter.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/inputs/docs/b80977c8538992a8.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round24/runner/studio_notes.md"
+        },
+        {
+          "role": "notes/techniques.md",
+          "path": "notes/techniques.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-d95ea6/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r25",
+          "lane": "FRDC1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r25/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r25/run/FRDC1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r25/run/FRDC1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-db6324",
+      "gallery_ids": [
+        "r19-lunab"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/d6f7fa6abafe2447.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-lunab.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "crates/easel/tests/engine1/studio_db6324.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "LUNAB1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-lunab/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/LUNAB1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-e708c7",
+      "gallery_ids": [
+        "r19-newf"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/bbaffa06866bff3c.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-newf.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-e708c7/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "NEWF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-newf/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/NEWF1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-ea8319",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-ea8319/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-ea8319/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-ea8319/notes/journal.md"
+        },
+        {
+          "role": "notes/research/inness_materials.md",
+          "path": "archive/collection/studios/paint-studio-24be5f/notes/research/inness_materials.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/studios/paint-studio-002de5/notes/research/oil_paint_physics.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/studios/paint-studio-ea8319/notes/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-ea8319/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r24",
+          "lane": "INNS1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r24/run/studios.json",
+          "finished_image": "notes/round24/finished/fable.png",
+          "finished_replay": "notes/round24/finished/fable.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-ebf843",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-ebf843/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-ebf843/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-ebf843/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "CTEST1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/runners/gallery-fcf9c110/r19/run/CTEST1_finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/CTEST1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-f0e4ab",
+      "gallery_ids": [
+        "r19-lunaf"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/c638941cc2fa485a.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/d8716550c03fa248.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r19-lunaf.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/c30cbb8f81e74c3d.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/9a602b4dbf124be4.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "notes/round19/runner/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-f0e4ab/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r19",
+          "lane": "LUNAF1",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r19/run/studios.json",
+          "finished_image": "archive/collection/gallery/r19-lunaf/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r19/run/LUNAF1_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-f705c2",
+      "gallery_ids": [
+        "r18-mimo"
+      ],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/inputs/docs/67a813e2e4c97065.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/inputs/docs/01d5f53cc1d04412.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/inputs/journals/r18-mimo.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/af65b2f0a375d22c.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "notes/round17/runner/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-f705c2/paintings/lua/painting.lua"
+        }
+      ],
+      "runs": [
+        {
+          "round": "r18",
+          "lane": "MIMO",
+          "mapping": "archive/collection/runners/gallery-fcf9c110/r18/run/studios.json",
+          "finished_image": "archive/collection/gallery/r18-mimo/finished.png",
+          "finished_replay": "archive/collection/runners/gallery-fcf9c110/r18/run/MIMO_finished.lua"
+        }
+      ]
+    },
+    {
+      "id": "paint-studio-f99282",
+      "gallery_ids": [],
+      "records": [
+        {
+          "role": "BRIEF.md",
+          "path": "archive/collection/studios/paint-studio-f99282/BRIEF.md"
+        },
+        {
+          "role": "notes/easel_guide.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/easel_guide.md"
+        },
+        {
+          "role": "notes/journal.md",
+          "path": "archive/collection/studios/paint-studio-f99282/notes/journal.md"
+        },
+        {
+          "role": "notes/research/friedrich_materials.md",
+          "path": "archive/collection/inputs/docs/9f509e9f1e92f7bc.md"
+        },
+        {
+          "role": "notes/research/oil_paint_physics.md",
+          "path": "archive/collection/inputs/docs/82c92500f9574376.md"
+        },
+        {
+          "role": "notes/research/trees.md",
+          "path": "archive/collection/studios/paint-studio-106bf6/notes/research/trees.md"
+        },
+        {
+          "role": "notes/studio_notes.md",
+          "path": "archive/collection/studios/paint-studio-f99282/notes/studio_notes.md"
+        },
+        {
+          "role": "paintings/lua/painting.lua",
+          "path": "archive/collection/studios/paint-studio-f99282/paintings/lua/painting.lua"
+        }
+      ]
+    }
+  ],
+  "issues": []
+}

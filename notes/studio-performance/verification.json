@@ -1,0 +1,57 @@
+{
+  "status": "deployed and production browser verified",
+  "pythonAndBrowserTests": 67,
+  "replayDisplayComparisons": 42,
+  "postImageFixStartupTests": 11,
+  "realSession": {
+    "painter": "paint-studio-c8bb05",
+    "events": 1148,
+    "runsPerVariant": 3,
+    "handlerSamplesPerVariant": 42,
+    "handlerMedianMs": {
+      "baseline": 13.1,
+      "candidate": 2.3
+    },
+    "pickerMutations": {
+      "baseline": [
+        1,
+        1,
+        1
+      ],
+      "candidate": [
+        0,
+        0,
+        0
+      ]
+    },
+    "contentEquivalent": true
+  },
+  "limits": [
+    "Handler timings are same-machine Chrome lab measurements, not field latency or frame-rate guarantees.",
+    "Initial comparison sampled unfinished chunked journal rendering; completed-content comparison passed.",
+    "Homepage autoplay unchanged: no consistent improvement across measured profiles.",
+    "Tailnet preview verified from serving host, not another machine."
+  ],
+  "commit": "86e02b7fab6569f4da83b6a34f171d5aba8f0d46",
+  "productionURL": "https://stillwet.art/studio/",
+  "privatePreviewURL": "http://100.82.115.34:8770/studio/",
+  "review": {
+    "model": "GPT-6.1 Sol",
+    "reasoning": "high",
+    "rounds": 2,
+    "result": "no blocking findings after wrong-painter loading fix"
+  },
+  "productionChecks": {
+    "desktop": true,
+    "mobileStream": true,
+    "canvasRequestsPerPage": 1,
+    "codeOpenReusesDOM": true,
+    "replayReturnAndPainterSwitch": true,
+    "unchangedPickerMutations": 0,
+    "pageErrors": 0,
+    "servedScriptMatchesCommit": true
+  },
+  "homepageDecision": "Unchanged: no consistent image benefit at 1.5 Mbps; at simulated desktop 0.4 Mbps image painted 1424 ms earlier in median paired differences, but video startup 221 ms later and final LCP 196 ms later.",
+  "homepageMethod": "Chrome lab network emulation, not field data; paired document-interception comparison plus direct live-origin checks. See homepage-autoplay.json.",
+  "regressionProof": "Early wrong-painter regression fails on previous staged startup and passes after fix."
+}

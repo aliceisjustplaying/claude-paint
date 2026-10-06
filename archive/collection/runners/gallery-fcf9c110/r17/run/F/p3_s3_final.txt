@@ -1,0 +1,15 @@
+The painting is finished, saved and the session is closed.
+
+- **Painting:** `~/src/a/paint-studio-358aea/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-358aea/paintings/lua/painting.lua`
+- **Title:** *Morning on the Ryck Meadows*
+
+It's a June forenoon on the flat meadows outside a small Pomeranian town, invented in Friedrich's way. The horizon is set low, so a pale, hazy sky takes up two thirds of the canvas. A man in a dark greatcoat and a woman in a red-brown dress and cream shawl stand on a worn path, their backs to us. They look across the meadow and a thin stretch of the river Ryck to the grey-blue towers of the town, which has a skirt of low houses and trees. On the left a row of pollard willows (trees cut back to a stump so shoots grow from the top) holds the edge of the picture, and a post mill on the rise shows between them. On the right a split-rail fence runs down to the river. A bay grazes behind it and a black horse stands. A red sail sits on the water in the distance. The foreground has buttercups, daisies, sorrel and cow parsley.
+
+When I came back to the easel, my last session had called the picture done but hadn't saved it. I made two final changes before saving:
+- **The horses:** the black horse got a cool sheen of sky light along its crest, back and rump, and the bay a warm lit back, so they no longer read as flat cut-outs.
+- **A stork:** I added a white stork walking between the first two willows, with a black wing and red legs and bill, its feet in the grass.
+
+Both were small enough to do safely on paint that was already dry.
+
+I didn't run `bin/easel check` to replay the log against the canvas. It took about 13 minutes at 208 chunks, and this log is now 189 chunks.

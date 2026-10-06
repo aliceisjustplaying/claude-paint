@@ -1,0 +1,5 @@
+- day 1, 09:06: ## Plan (day 1)
+  Subject: late-afternoon corner on a side street. A three-storey brick building fills the left 60%, seen frontally. It has a cornice, two rows of five tall windows with shades at different heights and a ground-floor lunchroom with a big dark plate-glass window and a door. Its right side face recedes in cool shade. To the right: pale sky, a lower distant block with a water tower, lit warm by low sun. Foreground: sidewalk and street. The sun comes low from the left. The shadow of an unseen building to the left cuts diagonally across the lower-left facade (line 0,290 → 380,560), so the storefront's left half sits in shadow. One small figure may stand near the corner, x≈640; decide after the masses.
+  Canvas 900mm, aspect 1.4 (H=714), linen 16x15, ground: lead white + touch of ochre, 120um, knife, texture 0.25.
+  Drawing: 2B pencil, ruled. The first square windows were erased and redrawn tall, so ghosts remain.
+  Method: thin turps lay-in, then fuller body paint wet over dry, with a little oil added late.

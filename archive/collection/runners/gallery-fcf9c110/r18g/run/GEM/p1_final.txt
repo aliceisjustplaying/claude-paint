@@ -1,0 +1,16 @@
+### *Still Life with Earthenware Pitcher, Lemons, and Folded Linen*
+
+**Saved painting:** `out/easel/painting/painting.png`  
+**Painting log:** `paintings/lua/painting.lua`
+
+---
+
+### About the Picture
+
+Painted in oil on a plain-weave linen canvas prepared with a warm earth imprimatura, this still life brings together everyday domestic elements within a quiet chiaroscuro atmosphere inspired by the 17th-century Spanish *bodegón* tradition of Zurbarán and Cotán. 
+
+Arranged across an aged oak tabletop, the composition balances weight, texture, and light:
+- At the center stands an earthenware pitcher with an ample turned body, modeled in rich terracotta earth, umber core shadows, and warm olive-amber glazes that capture specular lights on the shoulder and lip.
+- Beside it, a ripe whole lemon and a cut half introduce vibrant chrome and ochre brilliance against the deep background; the cut fruit reveals glistening radial segments of translucent pulp, pale pith, and a spiraling peel curling outward over the chamfered table edge.
+- A fresh botanical lemon leaf with its woody stem bridges the citrus to a starched white linen napkin folded over the tabletop and cascading downward into the foreground.
+- To the right, a solitary walnut with its rugged shell grounds the lateral balance of the light and cast shadows.

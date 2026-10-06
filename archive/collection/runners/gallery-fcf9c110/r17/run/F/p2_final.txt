@@ -1,0 +1,11 @@
+The painting is finished and saved.
+
+- **Painting:** `~/src/a/paint-studio-497bcf/out/easel/painting/painting.png`
+- **Log:** `~/src/a/paint-studio-497bcf/paintings/lua/painting.lua` (184 chunks)
+- **Title:** *June Morning on the Meadows before the Town*
+
+I had already judged it finished and saved it at the end of the last session. Today I reopened the easel, which replayed and verified the log. I looked at the whole canvas and at close crops of the cattle and fence, the couple, the hay field and the elder. I added no paint because I saw nothing I could improve without risking what already works. I saved it again unchanged, added a closing entry to the journal and closed the session.
+
+It's a wide, flat Pomeranian river meadow on a clear June morning, with a large, softly clouded sky over a low horizon. In the distance a town's three towers, its church roofs and a windmill stand pale lilac-grey in the haze, behind a strip of ripening rye and a hedgerow. A farmstead under three limes on the left balances the town. In the middle distance a river winds back through a quiet green pasture where three cattle graze and a stork wades. Beside it lies a mown hay field with a row of silvery pollard willows along its edge, haycocks, and a loaded wagon with two horses and two haymakers. The foreground is a grassy rise lying in cloud shadow, with a rail fence down the left and a flowering elder at the right edge. A sandy cart track curves up the rise to its crest, where a man in a greatcoat and his wife in a red shawl stand arm in arm with their backs to us, looking out over the harvest to the town.
+
+A few weaknesses remain. The willows still stand in too even a row, the far river gleams are a little bright, and the cattle are somewhat blocky.

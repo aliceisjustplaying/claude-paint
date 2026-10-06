@@ -550,7 +550,8 @@ impl Canvas {
                     let give = carried * settle;
                     let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
                     let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
-                    laid |= give - to_sheet > 0.0 && !last_bed.is_empty();
+                    // (crumbs that settle on wet paint aren't laid in the tooth)
+                    laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
                     wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
                     for &(i, g) in &last_sheet_bed {
                         caught.push((i, to_sheet * g / gs));

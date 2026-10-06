@@ -135,5 +135,6 @@ He sometimes used standard commercial formats [AIC; N-A 618; MaM].
 - [Conservator 1993] Norville-Day, Townsend & Green. [Sci. Rep.] 6:29594 (2016). [Jackson's] blog (2023), secondary.
 - Rouart, *Degas à la recherche de sa technique* (1945), quoted second-hand.
 - Blocked: Orsay, NGA and Norton Simon pages; used through search excerpts only.
-- [Artist's Network], [Dix-Neuf abstract]: an Artist's Network article and the abstract of a *Dix-Neuf* article, on the steam; read online, their addresses not recorded.
+- [Artist's Network] "Pastel Pointers: A Steamy Situation", Artist's Network. https://www.artistsnetwork.com/art-mediums/pastel/pastel-pointers-a-steamy-situation/
+- [Dix-Neuf abstract] "Degas's Breath and the Materiality of Pastel Veils", *Dix-Neuf* 25:3–4 (2021), abstract only. https://doi.org/10.1080/14787318.2021.2017557
 - [search summary], [MFA], [Norton Simon summary], [Wikipedia summary]: web-search summaries of those pages (and of general references), not the pages themselves; a claim resting on one of these alone is uncertain.

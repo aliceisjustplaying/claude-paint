@@ -619,7 +619,11 @@ impl Canvas {
                     for x in v.iter_mut() {
                         *x = get_f32(r)?;
                     }
-                    let over: Vec<bool> = get_all(r, n)?.into_iter().map(|o| o > 0.5).collect();
+                    let over = get_all(r, n)?;
+                    if !over.iter().all(|&o| o == 0.0 || o == 1.0) {
+                        return Err(bad("checkpoint sheet mask is invalid"));
+                    }
+                    let over: Vec<bool> = over.into_iter().map(|o| o > 0.5).collect();
                     let a = get_all(r, n)?;
                     let rgb = get_all(r, n * 3)?;
                     if !v.iter().chain(&a).chain(&rgb).all(|x| x.is_finite()) {

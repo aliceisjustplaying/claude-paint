@@ -889,13 +889,16 @@ pub struct Palette {
     pack: Vec<(f32, f32, f32)>,
     /// Each tube's oil and whether it holds wax, in its box (`grind_of`).
     grind: Vec<(Oil, bool)>,
+    /// The box whose colourmen ground its tubes (`pack`, `grind`): its own
+    /// name, kept when it is renamed (`named`).
+    stock: &'static str,
 }
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        // (its tubes' oil and grind as they are: a renamed palette, `named`,
-        // keeps its box's)
-        Palette { engine: self.engine, pack: self.pack.clone(), grind: self.grind.clone(), ..Palette::new(self.name, self.tubes.clone()) }
+        // (its tubes ground by its box's colourmen: a renamed palette's are
+        // its box's, `named`; rebuilt from its tubes as they are now)
+        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -911,7 +914,7 @@ impl Palette {
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         let grind = tubes.iter().map(|t| grind_of(name, t.name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, lat, scat, pack, grind }
+        Palette { name, tubes, engine: crate::ENGINE, lat, scat, pack, grind, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -1034,12 +1037,8 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        let mut p = Palette { engine: self.engine, ..Palette::new(self.name, t) };
-        // (the tubes it had keep their oil and grind: a renamed palette's
-        // are its box's, `named`)
-        p.pack[..self.pack.len()].copy_from_slice(&self.pack);
-        p.grind[..self.grind.len()].copy_from_slice(&self.grind);
-        p
+        // (ground by its box's colourmen: a renamed palette's are its box's, `named`)
+        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -1388,6 +1387,15 @@ mod tests {
         pal.engine = 5;
         let m = pal.pile(vec![(i, 1.0)]);
         assert!((m.drying - own).abs() < 1e-6 && m.tube_oil_rate == 1.0 && m.wax == 0.0);
+        // renamed, cloned or with a tube more, its tubes are still its box's
+        let renamed = Palette::named_box("impressionist").unwrap().named("a study");
+        let more = renamed.with(vec![renamed.tubes[0].clone()]);
+        for p in [renamed.clone(), more.clone()] {
+            assert_eq!(p.name, "a study");
+            assert_eq!(p.grind[i], (Oil::Poppy, true));
+            assert_eq!(p.pack[i], renamed.pack[i]);
+        }
+        assert_eq!(more.grind.len(), renamed.tubes.len() + 1);
     }
 
     /// From engine 6, blotting paper draws a paint's oil no lower than its

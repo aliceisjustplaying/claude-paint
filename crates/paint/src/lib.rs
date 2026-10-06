@@ -69,7 +69,9 @@ pub use shape::Shape;
 /// The engine version new paintings are painted with. A painting replays
 /// with the version it was painted with (its log's `--@ engine` line; a log
 /// without one is version 1), so a fix that changes what paint does never
-/// changes a past painting:
+/// changes a past painting. Exception: engine-5 solvent waits were
+/// accelerated in October 2026, accepting replay drift for existing logs
+/// (notes/thinner/ACCEPTANCE.md, check 17):
 /// - 1: every painting before the version was recorded.
 /// - 2: fresh paint over drying paint mixes into its cure as it is laid (a
 ///   stroke right after it feels the film as it would after `wait(0)`); a

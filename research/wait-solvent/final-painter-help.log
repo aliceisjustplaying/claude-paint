@@ -1,0 +1,17 @@
+easel: a live painting session (see notes/easel_guide.md)
+
+  easel open          start or reattach; replays paintings/lua/painting.lua if it exists
+  easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+             [--survey]   the whole canvas at full detail, in tiles
+             [--compare <earlier look png>]   that look beside this one
+             [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
+  easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
+  easel log           the painting so far (= paintings/lua/painting.lua)
+  easel status        chunks, width, canvas
+  easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/painting/painting.png), lit on its relief if asked
+  easel frames on|off save a look after every chunk
+  easel close         end the session (the log stays)
+  easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
+  easel tubes [--markdown]   the tubes in the box (--markdown: as a table)

@@ -1,0 +1,115 @@
+1000	750
+  chunk   1     2.63s
+  chunk   2     1.36s
+115.67916666666666	183.02666666666664	513.9708333333333	637.07916666666665	20.041666666666686	624.5
+  chunk   3     1.25s
+  chunk   4    17.27s
+  chunk   5    13.78s
+  chunk   6    18.81s
+  chunk   7    11.95s
+  chunk   8    33.67s
+  chunk   9    20.54s
+  chunk  10    14.91s
+day 2, 08:15
+100	50	open
+300	200	open
+150	320	open
+200	450	open
+500	450	open
+300	650	open
+700	300	open
+900	150	open
+900	650	open
+  chunk  11     0.60s
+day 4, 08:15
+100	50	setting
+300	200	tacky
+150	320	setting
+200	450	setting
+500	450	setting
+300	650	setting
+700	300	tacky
+900	150	tacky
+900	650	tacky
+  chunk  12     1.16s
+day 7, 08:15
+100	50	dry
+300	200	dry
+150	320	tacky
+200	450	tacky
+500	450	dry
+300	650	tacky
+700	300	dry
+900	150	dry
+900	650	dry
+  chunk  13     0.95s
+day 9, 08:15
+150	320	dry
+200	450	dry
+300	650	dry
+50	300	dry
+  chunk  14     0.54s
+  chunk  15    19.02s
+  chunk  16     9.05s
+  chunk  17     8.17s
+  chunk  18    10.50s
+1.0	0.79607844352722168	0.0
+  chunk  19     6.71s
+  chunk  20    23.97s
+  chunk  21    36.86s
+  chunk  22     3.33s
+setting	open	setting	open
+  chunk  23    15.07s
+tacky	setting	tacky	setting	setting	dry
+  chunk  24     0.75s
+  chunk  25   103.83s
+  chunk  26   198.53s
+  chunk  27    95.18s
+  chunk  28    28.93s
+  chunk  29     9.87s
+  chunk  30    37.14s
+100	300	tacky
+200	450	tacky
+500	450	setting
+500	320	setting
+300	650	setting
+800	300	tacky
+780	282	tacky
+430	240	dry
+  chunk  31     0.68s
+100	300	tacky
+200	450	dry
+500	450	tacky
+500	320	tacky
+300	650	dry
+800	300	dry
+780	282	dry
+600	500	tacky
+  chunk  32     0.55s
+100	300	dry
+200	450	dry
+500	450	dry
+500	320	dry
+600	500	dry
+50	280	dry
+  chunk  33     0.38s
+  chunk  34   263.68s
+wrote research/wait-solvent/fast-prefix.png (34 chunks, painted in 1011.6s, total 1014.9s)
+     1015.01 real      1060.58 user        53.00 sys
+          1775828992  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             2054890  page reclaims
+                  22  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 147  voluntary context switches
+             9392444  involuntary context switches
+       8044168803691  instructions retired
+       3054809893183  cycles elapsed
+          2465515968  peak memory footprint

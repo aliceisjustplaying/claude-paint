@@ -470,7 +470,9 @@ impl Canvas {
             let mut wet_um3 = 0.0f32;
             {
                 let d = self.drawing_mut();
-                d.sticks = true;
+                // (a stick drawing's layout once pastel lands in the tooth:
+                // its cells' loose and bound pastel are kept, `Drawing::sticks`)
+                let mut laid = false;
                 for (j, &(i, b)) in under.iter().enumerate() {
                     let (hs, mu, k) = surf[j];
                     // the overlap left in the micro-relief once the surface has given
@@ -527,6 +529,7 @@ impl Canvas {
                     c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
                     c.a = a1;
                     c.loose += dv;
+                    laid = true;
                     pxs[i] = cover(under_px, c.a, c.r);
                 }
                 if crumbs {
@@ -547,12 +550,14 @@ impl Canvas {
                     let give = carried * settle;
                     let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
                     let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
+                    laid |= give - to_sheet > 0.0 && !last_bed.is_empty();
                     wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
                     for &(i, g) in &last_sheet_bed {
                         caught.push((i, to_sheet * g / gs));
                     }
                     carried -= give;
                 }
+                d.sticks |= laid;
             }
             self.px = pxs;
             self.film = film;

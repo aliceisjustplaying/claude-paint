@@ -459,9 +459,10 @@ def mark_whole(c, path):
     whole picture after it. The chain starts, at the end, from the picture of the canvas's proportions most like the
     others among the last eight. A close-up of the same proportions differs from the whole too much to pass; where
     the painting changed a lot between two looks (an early lay-in) the chain stops, and before that the view shows
-    the last picture opened, as without this."""
+    the last picture opened, as without this. Where the easel command that wrote a picture can be read (_look_said),
+    it decides instead."""
     ims = [e for e in c["events"] if e["kind"] == "image" and not e.get("ref")]
-    key = f"{path}:{os.path.getsize(path)}:{len(ims)}"
+    key = f"v4:{path}:{os.path.getsize(path)}:{len(ims)}"
     done = _whole_cache().get(key)
     if done is not None and len(done) == len(ims):
         for e, w in zip(ims, done):
@@ -498,8 +499,45 @@ def mark_whole(c, path):
         if corr(e, later) >= 0.75:
             e["whole"] = True
             later = e
+    for e in ims:  # where the command that made the picture says what it showed, that decides
+        said = _look_said(c["events"], e)
+        if said is not None:
+            e["whole"] = said
+    # a round 16-18 studio painter looked through the easel (its pictures under out/easel/): a picture it made
+    # elsewhere (a mirrored or cut-out copy in a scratch folder) isn't the canvas as the easel shows it. (Earlier
+    # painters rendered their finals into scratch folders themselves: this doesn't apply to them.)
+    if os.path.basename(c.get("cwd", "").rstrip("/")).startswith("paint-studio-"):
+        for e in ims:
+            if "out/easel/" not in e.get("path", ""):
+                e["whole"] = False
     _whole_cache()[key] = [e["whole"] for e in ims]
     _save_whole_cache()
+
+
+def _look_said(events, image):
+    """Whether the easel command that wrote this picture asked for the whole canvas (rounds 16-18 called the easel
+    from the shell: `easel look --crop ...`, `easel do '...' --look`): True or False from its options, None when no
+    command names the file or which of several looks wrote it can't be told."""
+    name = os.path.basename(image.get("path", ""))
+    if not name:
+        return None
+    k = events.index(image)
+    cmd = next((e for e in reversed(events[:k]) if e["kind"] == "cmd" and name in (e.get("out") or "")), None)
+    if cmd is None:
+        return None
+    text, out = cmd.get("text", ""), cmd.get("out") or ""
+    looks = re.findall(r"\beasel\s+look\b([^\n;&|]*)", text)
+    files = re.findall(r"look-\d+\.\w+", out)
+    if looks and len(files) == len(looks) and name in files:
+        opts = looks[files.index(name)]
+    elif looks and len(files) < len(looks):  # some looks failed: decided only if all of them agree
+        wholes = {not re.search(r"--(crop|mode|light|survey|compare|hold|palette)\b", o) for o in looks}
+        return wholes.pop() if len(wholes) == 1 else None
+    elif not looks and re.search(r"\beasel\s+do\b", text) and re.search(r"(?m)--look\b", text) and len(files) == 1:
+        opts = ""
+    else:
+        return None
+    return not re.search(r"--(crop|mode|light|survey|compare|hold|palette)\b", opts)
 
 
 def summary_clock(text):

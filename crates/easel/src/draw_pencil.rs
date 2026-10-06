@@ -540,7 +540,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // pile's medium and thinner don't matter. soft: 0 hard .. 1 very soft;
     // point (mm): a pastel pencil, its point that wide, keeping it (from
     // engine 6 a pencil is kind="pencil" with a diameter)
-    {
+    // (an older log sees only the globals it saw: pastel and smudge from
+    // engine 5, feel from 6, the paper mask from 7; never set before, so a
+    // log's walk of its globals is as it was)
+    let engine = st.borrow().tubes.engine;
+    if engine >= 5 {
         let meta = meta.clone();
         let st1 = st.clone();
         g.set("pastel", lua.create_function(move |lua, (v, o): (Value, Option<Table>)| {
@@ -635,7 +639,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // smudge(mask or pts, {strength=0.6, width=, reach=}): a finger or stump
     // rubbed over loose pastel: drags neighboring colors together (within
     // `reach` units, about 2 mm) and presses it into the tooth
-    {
+    if engine >= 5 {
         let st1 = st.clone();
         g.set("smudge", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
             if let Some(o) = &o {
@@ -751,7 +755,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // lay_sheet(mask, {grammage=120, tone=}): a sheet of paper laid over the
     // mask to keep it clean (engine 7, paint's sheet.rs); lift_sheet() takes
     // it away with what it caught. It must be lifted in the chunk that laid it.
-    {
+    if engine >= 7 {
         let st1 = st.clone();
         g.set("lay_sheet", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
             if let Some(o) = &o {
@@ -792,7 +796,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     }
     // feel(x, y): what a fingertip feels there (engine 6): the surface, and the
     // pastel in the tooth
-    {
+    if engine >= 6 {
         let st1 = st.clone();
         // (a query: the painting ages to now first, as `drying` does)
         g.set("feel", lua.create_function(move |_, (x, y): (f32, f32)| {

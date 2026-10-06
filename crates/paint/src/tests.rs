@@ -868,10 +868,11 @@ fn wax_dries_more_matte() {
 #[test]
 fn a_packed_film_follows_the_relief() {
     let film = |fluid: Option<f32>| {
-        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));
+        // (80 mm over 300 px: the threads resolved; a fluid glaze's body)
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
         let (w, h) = (c.f.w, c.f.h);
         let add = vec![30.0f32; w * h];
-        let stiff = vec![0.05f32; w * h];
+        let stiff = vec![0.0f32; w * h];
         let sets = vec![crate::surface::SET_TIME; w * h];
         let fl = fluid.map(|f| vec![f; w * h]);
         c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, fl.as_deref())

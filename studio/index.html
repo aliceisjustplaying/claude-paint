@@ -672,7 +672,7 @@ function renderCode(path, text, newLines, before = null) {
       }
       if (at < lines.length) { queueCodeBatch(batch); return; }
       $('file').textContent = fname(path);
-      $('codeformat').textContent = lua && text ? (formatted ? 'formatted · display only' : 'raw source') : '';
+      $('codeformat').textContent = lua && text ? (formatted ? '' : 'raw source') : '';
       $('codeformat').title = formatted ? 'Line numbers refer to this formatted view. The painter’s source is unchanged.' : 'Original source; unavailable or unparseable formatting leaves it unchanged.';
       $('code').style.setProperty('--gutter', String(String(lines.length).length + 2) + 'ch');
       if (!lines.length) { const empty = document.createElement('div'); empty.textContent = 'no program yet'; empty.style.padding = '12px 16px'; fragment.appendChild(empty); }

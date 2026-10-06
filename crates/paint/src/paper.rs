@@ -306,8 +306,24 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
             }
         });
     }
-    // the pores between the fibre tops: mean depth about the fibre thickness
-    let micro = vec![p.thick_um; n];
+    // the pores between the fibre tops (Dodson 2001; notes/research/
+    // paper_mechanics_and_transport.md §2): many layers deep, a surface
+    // pore's mean height is t·ε/(1−ε) at the local porosity, its spread about
+    // its mean (near exponential, as measured). Pressing makes the denser
+    // spots denser: the solid share follows the fibre count to the power
+    // 1 − press. A pixel holds only a few dozen pores, so its mean scatters:
+    // Gamma(k = 6)/6 (the research's k ≈ 2–12, its middle).
+    let micro: Vec<f32> = (0..n)
+        .map(|i| {
+            let solid = ((1.0 - p.porosity) * (gram[i] / beta).max(0.05).powf(1.0 - p.press)).clamp(0.05, 0.95);
+            let mean = p.thick_um * (1.0 - solid) / solid;
+            let (x, y) = ((x0 + i % w) as u64, (y0 + i / w) as u64);
+            let mut r = Rng::new(p.seed ^ 0x5EED_9031 ^ x.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ y.wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
+            let k = 6;
+            let g: f32 = (0..k).map(|_| -(r.f().max(1e-7)).ln()).sum::<f32>() / k as f32;
+            mean * g
+        })
+        .collect();
     Sheet { height, micro, grammage: gram }
 }
 

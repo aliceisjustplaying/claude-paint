@@ -210,3 +210,73 @@ Not built, and why: wet pastel and steam (the deposit and consolidation of a
 water-softened pastel compact and its gum are unmeasured; only the water
 transport could be modelled), pastel paste/gouache (a water-borne binder
 drying by evaporation to a porous film: physics known, a large job).
+
+### Engine 7 tools, second pass (2026-10-06; notes/research/pastel_removal_air_blade.md)
+
+The brush, the blade and the loose dust made more physical. Paint's
+sheet.rs:
+
+- **The knife sinks** (`edge_sink_um`): a cylindrical edge (radius `edge`,
+  100 µm by default) on the sheet as a bed of springs with Chen et al.'s
+  (2020) compression curve σ = 0.636(e^(13.54ε) − 1) MPa, thickness the
+  paper's caliper; the hand's line load 0.05–0.5 N/mm by pressure. It takes
+  the loose pastel above that depth (35 % dropped where it lifts, an
+  estimate within the research's 20–50 %; the rest carried off), and
+  burnishes: the residual strain 0.49ε − 0.027 lowers the pixel's height and
+  its pore depth µ by the dent (the voids it closed), once per pixel. The
+  Winkler depth ignores the fibres' in-plane stiffness, so it is an upper
+  bound: a firm scrape strips the loose pastel to the paper. Fixed pastel
+  stays; nap raising and cutting (a scalpel) are not modelled.
+- **The brush fills** (`Held::pastel_mg`): it keeps what it lifts in
+  proportion to its room (capacity 0.06 mg per mm³ of a 2 mm loaded tip,
+  width × 2 × 0.3·width: a fur brush's pile holds 5–7 % of its volume in
+  toner); the rest is pushed 0.5 mm ahead as crumbs (lay_crumbs, up to
+  100 µm) and met again, so it ends as a ridge at the lift. `b:wipe` empties it.
+- **blow(x, y, {distance, speed, nozzle})**: Phares et al.'s peak wall shear
+  of an impinging jet, τ = 44.6ρU²Re^(−½)(h/d)^(−2) (h/d ≥ 6), on a ring at
+  0.09h, rising linearly inside it and falling as r^(−2.3) outside (a radial
+  wall jet). Heaped loose crumbs go past Shao & Lu's threshold for 100 µm
+  crumbs of 1250 kg/m³ (~0.21 m/s), on a ramp (the shear fluctuates); in the
+  pores the shear dies as exp(−4.21 z/w) (Moffatt), w the fibre width, so
+  the fine grains (Shao & Lu at 5 µm, ~0.8 m/s) go down to z = (w/2.1)·ln(u*/u*t).
+  Redeposition (0–20 %) left out.
+- **tap({g})**: crumbs heaped on the tooth with m·a > F_adh fall (F_adh 50
+  nN, crumbs 1250 kg/m³: at 100 g, d_c ≈ 33 µm; at 1 g, ~150 µm); with
+  crumb sizes P(A) ∝ A^(−3/2) up to 300 µm the falling share of the heap is
+  (A_max − A_c)/(A_max − A_min). Pore-held grains and fixed pastel stay.
+
+Still flat: a brushed ghost is an even tone, because the paper model gives
+every pixel the same pore depth (µ = the fibre thickness); letting µ vary
+with the local fibre count would need its own derivation.
+
+### Third pass (2026-10-06; notes/research/paper_mechanics_and_transport.md)
+
+The brief: "make it right, more physical"; and replay exactness only matters
+for master, so engine 7 changed in place.
+
+- **Pores per pixel** (paper.rs): Dodson's mean surface pore height
+  t·ε/(1−ε) at the local porosity (the solid share following the fibre count
+  to the power 1 − press: denser spots shallower), times a Gamma(6)/6
+  scatter for the few dozen pores a pixel holds (k ≈ 2–12, the middle).
+  The sheet's mean stays the fibre thickness at ε = 0.5. A brushed ghost
+  now has the paper's grain.
+- **The knife's dent** (`edge_sink_um`): a Pasternak layer, p = σ(w/T) −
+  (G_xz·T/3)w″ with Chen's σ and G_xz = 30 MPa (15–50 [E]; 16–127 measured
+  in board), solved on a grid with an active set for the contact and a
+  bisection on the depth: 0.17–0.8 of the bed of springs at a knife's light
+  loads, as the research's numerical solution. The load is the hand's 1–5 N
+  over the edge's length (no longer a fixed N/mm), so a 3 cm palette knife
+  presses lightly (no permanent dent: Chen's residual strain is 0 below
+  ε ≈ 0.055) and a 2–3 mm edge hard (burnishes).
+- **Nap**: drag per fibre crossed, μ·q·w_f (μ 0.3, w_f the fibre width),
+  past a joint's strength (3 mN; 1.1–6.5 measured) tears ends up; the tooth
+  there deepens up to 1.9× (1.3–2.5 [E]) with the excess.
+- **The scalpel**: past q = H·2R (fibre wall 350 MPa) the edge cuts,
+  shaving 12 µm (about a fibre layer, 10–15 [D]) a pass and taking the
+  pastel in it, fixed too.
+- **Blown crumbs**: lifted heaped crumbs roll out in their direction (48
+  sectors) and settle between 1.15 and 1.56 times the radius where the shear
+  stops lifting them (u* ∝ r^(−1.15); impact threshold 0.81–0.86 of the
+  fluid one; a puff's few cm too short for saltation): a ring. 5 % of the
+  fine grains settle within 10 cm (Wood's fit: 1–9 % for 5 µm); the rest are
+  carried off. `blow` returns what left the picture.

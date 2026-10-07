@@ -92,9 +92,11 @@ far below the compaction point; pi recovered only by overflow compaction.
 `painter.ts` has a `context` handler, which pi runs before each provider request
 on a copy of the messages (`structuredClone` in pi's `emitContext`), so the
 session file keeps every image for the studio viewer. It replaces the image of
-older tool results with a line naming the file, `[an earlier look:
-out/easel/painting/look-0031.png]`, and keeps the newest images: at most 20,
-and at most 12 MB of base64. Old images go 5 at a time, so the request prefix
+older tool results with a line saying the painter saw it earlier and it was
+removed from this request to save space. The line names the file when known,
+says `read` can reopen it within the studio and `look` shows the current canvas.
+It keeps the newest images: at most 20 and at most 12 MB of base64.
+Old images go 5 at a time, so the request prefix
 (and the prompt cache) changes once every 5 looks, not with every look. The
 newest image stays unless it alone is over the size limit; then it goes too,
 and its line says it was left out and why (its size and the limit).

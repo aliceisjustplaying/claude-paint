@@ -22,14 +22,14 @@ deletes only the listed files it didn't write again. It won't write into a folde
 except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
 at the top), which it adopts, owning all of data/ as the old exporter did.
 """
-import argparse, base64, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
+import argparse, base64, hashlib, html, io, json, os, shutil, sys, time
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import studio as S
+import painter_history as P
+from studio import HERE, VIEWER_ASSETS
 from urllib.parse import quote
 try:
     from PIL import Image
-    from palette_board import palette_board
 except ImportError:  # the web copies are an optimization: without Pillow the viewer shows the originals
     Image = None
 
@@ -49,52 +49,6 @@ MODEL_NAMES = {
     "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3", "space-bunny-free": "Space Bunny",
 }
-
-
-def working_studios():
-    """Actual Pi process working directories, not persistent easel servers or saved running records."""
-    try:
-        ps = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, check=True, timeout=10)
-        pids = [parts[0] for row in ps.stdout.splitlines()
-                if len(parts := row.split()) == 2 and os.path.basename(parts[1]) == "pi"]
-        lsof = shutil.which("lsof") or "/usr/sbin/lsof"
-        if not pids:
-            return set()
-        r = subprocess.run([lsof, "-a", "-p", ",".join(pids), "-d", "cwd", "-Fn"],
-                           capture_output=True, text=True, timeout=10)
-        return {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
-    except (OSError, subprocess.SubprocessError):
-        return set()  # no execution evidence: never claim live
-
-
-def runner_states(sessions, working, now):
-    """Require a running sitting, a live Pi in that studio and recent session activity. Completion
-    comes only from the runner outcome, never a title, quiet session or exported render."""
-    records = {}
-    for path in glob.glob(S.RUNS):
-        try:
-            with open(path) as fh:
-                names = json.load(fh)
-            for key, painter in names.items():
-                lane, number = re.match(r"^(.*?)(\d*)$", key).groups()
-                rd = os.path.join(os.path.dirname(path), lane)
-                stem = os.path.join(rd, "p" + (number or "0"))
-                running = False
-                try:
-                    with open(stem + "_sittings.json") as fh:
-                        sittings = json.load(fh)
-                    running = bool(sittings) and sittings[-1].get("status") == "running"
-                except (OSError, ValueError, AttributeError, TypeError, KeyError):
-                    pass
-                completed = next((os.path.getmtime(f) for f in (stem + ".painted", stem + "_outcome.json")
-                                  if os.path.isfile(f)), 0)
-                records[painter] = (running, completed)
-        except (OSError, ValueError, AttributeError, TypeError):
-            continue
-    for s in sessions:
-        running, completed = records.get(s["p"], (False, 0))
-        s["active"] = bool(not s.get("outcome") and running and s["p"] in working and 0 <= now - s["mtime"] < 1800)
-        s["completed_at"] = (completed or s["mtime"]) if (s.get("outcome") or {}).get("status") == "finished" else None
 
 
 def featured(sessions):
@@ -176,52 +130,6 @@ def card_page(page, painter, homepage=False):
     return page
 
 
-def palette_chips(data, names):
-    """Match look.rs chart glyphs before browser color processing or canvas protections."""
-    im = Image.open(io.BytesIO(data)).convert("RGB")
-    if im.width == 1000:
-        return palette_board(data)
-    if im.width != 1124:
-        return None
-    px, rows = im.load(), []
-    for y in range(32, im.height):
-        white = [x for x in range(8, 532) if px[x, y] == (255, 255, 255)]
-        if not white:
-            continue
-        if rows and y - rows[-1][1] <= 16:
-            rows[-1][1] = y
-            rows[-1][2] = max(rows[-1][2], white[-1])
-        else:
-            rows.append([y, y, white[-1]])
-    glyphs = dict(zip("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_", (
-        "75557 26227 71747 71317 55711 74717 74757 71122 75757 75717 "
-        "25755 65656 34443 65556 74647 74644 34553 55755 72227 11152 55655 44447 "
-        "57755 65555 25552 65644 25563 65655 34216 72222 55557 55552 55775 55255 55222 71247 00007"
-    ).split()))
-    signatures = {}
-    for name in names:
-        if len(name) > 66:
-            continue
-        points = [(x, y) for y in range(5) for x in range(len(name) * 4)
-                  if x % 4 < 3 and int(glyphs[name[x // 4].upper()][y]) & (4 >> (x % 4))]
-        top = min(y for _, y in points)
-        key = tuple((x, y - top) for x, y in points)
-        signatures[key] = name if key not in signatures else None
-    chips = []
-    for i, (top, bottom, right) in enumerate(rows):
-        key = tuple(((x - 10) // 2, (y - top) // 2)
-                    for y in range(top, bottom + 1, 2) for x in range(10, right + 1, 2)
-                    if px[x, y] == (255, 255, 255))
-        name = signatures.get(key)
-        if name is None:
-            return None
-        end = rows[i + 1][0] - 3 if i + 1 < len(rows) else im.height
-        y = (top - 3 + end) // 2
-        chips.append({"name": name, "thick": "#%02x%02x%02x" % px[608, y],
-                      "thin": "#%02x%02x%02x" % px[752, y]})
-    return chips or None
-
-
 def web_copies(data, thumb, view):
     """The strip's thumbnail and the view's copy of one look, as JPEGs. False if the image can't be read."""
     try:
@@ -296,8 +204,8 @@ def write(path, data):
 
 
 def text(path, data):
-    body = S.scrub(data if isinstance(data, bytes) else data.encode())
-    if S.HOME.encode() in body or re.search(re.escape(S.USER.encode()), body, re.I):
+    body = P.scrub(data if isinstance(data, bytes) else data.encode())
+    if not P.scrubbed(body):
         sys.exit(f"export: {path} still names the home folder or account after scrubbing")
     write(path, body)
 
@@ -307,31 +215,22 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--skip", nargs="*", default=[], help="painter folders to leave out (test runs)")
     a = ap.parse_args()
-    S.PUBLIC = True
     out = os.path.abspath(a.out)
     before = owned(out)
-    ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
-    runner_states(ss, working_studios(), time.time())
+    ss = [{k: v for k, v in s.items() if k != "files"} for s in P.list_sessions() if s.get("painter") and s["p"] not in a.skip]
+    P.runner_states(ss, P.working_studios(), time.time())
     n_img = n_web = 0
     pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
     for s in ss:
         p = s["p"]
-        files = S.painter_files(p)
-        st = S.stream("p:" + p, files)
+        files = P.painter_files(p)
+        st = P.stream("p:" + p, files)
         ev = st["events"]
-        names = set()
-        if Image:
-            for e in ev:
-                names.update(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", e.get("code", "")))
-                if e["kind"] == "image" and re.search(r"palette (?!False)", e.get("look", "")):
-                    im = S.image(st, e["img"])
-                    chips = palette_chips(base64.b64decode(im[1]), names) if im else None
-                    if chips:
-                        e["palette"] = chips
-        n = sum(len(im) for _, _, im in [(f, 0, S._cache[f]["images"]) for f in files])
+        P.palette_events(st)
+        n = P.image_count(st)
         exts, web, jobs = [], [0] * n, {}
         for i in range(n):
-            im = S.image(st, i)
+            im = P.image(st, i)
             ext = EXT.get(im[0], "bin") if im else "bin"
             exts.append(ext)
             if im:
@@ -348,26 +247,7 @@ def main():
             web[i] = int(job.result())
             n_web += 1
         n_img += n
-        # the newest whole look with a web copy (no crop, no mode), for a glimpse of the canvas elsewhere (the gallery's
-        # index, the studio's picker)
-        s["look"] = None
-        for e in ev:
-            if e["kind"] == "image" and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
-                s["look"] = e["img"]
-        # the painting's title, if the painter's last words begin with one
-        # (the closing words of each sitting: its last words before the next sitting starts, newest first)
-        closings = [e["text"] for k, e in enumerate(ev) if e["kind"] == "say"
-                    and all(x["kind"] != "say" for x in ev[k + 1:next((j for j in range(k + 1, len(ev)) if ev[j]["kind"] == "start"), len(ev))])]
-        s["title"] = S.title_of_closings(closings)
-        # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
-        # quiet run as in progress only then
-        s["said"] = bool(ev) and ev[-1]["kind"] == "say"
-        if s["look"] is None:  # painters from before the look tool read their renders as files: the last whole one
-            # they saw (studio.py mark_whole), else the last (a reference picture, read from the studio's reference/,
-            # is never the painter's picture)
-            mine = [e for e in reversed(ev) if e["kind"] == "image" and "look" not in e and not e.get("ref")
-                    and 0 <= e["img"] < n and web[e["img"]]]
-            s["look"] = next((e["img"] for e in mine if e.get("whole") is not False), mine[0]["img"] if mine else None)
+        s.update(P.picker(st, eligible=web))
         # Reuse the latest whole snapshot's web copy, re-encoded without source metadata. The content
         # version changes even if a session rewrites the same image index.
         s["og_image"] = None
@@ -380,7 +260,7 @@ def main():
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
-        cwd, rels = S.painting_sources(ev)
+        cwd, rels = P.painting_sources(ev)
         for rel in sorted(rels):
             src = os.path.realpath(os.path.join(cwd, rel))
             if cwd and src.startswith(os.path.realpath(cwd) + os.sep) and os.path.isfile(src):
@@ -388,7 +268,7 @@ def main():
                     text(inside(out, "data", p, "file", rel), fh.read())
         print(f"{p}: {len(ev)} events, {n} images", flush=True)
     text(os.path.join(out, "data", "sessions.json"), json.dumps(ss))
-    with open(os.path.join(S.HERE, "index.html"), "rb") as fh:
+    with open(os.path.join(HERE, "index.html"), "rb") as fh:
         page = fh.read().replace(b'<label id="allwrap"', b'<label id="allwrap" hidden')
     page = page.replace(b"<script>\nconst $ =", b"<script>window.STUDIO_STATIC = true;</script>\n<script>\nconst $ =", 1)
     assert b"STUDIO_STATIC = true" in page, "index.html changed: the static switch didn't go in"
@@ -397,8 +277,8 @@ def main():
     text(os.path.join(out, "index.html"), card_page(page, featured(ss), homepage=True))
     for s in ss:
         text(inside(out, "share", s["p"] + ".html"), card_page(page, s))
-    for asset in S.VIEWER_ASSETS:
-        with open(os.path.join(S.HERE, asset), "rb") as fh:
+    for asset in VIEWER_ASSETS:
+        with open(os.path.join(HERE, asset), "rb") as fh:
             write(os.path.join(out, asset), fh.read())
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0

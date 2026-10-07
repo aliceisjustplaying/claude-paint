@@ -15,7 +15,7 @@ import pytest
 sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 import export_static as E
-import studio as S
+import painter_history as P
 from test_studio import PAINTER, home, line, look, png_of, say, start
 
 OTHER = "paint-studio-def456"
@@ -36,17 +36,17 @@ def exported(home, monkeypatch, request):
         other_log.write_text(start(str(studio)) + line({"type": "model_change", "modelId": "claude-opus-5-5"})
                              + look("l1", png_of("blue")) + say("**Blue Pond**\n\nA pond."))
     if mode == "hostile":
-        monkeypatch.setattr(S, "HOME", str(root))
-        monkeypatch.setattr(S, "USER", "privateuser")
+        monkeypatch.setattr(P, "HOME", str(root))
+        monkeypatch.setattr(P, "USER", "privateuser")
     run = root / "tmp" / "gallery-fixture" / "r24" / "run"
     for lane in ("A", "B"):
         (run / lane).mkdir(parents=True)
         (run / lane / "p1_outcome.json").write_text('{"status":"finished","reason":"done"}')
     (run / "studios.json").write_text(json.dumps({"A1": PAINTER, "B1": OTHER}))
-    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi" / "agent" / "sessions"))
-    monkeypatch.setattr(S, "RUNS", str(run / "studios.json"))
-    monkeypatch.setattr(S, "_lanes", {"at": 0, "map": {}})
-    monkeypatch.setattr(E, "working_studios", set)
+    monkeypatch.setattr(P, "SESSIONS", str(root / ".pi" / "agent" / "sessions"))
+    monkeypatch.setattr(P, "RUNS", str(run / "studios.json"))
+    monkeypatch.setattr(P, "_lanes", {"at": 0, "map": {}})
+    monkeypatch.setattr(P, "working_studios", set)
     # Ensure the featured painter is deterministic, using actual runner completion times.
     import os
     os.utime(run / "A" / "p1_outcome.json", (2000000000, 2000000000))

@@ -298,7 +298,7 @@ let WEB = [];
 const webURL = (d, i) => STATIC && WEB[i] ? `data/${encodeURIComponent(P())}/${d}/${i}.jpg` : imgURL(i);
 const thumbURL = i => webURL('t', i), viewURL = i => webURL('v', i);
 let viewI = -1, viewI2 = -1;  // the looks in the main view: the painting, and what the painter is studying now
-let hasLooks = false;  // the painter uses the easel's look tool (round 19 on); before it, the main view is simply the last picture it saw
+let hasLooks = false;  // the painter uses the look tool; older histories rest on the newest inferred whole picture
 // model ids as people say them
 const NAMES = {'claude-opus-5-5':'Claude Opus 5.5', 'claude-fable-5-1':'Claude Fable 5.1', 'claude-sonnet-5':'Claude Sonnet 5', 'claude-sonnet-5-5':'Claude Sonnet 5.5',
   'gpt-6-astra':'GPT-6 Astra', 'gpt-6-luna':'GPT-6 Luna', 'gpt-6.1-sol':'GPT-6.1 Sol', 'gemini-3.8-flash':'Gemini 3.8 Flash', 'muse-spark-1.3':'Muse Spark 1.3',
@@ -466,6 +466,8 @@ async function poll() {
     return; }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
+  if (STATIC) { const usesLooks = hasLooks || r.events.some(e => e.kind === 'look');
+    r.events.forEach(e => legacyRole(e, usesLooks)); }
   if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
@@ -870,19 +872,32 @@ function md(text) {
 const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, '').replace(/\*\*|__|`/g, '').replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?!\w)/g, '$1$2');
 
 // ---- looks: the whole painting, and what the painter is studying
-// an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(e.look);
-// the scratch canvas beside the painting: a look at it, or a chunk painted on it
-const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
+// Roles come from painter_history. Only historical static exports lack them: normalize
+// those once at the file boundary rather than reinterpreting display text in replay.
+function legacyRole(e, usesLooks) {
+  if (e.kind !== 'image' && e.kind !== 'look' || e.role !== undefined) return;
+  const look = e.look ?? e.text, scratch = /scratch (?!False)/.test(look || '');
+  if (e.ref) { e.role = 'reference'; return; }
+  if (e.kind === 'image' && e.look === undefined) { e.role = !usesLooks && e.whole !== false ? 'painting-whole' : 'close-up'; return; }
+  const prefix = scratch ? 'scratch-' : '';
+  if (/palette (?!False)/.test(look || '')) { e.role = prefix + 'palette'; return; }
+  const whole = look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(scratch ? unscratched(look) : look);
+  e.role = whole ? scratch ? 'scratch-whole' : 'painting-whole' : prefix + 'close-up';
+}
+const isWhole = e => e.role === 'painting-whole';
+// The scratch canvas beside the painting: a look at it, or a chunk painted on it.
+const isScratch = e => e.kind === 'paint' ? !!e.scratch : (e.role || '').startsWith('scratch-');
 const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
-const isWholeScratch = e => e.look !== undefined && isScratch(e) && isWhole({ look: unscratched(e.look) });
+const isWholeScratch = e => e.role === 'scratch-whole';
+// Preserve the mixed-era replay rule: once a history uses look, file reads are not replay steps.
+const replayWhole = (e, sc = false) => (!hasLooks || e.look !== undefined) && (sc ? isWholeScratch(e) : isWhole(e));
 // whether the painter is at the scratch canvas at event i: its newest chunk or look was there
 function scratchingAt(i) {
   for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k];
     if (e.kind === 'paint' || e.kind === 'look') return isScratch(e); }
   return false;
 }
-const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
+const isPalette = e => e.kind === 'image' && (e.role === 'palette' || e.role === 'scratch-palette');
 // the newest palette look at or before event i (-1: none yet)
 function paletteAt(i) { const sc = scratchingAt(i); for (let k = i; k >= 0; k--) if (isPalette(events[k]) && isScratch(events[k]) === sc) return k; return -1; }
 let viewI3 = -1;
@@ -1042,7 +1057,7 @@ const resting = () => live && events.length > 0 && pos === events.length - 1 && 
 // another picture seen since (a close-up, a squint, a check in grays, or a reference picture it reads), that one too.
 // Only the painting when the view rests (rest), and from the start of a sitting until its first look: what the
 // painter studied before it stopped isn't what it's looking at now. Before the look tool, the newest picture the
-// server marks whole (studio.py mark_whole), else the last picture of its canvas; with no whole look yet, the last
+// history marks whole (painter_history.py mark_whole), else the last picture of its canvas; with no whole look yet, the last
 // picture of its canvas. A reference picture is never the painting: with only reference pictures so far there is no
 // painting (-1), and the reference shows beside its empty place.
 // sc: the scratch canvas's pictures instead of the painting's.
@@ -1051,7 +1066,7 @@ function picturesAt(i, rest, sc = false) {
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks ? e.whole !== false : sc ? isWholeScratch(e) : isWhole(e)) { whole = k; break; } } } }
+      if (!e.ref) { if (mine < 0) mine = k; if (replayWhole(e, sc)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
   return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
 }
@@ -1115,7 +1130,7 @@ function pictures() {
   const [w, o] = picturesAt(pos, rested, sc);
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : (sc ? isWholeScratch(img) : isWhole(img)) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`);
+    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : replayWhole(img, sc) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`);
     $('img').alt = sc ? 'the scratch canvas' : 'the painting';
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
@@ -1146,7 +1161,7 @@ function show(i) {
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 // replay steps through the painting: each whole look in turn (before the look tool, each picture), with the thinking that led to it
-const steps = () => looks().filter(k => !events[k].ref && (!hasLooks ? events[k].whole !== false : isWhole(events[k])));
+const steps = () => looks().filter(k => replayWhole(events[k]));
 function stop() { if (playing) { clearTimeout(playing); playing = null; } $('play').textContent = '▶ Replay'; $('play').title = 'watch the painting grow, one look at a time  space'; }
 function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {

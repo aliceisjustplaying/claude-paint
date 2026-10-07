@@ -125,6 +125,35 @@ async function pollUpdate(v, i, replacement) {
       report.checks.push(staticMode ? 'static replay, updates, reset, opening, stale formatting' : 'dynamic replay, updates, reset, opening, stale formatting');
       await v.page.close(); if (old) await old.page.close();
     }
+    // Image selection reads normalized roles, not look display text. This boundary is
+    // distinct from Python ingestion: misleading labels must not override domain tags.
+    const pictures = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local x=1', out:'ok' }),
+      ev('look', { text:'mode squint', role:'painting-whole' }),
+      ev('image', { img:0, look:'mode squint', role:'painting-whole' }),
+      ev('look', { text:'', role:'scratch-whole' }),
+      ev('image', { img:1, look:'', role:'scratch-whole' }),
+      ev('image', { img:2, look:'', role:'scratch-palette' }),
+      ev('image', { img:3, look:'', role:'scratch-close-up' }),
+      ev('image', { img:4, path:'reference/source.png', ref:true, role:'reference' }), ev('say', { text:'Rest' })];
+    for (const staticMode of [false, true]) {
+      const v = await viewer(browser, pictures, { staticMode });
+      const selected = await v.page.evaluate(() => ({ painting:picturesAt(8, false), scratch:picturesAt(7, false, true),
+        scratchPalette:paletteAt(7), scratching:scratchingAt(7), steps:steps() }));
+      assert.deepEqual(selected, { painting:[3,8], scratch:[5,7], scratchPalette:6, scratching:true, steps:[3] });
+      report.checks.push(staticMode ? 'static normalized image roles' : 'live normalized image roles');
+      await v.page.close();
+    }
+    // Already-exported files carry no roles. Compatibility belongs only to static ingestion.
+    const legacyPictures = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local x=1', out:'ok' }),
+      ev('look', { text:'' }), ev('image', { img:0, look:'' }),
+      ev('look', { text:'scratch True' }), ev('image', { img:1, look:'scratch True' }),
+      ev('image', { img:2, look:'scratch True, palette True' }),
+      ev('image', { img:3, look:'scratch True, mode value' }),
+      ev('image', { img:4, path:'reference/source.png', ref:true }), ev('say', { text:'Rest' })];
+    const legacy = await viewer(browser, legacyPictures, { staticMode:true });
+    assert.deepEqual(await legacy.page.evaluate(() => ({ painting:picturesAt(8, false), scratch:picturesAt(7, false, true),
+      scratchPalette:paletteAt(7), steps:steps() })), { painting:[3,8], scratch:[5,7], scratchPalette:6, steps:[3] });
+    report.checks.push('legacy static image role ingestion'); await legacy.page.close();
     // Writes, ordered edits, missing substitutions, failed results and file selection ties.
     const edits = [ev('start', { cwd:'/painter' }), ev('write', { path:'/painter/a.rs', content:'fn a() { one(); }', out:'ok' }, 1),
       ev('write', { path:'/painter/b.rs', content:'fn b() {}', out:'ok' }, 2), ev('edit', { path:'/painter/b.rs', edits:[{ oldText:'b()', newText:'bee()' }], out:'ok' }, 3),

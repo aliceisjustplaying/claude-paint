@@ -18,6 +18,7 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import studio as S
+import painter_history as P
 
 PAINTER = "paint-studio-abc123"
 
@@ -55,7 +56,7 @@ def home(tmp_path):
 
 @pytest.fixture
 def server(home, monkeypatch):
-    monkeypatch.setattr(S, "SESSIONS", str(home[0] / ".pi" / "agent" / "sessions"))
+    monkeypatch.setattr(P, "SESSIONS", str(home[0] / ".pi" / "agent" / "sessions"))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), S.H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     fetch = lambda q: get(fetch.base + q)
@@ -166,8 +167,8 @@ def test_runner_outcome_reaches_viewer_without_treating_export_as_completion(hom
         (rd / "p1_outcome.json").write_text(json.dumps({"status": status, "reason": "fixture stop reason"}))
         if status != "invalid":
             expected = status
-    monkeypatch.setattr(S, "RUNS", str(tmp_path / "tmp" / "gallery-*" / "r*" / "run" / "studios.json"))
-    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(P, "RUNS", str(tmp_path / "tmp" / "gallery-*" / "r*" / "run" / "studios.json"))
+    monkeypatch.setattr(P, "_lanes", {"at": 0.0, "map": {}})
     if via == "live server":
         entries = json.loads(server("/api/sessions")[1])
     else:
@@ -298,15 +299,15 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     running = run / "LIVE" / "p1_sittings.json"
     running.write_text('[{"status":"running"}]')
     (run / "DONE" / "p1_outcome.json").write_text('{"status":"finished","reason":"reviewed without painting"}')
-    monkeypatch.setattr(S, "SESSIONS", str(tmp_path / ".pi" / "agent" / "sessions"))
-    monkeypatch.setattr(S, "RUNS", str(run / "studios.json"))
-    monkeypatch.setattr(E, "working_studios", lambda: {PAINTER}, raising=False)
+    monkeypatch.setattr(P, "SESSIONS", str(tmp_path / ".pi" / "agent" / "sessions"))
+    monkeypatch.setattr(P, "RUNS", str(run / "studios.json"))
+    monkeypatch.setattr(P, "working_studios", lambda: {PAINTER}, raising=False)
     out = tmp_path / "out"
     monkeypatch.setattr(sys, "argv", ["export_static.py", str(out)])
 
     def render():
         E.WRITTEN.clear()
-        S._lanes.update(at=0, map={})
+        P._lanes.update(at=0, map={})
         E.main()
         return metadata(out / "index.html"), metadata(out / "share" / (PAINTER + ".html"))
 
@@ -320,11 +321,11 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     assert metadata(out / "share" / (other + ".html"))["og:image"] != card["og:image"]
 
     # A dead process or an old session cannot leave a saved running record live forever.
-    monkeypatch.setattr(E, "working_studios", lambda: set())
+    monkeypatch.setattr(P, "working_studios", lambda: set())
     front, card = render()
     assert "Not currently painting" in card["og:title"]
     assert front["og:image"] == metadata(out / "share" / (other + ".html"))["og:image"]
-    monkeypatch.setattr(E, "working_studios", lambda: {PAINTER})
+    monkeypatch.setattr(P, "working_studios", lambda: {PAINTER})
     old = log.stat().st_mtime - 3600
     os.utime(log, (old, old))
     front, card = render()
@@ -378,7 +379,7 @@ def test_a_held_knife_is_never_the_picker_fallback(home):
     _, studio, log = home
     log.write_text(start(str(studio)) + looks_at_once(
         ("hold", {"hold": "p", "at": "50,50"}, png_of("blue"))))
-    assert S.glance([str(log)])["look"] is None
+    assert P.glance([str(log)])["look"] is None
 
 
 @pytest.mark.parametrize("via", ["live server", "static export"])
@@ -518,27 +519,27 @@ def test_the_brief_names_the_artist_and_whose_paintings_the_reference_pictures_a
     ("I finished the sky, then **glazed** it.", None),
 ])
 def test_the_title_is_where_painters_put_it_in_their_closing_words(say, title):
-    assert S.title_of(say) == title
+    assert P.title_of(say) == title
 
 
 def test_a_last_sitting_that_only_looked_keeps_the_earlier_title():
     # paint-studio-b3a3c7: the second sitting's closing words don't repeat the title
-    assert S.title_of_closings(["**The Blue Barn**\n\nA barn.", "The painting is exactly as the journal left it."]) == "The Blue Barn"
+    assert P.title_of_closings(["**The Blue Barn**\n\nA barn.", "The painting is exactly as the journal left it."]) == "The Blue Barn"
 
 
 def test_a_palette_look_is_not_the_painting():
     # the easel's palette look (look{palette=true}) shows the mixed piles, not the canvas
-    assert S.is_whole(S.look_text({}))
-    assert S.is_whole(S.look_text({"size": 800}))
-    assert not S.is_whole(S.look_text({"palette": True}))
-    assert S.is_whole(S.look_text({"palette": False}))
+    assert P.is_whole(P.look_text({}))
+    assert P.is_whole(P.look_text({"size": 800}))
+    assert not P.is_whole(P.look_text({"palette": True}))
+    assert P.is_whole(P.look_text({"palette": False}))
     # nor is a survey's tile, a comparison or a lit look
-    assert not S.is_whole(S.look_text({"survey": True}))
-    assert S.is_whole(S.look_text({"survey": False}))
-    assert not S.is_whole(S.look_text({"compare": "out/easel/painting/a.png"}))
-    assert not S.is_whole(S.look_text({"light": "45,15"}))
-    assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
-    assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
+    assert not P.is_whole(P.look_text({"survey": True}))
+    assert P.is_whole(P.look_text({"survey": False}))
+    assert not P.is_whole(P.look_text({"compare": "out/easel/painting/a.png"}))
+    assert not P.is_whole(P.look_text({"light": "45,15"}))
+    assert not P.is_whole(P.look_text({"hold": "skyP", "at": "400,320"}))
+    assert not P.is_whole(P.look_text({"survey": True, "mode": "gallery"}))
 
 
 @pytest.mark.parametrize("ending, said", [
@@ -580,3 +581,75 @@ def test_viewer_preserves_readable_names_and_paint_colors_from_physical_palette_
     # Swatches show the colored paint, rather than the almost-black opacity cards.
     assert all(max(int(p[k][i:i + 2], 16) for i in (1, 3, 5)) > 80
                for p in piles for k in ("thick", "thin"))
+
+
+def test_history_roles_follow_the_request_not_display_text_and_keep_image_order(home, monkeypatch):
+    # The history is the owner: adapters/browser must not infer image roles again.
+    _, studio, log = home
+    monkeypatch.setattr(P, "WHOLE_CACHE", str(log.parent / "whole.json"))
+    png = png_of("blue")
+    log.write_text(start(str(studio)) + looks_at_once(
+        ("whole", {}, png), ("scratch", {"scratch": True}, png),
+        ("palette", {"palette": True}, png), ("detail", {"crop": "1,2,3,4"}, png),
+        ("scratch_palette", {"scratch": True, "palette": True}, png),
+        ("scratch_detail", {"scratch": True, "mode": "value"}, png))
+        + read_picture("reference", "reference/source.png", png))
+    st = P.stream(str(log), [str(log)])
+    images = [e for e in st["events"] if e["kind"] == "image"]
+    assert [(e["img"], e["role"]) for e in images] == list(enumerate([
+        "painting-whole", "scratch-whole", "palette", "close-up", "scratch-palette", "scratch-close-up", "reference"]))
+    assert P.picker(st)["look"] == 0
+    assert P.glance([str(log)])["look"] == 0
+
+
+def test_pre_look_picker_reuses_persisted_wholes_without_decoding_images(home, monkeypatch):
+    # The approved change: rest on the last whole, not the close-up read afterward.
+    # Shell look options independently specify which image is whole; no cache answers are fabricated.
+    tmp_path, studio, log = home
+    monkeypatch.setattr(P, "WHOLE_CACHE", str(tmp_path / ".cache" / "claude-paint-studio" / "whole.json"))
+    log.write_text(start(str(studio)))
+    for i, opts in enumerate(("", "--crop 1,2,3,4")):
+        name = f"look-{i:04}.png"
+        command = line({"type": "message", "message": {"role": "assistant", "content": [
+            {"type": "toolCall", "id": f"cmd{i}", "name": "bash", "arguments": {"command": f"easel look {opts}"}}]}})
+        with log.open("a") as fh:
+            fh.write(command + result(f"cmd{i}", name) + read_picture(f"read{i}", "out/easel/" + name, png_of("red")))
+    assert P.glance([str(log)])["look"] == 1  # no persisted heuristic yet: keep the legacy fallback
+    env = dict(os.environ, HOME=str(tmp_path), PYTHONPATH=HERE)
+    producer = ("import painter_history as P,json,sys; st=P.stream('export', [sys.argv[1]]); "
+                "print(json.dumps({'roles':[e['role'] for e in st['events'] if e['kind']=='image'], 'look':P.picker(st)['look']}))")
+    r = subprocess.run([sys.executable, "-c", producer, str(log)], env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {"roles": ["painting-whole", "close-up"], "look": 0}
+    assert (tmp_path / ".cache" / "claude-paint-studio" / "whole.json").is_file()
+    # The already-running picker notices an external exporter filling the cache.
+    assert P.glance([str(log)])["look"] == 0
+
+    # A fresh picker process consumes the real persisted result and reads only the selected bytes.
+    script = ("import painter_history as P; from PIL import Image; "
+              "Image.open=lambda *a,**k: (_ for _ in ()).throw(AssertionError('picker decoded an image')); "
+              "import json,sys; g=P.glance([sys.argv[1]]); "
+              "print(json.dumps({'look':g['look'], 'mime':P.glance_image(g['src'])[0]}))")
+    env = dict(os.environ, HOME=str(tmp_path), PYTHONPATH=HERE)
+    r = subprocess.run([sys.executable, "-c", script, str(log)], env=env, capture_output=True, text=True)
+    # Use the production cache path in the fresh process, as a real export/picker pair does.
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {"look": 0, "mime": "image/png"}
+
+
+def test_history_and_picker_wait_for_complete_lines_and_stitch_image_indices(home):
+    _, studio, first = home
+    second = first.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
+    first.write_text(start(str(studio)) + look("one", png_of("red")) + say("**Red Barn**"))
+    entry = look("two", png_of("blue"))
+    second.write_text(start(str(studio)) + entry[:-1])
+    files = [str(first), str(second)]
+    st = P.stream(str(first), files)
+    assert [(e["img"], e["role"]) for e in st["events"] if e["kind"] == "image"] == [(0, "painting-whole")]
+    assert P.glance(files)["look"] == 0
+    with second.open("a") as fh:
+        fh.write("\n")
+    st = P.stream(str(first), files)
+    assert [(e["img"], e["role"]) for e in st["events"] if e["kind"] == "image"] == [(0, "painting-whole"), (1, "painting-whole")]
+    assert P.picker(st) == {"look": 1, "title": "Red Barn", "said": False}
+    assert P.glance(files)["look"] == 1

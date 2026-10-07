@@ -653,3 +653,32 @@ def test_history_and_picker_wait_for_complete_lines_and_stitch_image_indices(hom
     assert [(e["img"], e["role"]) for e in st["events"] if e["kind"] == "image"] == [(0, "painting-whole"), (1, "painting-whole")]
     assert P.picker(st) == {"look": 1, "title": "Red Barn", "said": False}
     assert P.glance(files)["look"] == 1
+
+
+def test_mixed_era_sittings_keep_the_newest_file_read_in_both_pickers(home, monkeypatch):
+    tmp_path, studio, first = home
+    monkeypatch.setattr(P, "WHOLE_CACHE", str(tmp_path / ".cache" / "claude-paint-studio" / "whole.json"))
+    second = first.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
+    first.write_text(start(str(studio)) + read_picture("old", "out/easel/look-0000.png", png_of("red")))
+    second.write_text(start(str(studio))
+                      + looks_at_once(("squint", {"mode": "squint"}, png_of("green")))
+                      + read_picture("new", "out/easel/look-0001.png", png_of("blue")))
+    files = [str(first), str(second)]
+    # stream persists the early sitting's classification; the modern read has no whole flag.
+    st = P.stream(str(first), files)
+    assert P.picker(st)["look"] == 2
+    g = P.glance(files)
+    assert g["look"] == 2
+    assert P.glance_image(g["src"]) == ("image/png", png_of("blue"))
+
+
+@pytest.mark.parametrize("message,error", [
+    (None, AttributeError),
+    ({"role": "user", "content": None}, TypeError),
+], ids=["null message", "null user content"])
+def test_picker_ignores_malformed_messages_without_softening_full_history_errors(home, message, error):
+    _, studio, log = home
+    log.write_text(start(str(studio)) + line({"type": "message", "message": message}))
+    assert P.glance([str(log)]) == {"look": None, "title": None, "src": None}
+    with pytest.raises(error):
+        P.stream(str(log), [str(log)])

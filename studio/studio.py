@@ -20,6 +20,7 @@ import base64
 import http.server
 import json
 import os
+import re
 import threading
 import urllib.parse
 import painter_history as P
@@ -35,6 +36,16 @@ VIEWER_ASSETS = {
     "vendor/stylua/stylua_lib_bg.wasm": "application/wasm",
     "vendor/stylua/LICENSE.md": "text/plain; charset=utf-8",
 }
+
+
+def summary_clock(text):
+    """The latest recorded time in the painter harness's saved clock section."""
+    section = re.search(r"(?m)^## The canvas clock\n([\s\S]*?)(?=\n## |\Z)", text)
+    if not section:
+        return None
+    times = re.findall(r"(?m)^- Latest (?:painting time the easel printed|journal entry stamped): "
+                       r"(day ([1-9]\d*), ([01]\d|2[0-3]):([0-5]\d))[ \t]*$", section[1])
+    return max(times, key=lambda t: tuple(map(int, t[1:])))[0] if times else None
 
 
 class H(http.server.BaseHTTPRequestHandler):

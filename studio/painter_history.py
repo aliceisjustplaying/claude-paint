@@ -327,6 +327,8 @@ def _entry_events(d, c, at, images=None):
     not programs, output text or image data. Full histories also retain results
     on the original call event and decode palette metadata.
     """
+    if images is not None:
+        from studio import summary_clock
     ts = d.get("timestamp", "")
     typ = d.get("type")
     if typ == "session":
@@ -334,13 +336,15 @@ def _entry_events(d, c, at, images=None):
         yield {"ts": ts, "kind": "start", "cwd": c["cwd"]}
     elif typ == "model_change":
         yield {"ts": ts, "kind": "note", "text": "model " + d.get("modelId", "")}
-    elif typ == "compaction":
+    elif typ == "compaction" and images is not None:
         clock = summary_clock(d.get("summary", ""))
         if clock:
             yield {"ts": ts, "kind": "clock", "clock": clock, "text": clock}
     elif typ == "message":
-        m = d.get("message", {})
+        m = (d.get("message") or {}) if images is None else d.get("message", {})
         role, content = m.get("role"), m.get("content")
+        if images is None and not isinstance(content, list):
+            return
         if role == "assistant" and isinstance(content, list):
             for x in content:
                 t = x.get("type")
@@ -413,7 +417,7 @@ def _entry_events(d, c, at, images=None):
                     c["src"] = (idx, at, k)
                     k += 1
                     yield ev
-        elif role == "user":
+        elif role == "user" and images is not None:
             t = _text(content)
             if t.strip():
                 ev = {"ts": ts, "kind": "user", "text": t[:2000]}
@@ -435,7 +439,7 @@ def _parse(path):
         mark_whole(c, path)
     for ev in c["events"]:
         if ev["kind"] == "image" and "look" not in ev and not ev.get("ref"):
-            ev["role"] = "painting-whole" if ev.get("whole") is not False else "close-up"
+            ev["role"] = _file_read_role(ev.get("whole"))
     return c["events"], c["images"]
 
 
@@ -581,16 +585,6 @@ def _look_said(events, image):
     return not re.search(r"--(crop|mode|light|survey|compare|hold|palette)\b", opts)
 
 
-def summary_clock(text):
-    """The latest recorded time in the painter harness's saved clock section."""
-    section = re.search(r"(?m)^## The canvas clock\n([\s\S]*?)(?=\n## |\Z)", text)
-    if not section:
-        return None
-    times = re.findall(r"(?m)^- Latest (?:painting time the easel printed|journal entry stamped): "
-                       r"(day ([1-9]\d*), ([01]\d|2[0-3]):([0-5]\d))[ \t]*$", section[1])
-    return max(times, key=lambda t: tuple(map(int, t[1:])))[0] if times else None
-
-
 def look_text(args):
     """A look call's request as one line: "crop 110,540,610,900, size 800", "mode squint" ("" for the plain look)."""
     return ", ".join(f"{k} {v}" for k, v in args.items())
@@ -673,6 +667,16 @@ def _glance_file(path):
         return g
 
 
+def _file_read_role(whole=None):
+    """A file read is a whole-picture fallback unless the heuristic excludes it.
+
+    Modern sittings have no persisted pre-look classification; their last file
+    read must still outrank an earlier sitting's whole when there is no explicit
+    whole look, as in the historical live/static picker rule.
+    """
+    return "close-up" if whole is False else "painting-whole"
+
+
 def _picker_image(images, eligible=None):
     """Newest explicit whole, else newest legacy whole, else last legacy image.
 
@@ -704,10 +708,10 @@ def glance(files):
             done = _whole_cache(refresh=True).get(_whole_key(f, len(g["legacy"])))
             for j, (i, at, k) in enumerate(g["legacy"]):
                 whole = done[j] if done is not None and len(done) == len(g["legacy"]) else True
-                images.append({"img": base + i, "role": "painting-whole" if whole else "close-up", "src": (f, at, k)})
+                images.append({"img": base + i, "role": _file_read_role(whole), "src": (f, at, k)})
         elif g["last"]:
             i, at, k = g["last"]
-            images.append({"img": base + i, "role": "close-up", "src": (f, at, k)})
+            images.append({"img": base + i, "role": _file_read_role(), "src": (f, at, k)})
         base += g["n"]
     chosen = _picker_image(images)
     return {"look": chosen["img"] if chosen else None, "title": title_of_closings(says),

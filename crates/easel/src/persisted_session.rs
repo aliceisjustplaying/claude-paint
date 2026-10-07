@@ -116,6 +116,8 @@ impl SessionFiles {
     /// remove a witness or rename a log on behalf of an unlocked scratch canvas.
     pub(crate) fn put_aside(&self) -> Result<Option<PathBuf>, String> {
         let lp = self.log_path();
+        // Keep the existing reset failure semantics, now under this owner's lock.
+        let _ = fs::remove_file(self.witness());
         let aside = if lp.exists() {
             let mut n = 1;
             let to = loop {
@@ -133,11 +135,6 @@ impl SessionFiles {
         } else {
             None
         };
-        match fs::remove_file(self.witness()) {
-            Ok(()) => (),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-            Err(e) => return Err(e.to_string()),
-        }
         Ok(aside)
     }
 

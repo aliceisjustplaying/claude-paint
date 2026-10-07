@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { painterEasel, WAIT_MS, studioPath, type PainterCommand } from "../easel-client.ts";
 import { stubStudio } from "./fixtures/stub-easel.ts";
 
@@ -91,21 +91,43 @@ test("a long log keeps its end and says what was left out", async () => {
 	const studio = stubStudio('[ "$1" = status ] && exit 0\ncat reply');
 	writeFileSync(join(studio, "reply"), "abc");
 	assert.equal((await painterEasel(studio, "painting", { kind: "log" })).said, "abc");
-	writeFileSync(join(studio, "reply"), "a".repeat(50010));
+	const kept = "kept beginning\n" + "a".repeat(50000 - "kept beginning\n".length - "\nkept ending".length) + "\nkept ending";
+	writeFileSync(join(studio, "reply"), "discarded prefix\n" + kept);
 	for (const canvas of ["painting", "scratch"] as const) {
-		const want = `(the first 10 characters are left out; read paintings/lua/${canvas}.lua for all of it)\n${"a".repeat(50000)}`;
+		const want = `(the first 17 characters are left out; read paintings/lua/${canvas}.lua for all of it)\n${kept}`;
 		assert.equal((await painterEasel(studio, canvas, { kind: "log" })).said, canvas === "scratch" ? `[scratch canvas]\n${want}` : want);
 	}
 });
 
 // With EASEL_BIN (a painter build of the easel): the tools' path through a real session.
 const bin = process.env.EASEL_BIN;
-test("paint, look, note and status at a real easel", { skip: !bin || !existsSync(bin) }, async () => {
+async function withRealEasel(t: TestContext, run: (studio: string) => Promise<void>): Promise<void> {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
 	mkdirSync(join(studio, "notes"));
 	copyFileSync(bin!, join(studio, "bin", "easel"));
+	let failed = false;
 	try {
+		await run(studio);
+	} catch (error) {
+		failed = true;
+		throw error;
+	} finally {
+		// Match the client's restricted environment, including its absence of TMPDIR.
+		const env: Record<string, string> = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
+		if (process.env.RAYON_NUM_THREADS !== undefined) env.RAYON_NUM_THREADS = process.env.RAYON_NUM_THREADS;
+		const closed = spawnSync(join(studio, "bin/easel"), ["close"], { cwd: studio, env, encoding: "utf8", timeout: 10_000 });
+		if (closed.status === 0) rmSync(studio, { recursive: true, force: true });
+		else {
+			const message = `real easel cleanup failed: ` + (closed.error?.message ?? closed.stderr);
+			if (failed) t.diagnostic(message); // don't replace the original assertion failure
+			else assert.fail(message);
+		}
+	}
+}
+
+test("paint, look, note and status at a real easel", { skip: !bin || !existsSync(bin) }, async (t) => {
+	await withRealEasel(t, async (studio) => {
 		// no session yet: the first call opens one
 		const ok = await painterEasel(studio, "painting", { kind: "paint", lua: 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}\nprint("hi")' });
 		assert.equal(ok.said, "hi\nday 1, 09:00\nok");
@@ -117,9 +139,18 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 		assert.match((await painterEasel(studio, "painting", { kind: "note", text: "first note" })).said, /noted/);
 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
 		assert.equal((await painterEasel(studio, "painting", { kind: "status" })).said, "size=400, aspect=1.25, linen={15, 15}, seed=1");
-	} finally {
-		execFileSync(join(studio, "bin/easel"), ["close"], { cwd: studio });
-	}
+	});
+});
+
+test("a failing Lua chunk keeps its own error wording", { skip: !bin || !existsSync(bin) }, async (t) => {
+	await withRealEasel(t, async (studio) => {
+		await assert.rejects(painterEasel(studio, "painting", { kind: "paint", lua: 'error("mix 3 s into the sky --crop")' }), (error: Error) => {
+			assert.match(error.message, /mix 3 s into the sky --crop/);
+			assert.match(error.message, /changed nothing/);
+			assert.doesNotMatch(error.message, /\[string "chunk \d+"\]/);
+			return true;
+		});
+	});
 });
 
 test("a client that hangs is stopped and reported, not waited on forever", async () => {
@@ -167,6 +198,7 @@ test("an abort stops the tool's chain: nothing after it runs, and no listener is
 test("look's errors name the tool's options, not the easel's flags", async () => {
 	const studio = stubStudio('[ "$1" = status ] && exit 0\ncat reply; exit 1');
 	for (const [reply, want] of [
+		["look: --palette takes no other option", "look: palette takes no other option"],
 		["--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)", "a crop may be at most 500 units on either side; choose a smaller crop"],
 		["--mode x: normal, value, squint, mirror", "mode x: normal, value, squint, mirror"],
 		["look: --survey and --compare are two looks; --light needs --mode relief", "look: survey and compare are two looks; light needs mode relief"],
@@ -241,16 +273,18 @@ test("invalid rebuild replies never admit a command or open another session", as
 			"echo 'rebuilding from the log (2 of 4 chunks)'",
 			"echo 'rebuilding from the log (4 of 3 chunks)'",
 		]) {
-			const studio = stubStudio(`if [ ! -f started ]; then
+			for (const command of [{ kind: "look" }, { kind: "paint", lua: "x = 1" }] as const) {
+				const studio = stubStudio(`if [ ! -f started ]; then
  touch started; echo 'rebuilding from the log (1 of 3 chunks)'; exit 0
 fi
 ${reply}`);
-			await assert.rejects(painterEasel(studio, "painting", { kind: "look" }), (error: Error) => {
-				assert.match(error.message, /invalid rebuild progress/);
-				assert.doesNotMatch(error.message, /\d+ of \d+ chunks/);
-				return true;
-			});
-			assert.ok(calls(studio).every(c => c === "status"));
+				await assert.rejects(painterEasel(studio, "painting", command), (error: Error) => {
+					assert.match(error.message, /invalid rebuild progress/);
+					assert.doesNotMatch(error.message, /\d+ of \d+ chunks/);
+					return true;
+				});
+				assert.ok(calls(studio).every(c => c === "status"));
+			}
 		}
 	} finally { WAIT_MS.other = other; }
 });
@@ -322,22 +356,23 @@ test("every look a survey names is renamed, in order", async () => {
 	assert.ok(nested.paths[0].startsWith(join("archive.png (old)", "")));
 });
 
-// The subprocess boundary owns this contract: success bytes stay unchanged and all failures
-// (including failures before the command runs) hide the easel's bookkeeping. Helper-only
+// The subprocess boundary owns this contract: success bytes stay unchanged. Easel-owned
+// failures hide bookkeeping; paint failures preserve the chunk's words. Helper-only
 // tests could not catch a caller omitting a translation. No new production test seam.
 const privateWords = /\bchunk \d+|\b\d+(?: of \d+)? chunks?\b|look-\d+\.png|\d+(?:\.\d+)? ?s(?: to compute)?\b|\d+ minutes|--[a-z]/;
 const commands: { command: PainterCommand; raw: string; want: string; args: string[]; input?: string }[] = [
 	{ command: { kind: "paint", lua: "wait(60)", new_scratch: true }, raw: "day 1, 10:00\nok · chunk 12 (76.50 s to compute)", want: "day 1, 10:00\nok", args: ["do", "-", "--scratch", "--new"], input: "wait(60)" },
 	{ command: { kind: "look", mode: "gallery" }, raw: "out/look-0012.png (1000x714, 0.04s)", want: " (1000x714)", args: ["look", "--scratch", "--mode", "gallery"] },
+	{ command: { kind: "canvasLook" }, raw: "out/look-0012.png (1000x714, 0.04s)", want: " (1000x714)", args: ["look"] },
 	{ command: { kind: "note", text: "warm ground" }, raw: "noted", want: "noted", args: ["note", "-"], input: "warm ground" },
 	{ command: { kind: "status" }, raw: "12 chunks · 2400px · canvas{size=900}", want: "canvas{size=900}", args: ["status", "--scratch"] },
-	{ command: { kind: "log" }, raw: "-- easel session\n--@ chunk 1\nx = 1\n\n--@ chunk 12\ny = 2\n", want: "-- easel session\n--@ chunk\nx = 1\n\n--@ chunk\ny = 2", args: ["log", "--scratch"] },
+	{ command: { kind: "log" }, raw: "-- easel session\n--@ engine 2\n\n--@ chunk 1\nx = 1\n\n--@ chunk 12\ny = 2\n", want: "-- easel session\n--@ engine 2\n\n--@ chunk\nx = 1\n\n--@ chunk\ny = 2", args: ["log", "--scratch"] },
 	{ command: { kind: "globals" }, raw: "1\tOB\ttable with 2 entries\n12\ttree\tfunction (chunk 12, line 9)", want: "- `OB`: table with 2 entries\n- `tree`: function", args: ["globals"] },
 ];
 for (const { command, raw, want, args, input } of commands) {
 	for (const outcome of ["ok", "error"] as const) {
 		test(`${command.kind} ${outcome}: the painter sees no work count, compute time or flag`, async () => {
-			const canvases = command.kind === "note" || command.kind === "globals" ? ["painting"] as const : ["painting", "scratch"] as const;
+			const canvases = command.kind === "note" || command.kind === "globals" || command.kind === "canvasLook" ? ["painting"] as const : ["painting", "scratch"] as const;
 			for (const canvas of canvases) {
 				const s = stubStudio(`if [ ! -f admitted ]; then touch admitted; echo ready; exit 0; fi
 printf '%s\n' "$@" > args
@@ -346,21 +381,30 @@ cat reply
 exit ${outcome === "ok" ? 0 : 1}`);
 				mkdirSync(join(s, "out"));
 				writeFileSync(join(s, "out/look-0012.png"), "png");
-				writeFileSync(join(s, "reply"), outcome === "ok" ? raw : '12 chunks · 2400px · easel failed --scratch --new --crop\n[string "chunk 12"]:3: boom\n--@ chunk 4\nrebuilding from the log (2 of 3 chunks)\nok · chunk 12 (76.50 s to compute)\nout/look-0012.png (1000x714, 0.04s)\nthe chunk ran longer than 10 minutes and was stopped');
+				const failure = command.kind === "paint"
+					? 'runtime error: [string "chunk 12"]:3: boom\nstack traceback:\n\t[string "chunk 4"]:9: in function \'tree\'\nthe chunk ran longer than 10 minutes and was stopped; nothing it did was kept'
+					: '12 chunks · 2400px · easel failed --scratch --new --crop\n[string "chunk 12"]:3: boom\n--@ chunk 4\nrebuilding from the log (2 of 3 chunks)\nok · chunk 12 (76.50 s to compute)\nout/look-0012.png (1000x714, 0.04s)\nthe chunk ran longer than 10 minutes and was stopped; nothing it did was kept';
+				writeFileSync(join(s, "reply"), outcome === "ok" ? raw : failure);
 				const request = command.kind === "paint" ? { ...command, new_scratch: canvas === "scratch" } : command;
 				if (outcome === "ok") {
 					const result = await painterEasel(s, canvas, request);
 					const tag = canvas === "scratch" ? "[scratch canvas]\n" : "";
-					assert.equal(result.said, tag + (command.kind === "look" ? result.paths[0] : "") + want);
+					assert.equal(result.said, tag + ((command.kind === "look" || command.kind === "canvasLook") ? result.paths[0] : "") + want);
 					assert.doesNotMatch(result.said, privateWords);
-					if (command.kind === "look") {
+					if (command.kind === "look" || command.kind === "canvasLook") {
 						assert.match(result.paths[0], /^out\/[0-9a-f-]{36}\.png$/);
 						assert.equal(readFileSync(join(s, result.paths[0]), "utf8"), "png");
 					} else assert.deepEqual(result.paths, []);
+					if (command.kind === "status") {
+						writeFileSync(join(s, "reply"), "0 chunks · 2400px · no canvas yet");
+						assert.equal((await painterEasel(s, canvas, request)).said, tag + "no canvas yet");
+					}
 				} else {
 					await assert.rejects(painterEasel(s, canvas, request), (error: Error) => {
 						assert.doesNotMatch(error.message, privateWords);
-						assert.equal(error.message, 'easel failed scratch new crop\n[string "chunk"]:3: boom\n--@ chunk\nrebuilding from the log (chunks)\nok · chunk\nout/look.png (1000x714)\nthe chunk didn\'t finish and was stopped');
+						assert.equal(error.message, command.kind === "paint"
+							? 'runtime error: [string "chunk"]:3: boom\nstack traceback:\n\t[string "chunk"]:9: in function \'tree\'\nthe chunk didn\'t finish and was stopped; nothing it did was kept'
+							: 'easel failed scratch new crop\n[string "chunk"]:3: boom\n--@ chunk\nrebuilding from the log (chunks)\nok · chunk\nout/look.png (1000x714)\nthe chunk didn\'t finish and was stopped; nothing it did was kept');
 						return true;
 					});
 				}

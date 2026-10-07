@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stubStudio } from "./fixtures/stub-easel.ts";
@@ -83,4 +83,32 @@ test("globals and canvas errors in a summary use the painter's words", async () 
 	assert.equal(facts.globalsError, error);
 	assert.equal(facts.canvasLookError, error);
 	assert.doesNotMatch(summary, /chunk \d|\d+ s to compute|--mode/);
+});
+
+test("a summary look rejects a PNG followed by a warning", async () => {
+	const s = studio('[ "$1" = globals ] && exit 0\necho "out/look-0012.png (1x1, 0.01s)"\necho "a warning"');
+	mkdirSync(join(s, "out"));
+	writeFileSync(join(s, "out/look-0012.png"), "png");
+	const { summary, facts } = await buildSummary(s, []);
+	assert.equal(facts.canvasLook, undefined);
+	assert.match(String(facts.canvasLookError), /the easel's look named no image: .*\na warning$/);
+	assert.ok(summary.includes("(the easel couldn't show it:"));
+	assert.equal(readFileSync(join(s, "out/look-0012.png"), "utf8"), "png", "a rejected reply doesn't rename an earlier image");
+});
+
+test("a summary look reports a missing PNG as a rename failure", async () => {
+	const s = studio('[ "$1" = globals ] && exit 0\necho "out/look-0012.png (1x1, 0.01s)"');
+	mkdirSync(join(s, "out"));
+	const { summary, facts } = await buildSummary(s, []);
+	assert.equal(facts.canvasLook, undefined);
+	assert.match(String(facts.canvasLookError), /ENOENT.*rename/);
+	assert.doesNotMatch(String(facts.canvasLookError), /named no image/);
+	assert.ok(summary.includes("(the easel couldn't show it:"));
+});
+
+test("a summary look preserves the final-line fallback for unparsed dimensions", async () => {
+	const s = studio('[ "$1" = globals ] && exit 0\necho "out/look.png (unknown dimensions)"');
+	const { facts } = await buildSummary(s, []);
+	assert.equal(facts.canvasLook, "out/look.png");
+	assert.equal(facts.canvasLookError, undefined);
 });

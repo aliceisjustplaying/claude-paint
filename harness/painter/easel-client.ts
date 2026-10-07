@@ -97,18 +97,26 @@ async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.
 	}
 }
 
-/** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
+/** A paint command failed after admission; its Lua error wording must be preserved. */
+class PaintCommandError extends Error {}
+
+/** Run an easel command at an open easel; admission and command failures stay distinct. */
 async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
 	let deadline = Date.now() + wait;
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
-	const r = await step(studio, args, input, signal, deadline);
-	if (r.timedOut) {
-		throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+	try {
+		const r = await step(studio, args, input, signal, deadline);
+		if (r.timedOut) {
+			throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		}
+		const text = r.out.trimEnd();
+		if (r.code !== 0) throw new Error(text || "the easel gave no answer");
+		return text;
+	} catch (error) {
+		if (args[0] === "do") throw new PaintCommandError(error instanceof Error ? error.message : String(error));
+		throw error;
 	}
-	const text = r.out.trimEnd();
-	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
-	return text;
 }
 
 export const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: {} });
@@ -240,17 +248,24 @@ function isFile(path: string): boolean {
  * line that begins with a look's png path (a file that is there; its folders may
  * have spaces, or ".png", in their names) gets a fresh name; the paths in order.
  */
-function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
+function renameLooks(studio: string, said: string, wholeCanvas = false): { said: string; paths: string[] } {
 	const paths: string[] = [];
-	const lines = said.split("\n").map((line) => {
+	const lines = said.split("\n").map((line, index, all) => {
 		// (the whole path, to its last ".png": a folder's name may hold one too)
-		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
-		if (!m || !isFile(resolve(studio, m[1]))) return line;
+		// A summary parses only the final line; a missing parsed PNG must fail
+		// the rename rather than silently disappear from its answer.
+		if (wholeCanvas && index !== all.length - 1) return line;
+		const m = wholeCanvas
+			? /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(line)
+			: /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
+		if (!m || (!wholeCanvas && !isFile(resolve(studio, m[1])))) return line;
 		const path = join(dirname(m[1]), `${randomUUID()}.png`);
 		renameSync(resolve(studio, m[1]), resolve(studio, path));
 		paths.push(path);
 		// without the machine's seconds
-		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
+		return wholeCanvas
+			? path + (m[2] ? ` (${m[2]})` : "")
+			: path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
 	});
 	return { said: lines.join("\n"), paths };
 }
@@ -262,7 +277,7 @@ export type PainterCommand =
 	| { kind: "paint"; lua: string; new_scratch?: boolean }
 	| ({ kind: "look" } & Look)
 	| { kind: "note"; text: string }
-	| { kind: "status" | "log" | "globals" };
+	| { kind: "status" | "log" | "globals" | "canvasLook" };
 
 /** Globals in the painter's words, with no assignment counters or source provenance. */
 function globalsReply(out: string): string {
@@ -271,7 +286,7 @@ function globalsReply(out: string): string {
 	return rows.map((r) => `- \`${r![2]}\`: ${r![3].replace(/ \(chunk \d+, line \d+\)/g, "")}`).join("\n");
 }
 
-/** All easel failures, including admission/rebuild failures, use one translation policy. */
+/** Easel-owned errors, including admission/rebuild failures, use one translation policy. */
 function errorReply(message: string): string {
 	return toolWords(hideCounters(statusReply(message)))
 		.replace(/ \(chunk \d+, line \d+\)/g, "")
@@ -311,6 +326,7 @@ export async function painterEasel(studio: string, canvas: Canvas, command: Pain
 			}
 			case "note": args = ["note", "-"]; input = command.text; break;
 			case "globals": args = ["globals"]; break;
+			case "canvasLook": args = ["look"]; break;
 			default: args = [command.kind, ...on];
 		}
 		let said = await atEasel(studio, args, input, signal);
@@ -320,15 +336,26 @@ export async function painterEasel(studio: string, canvas: Canvas, command: Pain
 			case "status": said = statusReply(said); break;
 			case "log": said = tail(logReply(said), 50_000, `paintings/lua/${canvas}.lua`); break;
 			case "globals": said = globalsReply(said); break;
+			case "canvasLook":
+				({ said, paths } = renameLooks(studio, said, true));
+				if (paths.length === 0) {
+					// Preserve the old summary's fallback for an unparsed final line.
+					const path = said.split("\n").at(-1)!.replace(/ \(.*\)$/, "");
+					if (/\.png$/.test(path)) paths.push(path);
+					else throw new Error(`the easel's look named no image: ${said.slice(0, 200)}`);
+				}
+				break;
 			case "look":
 				({ said, paths } = renameLooks(studio, said));
-				// A look with no readable image becomes an error in both callers.
+				// The look tool treats an answer with no readable image as an error.
 				if (paths.length === 0) said = errorReply(said);
 				break;
 		}
 		if (canvas === "scratch") said = `[scratch canvas]\n${said}`;
 		return { said, paths };
 	} catch (error) {
-		throw new Error(errorReply(error instanceof Error ? error.message : String(error)));
+		throw new Error(error instanceof PaintCommandError
+			? hideCounters(error.message)
+			: errorReply(error instanceof Error ? error.message : String(error)));
 	}
 }

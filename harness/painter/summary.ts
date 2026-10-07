@@ -103,9 +103,8 @@ export const CANVAS_VIEW = /^The whole canvas as it was when this was written: (
 /** A fresh whole-canvas look at the easel: its PNG's path, or an error. */
 async function canvasLook(studio: string, signal?: AbortSignal): Promise<{ path: string } | { error: string }> {
 	try {
-		const { said, paths } = await painterEasel(studio, "painting", { kind: "look" }, signal);
-		const path = paths[paths.length - 1] ?? "";
-		return /\.png$/.test(path) ? { path } : { error: `the easel's look named no image: ${said.slice(0, 200)}` };
+		const { paths } = await painterEasel(studio, "painting", { kind: "canvasLook" }, signal);
+		return { path: paths[0] };
 	} catch (error) {
 		return { error: error instanceof Error ? error.message : String(error) };
 	}

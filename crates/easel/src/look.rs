@@ -10,7 +10,7 @@ use paint::color::{linear_to_srgb, luminance};
 use paint::{Canvas, Rgb};
 use std::path::Path;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct View {
     /// Crop in canvas units (x0, y0, x1, y1).
     pub crop: Option<[f32; 4]>,
@@ -40,13 +40,19 @@ fn is_num(s: Option<&String>) -> bool {
 impl View {
     /// Parse look arguments (see `LOOK_ARGS`).
     pub fn parse(args: &[String]) -> std::result::Result<View, String> {
-        let mut v = View::default();
+        Self::parse_with_size(args, None)
+    }
+
+    fn parse_with_size(args: &[String], default_size: Option<usize>) -> Result<View, String> {
+        let mut v = View { size: default_size, ..View::default() };
         let mut i = 0;
         while i < args.len() {
             let a = args[i].as_str();
             let mut next = || {
                 i += 1;
-                args.get(i).cloned().ok_or(format!("{a} needs a value"))
+                // Compare used to append --size 800 before parsing. A trailing
+                // --mode or --light therefore consumed --size, even on an error.
+                args.get(i).cloned().or_else(|| default_size.map(|_| "--size".into())).ok_or(format!("{a} needs a value"))
             };
             match a {
                 "--crop" => {
@@ -100,6 +106,253 @@ impl View {
         }
         Ok(v)
     }
+}
+
+// ---------------------------------------------------------------- complete look requests
+
+use crate::session::Session;
+use std::path::PathBuf;
+
+/// A look's arguments, parsed once. Survey view errors are retained until rendering:
+/// historically a missing canvas wins over those errors, but not over crop/size refusal.
+pub enum Request {
+    View(View),
+    Survey(std::result::Result<View, String>),
+    Compare { view: View, previous: PathBuf },
+    Held(Held),
+    Palette,
+}
+
+pub struct Held {
+    name: String,
+    at: (f32, f32),
+    view: View,
+}
+
+impl Held {
+    fn new(name: String, at: (f32, f32), view: View) -> Result<Self, String> {
+        if view.size.is_some() || view.grid.is_some() || view.mirror || view.palette {
+            return Err("look --hold takes --at, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+        }
+        Ok(Self { name, at, view })
+    }
+}
+
+pub enum Summary {
+    View,
+    Held { name: String, at: (f32, f32) },
+    Compare { previous: PathBuf },
+    Survey { rows: usize, cols: usize, tw: f32, th: f32 },
+}
+
+pub struct Tile {
+    pub row: usize,
+    pub column: usize,
+    pub crop: String,
+}
+
+pub struct Picture {
+    pub width: usize,
+    pub height: usize,
+    pub png: Vec<u8>,
+    pub tile: Option<Tile>,
+}
+
+impl From<(usize, usize, Vec<u8>)> for Picture {
+    fn from((width, height, png): (usize, usize, Vec<u8>)) -> Self {
+        Self { width, height, png, tile: None }
+    }
+}
+
+/// Survey tiles are rendered on demand, so writing one file still precedes rendering
+/// the next. A later failed tile must not erase files already delivered or skip a write error.
+pub struct Pictures<'a> {
+    pub summary: Summary,
+    pub pictures: Box<dyn Iterator<Item = Result<Picture, String>> + 'a>,
+}
+
+impl Request {
+    pub fn parse(args: &[String]) -> Result<Self, String> {
+        if args.iter().any(|a| a == "--palette") {
+            View::parse(args)?;
+            return Ok(Self::Palette);
+        }
+        let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
+        let (mut hold, mut at) = (None::<String>, None::<String>);
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--hold" => {
+                    hold = Some(args.get(i + 1).ok_or("--hold needs a knife or a pile: the name of a global that holds one")?.clone());
+                    i += 1;
+                }
+                "--at" => {
+                    at = Some(args.get(i + 1).ok_or("--at needs a point on the canvas: x,y in units")?.clone());
+                    i += 1;
+                }
+                "--survey" => survey = true,
+                "--compare" => {
+                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    i += 1;
+                }
+                a => rest.push(a.to_string()),
+            }
+            i += 1;
+        }
+        if survey && compare.is_some() {
+            return Err("look: --survey and --compare are two looks; ask for one".into());
+        }
+        if hold.is_some() || at.is_some() {
+            let (Some(name), Some(at)) = (hold, at) else { return Err("look: --hold <knife or pile> and --at x,y go together".into()) };
+            if survey || compare.is_some() {
+                return Err("look: --hold is a look of its own: no --survey or --compare".into());
+            }
+            let p: Vec<f32> = at.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("--at {at}: want x,y in units"))?;
+            if p.len() != 2 {
+                return Err(format!("--at {at}: want x,y in units"));
+            }
+            return Ok(Self::Held(Held::new(name, (p[0], p[1]), View::parse(&rest)?)?));
+        }
+        if survey {
+            if rest.iter().any(|a| a == "--crop" || a == "--size") {
+                return Err("look --survey covers the whole canvas at full detail: no --crop or --size".into());
+            }
+            return Ok(Self::Survey(View::parse(&rest)));
+        }
+        if let Some(previous) = compare {
+            let default_size = (!rest.iter().any(|a| a == "--size" || a == "--crop")).then_some(800);
+            let view = View::parse_with_size(&rest, default_size)?;
+            Ok(Self::Compare { view, previous })
+        } else {
+            Ok(Self::View(View::parse(&rest)?))
+        }
+    }
+
+    /// Read the session and return PNG buffers plus the facts used in the reply.
+    /// `studio` confines comparison pictures to the same studio as before.
+    pub fn render<'a>(&'a self, s: &'a Session, studio: &Path) -> Result<Pictures<'a>, String> {
+        let (summary, picture) = match self {
+            Self::View(view) => {
+                let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+                (Summary::View, render(&c, view)?.into())
+            }
+            Self::Palette => {
+                let st = s.st.borrow();
+                (Summary::View, crate::palette_look::render(&st.board, &st.tubes)?.into())
+            }
+            Self::Held(held) => (
+                Summary::Held { name: held.name.clone(), at: held.at },
+                render_held(s, &held.name, held.at, &held.view)?.into(),
+            ),
+            Self::Compare { view, previous } => {
+                let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+                let (previous, picture) = render_compare(&c, view, previous, studio)?;
+                (Summary::Compare { previous }, picture)
+            }
+            Self::Survey(view) => {
+                let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+                let view = view.as_ref().map_err(Clone::clone)?;
+                let seen = match view.light {
+                    Some((az, el)) => c.seen_lit(az, el, 1.0),
+                    None => c.seen(),
+                };
+                let (wu, hu) = (c.width(), c.height());
+                let cols = (wu / 500.0).ceil().max(1.0) as usize;
+                let rows = (hu / 500.0).ceil().max(1.0) as usize;
+                let (tw, th) = (wu / cols as f32, hu / rows as f32);
+                let pictures = (0..rows).flat_map(move |r| (0..cols).map(move |k| (r, k))).map(move |(r, k)| {
+                    let crop = [k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th];
+                    let v = View { crop: Some(crop), ..view.clone() };
+                    let mut picture = Picture::from(render_seen(&c, &v, Some(&seen))?);
+                    picture.tile = Some(Tile { row: r + 1, column: k + 1, crop: format!("{},{},{},{}", crop[0], crop[1], crop[2], crop[3]) });
+                    Ok(picture)
+                });
+                return Ok(Pictures { summary: Summary::Survey { rows, cols, tw, th }, pictures: Box::new(pictures) });
+            }
+        };
+        Ok(Pictures { summary, pictures: Box::new(std::iter::once(Ok(picture))) })
+    }
+}
+
+/// An earlier look (left) beside the same view now (right), at the same height.
+fn render_compare(c: &Canvas, v: &View, prev: &Path, studio: &Path) -> Result<(PathBuf, Picture), String> {
+    let (_, _, png) = render(c, v)?;
+    let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+    let studio = studio.canonicalize().map_err(|e| e.to_string())?;
+    let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
+    let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
+    if !real.starts_with(&studio) {
+        return Err(format!("--compare {}: an earlier look is a picture in this studio ({})", prev.display(), studio.display()));
+    }
+    let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
+    let h = now.height();
+    let bw = ((before.width() as f64 * h as f64 / before.height() as f64).round() as u32).max(1);
+    let total_width = bw.checked_add(12).and_then(|w| w.checked_add(now.width()));
+    if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
+        return Err("--compare: the combined picture is too large".into());
+    }
+    let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
+    let gap = 12;
+    let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
+    image::imageops::replace(&mut both, &before, 0, 0);
+    image::imageops::replace(&mut both, &now, (bw + gap) as i64, 0);
+    let mut bytes = Vec::new();
+    both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok((prev, (both.width() as usize, h as usize, bytes).into()))
+}
+
+/// Half the side (units) of the passage a held knife is seen against, when no crop is given.
+const HOLD_HALF: f32 = 120.0;
+
+/// SPECULATIVE (notes/open-questions.md). The loaded knife held up to the canvas
+/// (`look --hold <knife or pile> --at x,y`): a passage of the canvas at full detail
+/// (`--crop`, or 240 units square around the point) with a knife held over it, the
+/// blade's end at the point, so its paint meets the picture there in one light and one
+/// surround. The knife is a knife global with what is on it (a mix scraped off the
+/// canvas too), or a pile's name: a fresh load from its heap as it is on the board now.
+/// The engine lays that paint thick on a steel blade at the painting's scale and engine,
+/// and the blade is seen as the passage is: lit, in grays or squinted with it.
+/// It shows the paint on the knife and nothing of how it would look laid: not thinned by
+/// a brush, not mixed into what is wet there, not over what is under it, not dried.
+/// Only reads: no hand time, nothing in the log, the canvas and state untouched.
+fn render_held(s: &Session, name: &str, at: (f32, f32), v: &View) -> Result<(usize, usize, Vec<u8>), String> {
+    use image::ImageEncoder;
+    let (paint, blade, full) = s.held(name)?;
+    let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+    let (wu, hu) = (c.width(), c.height());
+    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
+        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
+    }
+    let crop = v.crop.unwrap_or([(at.0 - HOLD_HALF).max(0.0), (at.1 - HOLD_HALF).max(0.0), (at.0 + HOLD_HALF).min(wu), (at.1 + HOLD_HALF).min(hu)]);
+    if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
+        return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
+    }
+    let seen_as = |crop: [f32; 4]| View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..View::default() };
+    let (_, _, png) = render(&c, &seen_as(crop))?;
+    let mut passage = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+    // the knife: its paint laid thick on a steel blade, on a board of its own with the
+    // painting's pixels to the unit, millimetres to the unit and engine
+    let f = c.frame();
+    let (len, wide) = (2.0 * blade, blade + 12.0);
+    let board_h = wide + 20.0;
+    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine());
+    let mut knife = paint::Knife::new(blade);
+    knife.load(paint, full);
+    let cy = board_h / 2.0;
+    // (the pull starts before the part shown, so the paint comes to the blade's very end)
+    board.knife(&mut knife, &[(10.0, cy), (50.0 + len, cy)], (0.15, 0.1), None, true, 0.25);
+    let (_, _, bpng) = render(&board, &seen_as([30.0, cy - wide / 2.0, 30.0 + len, cy + wide / 2.0]))?;
+    let blade_img = image::load_from_memory(&bpng).map_err(|e| e.to_string())?.to_rgb8();
+    // held over the passage: the blade's end at the point, its length to the right
+    let x0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
+    let y0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
+    let x = (at.0 * f.scale).round() as i64 - x0;
+    let y = (at.1 * f.scale).round() as i64 - y0 - blade_img.height() as i64 / 2;
+    image::imageops::overlay(&mut passage, &blade_img, x, y);
+    let (w, h) = (passage.width(), passage.height());
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(passage.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok((w as usize, h as usize, out))
 }
 
 // ---------------------------------------------------------------- rendering
@@ -804,4 +1057,115 @@ mod tests {
         assert_ne!(std::fs::read(dir.join("flat.png")).unwrap(), std::fs::read(dir.join("relief.png")).unwrap());
         assert_eq!(before, bits(&c));
     }
+    const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
+
+    #[cfg(feature = "replay")]
+    use crate::state_digest_line;
+
+    #[cfg(feature = "replay")]
+    fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &View) -> Result<(usize, usize, Vec<u8>), String> {
+        let held = Held::new(name.into(), at, v.clone())?;
+        render_held(s, &held.name, held.at, &held.view)
+    }
+
+    #[cfg(tube_box)]
+    fn palette_look(s: &Session) -> Result<(usize, usize, Vec<u8>), String> {
+        let ground = s.ground_color().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        palette(&s.piles(), ground)
+    }
+
+    /// The held knife (speculative) only reads, as the palette look: the state digest, the
+    /// log, the globals and the clock are as they were. It shows the passage with a knife
+    /// over it at the point: a knife global with its own load, or a pile freshly loaded.
+    #[cfg(feature = "replay")]
+    #[test]
+    fn a_held_knife_shows_its_paint_over_the_passage_and_changes_nothing() {
+        let mut s = Session::new(1000).unwrap();
+        s.run(PALETTE_CANVAS).unwrap();
+        s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
+                 b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})
+                 k = knife{width=40}; k:load(dk, 0.8); clean = knife{width=20}"#).unwrap();
+        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let plain = View::default();
+        let at = (400.0, 320.0);
+        let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
+        let (w, h, png) = hold_look(&s, "k", at, &plain).unwrap();
+        // the passage is 240 units square: at this canvas's one px a unit, 240 px (give or take a rounded edge)
+        assert!((239..=241).contains(&w) && (239..=241).contains(&h), "{w} x {h}");
+        let side = w.min(h);
+        let held = rgb(&png);
+        // the same passage without the knife: the same left of the point, another picture right of it
+        let bare = rgb(&render(&s.canvas().unwrap(), &View { crop: Some([at.0 - HOLD_HALF, at.1 - HOLD_HALF, at.0 + HOLD_HALF, at.1 + HOLD_HALF]), ..View::default() }).unwrap().2);
+        let mid = (side / 2) as u32;
+        assert!((0..mid - 1).all(|x| (0..side as u32).all(|y| held.get_pixel(x, y) == bare.get_pixel(x, y))), "the passage left of the point is untouched");
+        let covered = (mid..side as u32).flat_map(|x| (0..side as u32).map(move |y| (x, y))).filter(|&(x, y)| held.get_pixel(x, y) != bare.get_pixel(x, y)).count();
+        assert!(covered > 100, "the blade covers {covered} pixels");
+        // the dark paint is on the blade: some of it much darker than the steel
+        let darkest = (mid..side as u32).map(|x| held.get_pixel(x, mid).0.iter().map(|&v| v as u32).sum::<u32>()).min().unwrap();
+        assert!(darkest < 200, "the darkest of the blade's middle row sums to {darkest}");
+        // a pile by its name is a fresh load; in grays the blade is gray too
+        hold_look(&s, "skyP", at, &plain).unwrap();
+        // The render clamps an out-of-bounds crop; blade placement uses the
+        // same origin, so it matches the explicitly clamped crop exactly.
+        let edge = (100.0, 100.0);
+        let outside = hold_look(&s, "k", edge, &View { crop: Some([-50.0, -50.0, 200.0, 200.0]), ..View::default() }).unwrap();
+        let clamped = hold_look(&s, "k", edge, &View { crop: Some([0.0, 0.0, 200.0, 200.0]), ..View::default() }).unwrap();
+        assert!(outside == clamped, "crop clipping cannot move the held blade");
+        let gray = rgb(&hold_look(&s, "k", at, &View { value: true, ..View::default() }).unwrap().2);
+        assert!((mid..side as u32).all(|x| { let p = gray.get_pixel(x, mid).0; p[0] == p[1] && p[1] == p[2] }));
+        // (kept for the eye: target/easel-look-test/held-knife.png)
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("held-knife.png"), &png).unwrap();
+        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        assert_eq!(before, after);
+        s.run("assert(k:fullness() > 0)").unwrap();
+        s.run("k:wipe(); k:load(dk, 0.01)").unwrap();
+        assert!((s.held("k").unwrap().2 - 0.01).abs() < 1e-5,
+            "the preview must preserve a nearly empty knife's load");
+        s.run(r#"skyP = pile{{"lead white", 1}, thinner=0.4}
+            skyP:add{{"lead white", 1}}
+            k:wipe(); k:load(skyP, 0.5)"#).unwrap();
+        assert!((s.held("skyP").unwrap().0.thinner - 0.2).abs() < 1e-5,
+            "a palette preview must use the current diluted thinner share");
+        assert!((s.held("k").unwrap().0.thinner - 0.2).abs() < 1e-5,
+            "a knife preview must retain the blade's carried solvent share");
+        // what it refuses: a clean knife, a name that holds neither, a point off the canvas or the crop, a view of its own
+        assert!(hold_look(&s, "clean", at, &plain).unwrap_err().contains("the knife is clean"));
+        let e = hold_look(&s, "nope", at, &plain).unwrap_err();
+        assert!(e.contains("no global of that name holds a knife or a pile") && e.contains("clean, dk, k, skyP"), "{e}");
+        assert!(hold_look(&s, "k", (1400.0, 320.0), &plain).unwrap_err().contains("not on the canvas"));
+        assert!(hold_look(&s, "k", (f32::NAN, 320.0), &plain).unwrap_err().contains("not on the canvas"));
+        assert!(hold_look(&s, "k", at, &View { crop: Some([0.0, 0.0, 100.0, 100.0]), ..View::default() }).unwrap_err().contains("outside the --crop"));
+        assert!(hold_look(&s, "k", at, &View { mirror: true, ..View::default() }).is_err());
+    }
+
+    /// A palette look only reads: the state digest (canvas, brushes, studio), the log and the
+    /// globals are the same before and after it, and it puts no time on the clock.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_palette_look_changes_nothing() {
+        let mut s = Session::new(320).unwrap();
+        s.run(PALETTE_CANVAS).unwrap();
+        s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
+                 b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})"#).unwrap();
+        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let (w, h, png) = palette_look(&s).unwrap();
+        assert!(w > 0 && h > 0 && png.starts_with(b"\x89PNG"));
+        assert_eq!(s.piles().iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["dk", "skyP"]);
+        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        assert_eq!(before, after);
+        // and the next chunk runs as it would have without the look
+        let mut t = Session::new(320).unwrap();
+        for c in &s.log {
+            t.run(&c.src).unwrap();
+        }
+        s.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
+        t.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
+        assert_eq!(state_digest_line(&s, 3, 0.0), state_digest_line(&t, 3, 0.0));
+    }
 }
+
+#[cfg(all(test, feature = "replay", tube_box))]
+#[path = "look_request_tests.rs"]
+mod request_tests;

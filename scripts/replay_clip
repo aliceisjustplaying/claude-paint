@@ -103,9 +103,9 @@ if [ "$pace" = dynamic ]; then
 else
   scheduler=(python3)
 fi
-"${scheduler[@]}" "$(dirname "$0")/replay_pace.py" "$dir" --pace "$pace" --length "$length" --max-hold "$maxhold" --hold "$hold" \
-  --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
-  --final-first "$finalfirst" --eval
+"${scheduler[@]}" "$(dirname "$0")/replay_pace.py" "$dir" --pace="$pace" --length="$length" --max-hold="$maxhold" --hold="$hold" \
+  --fps="$fps" --floor="$floor" --gamma="$gamma" --ramp="$ramp" --ramp-span="$rampspan" --open-hold="$openhold" \
+  --final-first="$finalfirst" --eval
 
 ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
   -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \

@@ -82,4 +82,28 @@ duration 0.04167
 file 'it'\''s blue.png'
 EOF_CONCAT
 cmp "$work/expected.txt" "$work/schedule/concat.txt" || fail "stdlib numeric schedule: concat bytes differ" "$work/schedule/concat.txt"
-echo "replay_clip test: relative and absolute frames folders at numeric and dynamic pace, each clip 8 s to a frame; 75 s at --max-hold 1 refused; stdlib numeric schedule exact ($work)"
+# Numeric refusals keep awk's conversion/domain behavior and exit status,
+# including negative scientific exponents passed through replay_clip.
+while IFS='|' read -r name pace length cap message; do
+  rc=0
+  "$repo/scripts/replay_clip" none.lua "$work/$name.mp4" --reuse --frames-dir "$work/rel-0.6/clip.mp4.frames" \
+    --pace "$pace" --length "$length" --max-hold "$cap" --width 64 >"$work/$name.log" 2>&1 || rc=$?
+  [ "$rc" = 1 ] || fail "$name: exit $rc, not refusal exit 1" "$work/$name.log"
+  printf '%s\n' "$message" > "$work/refusal.txt"
+  cmp "$work/refusal.txt" "$work/$name.log" || fail "$name: refusal text changed" "$work/$name.log"
+  [ ! -e "$work/$name.mp4" ] || fail "$name: a clip was cut" "$work/$name.log"
+done <<'EOF_REFUSALS'
+negative-pace|-1|8|10|replay_clip: --length 8 is longer than the clip can run: 0 moments held at most 10 s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; lower --length
+scientific-pace|-1e-3|8|10|replay_clip: --length 8 is longer than the clip can run: 0 moments held at most 10 s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; lower --length
+invalid-length|0.6|bogus|10|replay_clip: --length must exceed the 3 s final hold
+invalid-cap|0.6|8|bogus|replay_clip: --length 8 is longer than the clip can run: 2 moments held at most bogus s each (--max-hold) plus the 3 s final hold come to at most 3.00 s; raise --max-hold to at least 2.50 or lower --length
+overflow-pace|10000|8|10|replay_clip: the holds come to 0.000 s, not 5.000
+EOF_REFUSALS
+
+# CR and Unicode line separators are filename bytes, not TSV records.
+printf 'file\thand_secs\nwhite\342\200\250\r.png\t0\nit\047s red.png\t60\nblue.png\t120\n' > "$work/schedule/frames.tsv"
+uv run --no-project --python "$work/stdlib/bin/python" python -S "$repo/scripts/replay_pace.py" "$work/schedule" \
+  --pace=1 --length=8 --max-hold=10 >"$work/lf-records.log" 2>&1 || fail "LF-only records: failed" "$work/lf-records.log"
+printf "file 'white\342\200\250\r.png'\nduration 2.50000\nfile 'it'\\\\''s red.png'\nduration 2.50000\nfile 'blue.png'\nduration 2.91667\nfile 'blue.png'\nduration 0.04167\nfile 'blue.png'\n" > "$work/lf-expected.txt"
+cmp "$work/lf-expected.txt" "$work/schedule/concat.txt" || fail "LF-only records: concat bytes differ" "$work/schedule/concat.txt"
+echo "replay_clip test: relative and absolute frames folders at numeric and dynamic pace, each clip 8 s to a frame; 75 s at --max-hold 1 refused; stdlib numeric schedule, refusal semantics and LF-only records exact ($work)"

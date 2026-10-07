@@ -44,11 +44,77 @@ tenth).
 """
 
 import argparse
+import ctypes
+import errno
 import math
 import sys
 from pathlib import Path
 
 W = 250
+
+
+# The numeric path replaces the system awk (One True Awk). Use the same C
+# strtod conversion: numeric prefixes, hex, infinities and underflow included.
+_STRTOD = ctypes.CDLL(None, use_errno=True).strtod
+_STRTOD.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p)]
+_STRTOD.restype = ctypes.c_double
+
+
+def awk_value(text):
+    raw, end = str(text).encode(), ctypes.c_char_p()
+    ctypes.set_errno(0)
+    value = _STRTOD(raw, ctypes.byref(end))
+    numeric = (end.value != raw and not end.value.strip(b" \t\n")
+               and value != math.inf and ctypes.get_errno() != errno.ERANGE)
+    return value, numeric
+
+
+def awk_string(value):
+    # awk's derived integral values use %.30g, not CONVFMT's %.6g.
+    return format(value, ".30g" if math.isfinite(value) and value.is_integer() else ".6g")
+
+
+def awk_compare(x, y):
+    # One True Awk compares the difference, treating NaN as equality.
+    d = x - y
+    return -1 if d < 0 else 1 if d > 0 else 0
+
+
+def awk_power(x, exponent):
+    if exponent >= 0 and math.modf(exponent)[0] == 0:
+        # awk uses recursive squaring for nonnegative integer exponents;
+        # its C int conversion saturates at INT_MAX on the serving Mac.
+        def ipow(n):
+            if n <= 0:
+                return 1.0
+            v = ipow(n // 2)
+            return v * v if n % 2 == 0 else x * v * v
+        return ipow(min(int(exponent), 2147483647) if math.isfinite(exponent) else 2147483647)
+    try:
+        return math.pow(x, exponent)
+    except OverflowError:
+        return -math.inf if x < 0 and exponent % 2 == 1 else math.inf
+    except ValueError:
+        if x == 0 and exponent < 0:
+            return -math.inf if math.copysign(1, x) < 0 and exponent % 2 == 1 else math.inf
+        return math.nan
+
+
+def numeric_moments(d: Path):
+    """awk's LF-only records and $2 + 0, including blank/missing fields."""
+    records = (d / "frames.tsv").read_bytes().decode().split("\n")
+    if records[-1] == "":
+        records.pop()  # a terminating LF is not an extra record
+    out = []
+    for line in records[1:]:
+        fields = line.split("\t")
+        f = fields[0]
+        h = awk_value(fields[1] if len(fields) > 1 else "")[0]
+        if out and awk_compare(out[-1][1], h) == 0:
+            out[-1] = (f, h)
+        else:
+            out.append((f, h))
+    return out
 
 
 def moments(d: Path):
@@ -162,11 +228,11 @@ def write_schedule(ms, secs, a):
     """One concat encoding for either pace, including both finished-frame holds."""
     lines = []
     if a.final_first is not None and a.before > 0:
-        lines.append(f"{entry(ms[-1][0])}duration {a.before:.5f}\n")
+        lines.append(f"{entry(a.first_name)}duration {a.before:.5f}\n")
     for (f, _), d in zip(ms[:-1], secs):
         if d > 0:
             lines.append(f"{entry(f)}duration {d:.5f}\n")
-    last = entry(ms[-1][0])
+    last = entry(ms[-1][0] if ms else "")
     # The final entry takes the duration before it: hold less two frames,
     # a one-frame repeat, then the last frame once more (also one frame).
     lines.append(f"{last}duration {a.hold - 2 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
@@ -179,47 +245,55 @@ def numeric_schedule(ms, a):
     Keep the scalar operation order and 20 capped-rescaling iterations from
     replay_clip's awk schedule, including its feasibility tolerances/messages.
     """
-    if a.length <= a.hold:
+    if awk_compare(a.length, a.hold) <= 0:
         sys.exit(f"replay_clip: --length must exceed the {a.hold_text} s final hold")
-    pace = float(a.pace)
-    w = [later[1] ** pace - earlier[1] ** pace for earlier, later in zip(ms, ms[1:])]
+    pace = awk_value(a.pace)[0]
+    w = [awk_power(later[1], pace) - awk_power(earlier[1], pace) for earlier, later in zip(ms, ms[1:])]
     want = a.length - a.hold
     m = sum(x > 0 for x in w)
     if want > m * a.max_hold + 1e-6:
-        msg = (f"replay_clip: --length {a.length + a.before:g} is longer than the clip can run: "
+        msg = (f"replay_clip: --length {awk_string(a.length + a.before)} is longer than the clip can run: "
                f"{m} moment{'' if m == 1 else 's'} held at most {a.max_hold_text} s each (--max-hold) "
                f"plus the {a.hold_text} s final hold")
         if a.before > 0:
-            msg += f" plus the {a.final_first if a.final_first is not None else format(a.before, 'g')} s --final-first"
-        msg += f" come to at most {int((m * a.max_hold + a.hold + a.before) * 100 + 1e-6) / 100:.2f} s; "
+            msg += f" plus the {a.final_first if a.final_first is not None else awk_string(a.before)} s --final-first"
+        msg += f" come to at most {math.modf((m * a.max_hold + a.hold + a.before) * 100 + 1e-6)[1] / 100:.2f} s; "
         if m > 0:
-            msg += f"raise --max-hold to at least {int(want / m * 100 + 0.999999) / 100:.2f} or "
+            msg += f"raise --max-hold to at least {math.modf(want / m * 100 + 0.999999)[1] / 100:.2f} or "
         sys.exit(msg + "lower --length")
+    def over_cap(d):
+        return (awk_compare(d, a.max_hold) > 0 if a.cap_numeric
+                else awk_string(d) > a.max_hold_text)
+
     k = 0.0
     for _ in range(20):
         capped, free = 0.0, 0.0
         for x in w:
-            if k > 0 and x * k > a.max_hold:
+            if k > 0 and over_cap(x * k):
                 capped += a.max_hold
             else:
                 free += x
-        if free <= 0:
+        if awk_compare(free, 0) <= 0:
             break
         k2 = (want - capped) / free
-        if k2 == k:
+        if awk_compare(k2, k) == 0:
             break
         k = k2
-    secs, total = [], 0.0
+    secs, total, lines = [], 0.0, []
     for x in w:
         d = x * k
-        if d > a.max_hold:
+        if over_cap(d):
             d = a.max_hold
         secs.append(d)
-        if d > 0:
+        if awk_compare(d, 0) > 0:
+            lines.append(f"{entry(ms[len(secs) - 1][0])}duration {d:.5f}\n")
             total += d
+    # awk writes these entries before its consistency check. A refusal must
+    # leave the same partial concat file (without prefix or final hold).
+    (a.dir / "concat.txt").write_text("".join(lines))
     if total - want > 0.5 / a.fps or want - total > 0.5 / a.fps:
         sys.exit(f"replay_clip: the holds come to {total:.3f} s, not {want:.3f}")
-    print(f"{len(ms)} moments, {ms[-1][1] / 60:.1f} min of hand time, pace {a.pace}: about {total + a.hold:.1f} s of clip", file=sys.stderr)
+    print(f"{len(ms)} moments, {(ms[-1][1] if ms else 0) / 60:.1f} min of hand time, pace {a.pace}: about {total + a.hold:.1f} s of clip", file=sys.stderr)
     return secs
 
 
@@ -238,7 +312,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir", type=Path)
     ap.add_argument("--pace", default="dynamic", help="dynamic or a numeric hand-time exponent")
-    ap.add_argument("--length", type=float, default=50)
+    ap.add_argument("--length", default="50")
     ap.add_argument("--max-hold", default="1.0")
     ap.add_argument("--hold", default="3.0")
     ap.add_argument("--fps", type=int, default=24)
@@ -249,13 +323,27 @@ def main():
     ap.add_argument("--ramp", default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
     ap.add_argument("--open-hold", default=0.0, help="seconds the bare canvas is shown first")
     ap.add_argument("--ramp-span", default=0.35, help="share of hand time over which the ramp eases to 1")
-    ap.add_argument("--before", type=float, default=0.0, help="seconds of clip before this list, for the length message")
+    ap.add_argument("--before", default="0.0", help="seconds of clip before this list, for the length message")
     ap.add_argument("--final-first", help="open on the finished painting, taken out of --length")
     ap.add_argument("--eval", action="store_true", help="print evenness for this schedule and for plain --hand-pace")
     a = ap.parse_args()
     # Keep literal hold/cap spellings for the numeric path's existing messages.
     a.hold_text, a.max_hold_text = a.hold, a.max_hold
-    numbers = ["hold", "max_hold"]
+    if a.pace != "dynamic":
+        a.hold = awk_value(a.hold)[0]
+        a.max_hold, a.cap_numeric = awk_value(a.max_hold)
+        a.before = awk_value(a.final_first if a.final_first is not None else a.before)[0]
+        a.length = awk_value(a.length)[0]
+        if a.final_first is not None:
+            a.length = awk_value(f"{a.length - a.before:.5f}")[0]
+        (a.dir / "concat.txt").write_text("")
+        ms = numeric_moments(a.dir)
+        # The old prefix uses tail -1, including a blank final row/header.
+        a.first_name = (a.dir / "frames.tsv").read_bytes().decode().removesuffix("\n").split("\n")[-1].split("\t")[0]
+        secs = numeric_schedule(ms, a)
+        write_schedule(ms, secs, a)
+        return
+    numbers = ["length", "hold", "max_hold", "before"]
     if a.pace == "dynamic":
         numbers += ["floor", "gamma", "ramp", "open_hold", "ramp_span"]
     # Numeric pace ignores dynamic-only flags, even nonnumeric values, just
@@ -270,12 +358,8 @@ def main():
         a.before = float(a.final_first)
         a.length = float(f"{a.length - a.before:.5f}")
     ms = moments(a.dir)
-    if a.pace == "dynamic":
-        secs = dynamic_schedule(ms, a)
-    else:
-        # awk opened the list before checking numeric schedule feasibility.
-        (a.dir / "concat.txt").write_text("")
-        secs = numeric_schedule(ms, a)
+    a.first_name = ms[-1][0]
+    secs = dynamic_schedule(ms, a)
     write_schedule(ms, secs, a)
 
 

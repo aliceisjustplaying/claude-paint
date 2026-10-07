@@ -214,9 +214,31 @@ impl SessionFiles {
             Ok((s, text, log.chunks.len()))
         } else {
             let text = s.program(&self.name);
-            self.append(None, &text)?;
+            self.initialize(&text)?;
             Ok((s, text, 0))
         }
+    }
+
+    /// Preserve bootstrap's existing failure behavior: an unfinished initial
+    /// witness leaves the log on disk and the next open refuses it as incomplete.
+    fn initialize(&self, text: &str) -> Result<(), String> {
+        let p = self.log_path();
+        fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+        let mut log = OpenOptions::new()
+            .append(true)
+            .create_new(true)
+            .open(&p)
+            .map_err(|e| format!("session integrity: {e}"))?;
+        log.write_all(text.as_bytes())
+            .and_then(|_| log.sync_all())
+            .map_err(|e| format!("session integrity: {e}"))?;
+        let pending = self.witness().with_extension("pending");
+        let mut witness = File::create(&pending).map_err(|e| e.to_string())?;
+        witness
+            .write_all(text.as_bytes())
+            .and_then(|_| witness.sync_all())
+            .map_err(|e| e.to_string())?;
+        fs::rename(pending, self.witness()).map_err(|e| e.to_string())
     }
 
     fn integrity(&self, expected: &str) -> Integrity {
@@ -229,11 +251,9 @@ impl SessionFiles {
     /// Prepare the witness, append and sync the log, then publish the witness.
     /// Until publication, errors truncate the append back to the committed prefix.
     /// A crash between writes still fails closed, rather than replaying a partial chunk.
-    fn append(&self, previous: Option<&str>, text: &str) -> Result<(), String> {
-        if let Some(previous) = previous {
-            self.integrity(previous).validate()?;
-        }
-        let prefix = previous.unwrap_or("");
+    fn append(&self, previous: &str, text: &str) -> Result<(), String> {
+        self.integrity(previous).validate()?;
+        let prefix = previous;
         let suffix = text
             .strip_prefix(prefix)
             .ok_or("session integrity: log would rewrite history")?;
@@ -248,9 +268,6 @@ impl SessionFiles {
                 .map_err(|e| e.to_string())?;
             let mut opts = OpenOptions::new();
             opts.append(true);
-            if previous.is_none() {
-                opts.create_new(true);
-            }
             let mut log = opts
                 .open(&p)
                 .map_err(|e| format!("session integrity: {e}"))?;
@@ -273,18 +290,11 @@ impl SessionFiles {
                     log.set_len(prefix.len() as u64)?;
                     log.sync_all()?;
                     if published {
-                        if previous.is_some() {
-                            let mut f = File::create(&pending)?;
-                            f.write_all(prefix.as_bytes())?;
-                            f.sync_all()?;
-                            fs::rename(&pending, self.witness())?;
-                        } else {
-                            fs::remove_file(self.witness())?;
-                        }
+                        let mut f = File::create(&pending)?;
+                        f.write_all(prefix.as_bytes())?;
+                        f.sync_all()?;
+                        fs::rename(&pending, self.witness())?;
                         File::open(self.dir())?.sync_all()?;
-                    }
-                    if previous.is_none() {
-                        fs::remove_file(&p)?;
                     }
                     Ok(())
                 })();
@@ -364,7 +374,7 @@ impl PersistedSession {
             self.rebuild_with_progress(|_, _| {})?;
         }
         let result = self.s.run_committing(src, |s| {
-            self.files.append(Some(&self.written), &s.program(&self.files.name)).map_err(|e| {
+            self.files.append(&self.written, &s.program(&self.files.name)).map_err(|e| {
                 format!("session integrity: the chunk's log update couldn't be saved ({e}); the chunk was not kept")
             })
         });
@@ -394,7 +404,7 @@ impl PersistedSession {
     }
 
     pub(crate) fn close(&self, build: u64) -> Result<String, String> {
-        self.files.append(Some(&self.written), &self.written)?;
+        self.files.append(&self.written, &self.written)?;
         let live = self
             .save_live(build)
             .unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));

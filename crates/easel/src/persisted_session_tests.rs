@@ -217,3 +217,29 @@ fn scratch_owns_its_files_across_reset_and_reopen() {
     );
     assert!(first.exists());
 }
+
+// Moving bootstrap into this owner must not silently discard an incomplete
+// stored session after a failed initial witness write (the base fails closed).
+#[test]
+fn initial_witness_failure_remains_an_incomplete_session() {
+    let temp = Temp::new("bootstrap");
+    let files = temp.files("demo");
+    fs::create_dir(files.dir().join("committed.pending")).unwrap();
+    let files = match files.open(None) {
+        Err((files, e)) => {
+            assert!(e.contains("directory"), "{e}");
+            files
+        }
+        Ok(_) => panic!("failed initialization was accepted"),
+    };
+    assert!(files.log_path().is_file());
+    assert!(!files.dir().join("committed.lua").exists());
+    fs::remove_dir(files.dir().join("committed.pending")).unwrap();
+    match files.open(None) {
+        Err((_, e)) => assert!(
+            e.contains("The easel goes on only from the log it wrote"),
+            "{e}"
+        ),
+        Ok(_) => panic!("incomplete initialization was silently restarted"),
+    }
+}

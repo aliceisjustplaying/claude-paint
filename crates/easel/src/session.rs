@@ -4,7 +4,7 @@
 
 use crate::api::{self, Studio};
 use mlua::{Function, Lua, StdLib, Table, Value};
-use paint::{Canvas, Held, Palette, Style};
+use paint::{Canvas, Palette};
 use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -56,23 +56,9 @@ pub struct Chunk {
 
 /// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
-    canvas: Option<Canvas>,
-    style: Option<Rc<Style>>,
-    setup: Option<String>,
-    canvas_src: Option<String>,
-    seed: u64,
-    clock: f64,
-    clock0: f64,
-    hand: crate::time::Hand,
-    board: crate::board::Board,
-    /// The last world view made (depth options resolve against it).
-    view: Option<crate::world::ViewU>,
+    studio: crate::studio_state::Snapshot,
     /// The Lua heap (heap.lua's snapshot).
     heap: Table,
-    brushes: Vec<(Rc<RefCell<Held>>, Held)>,
-    knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
-    /// The rags in the hand, as the brushes.
-    rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
 }
 
 pub struct Session {
@@ -214,20 +200,7 @@ impl Session {
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
         let skip = self.prelude.as_ref().unwrap().1.clone();
         let heap: Table = snap_f.call((skip, self.lua.globals(), strings))?;
-        let mut s = self.st.borrow_mut();
-        let brushes = s.live_brushes().into_iter().map(|b| {
-            let h = b.borrow().clone();
-            (b, h)
-        }).collect();
-        let knives = s.live_knives().into_iter().map(|k| {
-            let h = k.borrow().clone();
-            (k, h)
-        }).collect();
-        let rags = s.live_rags().into_iter().map(|r| {
-            let v = *r.borrow();
-            (r, v)
-        }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { studio: self.st.borrow_mut().snapshot(), heap })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -236,26 +209,7 @@ impl Session {
         let (_, restore_f) = self.heap.as_ref().unwrap();
         let mismatches = restore_f.call::<usize>(snap.heap.clone())?;
         self.inject("restore")?;
-        for (b, h) in &snap.brushes {
-            *b.borrow_mut() = h.clone();
-        }
-        for (k, h) in &snap.knives {
-            *k.borrow_mut() = h.clone();
-        }
-        for (r, v) in &snap.rags {
-            *r.borrow_mut() = *v;
-        }
-        let mut s = self.st.borrow_mut();
-        s.canvas = snap.canvas.clone();
-        s.style = snap.style.clone();
-        s.setup = snap.setup.clone();
-        s.canvas_src = snap.canvas_src.clone();
-        s.seed = snap.seed;
-        s.clock = snap.clock;
-        s.clock0 = snap.clock0;
-        s.hand = snap.hand.clone();
-        s.board = snap.board.clone();
-        s.view = snap.view.clone();
+        self.st.borrow_mut().restore(&snap.studio);
         Ok(mismatches)
     }
 
@@ -380,6 +334,12 @@ impl Session {
         }
         self.log.push(Chunk { src });
         Ok(Ran { out, secs })
+    }
+
+    /// The studio's replay comparison, without retaining a borrow at the caller.
+    #[cfg(any(test, feature = "replay"))]
+    pub fn state_identity(&self) -> crate::studio_state::StateIdentity {
+        self.st.borrow_mut().state_identity()
     }
 
     pub fn canvas(&self) -> Option<std::cell::Ref<'_, Canvas>> {
@@ -1354,19 +1314,11 @@ mod tests {
         b
     }
 
-    /// Everything `easel run --state-digest` hashes (main.rs `state_digest_line`: the canvas
-    /// checkpoint, the held brushes, the studio's fields), unhashed, and the painting's globals.
+    /// The studio's durable replay identity, plus the painting's globals.
+    /// Per-chunk counters/RNG remain diagnostic digest fields, not durable state.
     #[cfg(tube_box)]
-    fn state(s: &Session) -> (Vec<u8>, String) {
-        let mut st = s.st.borrow_mut();
-        let mut canvas = Vec::new();
-        if let Some(c) = st.canvas.as_ref() {
-            c.write_state(&mut canvas, "").unwrap();
-        }
-        let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
-        let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
-        drop(st);
-        (canvas, format!("{}\n{studio}\n{}", brushes.join("\n"), s.globals()))
+    fn state(s: &Session) -> (crate::studio_state::StateIdentity, String) {
+        (s.state_identity(), s.globals())
     }
 
     /// A failed chunk can leave a table laid out differently (grown, or refilled by the

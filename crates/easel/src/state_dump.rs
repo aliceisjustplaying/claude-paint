@@ -21,15 +21,15 @@
 //! - the canvas's, `paint::Canvas::state_fields` (paint's state_dump.rs);
 //! - `studio.*`: seed, chunk, calls, clock, clock0 and the piles on the
 //!   palette (OKLab, `[n, 3]`);
-//! - `brushes.debug`, `rags.debug` and `studio.debug`: the exact text the
+//! - `brushes.debug`, `rags.debug`, `knives.debug` and `studio.debug`: the exact text the
 //!   state digest hashes (the held brushes' `Debug`, one a line, every
-//!   bristle's load, pigment mix, bend and cure; the rags'; the studio's
+//!   bristle's load, pigment mix, bend and cure; the rags' and knives'; the studio's
 //!   seed, clocks, counters, setup, piles and RNG). Rust's `Debug` prints
 //!   floats in their shortest round-trip form, so the text holds every value
 //!   exactly; `scripts/state_compare` parses it into named values.
+//! - `studio.board`: the palette board's exact `Debug` text.
 
 use crate::session::Session;
-use paint::state_dump::{Field, Values};
 use std::path::Path;
 
 fn json_str(s: &str) -> String {
@@ -50,30 +50,7 @@ fn json_str(s: &str) -> String {
 /// Write the state after chunk `n` to `<dir>/chunk-<NNN>.state`.
 pub fn write_chunk(s: &Session, n: usize, dir: &Path) -> Result<(), String> {
     let digest = crate::state_digest_line(s, n, 0.0);
-    let mut st = s.st.borrow_mut();
-    let mut fields: Vec<(String, &'static str, Vec<usize>, Vec<u8>)> = Vec::new();
-    let mut num = |f: Field| fields.push((f.name.to_string(), f.values.dtype(), f.shape, f.values.le_bytes()));
-    if let Some(c) = st.canvas.as_ref() {
-        for f in c.state_fields() {
-            num(f);
-        }
-    }
-    num(Field { name: "studio.seed", shape: vec![1], values: Values::U64(vec![st.seed]) });
-    num(Field { name: "studio.chunk", shape: vec![1], values: Values::U64(vec![st.chunk]) });
-    num(Field { name: "studio.calls", shape: vec![1], values: Values::U64(vec![st.calls]) });
-    num(Field { name: "studio.clock", shape: vec![1], values: Values::F64(vec![st.clock]) });
-    num(Field { name: "studio.clock0", shape: vec![1], values: Values::F64(vec![st.clock0]) });
-    let piles = &st.hand.piles.piles;
-    num(Field { name: "studio.piles", shape: vec![piles.len(), 3], values: Values::F32(piles.iter().flat_map(|p| *p).collect()) });
-    // the same text `state_digest_line` hashes
-    let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
-    let rags: Vec<String> = st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect();
-    let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
-    for (name, text) in [("brushes.debug", brushes.join("\n")), ("rags.debug", rags.join("\n")), ("studio.debug", studio)] {
-        let b = text.into_bytes();
-        fields.push((name.to_string(), "utf8", vec![b.len()], b));
-    }
-    drop(st);
+    let fields = s.st.borrow_mut().dump_fields();
     let mut head = format!("{{\"format\": \"CPSTATE1\", \"chunk\": {n}, \"digest\": {}, \"fields\": [", json_str(digest.trim_end()));
     let mut off = 0usize;
     for (i, (name, dtype, shape, bytes)) in fields.iter().enumerate() {

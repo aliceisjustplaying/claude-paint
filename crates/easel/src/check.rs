@@ -76,14 +76,14 @@ pub fn client_gone(conn: &UnixStream) -> bool {
 }
 
 #[cfg(feature = "replay")]
-/// What a check compares: the log's chunks and the live canvas (None: no canvas yet) as
-/// bits of what's seen and of the surface.
+/// What a check compares: the log's chunks and the studio's replay identity
+/// (checkpoint, held tools, clocks, piles and palette board).
 pub struct Input {
     pub width: usize,
     /// The box the session paints from.
     pub tubes: paint::Palette,
     pub chunks: Vec<String>,
-    pub live: Option<(Vec<u32>, Vec<u32>)>,
+    pub live: crate::studio_state::StateIdentity,
 }
 
 #[cfg(feature = "replay")]
@@ -164,11 +164,7 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
             if give_up(stop, conn) { format!("{STOPPED} in chunk {} of {}", i + 1, input.chunks.len()) } else { format!("replay failed at chunk {}: {e}", i + 1) }
         })?;
     }
-    Ok(match (&input.live, fresh.canvas()) {
-        (Some((seen, surface)), Some(b)) => *seen == crate::bits(&b.seen()) && *surface == crate::bits_f(b.surface_um()),
-        (None, None) => true,
-        _ => false,
-    })
+    Ok(input.live.matches(&fresh.st.borrow_mut().state_identity()))
 }
 
 #[cfg(test)]

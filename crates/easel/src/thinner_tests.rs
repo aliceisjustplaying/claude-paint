@@ -243,10 +243,10 @@ fn c18_a_failed_chunk_after_thinned_paint_takes_everything_back() {
     }
     let held = |s: &Session| -> (Vec<String>, Vec<String>) {
         let mut st = s.st.borrow_mut();
-        (st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect(), st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect())
+        (st.brushes.live().iter().map(|b| format!("{:?}", b.borrow())).collect(), st.rags.live().iter().map(|r| format!("{:?}", r.borrow())).collect())
     };
     {
-        let rags = s.st.borrow_mut().live_rags();
+        let rags = s.st.borrow_mut().rags.live();
         assert_eq!(rags.len(), 1, "the painter holds one rag");
         let g = rags[0].borrow();
         assert!(g.load > 0.0 && g.solvent_mm3 > 0.0 && g.damp > 0.0, "the rag holds paint and solvent and is damp: {g:?}");

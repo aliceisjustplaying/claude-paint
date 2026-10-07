@@ -17,6 +17,7 @@
 
 mod api;
 mod board;
+mod board_save;
 mod check;
 mod depth;
 mod draw_edges;
@@ -32,6 +33,7 @@ mod look;
 mod save;
 mod palette_look;
 mod session;
+mod studio_state;
 #[cfg(feature = "replay")]
 mod state_dump;
 mod time;
@@ -1214,11 +1216,12 @@ impl Server {
     #[cfg(feature = "replay")]
     fn check_input(&self) -> Result<check::Input, String> {
         self.ready()?;
+        let live = self.s.state_identity();
         Ok(check::Input {
             width: self.s.st.borrow().width,
             tubes: self.s.tube_box(),
             chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
-            live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
+            live,
         })
     }
 
@@ -1365,15 +1368,6 @@ impl Server {
             o => Err(format!("unknown command {o:?}")),
         }
     }
-}
-
-#[cfg(feature = "replay")]
-fn bits(v: &[paint::Rgb]) -> Vec<u32> {
-    v.iter().flat_map(|p| p.map(f32::to_bits)).collect()
-}
-#[cfg(feature = "replay")]
-fn bits_f(v: &[f32]) -> Vec<u32> {
-    v.iter().map(|x| x.to_bits()).collect()
 }
 
 // ---------------------------------------------------------------- replay
@@ -1624,6 +1618,8 @@ use save::fnv1a;
 /// - `studio`: FNV-1a-64 of the studio's seed, clocks, chunk and call
 ///   counters, `canvas{}` arguments, the piles on the palette and the
 ///   chunk's RNG, as `Debug` text.
+/// - `knives`: held knives' `Debug` text (omitted if none).
+/// - `board`: palette board's `Debug` text (omitted while untouched).
 ///
 /// Floats are hashed by their bits (checkpoint) or their shortest round-trip
 /// `Debug` text, which tells every value apart but NaN payloads. Not covered:
@@ -1634,25 +1630,7 @@ use save::fnv1a;
 /// `Held`, `Hand` or the checkpoint changes the digests.
 #[cfg(feature = "replay")]
 fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
-    let mut st = s.st.borrow_mut();
-    let canvas = match st.canvas.as_ref() {
-        Some(c) => {
-            let mut buf = Vec::new();
-            c.write_state(&mut buf, "").expect("checkpoint to memory");
-            fnv1a(&buf)
-        }
-        None => 0,
-    };
-    let brushes: Vec<String> = st.live_brushes().iter().map(|b| format!("{:?}", b.borrow())).collect();
-    // the rags in the hand after them (none: the same digest as before rags)
-    let rags: Vec<String> = st.live_rags().iter().map(|r| format!("{:?}", r.borrow())).collect();
-    let brushes_h = fnv1a(brushes.iter().chain(&rags).cloned().collect::<Vec<_>>().join("\n").as_bytes());
-    let studio = format!("seed={} clock={:?} clock0={:?} chunk={} calls={} setup={:?} piles={:?} rng={:?}", st.seed, st.clock, st.clock0, st.chunk, st.calls, st.setup, st.hand.piles, st.rng);
-    let studio_h = fnv1a(studio.as_bytes());
-    // (knives came with engine 4: a painting without one keeps the line it had)
-    let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
-    let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
-    format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
+    s.st.borrow_mut().digest_line(n, secs)
 }
 
 #[cfg(test)]
@@ -1757,7 +1735,7 @@ mod tests {
 
     const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
 
-    /// The held knife (speculative) only reads, as the palette look: the state digest, the
+    /// The held knife (speculative) only reads, as the palette look: the state identity, the
     /// log, the globals and the clock are as they were. It shows the passage with a knife
     /// over it at the point: a knife global with its own load, or a pile freshly loaded.
     #[cfg(feature = "replay")]
@@ -1768,7 +1746,7 @@ mod tests {
         s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
                  b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})
                  k = knife{width=40}; k:load(dk, 0.8); clean = knife{width=20}"#).unwrap();
-        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let before = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
         let plain = look::View::default();
         let at = (400.0, 320.0);
         let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
@@ -1800,7 +1778,7 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("held-knife.png"), &png).unwrap();
-        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let after = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
         assert_eq!(before, after);
         s.run("assert(k:fullness() > 0)").unwrap();
         s.run("k:wipe(); k:load(dk, 0.01)").unwrap();
@@ -1823,7 +1801,7 @@ mod tests {
         assert!(hold_look(&s, "k", at, &look::View { mirror: true, ..look::View::default() }).is_err());
     }
 
-    /// A palette look only reads: the state digest (canvas, brushes, studio), the log and the
+    /// A palette look only reads: the state identity (canvas, held tools, studio), the log and the
     /// globals are the same before and after it, and it puts no time on the clock.
     #[test]
     #[cfg(tube_box)]
@@ -1832,11 +1810,11 @@ mod tests {
         s.run(PALETTE_CANVAS).unwrap();
         s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
                  b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})"#).unwrap();
-        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let before = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
         let (w, h, png) = palette_look(&s).unwrap();
         assert!(w > 0 && h > 0 && png.starts_with(b"\x89PNG"));
         assert_eq!(s.piles().iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["dk", "skyP"]);
-        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
+        let after = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
         assert_eq!(before, after);
         // and the next chunk runs as it would have without the look
         let mut t = Session::new(320).unwrap();
@@ -1845,7 +1823,7 @@ mod tests {
         }
         s.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
         t.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
-        assert_eq!(state_digest_line(&s, 3, 0.0), state_digest_line(&t, 3, 0.0));
+        assert!(s.state_identity().matches(&t.state_identity()));
     }
 
     /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of

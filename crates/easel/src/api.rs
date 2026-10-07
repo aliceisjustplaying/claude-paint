@@ -18,10 +18,10 @@
 
 use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value, Variadic};
 use paint::palette::Mixture;
-use paint::{Apply, Canvas, Fbm, Frame, Gesture, Ground, Handling, Held, Linen, Mask, Order, Orient, Palette, Rgb, Rng, Shape, Stipple, Style, Tool, Touch};
+use paint::{Apply, Fbm, Frame, Gesture, Ground, Handling, Held, Linen, Mask, Order, Orient, Palette, Rgb, Rng, Shape, Stipple, Style, Tool, Touch};
 use crate::time::{self, Verb};
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 #[path = "draw_pencil.rs"]
 mod draw_pencil;
@@ -33,47 +33,9 @@ mod draw_soak;
 /// Grid spacing (units) that painter fields are sampled on.
 pub const FIELD_STEP: f32 = 2.0;
 
-pub struct Studio {
-    pub width: usize,
-    pub canvas: Option<Canvas>,
-    pub style: Option<Rc<Style>>,
-    /// Arguments `canvas{}` was called with (for status).
-    pub setup: Option<String>,
-    /// The `canvas{...}` call that set this canvas up, as Lua (`lua_src`): the scratch
-    /// canvas beside the painting is set up with it (main.rs `Server::scratch`).
-    pub canvas_src: Option<String>,
-    pub seed: u64,
-    /// Index of the chunk being run (1-based), for seeds.
-    pub chunk: u64,
-    /// Engine calls made in this chunk, for automatic seeds.
-    pub calls: u64,
-    /// Painting time in minutes since `canvas{}` (hand time and waits).
-    pub clock: f64,
-    pub clock0: f64,
-    pub rng: Rng,
-    pub brushes: Vec<Weak<RefCell<Held>>>,
-    /// The painting knives in hand (snapshotted with the brushes).
-    pub knives: Vec<Weak<RefCell<paint::Knife>>>,
-    /// The rags in the hand (draw_rag.rs), held as the brushes are.
-    pub rags: Vec<Weak<RefCell<paint::rag::Rag>>>,
-    pub out: String,
-    /// Time spent evaluating Lua fields in this chunk (s).
-    pub field_secs: f64,
-    /// The last world view made (`w:view()`): what `visible=`, `behind=` and
-    /// `at=` resolve against (depth.rs).
-    pub view: Option<crate::world::ViewU>,
-    /// The hand's state: the piles on the palette (time.rs).
-    pub hand: crate::time::Hand,
-    /// The tubes piles are knifed from.
-    pub tubes: Rc<Palette>,
-    /// The palette board: the heaps knifed out on it (board.rs).
-    pub board: crate::board::Board,
-}
+pub use crate::studio_state::Studio;
 
 impl Studio {
-    pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
-    }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
         self.chunk = n;
@@ -86,21 +48,6 @@ impl Studio {
     pub(crate) fn auto_seed(&mut self) -> u64 {
         self.calls += 1;
         mixseed(self.seed, self.chunk, self.calls)
-    }
-
-    pub fn live_knives(&mut self) -> Vec<Rc<RefCell<paint::Knife>>> {
-        self.knives.retain(|w| w.strong_count() > 0);
-        self.knives.iter().filter_map(|w| w.upgrade()).collect()
-    }
-
-    pub fn live_brushes(&mut self) -> Vec<Rc<RefCell<Held>>> {
-        self.brushes.retain(|w| w.strong_count() > 0);
-        self.brushes.iter().filter_map(|w| w.upgrade()).collect()
-    }
-
-    pub fn live_rags(&mut self) -> Vec<Rc<RefCell<paint::rag::Rag>>> {
-        self.rags.retain(|w| w.strong_count() > 0);
-        self.rags.iter().filter_map(|w| w.upgrade()).collect()
     }
 }
 

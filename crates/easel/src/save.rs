@@ -116,7 +116,6 @@ fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, Str
 /// the log.
 #[cfg(feature = "replay")]
 pub fn read(path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, ENGINE_MARK};
     use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut r = std::io::BufReader::with_capacity(1 << 20, f);
@@ -126,16 +125,10 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
         return Err(format!("{}: not an easel save (its header doesn't start {MAGIC:?})", path.display()));
     }
     let h: std::collections::BTreeMap<&str, &str> = lines.filter_map(|l| l.split_once('=')).collect();
-    // the box and engine as a log's head names them, so the box is found as a replay finds it
+    // The save carries a head directly, not fabricated painting-log text.
     let (bx, engine): (String, u32) = (field(&h, "box")?.to_string(), parse(&h, "engine")?);
-    let mut logged = String::new();
-    if paint::palette::default_box() != Some(bx.as_str()) {
-        logged.push_str(&format!("{BOX_MARK} {bx}\n"));
-    }
-    if engine != 1 {
-        logged.push_str(&format!("{ENGINE_MARK} {engine}\n"));
-    }
-    let tubes = crate::session::box_for(Some(&logged))?;
+    let configured = crate::session::configured_box()?;
+    let tubes = crate::painting_log::Head::saved(&bx, engine).tubes(configured.as_ref())?;
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;
     {

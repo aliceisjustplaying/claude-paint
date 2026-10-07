@@ -146,24 +146,31 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
 /// if a chunk failed or the check was stopped.
 fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bool, String> {
     let give_up = |stop: &AtomicBool, conn: &UnixStream| stop.load(Ordering::Relaxed) || client_gone(conn);
-    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?;
-    {
-        let (stop, conn) = (stop.clone(), conn.try_clone().map_err(|e| e.to_string())?);
-        fresh
-            .lua
-            .set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |_, _| {
-                if give_up(&stop, &conn) { Err(mlua::Error::runtime(STOPPED)) } else { Ok(mlua::VmState::Continue) }
-            })
-            .map_err(|e| e.to_string())?;
-    }
-    for (i, c) in input.chunks.iter().enumerate() {
-        if give_up(stop, conn) {
-            return Err(format!("{STOPPED} before chunk {} of {}", i + 1, input.chunks.len()));
+    let log = crate::painting_log::PaintingLog::from_chunks("", &input.tubes, false, input.chunks.iter().map(String::as_str));
+    struct Stop<'a> { stop: &'a AtomicBool, conn: &'a UnixStream }
+    impl crate::replay::Observer for Stop<'_> {
+        fn before_chunk(&mut self, number: usize, total: usize) -> Result<(), String> {
+            if self.stop.load(Ordering::Relaxed) || client_gone(self.conn) {
+                return Err(format!("{STOPPED} before chunk {number} of {total}"));
+            }
+            Ok(())
         }
-        fresh.run(c).map_err(|e| {
-            if give_up(stop, conn) { format!("{STOPPED} in chunk {} of {}", i + 1, input.chunks.len()) } else { format!("replay failed at chunk {}: {e}", i + 1) }
-        })?;
     }
+    let fresh = crate::replay::replay(&log, || {
+        let fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?;
+        // This deliberately replaces the deadline hook, as check always did. Replays
+        // have no deadline; the hook still checks abandonment inside a Lua chunk.
+        let (stop, conn) = (stop.clone(), conn.try_clone().map_err(|e| e.to_string())?);
+        fresh.lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |_, _| {
+            if give_up(&stop, &conn) { Err(mlua::Error::runtime(STOPPED)) } else { Ok(mlua::VmState::Continue) }
+        }).map_err(|e| e.to_string())?;
+        Ok(fresh)
+    }, true, &mut Stop { stop, conn }).map_err(|e| match e {
+        crate::replay::Error::Chunk { number, error } => {
+            if give_up(stop, conn) { format!("{STOPPED} in chunk {number} of {}", input.chunks.len()) } else { format!("replay failed at chunk {number}: {error}") }
+        }
+        crate::replay::Error::Session(e) | crate::replay::Error::Observer(e) => e,
+    })?;
     Ok(match (&input.live, fresh.canvas()) {
         (Some((seen, surface)), Some(b)) => *seen == crate::bits(&b.seen()) && *surface == crate::bits_f(b.surface_um()),
         (None, None) => true,

@@ -8,7 +8,8 @@
 //! need is `pile{..., thinner = t}` (engine 3) and `p.thinner`.
 #![allow(dead_code)]
 
-use crate::session::{Session, box_for, parse_program};
+use crate::session::{Session, box_for};
+use crate::painting_log::PaintingLog;
 use paint::color::{linear_to_srgb, luminance};
 use paint::thinner::evaporation_tau_min;
 use paint::{Canvas, Palette, Rgb};
@@ -36,11 +37,12 @@ pub fn run(s: &mut Session, src: &str) -> String {
 
 /// Replay a log (its own box and engine) at `width` px, as `easel run` does.
 pub fn replay(log: &str, width: usize) -> Session {
-    let mut s = Session::replay_with(width, box_for(Some(log)).expect("the log's box")).expect("a session");
-    for (i, c) in parse_program(log).iter().enumerate() {
-        s.run(c).unwrap_or_else(|e| panic!("chunk {}: {e}", i + 1));
-    }
-    s
+    let log = PaintingLog::parse(log);
+    let s = Session::replay_with(width, box_for(Some(&log)).expect("the log's box")).expect("a session");
+    crate::replay::replay(&log, || Ok(s), true, &mut ()).unwrap_or_else(|e| match e {
+        crate::replay::Error::Chunk { number, error } => panic!("chunk {number}: {error}"),
+        crate::replay::Error::Session(e) | crate::replay::Error::Observer(e) => panic!("{e}"),
+    })
 }
 
 /// The canvas's complete saved state (header "").

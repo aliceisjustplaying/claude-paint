@@ -31,6 +31,8 @@ mod legacy;
 mod look;
 mod save;
 mod palette_look;
+mod painting_log;
+mod replay;
 mod session;
 #[cfg(feature = "replay")]
 mod state_dump;
@@ -43,7 +45,8 @@ mod thinner_tests;
 
 use paint::Canvas;
 use paint::color::linear_to_srgb;
-use session::{Session, parse_program, root};
+use session::{Session, root};
+use painting_log::PaintingLog;
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -54,11 +57,11 @@ use std::time::{Duration, Instant};
 const LIVE_WIDTH: usize = 2400;
 
 /// The width a painting paints at: an existing one its log's (a sketch if
-/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
+/// its head says so, `painting_log::SKETCH_MARK`), a new one a sketch's if the
 /// session's name starts with "sketch".
-fn width_for(name: &str, log: Option<&str>) -> usize {
+fn width_for(name: &str, log: Option<&PaintingLog>) -> usize {
     let sketch = match log {
-        Some(text) => session::logged_sketch(text),
+        Some(log) => log.head.sketch,
         None => name.starts_with("sketch"),
     };
     if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
@@ -966,28 +969,38 @@ impl Server {
         if let Some(t) = &text {
             validate_log(&name, t)?;
         }
+        let log = text.as_deref().map(PaintingLog::parse);
         // an existing painting goes on with the box its log names; a new one takes the
         // configured box (session::box_for)
         let (tubes, width) = match (like, &text) {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
-            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
+            _ => (session::box_for(log.as_ref())?, width_for(&name, log.as_ref())),
         };
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
         let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None };
         if let Some(text) = text {
             srv.written = Some(text.clone());
-            let chunks = parse_program(&text);
-            // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
-            srv.s.set_replaying(true);
-            for (i, chunk) in chunks.iter().enumerate() {
-                let t0 = Instant::now();
-                eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
-                srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
-                eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
+            let log = log.as_ref().unwrap();
+            struct Resume { started: Instant, total: usize }
+            impl replay::Observer for Resume {
+                fn before_chunk(&mut self, number: usize, total: usize) -> Result<(), String> {
+                    self.started = Instant::now();
+                    eprintln!("resuming chunk {number}/{total}");
+                    Ok(())
+                }
+                fn chunk_end(&mut self, _s: &Session, number: usize, _ran: &session::Ran) -> Result<(), String> {
+                    eprintln!("resumed chunk {number}/{} {:.2}s", self.total, self.started.elapsed().as_secs_f64());
+                    Ok(())
+                }
             }
-            srv.s.set_replaying(false);
-            srv.replayed = chunks.len();
-            if srv.s.program(&srv.name) != text {
+            // A failed chunk refuses the whole reopen: no snapshots, no time limit.
+            srv.s = replay::replay(log, || Ok(srv.s), false, &mut Resume { started: Instant::now(), total: log.chunks.len() })
+                .map_err(|e| match e {
+                    replay::Error::Chunk { number, error } => format!("session integrity: replay failed at chunk {number}: {error}; refusing partial session"),
+                    replay::Error::Session(e) | replay::Error::Observer(e) => e,
+                })?;
+            srv.replayed = log.chunks.len();
+            if srv.s.program(&srv.name) != log.render() {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
             }
             println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
@@ -1447,20 +1460,20 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
+    let log = PaintingLog::parse(&text);
     // a development preview may replay narrower (kernel radii are in mm, so it is not the
     // painting at a smaller size: see notes/workflow.md); the painting is the width it was
     // painted at (LIVE_WIDTH, a sketch's SKETCH_WIDTH)
     let width = match flag(args, "--width") {
-        None => width_for(&stem, Some(&text)),
+        None => width_for(&stem, Some(&log)),
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
-    let chunks = parse_program(&text);
-    if chunks.is_empty() {
-        return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
+    if log.chunks.is_empty() {
+        return Err(format!("{file}: no chunks (each starts with a line \"{}\")", painting_log::MARK));
     }
     // the box the log was painted from, whatever this easel's own box is
-    let tubes = session::box_for(Some(&text)).map_err(|e| format!("{file}: {e}"))?;
+    let tubes = session::box_for(Some(&log)).map_err(|e| format!("{file}: {e}"))?;
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     // --light or --gallery: the picture (and its frames) lit on the paint's relief
@@ -1475,25 +1488,33 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
-    let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
+    let s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();
-    for (i, c) in chunks.iter().enumerate() {
-        let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
-        print!("{}", r.out);
-        eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
-        if let Some(f) = digests.as_mut() {
-            f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
-        }
-        // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
-        if let Some(d) = flag(args, "--dump-state") {
-            state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
-        }
-        if frames && let Some(c) = s.canvas() {
-            frames::chunk_end(&c, i + 1);
+    struct Run<'a> { args: &'a [String], digests: &'a mut Option<std::fs::File>, frames: bool }
+    impl replay::Observer for Run<'_> {
+        fn chunk_end(&mut self, s: &Session, number: usize, r: &session::Ran) -> Result<(), String> {
+            print!("{}", r.out);
+            eprintln!("  chunk {:>3}  {:>7.2}s", number, r.secs);
+            if let Some(f) = self.digests.as_mut() {
+                f.write_all(state_digest_line(s, number, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
+            }
+            // --dump-state <dir>: every state value after the chunk (reads only)
+            if let Some(d) = flag(self.args, "--dump-state") {
+                state_dump::write_chunk(s, number, Path::new(&d))?;
+            }
+            if self.frames && let Some(c) = s.canvas() {
+                frames::chunk_end(&c, number);
+            }
+            Ok(())
         }
     }
+    let s = replay::replay(&log, || Ok(s), true, &mut Run { args, digests: &mut digests, frames })
+        .map_err(|e| match e {
+            replay::Error::Chunk { number, error } => format!("chunk {number} failed:\n{error}"),
+            replay::Error::Session(e) | replay::Error::Observer(e) => e,
+        })?;
     let paint_secs = t0.elapsed().as_secs_f64();
     if let Some(d) = flag(args, "--dump-state") {
         state_dump::write_save(&s, &text, Path::new(&d))?;
@@ -1510,13 +1531,13 @@ fn run(args: &[String]) -> Result<(), String> {
             rec.written,
             rec.ticks,
             flag(args, "--frames-every").unwrap_or_default(),
-            chunks.len(),
+            log.chunks.len(),
             rec.hand / 60.0,
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
     deliver_lit(&c, &out, light)?;
-    eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
+    eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), log.chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
         // f32, row by row
@@ -1586,7 +1607,7 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     let r = save::read(Path::new(save))?;
     if let Some(l) = &log {
         let text = std::fs::read_to_string(l).map_err(|e| format!("{l}: {e}"))?;
-        let n = parse_program(&text).len();
+        let n = PaintingLog::parse(&text).chunks.len();
         if fnv1a(text.as_bytes()) != r.log_fnv || n != r.chunks {
             return Err(format!("{save} is not a save of {l} ({} chunks in the save, {n} in the log, or the text differs)", r.chunks));
         }
@@ -1922,7 +1943,7 @@ mod tests {
         assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
         assert_eq!(width_for("painting", None), LIVE_WIDTH);
         let head = |mark: &str| format!("-- easel session\n--@ engine 4\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
-        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
-        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
+        assert_eq!(width_for("renamed", Some(&PaintingLog::parse(&head(painting_log::SKETCH_MARK)))), session::SKETCH_WIDTH);
+        assert_eq!(width_for("sketchbook", Some(&PaintingLog::parse(&head("")))), LIVE_WIDTH);
     }
 }

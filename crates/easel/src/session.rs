@@ -15,19 +15,7 @@ use std::mem::ManuallyDrop;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-/// Marks the start of a chunk in a session file.
-pub const MARK: &str = "--@ chunk";
-/// Names the box a painting is painted from, in the head of its session file
-/// (before the first chunk). A log without it was painted from the default
-/// box (`paint::palette::DEFAULT_BOX`): every log before round 20.
-pub const BOX_MARK: &str = "--@ box";
-/// Names the engine version a painting is painted with (`paint::ENGINE`), in
-/// the head of its session file. A log without it was painted with engine 1:
-/// every log before the version was recorded.
-pub const ENGINE_MARK: &str = "--@ engine";
-/// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
-/// A log replays at the width it was painted at, whatever its file is named.
-pub const SKETCH_MARK: &str = "--@ sketch";
+use crate::painting_log::PaintingLog;
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -277,18 +265,23 @@ impl Session {
     /// Reports completed chunks, including zero before starting the replay.
     pub fn rebuild_with_progress(&mut self, mut progress: impl FnMut(usize, usize)) -> Result<(), String> {
         progress(0, self.log.len());
+        struct Progress<F>(F);
+        impl<F: FnMut(usize, usize)> crate::replay::Observer for Progress<F> {
+            fn progress(&mut self, done: usize, total: usize) { if done != 0 { (self.0)(done, total); } }
+        }
         let (width, tubes) = {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
-        fresh.chunk_limit = self.chunk_limit;
-        fresh.replay = true;
-        for (i, c) in self.log.iter().enumerate() {
-            fresh.run(&c.src).map_err(|e| format!("rebuilding from the log failed at chunk {}: {e}", i + 1))?;
-            progress(i + 1, self.log.len());
-        }
-        fresh.replay = self.replay;
+        let log = PaintingLog::from_chunks("", &tubes, width == SKETCH_WIDTH, self.log.iter().map(|c| c.src.as_str()));
+        let fresh = crate::replay::replay(&log, || {
+            let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+            fresh.chunk_limit = self.chunk_limit;
+            Ok(fresh)
+        }, self.replay, &mut Progress(progress)).map_err(|e| match e {
+            crate::replay::Error::Chunk { number, error } => format!("rebuilding from the log failed at chunk {number}: {error}"),
+            crate::replay::Error::Session(e) | crate::replay::Error::Observer(e) => e,
+        })?;
         *self = fresh;
         Ok(())
     }
@@ -297,13 +290,7 @@ impl Session {
     /// brushes, clock) and it is not logged; on success it is in the log
     /// for good.
     pub fn run(&mut self, src: &str) -> Result<Ran, String> {
-        let src = src.trim_end().to_string();
-        if src.lines().any(|l| l.trim_start().starts_with(MARK)) {
-            return Err(format!("a chunk can't contain a line starting with {MARK:?} (it separates chunks in the log)"));
-        }
-        if src.trim().is_empty() {
-            return Err("empty chunk".into());
-        }
+        let src = crate::painting_log::chunk_text(src)?;
         if self.stale {
             self.rebuild()?;
         }
@@ -388,26 +375,8 @@ impl Session {
 
     /// The session as a replayable program.
     pub fn program(&self, name: &str) -> String {
-        let mut s = String::new();
-        let _ = writeln!(s, "-- easel session {name:?}: a painting replayed chunk by chunk.");
-        let _ = writeln!(s, "-- Each {MARK:?} line starts one chunk as it was run at the easel.");
-        let tubes = self.st.borrow().tubes.name;
-        if paint::palette::default_box() != Some(tubes) {
-            let _ = writeln!(s, "{BOX_MARK} {tubes}");
-        }
-        let engine = self.st.borrow().tubes.engine;
-        if engine != 1 {
-            let _ = writeln!(s, "{ENGINE_MARK} {engine}");
-        }
-        if self.st.borrow().width == SKETCH_WIDTH {
-            let _ = writeln!(s, "{SKETCH_MARK}");
-        }
-        for (i, c) in self.log.iter().enumerate() {
-            let _ = writeln!(s, "\n{MARK} {}", i + 1);
-            s.push_str(&c.src);
-            s.push('\n');
-        }
-        s
+        let st = self.st.borrow();
+        PaintingLog::from_chunks(name, &st.tubes, st.width == SKETCH_WIDTH, self.log.iter().map(|c| c.src.as_str())).into_text()
     }
 
     /// The globals as chunk `n` left them: the ones it set, changed or removed are its.
@@ -845,58 +814,6 @@ fn unaddressed(e: &str) -> String {
     out
 }
 
-/// The box a session file names in its head (`BOX_MARK` lines before the
-/// first chunk): None if it names none (it was painted from the default box).
-pub fn logged_box(text: &str) -> Result<Option<String>, String> {
-    let mut found = None;
-    for l in text.lines() {
-        let l = l.trim();
-        if l.starts_with(MARK) {
-            break;
-        }
-        if let Some(rest) = l.strip_prefix(BOX_MARK) {
-            let name = rest.trim();
-            if name.is_empty() || !rest.starts_with(' ') {
-                return Err(format!("the log's line {l:?} names no box ({BOX_MARK} <name>)"));
-            }
-            if found.is_some() {
-                return Err(format!("the log names its box twice ({BOX_MARK} lines)"));
-            }
-            found = Some(name.to_string());
-        }
-    }
-    Ok(found)
-}
-
-/// The engine version a session file names in its head (its `ENGINE_MARK`
-/// line before the first chunk): 1 if it names none.
-pub fn logged_engine(text: &str) -> Result<u32, String> {
-    let mut found = None;
-    for l in text.lines() {
-        let l = l.trim();
-        if l.starts_with(MARK) {
-            break;
-        }
-        if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
-            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
-            let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
-            };
-            if found.is_some() {
-                return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
-            }
-            found = Some(v);
-        }
-    }
-    Ok(found.unwrap_or(1))
-}
-
-/// Whether a session file's head marks it a sketch (a `SKETCH_MARK` line
-/// before the first chunk).
-pub fn logged_sketch(text: &str) -> bool {
-    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
-}
-
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -922,66 +839,10 @@ pub fn configured_box() -> Result<Option<(String, String)>, String> {
     }
 }
 
-/// The box called `name`, or an error naming the boxes this easel has.
-pub fn find_box(name: &str) -> Result<Palette, String> {
-    Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", box_list()))
-}
-
-/// The boxes this easel has, quoted: `"tube box", "sargent"`.
-fn box_list() -> String {
-    Palette::box_names().iter().map(|b| format!("{b:?}")).collect::<Vec<_>>().join(", ")
-}
-
-/// The box a painting is painted from. A new painting (`log` None) takes the
-/// configured box (`configured_box`), else the default (in a painter's build
-/// for one box, which has no default box: that box). An existing one takes
-/// the box its log names (none: the default), whatever easel replays it; if a
-/// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one the current
-/// (`paint::ENGINE`), an existing one its log's (`logged_engine`).
-pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
+/// Resolve a parsed log's box using this executable's configuration.
+pub fn box_for(log: Option<&PaintingLog>) -> Result<Palette, String> {
     let configured = configured_box()?;
-    let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
-    };
-    let engine = logged_engine(text)?;
-    let logged = logged_box(text)?;
-    let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
-        return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
-    };
-    if let Some((c, from)) = &configured
-        && c != name
-    {
-        let log_says = match &logged {
-            Some(n) => format!("the log was painted from the box {n:?} (its {BOX_MARK} line)"),
-            None => format!("the log names no box, so it was painted from the default box {name:?}"),
-        };
-        return Err(format!("{log_says}, but {from} says {c:?}: a painting is replayed with the box it was painted from; nothing ran"));
-    }
-    let mut b = find_box(name)?;
-    b.engine = engine;
-    Ok(b)
-}
-
-/// Split a session file into chunks.
-pub fn parse_program(text: &str) -> Vec<String> {
-    let mut chunks: Vec<String> = Vec::new();
-    let mut cur: Option<String> = None;
-    for l in text.lines() {
-        if l.trim_start().starts_with(MARK) {
-            if let Some(c) = cur.take() {
-                chunks.push(c);
-            }
-            cur = Some(String::new());
-        } else if let Some(c) = cur.as_mut() {
-            c.push_str(l);
-            c.push('\n');
-        }
-    }
-    if let Some(c) = cur {
-        chunks.push(c);
-    }
-    chunks.into_iter().map(|c| c.trim_end().to_string()).filter(|c| !c.trim().is_empty()).collect()
+    crate::painting_log::box_for(log, configured.as_ref())
 }
 
 /// The checkout the easel works in (session logs in `paintings/lua`, renders
@@ -1017,6 +878,7 @@ pub fn root() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use crate::painting_log::{ENGINE_MARK, MARK, SKETCH_MARK, find_box};
     use super::*;
 
     #[test]
@@ -1089,7 +951,7 @@ mod tests {
         assert_eq!(a.log.len(), CHUNKS.len() + 1);
         // the log replays to the same canvas, bit for bit
         let prog = a.program("t");
-        let chunks = parse_program(&prog);
+        let chunks = PaintingLog::parse(&prog).chunks;
         assert_eq!(chunks.len(), CHUNKS.len() + 1);
         let mut b = Session::replay(W).unwrap();
         for c in &chunks {
@@ -1118,7 +980,7 @@ mod tests {
         let want = "1\tH\tnumber 668.75\n1\tW\tnumber 1000\n2\tb\tnumber 2\n2\tdeep\ttable with 3 entries\n2\tinner\tstring \"x\"\n2\tm\tmask(88 sq units)\n2\tn\tnumber NaN\n2\ttree\tfunction (chunk 2, line 17)\n3\ta\tnumber 5\n";
         assert_eq!(live.globals(), want);
         let mut replay = Session::replay(W).unwrap();
-        for c in parse_program(&live.program("t")) {
+        for c in PaintingLog::parse(&live.program("t")).chunks {
             replay.run(&c).unwrap();
         }
         assert_eq!(replay.globals(), want);
@@ -1265,7 +1127,7 @@ mod tests {
             s.run("assert(junk == nil)").unwrap();
             s.run(CHUNKS[2]).unwrap();
             let mut b = Session::replay(W).unwrap();
-            for c in parse_program(&s.program("t")) {
+            for c in PaintingLog::parse(&s.program("t")).chunks {
                 b.run(&c).unwrap();
             }
             assert!(bits(&s) == bits(&b), "{at}: the session went on differently from its log");
@@ -1347,8 +1209,8 @@ mod tests {
     #[cfg(tube_box)]
     fn replayed(s: &Session) -> Session {
         let prog = s.program("t");
-        let mut b = Session::replay_with(W, box_for(Some(&prog)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
-        for c in parse_program(&prog) {
+        let mut b = Session::replay_with(W, box_for(Some(&PaintingLog::parse(&prog))).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        for c in PaintingLog::parse(&prog).chunks {
             b.run(&c).unwrap();
         }
         b
@@ -1576,9 +1438,9 @@ mod tests {
         for (log, mut fails) in logs {
             fails.sort();
             let text = std::fs::read_to_string(&log).unwrap();
-            let chunks = parse_program(&text);
+            let chunks = PaintingLog::parse(&text).chunks;
             for engine in [2, 3] {
-                let mut tubes = box_for(Some(&text)).unwrap();
+                let mut tubes = box_for(Some(&PaintingLog::parse(&text))).unwrap();
                 tubes.engine = engine;
                 let mut s = Session::with_box(width, tubes).unwrap();
                 let mut done = 0;
@@ -1805,8 +1667,8 @@ mod tests {
         let prog = a.program("t");
         let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
-        assert_eq!(logged_box(&prog).unwrap(), None);
-        assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
+        assert_eq!(PaintingLog::parse(&prog).head.box_name().unwrap(), None);
+        assert_eq!(box_for(Some(&PaintingLog::parse(&prog))).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
     }
 
     /// Only the log's head names its box: a `--@ box` line inside a chunk is
@@ -1814,11 +1676,11 @@ mod tests {
     #[test]
     fn the_box_line_is_read_from_the_head_only() {
         let head = "-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n";
-        assert_eq!(logged_box(&format!("{head}--@ box inness\n\n--@ chunk 1\nx = 1\n")).unwrap().as_deref(), Some("inness"));
-        assert_eq!(logged_box(&format!("{head}\n--@ chunk 1\n--@ box inness\nx = 1\n")).unwrap(), None);
-        assert!(logged_box(&format!("{head}--@ box inness\n--@ box sargent\n--@ chunk 1\n")).unwrap_err().contains("twice"));
-        assert!(logged_box(&format!("{head}--@ box\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
-        assert!(logged_box(&format!("{head}--@ boxes x\n--@ chunk 1\n")).unwrap_err().contains("names no box"));
+        assert_eq!(PaintingLog::parse(&format!("{head}--@ box inness\n\n--@ chunk 1\nx = 1\n")).head.box_name().unwrap().as_deref(), Some("inness"));
+        assert_eq!(PaintingLog::parse(&format!("{head}\n--@ chunk 1\n--@ box inness\nx = 1\n")).head.box_name().unwrap(), None);
+        assert!(PaintingLog::parse(&format!("{head}--@ box inness\n--@ box sargent\n--@ chunk 1\n")).head.box_name().unwrap_err().contains("twice"));
+        assert!(PaintingLog::parse(&format!("{head}--@ box\n--@ chunk 1\n")).head.box_name().unwrap_err().contains("names no box"));
+        assert!(PaintingLog::parse(&format!("{head}--@ boxes x\n--@ chunk 1\n")).head.box_name().unwrap_err().contains("names no box"));
         // the boxes of this build: the default box, or a painter's build's own
         let own = paint::palette::default_box().unwrap_or_else(|| Palette::box_names()[0]);
         assert!(find_box("no such box").unwrap_err().contains(&format!("its boxes: {own:?}")));
@@ -1840,9 +1702,9 @@ mod tests {
         }
         let prog = a.program("t");
         assert_eq!(prog.lines().nth(2), Some("--@ box sargent"), "{prog}");
-        assert_eq!(logged_box(&prog).unwrap().as_deref(), Some("sargent"));
-        let mut b = Session::replay_with(W, box_for(Some(&prog)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
-        for c in parse_program(&prog) {
+        assert_eq!(PaintingLog::parse(&prog).head.box_name().unwrap().as_deref(), Some("sargent"));
+        let mut b = Session::replay_with(W, box_for(Some(&PaintingLog::parse(&prog))).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        for c in PaintingLog::parse(&prog).chunks {
             b.run(&c).unwrap();
         }
         assert_eq!(bits(&a), bits(&b));
@@ -1895,17 +1757,17 @@ mod tests {
         let line = format!("{ENGINE_MARK} {}\n", paint::ENGINE);
         let prog = a.program("t");
         assert!(prog.contains(&format!("{line}\n{MARK} 1\n")), "{prog}");
-        assert_eq!(logged_engine(&prog), Ok(paint::ENGINE));
+        assert_eq!(PaintingLog::parse(&prog).head.engine(), Ok(paint::ENGINE));
         let old = prog.replace(&line, "");
-        let tubes = box_for(Some(&old)).expect("(EASEL_BOX set in the test's environment?)");
+        let tubes = box_for(Some(&PaintingLog::parse(&old))).expect("(EASEL_BOX set in the test's environment?)");
         let mut b = Session::with_box(W, tubes).unwrap();
-        for c in parse_program(&old) {
+        for c in PaintingLog::parse(&old).chunks {
             b.run(&c).unwrap();
         }
         assert_eq!(b.canvas().unwrap().engine(), 1);
         assert_eq!(b.program("t"), old);
         for bad in ["--@ engine 0", "--@ engine 99", "--@ engine two", "--@ engine 1\n--@ engine 1"] {
-            assert!(logged_engine(&format!("{bad}\n{MARK} 1\n")).is_err(), "{bad}");
+            assert!(PaintingLog::parse(&format!("{bad}\n{MARK} 1\n")).head.engine().is_err(), "{bad}");
         }
     }
 
@@ -2032,10 +1894,10 @@ mod tests {
         a.run(CANVAS).unwrap();
         let prog = a.program("sketch-1");
         assert!(prog.contains(&format!("\n{SKETCH_MARK}\n\n{MARK} 1\n")), "{prog}");
-        assert!(logged_sketch(&prog));
+        assert!(PaintingLog::parse(&prog).head.sketch);
         let mut b = Session::new(W).unwrap();
         b.run(&format!("{CANVAS}\n-- {SKETCH_MARK} (in a chunk it is a comment)")).unwrap();
-        assert!(!logged_sketch(&b.program("sketchbook")));
+        assert!(!PaintingLog::parse(&b.program("sketchbook")).head.sketch);
     }
 
     /// What only engine 4 models is refused in a painting painted with an
@@ -2135,8 +1997,8 @@ mod tests {
     #[cfg(feature = "replay")]
     fn replay_fixture(name: &str) -> (Session, String) {
         let text = std::fs::read_to_string(format!("{}/tests/{name}.lua", env!("CARGO_MANIFEST_DIR"))).unwrap();
-        let mut s = Session::replay_with(320, box_for(Some(&text)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
-        for (i, c) in parse_program(&text).iter().enumerate() {
+        let mut s = Session::replay_with(320, box_for(Some(&PaintingLog::parse(&text))).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        for (i, c) in PaintingLog::parse(&text).chunks.iter().enumerate() {
             s.run(c).unwrap_or_else(|e| panic!("{name} chunk {}: {e}", i + 1));
         }
         (s, text)

@@ -1037,7 +1037,8 @@ pub fn world_method(lua: &Lua, key: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use crate::session::{Session, box_for, parse_program};
+    use crate::session::{Session, box_for};
+    use crate::painting_log::PaintingLog;
 
     /// Replay an old log to its end at a small width; the chunk that fails, if one does.
     /// The six tests below replay whole paintings (20 to 38 chunks): no test command runs
@@ -1046,8 +1047,8 @@ mod tests {
     fn replays(log: &str) {
         let path = format!("{}/../../notes/{log}", env!("CARGO_MANIFEST_DIR"));
         let text = std::fs::read_to_string(&path).unwrap();
-        let mut s = Session::replay_with(200, box_for(Some(&text)).unwrap()).unwrap();
-        for (i, c) in parse_program(&text).iter().enumerate() {
+        let mut s = Session::replay_with(200, box_for(Some(&PaintingLog::parse(&text))).unwrap()).unwrap();
+        for (i, c) in PaintingLog::parse(&text).chunks.iter().enumerate() {
             if let Err(e) = s.run(c) {
                 panic!("{log}: chunk {} failed:\n{e}", i + 1);
             }

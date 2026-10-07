@@ -177,7 +177,7 @@ mod tests {
     /// no wait. (Engine 2, whose lead white sets within that hour or two.)
     #[test]
     fn hand_time_is_always_on() {
-        let mut tubes = crate::session::find_box(paint::Palette::fallback_box()).unwrap();
+        let mut tubes = crate::painting_log::find_box(paint::Palette::fallback_box()).unwrap();
         tubes.engine = 2;
         let mut s = Session::with_box(W, tubes).unwrap();
         run(&mut s, CANVAS);

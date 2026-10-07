@@ -1,6 +1,6 @@
 //! A live painting: a Lua state over a canvas and the chunks run so far
 //! (the log, which is also the replayable program). A chunk that fails
-//! changes nothing; a chunk that succeeds is part of the painting for good.
+//! changes nothing; persistence keeps its snapshot until the log has been saved.
 
 use crate::api::{self, Studio};
 use mlua::{Function, Lua, StdLib, Table, Value};
@@ -288,12 +288,19 @@ impl Session {
 
     /// Run one chunk. On error nothing it did survives (canvas, globals,
     /// brushes, clock) and it is not logged; on success it is in the log
-    /// for good.
+    /// for good (in memory). Persisted sessions use `run_committing` instead.
     pub fn run(&mut self, src: &str) -> Result<Ran, String> {
+        self.run_committing(src, |_| Ok(()))
+    }
+
+    /// Keep the rollback snapshot through the durable commit. The proposed log is
+    /// visible to `commit`, but a rejected commit removes its chunk and restores state.
+    pub(crate) fn run_committing(&mut self, src: &str, commit: impl FnOnce(&Session) -> Result<(), String>) -> Result<Ran, String> {
         let src = crate::painting_log::chunk_text(src)?;
         if self.stale {
             self.rebuild()?;
         }
+        let committed_counts = { let st = self.st.borrow(); (st.chunk, st.calls) };
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
@@ -326,6 +333,17 @@ impl Session {
             Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
             Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
+        if fail.is_none() {
+            self.log.push(Chunk { src });
+            if let Err(e) = commit(self) {
+                self.log.pop();
+                // A rejected durable commit also keeps the last committed accounting
+                // (save headers expose it), not the just-computed chunk's counts.
+                let mut st = self.st.borrow_mut();
+                (st.chunk, st.calls) = committed_counts;
+                fail = Some(e);
+            }
+        }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
         // below reinstates the deadline because it can run Lua work.
@@ -352,7 +370,7 @@ impl Session {
         }
         // before collecting: the values the chunk replaced aren't held here any more
         if let Some(g) = globals {
-            self.globals = g;
+            if fail.is_none() { self.globals = g; }
         }
         // masks and brushes hold memory Lua can't see: collect between chunks, without the
         // snapshot, as a replay does, and within the chunk's time
@@ -365,7 +383,6 @@ impl Session {
             msg.push_str(&e);
             return Err(msg);
         }
-        self.log.push(Chunk { src });
         Ok(Ran { out, secs })
     }
 

@@ -354,3 +354,42 @@ fn sock_of(dir: &std::path::Path) -> std::path::PathBuf {
     }
     p
 }
+
+// The socket route must not bypass scratch's persisted ownership. `open` must
+// refuse a socketless owner promptly rather than wait for a server to appear.
+#[test]
+fn scratch_routing_rejects_colliding_paintings_and_locked_resets() {
+    let name = "sketch-collision";
+    let scratch = "sketch-collision-scratch";
+    let _painting_reaper = Reaper(name);
+    let _scratch_reaper = Reaper(scratch);
+    ok(&["open", name]);
+    ok(&["-s", name, "do", "canvas{size=300, aspect=4, linen=20, seed=5, raw='cotton duck'}"]);
+    ok(&["-s", name, "do", "x = 71", "--scratch"]);
+    let log = root().join("paintings/lua").join(format!("{scratch}.lua"));
+    let original = std::fs::read(&log).unwrap();
+    let started = std::time::Instant::now();
+    let o = cmd(&["open", scratch]);
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("as a scratch canvas"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(std::fs::read(&log).unwrap(), original);
+    ok(&["-s", name, "close"]);
+    // Primary reopening is lazy: scratch's name remains independently available.
+    ok(&["open", name]);
+    ok(&["open", scratch]);
+    for args in [&["--scratch"][..], &["--scratch", "--new"]] {
+        let mut req = vec!["-s", name, "do", "x = 99"];
+        req.extend(args);
+        let o = cmd(&req);
+        assert!(!o.status.success());
+        assert!(String::from_utf8_lossy(&o.stderr).contains("another easel serves session"));
+        assert_eq!(std::fs::read(&log).unwrap(), original);
+        assert!(!log.with_file_name(format!("{scratch}-1.lua")).exists());
+    }
+    ok(&["-s", scratch, "close"]);
+    ok(&["-s", name, "do", "assert(x == 71)", "--scratch"]);
+    let reset = ok(&["-s", name, "do", "assert(x == nil)", "--scratch", "--new"]);
+    assert!(reset.contains("sketch-collision-scratch-1.lua"), "{reset}");
+    ok(&["-s", name, "close"]);
+}

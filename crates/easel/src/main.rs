@@ -32,6 +32,7 @@ mod look;
 mod save;
 mod palette_look;
 mod painting_log;
+mod persisted_session;
 mod replay;
 mod session;
 #[cfg(feature = "replay")]
@@ -47,6 +48,7 @@ use paint::Canvas;
 use paint::color::linear_to_srgb;
 use session::{Session, root};
 use painting_log::PaintingLog;
+use persisted_session::{PersistedSession, SessionFiles};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -234,9 +236,6 @@ fn private_dir(dir: &Path, uid: u32) -> bool {
         Ok(m) => m.is_dir() && m.uid() == uid && m.mode() & 0o077 == 0,
         Err(_) => false,
     }
-}
-fn log_path(name: &str) -> PathBuf {
-    root().join("paintings/lua").join(format!("{name}.lua"))
 }
 fn journal_path() -> PathBuf {
     root().join("notes/journal.md")
@@ -486,18 +485,11 @@ fn set_current(name: &str) -> Result<(), String> {
 /// an `open` while it starts that server. A session has at most one server, and only its
 /// holder may remove the socket or start the server log.
 fn lock_path(name: &str) -> PathBuf {
-    session_dir(name).join("lock")
+    persisted_session::lock_path(&root(), name)
 }
 
-/// The session's lock, if no one holds it (None: a server, or an `open` starting one, does).
 fn try_lock(name: &str) -> Result<Option<std::fs::File>, String> {
-    let p = lock_path(name);
-    let f = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-    match f.try_lock() {
-        Ok(()) => Ok(Some(f)),
-        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
-        Err(std::fs::TryLockError::Error(e)) => Err(format!("{}: {e}", p.display())),
-    }
+    persisted_session::try_lock(&root(), name)
 }
 
 /// Set on the server `open` starts: its stdin is the session's lock, held for it.
@@ -545,6 +537,11 @@ fn open(args: &[String]) -> Result<(), String> {
                 .map_err(|e| format!("could not start the session: {e}"))?;
             started = true;
             shown = 0;
+        } else {
+            let holder = std::fs::read_to_string(lock_path(&name)).unwrap_or_default();
+            if holder.lines().nth(1) == Some("scratch") {
+                return Err(format!("another easel serves session {name:?} as a scratch canvas (pid {}); nothing ran", holder.lines().next().unwrap_or("")));
+            }
         }
         std::thread::sleep(Duration::from_millis(100));
         let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
@@ -578,61 +575,25 @@ fn open(args: &[String]) -> Result<(), String> {
 
 /// The session's lock for `serve`, held until it exits: the one `open` passed on its
 /// stdin, else taken here. A session that has a server already gets no second one.
-fn serve_lock(name: &str) -> Result<std::fs::File, String> {
+fn serve_lock(name: &str) -> Result<SessionFiles, String> {
     let on_stdin = std::env::var_os(LOCK_ON_STDIN).is_some();
-    // The signal is this server's alone: a child it starts must not take its stdin for the
-    // lock. (fd 0 itself is inherited by any child all the same, not close-on-exec: a child
-    // would hold the lock after the server died, and every open would wait for it. The
-    // server starts no children.)
-    // SAFETY: read and removed before the server starts any thread
+    // SAFETY: read and removed before the server starts any thread.
     unsafe { std::env::remove_var(LOCK_ON_STDIN) };
-    let lock = if on_stdin {
+    let inherited = if on_stdin {
         use std::os::fd::AsFd;
-        use std::os::unix::fs::MetadataExt;
-        // a duplicate of stdin: the same open file, so the same lock
-        let f = std::fs::File::from(std::io::stdin().as_fd().try_clone_to_owned().map_err(|e| e.to_string())?);
-        let (held, want) = (f.metadata().map_err(|e| e.to_string())?, std::fs::metadata(lock_path(name)).map_err(|e| e.to_string())?);
-        if (held.dev(), held.ino()) != (want.dev(), want.ino()) {
-            return Err(format!("{LOCK_ON_STDIN} is set but stdin isn't {}", lock_path(name).display()));
-        }
-        // already ours (the open file `open` locked): this doesn't wait
-        f.try_lock().map_err(|e| format!("{}: {e}", lock_path(name).display()))?;
-        f
-    } else {
-        std::fs::create_dir_all(session_dir(name)).map_err(|e| e.to_string())?;
-        match try_lock(name)? {
-            Some(f) => f,
-            None => {
-                let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
-                return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
-            }
-        }
-    };
-    // who holds it, for anyone looking
-    let mut f = &lock;
-    let _ = f.set_len(0).and_then(|_| writeln!(f, "{}", std::process::id()));
-    Ok(lock)
+        Some(std::fs::File::from(std::io::stdin().as_fd().try_clone_to_owned().map_err(|e| e.to_string())?))
+    } else { None };
+    SessionFiles::acquire(&root(), name.to_string(), inherited)
 }
 
 // ---------------------------------------------------------------- server
 
 struct Server {
-    name: String,
-    // Captured at session startup, before a later rebuild can replace the executable.
+    // Captured at startup, before a rebuild can replace the executable.
     build: u64,
-    s: Session,
+    painting: PersistedSession,
     frames: bool,
-    /// The log text as the easel last wrote (or read) it: if the file on
-    /// disk differs, it was changed outside the session.
-    written: Option<String>,
-    /// How many of the log's chunks the state was replayed from (at reopen or rebuild),
-    /// not painted live.
-    replayed: usize,
-    /// The scratch canvas beside the painting (`--scratch`): a session of its own (its own
-    /// log, canvas, palette, brushes and Lua state), set up as a copy of the painting's
-    /// canvas, with its own clock: time spent or waited there doesn't pass for the painting.
-    /// None until first used.
-    scratch: Option<Box<Server>>,
+    scratch: Option<PersistedSession>,
 }
 
 /// The scratch canvas's session beside the session `name`.
@@ -651,8 +612,10 @@ fn serve(args: &[String]) -> Result<(), String> {
     if args.len() != 1 {
         return Err("easel: fatal: live sessions are fixed at 2400px".into());
     }
-    let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
-    let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
+    let files = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
+    let painting = files.open(None).map_err(|(_, e)| format!("easel: fatal: {e}"))?;
+    let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
+    let mut srv = Server { painting, build: save::fnv1a(&executable), frames: false, scratch: None };
     let sock = sock_path(&name);
     // the lock is ours: a socket there is a dead server's
     let _ = std::fs::remove_file(&sock);
@@ -719,24 +682,23 @@ fn serve(args: &[String]) -> Result<(), String> {
         }
         // the same for the scratch canvas, at once (its log is short)
         if let Some(sc) = srv.scratch.as_mut()
-            && sc.s.stale
+            && sc.session().stale
         {
-            if let Err(e) = sc.s.rebuild() {
+            if let Err(e) = sc.rebuild_with_progress(|_, _| {}) {
                 eprintln!("warning: the scratch canvas couldn't be rebuilt ({e}); it is put away");
                 srv.scratch = None;
             }
         }
         // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
         // after the reply; status stays available and other requests are refused until done
-        if srv.s.stale {
+        if srv.painting.session().stale {
             drop(conn);
             let t0 = Instant::now();
-            eprintln!("rebuilding from the log ({} chunks)", srv.s.log.len());
+            eprintln!("rebuilding from the log ({} chunks)", srv.painting.session().log.len());
             if let Err(e) = rebuild_serving_status(&l, &mut srv) {
                 let _ = std::fs::remove_file(&sock);
                 return Err(format!("easel: fatal: {e}"));
             }
-            srv.replayed = srv.s.log.len();
             eprintln!("rebuilt {:.2}s", t0.elapsed().as_secs_f64());
         }
     }
@@ -771,10 +733,9 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
             self.conn.read(buf)
         }
     }
-    let total = srv.s.log.len();
+    let total = srv.painting.session().log.len();
 
-    let name = &srv.name;
-    let written = srv.written.as_deref().ok_or("session integrity: uninitialized log")?;
+    let integrity = srv.painting.integrity();
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let result = std::thread::scope(|scope| {
         let worker = scope.spawn(|| -> Result<(), String> {
@@ -795,7 +756,7 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
                 let mut reader = Reader { conn: &mut conn, until: Instant::now() + Duration::from_millis(100), done: &done };
                 let reply = match read_request(&mut reader) {
                     Err(e) => format!("err\n{e}\n"),
-                    Ok(req) => match validate_log(name, written) {
+                    Ok(req) => match integrity.validate() {
                         Err(e) => format!("err\n{e}\n"),
                         Ok(()) => {
                             let head = req.split(|b| *b == b'\n').next().unwrap_or_default();
@@ -812,7 +773,7 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
             Ok(())
         });
         let stop = Stop(&done);
-        let replay = srv.s.rebuild_with_progress(|k, _| completed.store(k, Ordering::Release));
+        let replay = srv.painting.rebuild_with_progress(|k, _| completed.store(k, Ordering::Release));
         drop(stop);
         worker.thread().unpark();
         let served = worker.join().map_err(|_| "rebuild status listener panicked".to_string())?;
@@ -820,42 +781,6 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
     });
     let blocking = listener.set_nonblocking(false).map_err(|e| e.to_string());
     result.and(blocking)
-}
-
-/// The session's committed record: the log as the session last wrote it.
-fn witness_path(name: &str) -> PathBuf {
-    session_dir(name).join("committed.lua")
-}
-
-/// Put a session's log aside as `<name>-N.lua` (the first N free) and drop its committed
-/// record, so a fresh session of that name starts empty. The path it went to, if any.
-fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
-    let lp = log_path(name);
-    let _ = std::fs::remove_file(witness_path(name));
-    if !lp.exists() {
-        return Ok(None);
-    }
-    let mut n = 1;
-    let to = loop {
-        let p = log_path(&format!("{name}-{n}"));
-        if !p.exists() {
-            break p;
-        }
-        n += 1;
-    };
-    std::fs::rename(&lp, &to).map_err(|e| format!("{}: {e}", lp.display()))?;
-    Ok(Some(to))
-}
-
-/// The log and the committed record on disk both hold `expected`.
-fn validate_log(name: &str, expected: &str) -> Result<(), String> {
-    for p in [log_path(name), witness_path(name)] {
-        let actual = std::fs::read(&p).map_err(|e| format!("session integrity: {} can't be read ({e}). The easel goes on only from the log it wrote; nothing ran.", p.display()))?;
-        if actual != expected.as_bytes() {
-            return Err(format!("session integrity: {} differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.", p.display()));
-        }
-    }
-    Ok(())
 }
 
 /// The palette look (look.rs `palette`): the piles the globals hold, over this canvas's
@@ -946,123 +871,7 @@ fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
 }
 
 impl Server {
-    // Independent local witness, not a signature or an access-control boundary.
-    // Editing the log alone is detected; coordinated edits of both files or
-    // restoring the entire directory are outside this local integrity model.
-    fn witness(&self) -> PathBuf {
-        witness_path(&self.name)
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        validate_log(&self.name, self.written.as_deref().ok_or("session integrity: uninitialized log")?)
-    }
-
-    fn resume(name: String) -> Result<Self, String> {
-        Self::resume_as(name, None)
-    }
-
-    /// `resume`; a new session's box and width are `like`'s when given (the scratch canvas
-    /// takes the painting's), else the configured box and the name's width.
-    fn resume_as(name: String, like: Option<&Session>) -> Result<Self, String> {
-        let lp = log_path(&name);
-        let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
-        if let Some(t) = &text {
-            validate_log(&name, t)?;
-        }
-        let log = text.as_deref().map(PaintingLog::parse);
-        // an existing painting goes on with the box its log names; a new one takes the
-        // configured box (session::box_for)
-        let (tubes, width) = match (like, &text) {
-            (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
-            _ => (session::box_for(log.as_ref())?, width_for(&name, log.as_ref())),
-        };
-        let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None };
-        if let Some(text) = text {
-            srv.written = Some(text.clone());
-            let log = log.as_ref().unwrap();
-            struct Resume { started: Instant, total: usize }
-            impl replay::Observer for Resume {
-                fn before_chunk(&mut self, number: usize, total: usize) -> Result<(), String> {
-                    self.started = Instant::now();
-                    eprintln!("resuming chunk {number}/{total}");
-                    Ok(())
-                }
-                fn chunk_end(&mut self, _s: &Session, number: usize, _ran: &session::Ran) -> Result<(), String> {
-                    eprintln!("resumed chunk {number}/{} {:.2}s", self.total, self.started.elapsed().as_secs_f64());
-                    Ok(())
-                }
-            }
-            // A failed chunk refuses the whole reopen: no snapshots, no time limit.
-            srv.s = replay::replay(log, || Ok(srv.s), false, &mut Resume { started: Instant::now(), total: log.chunks.len() })
-                .map_err(|e| match e {
-                    replay::Error::Chunk { number, error } => format!("session integrity: replay failed at chunk {number}: {error}; refusing partial session"),
-                    replay::Error::Session(e) | replay::Error::Observer(e) => e,
-                })?;
-            srv.replayed = log.chunks.len();
-            if srv.s.program(&srv.name) != log.render() {
-                return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
-            }
-            println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
-        } else {
-            srv.save_log()?;
-        }
-        Ok(srv)
-    }
-
-    /// Append only the new suffix. Commit the redundant witness afterward.
-    /// A crash between writes fails closed on reopen, never partial replay.
-    fn save_log(&mut self) -> Result<String, String> {
-        let p = log_path(&self.name);
-        let text = self.s.program(&self.name);
-        let previous = self.written.as_deref().unwrap_or("");
-        if self.written.is_some() {
-            self.validate()?;
-        }
-        let suffix = text.strip_prefix(previous).ok_or("session integrity: log would rewrite history")?;
-        std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(session_dir(&self.name)).map_err(|e| e.to_string())?;
-        let mut opts = std::fs::OpenOptions::new();
-        opts.append(true);
-        if self.written.is_none() {
-            opts.create_new(true);
-        }
-        let mut f = opts.open(&p).map_err(|e| format!("session integrity: {e}"))?;
-        f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| format!("session integrity: {e}"))?;
-        let pending = self.witness().with_extension("pending");
-        let mut f = std::fs::File::create(&pending).map_err(|e| e.to_string())?;
-        f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
-        std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
-        self.written = Some(text);
-        Ok(String::new())
-    }
-
-    /// The live canvas as a PNG, `save`'s (`live.png`, next to the committed log), its save
-    /// file (`live.ckpt`: the canvas and the studio fields the finishing verbs read, save.rs),
-    /// and in `live.txt` how many chunks they hold and how many of them were replayed: the
-    /// runner's check (scripts/check_painting) compares a replay of the log with them, and
-    /// scripts/finish_painting finishes from the save instead of replaying the log.
-    fn save_live(&self) -> Result<String, String> {
-        let dir = session_dir(&self.name);
-        let (png, txt, ckpt) = (dir.join("live.png"), dir.join("live.txt"), dir.join("live.ckpt"));
-        let _ = std::fs::remove_file(&txt);
-        let Some(c) = self.s.canvas() else {
-            let _ = std::fs::remove_file(&png);
-            let _ = std::fs::remove_file(&ckpt);
-            return Ok(String::new());
-        };
-        deliver(&c, &png)?;
-        drop(c);
-        // a save that can't be written leaves none (finish_painting then replays the log)
-        if let Err(e) = save::write(&self.s, &self.s.program(&self.name), &ckpt) {
-            let _ = std::fs::remove_file(&ckpt);
-            eprintln!("the save file couldn't be written: {e}");
-        }
-        std::fs::write(&txt, format!("chunks {}\nreplayed {}\nbuild {:016x}\n", self.s.log.len(), self.replayed, self.build)).map_err(|e| format!("{}: {e}", txt.display()))?;
-        Ok(format!("the live canvas is in {}\n", png.display()))
-    }
-
-    fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
+    fn look(target: &PersistedSession, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
         // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
         // earlier look beside this one (taken out before the view's own arguments)
         let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
@@ -1072,10 +881,10 @@ impl Server {
             // the palette board beside the easel (palette_look.rs)
             let t0 = Instant::now();
             let png = {
-                let st = self.s.st.borrow();
+                let st = target.session().st.borrow();
                 palette_look::render(&st.board, &st.tubes)?
             };
-            let p = new_look(&session_dir(&self.name), &png.2)?;
+            let p = new_look(&target.dir(), &png.2)?;
             return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
         }
         let (mut hold, mut at) = (None::<String>, None::<String>);
@@ -1114,25 +923,25 @@ impl Server {
             }
             let v = look::View::parse(&rest)?;
             let t0 = Instant::now();
-            let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
-            let path = new_look(&session_dir(&self.name), &png)?;
+            let (w, h, png) = hold_look(&target.session(), &pile, (p[0], p[1]), &v)?;
+            let path = new_look(&target.dir(), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
         }
         if survey {
-            return self.survey(&rest);
+            return Self::survey(target, &rest);
         }
         if let Some(prev) = compare {
-            return self.compare(&rest, &prev);
+            return Self::compare(target, &rest, &prev);
         }
         let args = &rest[..];
         let v = look::View::parse(args)?;
         let t0 = Instant::now();
         if v.palette {
-            let (w, h, png) = palette_look(&self.s)?;
-            let path = new_look(&session_dir(&self.name), &png)?;
+            let (w, h, png) = palette_look(&target.session())?;
+            let path = new_look(&target.dir(), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
         }
-        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let c = target.session().canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (w, h, path) = match path {
             Some(p) => {
                 let (w, h) = look::look(&c, &v, &p)?;
@@ -1140,7 +949,7 @@ impl Server {
             }
             None => {
                 let (w, h, png) = look::render(&c, &v)?;
-                (w, h, new_look(&session_dir(&self.name), &png)?)
+                (w, h, new_look(&target.dir(), &png)?)
             }
         };
         Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
@@ -1148,11 +957,11 @@ impl Server {
 
     /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
     /// in reading order; the view's modes (gallery, value...) apply to each.
-    fn survey(&mut self, args: &[String]) -> Result<String, String> {
+    fn survey(target: &PersistedSession, args: &[String]) -> Result<String, String> {
         if args.iter().any(|a| a == "--crop" || a == "--size") {
             return Err("look --survey covers the whole canvas at full detail: no --crop or --size".into());
         }
-        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let c = target.session().canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let seen = match look::View::parse(args)?.light {
             Some((az, el)) => c.seen_lit(az, el, 1.0),
@@ -1171,7 +980,7 @@ impl Server {
                 a.extend(["--crop".to_string(), crop.clone()]);
                 let v = look::View::parse(&a)?;
                 let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
-                let p = new_look(&session_dir(&self.name), &png)?;
+                let p = new_look(&target.dir(), &png)?;
                 out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
             }
         }
@@ -1180,17 +989,17 @@ impl Server {
 
     /// An earlier look (left) beside the same view of the canvas now (right), at
     /// the same height, for judging what a change did.
-    fn compare(&mut self, args: &[String], prev: &Path) -> Result<String, String> {
+    fn compare(target: &PersistedSession, args: &[String], prev: &Path) -> Result<String, String> {
         let mut a = args.to_vec();
         if !a.iter().any(|x| x == "--size" || x == "--crop") {
             a.extend(["--size".to_string(), "800".to_string()]);
         }
         let v = look::View::parse(&a)?;
-        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let c = target.session().canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (_, _, png) = look::render(&c, &v)?;
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
         // an earlier look of this studio: a picture under its folder, nothing outside it
-        let studio = root().canonicalize().map_err(|e| e.to_string())?;
+        let studio = target.directory().canonicalize().map_err(|e| e.to_string())?;
         let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
         let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
         if !real.starts_with(&studio) {
@@ -1210,28 +1019,19 @@ impl Server {
         image::imageops::replace(&mut both, &now, (bw + gap) as i64, 0);
         let mut bytes = Vec::new();
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
-        let p = new_look(&session_dir(&self.name), &bytes)?;
+        let p = new_look(&target.dir(), &bytes)?;
         Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
-    }
-
-    /// The log on disk is the one the session wrote, and holds everything it ran.
-    fn ready(&self) -> Result<(), String> {
-        self.validate()?;
-        if self.written.as_deref() != Some(self.s.program(&self.name).as_str()) {
-            return Err("session integrity: uncommitted state; restart required".into());
-        }
-        Ok(())
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
     #[cfg(feature = "replay")]
     fn check_input(&self) -> Result<check::Input, String> {
-        self.ready()?;
+        self.painting.ready()?;
         Ok(check::Input {
-            width: self.s.st.borrow().width,
-            tubes: self.s.tube_box(),
-            chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
-            live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
+            width: self.painting.session().st.borrow().width,
+            tubes: self.painting.session().tube_box(),
+            chunks: self.painting.session().log.iter().map(|c| c.src.clone()).collect(),
+            live: self.painting.session().canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
         })
     }
 
@@ -1245,16 +1045,16 @@ impl Server {
             return Err("--new starts a fresh scratch canvas: do --scratch --new".into());
         }
         if !scratch {
-            return self.serve_cmd(cmd, &args, payload);
+            return Self::serve_cmd(&mut self.painting, self.build, &mut self.frames, cmd, &args, payload);
         }
         if !matches!(cmd, "do" | "look" | "status" | "log" | "globals" | "save") {
             return Err(format!("{cmd} is the painting's: it takes no --scratch"));
         }
-        self.ready()?;
+        self.painting.ready()?;
         let mut out = String::new();
         // reopened when first asked for, so it never holds up the painting's reopen
         if self.scratch.is_none() && !new {
-            out += &self.resume_scratch();
+            out += &self.resume_scratch()?;
         }
         if new || (self.scratch.is_none() && cmd == "do") {
             out += &self.new_scratch()?;
@@ -1264,117 +1064,96 @@ impl Server {
             self.scratch = None;
             return Err(format!("{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
         }
-        out += &sc.serve_cmd(cmd, &args, payload)?;
+        out += &Self::serve_cmd(sc, self.build, &mut false, cmd, &args, payload)?;
         Ok(out)
     }
 
-    /// Run a chunk of the easel's own (not the painter's) and log it.
-    fn run_own(&mut self, src: &str) -> Result<(), String> {
-        self.ready()?;
-        self.s.run(src)?;
-        self.save_log()?;
-        Ok(())
-    }
-
-    /// Reopen the scratch canvas the studio has (its log), if any, at its first use after the
-    /// painting's reopen. A scratch canvas that can't be reopened is put aside, as `--new`
-    /// does, and doesn't stop the painting.
-    /// What happened, if the painter should know (a scratch canvas put aside).
-    fn resume_scratch(&mut self) -> String {
-        let name = scratch_name(&self.name);
-        if !(log_path(&name).exists() || witness_path(&name).exists()) {
-            return String::new();
-        }
-        match Server::resume_as(name.clone(), Some(&self.s)) {
+    /// Lazy reopening keeps scratch replay off the painting's startup path.
+    fn resume_scratch(&mut self) -> Result<String, String> {
+        let files = SessionFiles::acquire(self.painting.directory(), scratch_name(self.painting.name()), None)?;
+        files.mark_scratch()?;
+        if !files.exists() { return Ok(String::new()); }
+        match files.open(Some(self.painting.session())) {
             Ok(sc) => {
-                self.scratch = Some(Box::new(sc));
-                String::new()
+                self.scratch = Some(sc);
+                Ok(String::new())
             }
-            Err(e) => {
+            Err((files, e)) => {
                 eprintln!("warning: the scratch canvas couldn't be reopened ({e}); it is put aside");
-                match put_aside(&name) {
+                Ok(match files.put_aside() {
                     Ok(_) => "(the scratch canvas couldn't be reopened, so it is put aside)\n".into(),
                     Err(e) => format!("(the scratch canvas couldn't be reopened, nor put aside: {e})\n"),
-                }
+                })
             }
         }
     }
 
-    /// A fresh scratch canvas: the old one's log is put aside, and the new one is set up as
-    /// the painting's canvas was (its `canvas{...}`, the easel's first chunk there).
+    /// Reset only after owning scratch's lock (including while it is already open).
     fn new_scratch(&mut self) -> Result<String, String> {
-        let src = self.s.st.borrow().canvas_src.clone().ok_or(
+        let src = self.painting.session().st.borrow().canvas_src.clone().ok_or(
             "the scratch canvas is set up as a copy of the painting's canvas, and the painting has none yet: its first chunk is canvas{...}",
         )?;
-        let name = scratch_name(&self.name);
-        self.scratch = None;
-        let aside = put_aside(&name)?;
-        let mut sc = Server::resume_as(name, Some(&self.s))?;
-        sc.run_own(&src)?;
-        self.scratch = Some(Box::new(sc));
+        let files = match self.scratch.take() {
+            Some(sc) => sc.into_files(),
+            None => SessionFiles::acquire(self.painting.directory(), scratch_name(self.painting.name()), None)?,
+        };
+        files.mark_scratch()?;
+        let aside = files.put_aside()?;
+        let mut sc = files.open(Some(self.painting.session())).map_err(|(_, e)| e)?;
+        sc.run(&src)?;
+        self.scratch = Some(sc);
         Ok(match aside {
-            Some(p) => format!("a fresh scratch canvas (the last one's log is {})\n", p.strip_prefix(root()).unwrap_or(&p).display()),
+            Some(p) => format!("a fresh scratch canvas (the last one's log is {})\n", p.strip_prefix(self.painting.directory()).unwrap_or(&p).display()),
             None => "a scratch canvas beside the painting, set up as the painting's canvas was\n".into(),
         })
     }
 
-    fn serve_cmd(&mut self, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
-        self.ready()?;
+    fn serve_cmd(p: &mut PersistedSession, build: u64, frames: &mut bool, cmd: &str, args: &[String], payload: &str) -> Result<String, String> {
+        p.ready()?;
         match cmd {
-            "note" => append_note(self.s.st.borrow().clock, payload),
-            "status" => Ok(format!("{}\n", self.s.status())),
-            "globals" => Ok(self.s.globals()),
-            "do" => match self.s.run(payload) {
+            "note" => append_note(p.session().st.borrow().clock, payload),
+            "status" => Ok(format!("{}\n", p.session().status())),
+            "globals" => Ok(p.session().globals()),
+            "do" => match p.run(payload) {
                 Ok(ran) => {
-                    let note = self.save_log()?;
-                    let n = self.s.log.len();
-                    let mut out = note;
+                    let n = p.session().log.len();
+                    let mut out = String::new();
                     out.push_str(&ran.out);
-                    out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
+                    out.push_str(&format!("{}\n", time::time_of_day(p.session().st.borrow().clock)));
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
                     // the chunk is in the log: a look that fails now is reported with it, not
                     // as a failed `do` (which would be sent again)
-                    if self.frames {
-                        let p = session_dir(&self.name).join("frames").join(format!("{n:04}.png"));
-                        if let Err(e) = self.look(&[], Some(p)) {
+                    if *frames {
+                        let path = p.dir().join("frames").join(format!("{n:04}.png"));
+                        if let Err(e) = Self::look(p, &[], Some(path)) {
                             out.push_str(&format!("(no frame saved: {e})\n"));
                         }
                     }
                     if args.iter().any(|a| a == "--look") {
-                        match self.look(&[], None) {
+                        match Self::look(p, &[], None) {
                             Ok(l) => out.push_str(&l),
                             Err(e) => out.push_str(&format!("(no look: {e})\n")),
                         }
                     }
                     Ok(out)
                 }
-                Err(e) if self.s.unrestored => Err(format!(
-                    "{e}\n(the chunk failed and is not in the log; status reports the rebuild's progress and other commands must retry after it)"
-                )),
-                Err(e) if self.s.stale => Err(format!(
-                    "{e}\n(the chunk failed and changed nothing. It had changed tables from earlier chunks, and though what they hold is back, how they are laid out (which decides the order `pairs` walks them in, from engine 3 only the length `#` finds in a table with holes) can't be put back, so the easel now rebuilds the painting from its log, as a reopen does; status reports progress and other commands must retry after that)"
-                )),
-                Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
+                Err(e) => Err(e),
             },
-            "look" => self.look(args, None),
-            "log" => Ok(self.s.program(&self.name)),
+            "look" => Self::look(p, args, None),
+            "log" => Ok(p.session().program(p.name())),
             "save" => {
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
                 let (path, light) = save_args(args)?;
-                let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
-                let c = self.s.canvas().ok_or("no canvas yet")?;
-                deliver_lit(&c, &p, light)?;
-                Ok(format!("{}\n", p.display()))
+                let path = path.unwrap_or_else(|| p.dir().join(format!("{}.png", p.name())));
+                let c = p.session().canvas().ok_or("no canvas yet")?;
+                deliver_lit(&c, &path, light)?;
+                Ok(format!("{}\n", path.display()))
             }
             "frames" => {
-                self.frames = matches!(args.first().map(|s| s.as_str()), Some("on") | None);
-                Ok(format!("frames {} ({})\n", if self.frames { "on" } else { "off" }, session_dir(&self.name).join("frames").display()))
+                *frames = matches!(args.first().map(|s| s.as_str()), Some("on") | None);
+                Ok(format!("frames {} ({})\n", if *frames { "on" } else { "off" }, p.dir().join("frames").display()))
             }
-            "close" => {
-                let note = self.save_log()?;
-                let live = self.save_live().unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));
-                Ok(format!("{note}{live}closed; the session is in {}\n", log_path(&self.name).display()))
-            }
+            "close" => p.close(build),
             o => Err(format!("unknown command {o:?}")),
         }
     }

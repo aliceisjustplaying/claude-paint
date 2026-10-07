@@ -94,72 +94,18 @@ if [ "$reuse" = 0 ]; then
 fi
 [ -f "$dir/frames.tsv" ] || { echo "replay_clip: no $dir/frames.tsv" >&2; exit 1; }
 
-# the concat list: each distinct moment (frames at the same hand time: the
-# last one, as it is after any wait) held for its share of the clip: the
-# hand time to the next moment, measured on the curve hand_time^pace, scaled
-# so the clip runs --length (holds capped at --max-hold, the rest stretched
-# to make up for them)
+# replay_pace owns both schedules and the finished-painting opening. Numeric
+# pace runs with stdlib Python only; dynamic pace needs its image dependencies.
 list=$dir/concat.txt
-# the time the painting is paced into: --length less the opening on the finished painting
-plength=$(awk -v l="$length" -v f="$finalfirst" 'BEGIN { printf "%.5f", l - f }')
 if [ "$pace" = dynamic ]; then
   command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
-  uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$plength" --max-hold "$maxhold" --hold "$hold" \
-    --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
-    --before "$finalfirst" --eval
+  scheduler=(uv run -q --script)
 else
-# entries are file names: ffmpeg reads them relative to the list, which is in $dir
-awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
-  # a name in quotes in the list: each quote in it closes, escapes and reopens
-  function esc(s,  r, i) { r = ""; while ((i = index(s, q)) > 0) { r = r substr(s, 1, i - 1) q "\\" q q; s = substr(s, i + 1) } return r s }
-  NR == 1 { next }
-  { if (n > 0 && $2 + 0 == h[n]) { f[n] = $1 } else { n++; f[n] = $1; h[n] = $2 + 0 } }
-  END {
-    if (length_ <= hold) { print "replay_clip: --length must exceed the " hold " s final hold" > "/dev/stderr"; exit 1 }
-    for (i = 1; i < n; i++) w[i] = h[i + 1] ^ pace - h[i] ^ pace
-    want = length_ - hold; m = 0
-    for (i = 1; i < n; i++) if (w[i] > 0) m++
-    # the moments shown, each held at most --max-hold, may not fill --length
-    if (want > m * maxhold + 1e-6) {
-      msg = sprintf("replay_clip: --length %s is longer than the clip can run: %d moment%s held at most %s s each (--max-hold) plus the %s s final hold", length_ + ff, m, m == 1 ? "" : "s", maxhold, hold)
-      if (ff > 0) msg = msg sprintf(" plus the %s s --final-first", ff)
-      msg = msg sprintf(" come to at most %.2f s; ", int((m * maxhold + hold + ff) * 100 + 1e-6) / 100)
-      if (m > 0) msg = msg sprintf("raise --max-hold to at least %.2f or ", int(want / m * 100 + 0.999999) / 100)
-      print msg "lower --length" > "/dev/stderr"; exit 1
-    }
-    # scale: capped holds take max-hold, the rest share the remaining time
-    k = 0
-    for (it = 0; it < 20; it++) {
-      capped = 0; free = 0
-      for (i = 1; i < n; i++) if (k > 0 && w[i] * k > maxhold) capped += maxhold; else free += w[i]
-      if (free <= 0) break
-      k2 = (want - capped) / free
-      if (k2 == k) break
-      k = k2
-    }
-    secs = 0
-    for (i = 1; i < n; i++) {
-      d = w[i] * k
-      if (d > maxhold) d = maxhold
-      if (d <= 0) continue
-      printf "file '\''%s'\''\nduration %.5f\n", esc(f[i]), d
-      secs += d
-    }
-    if (secs - want > 0.5 / fps || want - secs > 0.5 / fps) { printf "replay_clip: the holds come to %.3f s, not %.3f\n", secs, want > "/dev/stderr"; exit 1 }
-    # the last entry of a concat list takes the duration before it, so the
-    # hold (less the two frames after it) is followed by a one-frame repeat
-    # and then the frame again (a frame)
-    printf "file '\''%s'\''\nduration %.5f\n", esc(f[n]), hold - 2 / fps
-    printf "file '\''%s'\''\nduration %.5f\nfile '\''%s'\''\n", esc(f[n]), 1 / fps, esc(f[n])
-    printf "%d moments, %.1f min of hand time, pace %s: about %.1f s of clip\n", n, h[n] / 60, pace, secs + hold > "/dev/stderr"
-  }' "$dir/frames.tsv" > "$list"
+  scheduler=(python3)
 fi
-
-if awk -v f="$finalfirst" 'BEGIN { exit !(f > 0) }'; then
-  # the finished painting first (the last frame, as the final hold shows it)
-  last=$(tail -1 "$dir/frames.tsv" | cut -f1) q="'"
-  { printf "file '%s'\nduration %.5f\n" "${last//$q/$q\\$q$q}" "$finalfirst"; cat "$list"; } > "$list.tmp" && mv "$list.tmp" "$list"
-fi
+"${scheduler[@]}" "$(dirname "$0")/replay_pace.py" "$dir" --pace "$pace" --length "$length" --max-hold "$maxhold" --hold "$hold" \
+  --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
+  --final-first "$finalfirst" --eval
 
 ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
   -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \

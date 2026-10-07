@@ -59,4 +59,27 @@ for pace in 0.6 dynamic; do
     || fail "--length 75 at --max-hold 1, pace $pace: no message with the longest length and the options" "$work/long-$pace.log"
   [ ! -e "$work/rel-$pace/long.mp4" ] || fail "--length 75 at --max-hold 1, pace $pace: a clip was cut" "$work/long-$pace.log"
 done
-echo "replay_clip test: relative and absolute frames folders at numeric and dynamic pace, each clip 8 s to a frame; 75 s at --max-hold 1 refused ($work)"
+# The schedule module's numeric contract: stdlib only, the last frame at
+# each hand time, unquantized durations, quoted names and a final-first
+# prefix. Dynamic-only opening flags must not affect numeric pace.
+mkdir "$work/schedule"
+printf 'file\thand_secs\tticks\tchunks_done\tkind\n0001.png\t0\t1\t0\ttick\n0002.png\t60\t2\t0\ttick\nit\047s red.png\t60\t3\t0\tchunk\n0003.png\t120\t4\t0\ttick\nit\047s blue.png\t120\t5\t0\tfinal\n' > "$work/schedule/frames.tsv"
+uv venv -q "$work/stdlib"
+uv run --no-project --python "$work/stdlib/bin/python" python -S "$repo/scripts/replay_pace.py" "$work/schedule" \
+  --pace 1 --length 8.12346 --max-hold 10 --final-first 1.25 --ramp ignored --ramp-span ignored --open-hold ignored --floor ignored --gamma ignored \
+  >"$work/schedule.log" 2>&1 || fail "stdlib numeric schedule: failed" "$work/schedule.log"
+cat > "$work/expected.txt" <<'EOF_CONCAT'
+file 'it'\''s blue.png'
+duration 1.25000
+file '0001.png'
+duration 1.93673
+file 'it'\''s red.png'
+duration 1.93673
+file 'it'\''s blue.png'
+duration 2.91667
+file 'it'\''s blue.png'
+duration 0.04167
+file 'it'\''s blue.png'
+EOF_CONCAT
+cmp "$work/expected.txt" "$work/schedule/concat.txt" || fail "stdlib numeric schedule: concat bytes differ" "$work/schedule/concat.txt"
+echo "replay_clip test: relative and absolute frames folders at numeric and dynamic pace, each clip 8 s to a frame; 75 s at --max-hold 1 refused; stdlib numeric schedule exact ($work)"

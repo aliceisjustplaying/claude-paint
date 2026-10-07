@@ -3,13 +3,19 @@
 # requires-python = ">=3.10"
 # dependencies = ["numpy", "pillow"]
 # ///
-"""Dynamic pacing for scripts/replay_clip (--pace dynamic).
+"""Clip schedules for scripts/replay_clip (numeric or dynamic --pace).
 
-    replay_pace.py <frames-dir> --length T [--max-hold 1] [--hold 3] [--fps 24]
+    replay_pace.py <frames-dir> --length T [--pace dynamic|P]
+                   [--max-hold 1] [--hold 3] [--fps 24] [--final-first 0]
                    [--floor 0.2] [--gamma 0.7] [--hand-pace 0.6] [--min-frames 2]
                    [--ramp 1] [--ramp-span 0.35] [--open-hold 0] [--before 0] [--eval]
 
-Writes <frames-dir>/concat.txt (ffmpeg concat list) from frames.tsv, where a
+Writes <frames-dir>/concat.txt (ffmpeg concat list) from frames.tsv. Numeric
+pace uses hand_time^P steps, capped and rescaled without frame quantization.
+It needs only Python's stdlib. --ramp, --ramp-span and --open-hold are ignored
+for numeric pace, preserving replay_clip's original numeric schedule.
+
+Dynamic pace (the default for direct callers) needs numpy and Pillow: a
 frame's screen time follows how much the picture visibly changed when it
 arrived, not how long the hand took:
 
@@ -30,17 +36,17 @@ The final picture is held --hold seconds; with --open-hold S the bare canvas
 opens the clip for S seconds, taken out of the rest. A --length the moments
 can't fill, held at most --max-hold each, is refused with the longest they
 can (--before: seconds of clip before this list, replay_clip's --final-first,
-counted in that message). With --eval, prints how evenly the
-visible change is spread over the clip (per tenth).
+counted in that message). --final-first opens on the finished painting and
+subtracts that time from --length (rounded to five decimals, as replay_clip
+has always done); unlike --before, it also writes the prefix. With --eval,
+dynamic pace prints how evenly visible change is spread over the clip (per
+tenth).
 """
 
 import argparse
 import math
 import sys
 from pathlib import Path
-
-import numpy as np
-from PIL import Image
 
 W = 250
 
@@ -60,12 +66,17 @@ def moments(d: Path):
 
 
 def load(p: Path):
+    import numpy as np
+    from PIL import Image
+
     im = Image.open(p).convert("RGB")
     return np.asarray(im.resize((W, max(1, round(im.height * W / im.width))), Image.BILINEAR), dtype=np.float32)
 
 
 def changes(d: Path, ms):
     """change_i (arriving at moment i; 0 for the first), cached per file pair."""
+    import numpy as np
+
     cache = d / "pace-change.tsv"
     known = {}
     if cache.exists():
@@ -93,6 +104,8 @@ def changes(d: Path, ms):
 
 def schedule(c, h, a):
     """Seconds per moment but the last, which the final hold shows."""
+    import numpy as np
+
     n = len(c)
     cs = c.copy()
     cs[1:-1] = 0.25 * c[:-2] + 0.5 * c[1:-1] + 0.25 * c[2:]
@@ -145,8 +158,75 @@ def entry(name: str) -> str:
     return "file '" + name.replace("'", "'\\''") + "'\n"
 
 
+def write_schedule(ms, secs, a):
+    """One concat encoding for either pace, including both finished-frame holds."""
+    lines = []
+    if a.final_first is not None and a.before > 0:
+        lines.append(f"{entry(ms[-1][0])}duration {a.before:.5f}\n")
+    for (f, _), d in zip(ms[:-1], secs):
+        if d > 0:
+            lines.append(f"{entry(f)}duration {d:.5f}\n")
+    last = entry(ms[-1][0])
+    # The final entry takes the duration before it: hold less two frames,
+    # a one-frame repeat, then the last frame once more (also one frame).
+    lines.append(f"{last}duration {a.hold - 2 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
+    (a.dir / "concat.txt").write_text("".join(lines))
+
+
+def numeric_schedule(ms, a):
+    """The original numeric policy: no quantization or dynamic opening flags.
+
+    Keep the scalar operation order and 20 capped-rescaling iterations from
+    replay_clip's awk schedule, including its feasibility tolerances/messages.
+    """
+    if a.length <= a.hold:
+        sys.exit(f"replay_clip: --length must exceed the {a.hold_text} s final hold")
+    pace = float(a.pace)
+    w = [later[1] ** pace - earlier[1] ** pace for earlier, later in zip(ms, ms[1:])]
+    want = a.length - a.hold
+    m = sum(x > 0 for x in w)
+    if want > m * a.max_hold + 1e-6:
+        msg = (f"replay_clip: --length {a.length + a.before:g} is longer than the clip can run: "
+               f"{m} moment{'' if m == 1 else 's'} held at most {a.max_hold_text} s each (--max-hold) "
+               f"plus the {a.hold_text} s final hold")
+        if a.before > 0:
+            msg += f" plus the {a.final_first if a.final_first is not None else format(a.before, 'g')} s --final-first"
+        msg += f" come to at most {int((m * a.max_hold + a.hold + a.before) * 100 + 1e-6) / 100:.2f} s; "
+        if m > 0:
+            msg += f"raise --max-hold to at least {int(want / m * 100 + 0.999999) / 100:.2f} or "
+        sys.exit(msg + "lower --length")
+    k = 0.0
+    for _ in range(20):
+        capped, free = 0.0, 0.0
+        for x in w:
+            if k > 0 and x * k > a.max_hold:
+                capped += a.max_hold
+            else:
+                free += x
+        if free <= 0:
+            break
+        k2 = (want - capped) / free
+        if k2 == k:
+            break
+        k = k2
+    secs, total = [], 0.0
+    for x in w:
+        d = x * k
+        if d > a.max_hold:
+            d = a.max_hold
+        secs.append(d)
+        if d > 0:
+            total += d
+    if total - want > 0.5 / a.fps or want - total > 0.5 / a.fps:
+        sys.exit(f"replay_clip: the holds come to {total:.3f} s, not {want:.3f}")
+    print(f"{len(ms)} moments, {ms[-1][1] / 60:.1f} min of hand time, pace {a.pace}: about {total + a.hold:.1f} s of clip", file=sys.stderr)
+    return secs
+
+
 def evenness(c, secs):
     """sqrt-change shown per tenth of the clip (%), as a vector."""
+    import numpy as np
+
     t = np.cumsum(secs) / max(sum(secs), 1e-12)
     b = np.minimum((t * 10).astype(int), 9)
     s = np.sqrt(c)
@@ -157,24 +237,54 @@ def evenness(c, secs):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir", type=Path)
+    ap.add_argument("--pace", default="dynamic", help="dynamic or a numeric hand-time exponent")
     ap.add_argument("--length", type=float, default=50)
-    ap.add_argument("--max-hold", type=float, default=1.0)
-    ap.add_argument("--hold", type=float, default=3.0)
+    ap.add_argument("--max-hold", default="1.0")
+    ap.add_argument("--hold", default="3.0")
     ap.add_argument("--fps", type=int, default=24)
-    ap.add_argument("--floor", type=float, default=0.2)
-    ap.add_argument("--gamma", type=float, default=0.7)
+    ap.add_argument("--floor", default=0.2)
+    ap.add_argument("--gamma", default=0.7)
     ap.add_argument("--hand-pace", type=float, default=0.6)
     ap.add_argument("--min-frames", type=int, default=2)
-    ap.add_argument("--ramp", type=float, default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
-    ap.add_argument("--open-hold", type=float, default=0.0, help="seconds the bare canvas is shown first")
-    ap.add_argument("--ramp-span", type=float, default=0.35, help="share of hand time over which the ramp eases to 1")
+    ap.add_argument("--ramp", default=1.0, help="opening speed-up: weight factor at the start (1 = none)")
+    ap.add_argument("--open-hold", default=0.0, help="seconds the bare canvas is shown first")
+    ap.add_argument("--ramp-span", default=0.35, help="share of hand time over which the ramp eases to 1")
     ap.add_argument("--before", type=float, default=0.0, help="seconds of clip before this list, for the length message")
+    ap.add_argument("--final-first", help="open on the finished painting, taken out of --length")
     ap.add_argument("--eval", action="store_true", help="print evenness for this schedule and for plain --hand-pace")
     a = ap.parse_args()
+    # Keep literal hold/cap spellings for the numeric path's existing messages.
+    a.hold_text, a.max_hold_text = a.hold, a.max_hold
+    numbers = ["hold", "max_hold"]
+    if a.pace == "dynamic":
+        numbers += ["floor", "gamma", "ramp", "open_hold", "ramp_span"]
+    # Numeric pace ignores dynamic-only flags, even nonnumeric values, just
+    # as the original shell path did. Only dynamic pace interprets them.
+    for name in numbers:
+        value = getattr(a, name)
+        try:
+            setattr(a, name, float(value))
+        except ValueError:
+            ap.error(f"argument --{name.replace('_', '-')}: invalid float value: {value!r}")
+    if a.final_first is not None:
+        a.before = float(a.final_first)
+        a.length = float(f"{a.length - a.before:.5f}")
+    ms = moments(a.dir)
+    if a.pace == "dynamic":
+        secs = dynamic_schedule(ms, a)
+    else:
+        # awk opened the list before checking numeric schedule feasibility.
+        (a.dir / "concat.txt").write_text("")
+        secs = numeric_schedule(ms, a)
+    write_schedule(ms, secs, a)
+
+
+def dynamic_schedule(ms, a):
+    import numpy as np
+
     if a.length <= a.hold + a.open_hold:
         sys.exit(f"replay_pace: --length must exceed the {a.hold} s final hold plus the {a.open_hold} s opening hold")
     opening = round(a.open_hold * a.fps)
-    ms = moments(a.dir)
     h = np.array([x[1] for x in ms])
     c = changes(a.dir, ms)
     # the moments shown, each held at most --max-hold (in whole video frames),
@@ -205,18 +315,7 @@ def main():
     if abs(got - target) >= 0.5 / a.fps:
         sys.exit(f"replay_pace: the schedule runs {got:.3f} s, not the {target} s asked for")
     a.length = target
-    lines, shown = [], 0
-    # moment i is shown for fr[i] frames, the time its own arrival earned
-    for (f, _), n in zip(ms[:-1], fr):
-        if n > 0:
-            lines.append(f"{entry(f)}duration {n / a.fps:.5f}\n")
-            shown += 1
-    last = entry(ms[-1][0])
-    # the last entry of a concat list takes the duration before it: the hold
-    # (less the two frames after it), then a one-frame repeat, then the frame
-    # again (a frame)
-    lines.append(f"{last}duration {a.hold - 2 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
-    (a.dir / "concat.txt").write_text("".join(lines))
+    shown = sum(n > 0 for n in fr)
     total = sum(fr) / a.fps + a.hold
     print(f"{len(ms)} moments, {shown + 1} shown, {h[-1] / 60:.1f} min of hand time, pace dynamic (floor {a.floor}, gamma {a.gamma}): about {total:.1f} s of clip", file=sys.stderr)
     if a.eval:
@@ -228,6 +327,7 @@ def main():
         e2 = evenness(c, hand / hand.sum() * (a.length - a.hold))
         for name, v in (("dynamic", e), (f"hand^{a.hand_pace}", e2)):
             print(f"{name:10s} per tenth: {' '.join(f'{x:4.1f}' for x in v)}   min {v.min():.1f} max {v.max():.1f} sd {v.std():.1f}", file=sys.stderr)
+    return [n / a.fps for n in fr]
 
 
 if __name__ == "__main__":

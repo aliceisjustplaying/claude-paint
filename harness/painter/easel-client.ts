@@ -1,6 +1,6 @@
 /**
- * The easel client and small helpers for the painter's tools (easel-tools.ts), without pi
- * imports so node --test can load them.
+ * The painter's easel: command admission, canvas selection and painter-facing replies.
+ * No pi imports; image reading stays in easel-tools.ts.
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
@@ -11,7 +11,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { fileURLToPath } from "node:url";
 import type { PruneLimits } from "./context-images.ts";
 
-export interface Ran {
+interface Ran {
 	code: number | null;
 	out: string;
 	timedOut?: boolean;
@@ -23,7 +23,7 @@ export interface Ran {
 export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_000 };
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
-export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
+function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
 	return new Promise((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
 		const env: Record<string, string> = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
@@ -62,7 +62,7 @@ async function step(studio: string, args: string[], input: string | undefined, s
 }
 
 /** Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. */
-export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<boolean> {
+async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<boolean> {
 	let r = await step(studio, ["status"], undefined, signal, deadline);
 	let opened = false;
 	let rebuilding = false;
@@ -98,7 +98,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 }
 
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
-export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
+async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
 	let deadline = Date.now() + wait;
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
@@ -114,7 +114,7 @@ export async function atEasel(studio: string, args: string[], input: string | un
 export const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: {} });
 
 /** At most `max` characters: the end of `t`, as bash's output was cut. */
-export function tail(t: string, max = 50_000, whole = "paintings/lua/painting.lua"): string {
+function tail(t: string, max = 50_000, whole = "paintings/lua/painting.lua"): string {
 	return t.length <= max ? t : `(the first ${t.length - max} characters are left out; read ${whole} for all of it)\n` + t.slice(-max);
 }
 
@@ -147,7 +147,7 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
+function lookArgs(p: Look): string[] {
 	const a: string[] = [];
 	if (p.palette) {
 		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
@@ -172,7 +172,7 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
  * An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on, and
  * a crop's limit is in canvas units (1200 of the live canvas's 2400 pixels are 500 units), not pixels.
  */
-export function toolWords(t: string): string {
+function toolWords(t: string): string {
 	return t
 		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
 		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
@@ -200,7 +200,7 @@ export function surveyReply<I extends { type: "image"; data: string }>(said: str
  * 14:20`, the journal's stamps) is the only time it sees. A Lua error names its chunk
  * `[string "chunk 12"]` (the easel loads each chunk as "chunk N"); it reads `[string "chunk"]`.
  */
-export function hideCounters(t: string): string {
+function hideCounters(t: string): string {
 	return t
 		.replace(/\[string "chunk \d+"\]/g, '[string "chunk"]')
 		// the easel's limit on a chunk's machine time (it has never been reached: the longest chunk took under 4 minutes)
@@ -211,18 +211,18 @@ export function hideCounters(t: string): string {
  * A paint reply without the chunk's number and the easel's compute time: `ok · chunk 12 (76.50 s
  * to compute)` reads `ok`. A chunk that runs out of the easel's time limit still says so in its error.
  */
-export function paintReply(reply: string): string {
+function paintReply(reply: string): string {
 	// the easel's line is the reply's last; a line the chunk printed above it is left as it is
 	return hideCounters(reply.replace(/(^|\n)ok · chunk \d+(?: \(\d+(?:\.\d+)? s to compute\))?(\n?)$/, "$1ok$2"));
 }
 
 /** A status reply without the chunk count or the pixel width: `12 chunks · 2400px · <setup>` reads `<setup>`. */
-export function statusReply(reply: string): string {
+function statusReply(reply: string): string {
 	return reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, "");
 }
 
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */
-export function logReply(log: string): string {
+function logReply(log: string): string {
 	return log.replace(/^--@ chunk \d+[ \t]*$/gm, "--@ chunk");
 }
 
@@ -236,11 +236,11 @@ function isFile(path: string): boolean {
 }
 
 /**
- * `renameLook` for every look an answer names (a survey names several): each
+ * Every look an answer names (a survey names several): each
  * line that begins with a look's png path (a file that is there; its folders may
  * have spaces, or ".png", in their names) gets a fresh name; the paths in order.
  */
-export function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
+function renameLooks(studio: string, said: string): { said: string; paths: string[] } {
 	const paths: string[] = [];
 	const lines = said.split("\n").map((line) => {
 		// (the whole path, to its last ".png": a folder's name may hold one too)
@@ -249,23 +249,86 @@ export function renameLooks(studio: string, said: string): { said: string; paths
 		const path = join(dirname(m[1]), `${randomUUID()}.png`);
 		renameSync(resolve(studio, m[1]), resolve(studio, path));
 		paths.push(path);
-		// (without the machine's seconds, as `renameLook`)
+		// without the machine's seconds
 		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
 	});
 	return { said: lines.join("\n"), paths };
 }
 
-/**
- * A look under a random name and without the machine's seconds: the easel's last line
- * `<dir>/look-0012.png (1000x714, 0.04s)` becomes `<dir>/<uuid>.png (1000x714)`, and the file is
- * renamed to match. `studio` resolves a relative path. Anything else is returned as it was.
- */
-export function renameLook(studio: string, said: string): { said: string; path: string } {
-	const lines = said.split("\n");
-	const m = /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(lines[lines.length - 1]);
-	if (!m) return { said, path: lines[lines.length - 1].replace(/ \(.*\)$/, "") };
-	const path = join(dirname(m[1]), `${randomUUID()}.png`);
-	renameSync(resolve(studio, m[1]), resolve(studio, path));
-	lines[lines.length - 1] = m[2] ? `${path} (${m[2]})` : path;
-	return { said: lines.join("\n"), path };
+export type Canvas = "painting" | "scratch";
+
+type Look = { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string };
+export type PainterCommand =
+	| { kind: "paint"; lua: string; new_scratch?: boolean }
+	| ({ kind: "look" } & Look)
+	| { kind: "note"; text: string }
+	| { kind: "status" | "log" | "globals" };
+
+/** Globals in the painter's words, with no assignment counters or source provenance. */
+function globalsReply(out: string): string {
+	const rows = out === "" ? [] : out.split("\n").map((l) => /^(\d+)\t([A-Za-z_]\w*)\t(.*)$/.exec(l));
+	if (rows.some((r) => !r)) throw new Error(`the easel's answer isn't a list of globals: ${out.slice(0, 200)}`);
+	return rows.map((r) => `- \`${r![2]}\`: ${r![3].replace(/ \(chunk \d+, line \d+\)/g, "")}`).join("\n");
+}
+
+/** All easel failures, including admission/rebuild failures, use one translation policy. */
+function errorReply(message: string): string {
+	return toolWords(hideCounters(statusReply(message)))
+		.replace(/ \(chunk \d+, line \d+\)/g, "")
+		.replace(/\b\d+ of \d+ chunks\b/g, "chunks")
+		.replace(/\b\d+ chunks?\b/g, "chunks")
+		.replace(/\bchunk \d+(?:\/\d+)?\b/g, "chunk")
+		.replace(/look-\d+\.png/g, "look.png")
+		.replace(/ \(\d+(?:\.\d+)? s to compute\)/g, "")
+		.replace(/, \d+(?:\.\d+)?s\)/g, ")")
+		.replace(/\b\d+(?:\.\d+)? ?s(?: to compute)?\b/g, "")
+		.replace(/--([a-z][a-z-]*)\b/g, "$1");
+}
+
+/** Run on this canvas, returning painter-facing text and renamed looks in display order. */
+export async function painterEasel(studio: string, canvas: Canvas, command: PainterCommand, signal?: AbortSignal): Promise<{ said: string; paths: string[] }> {
+	try {
+		const on = canvas === "scratch" ? ["--scratch"] : [];
+		let args: string[];
+		let input: string | undefined;
+		switch (command.kind) {
+			case "paint":
+				if (command.new_scratch && canvas !== "scratch") throw new Error("paint: new_scratch goes with scratch: true");
+				args = ["do", "-", ...on, ...(command.new_scratch ? ["--new"] : [])];
+				input = command.lua;
+				break;
+			case "look": {
+				const { kind, ...view } = command;
+				lookArgs(view); // validate combinations before resolving compare paths
+				if (view.survey && view.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				let compare = view.compare || undefined;
+				if (compare !== undefined) {
+					compare = studioPath(studio, compare);
+					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
+				}
+				args = ["look", ...on, ...lookArgs({ ...view, compare })];
+				break;
+			}
+			case "note": args = ["note", "-"]; input = command.text; break;
+			case "globals": args = ["globals"]; break;
+			default: args = [command.kind, ...on];
+		}
+		let said = await atEasel(studio, args, input, signal);
+		let paths: string[] = [];
+		switch (command.kind) {
+			case "paint": said = paintReply(said); break;
+			case "status": said = statusReply(said); break;
+			case "log": said = tail(logReply(said), 50_000, `paintings/lua/${canvas}.lua`); break;
+			case "globals": said = globalsReply(said); break;
+			case "look":
+				({ said, paths } = renameLooks(studio, said));
+				// A look with no readable image becomes an error in both callers.
+				if (paths.length === 0) said = errorReply(said);
+				break;
+		}
+		if (canvas === "scratch") said = `[scratch canvas]\n${said}`;
+		return { said, paths };
+	} catch (error) {
+		throw new Error(errorReply(error instanceof Error ? error.message : String(error)));
+	}
 }

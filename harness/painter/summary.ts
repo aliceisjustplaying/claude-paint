@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { atEasel, renameLook } from "./easel-client.ts";
+import { painterEasel } from "./easel-client.ts";
 
 /** A statement, not an instruction: the sections after it say what they hold. */
 export const HEADER = "Earlier parts of this session were condensed.";
@@ -52,19 +52,16 @@ function countChunks(source: string): { chunks: number; lastChunk?: number } {
 }
 
 /**
- * The painting's globals as the easel's live Lua state holds them (`easel globals`: one line
- * each, `<chunk>\t<name>\t<what it holds>`, the most recently assigned last).
+ * The painting's globals in the painter's words, the most recently assigned last.
  */
 async function globals(studio: string, signal?: AbortSignal): Promise<{ lines: string[]; total: number } | { error: string }> {
 	let out: string;
 	try {
-		out = await atEasel(studio, ["globals"], undefined, signal);
+		out = (await painterEasel(studio, "painting", { kind: "globals" }, signal)).said;
 	} catch (error) {
 		return { error: error instanceof Error ? error.message : String(error) };
 	}
-	const rows = out === "" ? [] : out.split("\n").map((l) => /^(\d+)\t([A-Za-z_]\w*)\t(.*)$/.exec(l));
-	if (rows.some((r) => !r)) return { error: `the easel's answer isn't a list of globals: ${out.slice(0, 200)}` };
-	const lines = rows.map((r) => `- \`${r![2]}\`: ${r![3].replace(/ \(chunk \d+, line \d+\)/g, "")}`);
+	const lines = out === "" ? [] : out.split("\n");
 	return { lines: lines.slice(Math.max(0, lines.length - MAX_GLOBALS)), total: lines.length };
 }
 
@@ -106,8 +103,8 @@ export const CANVAS_VIEW = /^The whole canvas as it was when this was written: (
 /** A fresh whole-canvas look at the easel: its PNG's path, or an error. */
 async function canvasLook(studio: string, signal?: AbortSignal): Promise<{ path: string } | { error: string }> {
 	try {
-		const said = await atEasel(studio, ["look"], undefined, signal);
-		const { path } = renameLook(studio, said);
+		const { said, paths } = await painterEasel(studio, "painting", { kind: "look" }, signal);
+		const path = paths[paths.length - 1] ?? "";
 		return /\.png$/.test(path) ? { path } : { error: `the easel's look named no image: ${said.slice(0, 200)}` };
 	} catch (error) {
 		return { error: error instanceof Error ? error.message : String(error) };

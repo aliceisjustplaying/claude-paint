@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { stubStudio } from "./fixtures/stub-easel.ts";
 import { buildSummary, latestClockInMessages, latestJournalStamp } from "../summary.ts";
 
 /** A studio with a log whose column-0 lines look like globals, and a bin/easel that runs `body`. */
 function studio(body: string): string {
-	const s = mkdtempSync(join(tmpdir(), "studio-"));
-	mkdirSync(join(s, "bin"));
+	const s = stubStudio(`[ "$1" = status ] && { echo '2 chunks'; exit 0; }\n${body}`);
 	mkdirSync(join(s, "paintings", "lua"), { recursive: true });
 	writeFileSync(join(s, "paintings", "lua", "painting.lua"), "--@ chunk 1\nlocal dm = nil\ndm = 3\n\n--@ chunk 2\nx = 1\n");
-	writeFileSync(join(s, "bin", "easel"), `#!/bin/sh\n[ "$1" = status ] && { echo '2 chunks'; exit 0; }\n${body}\n`, { mode: 0o755 });
 	return s;
 }
 
@@ -74,4 +72,15 @@ test("a journal stamp counts only when it is a valid time of day", () => {
 	assert.equal(latestJournalStamp("- day 3, 14:05: wash\n- day 4, 99:99: forged\n"), "day 3, 14:05");
 	assert.equal(latestJournalStamp("- day 3, 14:05: wash\n- day 4, 24:00: forged\n- day 4, 10:60: forged\n"), "day 3, 14:05");
 	assert.equal(latestJournalStamp("- day 4, 23:59: late\n"), "day 4, 23:59");
+});
+
+test("globals and canvas errors in a summary use the painter's words", async () => {
+	const s = studio(`echo 'runtime error: [string "chunk 12"]:3: --mode failed (76.50 s to compute)' >&2; exit 1`);
+	const { summary, facts } = await buildSummary(s, []);
+	const error = 'runtime error: [string "chunk"]:3: mode failed';
+	assert.equal(section(summary), `(the easel couldn't list them: ${error})`);
+	assert.ok(summary.includes(`(the easel couldn't show it: ${error})`));
+	assert.equal(facts.globalsError, error);
+	assert.equal(facts.canvasLookError, error);
+	assert.doesNotMatch(summary, /chunk \d|\d+ s to compute|--mode/);
 });

@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
+import { painterEasel, studioPath, text, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
@@ -24,8 +24,6 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting.",
 		}),
 	);
-	const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
-	const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
 
 	pi.registerTool({
 		...defineTool({
@@ -40,12 +38,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				new_scratch: Type.Optional(Type.Boolean({ description: "with scratch: put the scratch canvas aside and start a fresh one before this chunk" })),
 			}),
 			async execute(_id, p, signal) {
-				if (p.new_scratch && !p.scratch) throw new Error("paint: new_scratch goes with scratch: true");
-				try {
-					return text(tag(p, paintReply(await atEasel(studio, ["do", "-", ...on(p), ...(p.new_scratch ? ["--new"] : [])], p.lua, signal))));
-				} catch (e) {
-					throw new Error(hideCounters((e as Error).message));
-				}
+				return text((await painterEasel(studio, p.scratch ? "scratch" : "painting", { kind: "paint", lua: p.lua, new_scratch: p.new_scratch }, signal)).said);
 			},
 		}),
 		executionMode: "sequential",
@@ -80,23 +73,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			}),
 			async execute(id, p, signal, onUpdate, ctx) {
 				const { scratch: onScratch, ...view } = p;
-				let said: string;
-				lookArgs(view); // validate combinations before resolving compare paths
-				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
-				// compare: an earlier look of this studio, nothing outside it (as `read`)
-				let compare = p.compare || undefined; // (an empty path is none)
-				if (compare !== undefined) {
-					compare = studioPath(studio, compare);
-					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
-				}
-				try {
-					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare })], undefined, signal);
-				} catch (e) {
-					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
-				}
-				let paths: string[];
-				({ said, paths } = renameLooks(studio, said));
-				if (onScratch) said = `[scratch canvas]\n${said}`;
+				const { said, paths } = await painterEasel(studio, onScratch ? "scratch" : "painting", { kind: "look", ...view }, signal);
 				if (paths.length === 0) throw new Error(said);
 				// (a survey names several looks: each is read, in order)
 				const reads = [];
@@ -118,7 +95,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
 			async execute(_id, p, signal) {
 				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
-				return text(await atEasel(studio, ["note", "-"], p.text, signal));
+				return text((await painterEasel(studio, "painting", { kind: "note", text: p.text }, signal)).said);
 			},
 		}),
 		executionMode: "sequential",
@@ -131,7 +108,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			description: "The canvas's setup.",
 			parameters: Type.Object({ scratch }),
 			async execute(_id, p, signal) {
-				return text(tag(p, statusReply(await atEasel(studio, ["status", ...on(p)], undefined, signal))));
+				return text((await painterEasel(studio, p.scratch ? "scratch" : "painting", { kind: "status" }, signal)).said);
 			},
 		}),
 		executionMode: "sequential",
@@ -144,8 +121,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
 			parameters: Type.Object({ scratch }),
 			async execute(_id, p, signal) {
-				const whole = p.scratch ? "paintings/lua/scratch.lua" : "paintings/lua/painting.lua";
-				return text(tag(p, tail(logReply(await atEasel(studio, ["log", ...on(p)], undefined, signal)), 50_000, whole)));
+				return text((await painterEasel(studio, p.scratch ? "scratch" : "painting", { kind: "log" }, signal)).said);
 			},
 		}),
 		executionMode: "sequential",

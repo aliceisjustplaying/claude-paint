@@ -1,33 +1,29 @@
 // node --test harness/painter/test/recovery.test.ts  (TMPDIR: a scratch directory; runs pi)
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { stubStudio } from "./fixtures/stub-easel.ts";
 
 const HERE = join(import.meta.dirname, "..");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 /** A studio whose bin/easel answers status, globals and look (a 1-pixel PNG), with a brief and a journal. */
 function studio(): { dir: string; studio: string } {
-	const tmp = process.env.TMPDIR;
-	assert.ok(tmp, "set TMPDIR to a scratch directory");
-	const dir = mkdtempSync(join(tmp, "recovery-test-"));
-	const s = join(dir, "studio");
+	const s = stubStudio(`case "$1" in
+  status) echo '1 chunks · 2400px';;
+  globals) printf '1\\tsky\\ttable with 2 entries\\n';;
+  look) cp out/easel/painting/fresh.png out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png (1x1, 0.01s)';;
+  *) echo "no $1" >&2; exit 1;;
+esac`);
 	for (const d of ["bin", "notes", "paintings/lua", "out/easel/painting"]) mkdirSync(join(s, d), { recursive: true });
 	writeFileSync(join(s, "BRIEF.md"), "# Paint a picture\n");
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n");
 	writeFileSync(join(s, "paintings/lua/painting.lua"), "--@ chunk 1\ncanvas{}\n");
 	writeFileSync(join(s, "out/easel/painting/fresh.png"), Buffer.from(PNG, "base64"));
-	writeFileSync(join(s, "bin/easel"), `#!/bin/sh
-case "$1" in
-  status) echo '1 chunks · 2400px';;
-  globals) printf '1\\tsky\\ttable with 2 entries\\n';;
-  look) cp out/easel/painting/fresh.png out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png (1x1, 0.01s)';;
-  *) echo "no $1" >&2; exit 1;;
-esac
-`, { mode: 0o755 });
-	return { dir, studio: s };
+
+	return { dir: s, studio: s };
 }
 
 type Requests = { role: string; text: string; images: number }[][];

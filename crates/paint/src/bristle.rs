@@ -23,7 +23,7 @@ use crate::mask::Mask;
 use crate::rng::Rng;
 use crate::smoothstep;
 use crate::surface::COAT_UM;
-use crate::wet::{Tile, LAT, Latent, Paint, Prop, mix_into};
+use crate::wet::{Region, Tile, LAT, Latent, Paint, Prop, mix_into};
 
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
 /// lightly touches only peaks this much above their surroundings.
@@ -988,6 +988,7 @@ pub(crate) fn drag_on(
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.frame().full_w, sf.frame().full_h));
+    let stroke = sf.region(lim);
 
     for b in &mut held.bristles {
         b.prev = [None, None];
@@ -1100,7 +1101,7 @@ pub(crate) fn drag_on(
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
-             exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim);
+             exchange(&stroke, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim);
             b.prev[0] = Some(cur);
         }
         feed(&mut held.bristles, feed_k);
@@ -1229,7 +1230,7 @@ fn wander(t: f32, seed: u64) -> f32 {
 /// coats) it would lay on full contact (a touch: film splitting).
 #[allow(clippy::too_many_arguments)]
 fn exchange(
-    sf: &Tile<'_>,
+    stroke: &Region<'_, '_>,
     br: &mut Bristle,
     tool: &Tool,
     a: (f32, f32),
@@ -1245,11 +1246,12 @@ fn exchange(
     bounds: &mut Bounds,
     lim: Rect,
 ) {
+    let sf = stroke.tile();
 
     // pixel coordinates are whole-canvas ones; buffer index of (x, y) is
     // (y - oy) * bw + x - ox
     let (w, h) = (sf.frame().full_w, sf.frame().full_h);
-    let (ox, oy, bw_buf) = (sf.frame().x0, sf.frame().y0, sf.frame().w);
+    let (ox, oy) = (sf.frame().x0, sf.frame().y0);
     let s = sf.frame().scale;
     let px_area = 1.0 / (s * s);
     let cx0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
@@ -1297,10 +1299,8 @@ fn exchange(
         x0 >= lim.0 && y0 >= lim.1 && x1 <= lim.2 && y1 <= lim.3,
         "bristle contact ({x0},{y0},{x1},{y1}) outside the stroke footprint {lim:?}"
     );
-    let (x0, y0, x1, y1) = (x0.max(lim.0), y0.max(lim.1), x1.min(lim.2), y1.min(lim.3));
-    if x1 <= x0 || y1 <= y0 {
-        return;
-    }
+    let Some(contact) = stroke.intersect((x0, y0, x1, y1)) else { return; };
+    let (x0, y0, x1, y1) = contact.bounds();
     let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
     let (nx, ny) = (-my, mx);
     // a pointed tool's moving hair covers pixels by the exact share of
@@ -1340,8 +1340,9 @@ fn exchange(
     let mut sum_tack = 0.0f32;
     // past a fence a lifting brush lays a thinner film too (see `Clip`)
     let mut sum_k = 0.0f32;
-    for y in y0..y1 {
-        for x in x0..x1 {
+    for row in contact.rows() {
+        let y = row.y();
+        for (x, pixel) in row.pixels() {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
             let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
             let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
@@ -1362,8 +1363,7 @@ fn exchange(
                 continue;
             }
             sum_cov += cov;
-            let i = (y - oy) * bw_buf + x - ox;
-            let surf = (sf.contact(i) + 0.35 * sf.volume(i)).min(1.5);
+            let surf = (pixel.contact() + 0.35 * pixel.volume()).min(1.5);
             // soft hair bends down into the valleys of the weave; stiff hog
             // bristles ride on the peaks
             let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
@@ -1382,8 +1382,8 @@ fn exchange(
             wts[(y - y0) * bw + (x - x0)] = wt;
             sum_w += wt;
             if sf.timed() {
-                let p = sf.drying(i).unwrap();
-                sum_tack += wt * crate::drying::feel(sf.volume(i), p.cure, p.sub).1;
+                let p = pixel.drying().unwrap();
+                sum_tack += wt * crate::drying::feel(pixel.volume(), p.cure, p.sub).1;
             }
         }
     }
@@ -1480,51 +1480,41 @@ fn exchange(
     let mut got_s = 0.0f32;
     let mut laid_liq = 0.0f32;
     let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
-    for y in y0..y1 {
-        for x in x0..x1 {
+    for row in contact.rows() {
+        let y = row.y();
+        for (x, pixel) in row.pixels() {
             let wt = wts[(y - y0) * bw + (x - x0)];
             if wt <= 0.0 {
                 continue;
             }
-            let i = (y - oy) * bw_buf + x - ox;
-            let v = sf.volume(i);
+            let v = pixel.volume();
             // paint that is setting is stiff: it comes up and moves less
-            let fl = sf.fluid(i);
+            let fl = pixel.fluid();
             // one stroke lifts only part of the film
-            let floor = sf.pickup_floor(i, id, v, tool.pickup, fl);
+            let floor = pixel.pickup_floor(id, v, tool.pickup, fl);
             if Tile::brush_can_pick_up(v) {
                 let take = if exch {
                     (v * tool.pickup * wt * hunger * fl).min(v)
                 } else {
-                    let own = if sf.stroke(i) == id { 0.15 } else { 1.0 };
+                    let own = if pixel.stroke() == id { 0.15 } else { 1.0 };
                     (v * tool.pickup * wt * hunger * own * fl).min((v - floor).max(0.0))
                 };
                 if take > 0.0 {
                     let tv = take * px_area;
                     got_v += tv;
-                    let l = &sf.latent(i);
-                    for k in 0..LAT {
-                        got_l[k] += l[k] * tv;
-                    }
-                    let hp = sf.properties(i);
-                    for k in 0..hp.len() {
-                        got_h[k] += hp[k] * tv;
-                    }
-                    if sf.timed() {
-                        got_c += sf.cure(i) * tv;
-                    }
-                    if let Some(solvent) = sf.lift_brush(i, take, v, px_area) { got_s += solvent; }
+                    pixel.gather_pickup(tv, &mut got_l, &mut got_h, &mut got_c);
+                    if let Some(solvent) = pixel.lift_brush(take, v, px_area) { got_s += solvent; }
                 }
             }
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
-                sf.lay_hair(i, dep_per_w * wt, fine, wt * excl, id, &blat, bhide, bcure);
+                pixel.lay_hair(dep_per_w * wt, fine, wt * excl, id, &blat, bhide, bcure);
             } else if dep_per_w > 0.0 {
-                let d = sf.lay_liquid_hair(i, dep_per_w * wt, phi, cap, capped, fine, wt * excl, id, &blat, bhide, bcure);
+                let d = pixel.lay_liquid_hair(dep_per_w * wt, phi, cap, capped, fine, wt * excl, id, &blat, bhide, bcure);
                 if d > 0.0 { laid_liq += d * px_area; }
             }
             // plough: move paint outward from the bristle's path, and ahead
             if push_k > 0.0 {
-                let v = sf.volume(i);
+                let v = pixel.volume();
                 let m = v * push_k * wt * fl;
                 if m > PLOUGH_MIN_COATS {
                     let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -1552,7 +1542,7 @@ fn exchange(
                     // writes `j != i`). Its cure is read per destination:
                     // `take` zeroes it when the film goes bare (see the
                     // kernel_traps tests)
-                    let (l, hd) = (sf.latent(i), sf.properties(i));
+                    let (l, hd) = (pixel.latent(), pixel.properties());
                     for &(tx, ty, share) in &to[..n_to] {
                         if share <= 0.0 {
                             continue;
@@ -1562,7 +1552,7 @@ fn exchange(
                         debug_assert!(!inside || (tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3), "plough target outside the stroke footprint {lim:?}");
                         if inside && tx >= lim.0 as f32 && ty >= lim.1 as f32 && (tx as usize) < lim.2 && (ty as usize) < lim.3 {
                             let (tx, ty) = (tx as usize, ty as usize);
-                            let j = (ty - oy) * bw_buf + tx - ox;
+                            let to = sf.pixel_at(tx, ty);
                             // a clipped stroke can't push paint past its mask:
                             // only the accepted share moves, the rest stays
                             let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
@@ -1570,7 +1560,7 @@ fn exchange(
                             // pixel it ploughs into than its ceiling there
                             // allows; the solvent goes with the paint
                             // (solvent in µm, as the canvas holds it)
-                            sf.move_plough(i, j, m, v, fine, capped, cap, id, &l, hd);
+                            pixel.move_plough(&to, m, v, fine, capped, cap, id, &l, hd);
                         }
                     }
                 }
@@ -1746,6 +1736,7 @@ pub(crate) fn touch_on(sf: &Tile<'_>, held: &mut Held, t: &Touch, clip: Option<C
     let (dx, dy) = (t.drag.0 * s, t.drag.1 * s);
     let rb = touch_rb(&tool, p, s);
     let lim = limit(touch_footprint_checked(&tool, t, s, sf.frame().full_w, sf.frame().full_h));
+    let stroke = sf.region(lim);
     let dlen = (dx * dx + dy * dy).sqrt();
     let steps = (TOUCH_STEPS + (dlen / rb.max(1.0)).ceil() as usize).min(64);
     // press, hold, lift
@@ -1782,7 +1773,7 @@ pub(crate) fn touch_on(sf: &Tile<'_>, held: &mut Held, t: &Touch, clip: Option<C
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-             exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim);
+             exchange(&stroke, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim);
             b.prev[0] = Some(cur);
         }
     }
@@ -1974,7 +1965,7 @@ impl Canvas {
                 }
                 let i = (y - sf.frame().y0) * sf.frame().w + (x - sf.frame().x0);
                 let v = coats_mean * area_px * w / wsum * m;
-                let d = sf.lay_droplet(i, v, solvent_share, cap, capped, id, &lat, hide, cure);
+                let d = sf.pixel(i).lay_droplet(v, solvent_share, cap, capped, id, &lat, hide, cure);
                 if v - d > 0.0 {
                     spill.push((x, y, v - d));
                 }
@@ -1998,7 +1989,7 @@ impl Canvas {
                         continue;
                     }
                     let i = (ny - sf.frame().y0) * sf.frame().w + (nx - sf.frame().x0);
-                    let d = sf.lay_droplet(i, share.min(left), solvent_share, cap, capped, id, &lat, hide, cure);
+                    let d = sf.pixel(i).lay_droplet(share.min(left), solvent_share, cap, capped, id, &lat, hide, cure);
                     if d > 0.0 {
                         left -= d;
                         grow(&mut bounds, nx - sf.frame().x0, ny - sf.frame().y0, nx - sf.frame().x0 + 1, ny - sf.frame().y0 + 1);
@@ -2530,11 +2521,12 @@ mod kernel_traps {
         let mut carried = Vec::new();
         for &j in &js {
             // as the plough block in `exchange` does, per accepted destination
-            let l = sf.latent(i);
-            let hd = sf.properties(i);
-            let cure = sf.cure(i);
+            let pixel = sf.pixel(i);
+            let l = pixel.latent();
+            let hd = pixel.properties();
+            let cure = pixel.cure();
             carried.push(cure);
-            sf.move_plough(i, j, m, sf.volume(i), false, false, 0.0, 0, &l, hd);
+            pixel.move_plough(&sf.pixel(j), m, pixel.volume(), false, false, 0.0, 0, &l, hd);
         }
         // the first take crossed the threshold: only the first destination
         // got the source's cure
@@ -2856,7 +2848,7 @@ impl Canvas {
             }
             // the steel flexes over broad relief and bridges fine hollows: the
             // blade rests on the highest point within FLEX_MM along it
-            let hs: Vec<f32> = blade.iter().map(|b| sf.height(b.0)).collect();
+            let hs: Vec<f32> = blade.iter().map(|b| sf.pixel(b.0).height()).collect();
             let reach = ((FLEX_MM / (s_mm * 0.7)).ceil() as usize).max(1);
             let rest: Vec<f32> = (0..hs.len()).map(|q| hs[q.saturating_sub(reach)..(q + reach + 1).min(hs.len())].iter().cloned().fold(f32::MIN, f32::max)).collect();
             for (bi, &(i, u, (x, y))) in blade.iter().enumerate() {
@@ -2871,10 +2863,11 @@ impl Canvas {
                     0.5
                 };
 
-                let v = sf.volume(i);
-                let sol = sf.solvent_coats(i);
-                let top = sf.height(i) + (v + sol) * crate::surface::COAT_UM;
-                let fl = sf.fluid(i);
+                let pixel = sf.pixel(i);
+                let v = pixel.volume();
+                let sol = pixel.solvent_coats();
+                let top = pixel.height() + (v + sol) * crate::surface::COAT_UM;
+                let fl = pixel.fluid();
                 if top > plane && Tile::knife_can_cut(v) {
                     // cut off what stands above the blade (setting paint resists)
                     let cut = ((top - plane) / crate::surface::COAT_UM).min(v + sol) * fl;
@@ -2883,16 +2876,16 @@ impl Canvas {
                     if ex <= 1e-7 {
                         continue;
                     }
-                    let (l, hd) = (sf.latent(i), sf.properties(i));
-                    let cure = sf.cure(i);
-                    sf.lift_knife(i, ex, ex_solvent);
+                    let (l, hd) = (pixel.latent(), pixel.properties());
+                    let cure = pixel.cure();
+                    pixel.lift_knife(ex, ex_solvent);
                     // pressed out past the blade's end into a ridge (off
                     // the canvas's edge there is nowhere to press it: it
                     // stays on the blade)
                     let o = half * u.signum() * 0.2 + 1.5 * u.signum();
                     let ridge = if u.abs() > 0.85 { pix(x + e.0 * o, y + e.1 * o) } else { None };
                     if let Some(jx) = ridge {
-                        sf.lay_knife(jx, ex, ex_solvent, &l, hd, cure);
+                        sf.pixel(jx).lay_knife(ex, ex_solvent, &l, hd, cure);
                         grow(&mut bounds, (x + e.0 * o) as usize, (y + e.1 * o) as usize, (x + e.0 * o) as usize + 1, (y + e.1 * o) as usize + 1);
                     } else {
                         let tv = ex * px_area;
@@ -2910,7 +2903,7 @@ impl Canvas {
                     // parts with the blade and stays under it, out of the
                     // bead, so a torn pull runs out where a whole one
                     // does and covers less (once for each pixel)
-                    if k.vol > 1e-9 && sf.stroke(i) != id {
+                    if k.vol > 1e-9 && pixel.stroke() != id {
                         let liquid = k.vol + k.solvent;
                         let hold = ((plane - top) / crate::surface::COAT_UM).min(liquid / px_area * 0.25) * px_area;
                         let solvent = hold * k.solvent / liquid;
@@ -2931,12 +2924,12 @@ impl Canvas {
                     let give = want.min(liquid / px_area * 0.25);
                     let phi = k.solvent / liquid;
                     if give > 1e-7 {
-                        sf.lay_knife(i, give * (1.0 - phi), give * phi, &k.lat, k.hide, k.cure);
+                        pixel.lay_knife(give * (1.0 - phi), give * phi, &k.lat, k.hide, k.cure);
                         k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
                         k.solvent = (k.solvent - give * phi * px_area).max(0.0);
                     }
                 }
-                sf.mark_stroke(i, id);
+                pixel.mark_stroke(id);
                 grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);
 
             }
@@ -2967,9 +2960,10 @@ impl Canvas {
             if tw > 0.0 {
                 for (i, wgt, (x, y)) in cells {
                     let v = leave * wgt / tw / px_area;
+                    let pixel = sf.pixel(i);
 
-                    sf.lay_knife(i, v * (1.0 - phi), v * phi, &k.lat, k.hide, k.cure);
-                    sf.mark_stroke(i, id);
+                    pixel.lay_knife(v * (1.0 - phi), v * phi, &k.lat, k.hide, k.cure);
+                    pixel.mark_stroke(id);
 
                     grow(&mut bounds, x as usize, y as usize, x as usize + 1, y as usize + 1);
                 }

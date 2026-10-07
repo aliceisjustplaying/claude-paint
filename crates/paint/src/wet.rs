@@ -319,8 +319,7 @@ impl Wet {
 pub(crate) struct Tile<'a> {
     borrow: std::marker::PhantomData<&'a mut Wet>,
     not_sync: std::marker::PhantomData<std::cell::Cell<()>>,
-    first: usize,
-    end: usize,
+    rows: (usize, usize),
     columns: (usize, usize),
     height: *const f32,
     frame: crate::canvas::Frame,
@@ -363,8 +362,9 @@ unsafe impl Send for Tile<'_> {}
 // Only this private owner may share the raw buffers. It never exposes its
 // whole-window tile; each worker receives a non-Sync, footprint-bounded tile.
 struct SharedTiles<'a>(Tile<'a>);
-// SAFETY: paint_tiles uses run_ordered, and every read/write is checked against
-// the same rectangles run_ordered uses to serialize overlapping footprints.
+// SAFETY: paint_tiles uses run_ordered. Pixels can be obtained only by checking
+// an index/coordinate or a region against the same footprint rectangles that
+// run_ordered uses to serialize overlaps. Handles never expose raw indices.
 unsafe impl Sync for SharedTiles<'_> {}
 impl SharedTiles<'_> {
     fn at(&self, rect: crate::sched::Rect) -> Tile<'_> {
@@ -378,6 +378,8 @@ impl Wet {
     /// and prevents reallocation until the whole pass has joined.
     pub(crate) fn tile<'a>(&'a mut self, f: crate::canvas::Frame, engine: u32, base: &'a [f32], height: &'a [f32], absorb: &'a mut [f32], absorb_any: bool) -> Tile<'a> {
         let n = f.w.checked_mul(f.h).expect("film window area overflow");
+        f.x0.checked_add(f.w).expect("film window end overflow");
+        f.y0.checked_add(f.h).expect("film window end overflow");
         if engine >= 3 {
             self.ensure_solvent();
         }
@@ -390,8 +392,7 @@ impl Wet {
         Tile {
             borrow: std::marker::PhantomData,
             not_sync: std::marker::PhantomData,
-            first: 0,
-            end: n,
+            rows: (0, f.h),
             columns: (0, f.w),
             height: height.as_ptr(),
             frame: f,
@@ -424,13 +425,10 @@ impl Tile<'_> {
         assert!(rect.0 <= rect.2 && rect.1 <= rect.3, "invalid film footprint");
         let (x0, x1) = (rect.0.clamp(self.frame.x0, self.frame.x0 + self.frame.w) - self.frame.x0, rect.2.clamp(self.frame.x0, self.frame.x0 + self.frame.w) - self.frame.x0);
         let (y0, y1) = (rect.1.clamp(self.frame.y0, self.frame.y0 + self.frame.h) - self.frame.y0, rect.3.clamp(self.frame.y0, self.frame.y0 + self.frame.h) - self.frame.y0);
-        let first = y0 * self.frame.w + x0;
-        let end = if x0 < x1 && y0 < y1 { (y1 - 1) * self.frame.w + x1 } else { first };
         Tile {
             borrow: std::marker::PhantomData,
             not_sync: std::marker::PhantomData,
-            first,
-            end,
+            rows: (y0, y1),
             columns: (x0, x1),
             height: self.height,
             frame: self.frame,
@@ -462,10 +460,9 @@ impl Tile<'_> {
 
     #[inline]
     fn check(&self, i: usize) {
-        // The cached span bounds the rows and the first/last columns;
-        // the column check rejects the holes between those rows. A whole-
-        // width view needs no division in this per-pixel hot path.
-        assert!(i >= self.first && i < self.end, "film pixel outside tile footprint");
+        // The row span and column bounds admit exactly this rectangle.
+        // Whole-width views need no division, and indexed visits check once.
+        assert!(i >= self.rows.0 * self.frame.w && i < self.rows.1 * self.frame.w, "film pixel outside tile footprint");
         if self.columns != (0, self.frame.w) {
             let x = i % self.frame.w;
             assert!(x >= self.columns.0 && x < self.columns.1, "film pixel outside tile footprint");
@@ -479,92 +476,198 @@ impl Tile<'_> {
     pub(crate) fn knife_can_cut(v: f32) -> bool {
         v > KNIFE_MIN_COATS
     }
+    /// Restrict a capsule to this tile once, before either contact loop.
+    /// Rows yield only pixels in the intersection, even for an arbitrary
+    /// caller-supplied rectangle; no unchecked index is exposed.
     #[inline]
-    pub(crate) fn volume(&self, i: usize) -> f32 {
+    pub(crate) fn region(&self, rect: crate::sched::Rect) -> Region<'_, '_> {
+        let (x0, y0, x1, y1) = rect;
+        let (left, right) = (self.frame.x0 + self.columns.0, self.frame.x0 + self.columns.1);
+        let (top, bottom) = (self.frame.y0 + self.rows.0, self.frame.y0 + self.rows.1);
+        // Private tile bounds are ordered by the constructors; max/min keeps
+        // every endpoint inside them without rechecking that invariant per hair.
+        Region { tile: self, rect: (x0.max(left).min(right), y0.max(top).min(bottom), x1.max(left).min(right), y1.max(top).min(bottom)) }
+    }
+    /// An indexed caller checks once, then reuses the validated pixel.
+    #[inline]
+    pub(crate) fn pixel(&self, i: usize) -> Pixel<'_, '_> {
         self.check(i);
-        unsafe { *self.vol.add(i) }
+        Pixel { tile: self, i }
+    }
+    /// Coordinates are already available for a plough destination; do not
+    /// divide its linear index to recover its column.
+    #[inline]
+    pub(crate) fn pixel_at(&self, x: usize, y: usize) -> Pixel<'_, '_> {
+        let x = x.checked_sub(self.frame.x0).expect("film pixel outside window");
+        let y = y.checked_sub(self.frame.y0).expect("film pixel outside window");
+        assert!(x >= self.columns.0 && x < self.columns.1 && y >= self.rows.0 && y < self.rows.1, "film pixel outside tile footprint");
+        let i = y * self.frame.w + x;
+        Pixel { tile: self, i }
     }
     #[inline]
-    pub(crate) fn latent(&self, i: usize) -> Latent {
-        self.check(i);
-        unsafe { *self.lat.add(i) }
+    pub(crate) fn timed(&self) -> bool { !self.dry.is_null() }
+    #[inline]
+    pub(crate) fn has_ceiling(&self) -> bool { !self.laid.is_null() && !self.laid_id.is_null() }
+
+}
+
+/// Validated rectangular access to one tile. It cannot be sent or shared
+/// between workers because it borrows the non-Sync tile.
+pub(crate) struct Region<'a, 'film> {
+    tile: &'a Tile<'film>,
+    rect: crate::sched::Rect,
+}
+impl<'a, 'film> Region<'a, 'film> {
+    #[inline]
+    pub(crate) fn tile(&self) -> &'a Tile<'film> { self.tile }
+    /// Intersect a capsule with already validated stroke access. Empty
+    /// intersections expose no pixels; nonempty endpoints remain in the tile.
+    #[inline]
+    pub(crate) fn intersect(&self, rect: crate::sched::Rect) -> Option<Region<'a, 'film>> {
+        let rect = (rect.0.max(self.rect.0), rect.1.max(self.rect.1), rect.2.min(self.rect.2), rect.3.min(self.rect.3));
+        if rect.2 <= rect.0 || rect.3 <= rect.1 { return None; }
+        Some(Region { tile: self.tile, rect })
     }
     #[inline]
-    pub(crate) fn properties(&self, i: usize) -> Prop {
-        self.check(i);
-        unsafe { *self.hide.add(i) }
+    pub(crate) fn bounds(&self) -> crate::sched::Rect { self.rect }
+    #[inline]
+    pub(crate) fn rows(&self) -> impl Iterator<Item = Row<'_, '_>> {
+        let (x0, y0, x1, y1) = self.rect;
+        let tile = self.tile;
+        (y0..y1).map(move |y| Row { tile, y, x0, x1, start: (y - tile.frame.y0) * tile.frame.w + (x0 - tile.frame.x0) })
+    }
+}
+/// A row span produced only from a checked region.
+pub(crate) struct Row<'a, 'film> {
+    tile: &'a Tile<'film>,
+    y: usize,
+    x0: usize,
+    x1: usize,
+    start: usize,
+}
+impl<'a, 'film> Row<'a, 'film> {
+    #[inline]
+    pub(crate) fn y(&self) -> usize { self.y }
+    #[inline]
+    pub(crate) fn pixels(self) -> impl Iterator<Item = (usize, Pixel<'a, 'film>)> {
+        let Row { tile, x0, x1, start, .. } = self;
+        (x0..x1).map(move |x| (x, Pixel { tile, i: start + (x - x0) }))
+    }
+}
+/// A validated pixel of a borrowed tile. Its private index never changes;
+/// queries and edits cannot select another pixel or bypass the footprint.
+pub(crate) struct Pixel<'a, 'film> {
+    tile: &'a Tile<'film>,
+    i: usize,
+}
+impl Pixel<'_, '_> {
+    #[inline]
+    pub(crate) fn volume(&self) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.vol.add(i) }
     }
     #[inline]
-    pub(crate) fn stroke(&self, i: usize) -> u32 {
-        self.check(i);
-        unsafe { *self.stroke.add(i) }
+    pub(crate) fn latent(&self) -> Latent {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.lat.add(i) }
     }
     #[inline]
-    pub(crate) fn mark_stroke(&self, i: usize, id: u32) {
-        self.check(i);
+    pub(crate) fn properties(&self) -> Prop {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.hide.add(i) }
+    }
+    #[inline]
+    pub(crate) fn stroke(&self) -> u32 {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.stroke.add(i) }
+    }
+    #[inline]
+    pub(crate) fn mark_stroke(&self, id: u32) {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
-            *self.stroke.add(i) = id;
+            *tile.stroke.add(i) = id;
         }
     }
     #[inline]
-    pub(crate) fn contact(&self, i: usize) -> f32 {
-        self.check(i);
-        unsafe { *self.base.add(i) }
+    pub(crate) fn contact(&self) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.base.add(i) }
     }
     #[inline]
-    pub(crate) fn height(&self, i: usize) -> f32 {
-        self.check(i);
-        unsafe { *self.height.add(i) }
+    pub(crate) fn height(&self) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe { *tile.height.add(i) }
+    }
+
+    #[inline]
+    pub(crate) fn drying(&self) -> Option<crate::drying::Px> {
+        let tile = self.tile;
+        let i = self.i;
+        if tile.timed() { unsafe { Some(*tile.dry.add(i)) } } else { None }
     }
     #[inline]
-    pub(crate) fn timed(&self) -> bool {
-        !self.dry.is_null()
+    pub(crate) fn cure(&self) -> f32 {
+        self.drying().map_or(0.0, |p| p.cure)
     }
     #[inline]
-    pub(crate) fn drying(&self, i: usize) -> Option<crate::drying::Px> {
-        self.check(i);
-        if self.timed() { unsafe { Some(*self.dry.add(i)) } } else { None }
+    pub(crate) fn fluid(&self) -> f32 {
+        self.drying().map_or(1.0, |p| crate::drying::fluid(p.cure))
     }
+
     #[inline]
-    pub(crate) fn cure(&self, i: usize) -> f32 {
-        self.drying(i).map_or(0.0, |p| p.cure)
-    }
-    #[inline]
-    pub(crate) fn fluid(&self, i: usize) -> f32 {
-        self.drying(i).map_or(1.0, |p| crate::drying::fluid(p.cure))
-    }
-    #[inline]
-    pub(crate) fn has_ceiling(&self) -> bool {
-        !self.laid.is_null() && !self.laid_id.is_null()
-    }
-    #[inline]
-    pub(crate) fn solvent_coats(&self, i: usize) -> f32 {
-        self.check(i);
-        if self.solv.is_null() { 0.0 } else { unsafe { *self.solv.add(i) / COAT_UM } }
+    pub(crate) fn solvent_coats(&self) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
+        if tile.solv.is_null() { 0.0 } else { unsafe { *tile.solv.add(i) / COAT_UM } }
     }
 
     /// The first contact sets the stroke's pickup floor, not its lay ceiling.
     #[inline]
-    pub(crate) fn pickup_floor(&self, i: usize, id: u32, v: f32, pickup: f32, fl: f32) -> f32 {
-        self.check(i);
+    pub(crate) fn pickup_floor(&self, id: u32, v: f32, pickup: f32, fl: f32) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
-            if *self.touched.add(i) != id {
-                *self.touched.add(i) = id;
-                *self.floor.add(i) = v * (1.0 - pickup * fl);
+            if *tile.touched.add(i) != id {
+                *tile.touched.add(i) = id;
+                *tile.floor.add(i) = v * (1.0 - pickup * fl);
             }
-            *self.floor.add(i)
+            *tile.floor.add(i)
+        }
+    }
+
+    /// Gather the lifted paint into the brush's accumulators before taking
+    /// it. Borrow the latent buffer only within the film operation rather
+    /// than copying its seven components into an instrument-side temporary.
+    #[inline]
+    pub(crate) fn gather_pickup(&self, tv: f32, lat: &mut Latent, hide: &mut Prop, cure: &mut f32) {
+        let tile = self.tile;
+        let i = self.i;
+        unsafe {
+            let l = &*tile.lat.add(i);
+            for k in 0..LAT { lat[k] += l[k] * tv; }
+            let hp = *tile.hide.add(i);
+            for k in 0..hp.len() { hide[k] += hp[k] * tv; }
+            if tile.timed() { *cure += (*tile.dry.add(i)).cure * tv; }
         }
     }
 
     /// Brush pickup uses solvent in µm before converting to its reservoir's
     /// coats × pixel area. Keep that order distinct from ploughing and rag lift.
     #[inline]
-    pub(crate) fn lift_brush(&self, i: usize, take: f32, v: f32, px_area: f32) -> Option<f32> {
-        self.check(i);
+    pub(crate) fn lift_brush(&self, take: f32, v: f32, px_area: f32) -> Option<f32> {
+        let tile = self.tile;
+        let i = self.i;
         let mut solvent = None;
         unsafe {
-            if !self.solv.is_null() {
-                let sv = &mut *self.solv.add(i);
+            if !tile.solv.is_null() {
+                let sv = &mut *tile.solv.add(i);
                 if *sv > 0.0 {
                     let ts = (*sv * take / v).min(*sv);
                     *sv -= ts;
@@ -572,42 +675,44 @@ impl Tile<'_> {
                 }
             }
         }
-        self.take(i, take);
+        self.take(take);
         solvent
     }
 
     #[inline]
-    fn hair_cover(&self, i: usize, fine: bool, share: f32) {
-        self.check(i);
+    fn hair_cover(&self, fine: bool, share: f32) {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
-            let cv = &mut *self.cover.add(i);
-            *cv = if fine { ((if *self.vol.add(i) < COVER_BARE_COATS { 0.0 } else { *cv }) + share).min(1.0) } else { 1.0 };
+            let cv = &mut *tile.cover.add(i);
+            *cv = if fine { ((if *tile.vol.add(i) < COVER_BARE_COATS { 0.0 } else { *cv }) + share).min(1.0) } else { 1.0 };
         }
     }
     #[inline]
-    pub(crate) fn lay_hair(&self, i: usize, v: f32, fine: bool, share: f32, id: u32, lat: &Latent, hide: Prop, cure: f32) {
-        self.hair_cover(i, fine, share);
-        self.add(i, v, lat, hide, cure);
-        self.mark_stroke(i, id);
+    pub(crate) fn lay_hair(&self, v: f32, fine: bool, share: f32, id: u32, lat: &Latent, hide: Prop, cure: f32) {
+        self.hair_cover(fine, share);
+        self.add(v, lat, hide, cure);
+        self.mark_stroke(id);
     }
     #[inline]
-    pub(crate) fn lay_liquid_hair(&self, i: usize, mut d: f32, phi: f32, cap: f32, capped: bool, fine: bool, share: f32, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
-        self.check(i);
+    pub(crate) fn lay_liquid_hair(&self, mut d: f32, phi: f32, cap: f32, capped: bool, fine: bool, share: f32, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
             if capped {
-                assert!(self.has_ceiling(), "film ceiling unavailable");
-                let used = if *self.laid_id.add(i) == id { *self.laid.add(i) } else { 0.0 };
+                assert!(tile.has_ceiling(), "film ceiling unavailable");
+                let used = if *tile.laid_id.add(i) == id { *tile.laid.add(i) } else { 0.0 };
                 d = d.min((cap - used).max(0.0));
-                *self.laid_id.add(i) = id;
-                *self.laid.add(i) = used + d;
+                *tile.laid_id.add(i) = id;
+                *tile.laid.add(i) = used + d;
             }
             if d > 0.0 {
-                self.hair_cover(i, fine, share);
-                self.add(i, d * (1.0 - phi), lat, hide, cure);
-                if !self.solv.is_null() {
-                    *self.solv.add(i) += d * phi * COAT_UM;
+                self.hair_cover(fine, share);
+                self.add(d * (1.0 - phi), lat, hide, cure);
+                if !tile.solv.is_null() {
+                    *tile.solv.add(i) += d * phi * COAT_UM;
                 }
-                *self.stroke.add(i) = id;
+                *tile.stroke.add(i) = id;
             }
         }
         d
@@ -615,63 +720,69 @@ impl Tile<'_> {
 
     /// The knife cuts paint first, then its independently calculated solvent.
     #[inline]
-    pub(crate) fn lift_knife(&self, i: usize, v: f32, solvent: f32) {
-        self.take(i, v);
+    pub(crate) fn lift_knife(&self, v: f32, solvent: f32) {
+        let tile = self.tile;
+        let i = self.i;
+        self.take(v);
         unsafe {
-            if !self.solv.is_null() {
-                *self.solv.add(i) -= solvent * COAT_UM;
+            if !tile.solv.is_null() {
+                *tile.solv.add(i) -= solvent * COAT_UM;
             }
         }
     }
     /// Knife lays add paint and solvent before setting full coverage. Unlike a
     /// hair or droplet there is no per-stroke ceiling and no positivity guard.
     #[inline]
-    pub(crate) fn lay_knife(&self, i: usize, v: f32, solvent: f32, lat: &Latent, hide: Prop, cure: f32) {
-        self.add(i, v, lat, hide, cure);
+    pub(crate) fn lay_knife(&self, v: f32, solvent: f32, lat: &Latent, hide: Prop, cure: f32) {
+        let tile = self.tile;
+        let i = self.i;
+        self.add(v, lat, hide, cure);
         unsafe {
-            if !self.solv.is_null() {
-                *self.solv.add(i) += solvent * COAT_UM;
+            if !tile.solv.is_null() {
+                *tile.solv.add(i) += solvent * COAT_UM;
             }
-            *self.cover.add(i) = 1.0;
+            *tile.cover.add(i) = 1.0;
         }
     }
 
     /// One accepted plough destination. Cure is reread for each destination,
     /// including after a previous lift left the source bare.
     #[inline]
-    pub(crate) fn move_plough(&self, i: usize, j: usize, m: f32, v: f32, fine: bool, capped: bool, cap: f32, id: u32, l: &Latent, hd: Prop) {
-        self.check(i);
-        self.check(j);
+    pub(crate) fn move_plough(&self, to: &Pixel<'_, '_>, m: f32, v: f32, fine: bool, capped: bool, cap: f32, id: u32, l: &Latent, hd: Prop) {
+        assert!(std::ptr::eq(self.tile, to.tile), "plough pixels belong to different film views");
+        let tile = self.tile;
+        let i = self.i;
+        let j = to.i;
         unsafe {
-            let sol = if self.solv.is_null() { 0.0 } else { *self.solv.add(i) / COAT_UM };
-            let vi = *self.vol.add(i);
+            let sol = if tile.solv.is_null() { 0.0 } else { *tile.solv.add(i) / COAT_UM };
+            let vi = *tile.vol.add(i);
             let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
             let (m, ms) = if capped && j != i && m > 0.0 {
-                assert!(self.has_ceiling(), "film ceiling unavailable");
-                let used = if *self.laid_id.add(j) == id { *self.laid.add(j) } else { 0.0 };
+                assert!(tile.has_ceiling(), "film ceiling unavailable");
+                let used = if *tile.laid_id.add(j) == id { *tile.laid.add(j) } else { 0.0 };
                 let room = (cap - used).max(0.0);
                 let f = if m + ms > room { room / (m + ms) } else { 1.0 };
-                *self.laid_id.add(j) = id;
-                *self.laid.add(j) = used + (m + ms) * f;
+                *tile.laid_id.add(j) = id;
+                *tile.laid.add(j) = used + (m + ms) * f;
                 (m * f, ms * f)
             } else {
                 (m, ms)
             };
             if j != i && m > 0.0 {
                 if ms > 0.0 {
-                    let si = &mut *self.solv.add(i);
+                    let si = &mut *tile.solv.add(i);
                     let mu = (ms * COAT_UM).min(*si);
                     *si -= mu;
-                    *self.solv.add(j) += mu;
+                    *tile.solv.add(j) += mu;
                 }
-                let cure = if self.dry.is_null() { 0.0 } else { (*self.dry.add(i)).cure };
+                let cure = if tile.dry.is_null() { 0.0 } else { (*tile.dry.add(i)).cure };
                 // the paint moved covers its share of
                 // the pixel it came from
                 // (its film there thins but still covers it)
-                let cj = &mut *self.cover.add(j);
-                *cj = if fine { ((if *self.vol.add(j) < COVER_BARE_COATS { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *self.cover.add(i)).min(1.0) } else { 1.0 };
-                self.take(i, m);
-                self.add(j, m, l, hd, cure);
+                let cj = &mut *tile.cover.add(j);
+                *cj = if fine { ((if *tile.vol.add(j) < COVER_BARE_COATS { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *tile.cover.add(i)).min(1.0) } else { 1.0 };
+                self.take(m);
+                to.add(m, l, hd, cure);
             }
         }
     }
@@ -680,37 +791,38 @@ impl Tile<'_> {
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
     #[inline]
-    fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+    fn add(&self, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
-            self.check(i);
             if v <= 0.0 {
                 return;
             }
             // engine 4: the solvent in the paint evaporates as it is laid
             // (in minutes: before anything else can work it), leaving a film
             // of the paint's own body that much thinner
-            let (v, hide) = if self.lean && hide[3] > 0.0 {
+            let (v, hide) = if tile.lean && hide[3] > 0.0 {
                 let mut h = hide;
                 h[3] = 0.0;
                 (v * (1.0 - hide[3].clamp(0.0, 0.95)), h)
             } else {
                 (v, hide)
             };
-            let vol = &mut *self.vol.add(i);
-            let l = &mut *self.lat.add(i);
-            let hd = &mut *self.hide.add(i);
+            let vol = &mut *tile.vol.add(i);
+            let l = &mut *tile.lat.add(i);
+            let hd = &mut *tile.hide.add(i);
             let (t, a) = mix_material(*vol, l, hd, v, lat, hide);
-            if self.cure_now && !self.dry.is_null() {
+            if tile.cure_now && !tile.dry.is_null() {
                 // (a film too thin for `wait` to count is bare: no cure)
-                let p = &mut *self.dry.add(i);
+                let p = &mut *tile.dry.add(i);
                 p.cure = if t < CURE_BARE_COATS { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
             // engine 4: an absorbent ground under the film draws oil out of
             // the paint just laid, until its pores are full: a thin wash goes
             // lean (stiff, matte, quick to set), thick paint barely notices
-            if !self.absorb.is_null() {
-                let cap = &mut *self.absorb.add(i);
+            if !tile.absorb.is_null() {
+                let cap = &mut *tile.absorb.add(i);
                 if *cap > 0.0 {
                     let oil_in = v * OIL_SHARE * hd[4].max(0.0);
                     let take = (*cap).min(0.8 * oil_in);
@@ -730,37 +842,38 @@ impl Tile<'_> {
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
     /// left bare (as `wait` judges it) holds no film to have one.
     #[inline]
-    fn take(&self, i: usize, v: f32) {
+    fn take(&self, v: f32) {
+        let tile = self.tile;
+        let i = self.i;
         unsafe {
-            self.check(i);
-            let vol = &mut *self.vol.add(i);
+            let vol = &mut *tile.vol.add(i);
             *vol -= v;
-            if self.cure_now && *vol < CURE_BARE_COATS && !self.dry.is_null() {
-                (*self.dry.add(i)).cure = 0.0;
+            if tile.cure_now && *vol < CURE_BARE_COATS && !tile.dry.is_null() {
+                (*tile.dry.add(i)).cure = 0.0;
             }
         }
     }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn lay_droplet(&self, i: usize, v: f32, phi: f32, cap: f32, capped: bool, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
-        self.check(i);
+    pub(crate) fn lay_droplet(&self, v: f32, phi: f32, cap: f32, capped: bool, id: u32, lat: &Latent, hide: Prop, cure: f32) -> f32 {
+        let tile = self.tile;
+        let i = self.i;
         let mut d = v.max(0.0);
-        // SAFETY: check(i) enforces this tile's footprint, and the scheduler
-        // never runs overlapping tile footprints concurrently.
+        // SAFETY: this pixel was obtained through a checked tile boundary.
         unsafe {
             if capped {
-                assert!(self.has_ceiling(), "film ceiling unavailable");
-                let used = if *self.laid_id.add(i) == id { *self.laid.add(i) } else { 0.0 };
+                assert!(tile.has_ceiling(), "film ceiling unavailable");
+                let used = if *tile.laid_id.add(i) == id { *tile.laid.add(i) } else { 0.0 };
                 d = d.min((cap - used).max(0.0));
-                *self.laid_id.add(i) = id;
-                *self.laid.add(i) = used + d;
+                *tile.laid_id.add(i) = id;
+                *tile.laid.add(i) = used + d;
             }
             if d > 0.0 {
-                *self.cover.add(i) = 1.0;
-                self.add(i, d * (1.0 - phi), lat, hide, cure);
-                if phi > 0.0 && !self.solv.is_null() {
-                    *self.solv.add(i) += d * phi * COAT_UM;
+                *tile.cover.add(i) = 1.0;
+                self.add(d * (1.0 - phi), lat, hide, cure);
+                if phi > 0.0 && !tile.solv.is_null() {
+                    *tile.solv.add(i) += d * phi * COAT_UM;
                 }
-                *self.stroke.add(i) = id;
+                *tile.stroke.add(i) = id;
             }
         }
         d
@@ -1098,10 +1211,45 @@ mod tests {
                 for i in 0..=16 {
                     let (x, y) = (i % 4 + ox, i / 4 + oy);
                     let inside = i < 16 && x >= rect.0 && y >= rect.1 && x < rect.2 && y < rect.3;
-                    let read = catch_unwind(AssertUnwindSafe(|| tile.volume(i)));
+                    let read = catch_unwind(AssertUnwindSafe(|| tile.pixel(i).volume()));
                     assert_eq!(read.is_ok(), inside, "pixel {i} in footprint {rect:?}");
                     if inside { assert_eq!(read.unwrap(), 0.0); }
+                    let point = catch_unwind(AssertUnwindSafe(|| tile.pixel_at(x, y).volume()));
+                    assert_eq!(point.is_ok(), inside, "coordinate ({x},{y}) in footprint {rect:?}");
+                    let region = tile.region((x, y, x + 1, y + 1));
+                    let mut values = Vec::new();
+                    for row in region.rows() {
+                        for (_, pixel) in row.pixels() { values.push(pixel.volume()); }
+                    }
+                    assert_eq!(values, if inside { vec![0.0] } else { Vec::new() }, "region at ({x},{y}) in footprint {rect:?}");
                 }
+                let (x0, y0, x1, y1) = (rect.0.max(ox), rect.1.max(oy), rect.2.min(ox + 4), rect.3.min(oy + 4));
+                let expected: Vec<_> = (0..16).filter_map(|i| {
+                    let (x, y) = (i % 4 + ox, i / 4 + oy);
+                    if x < x0 || x >= x1 || y < y0 || y >= y1 { return None; }
+                    tile.pixel(i).lay_knife(i as f32 + 1.0, 0.0, &[0.0; super::LAT], [0.5; 5], 0.0);
+                    Some((x, y, i as f32 + 1.0))
+                }).collect();
+                let region = tile.region((x0, y0, x1, y1));
+                for request in [(0, 0, 16, 16), (x0, y0, x0 + 1, y0 + 1), (x1, y1, 16, 16), (x1, y1, x0, y0)] {
+                    let expected_part: Vec<_> = expected.iter().copied().filter(|&(x, y, _)| x >= request.0 && y >= request.1 && x < request.2 && y < request.3).collect();
+                    let mut actual_part = Vec::new();
+                    if let Some(part) = region.intersect(request) {
+                        for row in part.rows() {
+                            let y = row.y();
+                            for (x, pixel) in row.pixels() { actual_part.push((x, y, pixel.volume())); }
+                        }
+                    }
+                    assert_eq!(actual_part, expected_part, "intersection {request:?} in footprint {rect:?}");
+                }
+                let mut actual = Vec::new();
+                for row in region.rows() {
+                    let y = row.y();
+                    for (x, pixel) in row.pixels() {
+                        actual.push((x, y, pixel.volume()));
+                    }
+                }
+                assert_eq!(actual, expected, "region yields exactly its pixels in row order");
             });
         }
     }

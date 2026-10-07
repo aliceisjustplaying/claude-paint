@@ -613,8 +613,8 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err("easel: fatal: live sessions are fixed at 2400px".into());
     }
     let files = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
-    let painting = files.open(None).map_err(|(_, e)| format!("easel: fatal: {e}"))?;
     let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
+    let painting = files.open(None).map_err(|(_, e)| format!("easel: fatal: {e}"))?;
     let mut srv = Server { painting, build: save::fnv1a(&executable), frames: false, scratch: None };
     let sock = sock_path(&name);
     // the lock is ours: a socket there is a dead server's

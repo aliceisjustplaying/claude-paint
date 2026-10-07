@@ -1735,7 +1735,7 @@ mod tests {
 
     const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
 
-    /// The held knife (speculative) only reads, as the palette look: the state identity, the
+    /// The held knife (speculative) only reads, as the palette look: the full state observation, the
     /// log, the globals and the clock are as they were. It shows the passage with a knife
     /// over it at the point: a knife global with its own load, or a pile freshly loaded.
     #[cfg(feature = "replay")]
@@ -1746,7 +1746,7 @@ mod tests {
         s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
                  b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})
                  k = knife{width=40}; k:load(dk, 0.8); clean = knife{width=20}"#).unwrap();
-        let before = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
+        let before = (s.state_observation(), s.program("t"), s.globals(), s.st.borrow().clock);
         let plain = look::View::default();
         let at = (400.0, 320.0);
         let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
@@ -1778,7 +1778,7 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("held-knife.png"), &png).unwrap();
-        let after = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
+        let after = (s.state_observation(), s.program("t"), s.globals(), s.st.borrow().clock);
         assert_eq!(before, after);
         s.run("assert(k:fullness() > 0)").unwrap();
         s.run("k:wipe(); k:load(dk, 0.01)").unwrap();
@@ -1801,7 +1801,7 @@ mod tests {
         assert!(hold_look(&s, "k", at, &look::View { mirror: true, ..look::View::default() }).is_err());
     }
 
-    /// A palette look only reads: the state identity (canvas, held tools, studio), the log and the
+    /// A palette look only reads: the full state observation (canvas, held tools, studio), the log and the
     /// globals are the same before and after it, and it puts no time on the clock.
     #[test]
     #[cfg(tube_box)]
@@ -1810,11 +1810,11 @@ mod tests {
         s.run(PALETTE_CANVAS).unwrap();
         s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
                  b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})"#).unwrap();
-        let before = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
+        let before = (s.state_observation(), s.program("t"), s.globals(), s.st.borrow().clock);
         let (w, h, png) = palette_look(&s).unwrap();
         assert!(w > 0 && h > 0 && png.starts_with(b"\x89PNG"));
         assert_eq!(s.piles().iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["dk", "skyP"]);
-        let after = (s.state_identity(), s.program("t"), s.globals(), s.st.borrow().clock);
+        let after = (s.state_observation(), s.program("t"), s.globals(), s.st.borrow().clock);
         assert_eq!(before, after);
         // and the next chunk runs as it would have without the look
         let mut t = Session::new(320).unwrap();
@@ -1823,7 +1823,7 @@ mod tests {
         }
         s.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
         t.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
-        assert!(s.state_identity().matches(&t.state_identity()));
+        assert_eq!(s.state_observation(), t.state_observation());
     }
 
     /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of

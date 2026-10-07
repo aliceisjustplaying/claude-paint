@@ -342,6 +342,11 @@ impl Session {
         self.st.borrow_mut().state_identity()
     }
 
+    #[cfg(test)]
+    pub fn state_observation(&self) -> (crate::studio_state::StateIdentity, String) {
+        self.st.borrow_mut().state_observation()
+    }
+
     pub fn canvas(&self) -> Option<std::cell::Ref<'_, Canvas>> {
         std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref()).ok()
     }
@@ -1314,11 +1319,11 @@ mod tests {
         b
     }
 
-    /// The studio's durable replay identity, plus the painting's globals.
-    /// Per-chunk counters/RNG remain diagnostic digest fields, not durable state.
+    /// The committed identity and full studio projection, plus the globals.
+    /// After successful chunks, replay must also match counters and RNG.
     #[cfg(tube_box)]
-    fn state(s: &Session) -> (crate::studio_state::StateIdentity, String) {
-        (s.state_identity(), s.globals())
+    fn state(s: &Session) -> ((crate::studio_state::StateIdentity, String), String) {
+        (s.state_observation(), s.globals())
     }
 
     /// A failed chunk can leave a table laid out differently (grown, or refilled by the

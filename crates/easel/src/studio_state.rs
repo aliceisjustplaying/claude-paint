@@ -71,9 +71,18 @@ macro_rules! inventory {
             }
             #[cfg(feature = "replay")]
             pub fn read_header(&mut self, h: &Header<'_>, version: u32) -> Result<(), String> {
-                $(read!($rp, self, h, version, $r);)*
-                $(read!($cp, self, h, version, $c);)*
-                $(read!($fp, self, h, version, $f);)*
+                // Validation order is observable for headers with several errors.
+                // Use the historical save ranks, not the rollback groups.
+                let mut fields = [$(($rh, stringify!($r)),)* $(($ch, stringify!($c)),)* $(($fh, stringify!($f)),)*];
+                fields.sort_by_key(|v| v.0);
+                for (_, field) in fields {
+                    match field {
+                        $(stringify!($r) => { read!($rp, self, h, version, $r); },)*
+                        $(stringify!($c) => { read!($cp, self, h, version, $c); },)*
+                        $(stringify!($f) => { read!($fp, self, h, version, $f); },)*
+                        _ => unreachable!(),
+                    }
+                }
                 Ok(())
             }
         }
@@ -244,8 +253,15 @@ impl StateIdentity {
 impl Studio {
     #[cfg(any(test, feature = "replay"))]
     pub fn state_identity(&mut self) -> StateIdentity {
+        self.state_observation().0
+    }
+    /// Committed identity plus the full digest's studio fields. Read-only
+    /// observations include counters and RNG; check compares only the identity.
+    #[cfg(any(test, feature = "replay"))]
+    pub fn state_observation(&mut self) -> (StateIdentity, String) {
         let p = self.projection(ProjectionKind::Identity);
-        StateIdentity { studio: p.studio_debug(true), canvas: p.canvas, board: p.board, tools: p.tools }
+        let full = p.studio_debug(false);
+        (StateIdentity { studio: p.studio_debug(true), canvas: p.canvas, board: p.board, tools: p.tools }, full)
     }
     pub fn save_header(&mut self) -> String {
         self.projection(ProjectionKind::Header).header.into_iter().map(|(_, k, v)| format!("{k}={v}\n")).collect()
@@ -327,6 +343,23 @@ mod tests {
         assert!(before.matches(&s.state_identity()), "check must not report a discarded chunk's counters as changed painting state");
     }
 
+    #[test]
+    fn full_observations_detect_each_counter_and_rng_mutation() {
+        let changes: [(&str, fn(&mut super::Studio)); 3] = [
+            ("chunk", |st| st.chunk += 1),
+            ("calls", |st| st.calls += 1),
+            ("rng", |st| st.rng = paint::Rng::new(999)),
+        ];
+        let s = Session::new(64).unwrap();
+        for (name, change) in changes {
+            let before = s.state_observation();
+            change(&mut s.st.borrow_mut());
+            let after = s.state_observation();
+            assert!(before.0.matches(&after.0), "{name} must not change committed identity");
+            assert_ne!(before.1, after.1, "{name} must change a full observation");
+        }
+    }
+
     // The new persisted contract: a restored finishing checkpoint shows the
     // same dirty palette, including recipes, names, scraped heaps and residue.
     #[test]
@@ -361,6 +394,10 @@ mod tests {
         let mut fresh = Session::new(64).unwrap(); fresh.run(CANVAS).unwrap();
         assert_eq!(board_dump(&restored), board_dump(&fresh), "v1 has an untouched board");
         assert_eq!(restored.run("print(wait(0))").unwrap().out, s.run("print(wait(0))").unwrap().out, "v1 still restores the hand clock");
+        // Legacy diagnostics validate seed before relief, even when both are bad.
+        let bad = old.lines().filter(|l| !l.starts_with("seed=")).map(|l| if l.starts_with("relief=") { "relief=bad" } else { l }).collect::<Vec<_>>().join("\n") + "\n";
+        canvas.write_state(&mut std::fs::File::create(&path).unwrap(), &bad).unwrap();
+        assert_eq!(crate::save::read(&path).err().unwrap(), "the save has no seed= in its header");
         // A v2 file with missing or malformed board data cannot silently default it.
         for board in [None, Some("xyz"), Some("00")] {
             let head = old.replacen("easel save 1", "easel save 2", 1) + &board.map(|b| format!("board={b}\n")).unwrap_or_default();

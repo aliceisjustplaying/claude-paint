@@ -90,7 +90,11 @@ function readPaths(messages: readonly Message[]): Map<string, string> {
 }
 
 export function placeholder(path: string | undefined): string {
-	return path ? `[an earlier look: ${path}]` : path === "" ? "[an earlier look]" : "[an earlier image]";
+	return path
+		? `[You saw this image earlier (${path}); removed from this request to save space. Use read to reopen it within the studio, or look for the current canvas.]`
+		: path === ""
+			? "[You saw this image when you called look earlier; removed from this request to save space. Call look again for the current canvas.]"
+			: "[You saw this image earlier; removed from this request to save space. Call look for the current canvas.]";
 }
 
 /** What stands for an image that alone is over the size limit. */
@@ -145,7 +149,7 @@ export function pruneImages<M extends Message>(messages: readonly M[], limits: P
 		const content = (msg.content as Block[]).map((block, c) => {
 			const i = blocks.get(c);
 			if (i === undefined) return block;
-			// the newest image goes only when it alone is over the limit: say so, not "an earlier look"
+			// the newest image goes only when it alone is over the limit: say why, without claiming it was seen
 			const text = i === found.length - 1 ? oversize(found[i].chars, limits.maxImageChars) : placeholder(path);
 			return { type: "text", text };
 		});

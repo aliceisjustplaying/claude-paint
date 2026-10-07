@@ -67,9 +67,9 @@ test("old looks become a line naming the file; the newest stay; the input is unt
 	const results = r.messages.filter((m) => m.role === "toolResult");
 	assert.deepEqual(results[0].content, [
 		{ type: "text", text: "Read image file [image/png]" },
-		{ type: "text", text: "[an earlier look: out/easel/painting/look-0001.png]" },
+		{ type: "text", text: "[You saw this image earlier (out/easel/painting/look-0001.png); removed from this request to save space. Use read to reopen it within the studio, or look for the current canvas.]" },
 	]);
-	assert.equal(results[4].content[1].text, "[an earlier look: out/easel/painting/look-0005.png]");
+	assert.equal(results[4].content[1].text, "[You saw this image earlier (out/easel/painting/look-0005.png); removed from this request to save space. Use read to reopen it within the studio, or look for the current canvas.]");
 	assert.equal(results[5].content[1].type, "image");
 	assert.equal(results[22].content[1].type, "image");
 	assert.equal(r.messages[results.length], msgs[results.length], "unchanged messages are the same objects");
@@ -78,7 +78,7 @@ test("old looks become a line naming the file; the newest stay; the input is unt
 test("an image without a matching read call gets a generic line", () => {
 	const msgs = session(21).map((m) => (m.role === "assistant" ? { ...m, content: [] } : m));
 	const r = pruneImages(msgs, L);
-	assert.equal(r.messages[2].content[1].text, "[an earlier image]");
+	assert.equal(r.messages[2].content[1].text, "[You saw this image earlier; removed from this request to save space. Call look for the current canvas.]");
 });
 
 test("an image from the look tool gets a line saying it was a look", () => {
@@ -86,7 +86,7 @@ test("an image from the look tool gets a line saying it was a look", () => {
 		? { ...m, content: m.content.map((c: any) => ({ ...c, name: "look", arguments: { crop: "0,0,100,100" } })) }
 		: m));
 	const r = pruneImages(msgs, L);
-	assert.equal(r.messages[2].content[1].text, "[an earlier look]");
+	assert.equal(r.messages[2].content[1].text, "[You saw this image when you called look earlier; removed from this request to save space. Call look again for the current canvas.]");
 });
 
 test("the same messages give the same request", () => {

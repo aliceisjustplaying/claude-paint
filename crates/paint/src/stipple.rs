@@ -457,10 +457,10 @@ impl Canvas {
                     continue;
                 }
                 let id = first_id.wrapping_add(k as u32);
-                // SAFETY: every pixel a touch reaches lies in its footprint,
+                // The film view enforces the footprint; every pixel a touch reaches lies in its footprint,
                 // inside its passage's rect; run_ordered never runs passages
                 // with overlapping rects at once; `surf()` checked the buffers.
-                let r = unsafe { touch_on(surf, &mut held, &p.touch, clip.map(crate::bristle::Clip::Mask), id, &mut scratch) };
+                let r = touch_on(surf, &mut held, &p.touch, clip.map(crate::bristle::Clip::Mask), id, &mut scratch);
                 b = crate::sched::union(b, r);
             }
             b

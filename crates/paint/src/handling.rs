@@ -950,7 +950,7 @@ impl Canvas {
                     .ramps(ramps.0, ramps.1)
                     .shake(hd.shake)
                     .swell(p.swell.clone());
-                // SAFETY: every pixel this drag touches lies in its stroke
+                // The film view enforces the footprint; every pixel this drag touches lies in its stroke
                 // footprint, inside this tile's rect; run_ordered never runs
                 // tiles with overlapping rects at once; `surf()` checked the
                 // buffers match the frame.
@@ -959,7 +959,7 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
-                let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                let r = crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch);
                 b = crate::sched::union(b, r);
             }
             b

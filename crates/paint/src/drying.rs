@@ -476,12 +476,9 @@ impl Canvas {
     /// `age`; with `flow` (`wait_on_grid`), a film under the bare
     /// threshold that holds any paint keeps its cure and dries too.
     fn age_from(&mut self, dt: f32, flow: bool) {
-        let n = self.f.w * self.f.h;
-        if self.wet.clock.px.len() != n {
-            self.wet.clock.px = vec![Px::FRESH; n];
-        }
+        self.wet.ensure_drying();
         self.absorb_with(flow);
-        let low = if flow { f32::MIN_POSITIVE } else { 1e-5 };
+        let low = if flow { f32::MIN_POSITIVE } else { crate::wet::drying_cutoff() };
         let w = self.f.w;
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
@@ -549,7 +546,7 @@ impl Canvas {
         for y in 0..eh {
             for x in 0..ew {
                 let a = vol[(ey0 + y) * w + ex0 + x];
-                if a >= 1e-5 {
+                if crate::wet::Wet::counts_for_drying(a) {
                     v[y * ew + x] = a;
                     m[y * ew + x] = 1.0;
                 }
@@ -643,7 +640,7 @@ impl Canvas {
                     let mut m = 0.0f32;
                     for x in x0..x1 {
                         let i = y * w + x;
-                        if vol[i] >= 1e-5 {
+                        if crate::wet::Wet::counts_for_drying(vol[i]) {
                             let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
                             m = m.max(pace.to_dry(c, rate(t, hide[i][1], hide[i][2])));
                         }
@@ -670,7 +667,7 @@ impl Canvas {
     /// Fold what was painted since the last `wait` into the drying state: a
     /// film that was worked levels again, at the fluidity it has now, and
     /// its thickness is judged afresh. (Fresh paint diluted its cure as it
-    /// was laid, in `Surf::add`. Engine 1 diluted it here, so until the
+    /// was laid, in the wet film's brush lay. Engine 1 diluted it here, so until the
     /// next wait a brush felt the film as it was before: see `ENGINE`.)
     fn absorb(&mut self) {
         self.absorb_with(false);
@@ -685,59 +682,11 @@ impl Canvas {
         };
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-        let mark = self.wet.clock.mark;
-        // a worked film's thickness is judged afresh over the paint that's
-        // wet around it now; an untouched one keeps its own (see `Px::th`)
+        let rect = (x0, y0, x1, y1);
         let now = self.engine >= 2;
-        let worked = |wet: &crate::wet::Wet, i: usize| wet.touched[i] > mark || wet.stroke[i] > mark || (now && wet.clock.px[i].seen != wet.vol[i]);
-        let fresh = |wet: &crate::wet::Wet, i: usize| worked(wet, i) || wet.clock.px[i].th <= 0.0;
-        let any = (y0..y1).into_par_iter().any(|y| (x0..x1).any(|x| self.wet.vol[y * w + x] >= 1e-5 && fresh(&self.wet, y * w + x)));
-        let th = if any { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
-        let bw = x1 - x0;
-        let wet = &mut self.wet;
-        let (vol, touched, stroke) = (&wet.vol, &wet.touched, &wet.stroke);
-        wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
-            for x in x0..x1 {
-                let i = (y0 + j) * w + x;
-                let v = vol[i];
-                let p = &mut row[x];
-                if v < 1e-5 {
-                    if !(flow && v > 0.0) {
-                        (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
-                    }
-                    continue;
-                }
-                let worked = touched[i] > mark || stroke[i] > mark || (now && p.seen != v);
-                if worked {
-                    if !now {
-                        p.cure *= p.seen.min(v) / v;
-                    }
-                    p.lev = SET_TIME * fluid(p.cure);
-                }
-                if worked || p.th <= 0.0 {
-                    p.th = th[j * bw + x - x0];
-                }
-                p.seen = v;
-            }
-        });
-        wet.clock.mark = wet.current;
-    }
-
-    /// A film baked into the dry picture holds no solvent any more (by then
-    /// it has long gone; `dry` takes the rest with it).
-    fn clear_bare_solvent(&mut self, ex: (usize, usize, usize, usize)) {
-        if self.wet.solv.is_empty() {
-            return;
-        }
-        let w = self.f.w;
-        for y in ex.1..ex.3 {
-            for x in ex.0..ex.2 {
-                let i = y * w + x;
-                if self.wet.vol[i] == 0.0 {
-                    self.wet.solv[i] = 0.0;
-                }
-            }
-        }
+        let any = self.wet.needs_drying_thickness(rect, w, now);
+        let th = if any { self.film_thickness(rect) } else { Vec::new() };
+        self.wet.observe_worked_films(rect, w, now, flow, &th);
     }
 
     /// Level and bake open films into the dry picture: every film (`all`,
@@ -754,7 +703,7 @@ impl Canvas {
         if !all && !(ex.1..ex.3).into_par_iter().any(|y| {
             (ex.0..ex.2).any(|x| {
                 let i = y * w + x;
-                self.wet.vol[i] >= 1e-5 && self.wet.clock.px.get(i).is_some_and(|p| p.cure >= GEL)
+                crate::wet::Wet::counts_for_drying(self.wet.volume(i)) && self.wet.clock.px.get(i).is_some_and(|p| p.cure >= GEL)
             })
         }) {
             return;
@@ -772,7 +721,7 @@ impl Canvas {
             for x in 0..ew {
                 let i = (ex.1 + y) * w + ex.0 + x;
                 let v = self.wet.vol[i];
-                if v >= 1e-5 && (all || cp.get(i).is_some_and(|p| p.cure >= GEL)) {
+                if crate::wet::Wet::counts_for_drying(v) && (all || cp.get(i).is_some_and(|p| p.cure >= GEL)) {
                     let k = y * ew + x;
                     add[k] = v * COAT_UM;
                     stiff[k] = self.wet.hide[i][1];
@@ -794,12 +743,12 @@ impl Canvas {
             if all {
                 for y in ex.1..ex.3 {
                     for v in &mut self.wet.vol[y * w + ex.0..y * w + ex.2] {
-                        if *v < 1e-5 {
+                        if crate::wet::Wet::bare_for_drying(*v) {
                             *v = 0.0;
                         }
                     }
                 }
-                self.clear_bare_solvent(ex);
+                self.wet.clear_baked_solvent(ex, w);
             }
             return;
         }
@@ -830,7 +779,7 @@ impl Canvas {
         let cover: Vec<f32> = {
             let wet = &self.wet;
             // (two passes: a gap two pixels wide closes too)
-            let mut cv: Vec<f32> = (ex.1..ex.3).flat_map(|y| (ex.0..ex.2).map(move |x| if wet.vol[y * w + x] >= 1e-5 { wet.cover[y * w + x] } else { 0.0 })).collect();
+            let mut cv: Vec<f32> = (ex.1..ex.3).flat_map(|y| (ex.0..ex.2).map(move |x| if crate::wet::Wet::counts_for_drying(wet.vol[y * w + x]) { wet.cover[y * w + x] } else { 0.0 })).collect();
             for _ in 0..2 {
                 let prev = cv.clone();
                 let held = |x: usize, y: usize| prev[(y - ex.1) * ew + x - ex.0];
@@ -862,7 +811,7 @@ impl Canvas {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     let k = j * ew + x - ex.0;
-                    if vv[x] < 1e-5 {
+                    if crate::wet::Wet::bare_for_drying(vv[x]) {
                         if all {
                             vv[x] = 0.0;
                             cv[x] = 1.0;
@@ -881,7 +830,7 @@ impl Canvas {
                     cv[x] = 1.0;
                 }
             });
-        self.clear_bare_solvent(ex);
+        self.wet.clear_baked_solvent(ex, w);
         let wet = &mut self.wet;
         if wet.clock.px.is_empty() {
             return;

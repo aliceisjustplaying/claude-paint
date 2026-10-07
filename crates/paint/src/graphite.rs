@@ -578,7 +578,7 @@ impl Canvas {
         let (depth_k, crumble) = (sub.powf(0.6), lead.crumble * sub.sqrt());
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);
-        let wetv: Vec<bool> = hits.iter().map(|&(i, _, _)| self.wet.vol[i] > 1e-5).collect();
+        let wetv: Vec<bool> = hits.iter().map(|&(i, _, _)| self.wet.blocks_drawing(i)).collect();
         let mut px = std::mem::take(&mut self.px);
         {
             let d = self.drawing_mut();
@@ -638,7 +638,7 @@ impl Canvas {
         for i in 0..self.px.len() {
             let mv = m.data[f.whole_index(i)];
             let c = &mut d.cells[i];
-            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.vol[i] > 1e-5 {
+            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.blocks_drawing(i) {
                 continue;
             }
             let (x, y) = ((i % f.w) as isize, (i / f.w) as isize);

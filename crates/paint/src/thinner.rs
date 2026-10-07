@@ -210,9 +210,9 @@ impl Canvas {
     /// Maximum current flow mobility in the solvent work set.
     pub(crate) fn peak_mobility(&self, solvent: &[usize]) -> f32 {
         solvent.par_iter().map(|&i| {
-            let (h, s) = (self.wet.vol[i] * COAT_UM, self.wet.solv[i]);
+            let (h, s) = (self.wet.volume(i) * COAT_UM, self.wet.solvent_um(i));
             if s <= 0.0 || h + s <= 0.0 { return 0.0; }
-            let fl = self.wet.clock.px.get(i).map_or(1.0, |p| crate::drying::fluid(p.cure));
+            let fl = self.wet.drying(i).map_or(1.0, |p| crate::drying::fluid(p.cure));
             spread_mm2_min(s / (h + s)) * fl * thin_film(h + s)
         }).reduce(|| 0.0, f32::max)
     }
@@ -221,20 +221,7 @@ impl Canvas {
     /// adds receivers. It is rebuilt at every wait, so brushwork and saves
     /// need no cache invalidation or checkpoint-format change.
     pub(crate) fn evaporate_indices(&mut self, dt: f32, solvent: &mut Vec<usize>) {
-        solvent.retain(|&i| {
-            let s = &mut self.wet.solv[i];
-            if *s > 0.0 {
-                let h = self.wet.vol[i] * COAT_UM;
-                *s = (*s as f64 * (-(dt as f64) / evaporation_tau_min(h)).exp()) as f32;
-                // Engine 5: a trace below ten parts per million of the
-                // local film is numerically gone. The 2 µm term keeps
-                // the threshold finite on bare weave. A numerical estimate,
-                // not a measured evaporation law; earlier engines keep 1e-8.
-                let floor = if self.engine >= 5 { SOLVENT_FLOOR.max(1e-5 * (h + THIN_FILM_UM)) } else { SOLVENT_FLOOR };
-                if *s < floor { *s = 0.0; }
-            }
-            *s > 0.0
-        });
+        solvent.retain(|&i| self.wet.evaporate_solvent(i, dt, self.engine));
     }
 
     /// Solvent-wet paint flows for `dt` minutes: the wet surface (relief +
@@ -267,7 +254,7 @@ impl Canvas {
         if solvent.is_empty() { return; }
         let (w, h) = (self.f.w, self.f.h);
         let dx = self.px_mm();
-        let timed = self.wet.clock.px.len() == w * h;
+        let timed = self.wet.timed();
         // the mobility (mm²/min) of each pixel in the dirty box
         // (the canvas holds solvent in µm; the flow works in coats)
         // (of paint `v` and solvent `s`, coats, at cure `cure`)
@@ -278,7 +265,7 @@ impl Canvas {
             let fl = if timed { crate::drying::fluid(cure) } else { 1.0 };
             spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
-        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i], wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
+        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.volume(i), wet.solvent_um(i) / COAT_UM, if timed { wet.drying(i).unwrap().cure } else { 0.0 }) };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
@@ -339,7 +326,7 @@ impl Canvas {
                 .map(|k2| {
                     let i = index(k2);
                     let (x, y) = (i % w, i / w);
-                    let l = wet.vol[i] + wet.solv[i] / COAT_UM;
+                    let l = wet.volume(i) + wet.solvent_um(i) / COAT_UM;
                     let m = mob(wet, i);
                     if m <= 0.0 || l <= 0.0 {
                         return [0.0; 4];
@@ -351,7 +338,7 @@ impl Canvas {
                     let mut sum = 0.0f32;
                     for (d, j) in nb.iter().enumerate() {
                         if let Some(j) = *j {
-                            let zj = height[j] + wet.vol[j] * COAT_UM + wet.solv[j];
+                            let zj = height[j] + wet.volume(j) * COAT_UM + wet.solvent_um(j);
                             if z > zj {
                                 q[d] = m * k * (z - zj) / COAT_UM;
                                 sum += q[d];
@@ -375,8 +362,8 @@ impl Canvas {
             left -= sub;
             // pass 2: each pixel keeps what didn't leave and gathers what came
             // in, each part with the paint and solvent of where it came from
-            let cure_of = |i: usize| if timed { wet.clock.px[i].cure } else { 0.0 };
-            let th_of = |i: usize| if timed { wet.clock.px[i].th } else { 0.0 };
+            let cure_of = |i: usize| if timed { wet.drying(i).unwrap().cure } else { 0.0 };
+            let th_of = |i: usize| if timed { wet.drying(i).unwrap().th } else { 0.0 };
             let at = |x: usize, y: usize| if sparse { indices.binary_search(&(y * w + x)).ok() } else { Some((y - y0) * rw + x - x0) };
             // (and the mobility it then has, for the next substep's length,
             // and the drying thickness of the paint that came in)
@@ -386,11 +373,11 @@ impl Canvas {
                 .map(|k2| {
                     let i = index(k2);
                     let (x, y) = (i % w, i / w);
-                    let (v, s) = (wet.vol[i], wet.solv[i] / COAT_UM);
+                    let (v, s) = (wet.volume(i), wet.solvent_um(i) / COAT_UM);
                     let l = v + s;
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
-                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.latent(i), wet.properties(i), cure_of(i));
                     let mut changed = gone > 0.0;
                     let (mut qin, mut thin) = (0.0f32, 0.0f32);
                     // from the left neighbor (its rightward flow), the right
@@ -404,16 +391,16 @@ impl Canvas {
                             continue;
                         }
                         let j = fy * w + fx;
-                        let lj = wet.vol[j] + wet.solv[j] / COAT_UM;
+                        let lj = wet.volume(j) + wet.solvent_um(j) / COAT_UM;
                         if lj <= 0.0 {
                             continue;
                         }
-                        let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
+                        let (qp, qs) = (q * wet.volume(j) / lj, q * (wet.solvent_um(j) / COAT_UM) / lj);
                         if qp > 0.0 {
                             qin += qp;
                             thin += qp * th_of(j);
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
-                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.latent(j), wet.properties(j));
                         }
                         ps += qs;
                         changed = true;
@@ -431,7 +418,6 @@ impl Canvas {
             m_max = next.par_iter().map(|c| c.6).reduce(|| 0.0, f32::max);
             active = next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))).collect();
             // write back
-            let px_ok = timed;
             for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.into_iter().enumerate() {
                 if !changed {
                     continue;
@@ -442,40 +428,14 @@ impl Canvas {
                     None => (x, y, x + 1, y + 1),
                     Some((a, b, c, d)) => (a.min(x), b.min(y), c.max(x + 1), d.max(y + 1)),
                 });
-                let was_bare = self.wet.vol[i] < 1e-5;
-                self.wet.vol[i] = pv;
-                if ps > 0.0 && self.wet.solv[i] <= 0.0 { solvent.push(i); }
-                self.wet.solv[i] = ps * COAT_UM;
-                self.wet.lat[i] = lat;
-                self.wet.hide[i] = hide;
-                if was_bare && pv >= 1e-5 {
-                    self.wet.cover[i] = 1.0;
-                }
-                if px_ok {
-                    let p = &mut self.wet.clock.px[i];
-                    p.cure = cure;
-                    // the flow isn't a brush working the film: the film keeps
-                    // its own drying. A bare pixel it reaches takes the
-                    // drying thickness of the films it came from (when they
-                    // have one; else it is judged at the next drying step,
-                    // as a bare pixel's always was), so its drying doesn't
-                    // depend on when that step falls (`wait_on_grid`)
-                    if !was_bare {
-                        p.seen = pv;
-                    } else if th_in > 0.0 {
-                        p.th = th_in;
-                        if pv >= 1e-5 {
-                            (p.seen, p.lev) = (pv, crate::surface::SET_TIME * crate::drying::fluid(cure));
-                        }
-                    }
-                }
+                if self.wet.move_flow(i, pv, ps, lat, hide, cure, th_in) { solvent.push(i); }
             }
         }
         if solvent.len() != original_len {
             solvent.sort_unstable();
             solvent.dedup();
         }
-        solvent.retain(|&i| self.wet.solv[i] > 0.0);
+        solvent.retain(|&i| self.wet.solvent_um(i) > 0.0);
         if let Some((a, b, c, d)) = moved {
             self.wet.touch(a, b, c, d);
         }
@@ -485,10 +445,7 @@ impl Canvas {
     /// the gel point; 0 where there is no open film or it has never waited.
     pub fn cure_at(&self, x: f32, y: f32) -> f32 {
         let i = self.f.index(x, y);
-        if self.wet.vol[i] < 1e-5 {
-            return 0.0;
-        }
-        self.wet.clock.px.get(i).map_or(0.0, |p| p.cure)
+        self.wet.reported_cure(i)
     }
 }
 

@@ -469,30 +469,6 @@ pub struct RagPass {
 }
 
 impl Canvas {
-    /// The wet film under pixel `i` lifted by `take` coats, as
-    /// `bristle::Surf::take` does it: a film left bare holds no cure. The
-    /// solvent in the film comes away with the paint, in their proportions
-    /// there; returns how much (coats; the canvas holds it in µm).
-    #[inline]
-    fn rag_take(&mut self, i: usize, take: f32) -> f32 {
-        let v0 = self.wet.vol[i];
-        let mut ts = 0.0;
-        if let Some(s) = self.wet.solv.get_mut(i)
-            && *s > 0.0
-            && v0 > 0.0
-        {
-            let tu = (*s * take / v0).min(*s);
-            *s -= tu;
-            ts = tu / COAT_UM;
-        }
-        let v = &mut self.wet.vol[i];
-        *v -= take;
-        if self.engine >= 2 && *v < 1e-5 && self.wet.clock.px.len() == self.wet.vol.len() {
-            self.wet.clock.px[i].cure = 0.0;
-        }
-        ts
-    }
-
     /// One contact of the rag over the pixels in `bbox` (units): `expo(x,
     /// y)` is how much of the pad passes over that point (1 = one pass
     /// through its middle), the cloth's contact there and how lightly the
@@ -524,7 +500,7 @@ impl Canvas {
         let bw = bx1 - bx0;
         let surf: Vec<f32> = (by0..by1).flat_map(|y| (bx0..bx1).map(move |x| (y, x))).map(|(y, x)| {
             let i = y * f.w + x;
-            self.height[i] + self.wet.vol[i].max(0.0) * COAT_UM
+            self.height[i] + self.wet.volume(i).max(0.0) * COAT_UM
         }).collect();
         let peaks = local_max(&surf, bw, by1 - by0, rb);
         rag.evaporate(self.now_min());
@@ -533,7 +509,7 @@ impl Canvas {
         // (engine 3: spirits reach deeper, `DAMP_REACH`)
         let (reach, wick) = if e3 { (SAG_UM * (0.25 + 1.5 * p) * (1.0 + DAMP_REACH * d), WICK + (1.0 - WICK) * (DAMP_WICK * d).min(1.0)) } else { (SAG_UM * (0.25 + 1.5 * p), WICK) };
         let k = LIFT * (0.7 + 0.6 * p) * rag.thirst() * (1.0 + if e3 { DAMP_LIFT3 } else { DAMP_LIFT } * d);
-        let timed = self.wet.clock.px.len() == self.wet.vol.len();
+        let timed = self.wet.timed();
         let mut lifted = 0.0f64;
         let mut lifted_s = 0.0f64;
         let mut got = Pool::default();
@@ -546,8 +522,8 @@ impl Canvas {
         for y in y0..y1 {
             for x in x0..x1 {
                 let i = y * f.w + x;
-                let v = self.wet.vol[i];
-                if v <= 1e-6 {
+                let v = self.wet.volume(i);
+                if crate::wet::Wet::below_rag_contact_cutoff(v) {
                     continue;
                 }
                 let (pad, c, _, press) = expo(f.ux(x), f.uy(y));
@@ -555,7 +531,7 @@ impl Canvas {
                 if e <= 0.0 {
                     continue;
                 }
-                let fl = if timed { reach_fluid(self.wet.clock.px[i].cure) } else { 1.0 };
+                let fl = if timed { reach_fluid(self.wet.drying(i).unwrap().cure) } else { 1.0 };
                 if fl <= 0.0 {
                     continue;
                 }
@@ -609,20 +585,20 @@ impl Canvas {
                 let take = take * scale;
                 if take > 0.0 {
                     if pooled {
-                        let l = &self.wet.lat[i];
+                        let l = &self.wet.latent(i);
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
                         }
-                        let h = &self.wet.hide[i];
+                        let h = &self.wet.properties(i);
                         for q in 0..h.len() {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {
-                            got.cure += self.wet.clock.px[i].cure * take;
+                            got.cure += self.wet.drying(i).unwrap().cure * take;
                         }
                         got.vol += take;
                     }
-                    let ts = self.rag_take(i, take);
+                    let ts = self.wet.lift_rag(i, take, self.engine >= 2);
                     got.solv += ts * COAT_UM;
                     row_s += ts;
                     row += take;
@@ -678,7 +654,7 @@ impl Canvas {
                     if pad <= 0.0 || rim <= 0.0 || a <= 0.0 {
                         continue;
                     }
-                    self.rag_lay(y * f.w + x, a, pl, a * per_s);
+                    self.wet.smear_rag(y * f.w + x, a, &pl.lat, pl.hide, pl.cure, a * per_s);
                     out += a;
                     bounds = Some(match bounds {
                         None => (x, y, x + 1, y + 1),
@@ -708,33 +684,6 @@ impl Canvas {
         pl.vol = t;
         pl.solv = pl.solv.max(0.0) * left + got.solv;
         (out as f64, (laid_s / COAT_UM) as f64)
-    }
-
-    /// Engine 3 (`SMEAR`): lay `v` coats of the rag's paint `pl` with
-    /// `solv_um` µm of solvent at pixel `i`, mixing by volume as a brush's
-    /// paint does (`bristle::Surf::add`).
-    fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
-        let t = self.wet.vol[i] + v;
-        let a = v / t;
-        let l = &mut self.wet.lat[i];
-        for k in 0..l.len() {
-            l[k] += (pl.lat[k] - l[k]) * a;
-        }
-        let hd = &mut self.wet.hide[i];
-        for k in 0..hd.len() {
-            hd[k] += (pl.hide[k] - hd[k]) * a;
-        }
-        if self.wet.clock.px.len() == self.wet.vol.len() {
-            let p = &mut self.wet.clock.px[i];
-            p.cure = if t < 1e-5 { 0.0 } else { p.cure + (pl.cure - p.cure) * a };
-        }
-        self.wet.cover[i] = 1.0;
-        self.wet.vol[i] = t;
-        if solv_um > 0.0
-            && let Some(sv) = self.wet.solv.get_mut(i)
-        {
-            *sv += solv_um;
-        }
     }
 
     /// Wipe the rag along `pts` (units) at `pressure` (one value, or values

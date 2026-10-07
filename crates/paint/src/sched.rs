@@ -13,7 +13,8 @@
 //! and, with hand time on, the slices of hand time with the paint ageing
 //! between them.
 
-use crate::bristle::{Bounds, Surf};
+use crate::bristle::Bounds;
+use crate::wet::Tile;
 use crate::canvas::Canvas;
 use rayon::Scope;
 use std::sync::Mutex;
@@ -149,7 +150,7 @@ impl Canvas {
     /// render then skips the tiles that miss its window (they paint nothing
     /// it holds; the rest keep their relative order), after the ids are
     /// handed out, so it paints with the same ids as the whole canvas.
-    pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
+    pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(&Tile<'_>, usize, u32) -> Bounds + Sync) {
         let Pass { grid, order, rects, secs, ids, slice } = pass;
         let order = match order {
             TileOrder::Default(_) if slice.is_some() => sweep_down(grid),
@@ -177,7 +178,7 @@ impl Canvas {
             // tiles run in parallel wherever that can't change the result: a
             // tile starts once every earlier tile (in `order`) it overlaps is
             // done
-            let dirty = run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            let dirty = surf.paint_tiles(&order, &rects, |tile, t| paint(tile, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
             if let Some((x0, y0, x1, y1)) = dirty {
                 self.wet.touch(x0, y0, x1, y1);
             }

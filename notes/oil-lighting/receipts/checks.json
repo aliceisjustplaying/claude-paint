@@ -1,0 +1,501 @@
+{
+  "note": "Selected runner values. Paths redacted. Original log hashes retained; passing logs omitted. Not an official full-suite or --candidate receipt.",
+  "runs": [
+    {
+      "mode": "all",
+      "phase": "check",
+      "verdict": "fail",
+      "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "box-features"
+      ],
+      "commit": "90b7ee449db73e8e45b8fd1c0abe98bc193fb226",
+      "dirty": true,
+      "started": "2026-10-08T19:22:11+01:00",
+      "wall_seconds": 103.0,
+      "tests_run": 21,
+      "run": "all-box-features",
+      "steps": [
+        {
+          "name": "box-features",
+          "command": "CARGO_TARGET_DIR=\"$CARGO_TARGET_DIR/bf\" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh",
+          "limit": 600.0,
+          "exit": 1,
+          "seconds": 102.88,
+          "tests_run": 21,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 1",
+          "unredacted_log_sha256": "f306814e408526a74b8025bebe09edf9dc9bd93c30a624aa40afb4cf8f2becb1"
+        }
+      ]
+    },
+    {
+      "mode": "all",
+      "phase": "build",
+      "verdict": "unfinished",
+      "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "build-release-easel",
+        "build-test-binaries",
+        "build-thinner-release-tests"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": "2026-10-08T19:10:23+01:00",
+      "wall_seconds": 0.7,
+      "tests_run": 0,
+      "run": "all-build",
+      "steps": [
+        {
+          "name": "build-release-easel",
+          "command": "cargo build --release -p easel",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 0.2,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "c196488c9f0ef1c7b7a177aed831c1ef7557009f3b0b8dad1f94582a92b1f2a3"
+        },
+        {
+          "name": "build-test-binaries",
+          "command": "cargo test --workspace --lib --bins --tests --no-run",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 0.12,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "1678dfe0a39827651218da23cf5a3f6083444e4fcd9fa623dc8408efbe920b5f"
+        },
+        {
+          "name": "build-thinner-release-tests",
+          "command": "cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 0.13,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "4847104ba3ff47afb2710dafa7ea001f32a2c5381a236e879dd4c296e03e881f"
+        }
+      ]
+    },
+    {
+      "mode": "all",
+      "phase": "check",
+      "verdict": "fail",
+      "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "old-logs",
+        "image-tolerance",
+        "baseline-package",
+        "baseline-state",
+        "lockrun",
+        "test-runner",
+        "safeguards",
+        "replay-clip",
+        "box-tubes",
+        "studio-names"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": "2026-10-08T19:10:24+01:00",
+      "wall_seconds": 145.5,
+      "tests_run": 191,
+      "run": "all-check",
+      "steps": [
+        {
+          "name": "image-tolerance",
+          "command": "uv run --script scripts/tests/image_tolerance.py",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 0.8,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "5ded4e2d135ee8222041b87e1ca4b7a7bf1f8029cbcc4613b18ad894a6edeae7"
+        },
+        {
+          "name": "old-logs",
+          "command": "scripts/tests/old_logs.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 25.46,
+          "tests_run": 11,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "54650c4af1f18ff3b2c78a662fb43846c544818f084147f31d5750b2393b1c67"
+        },
+        {
+          "name": "baseline-package",
+          "command": "notes/thinner/baseline/tools/verify_package.sh",
+          "limit": 60.0,
+          "exit": 1,
+          "seconds": 0.15,
+          "tests_run": 0,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 1",
+          "unredacted_log_sha256": "7888349e428d8d560bac0d35c6fdb9328149cf49bcc697095613e1b52a6cc154"
+        },
+        {
+          "name": "baseline-state",
+          "command": "scripts/tests/baseline_state.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 2,
+          "seconds": 0.61,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 2",
+          "unredacted_log_sha256": "0968ee0a4beef59a84bd162dfb268406754a326196d88fa7b5ad549d63716f90"
+        },
+        {
+          "name": "lockrun",
+          "command": "scripts/tests/lockrun.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 23.84,
+          "tests_run": 17,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "c58d25faac1aee27ca13bbaac6905cec118673abb40e28114cf0528ec5619016"
+        },
+        {
+          "name": "test-runner",
+          "command": "scripts/tests/test_runner.sh",
+          "limit": 120.0,
+          "exit": 0,
+          "seconds": 72.96,
+          "tests_run": 18,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "aaf46dfd11ebd93b00145306068a42f04a8f2e4629ccb4a7b1a8d1c16d8e0702"
+        },
+        {
+          "name": "safeguards",
+          "command": "scripts/tests/safeguards.sh",
+          "limit": 180.0,
+          "exit": 0,
+          "seconds": 94.07,
+          "tests_run": 140,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "14f012f83fd69c509bf34bd21672029c04cb87f8dfef101f891718bc8434e6a5"
+        },
+        {
+          "name": "replay-clip",
+          "command": "scripts/tests/replay_clip.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 5.51,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "ec2b12fb86f962457c012b33cb2dde26b63f407d5df6a6b4075111632d194d42"
+        },
+        {
+          "name": "box-tubes",
+          "command": "scripts/tests/box_tubes.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 0.74,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "2dc7f349b4c8d7ddf5b76ac5042500a483db802fc825ed5c1a2ac31a90c9bbed"
+        },
+        {
+          "name": "studio-names",
+          "command": "scripts/tests/studio_names.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 1.58,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "ef1536f993d23a0deac76a2bbd8f93510a5145c8ccb161b43951bdea9c34d339"
+        }
+      ]
+    },
+    {
+      "mode": "all",
+      "phase": "check",
+      "verdict": "fail",
+      "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "baseline-package",
+        "baseline-state"
+      ],
+      "commit": "90b7ee449db73e8e45b8fd1c0abe98bc193fb226",
+      "dirty": true,
+      "started": "2026-10-08T19:17:44+01:00",
+      "wall_seconds": 4.3,
+      "tests_run": 4,
+      "run": "all-fixtures",
+      "steps": [
+        {
+          "name": "baseline-package",
+          "command": "notes/thinner/baseline/tools/verify_package.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 2.76,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "dfd6b0c10dce766d7449050b5ef5bcf43d318786e04992bc764e07237c791e77"
+        },
+        {
+          "name": "baseline-state",
+          "command": "scripts/tests/baseline_state.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 1,
+          "seconds": 1.32,
+          "tests_run": 3,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 1",
+          "unredacted_log_sha256": "838368e3b01c6188c22e1cbe969682f5ac74d17f978ffe1372c2a6f57a35de3d"
+        }
+      ]
+    },
+    {
+      "mode": "all",
+      "phase": "both",
+      "verdict": "unfinished",
+      "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "build-release-easel",
+        "build-test-binaries",
+        "build-thinner-release-tests",
+        "old-logs",
+        "image-tolerance",
+        "baseline-package",
+        "baseline-state",
+        "lockrun",
+        "test-runner",
+        "safeguards",
+        "replay-clip",
+        "box-tubes",
+        "studio-names"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": null,
+      "wall_seconds": 0,
+      "tests_run": 0,
+      "run": "all",
+      "steps": []
+    },
+    {
+      "mode": "fast",
+      "phase": "build",
+      "verdict": "unfinished",
+      "list_sha256": "3a1c2a86e0d0d5f83175d96f3af95c52651fcca5fbee03868bbdc0255a451ace",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "build-release-easel",
+        "build-test-binaries",
+        "build-thinner-release-tests"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": "2026-10-08T19:07:17+01:00",
+      "wall_seconds": 135.5,
+      "tests_run": 0,
+      "run": "fast-build",
+      "steps": [
+        {
+          "name": "build-release-easel",
+          "command": "cargo build --release -p easel",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 54.69,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "d50832531f1b3972929084543bd096b983223f6551ffb365a9afb080254f0814"
+        },
+        {
+          "name": "build-test-binaries",
+          "command": "cargo test --workspace --lib --bins --tests --no-run",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 38.7,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "86ac07958c0e6af2cf6ae86f8fc118d9367fea939660f458ab456082ec7d1d0b"
+        },
+        {
+          "name": "build-thinner-release-tests",
+          "command": "cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run",
+          "limit": 600.0,
+          "exit": 0,
+          "seconds": 41.83,
+          "tests_run": null,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "53380a4a00fca1afe46b59d03bf773f92acd1b5c3fe632ad9e2548ea7f686343"
+        }
+      ]
+    },
+    {
+      "mode": "fast",
+      "phase": "check",
+      "verdict": "fail",
+      "list_sha256": "3a1c2a86e0d0d5f83175d96f3af95c52651fcca5fbee03868bbdc0255a451ace",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "old-logs",
+        "image-tolerance",
+        "baseline-package",
+        "baseline-state"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": "2026-10-08T19:09:33+01:00",
+      "wall_seconds": 29.8,
+      "tests_run": 13,
+      "run": "fast-check",
+      "steps": [
+        {
+          "name": "old-logs",
+          "command": "scripts/tests/old_logs.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 25.83,
+          "tests_run": 11,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "b849377a749a809fc88b3be7f9550479d7623f1c51aeab464426dc86f7cc9d0a"
+        },
+        {
+          "name": "image-tolerance",
+          "command": "uv run --script scripts/tests/image_tolerance.py",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 2.46,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "df7d7d11d3e44745174498c7dd9f1a83ee083b2ad7456e70bff15533bbb3041c"
+        },
+        {
+          "name": "baseline-package",
+          "command": "notes/thinner/baseline/tools/verify_package.sh",
+          "limit": 60.0,
+          "exit": 1,
+          "seconds": 0.32,
+          "tests_run": 0,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 1",
+          "unredacted_log_sha256": "7888349e428d8d560bac0d35c6fdb9328149cf49bcc697095613e1b52a6cc154"
+        },
+        {
+          "name": "baseline-state",
+          "command": "scripts/tests/baseline_state.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 2,
+          "seconds": 0.71,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 2",
+          "unredacted_log_sha256": "0968ee0a4beef59a84bd162dfb268406754a326196d88fa7b5ad549d63716f90"
+        }
+      ]
+    },
+    {
+      "mode": "fast",
+      "phase": "check",
+      "verdict": "fail",
+      "list_sha256": "3a1c2a86e0d0d5f83175d96f3af95c52651fcca5fbee03868bbdc0255a451ace",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "baseline-package",
+        "baseline-state"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": "2026-10-08T19:13:51+01:00",
+      "wall_seconds": 4.3,
+      "tests_run": 4,
+      "run": "fast-fixtures",
+      "steps": [
+        {
+          "name": "baseline-package",
+          "command": "notes/thinner/baseline/tools/verify_package.sh",
+          "limit": 60.0,
+          "exit": 0,
+          "seconds": 2.72,
+          "tests_run": 1,
+          "timed_out": false,
+          "ok": true,
+          "why": "",
+          "unredacted_log_sha256": "dfd6b0c10dce766d7449050b5ef5bcf43d318786e04992bc764e07237c791e77"
+        },
+        {
+          "name": "baseline-state",
+          "command": "scripts/tests/baseline_state.sh \"$CARGO_TARGET_DIR/release/easel\"",
+          "limit": 60.0,
+          "exit": 1,
+          "seconds": 1.3,
+          "tests_run": 3,
+          "timed_out": false,
+          "ok": false,
+          "why": "exit 1",
+          "unredacted_log_sha256": "838368e3b01c6188c22e1cbe969682f5ac74d17f978ffe1372c2a6f57a35de3d"
+        }
+      ]
+    },
+    {
+      "mode": "fast",
+      "phase": "both",
+      "verdict": "unfinished",
+      "list_sha256": "3a1c2a86e0d0d5f83175d96f3af95c52651fcca5fbee03868bbdc0255a451ace",
+      "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+      "only": [
+        "build-release-easel",
+        "build-test-binaries",
+        "build-thinner-release-tests",
+        "old-logs",
+        "image-tolerance",
+        "baseline-package",
+        "baseline-state"
+      ],
+      "commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+      "dirty": true,
+      "started": null,
+      "wall_seconds": 0,
+      "tests_run": 0,
+      "run": "fast",
+      "steps": []
+    }
+  ]
+}

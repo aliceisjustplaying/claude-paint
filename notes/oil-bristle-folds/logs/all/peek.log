@@ -1,0 +1,7 @@
+$ sh scripts/tests/peek.sh
+10850 /tmp/cpt.l0a_38h8/peek-test-80011/whole.png
+2799553 /tmp/cpt.l0a_38h8/peek-test-80011/noise-view.png
+1249 /tmp/cpt.l0a_38h8/peek-test-80011/crop.png
+peek output must end in .png
+crop sides must be 1 to 1200 pixels
+peek: whole PNG, byte limit, 1:1 crop and invalid-output checks passed

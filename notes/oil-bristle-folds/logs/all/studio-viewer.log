@@ -1,0 +1,4 @@
+$ cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow python -m pytest -q -p no:cacheprovider -rs test_studio.py
+Installed 6 packages in 19ms
+........................................................                 [100%]
+56 passed in 20.86s

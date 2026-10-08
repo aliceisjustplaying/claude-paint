@@ -1,0 +1,10 @@
+$ cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run
+   Compiling either v1.18.0
+   Compiling paint v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/paint)
+   Compiling rayon v1.12.0
+    Finished `release` profile [optimized] target(s) in 19.32s
+  Executable tests/thinner_physics.rs (target/release/deps/thinner_physics-60784f8c1853f7d6)
+  Executable tests/thinner_pigments.rs (target/release/deps/thinner_pigments-0b7756c5a852877d)
+   Compiling easel v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/easel)
+    Finished `release` profile [optimized] target(s) in 38.52s
+  Executable unittests src/main.rs (target/release/deps/easel-6feb5e1e04edbf34)

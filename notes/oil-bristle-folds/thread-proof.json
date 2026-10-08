@@ -1,0 +1,10 @@
+{
+  "threads": [
+    1,
+    4
+  ],
+  "pngs_equal_per_run": 48,
+  "metric_rows_equal_per_run": 16,
+  "drying_rows_equal_per_run": 16,
+  "seconds": 3.153
+}

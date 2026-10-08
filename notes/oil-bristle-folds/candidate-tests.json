@@ -1,0 +1,10 @@
+{
+  "code_commit": "9e28e343e666b13d018fb0d4137b156cf4cfe0c6",
+  "command": "uv run --no-project scripts/lockrun --timeout 60 -- cargo test -p paint --lib fold_candidate_tests -- --nocapture",
+  "passed": 2,
+  "failed": 0,
+  "ignored": 0,
+  "test_seconds": 0.19,
+  "locked_batch_seconds": 1.9,
+  "bristle_sha256": "61f04704f93da4a47c9aaecdc93afa4773da4d5bac76273f133c9c7f4a4ff5f0"
+}

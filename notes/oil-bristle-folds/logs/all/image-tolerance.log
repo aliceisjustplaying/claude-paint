@@ -1,0 +1,2 @@
+$ uv run --script scripts/tests/image_tolerance.py
+image_tolerance: 8 cases passed

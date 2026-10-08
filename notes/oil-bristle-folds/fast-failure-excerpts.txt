@@ -1,0 +1,63 @@
+Selected excerpts from the unsuccessful initial fast suite. Not a full log.
+Recorded command: uv run --no-project scripts/test --summary notes/oil-bristle-folds/fast-tests.local.json --logs target/folds-fast-logs
+
+## cargo-test
+$ scripts/tests/cargo_tests.sh -j 4
+
+## baseline-state
+state_compare: EQUAL (0 of 2 chunks differ)
+body: state equal on every baseline field
+state_compare: EQUAL (0 of 3 chunks differ)
+overlap: state equal on every baseline field
+state_compare: EQUAL (0 of 4 chunks differ)
+pickup: state equal on every baseline field
+  wet.vol: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+  wet.vol: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+  wet.vol: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+  wet.vol: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+  wet.vol: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+state_compare: DIFFERENT (5 of 8 chunks differ)
+
+## thinner-quick
+== check 2: cargo build --release -p easel, then scripts/thinner_check2
+body: state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+overlap: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+pickup: state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+rag: STATE DIFFERS
+    wet.vol: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.vol: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.vol: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.vol: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.vol: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+  state_compare: DIFFERENT (5 of 8 chunks differ)
+  png DIFFERENT as af49348's; printed output DIFFERENT; state digests different
+stroke: state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+wait: state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+check 2: compare_build.sh failed (exit 1)
+check 2: 5 of 6 scenes have af49348's PNG
+body (thinner=0): state equal on every baseline field (EQUAL (0 of 2 chunks differ))
+overlap (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+pickup (thinner=0): state equal on every baseline field (EQUAL (0 of 4 chunks differ))
+rag (thinner=0): STATE DIFFERS
+    wet.vol: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.vol: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)
+    wet.vol: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.vol: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+    wet.vol: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)
+  state_compare: DIFFERENT (5 of 8 chunks differ)
+  png DIFFERENT
+stroke (thinner=0): state equal on every baseline field (EQUAL (0 of 3 chunks differ))
+wait (thinner=0): state equal on every baseline field (EQUAL (0 of 7 chunks differ))
+check 2: FAIL
+== check 2: exited 1 after 4 s
+assertion `left == right` failed: current expanded tube table changed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 1.04s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 4.04s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 114 filtered out; finished in 12.37s
+thinner acceptance --quick: 21 of 24 required tests passed (logs: $TMPDIR)
+  NOT PASSED: check 2 (scripts/thinner_check2: see $TMPDIR)
+  NOT PASSED: pigments: cargo exited 101
+  NOT PASSED: c13_every_pigment_value_is_af49348s (failed)
+  NOT PASSED: c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 (did not run: not found, not built or cut short)
+thinner acceptance --quick: FAILED

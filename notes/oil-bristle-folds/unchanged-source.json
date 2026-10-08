@@ -1,0 +1,45 @@
+{
+  "baseline": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+  "files": [
+    {
+      "path": "crates/paint/src/canvas.rs",
+      "sha256": "d0615f08758ab99ea19f1fa87a979ed87e7815ce8298eb8160c713c8fd6503e7",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/checkpoint.rs",
+      "sha256": "598590ea6ee40fd77a9afe05a402b61268c35d2e536a7cb47e5d2f4174e31b57",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/wet.rs",
+      "sha256": "e500974a053529fa94bb3bb7290151e00d367579d3479f3e940c68637a45a44b",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/surface.rs",
+      "sha256": "45572660092d03bb77ef0e6657b6d116e350862890c4dd21b06b2f7db210f750",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/lib.rs",
+      "sha256": "a758e1e8953a4791f7d7734bba031153ecdc81a427e537dd9dfad82320894865",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/bristle.rs: impl Knife and Canvas::knife region",
+      "sha256": "b632f4ce9a537545a9d4b07b1755eb226059c273068d29e1335400dfc42433c0",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/paint/src/palette.rs",
+      "sha256": "bf8d7066d6ccf5e97d32718cdadfac34849d721c3900f123174b7b4f46f139b1",
+      "baseline_equal": true
+    },
+    {
+      "path": "crates/easel/tests/boxes.rs",
+      "sha256": "fad6e47732e9bb954a5172856473e6d3436c4bcf760c7c7513611cb9a6f94dbe",
+      "baseline_equal": true
+    }
+  ]
+}

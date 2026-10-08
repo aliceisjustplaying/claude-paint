@@ -1,0 +1,45 @@
+{
+  "baseline_commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+  "checks": [
+    {
+      "command": [
+        "scripts/tests/baseline_state.sh",
+        "target/release/easel"
+      ],
+      "exit": 1,
+      "evidence": [
+        "state_compare: EQUAL (0 of 2 chunks differ)",
+        "body: state equal on every baseline field",
+        "state_compare: EQUAL (0 of 3 chunks differ)",
+        "overlap: state equal on every baseline field",
+        "state_compare: EQUAL (0 of 4 chunks differ)",
+        "pickup: state equal on every baseline field",
+        "  wet.vol: 382 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)",
+        "  wet.vol: 429 of 8192 values differ (largest |diff| 2.96356 at flat index 1310: 0.9863235950469971 -> 3.9498796463012695)",
+        "  wet.vol: 756 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)",
+        "  wet.vol: 1206 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)",
+        "  wet.vol: 1442 of 8192 values differ (largest |diff| 7.03836 at flat index 1884: 1.9533520936965942 -> 8.991713523864746)",
+        "state_compare: DIFFERENT (5 of 8 chunks differ)"
+      ]
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "-p",
+        "paint",
+        "--test",
+        "thinner_pigments",
+        "--",
+        "--exact",
+        "c13_every_pigment_value_is_af49348s"
+      ],
+      "exit": 101,
+      "evidence": [
+        "assertion `left == right` failed: current expanded tube table changed",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "mode": "all",
+  "phase": "both",
+  "verdict": "unfinished",
+  "verdict_text": "UNFINISHED",
+  "list": "notes/speed/test_lists/all.tsv",
+  "list_sha256": "f1de0f7b1bd6610495940b678e31ae1a786e8c301472996a20665bae19053112",
+  "runner_sha256": "fab220d65fc9e74bbaf5f6e2704e2814ae3abee3f40cdb58d679201ed77e454e",
+  "target_dir": null,
+  "only": [
+    "build-release-easel",
+    "build-test-binaries",
+    "build-thinner-release-tests",
+    "image-tolerance",
+    "old-logs",
+    "baseline-package",
+    "baseline-state",
+    "lockrun",
+    "box-features",
+    "test-runner",
+    "safeguards",
+    "runner-round24",
+    "studio-viewer",
+    "replay-clip",
+    "box-tubes",
+    "studio-names",
+    "peek"
+  ],
+  "commit": "9e28e343e666b13d018fb0d4137b156cf4cfe0c6",
+  "dirty": true,
+  "phases": {
+    "build": {
+      "limit": 600.0,
+      "exit": 1,
+      "verdict": "unfinished",
+      "wall_seconds": null
+    }
+  },
+  "wall_seconds": 0,
+  "build_seconds": 0,
+  "test_seconds": 0,
+  "tests_run": 0,
+  "steps": []
+}

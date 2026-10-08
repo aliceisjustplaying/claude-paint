@@ -1,0 +1,4 @@
+$ cargo build --release -p easel
+   Compiling paint v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/paint)
+   Compiling easel v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/easel)
+    Finished `release` profile [optimized] target(s) in 52.73s

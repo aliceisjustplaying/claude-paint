@@ -1,0 +1,8 @@
+{
+  "baseline_commit": "8eeb9bec3ce146bcd15c37db447665391fb95bdd",
+  "pngs_equal": 24,
+  "metric_rows_equal": 8,
+  "seconds": 82.737,
+  "baseline_bristle_sha256": "bd03d045758dde60e71caded878803f6c4189e3521b283a23e6d291920a5cec7",
+  "candidate_bristle_sha256": "61f04704f93da4a47c9aaecdc93afa4773da4d5bac76273f133c9c7f4a4ff5f0"
+}

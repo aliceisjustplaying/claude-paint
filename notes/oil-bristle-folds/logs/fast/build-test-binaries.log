@@ -1,0 +1,82 @@
+$ cargo test --workspace --lib --bins --tests --no-run
+   Compiling cfg-if v1.0.5
+   Compiling simd-adler32 v0.3.10
+   Compiling autocfg v1.5.1
+   Compiling crossbeam-utils v0.8.23
+   Compiling adler2 v2.0.1
+   Compiling crc32fast v1.5.2
+   Compiling crossbeam-epoch v0.9.21
+   Compiling libc v0.2.189
+   Compiling crossbeam-deque v0.8.8
+   Compiling bytemuck v1.25.2
+   Compiling rayon-core v1.13.0
+   Compiling rand_core v0.6.4
+   Compiling num-traits v0.2.19
+   Compiling fdeflate v0.3.7
+   Compiling bitflags v2.13.2
+   Compiling libm v0.2.16
+   Compiling miniz_oxide v0.9.1
+   Compiling miniz_oxide v0.8.9
+   Compiling pxfm v0.1.30
+   Compiling arrayref v0.3.9
+   Compiling either v1.18.0
+   Compiling strict-num v0.1.1
+   Compiling rand v0.8.8
+   Compiling tiny-skia-path v0.12.0
+   Compiling rand_xorshift v0.3.0
+   Compiling byteorder-lite v0.1.0
+   Compiling paint v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/paint)
+   Compiling arrayvec v0.7.8
+   Compiling log v0.4.34
+   Compiling find-msvc-tools v0.1.13
+   Compiling shlex v2.0.1
+   Compiling parking_lot_core v0.9.12
+   Compiling cc v1.4.7
+   Compiling lua-src v551.0.2
+   Compiling pkg-config v0.3.34
+   Compiling smallvec v1.16.1
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling memchr v2.8.3
+   Compiling bstr v1.13.1
+   Compiling rustc-hash v2.1.3
+   Compiling easel v0.1.0 (~/src/a/claude-paint-oil-bristle-folds/crates/easel)
+   Compiling flate2 v1.1.10
+   Compiling moxcms v0.8.1
+   Compiling noise v0.9.0
+   Compiling which v8.0.6
+   Compiling mixbox v2.0.0
+   Compiling png v0.18.1
+   Compiling luajit-src v210.7.3+1ee778a
+   Compiling tiny-skia v0.12.0
+   Compiling mlua-sys v0.12.0
+   Compiling parking_lot v0.12.5
+   Compiling image v0.25.10
+   Compiling rayon v1.12.0
+   Compiling mlua v0.12.1
+warning: variable does not need to be mutable
+   --> crates/paint/src/thinner.rs:900:21
+    |
+900 |                 let mut report = |name: &str, c: &mut Canvas, r: (f32, f32, f32, f32), brush: Option<f64>| {
+    |                     ----^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib test) generated 1 warning (run `cargo fix --lib -p paint --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 34.58s
+  Executable unittests src/main.rs (target/debug/deps/easel-08ed89ea3e311712)
+  Executable tests/boxes.rs (target/debug/deps/boxes-dda03e40250b0bdc)
+  Executable tests/delivery.rs (target/debug/deps/delivery-fac90a9eefa13f51)
+  Executable tests/determinism.rs (target/debug/deps/determinism-89806e35bef61f86)
+  Executable tests/painter.rs (target/debug/deps/painter-e14ab75145429d26)
+  Executable tests/session_integrity.rs (target/debug/deps/session_integrity-c14d0f8e101c605f)
+  Executable tests/smoke.rs (target/debug/deps/smoke-f4053151f4ac696d)
+  Executable unittests src/lib.rs (target/debug/deps/paint-9d13eca2d11429aa)
+  Executable tests/curved_drag_nan.rs (target/debug/deps/curved_drag_nan-ab274f415579e97d)
+  Executable tests/ground_grain.rs (target/debug/deps/ground_grain-0447585486dae176)
+  Executable tests/look_rim.rs (target/debug/deps/look_rim-4b1707da4ce6ea41)
+  Executable tests/look_sienna.rs (target/debug/deps/look_sienna-2b9a1ff3b9ba29b8)
+  Executable tests/thinner_physics.rs (target/debug/deps/thinner_physics-6c1b64e8b1cee720)
+  Executable tests/thinner_pigments.rs (target/debug/deps/thinner_pigments-75d66af883ce26ab)

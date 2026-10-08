@@ -1,0 +1,1 @@
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact crop_max_delta_coats=0

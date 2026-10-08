@@ -745,6 +745,8 @@ pub(crate) struct Surf {
     /// Engine 4: bristles in stiff paint gather into clumps that lay it in
     /// ridges and furrows and plough it aside a clump's width (`exchange`).
     clump: bool,
+    /// Per-call visual experiment; never saved or enabled by ordinary work.
+    folds: Option<FoldContact>,
     /// Engine 4: paint laid loses its solvent at once (it evaporates in
     /// minutes), and an absorbent ground draws oil out of it (`add`).
     lean: bool,
@@ -891,6 +893,7 @@ impl Canvas {
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
             clump: self.engine >= 4,
+            folds: None,
             lean: self.engine >= 4,
             absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
@@ -923,6 +926,20 @@ impl Canvas {
     /// Panics if the brush holds solvent (a thinned load) and the canvas's
     /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        self.drag_contact(held, g, clip, false);
+    }
+
+    /// Isolated irregular-clump/fold candidate under unchanged lighting.
+    /// Opt in for EACH gesture; ordinary `drag`, work, touches and knives
+    /// remain unchanged. No engine version or checkpoint state is added.
+    /// A program reproducing this experiment must record these explicit
+    /// calls; easel logs do not expose or replay this candidate.
+    /// Only broad, stiff, blunt brushes in engine 4+ participate.
+    pub fn drag_bristle_folds(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        self.drag_contact(held, g, clip, true);
+    }
+
+    fn drag_contact(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>, folds: bool) {
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
@@ -932,7 +949,13 @@ impl Canvas {
         }
         self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
-        let surf = self.surf();
+        let mut surf = self.surf();
+        if folds && surf.clump && held.tool.point == 0.0 && held.tool.stiffness > 0.6
+            && held.tool.width * self.mm_per_unit >= 6.0
+        {
+            surf.folds = Some(FoldContact { mm_per_unit: self.mm_per_unit, distance_mm: 0.0,
+                seed: held.bristles.first().map_or(0, |b| b.seed) ^ (id as u64).wrapping_mul(7919) });
+        }
         let mut scratch = Vec::new();
         // SAFETY: exclusive &mut self, single brush.
         let b = unsafe { drag_on(surf, held, g, clip.map(Clip::Mask), id, &mut scratch) };
@@ -1113,7 +1136,7 @@ fn limit(r: Option<Option<Rect>>) -> Rect {
 /// access is clamped to that footprint, and debug builds assert that the
 /// clamp never cuts anything.)
 pub(crate) unsafe fn drag_on(
-    sf: Surf,
+    mut sf: Surf,
     held: &mut Held,
     g: &Gesture,
     clip: Option<Clip<'_>>,
@@ -1167,6 +1190,9 @@ pub(crate) unsafe fn drag_on(
     let tip = held.bristles.iter().enumerate().min_by(|a, b| a.1.thresh.total_cmp(&b.1.thresh)).map_or(0, |(i, _)| i);
     for k in 0..=nsteps {
         let d = (k as f32 * step).min(total);
+        if let Some(folds) = &mut sf.folds {
+            folds.distance_mm = d / s * folds.mm_per_unit;
+        }
         while seg + 1 < path.len() - 1 && arc[seg + 1] < d {
             seg += 1;
         }
@@ -1200,15 +1226,27 @@ pub(crate) unsafe fn drag_on(
 
         // where each touching hair meets the canvas this step
         for (bi, b) in held.bristles.iter_mut().enumerate() {
-            let reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
+            let mut reach = (p - b.thresh) / (1.0 - b.thresh).max(1e-3);
             if reach <= 0.0 && !(bi == tip && p > 0.0) {
                 b.prev = [None, None];
                 contact[bi] = None;
                 continue;
             }
+            let mut rx = b.rx;
+            if let Some(folds) = sf.folds {
+                // Only already-touching hairs change reach: no contact is
+                // invented when pressure has not brought a hair down.
+                let (group, fold) = folds.at(b.rx, tool.width);
+                let strength = fold_strength(b, &tool);
+                reach *= (1.0 + strength * (0.25 * group + 0.3 * fold)).max(0.0);
+                // Shared lateral deflection gathers neighboring tips toward
+                // bunches and the broad fold's crest. Bound it INSIDE the
+                // existing root extent, so path/crop/scheduler bounds hold.
+                rx = (rx + strength * folds.deflect(rx, tool.width)).clamp(-ROOT_MAX, ROOT_MAX);
+            }
             // bristles wander a little across the stroke
             let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
-            let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
+            let (ox, oy) = ((rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
             let trail = tool.length * s * b.len * p;
@@ -1368,6 +1406,74 @@ fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
     (0.5 * area.abs()).clamp(0.0, 1.0)
 }
 
+/// Transient gesture coordinates, in millimeters, shared by neighboring
+/// hairs. Constants below are aesthetic estimates, not measured brush laws.
+#[derive(Clone, Copy)]
+struct FoldContact {
+    mm_per_unit: f32,
+    distance_mm: f32,
+    seed: u64,
+}
+
+impl FoldContact {
+    fn at(self, rx: f32, width: f32) -> (f32, f32) {
+        let width_mm = width * self.mm_per_unit;
+        let x = rx * width_mm * 0.5;
+        let d = self.distance_mm;
+        // Irregular, gently wandering 1.1 mm groups, coherent for 7 mm of
+        // travel. Warp the group positions rather than overlaying stripes.
+        let warp = fold_noise(x / 3.0, d / 11.0, self.seed ^ 0xA61);
+        let group = fold_noise(x / 1.1 + 0.6 * warp, d / 7.0, self.seed ^ 0xB72);
+        // Occasional local bunching: a broad release ridge beside a hollow.
+        // Compact envelopes vanish at each 14 mm interval's boundaries.
+        let cell = (d / 14.0).floor() as i64;
+        let h = |n| crate::rng::hash2(cell, n, self.seed ^ 0xC83);
+        let along = d - cell as f32 * 14.0;
+        let envelope = 1.0 - smoothstep(1.0, 3.0, (along - (4.0 + 6.0 * h(0))).abs());
+        let center = (2.0 * h(1) - 1.0) * width_mm * 0.32
+            + 0.5 * wander(d / 9.0, self.seed ^ 0xD94);
+        let span = 0.9 + 0.8 * h(2);
+        let side = if h(3) < 0.5 { -1.0 } else { 1.0 };
+        let ridge = 1.0 - smoothstep(0.0, span, (x - center).abs());
+        let hollow = 1.0 - smoothstep(0.0, span * 1.2, (x - center - side * span * 1.3).abs());
+        let fold = if h(4) > 0.35 { envelope * (ridge - hollow) } else { 0.0 };
+        (group, fold)
+    }
+
+    fn deflect(self, rx: f32, width: f32) -> f32 {
+        let width_mm = width * self.mm_per_unit;
+        // A physical finite difference of the bundle contact field. Hairs
+        // move toward positive bunches; this is tip geometry BEFORE exchange,
+        // never a modification of deposited height. At the edges it vanishes.
+        let delta = 2.0 * 0.3 / width_mm;
+        let (ga, fa) = self.at(rx - delta, width);
+        let (gb, fb) = self.at(rx + delta, width);
+        let mm = (0.45 * (gb - ga) / 0.6 + 0.55 * (fb - fa) / 0.6).clamp(-0.65, 0.65);
+        2.0 * mm / width_mm * (1.0 - rx * rx).max(0.0)
+    }
+
+    fn release(self, br: &Bristle, tool: &Tool) -> f32 {
+        let (group, fold) = self.at(br.rx, tool.width);
+        // Positive and bounded; the ordinary exchange still subtracts every
+        // deposited unit from THIS hair's finite load and lifts wet paint.
+        (1.0 + fold_strength(br, tool) * (0.65 * group + 0.85 * fold)).clamp(0.15, 2.5)
+    }
+}
+
+fn fold_strength(br: &Bristle, tool: &Tool) -> f32 {
+    let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
+    ((ps - 0.4) / 0.6).clamp(0.0, 1.0) * smoothstep(0.6, 0.9, tool.stiffness)
+}
+
+/// Smooth physical-coordinate field, not a raster or a height perturbation.
+fn fold_noise(x: f32, y: f32, seed: u64) -> f32 {
+    let (ix, iy) = (x.floor() as i64, y.floor() as i64);
+    let (u, v) = (smoothstep(0.0, 1.0, x - x.floor()), smoothstep(0.0, 1.0, y - y.floor()));
+    let a = lerp_f(crate::rng::hash2(ix, iy, seed), crate::rng::hash2(ix + 1, iy, seed), u);
+    let b = lerp_f(crate::rng::hash2(ix, iy + 1, seed), crate::rng::hash2(ix + 1, iy + 1, seed), u);
+    2.0 * lerp_f(a, b, v) - 1.0
+}
+
 /// Smooth 1-D value noise, −1..1.
 fn wander(t: f32, seed: u64) -> f32 {
     let i = t.floor();
@@ -1425,6 +1531,12 @@ unsafe fn exchange(
             // bristle touched and laid paint as usual (so it arrives in the
             // window about as spent as in a whole render), lifting none
             let travel = (seg / s).max(rb / s * 0.5);
+            let release = sf.folds.map(|f| f.release(br, tool));
+            let ghost_left = |liquid: f32, travel: f32| {
+                let loss = (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH;
+                let loss = release.map_or(loss, |g| (loss * g).min(0.95));
+                liquid * (1.0 - loss)
+            };
             if br.solvent > 0.0 {
                 // (a thinned load: its liquid runs down the same way, paint
                 // and solvent alike)
@@ -1432,7 +1544,7 @@ unsafe fn exchange(
                 // (the exchange experiment: a thinned hair lets go more slowly)
                 let travel = if crate::thinner::exchange() && !sf.laid.is_null() { travel * (1.0 - br.solvent / l).powf(crate::thinner::exchange_kj().0) } else { travel };
                 let left = match dep {
-                    None => l * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                    None => ghost_left(l, travel),
                     Some(v) => (l - v.min(l * 0.5) * GHOST_TOUCH).max(0.0),
                 };
                 let f = if l > 0.0 { left / l } else { 0.0 };
@@ -1441,7 +1553,7 @@ unsafe fn exchange(
                 return;
             }
             br.vol = match dep {
-                None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
+                None => ghost_left(br.vol, travel),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
             return;
@@ -1581,7 +1693,9 @@ unsafe fn exchange(
         // how far the paint is stiff enough to hold hairs together: none in
         // fluid paint, rising steeply in stiff
         let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
-        let dep_total = if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
+        let dep_total = if let Some(folds) = sf.folds {
+            (dep_total * folds.release(br, tool)).min(liquid * 0.95)
+        } else if sf.clump && dep.is_none() && !fine && stiffen > 0.0 {
             let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
             let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
             let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
@@ -3332,5 +3446,65 @@ mod spatter_tests {
     fn spatter_is_deterministic() {
         assert_eq!(flick(0.2, 0.7).0, flick(0.2, 0.7).0);
         assert_eq!(flick(0.2, 0.7).2.to_bits(), flick(0.2, 0.7).2.to_bits());
+    }
+}
+
+#[cfg(test)]
+mod fold_candidate_tests {
+    use super::*;
+    use crate::color::hex;
+
+    // New public experiment boundary: existing tests only exercise ordinary
+    // drag. Catch an over-budget release or lost pickup on the opt-in path.
+    #[test]
+    fn fold_candidate_keeps_finite_reservoirs_through_wet_crossings() {
+        for width in [64, 160, 320] {
+            for thinner in [0.0, 0.5] {
+                let mut c = Canvas::new_window(width, 1.0, [0.8; 3], None).with_size_mm(100.0);
+                let mut a = Held::new(Tool::hog_flat(140.0), 19);
+                let mut b = Held::new(Tool::hog_flat(140.0), 71);
+                a.load(Paint::body(hex("#b44424")).with_stiff(0.95).with_thinner(thinner), 0.7);
+                b.load(Paint::body(hex("#275ca8")).with_stiff(0.95).with_thinner(thinner), 0.04);
+                let initial = a.carried().0 + b.carried().0;
+                let solvent = a.carried().1 + b.carried().1;
+                c.drag_bristle_folds(&mut a, &Gesture::line((100.0, 500.0), (900.0, 500.0)).shake(0.0), None);
+                let blue: Vec<_> = b.bristles.iter().map(|b| b.lat).collect();
+                c.drag_bristle_folds(&mut b, &Gesture::new(vec![(450.0, 150.0), (550.0, 500.0), (450.0, 850.0)]).pressure(0.2, 0.9).shake(0.0), None);
+                // Net carried volume can fall while pickup occurs, especially
+                // under the thinner ceiling. Red entering blue hairs proves
+                // pickup without conflating it with the release balance.
+                assert!(b.bristles.iter().zip(&blue).any(|(b, l)| b.lat != *l),
+                    "{width}px, thinner {thinner}: crossing must dirty blue hairs");
+                let after = c.wet_total() + a.carried().0 + b.carried().0;
+                assert!((after / initial - 1.0).abs() < 2e-5, "{width}px, thinner {thinner}: {initial} -> {after}");
+                let left = c.solvent_total() + a.carried().1 + b.carried().1;
+                assert!((left - solvent).abs() < (solvent * 2e-5).max(1e-6));
+                assert!(c.wet.vol.iter().all(|v| v.is_finite() && *v >= 0.0));
+                assert!(a.bristles.iter().chain(&b.bristles).all(|b| b.vol.is_finite() && b.vol >= 0.0));
+            }
+        }
+    }
+
+    // Preserve historical engine selection and nonparticipating tools.
+    // Comparison is an identity CONTRACT here, not an expected renderer output.
+    #[test]
+    fn fold_opt_in_leaves_old_engines_and_other_tools_unchanged() {
+        for (engine, tool) in [(1, Tool::hog_flat(140.0)), (3, Tool::hog_flat(140.0)),
+            (5, Tool::round_sable(140.0)), (5, Tool::hog_flat(10.0)),
+            (5, Tool { point: 0.8, ..Tool::hog_flat(140.0) })]
+        {
+            let mut a = Canvas::new_window(64, 1.0, [0.8; 3], None).with_size_mm(100.0).with_engine(engine);
+            let mut b = a.clone();
+            let mut h = Held::new(tool, 19);
+            h.load(Paint::body(hex("#b44424")).with_stiff(0.95), 0.7);
+            let mut j = h.clone();
+            let g = Gesture::line((100.0, 500.0), (900.0, 500.0)).shake(0.0);
+            a.drag(&mut h, &g, None);
+            b.drag_bristle_folds(&mut j, &g, None);
+            assert_eq!(format!("{h:?}"), format!("{j:?}"));
+            for (x, y) in a.state_fields().into_iter().zip(b.state_fields()) {
+                assert_eq!(x.values.le_bytes(), y.values.le_bytes(), "{} engine {engine}", x.name);
+            }
+        }
     }
 }

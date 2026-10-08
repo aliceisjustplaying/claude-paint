@@ -1,0 +1,8 @@
+scene width=160 height=107 mm_width=24 px_mm=0.15 engine=5 seed=73 clock=0 build_scene_seconds=0.019338
+view=current width=160 render_seconds=0.000987 max_linear=0.610563 checkpoint_bytes=1643838 material_equal=true
+view=candidate width=160 render_seconds=0.001245 max_linear=0.485750 checkpoint_bytes=1643838 material_equal=true
+view=flat width=160 material_equal=true
+scene width=320 height=213 mm_width=24 px_mm=0.075 engine=5 seed=73 clock=0 build_scene_seconds=0.037052
+view=current width=320 render_seconds=0.003351 max_linear=0.768301 checkpoint_bytes=6543678 material_equal=true
+view=candidate width=320 render_seconds=0.003554 max_linear=0.503363 checkpoint_bytes=6543678 material_equal=true
+view=flat width=320 material_equal=true

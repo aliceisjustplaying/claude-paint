@@ -1,0 +1,8 @@
+scripts/lockrun --timeout 60 -- cargo test -p paint --lib body_candidate -- --nocapture
+running 3 tests
+test canvas::tests::body_candidate_retains_real_height_shadows ... ok
+physical-scale linear mae=0.00016227 max=0.00049414
+test canvas::tests::body_candidate_keeps_physical_scale ... ok
+test canvas::tests::body_candidate_flat_response_and_sheen_bound ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 236 filtered out; finished in 0.09s

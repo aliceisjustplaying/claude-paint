@@ -1,0 +1,11 @@
+renderer baseline=8eeb9bec3ce146bcd15c37db447665391fb95bdd
+width=160 current_png_equal=true flat_png_equal=true material_sha256_equal=true sha256=6bd330a4ac2089ee554a349cc01cc745b708d14460031d5ee7201adfc6ae4528
+width=320 current_png_equal=true flat_png_equal=true material_sha256_equal=true sha256=e1047daf8158233eb093a10d2f146b7ffa9ecbcbdd0f1448da90fa3689af09d4
+scene width=160 height=107 mm_width=24 px_mm=0.15 engine=5 seed=73 clock=0 build_scene_seconds=0.017395
+view=current width=160 render_seconds=0.001029 max_linear=0.610563 checkpoint_bytes=1643838 material_equal=true
+view=baseline-alias width=160 render_seconds=0.000908 max_linear=0.610563 checkpoint_bytes=1643838 material_equal=true
+view=flat width=160 material_equal=true
+scene width=320 height=213 mm_width=24 px_mm=0.075 engine=5 seed=73 clock=0 build_scene_seconds=0.036302
+view=current width=320 render_seconds=0.003280 max_linear=0.768301 checkpoint_bytes=6543678 material_equal=true
+view=baseline-alias width=320 render_seconds=0.003148 max_linear=0.768301 checkpoint_bytes=6543678 material_equal=true
+view=flat width=320 material_equal=true

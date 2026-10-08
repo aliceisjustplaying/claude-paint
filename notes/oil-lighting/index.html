@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oil lighting candidate — identical material</title>
+<style>
+body { font: 16px/1.45 system-ui, sans-serif; margin: 24px; background: #242424; color: #eee; }
+h1 { font-size: 24px; } h2 { font-size: 19px; } p { max-width: 75ch; }
+.views { display: flex; flex-wrap: wrap; gap: 18px; } figure { margin: 0; }
+img { display: block; width: 320px; max-width: 100%; image-rendering: pixelated; }
+figcaption { margin-bottom: 6px; } a { color: #9dd4ff; }
+</style>
+<h1>Oil lighting candidate · not a default</h1>
+<p>Same wet material, camera and lamp for each row. Top: loaded hog brush. Middle: same partly spent reservoir. Bottom: knife slab. Smooth neutral support, 24 mm wide. Lamp: upper left (135°), elevation 25°, strength 0.8. No reference code or assets.</p>
+<h2>320 × 213 px · 0.075 mm/px</h2>
+<div class="views">
+<figure><figcaption>Current single normal</figcaption><a href="current-320.png"><img src="current-320.png" alt="Current lighting, 320 pixels"></a></figure>
+<figure><figcaption>Candidate: smooth body + fine glints</figcaption><a href="candidate-320.png"><img src="candidate-320.png" alt="Candidate lighting, 320 pixels"></a></figure>
+<figure><figcaption>Flat color (no directional lighting)</figcaption><a href="flat-320.png"><img src="flat-320.png" alt="Flat view, 320 pixels"></a></figure>
+</div>
+<h2>160 × 107 px · 0.15 mm/px · displayed at 2×</h2>
+<div class="views">
+<figure><figcaption>Current</figcaption><a href="current-160.png"><img src="current-160.png" alt="Current lighting, 160 pixels"></a></figure>
+<figure><figcaption>Candidate</figcaption><a href="candidate-160.png"><img src="candidate-160.png" alt="Candidate lighting, 160 pixels"></a></figure>
+<figure><figcaption>Flat</figcaption><a href="flat-160.png"><img src="flat-160.png" alt="Flat view, 160 pixels"></a></figure>
+</div>
+<p>The rows are separate runs of the same recipe, not identical material across resolutions. Within each row all three views use one unchanged canvas. The independent analytic height-field test isolates lighting’s physical scale from brush sampling.</p>
+<p>Chosen constants: two 0.6 mm-radius box passes; broad highlight exponent 24, fine exponent 120; weights 0.85/0.15. The existing wet-volume sheen budget and physical-height shadows remain. These are study choices, not measured optical properties.</p>
+<p><a href="REPORT.md">Report</a> · <a href="measurements.txt">Measured render times and unchanged-state checks</a> · <a href="baseline-proof.txt">Unchanged renderer comparison</a> · <a href="SHA256SUMS">Image and material hashes</a></p>
+</html>

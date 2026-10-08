@@ -550,6 +550,18 @@ impl Canvas {
     /// more of the room's light fills the shadows (a raking lamp in a dim
     /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        self.seen_lit_impl(azimuth, elevation, strength, false)
+    }
+
+    /// Display-only oil-lighting experiment, explicitly selected by its caller.
+    /// Broad diffuse light and sheen use a smooth physical-scale surface;
+    /// the original fine normal contributes only restrained narrow glints.
+    /// No material, engine version or historical view default is changed.
+    pub fn seen_lit_body_candidate(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        self.seen_lit_impl(azimuth, elevation, strength, true)
+    }
+
+    fn seen_lit_impl(&self, azimuth: f32, elevation: f32, strength: f32, body_candidate: bool) -> Vec<Rgb> {
         use rayon::prelude::*;
         // the room's light that fills the shadows: little where one low lamp
         // rakes across the picture in a dim room, much under a gallery's high
@@ -572,7 +584,16 @@ impl Canvas {
             let m = (lx * lx + ly * ly).sqrt().max(1e-6);
             (lx / m, ly / m)
         };
-        let at = |x: isize, y: isize| surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
+        // Chosen study scale, not measured optical roughness: two box passes
+        // of radius 0.6 mm (roughly 0.5 mm sigma when resolved). At coarse
+        // resolutions the radius may be zero; don't invent a larger mm scale.
+        let body = body_candidate.then(|| {
+            let r = (0.6 / self.px_mm()).round() as usize;
+            let pass = crate::surface::box_blur(&surf, w, h, r);
+            crate::surface::box_blur(&pass, w, h, r)
+        });
+        let normal_surf = body.as_deref().unwrap_or(&surf);
+        let at = |x: isize, y: isize| normal_surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
         // shadows are cast by the relief a pixel can resolve: bumps finer than
         // a pixel (a stroke's furrows) shade by their slope, above, and don't
         // shadow the paint around them
@@ -621,7 +642,21 @@ impl Canvas {
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                let spec = if body_candidate {
+                    let fine_at = |xx: isize, yy: isize| surf[(yy.clamp(0, h as isize - 1) as usize) * w + xx.clamp(0, w as isize - 1) as usize];
+                    let dx = (fine_at(x + 1, y) - fine_at(x - 1, y)) * k;
+                    let dy = (fine_at(x, y + 1) - fine_at(x, y - 1)) * k;
+                    let g = (dx * dx + dy * dy).sqrt();
+                    let soft = 1.0 / (1.0 + g / 1.2);
+                    let (dx, dy) = (dx * soft, dy * soft);
+                    let m = (dx * dx + dy * dy + 1.0).sqrt();
+                    let fine_ndh = ((-dx * hv[0] - dy * hv[1] + hv[2]) / m).max(0.0);
+                    // Redistribute the existing wet-volume sheen budget, not
+                    // a new oil/gloss response. Both lobes <= 1, weights sum 1.
+                    (0.02 + 0.10 * wet) * (0.85 * ndh.powf(24.0) + 0.15 * fine_ndh.powf(120.0)) * lit
+                } else {
+                    (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit
+                };
                 let p = base[i];
                 [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
             })
@@ -660,6 +695,113 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
+    // These owner-boundary contracts cover the new opt-in path: independent
+    // flat response/bounds, physical scale and real-height shadow reach.
+    // Existing lighting tests exercise the historical path only.
+    #[test]
+    fn body_candidate_flat_response_and_sheen_bound() {
+        for engine in 1..=5 {
+            let mut c = super::Canvas::new(64, 1.0, [0.2; 3]).with_size_mm(16.0).with_engine(engine);
+            for wet in [0.0, 0.25] {
+                c.wet.vol.fill(wet);
+                let base = c.seen();
+                let mut before = Vec::new();
+                c.write_state(&mut before, "").unwrap();
+                // At an 89-degree lamp, half-normal cosine is cos(0.5 degrees).
+                let half_cos = 0.5f32.to_radians().cos();
+                let expected_spec = (0.02 + 0.10 * (wet * 4.0).min(1.0))
+                    * (0.85 * half_cos.powf(24.0) + 0.15 * half_cos.powf(120.0));
+                let view = c.seen_lit_body_candidate(0.0, 89.0, 1.0);
+                for (p, b) in view.iter().zip(&base) {
+                    for ch in 0..3 {
+                        assert!((p[ch] - b[ch] - expected_spec).abs() < 2e-6);
+                    }
+                }
+                // Independent energy ceiling: diffuse <=1.6, spec <= old budget.
+                for i in 0..c.height.len() {
+                    c.height[i] = if i % 64 < 32 { 800.0 } else { 0.0 };
+                }
+                let base = c.seen();
+                let mut raised_before = Vec::new();
+                c.write_state(&mut raised_before, "").unwrap();
+                for az in [0.0, 90.0, 135.0, 270.0] {
+                    for el in [3.0, 25.0, 89.0] {
+                        let view = c.seen_lit_body_candidate(az, el, 1.0);
+                        for (p, b) in view.iter().zip(&base) {
+                            for ch in 0..3 {
+                                assert!(p[ch].is_finite() && p[ch] >= 0.0);
+                                assert!(p[ch] <= 1.6 * b[ch] + 0.02 + 0.10 * (wet * 4.0).min(1.0) + 2e-6);
+                            }
+                        }
+                    }
+                }
+                let mut after = Vec::new();
+                c.write_state(&mut after, "").unwrap();
+                assert_eq!(raised_before, after, "viewing changes saved state");
+                // Restore the flat relief; the flat comparison must also have
+                // preserved every checkpoint field, across historical engines.
+                c.height.fill(0.0);
+                after.clear();
+                c.write_state(&mut after, "").unwrap();
+                assert_eq!(before, after);
+            }
+        }
+    }
+
+    #[test]
+    fn body_candidate_keeps_physical_scale() {
+        // Same analytic 16 mm surface sampled at pixel centers, not repainted
+        // brush geometry. Broad 4 mm mound with 0.4 mm groove wavelength.
+        let render = |w| {
+            let mut c = super::Canvas::new(w, 1.0, [0.2; 3]).with_size_mm(16.0);
+            for i in 0..c.height.len() {
+                let x = (i % w) as f32 * c.px_mm() + c.px_mm() * 0.5;
+                c.height[i] = 350.0 * (-((x - 8.0) / 2.0).powi(2)).exp()
+                    + 15.0 * (x * std::f32::consts::TAU / 0.4).cos();
+            }
+            c.seen_lit_body_candidate(0.0, 55.0, 1.0)
+        };
+        let low = render(160);
+        let high = render(320);
+        let mut max = 0.0f32;
+        let mut sum = 0.0f64;
+        let mut count = 0;
+        for y in 20..140 {
+            for x in 20..140 {
+                let i = y * 160 + x;
+                let j = y * 2 * 320 + x * 2;
+                let avg = (high[j][0] + high[j + 1][0] + high[j + 320][0] + high[j + 321][0]) * 0.25;
+                let delta = (low[i][0] - avg).abs();
+                max = max.max(delta);
+                sum += delta as f64;
+                count += 1;
+            }
+        }
+        let mae = sum / count as f64;
+        eprintln!("physical-scale linear mae={mae:.8} max={max:.8}");
+        // Chosen tolerance, not a physical-accuracy claim. A fixed-pixel
+        // body filter lets the 0.4 mm grooves control diffuse light and fails.
+        assert!(mae < 0.001 && max < 0.004, "mae={mae} max={max}");
+    }
+
+    #[test]
+    fn body_candidate_retains_real_height_shadows() {
+        let mut c = super::Canvas::new(160, 1.0, [0.2; 3]).with_size_mm(16.0);
+        // A 1 mm-high, 1 mm-wide ridge: at 10 degrees the resolved
+        // plateau casts a shadow reaching about 5.67 mm. A one-pixel ridge
+        // would be only one-third as high after the existing shadow blur.
+        for y in 0..160 {
+            c.height[y * 160 + 100..y * 160 + 110].fill(1000.0);
+        }
+        let current = c.seen_lit(0.0, 10.0, 1.0);
+        let candidate = c.seen_lit_body_candidate(0.0, 10.0, 1.0);
+        for x in [60, 75] {
+            // Outside both body-filter passes but within the physical shadow.
+            assert!(candidate[80 * 160 + x][0] < 0.1);
+            assert!((candidate[80 * 160 + x][0] - current[80 * 160 + x][0]).abs() < 1e-5);
+        }
+        assert!(candidate[80 * 160 + 30][0] > 0.19, "beyond shadow reach");
+    }
     // Solvent contributes geometry under raking light, while remaining
     // optically clear in the diffuse view. The same relief must shade alike
     // whether its height comes from the dry support or the liquid film.

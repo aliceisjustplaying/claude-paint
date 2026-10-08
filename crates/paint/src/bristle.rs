@@ -926,7 +926,7 @@ impl Canvas {
     /// Panics if the brush holds solvent (a thinned load) and the canvas's
     /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
-        self.drag_contact(held, g, clip, false);
+        self.drag_contact(held, g, clip, None);
     }
 
     /// Isolated irregular-clump/fold candidate under unchanged lighting.
@@ -936,10 +936,18 @@ impl Canvas {
     /// calls; easel logs do not expose or replay this candidate.
     /// Only broad, stiff, blunt brushes in engine 4+ participate.
     pub fn drag_bristle_folds(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
-        self.drag_contact(held, g, clip, true);
+        self.drag_contact(held, g, clip, Some(1.0));
     }
 
-    fn drag_contact(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>, folds: bool) {
+    /// Release-only study of the existing candidate: geometry fields are unchanged.
+    /// Not a persisted setting or an ordinary-drag configuration.
+    #[doc(hidden)]
+    pub fn drag_bristle_folds_release_study(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>, release: f32) {
+        assert!([1.0, 0.9, 0.8].contains(&release), "study release must be 1.0, 0.9 or 0.8");
+        self.drag_contact(held, g, clip, Some(release));
+    }
+
+    fn drag_contact(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>, folds: Option<f32>) {
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
@@ -950,10 +958,10 @@ impl Canvas {
         self.tally.stroke(&held.tool, &g.pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         let mut surf = self.surf();
-        if folds && surf.clump && held.tool.point == 0.0 && held.tool.stiffness > 0.6
+        if folds.is_some() && surf.clump && held.tool.point == 0.0 && held.tool.stiffness > 0.6
             && held.tool.width * self.mm_per_unit >= 6.0
         {
-            surf.folds = Some(FoldContact { mm_per_unit: self.mm_per_unit, distance_mm: 0.0,
+            surf.folds = Some(FoldContact { release_scale: folds.unwrap(), mm_per_unit: self.mm_per_unit, distance_mm: 0.0,
                 seed: held.bristles.first().map_or(0, |b| b.seed) ^ (id as u64).wrapping_mul(7919) });
         }
         let mut scratch = Vec::new();
@@ -1410,6 +1418,7 @@ fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
 /// hairs. Constants below are aesthetic estimates, not measured brush laws.
 #[derive(Clone, Copy)]
 struct FoldContact {
+    release_scale: f32,
     mm_per_unit: f32,
     distance_mm: f32,
     seed: u64,
@@ -1456,7 +1465,7 @@ impl FoldContact {
         let (group, fold) = self.at(br.rx, tool.width);
         // Positive and bounded; the ordinary exchange still subtracts every
         // deposited unit from THIS hair's finite load and lifts wet paint.
-        (1.0 + fold_strength(br, tool) * (0.65 * group + 0.85 * fold)).clamp(0.15, 2.5)
+        self.release_scale * (1.0 + fold_strength(br, tool) * (0.65 * group + 0.85 * fold)).clamp(0.15, 2.5)
     }
 }
 
@@ -3458,29 +3467,31 @@ mod fold_candidate_tests {
     // drag. Catch an over-budget release or lost pickup on the opt-in path.
     #[test]
     fn fold_candidate_keeps_finite_reservoirs_through_wet_crossings() {
-        for width in [64, 160, 320] {
-            for thinner in [0.0, 0.5] {
-                let mut c = Canvas::new_window(width, 1.0, [0.8; 3], None).with_size_mm(100.0);
-                let mut a = Held::new(Tool::hog_flat(140.0), 19);
-                let mut b = Held::new(Tool::hog_flat(140.0), 71);
-                a.load(Paint::body(hex("#b44424")).with_stiff(0.95).with_thinner(thinner), 0.7);
-                b.load(Paint::body(hex("#275ca8")).with_stiff(0.95).with_thinner(thinner), 0.04);
-                let initial = a.carried().0 + b.carried().0;
-                let solvent = a.carried().1 + b.carried().1;
-                c.drag_bristle_folds(&mut a, &Gesture::line((100.0, 500.0), (900.0, 500.0)).shake(0.0), None);
-                let blue: Vec<_> = b.bristles.iter().map(|b| b.lat).collect();
-                c.drag_bristle_folds(&mut b, &Gesture::new(vec![(450.0, 150.0), (550.0, 500.0), (450.0, 850.0)]).pressure(0.2, 0.9).shake(0.0), None);
-                // Net carried volume can fall while pickup occurs, especially
-                // under the thinner ceiling. Red entering blue hairs proves
-                // pickup without conflating it with the release balance.
-                assert!(b.bristles.iter().zip(&blue).any(|(b, l)| b.lat != *l),
-                    "{width}px, thinner {thinner}: crossing must dirty blue hairs");
-                let after = c.wet_total() + a.carried().0 + b.carried().0;
-                assert!((after / initial - 1.0).abs() < 2e-5, "{width}px, thinner {thinner}: {initial} -> {after}");
-                let left = c.solvent_total() + a.carried().1 + b.carried().1;
-                assert!((left - solvent).abs() < (solvent * 2e-5).max(1e-6));
-                assert!(c.wet.vol.iter().all(|v| v.is_finite() && *v >= 0.0));
-                assert!(a.bristles.iter().chain(&b.bristles).all(|b| b.vol.is_finite() && b.vol >= 0.0));
+        for release in [1.0, 0.9, 0.8] {
+            for width in [64, 160, 320] {
+                for thinner in [0.0, 0.5] {
+                    let mut c = Canvas::new_window(width, 1.0, [0.8; 3], None).with_size_mm(100.0);
+                    let mut a = Held::new(Tool::hog_flat(140.0), 19);
+                    let mut b = Held::new(Tool::hog_flat(140.0), 71);
+                    a.load(Paint::body(hex("#b44424")).with_stiff(0.95).with_thinner(thinner), 0.7);
+                    b.load(Paint::body(hex("#275ca8")).with_stiff(0.95).with_thinner(thinner), 0.04);
+                    let initial = a.carried().0 + b.carried().0;
+                    let solvent = a.carried().1 + b.carried().1;
+                    c.drag_bristle_folds_release_study(&mut a, &Gesture::line((100.0, 500.0), (900.0, 500.0)).shake(0.0), None, release);
+                    let blue: Vec<_> = b.bristles.iter().map(|b| b.lat).collect();
+                    c.drag_bristle_folds_release_study(&mut b, &Gesture::new(vec![(450.0, 150.0), (550.0, 500.0), (450.0, 850.0)]).pressure(0.2, 0.9).shake(0.0), None, release);
+                    // Net carried volume can fall while pickup occurs, especially
+                    // under the thinner ceiling. Red entering blue hairs proves
+                    // pickup without conflating it with the release balance.
+                    assert!(b.bristles.iter().zip(&blue).any(|(b, l)| b.lat != *l),
+                        "{width}px, thinner {thinner}: crossing must dirty blue hairs");
+                    let after = c.wet_total() + a.carried().0 + b.carried().0;
+                    assert!((after / initial - 1.0).abs() < 2e-5, "{width}px, thinner {thinner}: {initial} -> {after}");
+                    let left = c.solvent_total() + a.carried().1 + b.carried().1;
+                    assert!((left - solvent).abs() < (solvent * 2e-5).max(1e-6));
+                    assert!(c.wet.vol.iter().all(|v| v.is_finite() && *v >= 0.0));
+                    assert!(a.bristles.iter().chain(&b.bristles).all(|b| b.vol.is_finite() && b.vol >= 0.0));
+                }
             }
         }
     }

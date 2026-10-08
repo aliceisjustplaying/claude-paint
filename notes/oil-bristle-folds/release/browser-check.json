@@ -1,0 +1,11 @@
+{
+  "url": "http://m3p.tailec2dc.ts.net:8773/release/index.html",
+  "original_gallery_http_status": 200,
+  "release_gallery_http_status": 200,
+  "images_http_200_and_decoded": 96,
+  "lit_display_verified_at_native_widths": [160, 320],
+  "scenes": 4,
+  "server_bind": "100.82.115.34:8773",
+  "other_machine_connectivity_tested": false,
+  "review_pngs": ["review-lit-160.png", "review-lit-320.png"]
+}

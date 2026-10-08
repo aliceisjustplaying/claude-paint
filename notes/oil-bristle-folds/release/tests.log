@@ -1,0 +1,19 @@
+warning: variable does not need to be mutable
+   --> crates/paint/src/thinner.rs:900:21
+    |
+900 |                 let mut report = |name: &str, c: &mut Canvas, r: (f32, f32, f32, f32), brush: Option<f64>| {
+    |                     ----^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib test) generated 1 warning (run `cargo fix --lib -p paint --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (target/debug/deps/paint-4a9b55dd024f8bad)
+
+running 2 tests
+test bristle::fold_candidate_tests::fold_opt_in_leaves_old_engines_and_other_tools_unchanged ... ok
+test bristle::fold_candidate_tests::fold_candidate_keeps_finite_reservoirs_through_wet_crossings ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 236 filtered out; finished in 0.56s

@@ -1,0 +1,13 @@
+{
+  "raw_build_log_sha256": "cc6b86debe22594b2bd90e3afcf487869b0f53473fd5c74bc3911698f990b87c",
+  "build_phase_seconds": 12.56,
+  "test_compile_seconds": 15.3,
+  "recovered_artifacts": [
+    "target/iter/examples/bristle_folds",
+    "target/debug/deps/paint-4a9b55dd024f8bad"
+  ],
+  "former_helper_and_group_absent": true,
+  "lock_free": true,
+  "outer_build_exit_code": null,
+  "note": "Both compiler completion lines and executables recovered; cancellation left a stale running record. No outer successful-exit receipt is claimed."
+}

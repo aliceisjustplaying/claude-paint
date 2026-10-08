@@ -1,0 +1,37 @@
+[
+  {
+    "owner": "folds-release-tests",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "paint",
+      "--lib",
+      "fold_candidate_tests",
+      "--",
+      "--nocapture"
+    ],
+    "start": "2026-10-08T23:01:15+01:00",
+    "end": "2026-10-08T23:01:17+01:00",
+    "state": "finished",
+    "exit": 0,
+    "seconds": 1.303,
+    "timeout_s": 60.0,
+    "log": "notes/oil-bristle-folds/release/tests.log"
+  },
+  {
+    "owner": "folds-release-render",
+    "command": [
+      "sh",
+      "-c",
+      "target/iter/examples/bristle_folds notes/oil-bristle-folds/release --release-sweep > notes/oil-bristle-folds/release/metrics.csv 2> notes/oil-bristle-folds/release/checks.txt && uv --offline run --no-project --python .venv/bin/python python notes/oil-bristle-folds/release/check_sweep.py"
+    ],
+    "start": "2026-10-08T23:02:07+01:00",
+    "end": "2026-10-08T23:02:17+01:00",
+    "state": "finished",
+    "exit": 0,
+    "seconds": 10.187,
+    "timeout_s": 60.0,
+    "log": "notes/oil-bristle-folds/release/render.log"
+  }
+]

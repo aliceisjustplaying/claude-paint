@@ -1,0 +1,7 @@
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=1 crop_max_delta_coats=0
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=0.9 crop_max_delta_coats=0
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=0.8 crop_max_delta_coats=0
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=1 crop_max_delta_coats=0
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=0.9 crop_max_delta_coats=0
+repeat_state=exact repeat_brushes=exact view_state=unchanged checkpoint_continuation=exact release=0.8 crop_max_delta_coats=0
+{"original_evidence_commit": "78b3dd5e", "original_evidence_files_exact": 98, "original_candidate_pngs_exact": 24, "original_baseline_pngs_exact": 24, "original_budget_rows_exact": 16, "repeat_threads": [1, 4], "repeat_pngs_exact_per_run": 96, "repeat_budget_rows_exact_per_run": 32, "repeat_drying_rows_exact_per_run": 32, "max_abs_relative_mass_error": 7.302213944626601e-08, "seconds": 7.101}

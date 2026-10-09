@@ -610,9 +610,8 @@ fn describe(v: &Value) -> String {
 /// are also listed by address.
 pub struct Serials {
     next: Cell<i64>,
-    /// bytes the state holds now, and the most it may hold (EASEL_LUA_MAX_MB,
-    /// default 2048): past it an allocation fails and Lua raises "not enough
-    /// memory", so a runaway chunk errors instead of swapping the machine
+    /// bytes the state holds now, headers included; past LUA_MAX_BYTES an
+    /// allocation fails and Lua raises "not enough memory"
     used: Cell<usize>,
     cap: usize,
     /// userdata and thread blocks: user address -> (serial, size)
@@ -620,6 +619,11 @@ pub struct Serials {
 }
 
 const HDR: usize = 16;
+/// The most a session's Lua state may hold. A chunk that builds something huge
+/// (a giant string.rep, a loop filling a table) then errors and is rolled back
+/// instead of swapping the machine. A constant, not a setting, so a replay
+/// fails exactly the chunks the live session failed.
+const LUA_MAX_BYTES: usize = 2 << 30;
 const PLAIN: i64 = 0;
 const AT_START: i64 = 1;
 const LISTED: i64 = 2;
@@ -640,14 +644,14 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             if nsize == 0 {
                 return std::ptr::null_mut();
             }
-            if h.used.get() + nsize > h.cap {
+            if nsize.saturating_add(HDR) > h.cap.saturating_sub(h.used.get()) {
                 return std::ptr::null_mut();
             }
             let b = std::alloc::alloc(layout(nsize));
             if b.is_null() {
                 return b as *mut c_void;
             }
-            h.used.set(h.used.get() + nsize);
+            h.used.set(h.used.get() + nsize + HDR);
             // a new object: `osize` is its type
             let kind = match osize as i32 {
                 LUA_TTABLE | LUA_TFUNCTION => AT_START,
@@ -674,10 +678,10 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
                 h.inner.borrow_mut().remove(&(ptr as usize));
             }
             std::alloc::dealloc(b, layout(osize));
-            h.used.set(h.used.get().saturating_sub(osize));
+            h.used.set(h.used.get().saturating_sub(osize + HDR));
             return std::ptr::null_mut();
         }
-        if nsize > osize && h.used.get() + (nsize - osize) > h.cap {
+        if nsize > osize && nsize - osize > h.cap.saturating_sub(h.used.get()) {
             return std::ptr::null_mut();
         }
         // only arrays and buffers are reallocated, never objects
@@ -720,8 +724,7 @@ impl Serials {
 /// (see `Serials`).
 fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
-    let cap = std::env::var("EASEL_LUA_MAX_MB").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(2048) << 20;
-    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap });
+    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap: LUA_MAX_BYTES });
     unsafe {
         let ud = &*serials as *const Serials as *mut c_void;
         let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
@@ -1090,8 +1093,10 @@ mod tests {
     ];
 
     /// A chunk that asks for more memory than the cap errors and leaves the
-    /// session as it was, instead of swapping the machine.
+    /// session as it was, instead of swapping the machine. 8 GB is past
+    /// LUA_MAX_BYTES, a constant, so this never allocates it.
     #[test]
+    #[cfg(tube_box)]
     fn a_runaway_allocation_errors() {
         let mut s = Session::new(W).unwrap();
         s.run(CHUNKS[0]).unwrap();

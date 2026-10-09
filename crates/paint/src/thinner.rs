@@ -266,6 +266,11 @@ impl Canvas {
     pub(crate) fn spread(&mut self, dt: f32, solvent: &mut Vec<usize>) {
         if solvent.is_empty() { return; }
         let (w, h) = (self.f.w, self.f.h);
+        // engine 6: paint packed on an absorbent ground (`bristle::ground_drain`)
+        // stays where it is; only the liquid above it flows, the paint in it
+        // as rich as the film's surface (`bristle::surface_oil`)
+        let drain = self.engine >= 6;
+        let packed = |wet: &crate::wet::Wet, i: usize| if drain { wet.hide[i][7].clamp(0.0, 1.0) } else { 0.0 };
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
         // the mobility (mm²/min) of each pixel in the dirty box
@@ -278,7 +283,8 @@ impl Canvas {
             let fl = if timed { crate::drying::fluid(cure) } else { 1.0 };
             spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
-        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i], wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
+        // (engine 6: of the liquid above any packed paint, which doesn't flow)
+        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i] * (1.0 - packed(wet, i)), wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
@@ -341,7 +347,9 @@ impl Canvas {
                     let (x, y) = (i % w, i / w);
                     let l = wet.vol[i] + wet.solv[i] / COAT_UM;
                     let m = mob(wet, i);
-                    if m <= 0.0 || l <= 0.0 {
+                    // (what can leave: the liquid above any packed paint)
+                    let lm = l - wet.vol[i] * packed(wet, i);
+                    if m <= 0.0 || l <= 0.0 || lm <= 0.0 {
                         return [0.0; 4];
                     }
                     let z = height[i] + l * COAT_UM;
@@ -358,8 +366,8 @@ impl Canvas {
                             }
                         }
                     }
-                    if sum > MAX_OUT * l {
-                        let f = MAX_OUT * l / sum;
+                    if sum > MAX_OUT * lm {
+                        let f = MAX_OUT * lm / sum;
                         for v in &mut q {
                             *v *= f;
                         }
@@ -391,6 +399,20 @@ impl Canvas {
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
                     let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                    let pk = packed(wet, i);
+                    if pk > 0.0 && gone > 0.0 {
+                        // the liquid left from above the packed paint, which
+                        // stays: the film's packed share grows, its oil falls
+                        // by the surface paint's
+                        let lm = l - v * pk;
+                        let (pl, sl) = (gone * v * (1.0 - pk) / lm, gone * s / lm);
+                        (pv, ps) = ((v - pl).max(0.0), (s - sl).max(0.0));
+                        if pv > 1e-9 {
+                            let top = crate::bristle::surface_oil(&hide);
+                            hide[4] = ((hide[4] * v - top * pl) / pv).max(0.0);
+                            hide[7] = (pk * v / pv).min(1.0);
+                        }
+                    }
                     let mut changed = gone > 0.0;
                     let (mut qin, mut thin) = (0.0f32, 0.0f32);
                     // from the left neighbor (its rightward flow), the right
@@ -404,16 +426,20 @@ impl Canvas {
                             continue;
                         }
                         let j = fy * w + fx;
-                        let lj = wet.vol[j] + wet.solv[j] / COAT_UM;
+                        // (the liquid above any packed paint, which came)
+                        let vj = wet.vol[j] * (1.0 - packed(wet, j));
+                        let lj = vj + wet.solv[j] / COAT_UM;
                         if lj <= 0.0 {
                             continue;
                         }
-                        let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
+                        let (qp, qs) = (q * vj / lj, q * (wet.solv[j] / COAT_UM) / lj);
                         if qp > 0.0 {
                             qin += qp;
                             thin += qp * th_of(j);
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
-                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                            let hj = wet.hide[j];
+                            let hj = if drain { let mut h = crate::bristle::fluid_of(hj); h[4] = crate::bristle::surface_oil(&hj); h } else { hj };
+                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], hj);
                         }
                         ps += qs;
                         changed = true;
@@ -422,7 +448,8 @@ impl Canvas {
                     // (the drying thickness a bare pixel takes, by amount)
                     let own = th_of(i);
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
-                    (pv, ps, lat, hide, cure, changed, mob_of(pv, ps, cure), th_in)
+                    let flowing = if drain { pv * (1.0 - hide[7].clamp(0.0, 1.0)) } else { pv };
+                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in)
                 })
                 .collect();
             // the largest mobility now: every pixel that has any is in the

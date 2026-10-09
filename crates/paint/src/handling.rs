@@ -1008,11 +1008,13 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
                 med += wk * md;
                 thinner += wk * th;
                 solv += wk * m.solvent;
-                oilr += wk * m.oil_rate;
+                // (each pile's oil as it is: from engine 6 its regrind times
+                // its tubes' own oils, `Mixture::oil_rate`)
+                oilr += wk * m.oil_rate * m.tube_oil_rate;
             }
             let mut mix = pal.pile(parts);
             mix.solvent = solv;
-            mix.oil_rate = oilr;
+            mix.oil_rate = if pal.engine >= 6 { oilr / mix.tube_oil_rate.max(1e-6) } else { oilr };
             Some((mix, med, thinner, main, next))
         });
         let (pile, medium, thinner) = match &graded {
@@ -1103,8 +1105,9 @@ fn trim_inside(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32) -> Ve
     dense[a..=b].iter().step_by(4).copied().chain(std::iter::once(dense[b])).collect()
 }
 
-/// A point on the region's edge within half a brush of `c` (across the
-/// stroke direction there), nearest first; None if the region isn't there.
+/// A point on the region's edge within half a brush (`w` wide) of `c`
+/// (across the stroke direction there), nearest first; None if the region
+/// isn't there.
 fn hug_edge(hd: &Handling, mask: &Mask, c: (f32, f32), w: f32) -> Option<(f32, f32)> {
     let f = mask.f;
     let a = (hd.angle)(c.0.clamp(0.0, f.width()), c.1.clamp(0.0, f.height()));
@@ -1717,7 +1720,8 @@ mod tests {
     }
 }
 
-/// Maybe lift the brush partway and put it down again a little off the line.
+/// Maybe lift the brush partway and put it down again a little off the line
+/// (by fractions of `w`, the stroke's brush width).
 fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, w: f32, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
     let n = pts.len();
     if n < 5 || hd.broken <= 0.0 || !rng.chance(hd.broken) {

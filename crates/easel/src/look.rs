@@ -781,7 +781,9 @@ mod tests {
         assert_eq!(parse(&["--mode", "gallery"]).unwrap().light, Some(crate::GALLERY_LIGHT));
         assert_eq!(parse(&["--mode", "relief", "--light", "45,15"]).unwrap().light, Some((45.0, 15.0)));
         assert_eq!(parse(&["--light", "45,15", "--mode", "relief,mirror"]).unwrap().light, Some((45.0, 15.0)));
-        for bad in [&["--light", "45"][..], &["--light", "45,0"], &["--light", "a,b"], &["--light"]] {
+        assert_eq!(parse(&["--light", "45,0"]).unwrap().light, Some((45.0, 0.0)));
+        assert_eq!(parse(&["--light", "45,90"]).unwrap().light, Some((45.0, 90.0)));
+        for bad in [&["--light", "45"][..], &["--light", "45,-1"], &["--light", "45,91"], &["--light", "a,b"], &["--light"]] {
             assert!(parse(bad).is_err(), "{bad:?}");
         }
     }

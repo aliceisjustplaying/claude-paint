@@ -66,9 +66,14 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   cloth there (`"raw"`), and whether paint lies on it.
 - A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
   ground: it draws oil out of the paint laid straight on it until its pores
-  are full, so thin paint there goes lean, stiff, quick to set and matte,
-  while thick paint barely notices. Paint that has dried over it seals it.
-  An oil ground (the default) absorbs nothing and is semi-matte.
+  are full, so thin paint there goes lean, quick to set and matte, while
+  thick paint barely notices. The pigment packs from the ground up: the
+  paint above keeps its oil, its flow and its gloss until the packed layer
+  reaches the surface, and how far a thin film drains is its pigment's
+  (fine pigments keep the oil they pack with and dry semi-matte; coarse
+  ones, such as smalt, drain further and dry matte). Each box's tubes hold
+  as much oil as its period ground them with. Paint that has dried over it
+  seals it. An oil ground (the default) absorbs nothing and is semi-matte.
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -108,14 +113,18 @@ scraped off to make room.
 evaporates as the paint is laid, so it leaves a film that much thinner, of
 the paint's own body: the lean, quick lay-in and wash. (`thinner`, below,
 is the other way to thin a pile: its solvent stays in the film for a while
-and leaves over painting time.) `oil` is what the paint is ground in: `"linseed"` (as the tubes come), `"walnut"` (dries a
-little slower) or `"poppy"` (dries much slower, yellows least).
+and leaves over painting time.) Your tubes come ground in the oils your
+box's colourmen used, some with a little wax (it dries slower and more
+matte). `oil` grinds the pile in another: `"linseed"`, `"walnut"` (dries a
+little slower) or `"poppy"` (dries slower still, yellows least).
 
 `blot` is the opposite of medium: the paint laid out on blotting paper
 first, which draws out that share of its own oil (0 to 0.5):
 `pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
 more opaque and much stiffer: it holds the ridges and furrows of the brush
-as it dries. A pile takes medium or blot, not both.
+as it dries. The paper draws no more than the pigment lets go: a paint
+already ground stiff, or of a fine pigment that holds its oil, gives up
+less than you ask. A pile takes medium or blot, not both.
 
 **The palette board.** Every pile is a heap on the board beside the easel.
 
@@ -129,8 +138,9 @@ as it dries. A pile takes medium or blot, not both.
   heap, in the units its recipe was given in (a pile knifed as
   `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
   as a tenth of a part more): look, adjust, look again. It returns the pile,
-  its recipe with the added parts. The added paint is tube paint (linseed,
-  unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
+  its recipe with the added parts. The added paint is tube paint as the tubes
+  come (in their oil, unthinned), so it dilutes the heap's turpentine, its
+  `thinner` and any oil it was reground in;
   a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
@@ -443,7 +453,7 @@ is the silhouette of a skeleton of points and widths. Methods: `o:mask()`,
 `o:offset(d)`, `o:paint(brush, {...})`, `o:path(i)`, `o:paths()`,
 `o:strokes()`, `o:at(t)`, `o:length()`, `o:corners()`.
 
-## Drawing: pencil, chalk and eraser
+## Drawing: pencil, chalk, pastel and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -452,6 +462,7 @@ h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
 h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
+h:hatch(m, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
@@ -463,6 +474,169 @@ hollows. Soft leads lay darker, glossier lines, hard ones pale silver
 lines. The eraser lifts most of a line, more from the tops than the
 hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
+
+**Pastel.** A pastel is a stick of pigment with a little gum and chalk:
+colored, dry and soft. In a painting begun before engine 6:
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {soft=0.7})  -- the pile's color; soft 0 (hard) .. 1 (very soft)
+p:line(pts, {pressure={0.6, 0.1}})    -- with the end of the stick (also sketch, hatch, rule, as a pencil)
+p:side(pts, {width=20, pressure=0.4}) -- laid on its side: a broad band (width in units, about 12 mm by default)
+q = pastel(pile{{"lead white", 1}}, {soft=0.2, point=0.6})  -- a pastel pencil: a fine point (mm) that keeps its point
+smudge(mask or pts, {strength=0.6, width=, reach=})   -- a finger or stump rubbed over it
+fix(mask)                             -- fixative between layers
+```
+
+- The stick's color is the pile's pigments as they look dry, a little
+  paler and grayer than the same pile in oil; the pile's medium and
+  thinner don't matter. Tints are made the way the sticks were, with
+  white in the pile (lead white stands in for the chalk).
+- Pastel lays on itself. A stroke covers a share of what is under it,
+  earlier pastel included, so colors laid across each other mix in the
+  eye, stroke by stroke, and the last one laid is on top. A soft stick
+  pressed hard covers almost completely; a light touch catches only the
+  tops of the tooth and leaves the hollows; the edge of a mark, where the
+  stick presses least, breaks up in the tooth.
+- Each stroke also fills the tooth, and a full tooth takes little more: the
+  paper refuses more pastel. `fix` binds what is there (the eraser no longer
+  lifts it, the stump hardly moves it), gives back more than half the tooth so more can
+  go on top, and darkens the layer a little.
+- `p:side` lays the stick flat: wide, riding on the tops of the tooth
+  (speckled at a light touch), and it doesn't wear the end.
+- `smudge` drags loose pastel within `reach` units (about 2 mm) together,
+  averaging its colors by how much of each is there, presses it into the
+  hollows (it covers more) and packs it, so it takes less pastel afterwards.
+  Fixed pastel moves a quarter as readily as loose; pastel painted over or
+  under wet paint doesn't move.
+- Pastel skips wet paint, as graphite does; let the paint set first. Paint
+  laid over pastel seals it, as it seals a drawing.
+
+The numbers (how much a stroke lays, how fast the tooth fills, what dry
+pigment looks like) are estimates, not measurements.
+
+**Pastel in engine 6.** From engine 6 (a painting begun now) a pastel is a
+stick: a solid that rests on the tooth, wears and sheds what it abrades.
+An older painting's pastel draws as above.
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
+h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
+q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
+p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
+p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
+p:line(pts, {pressure=0.5})    -- a pencil's call: pressure as force (5 N at 1), held at 60°
+smudge(pts, {force=1, pad=})   -- a finger drawn along a path (pad: a stump's few mm²)
+fix(mask)                      -- binds what is there, and darkens it a little
+feel(x, y)                     -- what a fingertip feels there
+```
+
+- **One stroke at a time.** `stroke` is a single movement of the hand:
+  `force` in newtons (a feathered touch 0.1–0.5, normal 0.5–2, heavy 2–5),
+  `alt` the stick's angle to the paper in degrees (upright 90, on its side 0),
+  `azimuth` where its upper end points (degrees: 0 to the right, 90 down the
+  canvas; a right hand holds it at about 45), `roll` turned about its axis,
+  `speed` in mm/s. Each is a number or a list along the points. The hand
+  lands and lifts as a hand does: its force comes up from nothing over about
+  50 ms of the stroke and falls back over about 40 ms.
+- **The stick rests on the tooth.** Under the force it sinks into the paper's
+  micro-relief until the material it meets carries the force: the paper gives
+  a little (it is compressible), and the soft pastel yields on the tops it
+  touches. A light stroke touches only the highest fibres and leaves the
+  paper's grain broken through the mark; a heavy one reaches into the pores.
+- **It wears.** It lays what it abrades, in proportion to the force and the
+  distance (Archard's law), and wears flat against the paper: a stick held
+  one way grows a facet and draws wider as it does; rolled or tilted it cuts a
+  new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
+  says how many facets it has and how long it is.
+- **The tooth fills.** Loose pastel in the pores is a third body the stick
+  slides on: the more there is, the less a stroke lays, until the paper
+  refuses it. Fixative binds it into a rough crust that files the stick again,
+  so a fixed passage takes more pastel; and darkens it a little, as the resin
+  wets the particles.
+- **The finger** picks up loose pastel and lays it down along its path as fine
+  grains pressed into the pores: colours drag into each other and the passage
+  covers more for its thickness. It leaves fixed pastel where it is.
+- **Colour.** A stick is its pigments as they look dry: absorption as in oil,
+  scattering raised by the contrast between each pigment and air (much for
+  ultramarine, Prussian blue, the lakes and the earths' clays; little for
+  vermilion and the chromes). Dry blacks are greyer than in oil.
+- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+  far it has set) and the pastel in the tooth (loose or fixed; a little, the
+  tooth taking it, half full and more, full).
+
+**Pastel tools in engine 7.** Six more, each a physical process
+(paint's sheet.rs; the research behind them in notes/research/):
+
+```lua
+lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
+lift_sheet()                                              -- taken away, with what it caught
+b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
+k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the paper, takes the loose
+blow(x, y, {distance=50, speed=12})   -- a puff of air (mm from the paper; m/s from the lips)
+tap({g=100})                          -- the board's edge struck on the table (an upright sheet: g=1)
+```
+
+- **The sheet** keeps what it covers clean. It lies a paper's thickness
+  above the picture, so a stick rests on it like any surface; near its
+  edge the stick bridges from sheet to picture, and the edge left behind is
+  as sharp as the stick's angle and force make it (a stick laid flat leaves
+  a wider margin than its point). Strokes and crumbs that land on the sheet
+  stay on it; the finger, the eraser and fixative don't reach under it. Lay
+  and lift it in one chunk. While it is down, only pastel, the finger, a dry
+  brush, the eraser and fixative work: wet paint and graphite aren't modelled
+  under a sheet and refuse.
+- **A dry brush** (`b:dust`, the brush wiped clean) lifts loose pastel as
+  far as its bristles' tips reach into the tooth and no deeper: a hog's tip
+  (about 50 µm) reaches only the top micrometres of the pores, so what fills
+  them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
+  The bristles keep what they lift until they are full (a brush a centimetre
+  wide holds a few milligrams; `b:wipe(1)` empties it); then the rest is pushed
+  ahead and left as a ridge of crumbs where the brush lifts. Over a
+  speckled passage it smears more than it cleans.
+- **The knife** (`k:scrape`) over pastel: the hand's force (1–5 N by
+  `pressure`) bears along the blade's edge, so a wide palette knife presses
+  lightly and a short edge hard. The edge sinks into the paper as far as
+  the sheet's compression and its surface's stiffness allow, and takes the
+  loose pastel above that depth; a stiff blade rides the paper's high spots
+  and bridges its low ones, so a scrape is mottled. Pressed hard enough it
+  sets the paper: burnished, flatter, the pores shallower (less tooth). Its
+  drag can tear fibres loose: raised nap, more tooth there. `edge` is the
+  edge's radius in µm (a painting knife 20–500; a scalpel about 1): a
+  scalpel on a short edge cuts, shaving a fibre layer and taking even fixed
+  pastel. Otherwise fixed pastel stays.
+- **A puff** (`blow`) shears the surface in a ring around where it is aimed
+  (nothing at the very centre): loose crumbs heaped on the tooth go easily;
+  the pores' fine grains only under a hard blow close in, and only their
+  top few micrometres. Most crumbs it lifts roll outward and settle in a
+  broad ring past where it stops lifting them; some hop further, a few
+  centimetres, and over ten from a hard blow close in; a little of the fine
+  grains settles thinly further out, and most are carried off. Crumbs
+  landing on a paper mask go with it.
+- **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
+  heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
+- **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
+  `at: "x,y"` (see Looking).
+
+**Paper (engine 6).** `canvas{size=, aspect=, paper={...}}` instead of
+`linen=`: a sheet laid from its fibres (a random fibre network, with flocs),
+pressed on a felt (its grain) and calendered. Every key has a default (a
+160 g/m² cotton drawing paper with a felt grain):
+
+| key | |
+|---|---|
+| `tone` | the sheet's colour: parts of tubes, as a ground's paste (`{{"cobalt blue", 1}, {"lead white", 3}}`), seen dry |
+| `grammage` | g/m² (90–250 for drawing papers) |
+| `fibre`, `fibre_width`, `thickness`, `coarseness` | fibre length (mm), width (µm), collapsed thickness (µm), mass per length (mg/m) |
+| `porosity`, `floc`, `floc_size`, `press`, `calender` | the sheet's pore share; the share of fibres in flocs and their size (mm); how much of the thickness variation the press turns into density (0.5–0.8); calendering 0..1 |
+| `felt` | `{cell=mm, depth=µm}`, or `false` for none |
+| `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mould's wires |
+| `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+
+A ground is optional on paper. Thin oil paint on it goes lean and matte, as
+on an absorbent ground. The numbers come from paper physics and, where no
+measurement of artists' papers exists, are estimates
+(notes/research/paper_surface.md).
 
 ## The rag
 
@@ -637,7 +811,7 @@ in canvas units, not a position and width/height.
 | `mode: "mirror"` | flipped left to right |
 | `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
 | `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
-| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation; the lower the light, the harsher |
+| `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation (0 to 90); the lower the light, the harsher; at 0 the lamp lies in the canvas's plane: flat paint gets only the room's light, ridges are lit on the lamp side; at 90 it is overhead and casts no shadow |
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
@@ -655,7 +829,9 @@ other option, and nothing on the canvas or the clock changes.
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
+| `ref: "<a picture in the studio>"` | the motif (a photograph, a study) pinned beside the easel: fitted to the canvas's shape, on the left, beside the same view of the canvas: the same crop, size, mode and grid |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `hold: "<a pastel stick>"`, `at: "x,y"`, `pose: "force,alt,azimuth"` or `side: "<direction>"` | (engine 6 on) the stick held there, seen from above over the passage (120 units around the point, or your `crop`): its low end as a light shadow, where it rests on the tooth at that force in its colour, and (engine 7) the band where its crumbs would settle, tinted; `side` lays it flat across a stroke going that way. The reply says how much it touches and how much its crumbs would reach, in mm². The stick can be a field of a table (`P.glow`). It shows where a stroke from there would lay, not what it would leave |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect

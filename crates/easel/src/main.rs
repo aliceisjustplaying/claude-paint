@@ -1,12 +1,13 @@
 //! easel: a live Lua painting session over the claude-paint engine.
 //!
-//!   easel open [<name>]              start (or reattach to) a session
+//!   easel open [<name>]              start (or reattach to) a session (2400px, a sketch 600px)
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | globals | save [path] | frames on|off | close
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--out path] [--look] [--state-digest digests.txt]
+//!   easel run paintings/lua/<name>.lua [--out path] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+//!                                    (replay build) replay at the width it was painted at
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
@@ -73,9 +74,10 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
+             [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the painting so far (= paintings/lua/painting.lua)
@@ -91,10 +93,12 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
+                      (2400px; a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
+             [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the session so far (= paintings/lua/<name>.lua)
@@ -105,7 +109,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+                      replay at the width it was painted at (2400px, a sketch 600px) and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
@@ -456,7 +461,7 @@ fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
-        return Err("open: live sessions are fixed at 2400px; no width option".into());
+        return Err(format!("open: a session's width is fixed ({LIVE_WIDTH}px, a sketch {}px); no width option", session::SKETCH_WIDTH));
     }
     Ok(name)
 }
@@ -646,7 +651,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
-        return Err("easel: fatal: live sessions are fixed at 2400px".into());
+        return Err(format!("easel: fatal: a session's width is fixed ({LIVE_WIDTH}px, a sketch {}px)", session::SKETCH_WIDTH));
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
@@ -919,6 +924,69 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     Ok((w as usize, h as usize, out))
 }
 
+/// Engine 6 on: a pastel stick held over the canvas (`look --hold <stick> --at
+/// x,y [--pose force,alt,azimuth[,roll] | --side direction]`): the passage at
+/// full detail with, seen from above, the stick's low part as a light shadow,
+/// the band where its crumbs would settle tinted with its colour, and where it
+/// rests on the tooth at that force in its colour: where a stroke from there
+/// would lay. `--side` lays it flat across a stroke going that way (degrees).
+/// Only reads: no hand time, nothing in the log, the canvas and its wear untouched.
+fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
+    use image::ImageEncoder;
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+        return Err("look --hold takes --at, --pose or --side, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+    }
+    let (stick, turned) = s.held_stick(name)?;
+    let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+    let (wu, hu) = (c.width(), c.height());
+    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
+        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
+    }
+    let half = 60.0f32;
+    let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
+    // (as `hold_look`: the point in the passage shown)
+    if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
+        return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
+    }
+    let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
+    let (_, _, png) = look::render(&c, &seen_as)?;
+    let mut img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+    let p = paint::pastel::Pose { force: pose[0], alt: pose[1].to_radians(), az: pose[2].to_radians(), roll: (turned + pose[3]).to_radians() };
+    let cells = c.stick_contact(&stick, at.0, at.1, p);
+    let f = c.window();
+    // (the passage as rendered: a crop past the canvas's edge is clipped, as in `hold_look`)
+    let cx0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
+    let cy0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
+    let col = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as f32);
+    let (mut touch, mut bed) = (0usize, 0usize);
+    for &(i, k) in &cells {
+        let (x, y) = ((i % f.w + f.x0) as i64 - cx0, (i / f.w + f.y0) as i64 - cy0);
+        if x < 0 || y < 0 || x >= img.width() as i64 || y >= img.height() as i64 {
+            continue;
+        }
+        let q = img.get_pixel_mut(x as u32, y as u32);
+        let (share, to): (f32, [f32; 3]) = match k {
+            2 => (1.0, col),
+            1 => (0.45, col),
+            _ => (0.22, [20.0, 20.0, 20.0]),
+        };
+        for ch in 0..3 {
+            q[ch] = (q[ch] as f32 * (1.0 - share) + to[ch] * share).round() as u8;
+        }
+        match k {
+            2 => touch += 1,
+            1 => bed += 1,
+            _ => {}
+        }
+    }
+    let mm2 = c.px_mm() * c.px_mm();
+    let note = format!("touching {:.1} mm², crumbs settle over {:.1} mm² more", touch as f32 * mm2, bed as f32 * mm2);
+    let (w, h) = (img.width(), img.height());
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok((w as usize, h as usize, out, note))
+}
+
 /// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
 /// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
 fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
@@ -1053,6 +1121,7 @@ impl Server {
         // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
         // earlier look beside this one (taken out before the view's own arguments)
         let (mut survey, mut compare, mut rest) = (false, None::<PathBuf>, Vec::new());
+        let mut reference = None::<PathBuf>;
         if args.iter().any(|a| a == "--palette") {
             // (it takes no other option: the view's own check)
             look::View::parse(args)?;
@@ -1065,7 +1134,7 @@ impl Server {
             let p = new_look(&session_dir(&self.name), &png.2)?;
             return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
         }
-        let (mut hold, mut at) = (None::<String>, None::<String>);
+        let (mut hold, mut at, mut pose, mut side) = (None::<String>, None::<String>, None::<String>, None::<String>);
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {
@@ -1077,9 +1146,22 @@ impl Server {
                     at = Some(args.get(i + 1).ok_or("--at needs a point on the canvas: x,y in units")?.clone());
                     i += 1;
                 }
+                "--pose" => {
+                    pose = Some(args.get(i + 1).ok_or("--pose needs force,alt,azimuth[,roll] (N, degrees)")?.clone());
+                    i += 1;
+                }
+                "--side" => {
+                    side = Some(args.get(i + 1).ok_or("--side needs the stroke's direction in degrees")?.clone());
+                    i += 1;
+                }
                 "--survey" => survey = true,
                 "--compare" => {
-                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    // (not a following option taken for the path)
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
+                    i += 1;
+                }
+                "--ref" => {
+                    reference = Some(PathBuf::from(args.get(i + 1).ok_or("--ref needs a picture of the motif (a file in the studio)")?));
                     i += 1;
                 }
                 a => rest.push(a.to_string()),
@@ -1088,6 +1170,15 @@ impl Server {
         }
         if survey && compare.is_some() {
             return Err("look: --survey and --compare are two looks; ask for one".into());
+        }
+        if (pose.is_some() || side.is_some()) && hold.is_none() {
+            return Err("look: --pose and --side hold a pastel stick: they go with --hold <stick> --at x,y".into());
+        }
+        if let Some(r) = reference {
+            if survey || compare.is_some() || hold.is_some() || at.is_some() {
+                return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
+            }
+            return self.reference(&rest, &r);
         }
         // --hold <pile> --at x,y: the loaded knife held up to the canvas (speculative: `hold_look`)
         if hold.is_some() || at.is_some() {
@@ -1101,6 +1192,40 @@ impl Server {
             }
             let v = look::View::parse(&rest)?;
             let t0 = Instant::now();
+            if self.s.held_stick(&pile).is_ok() {
+                let nums = |t: &str| -> Result<Vec<f32>, String> { t.split(',').map(|x| x.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("{t}: want numbers separated by commas")) };
+                let ps = match (&pose, &side) {
+                    (Some(_), Some(_)) => return Err("look --hold: --pose or --side, not both".into()),
+                    (Some(t), None) => {
+                        let n = nums(t)?;
+                        if !(3..=4).contains(&n.len()) {
+                            return Err("--pose force,alt,azimuth[,roll]: newtons and degrees".into());
+                        }
+                        [n[0], n[1], n[2], n.get(3).copied().unwrap_or(0.0)]
+                    }
+                    // laid flat across a stroke going that way (as p:side holds it)
+                    (None, Some(t)) => {
+                        let n = nums(t)?;
+                        if n.len() != 1 {
+                            return Err("--side: the stroke's direction, degrees".into());
+                        }
+                        [2.0, 0.0, n[0] + 90.0, 0.0]
+                    }
+                    (None, None) => [1.5, 60.0, 45.0, 0.0],
+                };
+                if !(0.0..=20.0).contains(&ps[0]) || !(0.0..=90.0).contains(&ps[1]) {
+                    return Err("--pose: force 0 to 20 N, alt 0 to 90 degrees".into());
+                }
+                if !(ps[2].is_finite() && ps[3].is_finite()) {
+                    return Err("--pose, --side: the azimuth, direction and roll are numbers (degrees)".into());
+                }
+                let (w, h, png, note) = stick_hold_look(&self.s, &pile, (p[0], p[1]), ps, &v)?;
+                let path = new_look(&session_dir(&self.name), &png)?;
+                return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held at {},{}: {note}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
+            }
+            if pose.is_some() || side.is_some() {
+                return Err(format!("look --hold {pile}: --pose and --side hold a pastel stick, not a knife or a pile"));
+            }
             let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
@@ -1190,6 +1315,11 @@ impl Server {
         if total_width.is_none_or(|w| w > 16384 || u64::from(w) * u64::from(h) > 32_000_000) {
             return Err("--compare: the combined picture is too large".into());
         }
+        // (an earlier look far wider or far narrower at this height is of another
+        // crop: side by side, the two would pass for the same view)
+        if bw > 4 * now.width() || 4 * bw < now.width() {
+            return Err(format!("--compare {}: the earlier look's crop doesn't match this one's (its shape is far from this one's); repeat its --crop", prev.display()));
+        }
         let before = image::imageops::resize(&before, bw, h, image::imageops::FilterType::Lanczos3);
         let gap = 12;
         let mut both = image::RgbImage::from_pixel(bw + gap + now.width(), h, image::Rgb([24, 24, 28]));
@@ -1199,6 +1329,67 @@ impl Server {
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
         let p = new_look(&session_dir(&self.name), &bytes)?;
         Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
+    }
+
+    /// The motif beside the canvas, as a painter pins a photograph or a study
+    /// beside the easel: the picture (a file in the studio) fitted to the
+    /// canvas's shape (centered, cropped to its aspect), on the left; the
+    /// same view of the canvas on the right. Both go through the view's
+    /// crop, size, modes and grid alike, so a passage is set beside the same
+    /// part of the motif. It is only looked at: nothing of it reaches the
+    /// painting, its log or its randomness.
+    fn reference(&mut self, args: &[String], pic: &Path) -> Result<String, String> {
+        let mut a = args.to_vec();
+        if !a.iter().any(|x| x == "--size" || x == "--crop") {
+            a.extend(["--size".to_string(), "800".to_string()]);
+        }
+        let v = look::View::parse(&a)?;
+        if v.palette {
+            return Err("look: --ref sets the motif beside the canvas, not the palette".into());
+        }
+        let studio = root().canonicalize().map_err(|e| e.to_string())?;
+        let pic = if pic.is_absolute() { pic.to_path_buf() } else { studio.join(pic) };
+        let real = pic.canonicalize().map_err(|e| format!("--ref {}: {e}", pic.display()))?;
+        if !real.starts_with(&studio) {
+            return Err(format!("--ref {}: the motif is a picture in this studio ({})", pic.display(), studio.display()));
+        }
+        let im = image::open(&real).map_err(|e| format!("--ref {}: {e}", pic.display()))?.to_rgb8();
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let (f, whole) = (c.window(), c.frame());
+        // the picture fitted to the canvas's shape: scaled to cover it, centered
+        let (iw, ih) = (im.width() as f32, im.height() as f32);
+        let k = (iw / whole.w as f32).min(ih / whole.h as f32);
+        let (ox, oy) = (0.5 * (iw - k * whole.w as f32), 0.5 * (ih - k * whole.h as f32));
+        let lin: Vec<f32> = (0..=255).map(|b| paint::color::srgb_to_linear(b as f32 / 255.0)).collect();
+        let at = |x: f32, y: f32| -> [f32; 3] {
+            // (bilinear between the picture's pixels)
+            let (x, y) = ((x - 0.5).clamp(0.0, iw - 1.0), (y - 0.5).clamp(0.0, ih - 1.0));
+            let (x0, y0) = (x.floor() as u32, y.floor() as u32);
+            let (x1, y1) = ((x0 + 1).min(im.width() - 1), (y0 + 1).min(im.height() - 1));
+            let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+            let p = |xx: u32, yy: u32| im.get_pixel(xx, yy).0.map(|b| lin[b as usize]);
+            let (a, b, cc, d) = (p(x0, y0), p(x1, y0), p(x0, y1), p(x1, y1));
+            [0, 1, 2].map(|q| (a[q] * (1.0 - fx) + b[q] * fx) * (1.0 - fy) + (cc[q] * (1.0 - fx) + d[q] * fx) * fy)
+        };
+        let motif: Vec<[f32; 3]> = (0..f.w * f.h)
+            .map(|i| {
+                let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
+                at(ox + x * k, oy + y * k)
+            })
+            .collect();
+        let (_, _, left) = look::render_seen(&c, &v, Some(&motif))?;
+        let (_, _, right) = look::render(&c, &v)?;
+        drop(c);
+        let (l, r) = (image::load_from_memory(&left).map_err(|e| e.to_string())?.to_rgb8(), image::load_from_memory(&right).map_err(|e| e.to_string())?.to_rgb8());
+        let gap = 12;
+        let h = l.height().max(r.height());
+        let mut both = image::RgbImage::from_pixel(l.width() + gap + r.width(), h, image::Rgb([24, 24, 28]));
+        image::imageops::replace(&mut both, &l, 0, 0);
+        image::imageops::replace(&mut both, &r, (l.width() + gap) as i64, 0);
+        let mut bytes = Vec::new();
+        both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        let p = new_look(&session_dir(&self.name), &bytes)?;
+        Ok(format!("{} ({}x{}): left the motif ({}), right the canvas\n", p.display(), both.width(), h, pic.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.
@@ -1385,14 +1576,17 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !p[0].is_finite() || !(3.0..=89.0).contains(&p[1]) {
-        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 3 to 89)"));
+    if p.len() != 2 || !p[0].is_finite() || !(0.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 0 to 90)"));
     }
     Ok((p[0], p[1]))
 }
 
 /// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
 fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err("save: --light and --gallery are two lights; give one".into());
+    }
     let (mut path, mut light) = (None, None);
     let mut i = 0;
     while i < args.len() {
@@ -1464,6 +1658,9 @@ fn run(args: &[String]) -> Result<(), String> {
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err(format!("run: --light and --gallery are two lights; give one ({RUN_USAGE})"));
+    }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,
@@ -1911,7 +2108,7 @@ mod tests {
         assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
         assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
         assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
-        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
+        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"], &["--gallery", "--light", "135,25"]] {
             assert!(args(bad).is_err(), "{bad:?}");
         }
     }

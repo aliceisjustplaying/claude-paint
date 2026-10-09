@@ -379,6 +379,8 @@ def _parse(path):
             if parent is not None and (txt or m.get("isError")):
                 if txt:
                     c["events"][parent]["out"] = txt[-1500:]
+                    if c["events"][parent]["kind"] == "look" and STICK_HELD.search(txt):
+                        c["events"][parent]["held"] = "stick"
                 if m.get("isError"):
                     c["events"][parent]["err"] = True
                 c["changed"].append(parent)
@@ -390,6 +392,8 @@ def _parse(path):
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                        if c["events"][parent].get("held"):
+                            ev["held"] = c["events"][parent]["held"]
                     if re.search(r"palette (?!False)", ev.get("look", "")):
                         chips = palette_board(base64.b64decode(x["data"]))
                         if chips:
@@ -555,10 +559,17 @@ def look_text(args):
     return ", ".join(f"{k} {v}" for k, v in args.items())
 
 
+# a look's reply when it held a pastel stick over the canvas ("<look> (WxH, 0.12s): P.glow held at 400,300: <what
+# it shows>", main.rs), not a knife or a pile ("... held up to the canvas at 400,300"): the request alone can't tell,
+# a stick held without pose or side taking the easel's default pose
+STICK_HELD = re.compile(r"\): .+ held at -?[0-9.]+,-?[0-9.]+: ")
+
+
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison, not a held knife and not the scratch canvas."""
-    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)", look)
+    not the palette, not a survey's tile, not a comparison, not a held knife, not the motif pinned beside it and not
+    the scratch canvas."""
+    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -604,9 +615,10 @@ _glances = {}  # path -> what the picker needs from one session file, read incre
 
 def _glance_file(path):
     """One session file, scanned from where the last scan stopped: its image count, its newest whole look and its
-    last picture (each as (index in the file, byte offset of the line, which image in the line)) and its last words.
-    Images are counted as parse() counts them, so the indices match the stream's. Reference pictures (read from
-    the studio's reference/) are counted but are never the whole look or the last picture."""
+    last picture from before the look tool (each as (index in the file, byte offset of the line, which image in the
+    line)) and its last words. Images are counted as parse() counts them, so the indices match the stream's.
+    Reference pictures (read from the studio's reference/) are counted but are never the whole look or the last
+    picture; nor are a look's other pictures (a survey's tile, a comparison, a held knife)."""
     with _lock("g:" + path):
         g = _glances.get(path)
         size = os.path.getsize(path)
@@ -653,7 +665,8 @@ def _glance_file(path):
 
 def glance(files):
     """A painter's picture and title for the picker: {"look": its newest whole look (or, before the look tool, the
-    last picture it saw; never a reference picture; None if it has seen none of its own) as a stream image index,
+    last picture it read; never a reference picture or a look's other pictures; None if it has seen none of its own)
+    as a stream image index,
     "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
     gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
     for f, g in zip(files, gs):

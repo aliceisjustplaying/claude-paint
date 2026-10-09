@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 #[path = "draw_pencil.rs"]
-mod draw_pencil;
+pub(crate) mod draw_pencil;
 #[path = "draw_rag.rs"]
 mod draw_rag;
 #[path = "draw_soak.rs"]
@@ -426,8 +426,15 @@ impl UserData for KnifeU {
                     return err(format!("k:{name}: needs points"));
                 }
                 let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                let mut edge = 100.0f32;
                 if let Some(o) = &o {
-                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    check_keys(o, if lay { &["pressure", "angle", "lift"] } else { &["pressure", "angle", "lift", "edge"] }, &format!("k:{name}"))?;
+                    if let Some(e) = num(o, "edge")? {
+                        if !(1.0..=1000.0).contains(&e) {
+                            return err("k:scrape: edge is the blade's edge radius, µm (a painting knife's 20–500; a scalpel's about 1)");
+                        }
+                        edge = e;
+                    }
                     if let Some(p) = pair(o, "pressure")? {
                         pressure = p;
                     }
@@ -443,7 +450,13 @@ impl UserData for KnifeU {
                 let scale = k.st.borrow().width as f32 / 1000.0;
                 if let Err(e) = paint::Knife::check_path(&pts, scale) { return err(format!("k:{name}: {e}")); }
                 time::verb(&k.st, Verb::Marks, |s| {
-                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                    let width = k.k.borrow().width;
+                    c.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    if !lay {
+                        // engine 7: the blade takes the pastel heaped above the paper too (sheet.rs)
+                        c.scrape_pastel(width, edge, &pts, pressure, angle);
+                    }
                     Ok(())
                 })
             });
@@ -504,6 +517,57 @@ impl UserData for Brush {
         m.add_method("fullness", |_, b, ()| Ok(b.held.borrow().fullness()));
         // pointed tips: how wide a mark at this pressure, what pressure for this width
         m.add_method("mark_width", |_, b, p: f32| Ok(b.held.borrow().tool.mark_width(p)));
+        // b:dust(pts, {pressure=0.6, tip=}): the brush, dry, drawn over pastel
+        // (engine 7, paint's sheet.rs): loose pastel its tips reach comes away,
+        // dropped behind it; what lies deeper in the tooth, and fixed pastel,
+        // stays. `tip` is the bristles' tip radius in µm (a hog's 50; finer
+        // hair reaches deeper). Returns the volume lifted, mm³.
+        m.add_method("dust", |_, b, (pts, o): (Value, Option<Table>)| {
+            let pts = points(&pts)?;
+            if pts.len() < 2 {
+                return err("b:dust: needs at least two points");
+            }
+            let (mut p, mut tip) = (0.6f32, paint::sheet::HOG_TIP_UM);
+            if let Some(o) = &o {
+                check_keys(o, &["pressure", "tip"], "b:dust")?;
+                if let Some(v) = num(o, "pressure")? {
+                    // (clamp keeps a NaN: refuse it first)
+                    if !v.is_finite() {
+                        return err("b:dust: pressure is a number, 0 to 1");
+                    }
+                    p = v.clamp(0.0, 1.0);
+                }
+                if let Some(v) = num(o, "tip")? {
+                    if !(2.0..=200.0).contains(&v) {
+                        return err("b:dust: tip is the bristles' tip radius, µm (2 to 200; a hog bristle's about 50)");
+                    }
+                    tip = v;
+                }
+            }
+            let width = b.held.borrow().tool.mark_width(p);
+            let full_w = b.held.borrow().tool.width;
+            if b.held.borrow().fullness() > 0.02 {
+                return err("b:dust: the brush has paint on it; a dry brush brushes pastel off (b:wipe(1) first)");
+            }
+            time::verb_dry(&b.st, Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                if c.engine() < 7 {
+                    return err("b:dust: brushing pastel off needs engine 7");
+                }
+                // (the path's work bounded before it is densified, as a knife's)
+                if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
+                    return err(format!("b:dust: {e}"));
+                }
+                // what its loaded tip holds: 2 mm of it, its width by a third of that thick
+                let w_mm = full_w * c.mm_per_unit();
+                let cap = paint::sheet::BRUSH_HOLDS_MG_MM3 * w_mm * 2.0 * 0.3 * w_mm;
+                let mut held = b.held.borrow().pastel_mg;
+                let (v, secs) = c.dust_pastel(width, tip, &pts, &mut held, cap);
+                b.held.borrow_mut().pastel_mg = held;
+                c.tally_mut().secs += secs as f64;
+                Ok(v)
+            })
+        });
         m.add_method("pressure_for", |_, b, w: f32| Ok(b.held.borrow().tool.pressure_for(w)));
         // b:stroke(points, {pressure=, ramps=, orient=, shake=, swell=, clip=})
         m.add_method("stroke", |_, b, (pts, o): (Value, Option<Table>)| {
@@ -717,6 +781,10 @@ impl UserData for Brush {
             check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
             let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
             let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            // (refused here, as numbers, before the engine would panic on them)
+            if !(at.0.is_finite() && at.1.is_finite() && toward.0.is_finite() && toward.1.is_finite()) {
+                return err(format!("spatter: at and toward are numbers (units), not {{{}, {}}} and {{{}, {}}}", at.0, at.1, toward.0, toward.1));
+            }
             let spread = num(&o, "spread")?.unwrap_or(0.45);
             if !(0.0..=1.5).contains(&spread) {
                 return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
@@ -789,7 +857,21 @@ impl UserData for PileU {
             let tubes = st.borrow().tubes.clone();
             let add = tube_parts(&tubes, &t, "p:add")?;
             check_set_out(&st, &add, "p:add")?;
+            let before = resolve(&st, p.clone(), None).mix;
             st.borrow_mut().board.add(p.heap, &add, medium).map_err(mlua::Error::runtime)?;
+            // (engine 6: a reground heap's oil is relative to its tubes' own
+            // oils, which the added tubes change: its paint keeps its oil, the
+            // added paint comes as its tubes do, `Mixture::oil_rate`)
+            if tubes.engine >= 6 && (before.oil_rate - 1.0).abs() > 1e-6 {
+                let after = resolve(&st, p.clone(), None).mix;
+                let mut s = st.borrow_mut();
+                if let Some(h) = s.board.heap_mut(p.heap) {
+                    let kept = (1.0 - h.oil_rate) / (1.0 - before.oil_rate);
+                    let came = tubes.pile(add.clone()).tube_oil_rate;
+                    let oil = before.oil_rate * before.tube_oil_rate * kept + came * (1.0 - kept);
+                    h.oil_rate = oil / after.tube_oil_rate.max(1e-6);
+                }
+            }
             let now = resolve(&st, p.clone(), None);
             time::knife(&st, now.mix.color);
             Ok(now)
@@ -823,7 +905,15 @@ impl PileU {
         if self.mix.solvent > 0.0 {
             tail += &format!(", turps {}", fmt_num(self.mix.solvent));
         }
-        if self.mix.oil_rate != 1.0 {
+        if self.mix.engine >= 6 {
+            // (from engine 6 relative to the tubes' own oils: name the oil it is in now)
+            if (self.mix.oil_rate - 1.0).abs() > 1e-6 {
+                let r = self.mix.oil_rate * self.mix.tube_oil_rate;
+                let oils = [(1.0, "linseed"), (paint::palette::WALNUT_RATE, "walnut"), (paint::palette::POPPY_RATE, "poppy")];
+                let near = oils.iter().min_by(|a, b| (a.0 - r).abs().total_cmp(&(b.0 - r).abs())).unwrap();
+                tail += &format!(", in {} oil", near.1);
+            }
+        } else if self.mix.oil_rate != 1.0 {
             tail += if self.mix.oil_rate < 0.7 { ", in poppy oil" } else { ", in walnut oil" };
         }
         format!("pile({}; {tail})", parts.join(", "))
@@ -900,7 +990,7 @@ fn fmt_num(v: f32) -> String {
 /// Parts of tubes from `{{"lead white", 6}, {"smalt", 1}, ...}` (the table's
 /// array part): tube indices and fractions by volume summing to 1, and the
 /// parts as given.
-fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
+pub(crate) fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
     let mut parts: Vec<(usize, f32)> = Vec::new();
     let mut given = Vec::new();
     for e in t.sequence_values::<Value>() {
@@ -1297,7 +1387,14 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
             let mut v = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, e.get::<Value>(2)?));
+                // (a weight that is no number is refused, not quietly counted as none)
+                let w = e.get::<Value>(2)?;
+                if let Value::Number(n) = &w
+                    && !n.is_finite()
+                {
+                    return err(format!("work piles: a weight is a number or function(x, y), not {n}"));
+                }
+                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, w));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
@@ -1731,7 +1828,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
-                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "ground", "seed"] }, "canvas")?;
+                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "paper", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "paper", "ground", "seed"] }, "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");
                 }
@@ -1743,24 +1840,59 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(0.2..=5.0).contains(&aspect) {
                     return err("canvas: aspect is width / height, between 0.2 and 5");
                 }
-                let (warp, weft) = pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}})\n{CANVAS_HELP}")))?;
-                if !((4.0..=60.0).contains(&warp) && (4.0..=60.0).contains(&weft)) {
-                    return err("canvas: linen threads per cm, 4 to 60");
-                }
                 let tubes = st.borrow().tubes.clone();
-                // a raw canvas: no ground, the bare cloth
-                let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
-                let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
-                if let Some(f) = &fabric {
-                    sty.raw = f.color;
-                }
+                // paper= (engine 6): a sheet of paper instead of linen
+                let paper = match o.get::<Value>("paper")? {
+                    Value::Nil => None,
+                    Value::Table(t) => {
+                        if tubes.engine < 6 {
+                            return err(format!("canvas: paper= needs engine 6; this painting is painted with engine {} (its log says so)", tubes.engine));
+                        }
+                        if o.contains_key("linen")? {
+                            return err("canvas: a sheet of paper or linen, not both");
+                        }
+                        if raw_ok && o.contains_key("raw")? {
+                            return err("canvas: a sheet of paper or a raw canvas, not both");
+                        }
+                        Some(paper_of(&tubes, &t, seed)?)
+                    }
+                    v => return err(format!("canvas: paper= is a table of the sheet's make ({{grammage=, tone=, felt=, ...}}), got {}", v.type_name())),
+                };
                 let width = st.borrow().width;
-                let mut c = sty.prepare(width, aspect, seed);
-                if let Some(f) = &fabric {
-                    c.raw_canvas(f.clone(), seed);
-                }
+                let (mut c, sty, support) = match paper {
+                    Some((p, tone)) => {
+                        // (a sheet of paper needs no ground: it is drawn and painted on as it is)
+                        let ground = match o.get::<Value>("ground")? {
+                            Value::Nil => Vec::new(),
+                            g => ground_of(&tubes, &g)?,
+                        };
+                        let sty = Style { name: "oil", width_mm: mm, raw: tone, ground, ..Style::oil_with((*tubes).clone()) };
+                        (sty.prepare_paper(width, aspect, seed, p), sty, format!("paper={} g/m²", fmt_num(p.grammage)))
+                    }
+                    None => {
+                        let (warp, weft) = pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}}), or paper= (engine 6)\n{CANVAS_HELP}")))?;
+                        if !((4.0..=60.0).contains(&warp) && (4.0..=60.0).contains(&weft)) {
+                            return err("canvas: linen threads per cm, 4 to 60");
+                        }
+                        // a raw canvas: no ground, the bare cloth
+                        let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
+                        let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
+                        let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                        if let Some(f) = &fabric {
+                            sty.raw = f.color;
+                        }
+                        let mut c = sty.prepare(width, aspect, seed);
+                        let support = match &fabric {
+                            None => format!("linen={{{warp}, {weft}}}"),
+                            Some(f) => format!("linen={{{warp}, {weft}}}, raw={:?}", f.name),
+                        };
+                        if let Some(f) = fabric {
+                            c.raw_canvas(f, seed);
+                        }
+                        (c, sty, support)
+                    }
+                };
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
@@ -1774,10 +1906,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     s.canvas_src = Some(format!("canvas{}", lua_src(&Value::Table(o.clone()))?));
-                    s.setup = Some(match fabric {
-                        None => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)),
-                        Some(f) => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, raw={:?}, seed={seed}", fmt_num(mm), f.name),
-                    });
+                    s.setup = Some(format!("size={}, aspect={aspect}, {support}, seed={seed}", fmt_num(mm)));
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
@@ -1846,16 +1975,22 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             } else {
                 None
             };
-            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy"
-            let oil_rate = match t.get::<Option<String>>("oil")?.as_deref() {
-                None | Some("linseed") => 1.0,
-                Some("walnut") => 0.8,
-                Some("poppy") => 0.6,
+            // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy".
+            // From engine 6 the tubes come in their box's own oils (`palette::grind_of`) and
+            // oil= regrinds them: the rate is relative to theirs (`Mixture::oil_rate`)
+            let oil = t.get::<Option<String>>("oil")?;
+            let tubes = st.borrow().tubes.clone();
+            let six = tubes.engine >= 6;
+            let oil_rate = match oil.as_deref() {
+                None => 1.0,
+                Some("linseed") => 1.0,
+                Some("walnut") => if six { paint::palette::WALNUT_RATE } else { 0.8 },
+                Some("poppy") => if six { paint::palette::POPPY_RATE } else { 0.6 },
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
-            let tubes = st.borrow().tubes.clone();
             let (parts, given) = parts_of(&tubes, &t, "pile")?;
             let mut mix = tubes.pile(parts.clone());
+            let oil_rate = if six && oil.is_some() { oil_rate / mix.tube_oil_rate.max(1e-6) } else { oil_rate };
             mix.solvent = turps;
             mix.oil_rate = oil_rate;
             if st.borrow().canvas.is_none() {
@@ -1900,7 +2035,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 medium += p.medium * w;
                 solvent += p.mix.solvent * w;
                 thinner += p.thinner() * w;
-                oil += p.mix.oil_rate * w;
+                // (from engine 6 each heap's oil as it is, its regrind times its
+                // tubes' own oils: `Mixture::oil_rate`)
+                oil += p.mix.oil_rate * p.mix.tube_oil_rate * w;
                 wsum += w;
             }
             if wsum <= 0.0 {
@@ -1912,6 +2049,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v * wsum)).collect();
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
+            // (relative again to the mix's own tubes, from engine 6; before, 1)
+            let oil = if tubes.engine >= 6 { oil / mix.tube_oil_rate.max(1e-6) } else { oil };
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
             let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
@@ -2166,10 +2305,77 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 
 
-const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
+const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  or, engine 6, paper={grammage=, tone={{\"<tube>\", <parts>}, ...}, felt={cell=, depth=}|false, laid={...}, ...} instead of linen (a ground is then optional);\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).
+/// A sheet of paper from `canvas{paper={...}}` (engine 6), and its tone: the
+/// pulp's colour, tubes' pigments as they look dry (a dyed or toned
+/// sheet), or the colour of cotton rag if none is given. Every key has a
+/// default (`Paper::drawing`).
+fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
+    use paint::paper::{Felt, Laid, Paper};
+    check_keys(t, &["grammage", "fibre", "fibre_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    let d = Paper::drawing(seed);
+    let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
+        let v = num(t, k)?.unwrap_or(def);
+        if !(lo..=hi).contains(&v) {
+            return err(format!("paper: {k} between {lo} and {hi}"));
+        }
+        Ok(v)
+    };
+    let felt = match t.get::<Value>("felt")? {
+        Value::Nil => d.felt,
+        Value::Boolean(false) => None,
+        Value::Table(f) => {
+            check_keys(&f, &["cell", "depth"], "paper felt")?;
+            let (cell, depth) = (num(&f, "cell")?.unwrap_or(0.8), num(&f, "depth")?.unwrap_or(20.0));
+            // (clamp keeps a NaN: refuse it first)
+            if !(cell.is_finite() && depth.is_finite()) {
+                return err("paper: felt= cell and depth are numbers (mm, µm)");
+            }
+            Some(Felt { cell_mm: cell.clamp(0.1, 5.0), depth_um: depth.clamp(0.0, 200.0) })
+        }
+        _ => return err("paper: felt= {cell=mm, depth=µm}, or false for none"),
+    };
+    let laid = match t.get::<Value>("laid")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Table(l) => {
+            check_keys(&l, &["per_cm", "chain", "deficit"], "paper laid")?;
+            let (per_cm, chain, deficit) = (num(&l, "per_cm")?.unwrap_or(10.0), num(&l, "chain")?.unwrap_or(25.0), num(&l, "deficit")?.unwrap_or(0.15));
+            if !(per_cm.is_finite() && chain.is_finite() && deficit.is_finite()) {
+                return err("paper: laid= per_cm, chain and deficit are numbers");
+            }
+            Some(Laid { per_cm: per_cm.clamp(2.0, 20.0), chain_mm: chain.clamp(5.0, 60.0), deficit: deficit.clamp(0.0, 0.5) })
+        }
+        _ => return err("paper: laid= {per_cm=, chain=mm, deficit=}"),
+    };
+    let p = Paper {
+        grammage: get("grammage", d.grammage, 40.0, 600.0)?,
+        fibre_mm: get("fibre", d.fibre_mm, 0.3, 10.0)?,
+        fibre_um: get("fibre_width", d.fibre_um, 8.0, 60.0)?,
+        thick_um: get("thickness", d.thick_um, 2.0, 30.0)?,
+        coarseness: get("coarseness", d.coarseness, 0.04, 0.5)?,
+        porosity: get("porosity", d.porosity, 0.2, 0.8)?,
+        floc: get("floc", d.floc, 0.0, 1.0)?,
+        floc_mm: get("floc_size", d.floc_mm, 0.2, 10.0)?,
+        press: get("press", d.press, 0.3, 1.0)?,
+        calender: get("calender", d.calender, 0.0, 1.0)?,
+        absorbent: get("absorbent", d.absorbent, 0.0, 1.0)?,
+        z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
+        felt,
+        laid,
+        seed,
+    };
+    // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})
+    let tone = match t.get::<Value>("tone")? {
+        Value::Nil => paint::hex("#e8e0cf"),
+        Value::Table(p) => tubes.dry_color(&parts_of(tubes, &p, "paper tone")?.0),
+        v => return err(format!("paper: tone= is parts of tubes ({{{{\"tube\", parts}}, ...}}), got {}", v.type_name())),
+    };
+    Ok((p, tone))
+}
+
 fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
     let Value::Table(t) = v else {
         return err(format!("canvas: ground= (the layers, bottom first)\n{CANVAS_HELP}"));

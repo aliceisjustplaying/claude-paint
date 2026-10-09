@@ -52,10 +52,34 @@ pub enum Verb {
     Wait,
 }
 
+thread_local! {
+    /// Set while a dry verb runs (`verb_dry`): one the sheet is modelled for.
+    static DRY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `verb`, for a tool a paper mask is modelled for (engine 7, paint's
+/// `sheet.rs`): a pastel stick, the finger, a dry brush. Other marking verbs
+/// refuse while a sheet lies on the picture.
+pub fn verb_dry<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+    // (put back as it was however the verb ends: a chunk's engine panic is
+    // caught and the session goes on)
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            DRY.with(|d| d.set(self.0));
+        }
+    }
+    let _restore = Restore(DRY.with(|d| d.replace(true)));
+    verb(st, kind, f)
+}
+
 /// Run a verb `f` on the studio under the hand clock's rules for its kind.
 pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
     if matches!(kind, Verb::Query | Verb::Wait) {
         flush(st, true);
+    }
+    if matches!(kind, Verb::Marks | Verb::Pass) && !DRY.with(|d| d.get()) && st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
+        return Err(mlua::Error::runtime("a sheet of paper lies on the picture: only pastel, the finger, a dry brush (b:dust), the eraser and fixative are modelled with one down; lift it first (lift_sheet())"));
     }
     let r = {
         let mut g = st.borrow_mut();

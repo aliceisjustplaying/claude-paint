@@ -254,6 +254,15 @@ impl Pace {
     }
 }
 
+/// How lean a film whose properties are `hd` dries, as the stiffness `rate`
+/// takes: its own, and from engine 6 its packed share as lean as stiff
+/// paste (packed on an absorbent ground, it holds only the oil its pigment
+/// packs with: `bristle::ground_drain`).
+#[inline]
+pub(crate) fn lean_of(engine: u32, hd: &crate::wet::Prop) -> f32 {
+    if engine >= 6 { hd[1] + (1.0 - hd[1].clamp(0.0, 1.0)) * hd[7].clamp(0.0, 1.0) } else { hd[1] }
+}
+
 /// Cure gained per minute by an open film `vol` coats thick, of stiffness
 /// `stiff` and pigment drying rate `drying` (before `Pace`).
 pub(crate) fn rate(vol: f32, stiff: f32, drying: f32) -> f32 {
@@ -486,7 +495,7 @@ impl Canvas {
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-            let pace = Pace::of(self.engine);
+            let (pace, engine) = (Pace::of(self.engine), self.engine);
             let wet = &mut self.wet;
             let (vol, hide) = (&wet.vol, &wet.hide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
@@ -494,7 +503,7 @@ impl Canvas {
                     let i = (y0 + j) * w + x;
                     if vol[i] >= low {
                         let p = &mut row[x];
-                        p.cure = pace.age(p.cure, dt, rate(p.th, hide[i][1], hide[i][2]));
+                        p.cure = pace.age(p.cure, dt, rate(p.th, lean_of(engine, &hide[i]), hide[i][2]));
                     }
                 }
             });
@@ -635,7 +644,7 @@ impl Canvas {
             // `wait` would)
             let th = if self.wet.clock.px.is_empty() { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
             let bw = x1 - x0;
-            let pace = Pace::of(self.engine);
+            let (pace, engine) = (Pace::of(self.engine), self.engine);
             let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
             left = (y0..y1)
                 .into_par_iter()
@@ -645,7 +654,7 @@ impl Canvas {
                         let i = y * w + x;
                         if vol[i] >= 1e-5 {
                             let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
-                            m = m.max(pace.to_dry(c, rate(t, hide[i][1], hide[i][2])));
+                            m = m.max(pace.to_dry(c, rate(t, lean_of(engine, &hide[i]), hide[i][2])));
                         }
                     }
                     m
@@ -762,6 +771,10 @@ impl Canvas {
         let mut add = vec![0.0f32; ew * eh];
         let mut stiff = vec![0.5f32; ew * eh];
         let mut oil = vec![1.0f32; ew * eh];
+        // (engine 6: the share of each film still fluid above its packed
+        // layer, and the gloss its wax leaves it)
+        let mut fluid = vec![1.0f32; ew * eh];
+        let mut sheen = vec![1.0f32; ew * eh];
         let mut sets = vec![SET_TIME; ew * eh];
         // cure per minute of each film that bakes (for its tack afterwards)
         let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
@@ -777,11 +790,21 @@ impl Canvas {
                     add[k] = v * COAT_UM;
                     stiff[k] = self.wet.hide[i][1];
                     oil[k] = self.wet.hide[i][4];
+                    if self.engine >= 6 {
+                        // its surface is as rich as the paint above the
+                        // packed layer; its gloss reads that against the
+                        // pigment's packing (a paint at its packed oil is as
+                        // glossy as paint naming no tubes at `PACKED_OIL`)
+                        let hd = &self.wet.hide[i];
+                        oil[k] = crate::bristle::surface_oil(hd) * crate::wet::PACKED_OIL / hd[5].max(0.05);
+                        fluid[k] = 1.0 - hd[7].clamp(0.0, 1.0);
+                        sheen[k] = 1.0 - crate::palette::WAX_MATTE * hd[9].clamp(0.0, 1.0);
+                    }
                     if let Some(p) = cp.get(i) {
                         sets[k] = p.lev;
                     }
                     if !all && let Some(p) = cp.get(i) {
-                        rates[k] = pace.set_rate(rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]));
+                        rates[k] = pace.set_rate(rate(p.th, lean_of(self.engine, &self.wet.hide[i]), self.wet.hide[i][2]));
                     }
                     any = true;
                 }
@@ -803,7 +826,7 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
+        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4, (self.engine >= 6).then_some(&fluid[..]));
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
         // an absorbent ground's pores
@@ -815,7 +838,7 @@ impl Canvas {
                         let i = (ex.1 + y) * w + ex.0 + x;
                         // (the film as it settled here, not as it was laid)
                         let coats = t[k].max(0.0) / COAT_UM;
-                        let g = smoothstep(0.15, 1.3, oil[k]);
+                        let g = smoothstep(0.15, 1.3, oil[k]) * sheen[k];
                         self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
                         self.absorb[i] *= (-coats / 0.4).exp();
                     }
@@ -927,7 +950,7 @@ mod tests {
     use crate::bristle::{Gesture, Held, Tool};
     use crate::color::hex;
     use crate::surface::Linen;
-    use crate::wet::Paint;
+    use crate::wet::{DRAINED_FLOOR, OIL_VOLUME, PACKED_OIL, Paint};
 
     fn canvas() -> Canvas {
         Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3))
@@ -1089,7 +1112,7 @@ mod tests {
         let mut c = Canvas::new(40, 1.0, [0.5; 3]).with_size_mm(40.0).with_engine(engine);
         let lat = Paint::body([0.9; 3]).latent();
         for i in 0..c.wet.vol.len() {
-            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0], 1);
+            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0], 1);
         }
         c.wet.current = 1;
         c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
@@ -1178,8 +1201,9 @@ mod tests {
     /// At equal thickness, lead white and raw umber are touch-dry before
     /// titanium white and bone black, and alizarin (permanent alizarin, rose
     /// madder) is the slowest of them (every source orders them so). Of the
-    /// tubes this build has (`tube`): lead white and bone black are in every
-    /// box, titanium white in none.
+    /// tubes this build has (`tube`): lead white is in every box, bone black
+    /// in every box but the giverny box (which has no black), titanium white
+    /// in none (its numbers are given here).
     #[test]
     fn fast_pigments_dry_before_slow_ones() {
         fn dry(name: &'static str) -> Option<(&'static str, f32)> {
@@ -1193,7 +1217,7 @@ mod tests {
         }
         let of = |names: &[&'static str]| names.iter().filter_map(|&n| dry(n)).collect::<Vec<_>>();
         let (fast, medium, slow) = (of(&["lead white", "raw umber"]), of(&["titanium white", "bone black"]), of(&["permanent alizarin", "rose madder"]));
-        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.len() == 2);
+        assert!(fast.iter().any(|f| f.0 == "lead white") && medium.iter().any(|m| m.0 == "titanium white"));
         let first = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MAX, f32::min);
         let last = |v: &[(&str, f32)]| v.iter().map(|x| x.1).fold(f32::MIN, f32::max);
         assert!(last(&fast) < first(&medium), "{fast:?} before {medium:?}");
@@ -1265,7 +1289,7 @@ mod tests {
                 let i = y * f.w + x;
                 c.wet.vol[i] = t;
                 c.wet.lat[i] = lat;
-                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE, 0.0, 1.0];
+                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0];
                 c.wet.stroke[i] = 1;
             }
         }
@@ -1325,7 +1349,7 @@ mod tests {
                 let thin = x % 2 == 0;
                 c.wet.vol[i] = if thin { 0.2 } else { 4.0 };
                 c.wet.lat[i] = p.latent();
-                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }, 0.0, 1.0];
+                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0];
                 c.wet.stroke[i] = 1;
             }
         }

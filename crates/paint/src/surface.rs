@@ -230,6 +230,14 @@ impl Canvas {
     /// Lay the bare support: woven linen height in µm, averaged over each
     /// pixel's footprint so threads finer than a pixel don't alias.
     pub(crate) fn build_support(&mut self) {
+        if let Some(p) = self.paper {
+            let f = self.f;
+            let s = crate::paper::lay(&p, f.x0, f.y0, f.w, f.h, self.px_mm());
+            self.height = s.height;
+            self.micro = s.micro;
+            self.surf_gen += 1;
+            return;
+        }
         let Some(l) = self.linen else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);
@@ -259,18 +267,27 @@ impl Canvas {
     /// thin fluid paint gathers in the valleys and thins on the peaks.
     pub(crate) fn settle(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32]) -> Vec<f32> {
         let sets = vec![SET_TIME; add.len()];
-        self.settle_for(rect, add, stiff, &sets, false)
+        self.settle_for(rect, add, stiff, &sets, false, None)
     }
 
     /// The surface with the wet paint on it, as the painter's raking light
     /// sees it (`seen_lit`): the dry height plus each wet film's paint and solvent thickness.
-    /// Paint bridges the fine relief under it as a set film does (engine 4,
-    /// `BRIDGE_UM`); clear solvent adds height without changing the underlying relief.
+    /// The liquid film, paint and the solvent in it alike, bridges the fine
+    /// relief under it (engine 4, `BRIDGE_UM`): a liquid's surface levels as
+    /// surface tension pulls it flat, the thinner the liquid the sooner, so a
+    /// thinned film is no less level than its paint alone would be.
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
+        // (engine 6: what is still liquid, above a packed layer, which
+        // follows the relief: `settle_for`)
+        let liquid = |i: usize| if self.engine >= 6 { wet[i] - self.wet.vol[i] * COAT_UM * self.wet.hide[i][7].clamp(0.0, 1.0) } else { wet[i] };
         if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
+        }
+        // (no wet paint anywhere: every pixel is its dry height, without the blurs)
+        if wet.par_iter().all(|&a| a <= 0.0) {
+            return self.height.clone();
         }
         let Bands { r1, .. } = Bands::at(self.px_mm());
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
@@ -281,15 +298,20 @@ impl Canvas {
                 if a <= 0.0 {
                     return self.height[i];
                 }
-                let keep = (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
+                let keep = (-liquid(i) / BRIDGE_UM).exp();
                 fine[i] + (self.height[i] - fine[i]) * keep + a
             })
             .collect()
     }
 
     /// `settle`, with each pixel's paint leveling for its own time `sets`
-    /// (s): how long it stayed fluid (see `drying`).
-    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool) -> Vec<f32> {
+    /// (s): how long it stayed fluid (see `drying`). With `fluid`, only that
+    /// share of each pixel's film flows (engine 6: the rest has packed on an
+    /// absorbent ground, `bristle::ground_drain`): its depth sets how fast
+    /// it levels (as depth cubed) and how much of the relief under it it
+    /// bridges; the packed layer follows the relief.
+    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool, fluid: Option<&[f32]>) -> Vec<f32> {
+        let flow = |i: usize| fluid.map_or(1.0, |f| f[i]);
         // far below any film is nothing at all (see ADD_EPS_UM): zero it so
         // float residue can't pose as paint in the ratios below
         let clean: Vec<f32>;
@@ -327,7 +349,7 @@ impl Canvas {
                     row[x] = 0.0;
                     continue;
                 }
-                let hm = a * 1e-6;
+                let hm = a * flow(i) * 1e-6;
                 let (eta, ty) = rheology_at(engine, stiff[i]);
                 let (k1, c1) = level_band(lam1, hm, eta, ty, sets[i]);
                 let (k2, c2) = level_band(lam2, hm, eta, ty, sets[i]);
@@ -371,7 +393,7 @@ impl Canvas {
                     let i = y * rw + x;
                     if add[i] > 0.0 {
                         // (by the film as it leveled here: thin on a peak it drained from)
-                        let keep = (-out[i].max(0.0) / BRIDGE_UM).exp();
+                        let keep = (-out[i].max(0.0) * flow(i) / BRIDGE_UM).exp();
                         self.height[(y0 + y) * w + x0 + x] -= (old[i] - fine[i]) * (1.0 - keep);
                     }
                 }

@@ -437,6 +437,34 @@ def read_picture(i, path, png):
                                 {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}}))
 
 
+def held_look(i, args, said, png):
+    """A look held up to the canvas, its picture and the easel's words about it."""
+    import base64
+    return (line({"type": "message", "message": {"role": "assistant", "content": [
+                {"type": "toolCall", "id": i, "name": "look", "arguments": args}]}})
+            + line({"type": "message", "message": {"role": "toolResult", "toolCallId": i, "isError": False, "content": [
+                {"type": "text", "text": said}, {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}}))
+
+
+def test_a_stick_held_without_a_pose_is_known_by_the_easels_reply(home):
+    # a pastel stick held with no pose or side takes the easel's default pose: its request reads as a knife's, and
+    # only the reply (main.rs) says which was held
+    pytest.importorskip("PIL")
+    _, studio, log = home
+    log.write_text(start(str(studio))
+                   + held_look("k", {"hold": "k1", "at": "50,50"},
+                               "look-0001.png (400x300, 0.08s): k1 held up to the canvas at 50,50\n", png_of("blue"))
+                   + held_look("s", {"hold": "P.glow", "at": "50.5,-2"},
+                               "look-0002.png (400x300, 0.31s): P.glow held at 50.5,-2: resting on the tooth at 1.5 N\n",
+                               png_of("red"))
+                   + held_look("p", {"hold": "P.glow", "at": "60,60", "side": "30"},
+                               "[scratch canvas]\nlook-0003.png (400x300, 0.30s): P.glow held at 60,60: laid flat\n",
+                               png_of("green")))
+    events, _ = S.parse(str(log))
+    assert [e.get("held") for e in events if e["kind"] == "look"] == [None, "stick", "stick"]
+    assert [e.get("held") for e in events if e["kind"] == "image"] == [None, "stick", "stick"]
+
+
 @pytest.mark.parametrize("via", ["live server", "static export"])
 def test_a_reference_picture_is_marked_and_is_never_the_painters_picture(home, server, via):
     # pictures read from the studio's reference/ are another painter's work, given to this one to study
@@ -539,6 +567,9 @@ def test_a_palette_look_is_not_the_painting():
     assert not S.is_whole(S.look_text({"light": "45,15"}))
     assert not S.is_whole(S.look_text({"hold": "skyP", "at": "400,320"}))
     assert not S.is_whole(S.look_text({"survey": True, "mode": "gallery"}))
+    # nor the motif pinned beside the canvas (look{ref=}), even with a size
+    assert not S.is_whole(S.look_text({"ref": "motif.jpg"}))
+    assert not S.is_whole(S.look_text({"size": 800, "ref": "motif.jpg"}))
 
 
 @pytest.mark.parametrize("ending, said", [

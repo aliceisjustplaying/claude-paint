@@ -23,17 +23,18 @@ fn brush_volume(h: &Held) -> f64 {
 fn mix_into_is_volume_weighted() {
     let a = mixbox::linear_float_rgb_to_latent(&[0.8, 0.1, 0.1]);
     let b = mixbox::linear_float_rgb_to_latent(&[0.1, 0.1, 0.8]);
-    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4, 1.0, 0.8, 0.4]);
-    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8, 2.0, 0.0, 1.2]);
+    let (mut v, mut l, mut p) = (1.0f32, a, [0.2f32, 0.4, 1.0, 0.8, 0.4, 0.8, 0.4, 0.4, 0.4, 0.0]);
+    mix_into(&mut v, &mut l, &mut p, 3.0, &b, [0.6, 0.8, 2.0, 0.0, 1.2, 0.4, 0.8, 0.0, 0.8, 0.4]);
     assert!((v - 4.0).abs() < 1e-6);
     for k in 0..l.len() {
         assert!((l[k] - (0.25 * a[k] + 0.75 * b[k])).abs() < 1e-5);
     }
     assert!((p[0] - 0.5).abs() < 1e-6 && (p[1] - 0.7).abs() < 1e-6 && (p[2] - 1.75).abs() < 1e-6);
     assert!((p[3] - 0.2).abs() < 1e-6 && (p[4] - 1.0).abs() < 1e-6, "solvent and oil mix by volume too: {p:?}");
+    assert!((p[5] - 0.5).abs() < 1e-6 && (p[6] - 0.7).abs() < 1e-6 && (p[7] - 0.1).abs() < 1e-6 && (p[8] - 0.7).abs() < 1e-6 && (p[9] - 0.3).abs() < 1e-6, "and the packing: {p:?}");
     // zero or negative volume is a no-op
     let before = (v, l, p);
-    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0, 0.0, 0.0, 0.0, 0.0]);
+    mix_into(&mut v, &mut l, &mut p, 0.0, &a, [0.0; 10]);
     assert_eq!(before, (v, l, p));
 }
 
@@ -740,9 +741,10 @@ fn turpentine_leaves_a_thinner_film() {
 #[cfg(tube_box)]
 fn an_absorbent_ground_drinks_a_wash() {
     use crate::palette::Palette;
-    let pal = Palette::tube_box();
+    let mut pal = Palette::tube_box();
+    pal.engine = 4;
     let run = |absorbent: f32| {
-        let mut c = Canvas::new(300, 1.0, [0.8; 3]);
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_engine(4);
         c.ground_finish(absorbent);
         let mut h = Held::new(Tool::filbert(60.0), 3);
         h.load(pal.pile(vec![(10, 1.0)]).laid(0.3), 0.3);
@@ -757,10 +759,139 @@ fn an_absorbent_ground_drinks_a_wash() {
     assert!(chalk.2 < oil.2 - 0.2, "gloss: oil ground {}, chalk {}", oil.2, chalk.2);
 }
 
-/// Poppy oil dries slower than linseed (walnut between).
+/// Engine 6: an absorbent ground drains a film to its drained floor, as
+/// far as its pores allow: the pigment packs from the ground up, the paint
+/// above keeping all its oil, so the surface's oil is the paint's until the
+/// packed layer reaches it. What a brush takes off comes from the top.
+#[test]
+fn an_absorbent_ground_drains_a_film_from_the_ground_up() {
+    use crate::bristle::{ground_drain, surface_oil, take_from};
+    // (a tube paint 40% oil by volume)
+    let fresh = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, 0.0, 0.4, 0.0];
+    // two coats of tube paint: pigment 1.2 coats, oil 0.8, of which the
+    // ground can take 0.8 × (1 − 0.6) = 0.32, 0.16 a coat. Taking 0.1
+    // packs 0.625 coats of it into 0.525 coats at the floor's oil
+    let (mut hd, mut cap) = (fresh, 0.1);
+    let t = ground_drain(&mut cap, 2.0, &mut hd);
+    assert!((t - 1.9).abs() < 1e-5 && cap == 0.0, "{t} {cap}");
+    assert!((hd[7] - 0.525 / 1.9).abs() < 1e-5 && (hd[4] - (0.525 * 0.6 + 1.375) / 1.9).abs() < 1e-5, "{hd:?}");
+    assert!((surface_oil(&hd) - 1.0).abs() < 1e-5, "the surface keeps its oil: {hd:?}");
+    assert_eq!(hd[1], fresh[1], "the paint above the packed layer keeps its stiffness");
+    // more pores than the film can give: down to the floor, all packed
+    let mut cap = 1.0;
+    let t = ground_drain(&mut cap, t, &mut hd);
+    assert!((t - 1.68).abs() < 1e-5 && (cap - 0.78).abs() < 1e-5, "{t} {cap}");
+    assert!((hd[4] - 0.6).abs() < 1e-5 && (hd[7] - 1.0).abs() < 1e-5 && (surface_oil(&hd) - 0.6).abs() < 1e-5, "{hd:?}");
+    assert_eq!(ground_drain(&mut cap, t, &mut hd), t, "nothing below the floor");
+    // nearly packed through, the surface still has the paint's own oil
+    let nearly = [0.8, 0.6, 1.0, 0.0, 0.9995 * 0.6 + 0.0005, 0.7, 0.6, 0.9995, 0.4, 0.0];
+    assert!((surface_oil(&nearly) - 1.0).abs() < 2e-3, "{}", surface_oil(&nearly));
+    // packed through, it dries as lean as stiff paste (engine 6 only)
+    assert!(crate::drying::lean_of(6, &hd) == 1.0 && crate::drying::lean_of(5, &hd) == hd[1], "{hd:?}");
+    // a coarse pigment's floor is below its packed oil: it drains further
+    let (mut coarse, mut cap) = ([0.8, 0.6, 1.0, 0.0, 1.0, 0.8, 0.15, 0.0, 0.4, 0.0], 1.0);
+    ground_drain(&mut cap, 2.0, &mut coarse);
+    assert!((coarse[4] - 0.15).abs() < 1e-5, "{coarse:?}");
+    // a brush takes the top first: the paint above the packed layer, as rich
+    // as the surface; the film's packed share grows
+    let (mut hd, mut cap) = (fresh, 0.16);
+    ground_drain(&mut cap, 2.0, &mut hd);
+    let (vol, f) = (2.0 - 0.16, hd[7]);
+    // an oilier tube paint (60% oil by volume, as an oily earth's) gives
+    // up more oil a coat as it packs to the same share of its own
+    let (mut oily, mut cap) = ([0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, 0.0, 0.6, 0.0], 1.0);
+    let thinner = 2.0 - ground_drain(&mut cap, 2.0, &mut oily);
+    assert!(thinner > 0.32 + 0.1 && (oily[4] - 0.6).abs() < 1e-5, "{thinner} {oily:?}");
+    let got = take_from(&mut hd, vol, 0.4);
+    assert!((got[4] - 1.0).abs() < 1e-5 && got[7] == 0.0, "{got:?}");
+    assert!((hd[7] - f * vol / (vol - 0.4)).abs() < 1e-5 && (surface_oil(&hd) - 1.0).abs() < 1e-4, "{hd:?}");
+}
+
+/// Engine 6 on a chalk ground: a thin film of smalt, coarser than the
+/// ground's pores, drains below its packed oil and dries matte; one of
+/// Prussian blue, finer, keeps its packed layer saturated and dries
+/// glossier; a film too thick for the ground to drain keeps its surface's
+/// oil and dries about as glossy as on an oil ground. The paint keeps its
+/// stiffness (engine 4's draw stiffened it).
 #[test]
 #[cfg(tube_box)]
-fn poppy_oil_dries_slower() {
+fn an_absorbent_ground_drains_paint_as_its_pigment_packs() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let run = |tube: &str, absorbent: f32, passes: usize| {
+        let i = pal.tubes.iter().position(|t| t.name == tube).unwrap();
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]);
+        assert!(c.engine >= 6);
+        c.ground_finish(absorbent);
+        for _ in 0..passes {
+            let mut h = Held::new(Tool::filbert(60.0), 3);
+            h.load(pal.pile(vec![(i, 1.0)]).laid(0.0), if passes > 1 { 1.0 } else { 0.4 });
+            c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        }
+        let i = c.f.index(500.0, 500.0);
+        let (vol, hd) = (c.wet.vol[i], c.wet.hide[i]);
+        c.dry();
+        eprintln!("{tube} absorbent {absorbent} passes {passes}: {vol} coats {hd:?} gloss {}", c.gloss[i]);
+        (vol, hd, c.gloss[i])
+    };
+    let (smalt, smalt_oil) = (run("smalt", 1.0, 1), run("smalt", 0.0, 1));
+    let prussian = run("Prussian blue", 1.0, 1);
+    assert!(smalt.1[7] > 0.95 && prussian.1[7] > 0.95, "thin films pack through: {smalt:?} {prussian:?}");
+    assert!(smalt.1[4] < 0.2 && smalt.2 < 0.1, "smalt drains below its packed oil, matte: {smalt:?}");
+    assert!(prussian.2 > smalt.2 + 0.1, "Prussian blue keeps its packed layer: {prussian:?} {smalt:?}");
+    assert!((smalt.1[1] - smalt_oil.1[1]).abs() < 1e-5, "stiffness: {smalt:?} {smalt_oil:?}");
+    let (thick, thick_oil) = (run("smalt", 1.0, 8), run("smalt", 0.0, 8));
+    assert!(thick.1[7] < 0.7 && thick.2 > thick_oil.2 - 0.05, "a thick film keeps its surface: {thick:?} {thick_oil:?}");
+}
+
+/// Engine 6: a waxed paint dries less glossy than the same paint without
+/// wax (`palette::WAX_MATTE`), on an oil ground where nothing drains it.
+#[test]
+fn wax_dries_more_matte() {
+    let gloss = |wax: f32| {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]);
+        assert!(c.engine >= 6);
+        let p = Paint { wax, ..Paint::body(hex("#556677")) };
+        for _ in 0..4 {
+            let mut h = Held::new(Tool::filbert(60.0), 3);
+            h.load(p, 1.0);
+            c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        }
+        let i = c.f.index(500.0, 500.0);
+        c.dry();
+        c.gloss[i]
+    };
+    let (plain, waxed) = (gloss(0.0), gloss(1.0));
+    assert!(plain > 0.3 && (waxed / plain - (1.0 - crate::palette::WAX_MATTE)).abs() < 0.05, "plain {plain} waxed {waxed}");
+}
+
+/// Engine 6: only the fluid share of a film levels (`settle_for`'s
+/// `fluid`): over the weave a film packed through follows the relief under
+/// it, as even as it was laid; a fluid one gathers in the hollows.
+#[test]
+fn a_packed_film_follows_the_relief() {
+    let film = |fluid: Option<f32>| {
+        // (80 mm over 300 px: the threads resolved; a fluid glaze's body)
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+        let (w, h) = (c.f.w, c.f.h);
+        let add = vec![30.0f32; w * h];
+        let stiff = vec![0.0f32; w * h];
+        let sets = vec![crate::surface::SET_TIME; w * h];
+        let fl = fluid.map(|f| vec![f; w * h]);
+        c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, fl.as_deref())
+    };
+    let spread = |t: &[f32]| t.iter().fold((f32::MAX, 0f32), |(a, b), &x| (a.min(x), b.max(x)));
+    let (packed, fluid) = (spread(&film(Some(0.0))), spread(&film(None)));
+    assert!(packed.1 - packed.0 < 0.01, "packed through: an even film {packed:?}");
+    assert!(fluid.1 - fluid.0 > 1.0, "fluid: it gathers in the hollows {fluid:?}");
+    assert_eq!(spread(&film(Some(1.0))), fluid);
+}
+
+/// A pile's oil rate scales its drying rate (poppy's 0.6 dries at 0.6 of
+/// linseed's; the easel's pile{oil=} sets the rate, a_pile_s_oil_sets_its_drying_rate).
+#[test]
+#[cfg(tube_box)]
+fn oil_rate_scales_drying() {
     use crate::palette::Palette;
     let pal = Palette::tube_box();
     let mut m = pal.pile(vec![(0, 1.0)]);

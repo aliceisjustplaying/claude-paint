@@ -324,6 +324,10 @@ impl Session {
             // through prelude.lua's guard: an error value is shown without its address
             guard.call::<()>(chunk.into_function()?)?;
             check.call::<()>(())?;
+            // a paper mask is laid and lifted within one sitting's chunk (paint's sheet.rs)
+            if self.st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
+                return Err(mlua::Error::runtime("the chunk ended with a sheet laid on the picture: lift it (lift_sheet()) in the chunk that laid it"));
+            }
             // the hand time the chunk spent goes on the clock before it ends
             if self.inject("flush").is_err() {
                 panic!("injected failure: flush");
@@ -492,6 +496,28 @@ impl Session {
             .collect();
         names.sort();
         Err(format!("look --hold {name}: no global of that name holds a knife or a pile ({})", if names.is_empty() { "there is none yet".to_string() } else { names.join(", ") }))
+    }
+
+    /// The pastel stick a global (or a field of one: `P.glow`) holds, and how
+    /// far it has been turned in the fingers (degrees): `look --hold`'s.
+    pub fn held_stick(&self, name: &str) -> Result<(paint::pastel::Stick, f32), String> {
+        let mut parts = name.split('.');
+        let first = parts.next().unwrap_or("");
+        let mut v: Value = self.lua.globals().raw_get(first).map_err(|e| e.to_string())?;
+        for p in parts {
+            v = match v {
+                Value::Table(t) => t.raw_get(p).map_err(|e| e.to_string())?,
+                _ => Value::Nil,
+            };
+        }
+        match v {
+            Value::Table(t) if t.raw_get::<Option<String>>("kind").ok().flatten().as_deref() == Some("stick") => {
+                let s = crate::api::draw_pencil::stick_of(&t).map_err(|e| e.to_string())?;
+                let turned = t.raw_get::<Option<f32>>("turned").ok().flatten().unwrap_or(0.0);
+                Ok((s, turned))
+            }
+            _ => Err(format!("look --hold {name}: that holds no pastel stick")),
+        }
     }
 
     /// The ground's color, from the `canvas{}` layers: each layer's paint over the raw linen
@@ -1032,7 +1058,10 @@ mod tests {
             assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
         let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
         assert!((p.mix.solvent - 0.3).abs() < 1e-5);
-        assert!((p.mix.oil_rate - 0.8).abs() < 1e-5);
+        // (half of it reground in poppy: from engine 6 against the box's own
+        // walnut-ground tubes, before against linseed)
+        let poppy = if paint::ENGINE >= 6 { paint::palette::POPPY_RATE / paint::palette::WALNUT_RATE } else { 0.6 };
+        assert!((p.mix.oil_rate - (poppy + 1.0) / 2.0).abs() < 1e-5, "{}", p.mix.oil_rate);
     }
 
     #[test]
@@ -1803,7 +1832,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine {}\n\n--@ chunk 1\n{CANVAS}\n", paint::ENGINE);
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");
@@ -2005,13 +2034,15 @@ mod tests {
     /// file name; a painting's log doesn't.
     /// The scratch canvas is set up with the painting's `canvas{...}` as the easel wrote it
     /// back (`Studio::canvas_src`): run in a fresh session it makes the same canvas, every
-    /// option kept (a two-layer ground with texture and absorbent, and a raw canvas).
+    /// option kept (a two-layer ground with texture and absorbent, a raw canvas, and a sheet of
+    /// paper with its tone, felt and laid lines).
     #[test]
     #[cfg(tube_box)]
     fn a_canvas_written_back_sets_up_the_same_canvas() {
         for call in [
             r#"canvas{size=320, aspect=1.25, linen={14, 17}, seed=9, ground={{pile={{"lead white", 3}, {"yellow ochre", 0.5}}, um=90, apply="brush"}, {pile={{"lead white", 1}}, um=40.5, apply="knife", texture=0.7, absorbent=0.6}}}"#,
             r#"canvas{size=300, aspect=1, linen=20, seed=4, raw="cotton duck"}"#,
+            r#"canvas{size=240, aspect=1.4, seed=5, paper={grammage=160, tone={{"lead white", 4}, {"raw umber", 0.2}}, felt={cell=0.9, depth=18.5}, laid={per_cm=9, chain=24}, porosity=0.55}}"#,
         ] {
             let mut a = Session::new(160).unwrap();
             a.run(call).unwrap();
@@ -2079,6 +2110,8 @@ mod tests {
 
     /// pile{oil=} grinds the paint in that oil: its drying rate against
     /// linseed's (paint's oil_rate_scales_drying has what the rate does).
+    /// From engine 6 a pile naming no oil is in its tubes' own (the default
+    /// box's are walnut-ground), and the rate is relative to theirs.
     #[test]
     #[cfg(tube_box)]
     fn a_pile_s_oil_sets_its_drying_rate() {
@@ -2086,11 +2119,19 @@ mod tests {
         s.run(CANVAS).unwrap();
         s.run(r#"pl = pile{{"lead white", 1}}; pli = pile{{"lead white", 1}, oil="linseed"}
                  pw = pile{{"lead white", 1}, oil="walnut"}; pp = pile{{"lead white", 1}, oil="poppy"}"#).unwrap();
+        // (the oil it is in: its rate against linseed's)
         let rate = |n: &str| match &s.globals[n].0 {
-            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.oil_rate,
+            Value::UserData(u) => {
+                let m = &u.borrow::<api::PileU>().unwrap().mix;
+                m.oil_rate * m.tube_oil_rate
+            }
             o => panic!("{n} is {o:?}"),
         };
-        assert_eq!([rate("pl"), rate("pli"), rate("pw"), rate("pp")], [1.0, 1.0, 0.8, 0.6]);
+        use paint::palette::{POPPY_RATE, WALNUT_RATE};
+        let want = if paint::ENGINE >= 6 { [WALNUT_RATE, 1.0, WALNUT_RATE, POPPY_RATE] } else { [1.0, 1.0, 0.8, 0.6] };
+        for (n, w) in ["pl", "pli", "pw", "pp"].into_iter().zip(want) {
+            assert!((rate(n) - w).abs() < 1e-5, "{n}: {} for {w}", rate(n));
+        }
         let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
         assert!(e.contains("linseed"), "{e}");
     }

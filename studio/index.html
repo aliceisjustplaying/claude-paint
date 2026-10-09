@@ -539,7 +539,7 @@ function kindOf(e) {
   }
   if (e.kind === 'read') return e.ref && /\.(jpe?g|png|webp|gif)$/i.test(f) ? ['ref', '🖼', 'studies a reference picture'] : /\.(jpe?g|png)$/i.test(f) ? ['look', '👁', 'looks at the canvas'] : ['read', '📖', 'reads ' + f];
   if (e.kind === 'image') return e.ref ? ['ref', '🖼', 'studies a reference picture'] : ['look', '👁', 'looks at ' + (f || 'the canvas')];
-  if (e.kind === 'look') return ['look', '👁', lookWords(e.text)[2]];
+  if (e.kind === 'look') return ['look', '👁', lookWords(e.text, e.held)[2]];
   if (e.kind === 'clock') return ['notes', '◷', 'painting clock'];
   if (e.kind === 'paint') { const ok = paintOK(e);
     const on = e.scratch ? ' on the scratch canvas' : '';
@@ -871,7 +871,7 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(e.look);
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)/.test(e.look);
 // the scratch canvas beside the painting: a look at it, or a chunk painted on it
 const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
 const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
@@ -1005,24 +1005,30 @@ function palette(k) {
   im.src = url;
 }
 // a look request in words: [title, what it's for, the chip's words]
-function lookWords(req) {
-  if (req != null && /scratch (?!False)/.test(req)) { const [t, why, chip] = lookWords(unscratched(req));
+// held: 'stick' when the easel's reply says a pastel stick was held (studio.py STICK_HELD), whatever the request says
+function lookWords(req, held) {
+  if (req != null && /scratch (?!False)/.test(req)) { const [t, why, chip] = lookWords(unscratched(req), held);
     return [t === 'The whole canvas' ? 'The scratch canvas' : `${t} (scratch canvas)`, why, chip + ' (scratch canvas)']; }
   if (req == null) return ['A picture it opened', 'an image file it looked at', 'looks at a picture'];
   if (/palette (?!False)/.test(req)) return ['Palette', 'the paints it has mixed, thick and thin', 'looks at its palette'];
   if (/survey (?!False)/.test(req)) return ['Survey', 'a part of the canvas at full detail, one of several', 'surveys the canvas up close'];
+  if (/(?:^|, )ref /.test(req)) return ['Beside the motif', 'a picture of the motif pinned beside the same view of the canvas, to judge the canvas against it', 'looks at the canvas beside the motif'];
+  if (/hold/.test(req) && (held === 'stick' || /(?:^|, )(?:pose|side) /.test(req))) return ['Stick held up', 'a pastel stick held over a passage of the canvas, where it would rest on the tooth and where its crumbs would settle', 'holds a pastel stick over the canvas'];
   if (/hold/.test(req)) return ['Knife held up', 'the loaded knife held up to a passage of the canvas, to judge a mix against it', 'holds the loaded knife up to the canvas'];
   if (/compare/.test(req)) return ['Before and after', 'an earlier look beside the canvas now', 'compares the canvas with an earlier look'];
   const mode = (req.match(/mode\s+([a-z]+(?:\s*,\s*[a-z]+)*)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
-  // the light, as the easel takes it: a light given (it rakes, whatever the mode), else the first of relief/raking/gallery in the mode list
-  const lit = /light\s/.test(req) ? 'relief' : (mode.replace(/^mode\s+/, '').split(',').map(m => m.trim()).find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', rel = lit !== '' && !gal;
+  // the light, as the easel takes it: a light given (whatever the mode), else the first of relief/raking/gallery in the mode list;
+  // a light given rakes at 35° or lower, and a higher one is named by its elevation (the easel's numbers, 5e1 included)
+  const lm = req.match(/light\s+([^,\s]+)\s*,\s*([^,\s)]+)/), el = lm ? Number(lm[2]) : NaN;
+  const lit = /light\s/.test(req) ? (el > 35 ? 'high' : 'relief') : (mode.replace(/^mode\s+/, '').split(',').map(m => m.trim()).find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', high = lit === 'high', rel = lit !== '' && !gal && !high;
+  const hw = high && `lit from ${el}°`;
   const why = [crop && 'up close, at full detail', sq && 'blurred on purpose, as through half-closed eyes, to judge the big shapes',
                val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes',
-               rel && 'under a raking light, to see the ridges and furrows of the paint', gal && 'lit from above, as it would hang'].filter(Boolean);
+               rel && 'under a raking light, to see the ridges and furrows of the paint', high && `${hw}, to see the ridges and furrows of the paint`, gal && 'lit from above, as it would hang'].filter(Boolean);
   if (!why.length) return ['The whole canvas', '', 'looks at the whole canvas'];
-  const lw = rel ? 'raking light' : gal && 'gallery light', plain = crop || sq || val || mir;
-  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
-  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : 'looks at it in gallery light'];
+  const lw = rel ? 'raking light' : gal ? 'gallery light' : hw, plain = crop || sq || val || mir;
+  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : high ? `Lit from ${el}°` : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
+  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : high ? `looks at the paint ${hw}` : 'looks at it in gallery light'];
 }
 // a crop's window in canvas units [x0, y0, x1, y1] (two opposite corners; the canvas is 1000 units wide, y down: notes/easel_guide.md)
 function cropOf(req) {
@@ -1064,7 +1070,7 @@ let crop = null, otherK = -1;  // the second look's window, outlined on the pain
 function second(k) {
   const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
-  if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
+  if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look, e.held), u = viewURL(e.img);
     setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
     $('cap2').querySelector('b').textContent = t; crop = e.ref ? null : cropOf(e.look);
     const sq = !e.ref && /squint|blur/.test(e.look || ''), gray = !e.ref && /value|gray/.test(e.look || ''), by = e.ref && why.match(/^A painting by (.+?) that/);
@@ -1115,7 +1121,7 @@ function pictures() {
   const [w, o] = picturesAt(pos, rested, sc);
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : (sc ? isWholeScratch(img) : isWhole(img)) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`);
+    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : (sc ? isWholeScratch(img) : isWhole(img)) ? hhmm(img.ts) : `${lookWords(img.look, img.held)[0]} · ${hhmm(img.ts)}`);
     $('img').alt = sc ? 'the scratch canvas' : 'the painting';
     second(o); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place

@@ -194,7 +194,7 @@ struct Pool {
 /// already. mm³ of paint, its mean color, hiding and cure, mm³ of solvent,
 /// and when it was last brought up to date: minutes of painting time
 /// (`Canvas::now_min`) and hand seconds (`Tally::secs`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct Mobile {
     pub mm3: f32,
     pub lat: crate::wet::Latent,
@@ -203,6 +203,23 @@ pub struct Mobile {
     pub solv_mm3: f32,
     pub at_min: f64,
     pub at_secs: f64,
+}
+
+impl std::fmt::Debug for Mobile {
+    /// As derived, but the paint's properties without engine 6's five while
+    /// it carries none (a rag before engine 6 prints as it always did).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = if self.hide[5..].iter().all(|&v| v == 0.0) { 5 } else { self.hide.len() };
+        f.debug_struct("Mobile")
+            .field("mm3", &self.mm3)
+            .field("lat", &self.lat)
+            .field("hide", &&self.hide[..n])
+            .field("cure", &self.cure)
+            .field("solv_mm3", &self.solv_mm3)
+            .field("at_min", &self.at_min)
+            .field("at_secs", &self.at_secs)
+            .finish()
+    }
 }
 
 /// One contact of the pad (`rag_contact`): how long it lasts (s) and how
@@ -608,13 +625,16 @@ impl Canvas {
             for &(i, take) in &asks[k0..k1] {
                 let take = take * scale;
                 if take > 0.0 {
+                    // (engine 6: the rag lifts from the top down, `bristle::take_from`)
+                    let h = if self.engine >= 6 { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
                     if pooled {
                         let l = &self.wet.lat[i];
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
                         }
-                        let h = &self.wet.hide[i];
-                        for q in 0..h.len() {
+                        // (before engine 6 the rag carries engine 4's five
+                        // properties; the packing's are engine 6's)
+                        for q in 0..if self.engine >= 6 { h.len() } else { 5 } {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {
@@ -721,8 +741,11 @@ impl Canvas {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
         let hd = &mut self.wet.hide[i];
+        // (engine 6: the smear is fluid however packed it was where the rag
+        // took it up, `Surf::add`)
+        let ph = if self.engine >= 6 { crate::bristle::fluid_of(pl.hide) } else { pl.hide };
         for k in 0..hd.len() {
-            hd[k] += (pl.hide[k] - hd[k]) * a;
+            hd[k] += (ph[k] - hd[k]) * a;
         }
         if self.wet.clock.px.len() == self.wet.vol.len() {
             let p = &mut self.wet.clock.px[i];
@@ -730,6 +753,12 @@ impl Canvas {
         }
         self.wet.cover[i] = 1.0;
         self.wet.vol[i] = t;
+        // engine 6: an absorbent ground drains the smear, as it drains paint
+        // a brush lays (`bristle::ground_drain`)
+        if self.engine >= 6 && self.absorb_any {
+            let hd = &mut self.wet.hide[i];
+            self.wet.vol[i] = crate::bristle::ground_drain(&mut self.absorb[i], t, hd);
+        }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)
         {
@@ -1120,6 +1149,7 @@ mod tests {
     use crate::drying::GEL;
     use crate::handling::Handling;
     use crate::surface::Linen;
+    use crate::wet::{DRAINED_FLOOR, OIL_VOLUME, PACKED_OIL};
     use crate::canvas::Crop;
 
     /// The live width (px): the weave is resolved (a thread about 3.6 px).
@@ -1147,7 +1177,7 @@ mod tests {
         for i in 0..c.wet.vol.len() {
             if i % 240 < 120 {
                 c.wet.vol[i] = 0.8;
-                c.wet.hide[i] = [0.8, 0.6, 1.0, 0.4, 0.6];
+                c.wet.hide[i] = [0.8, 0.6, 1.0, 0.4, 0.6, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0];
                 c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
             }
         }
@@ -1163,6 +1193,50 @@ mod tests {
             }
         }
         assert!(laid > 0, "the rag must carry paint onto the initially bare half");
+    }
+
+    /// From engine 6 an absorbent ground drains what a rag smears onto it,
+    /// as it drains paint a brush lays (`bristle::ground_drain`): on bare
+    /// absorbent ground the smear loses oil down toward its drained floor and
+    /// packs from the ground up, its stiffness its own; where the ground's
+    /// pores are already full it keeps its material. Engines 4 and 5 leave
+    /// a smear as it came (`a_rag_smear_preserves_the_paint_oil_and_turps`).
+    #[test]
+    fn an_absorbent_ground_drains_a_rag_smear_from_engine_6() {
+        for engine in [5, 6] {
+            let mut c = Canvas::new(240, 1.0, [0.3, 0.2, 0.1]).with_engine(engine);
+            c.ground_finish(1.0);
+            for i in 0..c.wet.vol.len() {
+                if i % 240 < 120 {
+                    c.wet.vol[i] = 0.8;
+                    c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, OIL_VOLUME, 0.0];
+                    c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+                    // (painted on before: its ground's pores are full)
+                    c.absorb[i] = 0.0;
+                }
+            }
+            let mut rag = Rag::new(50.0, 2);
+            assert!(c.rag_wipe(&mut rag, &[(100.0, 200.0), (900.0, 200.0)], &[0.8], 19) > 0.0);
+            let mut laid = 0;
+            for (i, (&v, h)) in c.wet.vol.iter().zip(&c.wet.hide).enumerate() {
+                if i % 240 >= 130 && v > 1e-5 {
+                    laid += 1;
+                    if engine >= 6 {
+                        assert!(h[4] < 1.0 - 1e-3 && h[4] >= 0.4 - 1e-4 && h[7] > 1e-3 && (h[1] - 0.6).abs() < 1e-5, "a smear on bare absorbent ground drains and packs: {h:?}");
+                    } else {
+                        assert!((h[4] - 1.0).abs() < 1e-5 && (h[1] - 0.6).abs() < 1e-5, "engine {engine} leaves a smear as it came: {h:?}");
+                    }
+                }
+            }
+            assert!(laid > 0, "the rag must carry paint onto the bare half");
+            // (clear of the boundary, where the pad lays back what it took
+            // from the drained half)
+            for (i, h) in c.wet.hide.iter().enumerate() {
+                if i % 240 < 96 && c.wet.vol[i] > 1e-5 {
+                    assert!((h[4] - 1.0).abs() < 1e-5 && h[7] == 0.0, "full pores leave the paint its oil: {h:?}");
+                }
+            }
+        }
     }
 
     /// A 440 mm canvas on 15-thread linen with a thin brushed ground, the

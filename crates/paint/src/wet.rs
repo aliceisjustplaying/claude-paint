@@ -27,12 +27,31 @@ use crate::pigment::{Pigment, hiding_of, scatter_for};
 pub const LAT: usize = mixbox::LATENT_SIZE;
 pub type Latent = [f32; LAT];
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
-/// coat, stiffness, drying rate, solvent, oil].
+/// coat, stiffness, drying rate, solvent, oil, packed oil, drained floor,
+/// packed share, oil volume, wax].
 /// Stiffness 0 = fluid, medium-rich glaze; 1 = stiff tube paint. Drying rate
 /// relative to average paint (see `drying::drier`). Solvent and oil are
 /// engine 4's (see `Paint`; engine 3's thinner keeps its solvent beside the
-/// paint, `crate::thinner`).
-pub type Prop = [f32; 5];
+/// paint, `crate::thinner`). The last five are engine 6's, for an absorbent
+/// ground's drain (`bristle::ground_drain`): the oil left, relative to tube
+/// paint as `oil` is, when the pigment packs (`Paint::packed`) and when a
+/// ground has drained all it can (`Paint::floor`), and the share of a film on
+/// the canvas packed from the ground up as it drained, of its thickness (the
+/// paint above keeps its oil until the packed layer reaches the surface;
+/// paint laid or taken up is fluid again), and the oil's share of the
+/// volume of its tube paint (`Paint::oil_volume`), and the share of its oil
+/// from waxed tubes (`Paint::wax`).
+pub type Prop = [f32; 10];
+
+/// Engine 6's packed oil and drained floor for paint that names no tubes
+/// (relative to tube paint): a fine pigment's, ground as a tube is
+/// (`palette::tube_packing`).
+pub const PACKED_OIL: f32 = 0.7;
+pub const DRAINED_FLOOR: f32 = 0.6;
+/// Engine 6's oil share by volume of tube paint naming no tubes: Golden's
+/// measured ultramarine tube, 54% oil, which keeps about `PACKED_OIL` of it
+/// packed (notes/research/pigment_oil.md).
+pub const OIL_VOLUME: f32 = 0.54;
 
 #[inline]
 fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
@@ -76,22 +95,42 @@ pub struct Paint {
     /// medium, less blotted or drawn into an absorbent ground. A film's gloss
     /// follows it (engine 4).
     pub oil: f32,
+    /// Engine 6: the oil left, relative to tube paint (as `oil`), when the
+    /// pigment packs at its critical pigment volume (`palette::Tube`'s oil
+    /// absorption against the oil its tube holds): a film drained to here
+    /// dries semi-matte.
+    pub packed: f32,
+    /// Engine 6: the oil an absorbent ground can leave at the least, below
+    /// `packed` only for pigments coarser than the ground's pores (air enters
+    /// the paint; it goes matte and underbound).
+    pub floor: f32,
+    /// Engine 6: the oil's share of the volume of the tube paint it is made
+    /// of (as ground, before medium or blotting: `oil` counts those), from
+    /// its tubes' oil by weight and their pigments' density
+    /// (`palette::tube_packing`): about 0.5 for lead white, 0.85 for an
+    /// oily tube of burnt sienna. An absorbent ground drains a film by it
+    /// (`bristle::ground_drain`).
+    pub oil_volume: f32,
+    /// Engine 6: the share of its oil from tubes ground with wax (the
+    /// French colourmen's few per cent, `palette::grind_of`): it dries more
+    /// slowly (in `drying`) and more matte (`palette::WAX_MATTE`).
+    pub wax: f32,
 }
 
 impl Paint {
     /// Its properties as they mix in a brush and on the canvas (`Prop`).
     pub fn prop(&self) -> Prop {
-        [self.scatter(), self.stiff, self.drying, self.solvent, self.oil]
+        [self.scatter(), self.stiff, self.drying, self.solvent, self.oil, self.packed, self.floor, 0.0, self.oil_volume, self.wax]
     }
     /// A paint of masstone `color` whose one coat hides `hiding` (contrast
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0 }
+        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME, wax: 0.0 }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0 }
+        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME, wax: 0.0 }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -183,7 +222,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is
@@ -305,6 +344,9 @@ impl Canvas {
             return (0..self.px.len())
                 .into_par_iter()
                 .map(|i| {
+                    if let Some(c) = self.sheet_seen(i) {
+                        return c;
+                    }
                     // (the thinnest wet film lets the surface under it show: no edge where it ends)
                     let v = self.wet.vol[i];
                     let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);

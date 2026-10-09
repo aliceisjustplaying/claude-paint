@@ -323,15 +323,17 @@ mod tests {
         let p = load(saved(&Canvas::new_window(8, 1.0, [0.5; 3], None).with_engine(3))).unwrap();
         assert!(&saved(&p)[..8] == b"PAINTCK9" && p.soak.is_none());
         // New engines retain both cloth state and the extended material arrays.
-        let mut material = on(40, Fabric::cotton_duck()).with_engine(4);
-        material.wet.vol[0] = 0.5;
-        material.wet.hide[0] = [0.8, 0.6, 1.1, 0.2, 0.7];
-        material.gloss[0] = 0.4;
-        material.absorb[0] = 0.3;
-        let bytes = saved(&material);
-        assert_eq!(&bytes[..8], b"PAINTC12");
-        let resumed = load(bytes.clone()).unwrap();
-        assert!(saved(&resumed) == bytes, "raw material state must round-trip without loss");
+        for (engine, magic) in [(4, b"PAINTC12"), (6, b"PAINTC14")] {
+            let mut material = on(40, Fabric::cotton_duck()).with_engine(engine);
+            material.wet.vol[0] = 0.5;
+            material.wet.hide[0] = [0.8, 0.6, 1.1, 0.2, 0.7, if engine >= 6 { 0.5 } else { crate::wet::PACKED_OIL }, if engine >= 6 { 0.3 } else { crate::wet::DRAINED_FLOOR }, if engine >= 6 { 0.2 } else { 0.0 }, if engine >= 6 { 0.6 } else { crate::wet::OIL_VOLUME }, if engine >= 6 { 0.3 } else { 0.0 }];
+            material.gloss[0] = 0.4;
+            material.absorb[0] = 0.3;
+            let bytes = saved(&material);
+            assert_eq!(&bytes[..8], magic);
+            let resumed = load(bytes.clone()).unwrap();
+            assert!(saved(&resumed) == bytes && resumed.wet.hide[0] == material.wet.hide[0], "engine {engine}: raw material state must round-trip without loss");
+        }
     }
 
     #[test]

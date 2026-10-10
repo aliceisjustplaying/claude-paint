@@ -554,7 +554,7 @@ function waitChip(e, i) {
     if (e.scratch && prev.new_scratch) break;
   }
   const literal = code.slice(firstWait).match(/^wait\s*\(\s*((?:\d+(?:\.\d*)?|\.\d+)(?:\s*\*\s*(?:\d+(?:\.\d*)?|\.\d+))*)\s*\)/);
-  if (literal && literal[1].split('*').some(x => Number(x) === 0)) return null;
+  if (!literal || literal[1].split('*').some(x => Number(x) === 0)) return null;
   const clock = text => { const m = [...(text || '').matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); return m ? (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 : null; };
   const end = clock(e.out);
   if (end !== null) {

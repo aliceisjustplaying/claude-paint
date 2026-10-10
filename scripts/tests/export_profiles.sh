@@ -24,9 +24,9 @@ committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
 # the profiles named on the command line, else all of them (the two newest only where R16_BRANCH has them)
 profiles=("$@")
 if [ ${#profiles[@]} -eq 0 ]; then
-  for p in blank friedrich sargent inness alma-tadema tonn hopper giverny impressionist; do
+  for p in blank friedrich sargent inness alma-tadema tonn hopper giverny impressionist seurat; do
     case $p in
-      giverny|impressionist) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${p}_materials.md" 2>/dev/null || continue ;;
+      giverny|impressionist|seurat) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${p}_materials.md" 2>/dev/null || continue ;;
     esac
     profiles+=("$p")
   done

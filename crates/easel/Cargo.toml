@@ -21,7 +21,7 @@ finish = []
 # built with its studio's only (scripts/export_r16_studio), so nothing in it
 # names another studio's box. Its `paint/all-boxes` puts the default tube box
 # in too (paint's build.rs); two box-* features without it are a compile error.
-all-boxes = ["box-friedrich", "box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper", "box-giverny", "box-impressionist", "box-every", "paint/all-boxes"]
+all-boxes = ["box-friedrich", "box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper", "box-giverny", "box-impressionist", "box-seurat", "box-every", "paint/all-boxes"]
 box-friedrich = ["paint/box-friedrich"]
 box-sargent = ["paint/box-sargent"]
 box-inness = ["paint/box-inness"]
@@ -29,6 +29,7 @@ box-alma-tadema = ["paint/box-alma-tadema"]
 box-tonn = ["paint/box-tonn"]
 box-giverny = ["paint/box-giverny"]
 box-impressionist = ["paint/box-impressionist"]
+box-seurat = ["paint/box-seurat"]
 box-hopper = ["paint/box-hopper"]
 box-every = ["paint/box-every"]
 

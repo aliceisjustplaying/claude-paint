@@ -386,6 +386,25 @@ The boxes were changed to follow the first version of the rule
   note `notes/research/hopper_materials.md`, the export profile `hopper`
   and the feature `box-hopper`.
 
+## Seurat (2026-10-10)
+
+The `seurat` box (`box-seurat`, export profile `seurat`) follows
+`notes/research/seurat_materials.md` §2 [NG24 pp.21–26, Table 3]. Its
+14 tubes are lead white; chrome yellow, cadmium yellow, strontium yellow,
+zinc yellow; vermilion, rose madder; yellow ochre, red earth, bone black;
+cobalt blue, ultramarine blue; viridian, emerald green. Rose madder stands
+in for the documented madder/cochineal red lakes, not an exact batch.
+
+Yellow ochre and red earth represent the documented early yellow/red earths;
+bone black represents the occasional early carbon/bone black. Keeping these
+available supports early studies without prescribing them for mature works:
+later earth use was largely relinquished, possibly excepting yellow ochre.
+No specific sienna or umber grade is established by this research. The
+work-specific Gravelines violet/cadmium-orange exceptions are not included
+in this core-and-early-study box; manganese violet has no current tube, and
+a mixed blue/lake violet remains the declared approximation in the method
+note. No other box or tube values change.
+
 ## Ordering
 
 A box's tubes are listed roughly by hue (whites, yellows, oranges and

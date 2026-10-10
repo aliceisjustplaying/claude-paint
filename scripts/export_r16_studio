@@ -51,7 +51,7 @@
 # box from the log.
 set -euo pipefail
 
-usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist|every <dest>" >&2; exit 2; }
+usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist|seurat|every <dest>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 profile=$1
 dest=$2
@@ -66,6 +66,7 @@ case "$profile" in
   tonn) box=tonn; materials=tonn_materials.md; own=(Tonn) ;;
   hopper) box=hopper; materials=hopper_materials.md; own=(Hopper) ;;
   giverny) box=giverny; materials=giverny_materials.md; own=(Monet) ;;
+  seurat) box=seurat; materials=seurat_materials.md; own=(Seurat) ;;
   every) box=every; materials=every_materials.md; own=() ;;
   impressionist) box=impressionist; materials=impressionist_materials.md; own=(Monet Renoir Pissarro Sisley Morisot Degas Cézanne Seurat) ;;
   *) usage ;;

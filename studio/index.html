@@ -121,10 +121,10 @@
   #pip[hidden] { display:none }
   #pip img { display:block; width:100%; height:auto; cursor:zoom-in }
   #pip figcaption { font:600 13px/1.3 -apple-system,system-ui,sans-serif; color:#fff }
-  #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:#fff; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:#fff; text-align:center; white-space:normal; overflow-wrap:anywhere }
   #other { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center }
   #other .box { height:100% } #other img { object-position:right center }
-  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:block; color:#dcb8ea; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:inline; color:#dcb8ea; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
   #cropbox { position:absolute; border:2px solid #dcb8ea; box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
   #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:rgba(11,11,13,.8); border:1px solid #3a3226; border-radius:6px; padding:3px 10px; text-decoration:none }
   #finished:hover { color:var(--fg) }
@@ -281,7 +281,7 @@ let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
-const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'numeric', minute:'2-digit', hour12:true}).replace(/^0(?=\d:)/, '');
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
 // the static export (studio/export_static.py) sets STUDIO_STATIC: the same data, read from files, loaded once
 const STATIC = !!window.STUDIO_STATIC;
@@ -470,7 +470,7 @@ async function poll() {
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];
-    for (let i = 0; i < events.length && i < r.events.length; i++) if (r.events[i].out !== events[i].out || r.events[i].err !== events[i].err) ups.push([i, r.events[i]]);
+    for (let i = 0; i < events.length && i < r.events.length; i++) if (r.events[i].out !== events[i].out || r.events[i].err !== events[i].err || r.events[i].scratch_reset !== events[i].scratch_reset) ups.push([i, r.events[i]]);
     r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
   epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext; if (r.web) WEB = r.web; if (r.nupdates !== undefined) nUpd = r.nupdates;
   for (const [i, e] of ups) if (i < events.length) { events[i] = e; invalidateReplay(i); }
@@ -545,7 +545,6 @@ function waitChip(e, i) {
   const firstWait = code.search(/\bwait\s*\(/);
   if (firstWait < 0 || /[.:]\s*$|\b(?:if|for|while|repeat|function|return|goto|break|and|or)\b/.test(code.slice(0, firstWait))) return null;
   const shadowsWait = text => /\bwait\s*(?:<\s*(?:const|close)\s*>\s*)?[,=]|\bfunction\s+wait\s*\(|\b_G\b/.test(text);
-  const scratchReset = event => event.scratch && (event.new_scratch || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(event.out || ''));
   const freshScratch = scratchReset(e);
   if (shadowsWait(code.slice(0, firstWait))) return null;
   for (let k = i - 1; k >= 0; k--) {
@@ -926,6 +925,9 @@ const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:p
 const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
 const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
 const isWholeScratch = e => e.look !== undefined && isScratch(e) && isWhole({ look: unscratched(e.look) });
+const scratchReset = e => e.kind === 'paint' && e.scratch && (e.new_scratch || e.scratch_reset || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out || ''));
+const scratchBoundary = e => scratchReset(e) || e.kind === 'paint' && e.scratch && e.err;
+const wholePicture = e => !hasLooks ? e.whole !== false : isScratch(e) ? isWholeScratch(e) : isWhole(e);
 // whether the painter is at the scratch canvas at event i: its newest chunk or look was there
 function scratchingAt(i) {
   for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k];
@@ -934,7 +936,7 @@ function scratchingAt(i) {
 }
 const isPalette = e => e.kind === 'image' && /palette (?!False)/.test(e.look || '');
 // the newest palette look at or before event i (-1: none yet)
-function paletteAt(i) { const sc = scratchingAt(i); for (let k = i; k >= 0; k--) if (isPalette(events[k]) && isScratch(events[k]) === sc) return k; return -1; }
+function paletteAt(i) { const sc = scratchingAt(i); for (let k = i; k >= 0; k--) { if (sc && scratchBoundary(events[k])) break; if (isPalette(events[k]) && isScratch(events[k]) === sc) return k; } return -1; }
 let viewI3 = -1;
 let paletteURL = '';
 function paletteHeading() {
@@ -1099,11 +1101,24 @@ const resting = () => live && events.length > 0 && pos === events.length - 1 && 
 function picturesAt(i, rest, sc = false) {
   let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
+    if (sc && scratchBoundary(e)) break;
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (!hasLooks ? e.whole !== false : sc ? isWholeScratch(e) : isWhole(e)) { whole = k; break; } } } }
+      if (!e.ref) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
   return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
+}
+function snapshotAge(k, sc) {
+  const e = events[k];
+  const newer = events.slice(k + 1, pos + 1).some(x => isScratch(x) === sc &&
+    (x.kind === 'paint' && !x.err || x.kind === 'image' && !x.ref && !isPalette(x)));
+  if (!newer) return '';
+  const minutes = Math.max(0, Math.ceil((Date.parse(events[pos].ts) - Date.parse(e.ts)) / 60000));
+  return Number.isFinite(minutes) ? `${minutes || '<1'} min earlier` : 'earlier';
+}
+function pictureCaption(k, sc) {
+  const e = events[k], detail = wholePicture(e) ? '' : lookWords(sc ? unscratched(e.look) : e.look)[0].split(',')[0].toLowerCase();
+  return [sc ? 'Scratch canvas' : 'The painting', detail, hhmm(e.ts), snapshotAge(k, sc)].filter(Boolean).join(' · ');
 }
 // a reference picture in words: whose painting it is when the studio's brief says (reference_artist, from the server)
 function refWords() {
@@ -1111,15 +1126,17 @@ function refWords() {
   return ['Reference', by ? `A painting by ${by} that the painter is studying: not the painter's own picture.` : "A reference picture the painter is studying: not the painter's own picture."];
 }
 let crop = null, otherK = -1;  // the second look's window, outlined on the painting; the second picture's event
-function second(k) {
+function second(k, w = -1) {
   const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
   if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
     setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
-    $('cap2').querySelector('b').textContent = t; crop = e.ref ? null : cropOf(e.look);
-    const sq = !e.ref && /squint|blur/.test(e.look || ''), gray = !e.ref && /value|gray/.test(e.look || ''), by = e.ref && why.match(/^A painting by (.+?) that/);
-    $('cap2').querySelector('span').textContent = e.ref ? (by ? 'a painting by ' + by[1] : '') : [sq && 'blurred on purpose', gray && 'in grays'].filter(Boolean).join(', ');
-    $('cap2').title = e.ref ? why : `What the painter is looking at now${why ? ': ' + why : ''}${crop ? '. Outlined on the painting.' : '.'}`;
+    $('cap2').querySelector('b').textContent = e.ref ? t : lookWords(unscratched(e.look))[0].split(',')[0];
+    const detail = e.ref ? null : cropOf(e.look);
+    crop = detail && w >= k && wholePicture(events[w]) ? detail : null;
+    const age = e.ref ? '' : snapshotAge(k, isScratch(e));
+    $('cap2').querySelector('span').textContent = ' · ' + [hhmm(e.ts), age].filter(Boolean).join(' · ');
+    $('cap2').title = e.ref ? why : `Recorded look at ${hhmm(e.ts)}${age ? ': ' + age : ''}${why ? '. ' + why : ''}${crop ? '. Outlined on the painting.' : detail ? '. No outline: the whole look is older or unavailable.' : '.'}`;
     $('img2').alt = e.ref ? 'a reference picture' : t; }
   else clearPic($('img2'));
   placeCrop(); placeTag();
@@ -1161,15 +1178,15 @@ let rested = false;  // the view as last drawn was resting
 function pictures() {
   rested = resting();
   // at the scratch canvas (and a picture of it seen): it is the big picture and the painting the small one
-  let sc = scratchingAt(pos) && !rested && picturesAt(pos, true, true)[0] >= 0;
+  let sc = scratchingAt(pos) && !rested;
   const [w, o] = picturesAt(pos, rested, sc);
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = (sc ? 'Scratch canvas · ' : '') + (!hasLooks ? hhmm(img.ts) + '  ' + fname(img.path) : (sc ? isWholeScratch(img) : isWhole(img)) ? hhmm(img.ts) : `${lookWords(img.look)[0]} · ${hhmm(img.ts)}`);
+    $('cap').textContent = pictureCaption(w, sc);
     $('img').alt = sc ? 'the scratch canvas' : 'the painting';
-    second(o); }
+    second(o, w); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
-  else noPicture();
+  else { noPicture(); if (sc) { $('nopic').textContent = 'No current scratch look'; $('cap').textContent = 'Scratch canvas'; } }
   palette(paletteAt(pos));
   const curK = o >= 0 ? o : w;
   // the strip follows: to the current thumbnail, else the last one before this point, else its start (before the first look)
@@ -1185,7 +1202,7 @@ function pip(k, sc) {
   const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
   if (!on) { clearPic($('pipimg')); return; }
   setPic($('pipimg'), [thumbURL(pipI), viewURL(pipI), imgURL(pipI)]);
-  $('pipcap').textContent = sc ? `The painting · ${hhmm(events[k].ts)}` : `Scratch canvas · ${hhmm(events[k].ts)}`;
+  $('pipcap').textContent = pictureCaption(k, !sc);
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
 $('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = imgURL(pipI); $('zoom').style.display = 'flex'; } };

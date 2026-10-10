@@ -28,6 +28,7 @@ from datetime import datetime
 from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
+DISPLAY_LIGHTS = ("gallery", "relief")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
 PUBLIC = False
 HOME = os.path.expanduser("~")
@@ -305,10 +306,10 @@ def parse(path):
 
 def _parse(path):
     # changed: indices of events whose result came in after them, in arrival order (see stream())
-    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "gallery": {}, "calls": {}, "changed": [], "cwd": ""})
+    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "lights": {light: {} for light in DISPLAY_LIGHTS}, "calls": {}, "changed": [], "cwd": ""})
     size = os.path.getsize(path)
     if size < c["offset"]:  # rewritten
-        c.update(offset=0, events=[], images=[], gallery={}, calls={}, changed=[], cwd="")
+        c.update(offset=0, events=[], images=[], lights={light: {} for light in DISPLAY_LIGHTS}, calls={}, changed=[], cwd="")
     with open(path, "rb") as fh:
         fh.seek(c["offset"])
         chunk = fh.read()
@@ -401,10 +402,11 @@ def _parse(path):
                             display_path = picture_paths[picture_n]
                     elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
                         display_path = src
-                    lit = gallery_companion(c["cwd"], display_path) if display_path else None
-                    if lit:
-                        c["gallery"][idx] = ("image/png", base64.b64encode(lit).decode())
-                        ev["gallery"] = True
+                    for light in DISPLAY_LIGHTS:
+                        lit = display_companion(c["cwd"], display_path, light) if display_path else None
+                        if lit:
+                            c["lights"][light][idx] = ("image/png", base64.b64encode(lit).decode())
+                            ev[light] = True
                     picture_n += 1
                     if re.search(r"palette (?!False)", ev.get("look", "")):
                         chips = palette_board(base64.b64decode(x["data"]))
@@ -426,11 +428,11 @@ def _parse(path):
     return c["events"], c["images"]
 
 
-def gallery_companion(cwd, path):
-    if not cwd:
+def display_companion(cwd, path, light):
+    if not cwd or light not in DISPLAY_LIGHTS:
         return None
     original = os.path.realpath(os.path.join(cwd, path))
-    companion = os.path.realpath(os.path.join(os.path.dirname(original), ".gallery", os.path.basename(original)))
+    companion = os.path.realpath(os.path.join(os.path.dirname(original), "." + light, os.path.basename(original)))
     if not companion.startswith(os.path.realpath(cwd) + os.sep):
         return None
     try:
@@ -790,12 +792,12 @@ def painting_sources(events):
     return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
 
 
-def image(st, i, gallery=False):
+def image(st, i, light=None):
     """Image i of a stitched stream: (mime, base64 data), or None."""
     for f, _, ni in st["parts"]:
         if i < ni:
-            if gallery:
-                return _cache[f]["gallery"].get(i)
+            if light:
+                return _cache[f]["lights"].get(light, {}).get(i)
             imgs = _cache[f]["images"]
             return imgs[i] if 0 <= i < len(imgs) else None
         i -= ni
@@ -877,7 +879,8 @@ class H(http.server.BaseHTTPRequestHandler):
                     return self._send(200, fh.read(), "text/plain; charset=utf-8")
             return self._send(404, b"", "text/plain")
         if u.path == "/img":
-            im = image(st, int(q.get("i", ["0"])[0]), gallery=q.get("gallery") == ["1"])
+            light = next((light for light in DISPLAY_LIGHTS if q.get(light) == ["1"]), None)
+            im = image(st, int(q.get("i", ["0"])[0]), light=light)
             if im:
                 return self._send(200, base64.b64decode(im[1]), im[0])
         self._send(404, b"not found", "text/plain")

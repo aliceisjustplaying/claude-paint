@@ -297,8 +297,8 @@ const addr = q => '?' + q + (STREAM ? '&stream=1' : '');
 let IMGEXT = [], lastStatic = 0, staticV = null;  // static: when events.json was last read (it's re-read every minute)
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
 const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
-const galleryURL = i => STATIC ? `data/${encodeURIComponent(P())}/gallery/${i}.png` : `/img?${Q}&i=${i}&gallery=1`;
-const DISPLAY_LIGHTS = { colour:{ label:'Colour' }, gallery:{ label:'Gallery light', image:galleryURL } };
+const lightURL = (i, light) => STATIC ? `data/${encodeURIComponent(P())}/${light}/${i}.png` : `/img?${Q}&i=${i}&${light}=1`;
+const DISPLAY_LIGHTS = { colour:{ label:'Colour' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
 try { const saved = localStorage.getItem('studio.lighting'); if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
 function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }

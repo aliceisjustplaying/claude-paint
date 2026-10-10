@@ -275,7 +275,8 @@ def look(i, png):
 
 
 @pytest.mark.parametrize("public", [False, True])
-def test_gallery_companions_are_display_only_and_exported(home, server, monkeypatch, public):
+@pytest.mark.parametrize("lights", [("gallery",), ("relief",), S.DISPLAY_LIGHTS])
+def test_gallery_companions_are_display_only_and_exported(home, server, monkeypatch, public, lights):
     import base64
     import io
     Image = pytest.importorskip("PIL.Image")
@@ -283,14 +284,16 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     buf = io.BytesIO()
     Image.new("RGB", (20, 16), (100, 80, 60)).save(buf, "PNG")
     colour = buf.getvalue()
-    buf = io.BytesIO()
-    Image.new("RGB", (20, 16), (120, 90, 70)).save(buf, "PNG")
-    lit = buf.getvalue()
     tmp_path, studio, log = home
     path = "out/easel/painting/look-0001.png"
-    companion = studio / "out/easel/painting/.gallery/look-0001.png"
-    companion.parent.mkdir(parents=True)
-    companion.write_bytes(lit)
+    lit = {}
+    for n, light in enumerate(lights):
+        buf = io.BytesIO()
+        Image.new("RGB", (20, 16), (120 + n * 30, 90, 70)).save(buf, "PNG")
+        lit[light] = buf.getvalue()
+        companion = studio / f"out/easel/painting/.{light}/look-0001.png"
+        companion.parent.mkdir(parents=True)
+        companion.write_bytes(lit[light])
     entry = look("l1", colour)
     rows = entry.splitlines()
     result_row = json.loads(rows[1])
@@ -299,35 +302,50 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     log.write_text(start(str(studio)) + entry + look("l2", colour))
     events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
     pictures = [e for e in events if e["kind"] == "image"]
-    assert [(e["img"], e.get("gallery", False)) for e in pictures] == [(0, True), (1, False)]
+    for light in S.DISPLAY_LIGHTS:
+        assert [(e["img"], e.get(light, False)) for e in pictures] == [(0, light in lights), (1, False)]
     assert server(f"/img?p={PAINTER}&i=0") == (200, colour)
-    assert server(f"/img?p={PAINTER}&i=0&gallery=1") == (200, lit)
-    assert server(f"/img?p={PAINTER}&i=1&gallery=1")[0] == 404
+    for light in S.DISPLAY_LIGHTS:
+        response = server(f"/img?p={PAINTER}&i=0&{light}=1")
+        if light in lights:
+            assert response == (200, lit[light])
+        else:
+            assert response[0] == 404
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1")[0] == 404
     second = log.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
     second.write_text(start(str(studio)) + entry)
     events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
     assert [e["img"] for e in events if e["kind"] == "image"] == [0, 1, 2]
-    assert server(f"/img?p={PAINTER}&i=2&gallery=1") == (200, lit)
+    for light in lights:
+        assert server(f"/img?p={PAINTER}&i=2&{light}=1") == (200, lit[light])
     out = tmp_path / "out"
     exported = export(tmp_path, out)
     assert exported.returncode == 0, exported.stderr
     d = out / "data" / PAINTER
-    assert (d / "gallery/0.png").read_bytes() == lit
-    assert (d / "gallery/2.png").read_bytes() == lit
-    assert not (d / "gallery/1.png").exists()
+    for light in S.DISPLAY_LIGHTS:
+        if light in lights:
+            assert (d / light / "0.png").read_bytes() == lit[light]
+            assert (d / light / "2.png").read_bytes() == lit[light]
+            assert f"data/{PAINTER}/{light}/0.png" in (out / ".studio-export").read_text().splitlines()
+        else:
+            assert not (d / light / "0.png").exists()
+        assert not (d / light / "1.png").exists()
     assert (d / "img/0.png").read_bytes() == colour
     exported_events = json.loads((d / "events.json").read_text())["events"]
-    assert [e.get("gallery", False) for e in exported_events if e["kind"] == "image"] == [True, False, True]
-    assert S.gallery_companion(str(studio), str(tmp_path / "outside.png")) is None
+    for light in S.DISPLAY_LIGHTS:
+        assert [e.get(light, False) for e in exported_events if e["kind"] == "image"] == [light in lights, False, light in lights]
+        assert S.display_companion(str(studio), str(tmp_path / "outside.png"), light) is None
+    assert S.display_companion(str(studio), path, "../outside") is None
     assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
 
 
-def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server):
+@pytest.mark.parametrize("light", S.DISPLAY_LIGHTS)
+def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server, light):
     import base64
     _, studio, log = home
     path = "out/easel/painting/tile.png"
     lit = b"\x89PNG\r\n\x1a\nfixture"
-    companion = studio / "out/easel/painting/.gallery/tile.png"
+    companion = studio / f"out/easel/painting/.{light}/tile.png"
     companion.parent.mkdir(parents=True)
     companion.write_bytes(lit)
     log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "assistant", "content": [
@@ -335,8 +353,8 @@ def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server):
         + line({"type": "message", "message": {"role": "toolResult", "toolCallId": "r1", "content": [
             {"type": "image", "mimeType": "image/png", "data": base64.b64encode(lit).decode()}]}}))
     events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
-    assert next(e for e in events if e["kind"] == "image")["gallery"] is True
-    assert server(f"/img?p={PAINTER}&i=0&gallery=1") == (200, lit)
+    assert next(e for e in events if e["kind"] == "image")[light] is True
+    assert server(f"/img?p={PAINTER}&i=0&{light}=1") == (200, lit)
 
 
 def test_export_makes_small_web_copies_of_each_look_and_remakes_them_when_it_changes(home):

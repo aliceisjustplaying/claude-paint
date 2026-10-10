@@ -100,7 +100,7 @@ async function pollUpdate(v, i, replacement) {
         const failed = extract('wait(60)', 'day 2, 09:00\nok', {err:true});
         const missing = extract('wait(60)', 'day 2, 09:00\nok');
         const before = {kind:'paint', code:'work{}', out:'day 1, 09:00\nok'};
-        const conditional = ['local skipped = false and wait(10080); work{}', 'local skipped = true or wait(10080); work{}', 'wait(0); work{}', 'other.wait(10080); work{}', 'local wait = print; wait(10080); work{}', 'wait(0*60); work{}', 'wait(60*0); work{}', 'wait(.0*60); work{}', 'local wait, x = print, 1; wait(10080); work{}'].map(code => {
+        const conditional = ['local skipped = false and wait(10080); work{}', 'local skipped = true or wait(10080); work{}', 'wait(0); work{}', 'other.wait(10080); work{}', 'local wait = print; wait(10080); work{}', 'wait(0*60); work{}', 'wait(60*0); work{}', 'wait(.0*60); work{}', 'local wait, x = print, 1; wait(10080); work{}', 'wait(minutes); work{}', 'wait(0+0); work{}'].map(code => {
           const e = {kind:'paint', code, out:'day 1, 09:19\nok'}; events = [before, e]; return waitChip(e, 1)?.[2] || null;
         });
         const resetWait = {kind:'paint', scratch:true, code:'wait(20160)', out:'day 15, 09:00\nok'};
@@ -117,7 +117,7 @@ async function pollUpdate(v, i, replacement) {
       assert.deepEqual(result.real, ['waits 1 week on the scratch canvas', 'waits 1 week', 'waits 1 week on the scratch canvas', 'waits 1 week']);
       assert.deepEqual(result.fallback, ['waits 2 hours', 'waits 3 days', 'waits 6 weeks', 'waits 2 hours', null, null, null, null, null, null, null, null]);
       assert.equal(result.failed, null); assert.equal(result.missing, null);
-      assert.deepEqual(result.conditional, Array(9).fill(null)); assert.equal(result.earlierShadow, null);
+      assert.deepEqual(result.conditional, Array(11).fill(null)); assert.equal(result.earlierShadow, null);
       assert.equal(result.reset, 'waits 2 weeks on the scratch canvas');
       assert.equal(result.implicit, 'waits 2 weeks on the scratch canvas');
       assert.deepEqual(result.durations, ['1 minute', '59 minutes', '1 hour', '2 hours', '1 day', '3 days', '6 weeks', '2 months', '1 year', null, null]);

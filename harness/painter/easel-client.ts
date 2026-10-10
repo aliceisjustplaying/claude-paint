@@ -235,6 +235,18 @@ function isFile(path: string): boolean {
 	}
 }
 
+function renameCompanions(studio: string, before: string, after: string): void {
+	for (const folder of [".gallery", ".relief"]) {
+		const sibling = resolve(studio, dirname(before), folder, basename(before));
+		if (!isFile(sibling)) continue;
+		try {
+			renameSync(sibling, resolve(studio, dirname(after), folder, basename(after)));
+		} catch (e) {
+			console.error(`warning: couldn't rename ${folder.slice(1)} companion: ${e}`);
+		}
+	}
+}
+
 /**
  * `renameLook` for every look an answer names (a survey names several): each
  * line that begins with a look's png path (a file that is there; its folders may
@@ -248,6 +260,7 @@ export function renameLooks(studio: string, said: string): { said: string; paths
 		if (!m || !isFile(resolve(studio, m[1]))) return line;
 		const path = join(dirname(m[1]), `${randomUUID()}.png`);
 		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		renameCompanions(studio, m[1], path);
 		paths.push(path);
 		// (without the machine's seconds, as `renameLook`)
 		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
@@ -266,6 +279,7 @@ export function renameLook(studio: string, said: string): { said: string; path: 
 	if (!m) return { said, path: lines[lines.length - 1].replace(/ \(.*\)$/, "") };
 	const path = join(dirname(m[1]), `${randomUUID()}.png`);
 	renameSync(resolve(studio, m[1]), resolve(studio, path));
+	renameCompanions(studio, m[1], path);
 	lines[lines.length - 1] = m[2] ? `${path} (${m[2]})` : path;
 	return { said: lines.join("\n"), path };
 }

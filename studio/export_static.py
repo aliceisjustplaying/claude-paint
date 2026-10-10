@@ -337,6 +337,10 @@ def main():
             if im:
                 data = base64.b64decode(im[1])
                 changed = write(os.path.join(out, "data", p, "img", f"{i}.{ext}"), data)
+                for light in S.DISPLAY_LIGHTS:
+                    lit = S.image(st, i, light=light)
+                    if lit:
+                        write(os.path.join(out, "data", p, light, f"{i}.png"), base64.b64decode(lit[1]))
                 if Image:
                     t, v = (os.path.join(out, "data", p, d, f"{i}.jpg") for d in ("t", "v"))
                     if changed or not (os.path.isfile(t) and os.path.isfile(v)):

@@ -8,9 +8,9 @@
 use image::ImageEncoder;
 use paint::color::{linear_to_srgb, luminance};
 use paint::{Canvas, Rgb};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct View {
     /// Crop in canvas units (x0, y0, x1, y1).
     pub crop: Option<[f32; 4]>,
@@ -38,6 +38,10 @@ fn is_num(s: Option<&String>) -> bool {
 }
 
 impl View {
+    pub fn display_eligible(&self) -> bool {
+        !(self.value || self.squint || self.mirror || self.light.is_some() || self.palette)
+    }
+
     /// Parse look arguments (see `LOOK_ARGS`).
     pub fn parse(args: &[String]) -> std::result::Result<View, String> {
         let mut v = View::default();
@@ -351,6 +355,40 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
     Ok((w, h))
 }
 
+pub struct DisplayPreset {
+    pub name: &'static str,
+    pub folder: &'static str,
+    pub light: (f32, f32),
+}
+
+pub const DISPLAY_PRESETS: [DisplayPreset; 2] = [
+    DisplayPreset { name: "gallery", folder: ".gallery", light: crate::GALLERY_LIGHT },
+    DisplayPreset { name: "relief", folder: ".relief", light: RAKING },
+];
+
+pub fn companions(c: &Canvas, views: &[(View, PathBuf)]) {
+    if !views.iter().any(|(v, _)| v.display_eligible()) {
+        return;
+    }
+    for preset in DISPLAY_PRESETS {
+        let seen = c.seen_lit(preset.light.0, preset.light.1, 1.0);
+        for (v, out) in views.iter().filter(|(v, _)| v.display_eligible()) {
+            let result = (|| -> Result<(), String> {
+                let mut lit = v.clone();
+                lit.light = Some(preset.light);
+                let (_, _, png) = render_seen(c, &lit, Some(&seen))?;
+                let dir = out.parent().unwrap_or_else(|| Path::new("")).join(preset.folder);
+                let name = out.file_name().ok_or("display companion needs a PNG filename")?;
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                std::fs::write(dir.join(name), png).map_err(|e| e.to_string())
+            })();
+            if let Err(e) = result {
+                eprintln!("warning: couldn't save {} companion for {}: {e}", preset.name, out.display());
+            }
+        }
+    }
+}
+
 /// `look`'s PNG bytes and size, written nowhere.
 /// Labels written on a rendered look: (x, y as fractions of the image, text),
 /// light text on a dark plate.
@@ -632,6 +670,84 @@ mod tests {
 
     fn out_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test")
+    }
+
+    #[test]
+    fn display_companions_match_the_same_view_without_changing_original_or_state() {
+        let c = Canvas::new_window(240, 1.25, [0.2, 0.3, 0.4], None).with_linen(paint::Linen::fine(3));
+        let mut before = Vec::new();
+        c.write_state(&mut before, "unchanged").unwrap();
+        let dir = out_dir().join(format!("display-views-{}", std::process::id()));
+        let mut views = Vec::new();
+        for (name, v) in [
+            ("whole", View::default()),
+            ("sized-grid", View { size: Some(180), grid: Some(100.0), ..View::default() }),
+            ("crop-grid", View { crop: Some([100.0, 100.0, 400.0, 350.0]), grid: Some(100.0), ..View::default() }),
+            ("tile-a", View { crop: Some([0.0, 0.0, 500.0, 400.0]), ..View::default() }),
+            ("tile-b", View { crop: Some([500.0, 0.0, 1000.0, 400.0]), ..View::default() }),
+            ("tile-c", View { crop: Some([0.0, 400.0, 500.0, 800.0]), ..View::default() }),
+            ("tile-d", View { crop: Some([500.0, 400.0, 1000.0, 800.0]), ..View::default() }),
+        ] {
+            let path = dir.join(format!("{name}.png"));
+            let original = render(&c, &v).unwrap();
+            assert_eq!(look(&c, &v, &path).unwrap(), (original.0, original.1));
+            companions(&c, &[(v.clone(), path.clone())]);
+            assert_eq!(std::fs::read(&path).unwrap(), original.2);
+            views.push((v, path));
+        }
+        companions(&c, &views);
+        for (v, path) in views {
+            let original = render(&c, &v).unwrap();
+            assert_eq!(std::fs::read(&path).unwrap(), original.2);
+            for preset in DISPLAY_PRESETS {
+                let lit = View { light: Some(preset.light), ..v.clone() };
+                let expected = render(&c, &lit).unwrap();
+                assert_eq!((expected.0, expected.1), (original.0, original.1));
+                assert_eq!(std::fs::read(dir.join(preset.folder).join(path.file_name().unwrap())).unwrap(), expected.2);
+            }
+        }
+        let mut after = Vec::new();
+        c.write_state(&mut after, "unchanged").unwrap();
+        assert_eq!(before, after);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn display_companions_are_only_for_ordinary_colour_views() {
+        let c = Canvas::new_window(40, 1.25, [0.2; 3], None);
+        let dir = out_dir().join(format!("display-eligibility-{}", std::process::id()));
+        for args in [
+            vec!["--value"], vec!["--squint"], vec!["--mirror"], vec!["--mode", "relief"],
+            vec!["--mode", "gallery"], vec!["--light", "115,55"], vec!["--palette"],
+            vec!["--mode", "normal,value"], vec!["--mode", "gray,blur,mirror"],
+        ] {
+            let v = View::parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
+            assert!(!v.display_eligible(), "{args:?}");
+            companions(&c, &[(v, dir.join("ineligible.png"))]);
+        }
+        assert!(!dir.exists());
+        assert!(View::parse(&["--mode".into(), "normal".into()]).unwrap().display_eligible());
+    }
+
+    #[test]
+    fn each_failed_companion_write_leaves_the_other_and_original_png_intact() {
+        let c = Canvas::new_window(40, 1.25, [0.2; 3], None);
+        for blocked in DISPLAY_PRESETS {
+            let dir = out_dir().join(format!("display-failure-{}-{}", blocked.name, std::process::id()));
+            let path = dir.join("normal.png");
+            let v = View::default();
+            look(&c, &v, &path).unwrap();
+            let original = std::fs::read(&path).unwrap();
+            std::fs::write(dir.join(blocked.folder), b"blocked").unwrap();
+            companions(&c, &[(v.clone(), path.clone())]);
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+            assert_eq!(std::fs::read(dir.join(blocked.folder)).unwrap(), b"blocked");
+            for preset in DISPLAY_PRESETS.into_iter().filter(|p| p.folder != blocked.folder) {
+                let expected = render(&c, &View { light: Some(preset.light), ..v.clone() }).unwrap();
+                assert_eq!(std::fs::read(dir.join(preset.folder).join("normal.png")).unwrap(), expected.2);
+            }
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     #[cfg(tube_box)]

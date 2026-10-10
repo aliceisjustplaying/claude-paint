@@ -88,6 +88,9 @@
   #code .new { background:rgba(214,162,90,.10); box-shadow:inset 3px 0 0 var(--acc) }
   .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#9a9aa3; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
   #viewpane { background:#070708; position:relative }
+  #lighting { display:flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px 0; font-size:12px; color:var(--dim) }
+  #lighting button { padding:3px 9px; font-size:12px }
+  #lighting button[aria-pressed="true"] { color:var(--acc); border-color:var(--acc) }
   /* the painting (its newest whole look) and, when the painter is studying something else right now (a close-up,
      a squint, a check in grays), that look too: secondary here, as big as the painting in stream.css */
   #view { flex:1; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); gap:10px; padding:12px 12px 8px }
@@ -235,6 +238,7 @@
 <main>
   <section class="pane" id="codepane" role="dialog" aria-label="Painter code" aria-hidden="true" inert><h4>code <span id="file"></span><span id="codeformat"></span><button id="codeclose" type="button" aria-label="Close code">✕</button></h4><pre id="code"></pre></section>
   <section class="pane" id="viewpane">
+    <div id="lighting" role="group" aria-label="Painting display"></div>
     <div id="view">
       <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting"><div id="cropbox" hidden></div><p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p></div><figcaption id="cap"></figcaption></figure>
       <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
@@ -293,6 +297,21 @@ const addr = q => '?' + q + (STREAM ? '&stream=1' : '');
 let IMGEXT = [], lastStatic = 0, staticV = null;  // static: when events.json was last read (it's re-read every minute)
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
 const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
+const lightURL = (i, light) => STATIC ? `data/${encodeURIComponent(P())}/${light}/${i}.png` : `/img?${Q}&i=${i}&${light}=1`;
+const DISPLAY_LIGHTS = { colour:{ label:'Colour' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
+let displayLight = 'gallery';
+try { const saved = localStorage.getItem('studio.lighting'); if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
+function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }
+for (const [id, preset] of Object.entries(DISPLAY_LIGHTS)) {
+  const button = document.createElement('button'); button.id = id; button.type = 'button'; button.textContent = preset.label;
+  button.onclick = () => {
+    displayLight = id;
+    try { localStorage.setItem('studio.lighting', displayLight); } catch (e) {}
+    lightingControls(); $('zoom').style.display = 'none'; pictures();
+  };
+  $('lighting').appendChild(button);
+}
+lightingControls();
 // the static export's small JPEG copies of a look (t: the strip's thumbnail, v: the main view); the original is for the zoom
 let WEB = [];
 const webURL = (d, i) => STATIC && WEB[i] ? `data/${encodeURIComponent(P())}/${d}/${i}.jpg` : imgURL(i);
@@ -400,17 +419,35 @@ function glimpse() {
 // a picture into one of the view's places. The one there stays until the new one has loaded, so a place never goes
 // empty while a picture is known; one that fails is tried again, then the next of urls (the original, the
 // thumbnail), and the first again a little later (a few times), for as long as it's the picture wanted there
-function setPic(im, urls) {
-  if (im.dataset.want === urls[0]) return; const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
+function setPic(im, urls, loaded) {
+  im._picLoaded = loaded;
+  if (im.dataset.want === urls[0]) { if (loaded && im.dataset.loadedWant === urls[0]) loaded(im.dataset.loaded); return; }
+  const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
   const again = () => { if (++rounds < 6) { k = 0; tries = 0; setTimeout(go, 5000); } };
   const go = () => { if (im.dataset.want !== want) return; const p = new Image(), u = urls[k];
     if (im === $('img')) p.fetchPriority = 'high';
-    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; if (k) again(); };
+    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; im.dataset.loaded = u; im.dataset.loadedWant = want; if (im._picLoaded) im._picLoaded(u); if (k) again(); };
     p.onerror = () => { if (++tries < 2) return setTimeout(go, 1000); tries = 0; if (++k < urls.length) go(); else again(); };
     p.src = u; };
   go();
 }
-function clearPic(im) { delete im.dataset.want; im.removeAttribute('src'); }
+function displayPic(im, e, caption, label) {
+  const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], url = preset.image && preset.image(e.img);
+  const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
+  const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
+  const lit = eligible && preset.image && e[lightName];
+  const describe = () => {
+    const actual = DISPLAY_LIGHTS[im.dataset.light || 'colour'];
+    const light = actual.image ? actual.label : preset.image && eligible ? `Colour · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Colour' : '';
+    caption.textContent = [label, light].filter(Boolean).join(' · ');
+  };
+  const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
+  if (lit) urls.unshift(url);
+  describe();
+  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'colour'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
+}
+const zoomURL = im => im.dataset.zoom || im.src;
+function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
@@ -1129,13 +1166,12 @@ let crop = null, otherK = -1;  // the second look's window, outlined on the pain
 function second(k, w = -1) {
   const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
-  if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
-    setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
+  if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look);
     $('cap2').querySelector('b').textContent = e.ref ? t : lookWords(unscratched(e.look))[0].split(',')[0];
     const detail = e.ref ? null : cropOf(e.look);
     crop = detail && w >= k && wholePicture(events[w]) ? detail : null;
     const age = e.ref ? '' : snapshotAge(k, isScratch(e));
-    $('cap2').querySelector('span').textContent = ' · ' + [hhmm(e.ts), age].filter(Boolean).join(' · ');
+    displayPic($('img2'), e, $('cap2').querySelector('span'), ' · ' + [hhmm(e.ts), age].filter(Boolean).join(' · '));
     $('cap2').title = e.ref ? why : `Recorded look at ${hhmm(e.ts)}${age ? ': ' + age : ''}${why ? '. ' + why : ''}${crop ? '. Outlined on the painting.' : detail ? '. No outline: the whole look is older or unavailable.' : '.'}`;
     $('img2').alt = e.ref ? 'a reference picture' : t; }
   else clearPic($('img2'));
@@ -1181,8 +1217,8 @@ function pictures() {
   let sc = scratchingAt(pos) && !rested;
   const [w, o] = picturesAt(pos, rested, sc);
   pip(picturesAt(pos, true, !sc)[0], sc);
-  if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true; setPic($('img'), [viewURL(img.img), imgURL(img.img), thumbURL(img.img)]);
-    $('cap').textContent = pictureCaption(w, sc);
+  if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true;
+    displayPic($('img'), img, $('cap'), pictureCaption(w, sc));
     $('img').alt = sc ? 'the scratch canvas' : 'the painting';
     second(o, w); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
@@ -1201,11 +1237,10 @@ let pipI = -1;
 function pip(k, sc) {
   const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
   if (!on) { clearPic($('pipimg')); return; }
-  setPic($('pipimg'), [thumbURL(pipI), viewURL(pipI), imgURL(pipI)]);
-  $('pipcap').textContent = pictureCaption(k, !sc);
+  displayPic($('pipimg'), events[k], $('pipcap'), pictureCaption(k, !sc));
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
-$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = imgURL(pipI); $('zoom').style.display = 'flex'; } };
+$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg')); $('zoom').style.display = 'flex'; } };
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   pictures(); codeAt(pos); journal(pos); status();
@@ -1232,8 +1267,8 @@ $('golive').onclick = goLive;
 $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value); };
 $('togglecode').onclick = () => { document.body.classList.toggle('nocode'); const shown = codeShown(); $('togglecode').setAttribute('aria-expanded', String(shown)); $('codepane').setAttribute('aria-hidden', String(!shown)); $('codepane').inert = !shown; };
 $('codeclose').onclick = () => { if (codeShown()) $('togglecode').click(); $('togglecode').focus(); };
-$('img').onclick = () => { $('zimg').src = viewI >= 0 ? imgURL(viewI) : $('img').src; $('zoom').style.display = 'flex'; };
-$('img2').onclick = () => { $('zimg').src = viewI2 >= 0 ? imgURL(viewI2) : $('img2').src; $('zoom').style.display = 'flex'; };
+$('img').onclick = () => { $('zimg').src = zoomURL($('img')); $('zoom').style.display = 'flex'; };
+$('img2').onclick = () => { $('zimg').src = zoomURL($('img2')); $('zoom').style.display = 'flex'; };
 $('img3').onclick = () => { $('zimg').src = viewI3 >= 0 ? imgURL(viewI3) : $('img3').src; $('zoom').style.display = 'flex'; };
 $('zoom').onclick = () => { $('zoom').style.display = 'none'; };
 document.onkeydown = e => {

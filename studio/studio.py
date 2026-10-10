@@ -28,6 +28,7 @@ from datetime import datetime
 from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
+DISPLAY_LIGHTS = ("gallery", "relief")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
 PUBLIC = False
 HOME = os.path.expanduser("~")
@@ -305,10 +306,10 @@ def parse(path):
 
 def _parse(path):
     # changed: indices of events whose result came in after them, in arrival order (see stream())
-    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "calls": {}, "changed": [], "cwd": ""})
+    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "lights": {light: {} for light in DISPLAY_LIGHTS}, "calls": {}, "changed": [], "cwd": ""})
     size = os.path.getsize(path)
     if size < c["offset"]:  # rewritten
-        c.update(offset=0, events=[], images=[], calls={}, changed=[], cwd="")
+        c.update(offset=0, events=[], images=[], lights={light: {} for light in DISPLAY_LIGHTS}, calls={}, changed=[], cwd="")
     with open(path, "rb") as fh:
         fh.seek(c["offset"])
         chunk = fh.read()
@@ -386,14 +387,27 @@ def _parse(path):
                 if m.get("isError"):
                     ev["err"] = True
                 c["changed"].append(parent)
+            picture_paths = re.findall(r"^(.+\.png)(?: \(.*)?$", txt, re.MULTILINE)
+            picture_n = 0
             for x in content:
                 if x.get("type") == "image" and x.get("data"):
                     idx = len(c["images"])
                     c["images"].append((x.get("mimeType", "image/jpeg"), x["data"]))
                     src = c["events"][parent].get("path", "") if parent is not None else ""
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
+                    display_path = ""
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                        if picture_n < len(picture_paths):
+                            display_path = picture_paths[picture_n]
+                    elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
+                        display_path = src
+                    for light in DISPLAY_LIGHTS:
+                        lit = display_companion(c["cwd"], display_path, light) if display_path else None
+                        if lit:
+                            c["lights"][light][idx] = ("image/png", base64.b64encode(lit).decode())
+                            ev[light] = True
+                    picture_n += 1
                     if re.search(r"palette (?!False)", ev.get("look", "")):
                         chips = palette_board(base64.b64decode(x["data"]))
                         if chips:
@@ -412,6 +426,21 @@ def _parse(path):
     if not any(e["kind"] == "look" for e in c["events"]):
         mark_whole(c, path)
     return c["events"], c["images"]
+
+
+def display_companion(cwd, path, light):
+    if not cwd or light not in DISPLAY_LIGHTS:
+        return None
+    original = os.path.realpath(os.path.join(cwd, path))
+    companion = os.path.realpath(os.path.join(os.path.dirname(original), "." + light, os.path.basename(original)))
+    if not companion.startswith(os.path.realpath(cwd) + os.sep):
+        return None
+    try:
+        with open(companion, "rb") as fh:
+            data = fh.read()
+        return data if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+    except OSError:
+        return None
 
 
 def _signature(data):
@@ -763,10 +792,12 @@ def painting_sources(events):
     return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
 
 
-def image(st, i):
+def image(st, i, light=None):
     """Image i of a stitched stream: (mime, base64 data), or None."""
     for f, _, ni in st["parts"]:
         if i < ni:
+            if light:
+                return _cache[f]["lights"].get(light, {}).get(i)
             imgs = _cache[f]["images"]
             return imgs[i] if 0 <= i < len(imgs) else None
         i -= ni
@@ -848,7 +879,8 @@ class H(http.server.BaseHTTPRequestHandler):
                     return self._send(200, fh.read(), "text/plain; charset=utf-8")
             return self._send(404, b"", "text/plain")
         if u.path == "/img":
-            im = image(st, int(q.get("i", ["0"])[0]))
+            light = next((light for light in DISPLAY_LIGHTS if q.get(light) == ["1"]), None)
+            im = image(st, int(q.get("i", ["0"])[0]), light=light)
             if im:
                 return self._send(200, base64.b64decode(im[1]), im[0])
         self._send(404, b"not found", "text/plain")

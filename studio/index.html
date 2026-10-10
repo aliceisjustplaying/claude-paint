@@ -420,30 +420,33 @@ function glimpse() {
 // empty while a picture is known; one that fails is tried again, then the next of urls (the original, the
 // thumbnail), and the first again a little later (a few times), for as long as it's the picture wanted there
 function setPic(im, urls, loaded) {
-  if (im.dataset.want === urls[0]) return; const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
+  im._picLoaded = loaded;
+  if (im.dataset.want === urls[0]) { if (loaded && im.dataset.loadedWant === urls[0]) loaded(im.dataset.loaded); return; }
+  const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
   const again = () => { if (++rounds < 6) { k = 0; tries = 0; setTimeout(go, 5000); } };
   const go = () => { if (im.dataset.want !== want) return; const p = new Image(), u = urls[k];
     if (im === $('img')) p.fetchPriority = 'high';
-    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; if (loaded) loaded(u); if (k) again(); };
+    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; im.dataset.loaded = u; im.dataset.loadedWant = want; if (im._picLoaded) im._picLoaded(u); if (k) again(); };
     p.onerror = () => { if (++tries < 2) return setTimeout(go, 1000); tries = 0; if (++k < urls.length) go(); else again(); };
     p.src = u; };
   go();
 }
 function displayPic(im, e, caption, label) {
-  const preset = DISPLAY_LIGHTS[displayLight], lit = preset.image && e[displayLight], url = preset.image && preset.image(e.img);
-  const eligible = !e.ref && !/mode (?!normal)|light|compare|hold|palette/.test(e.look || '');
+  const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], lit = preset.image && e[lightName], url = preset.image && preset.image(e.img);
+  const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
+  const eligible = !e.ref && !/light|compare|hold|palette/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
   const describe = () => {
-    const light = im.dataset.lit === '1' ? preset.label : preset.image && eligible ? `Colour · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Colour' : '';
+    const actual = DISPLAY_LIGHTS[im.dataset.light || 'colour'];
+    const light = actual.image ? actual.label : preset.image && eligible ? `Colour · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Colour' : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
   if (lit) urls.unshift(url);
-  if (im.dataset.want !== urls[0]) im.dataset.lit = lit ? '1' : '0';
   describe();
-  setPic(im, urls, u => { im.dataset.lit = u === url ? '1' : '0'; describe(); });
+  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'colour'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
 }
-const zoomURL = (im, i) => im.dataset.lit === '1' ? DISPLAY_LIGHTS[displayLight].image(i) : imgURL(i);
-function clearPic(im) { delete im.dataset.want; im.removeAttribute('src'); }
+const zoomURL = im => im.dataset.zoom || im.src;
+function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
@@ -1236,7 +1239,7 @@ function pip(k, sc) {
   displayPic($('pipimg'), events[k], $('pipcap'), pictureCaption(k, !sc));
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
-$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg'), pipI); $('zoom').style.display = 'flex'; } };
+$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg')); $('zoom').style.display = 'flex'; } };
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   pictures(); codeAt(pos); journal(pos); status();
@@ -1263,8 +1266,8 @@ $('golive').onclick = goLive;
 $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value); };
 $('togglecode').onclick = () => { document.body.classList.toggle('nocode'); const shown = codeShown(); $('togglecode').setAttribute('aria-expanded', String(shown)); $('codepane').setAttribute('aria-hidden', String(!shown)); $('codepane').inert = !shown; };
 $('codeclose').onclick = () => { if (codeShown()) $('togglecode').click(); $('togglecode').focus(); };
-$('img').onclick = () => { $('zimg').src = viewI >= 0 ? zoomURL($('img'), viewI) : $('img').src; $('zoom').style.display = 'flex'; };
-$('img2').onclick = () => { $('zimg').src = viewI2 >= 0 ? zoomURL($('img2'), viewI2) : $('img2').src; $('zoom').style.display = 'flex'; };
+$('img').onclick = () => { $('zimg').src = zoomURL($('img')); $('zoom').style.display = 'flex'; };
+$('img2').onclick = () => { $('zimg').src = zoomURL($('img2')); $('zoom').style.display = 'flex'; };
 $('img3').onclick = () => { $('zimg').src = viewI3 >= 0 ? imgURL(viewI3) : $('img3').src; $('zoom').style.display = 'flex'; };
 $('zoom').onclick = () => { $('zoom').style.display = 'none'; };
 document.onkeydown = e => {

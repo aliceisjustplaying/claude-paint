@@ -47,11 +47,11 @@ does; this says how to use them. What you paint is yours to choose.
 - **Values.** Check `mode: "value,squint"`: do the large lights, middles
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
-- **A light-giving passage has a gradient.** Where the picture shows the
-  passage the light comes from, it is warmer and lighter toward the light,
-  and it explains every light and shadow it falls on. One flat tone there
-  looks dead, and a ruler-straight edge to it looks too hard: lose it in
-  places.
+- **A passage of ambient light has a gradient.** Where the picture
+  includes a broad passage that gives the surrounding light, it is warmer
+  and lighter toward the light, and it explains every light and shadow it
+  falls on. One flat tone there looks dead, and a ruler-straight distant
+  boundary to it looks too hard: lose it in places.
 - **Forms meet each other physically.** Where two surfaces meet there is an
   edge, a turn or a shadow that belongs to both. A boundary drawn as a
   mask's edge and nothing else flattens the space.

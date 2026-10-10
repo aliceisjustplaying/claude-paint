@@ -274,6 +274,54 @@ def look(i, png):
                 {"type": "image", "mimeType": "image/png", "data": base64.b64encode(png).decode()}]}}))
 
 
+@pytest.mark.parametrize("public", [False, True])
+def test_gallery_companions_are_display_only_and_exported(home, server, monkeypatch, public):
+    import base64
+    import io
+    Image = pytest.importorskip("PIL.Image")
+    monkeypatch.setattr(S, "PUBLIC", public)
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 16), (100, 80, 60)).save(buf, "PNG")
+    colour = buf.getvalue()
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 16), (120, 90, 70)).save(buf, "PNG")
+    lit = buf.getvalue()
+    tmp_path, studio, log = home
+    path = "out/easel/painting/look-0001.png"
+    companion = studio / "out/easel/painting/.gallery/look-0001.png"
+    companion.parent.mkdir(parents=True)
+    companion.write_bytes(lit)
+    entry = look("l1", colour)
+    rows = entry.splitlines()
+    result_row = json.loads(rows[1])
+    result_row["message"]["content"].insert(0, {"type": "text", "text": path + " (20x16)"})
+    entry = rows[0] + "\n" + line(result_row)
+    log.write_text(start(str(studio)) + entry + look("l2", colour))
+    events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
+    pictures = [e for e in events if e["kind"] == "image"]
+    assert [(e["img"], e.get("gallery", False)) for e in pictures] == [(0, True), (1, False)]
+    assert server(f"/img?p={PAINTER}&i=0") == (200, colour)
+    assert server(f"/img?p={PAINTER}&i=0&gallery=1") == (200, lit)
+    assert server(f"/img?p={PAINTER}&i=1&gallery=1")[0] == 404
+    second = log.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
+    second.write_text(start(str(studio)) + entry)
+    events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
+    assert [e["img"] for e in events if e["kind"] == "image"] == [0, 1, 2]
+    assert server(f"/img?p={PAINTER}&i=2&gallery=1") == (200, lit)
+    out = tmp_path / "out"
+    exported = export(tmp_path, out)
+    assert exported.returncode == 0, exported.stderr
+    d = out / "data" / PAINTER
+    assert (d / "gallery/0.png").read_bytes() == lit
+    assert (d / "gallery/2.png").read_bytes() == lit
+    assert not (d / "gallery/1.png").exists()
+    assert (d / "img/0.png").read_bytes() == colour
+    exported_events = json.loads((d / "events.json").read_text())["events"]
+    assert [e.get("gallery", False) for e in exported_events if e["kind"] == "image"] == [True, False, True]
+    assert S.gallery_companion(str(studio), str(tmp_path / "outside.png")) is None
+    assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
+
+
 def test_export_makes_small_web_copies_of_each_look_and_remakes_them_when_it_changes(home):
     Image = pytest.importorskip("PIL.Image")
     import io

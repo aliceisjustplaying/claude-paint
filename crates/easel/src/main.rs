@@ -1131,7 +1131,7 @@ impl Server {
             }
         };
         let reply = format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64());
-        look::gallery(&c, &v, &path, None);
+        look::companions(&c, &[(v, path)]);
         Ok(reply)
     }
 
@@ -1148,13 +1148,13 @@ impl Server {
             Some((az, el)) => c.seen_lit(az, el, 1.0),
             None => c.seen(),
         };
-        let gallery_seen = view.gallery_eligible().then(|| c.seen_lit(GALLERY_LIGHT.0, GALLERY_LIGHT.1, 1.0));
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
         let (tw, th) = (wu / cols as f32, hu / rows as f32);
         let mut out = format!("survey: {rows} rows x {cols} columns of {tw:.0} x {th:.0} units, at full detail\n");
+        let mut views = Vec::new();
         for r in 0..rows {
             for k in 0..cols {
                 let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
@@ -1163,10 +1163,12 @@ impl Server {
                 let v = look::View::parse(&a)?;
                 let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
                 let p = new_look(&session_dir(&self.name), &png)?;
-                look::gallery(&c, &v, &p, gallery_seen.as_deref());
                 out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
+                views.push((v, p));
             }
         }
+        drop(seen);
+        look::companions(&c, &views);
         Ok(out)
     }
 

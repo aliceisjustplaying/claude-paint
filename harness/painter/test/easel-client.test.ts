@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join } from "node:path";
@@ -322,14 +322,14 @@ test("every look a survey names is renamed, in order", async () => {
 	assert.ok(nested.paths[0].startsWith(join("archive.png (old)", "")));
 });
 
-test("look renames keep hidden gallery siblings without naming them in replies", async () => {
+test("look renames keep both hidden display siblings without naming them in replies", async () => {
 	const { renameLook, renameLooks } = await import("../easel-client.ts");
 	const s = mkdtempSync(join(tmpdir(), "studio-gallery-"));
 	const folder = "my archive.png (old)";
-	mkdirSync(join(s, folder, ".gallery"), { recursive: true });
+	for (const companion of [".gallery", ".relief"]) mkdirSync(join(s, folder, companion), { recursive: true });
 	for (const name of ["whole", "tile-a", "tile-b"]) {
 		writeFileSync(join(s, folder, `${name}.png`), name);
-		writeFileSync(join(s, folder, ".gallery", `${name}.png`), `lit ${name}`);
+		for (const companion of [".gallery", ".relief"]) writeFileSync(join(s, folder, companion, `${name}.png`), `${companion} ${name}`);
 	}
 	const one = renameLook(s, `${folder}/whole.png (1000x800, 0.04s)`);
 	assert.equal(one.said, `${one.path} (1000x800)`);
@@ -337,12 +337,48 @@ test("look renames keep hidden gallery siblings without naming them in replies",
 	const many = renameLooks(s, `${folder}/tile-a.png (1200x960): row 1 column 1\n${folder}/tile-b.png (1200x960): row 1 column 2\n`);
 	assert.equal(many.paths.length, 2);
 	for (const [path, name] of [[one.path, "whole"], [many.paths[0], "tile-a"], [many.paths[1], "tile-b"]]) {
-		assert.equal(readFileSync(join(s, dirname(path), ".gallery", basename(path)), "utf8"), `lit ${name}`);
 		assert.ok(!existsSync(join(s, folder, `${name}.png`)));
-		assert.ok(!existsSync(join(s, folder, ".gallery", `${name}.png`)));
+		for (const companion of [".gallery", ".relief"]) {
+			assert.equal(readFileSync(join(s, dirname(path), companion, basename(path)), "utf8"), `${companion} ${name}`);
+			assert.ok(!existsSync(join(s, folder, companion, `${name}.png`)));
+		}
 	}
-	assert.ok(!one.said.includes(".gallery"));
-	assert.ok(!many.said.includes(".gallery"));
+	for (const companion of [".gallery", ".relief"]) {
+		assert.ok(!one.said.includes(companion));
+		assert.ok(!many.said.includes(companion));
+	}
 	assert.deepEqual(Object.keys(one).sort(), ["path", "said"]);
 	assert.deepEqual(Object.keys(many).sort(), ["paths", "said"]);
+});
+
+test("each failed companion rename leaves the other companion and primary reply intact", async (t) => {
+	const { renameLook, renameLooks } = await import("../easel-client.ts");
+	const warnings: string[] = [];
+	t.mock.method(console, "error", (warning: string) => warnings.push(warning));
+	for (const blocked of [".gallery", ".relief"]) {
+		for (const rename of [renameLook, renameLooks]) {
+			const s = mkdtempSync(join(tmpdir(), "studio-companion-failure-"));
+			mkdirSync(join(s, "out"));
+			writeFileSync(join(s, "out", "whole.png"), "original");
+			for (const companion of [".gallery", ".relief"]) {
+				mkdirSync(join(s, "out", companion));
+				writeFileSync(join(s, "out", companion, "whole.png"), companion);
+			}
+			chmodSync(join(s, "out", blocked), 0o555);
+			try {
+				const result = rename(s, "out/whole.png (1000x800, 0.04s)");
+				const path = "path" in result ? result.path : result.paths[0];
+				assert.equal(result.said, `${path} (1000x800)`);
+				assert.equal(readFileSync(join(s, path), "utf8"), "original");
+				assert.equal(readFileSync(join(s, "out", blocked, "whole.png"), "utf8"), blocked);
+				const other = blocked === ".gallery" ? ".relief" : ".gallery";
+				assert.equal(readFileSync(join(s, "out", other, basename(path)), "utf8"), other);
+				assert.ok(!existsSync(join(s, "out", other, "whole.png")));
+				assert.match(warnings.at(-1)!, new RegExp(`couldn't rename ${blocked.slice(1)} companion`));
+			} finally {
+				chmodSync(join(s, "out", blocked), 0o755);
+			}
+		}
+	}
+	assert.equal(warnings.length, 4);
 });

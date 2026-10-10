@@ -421,7 +421,7 @@ Ultramarine blue is the catalog's synthetic ultramarine. Emerald green and
 viridian remain distinct. Later cobalt prominence does not establish a
 first-use date; late chrome-yellow evidence does not support a universal
 cutoff. The separate watercolour findings are not treated as oil evidence.
-The unedited handoff is preserved as `notes/research/cezanne_materials_full.md`;
+The source handoff with subject-choice-neutral guidance is preserved as `notes/research/cezanne_materials_full.md`;
 the profile note removes one other artist's name for the studio's isolation.
 No other box, tube values or engine behavior changes.
 

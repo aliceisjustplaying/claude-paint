@@ -298,9 +298,9 @@ let IMGEXT = [], lastStatic = 0, staticV = null;  // static: when events.json wa
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
 const imgURL = i => STATIC ? `data/${encodeURIComponent(P())}/img/${i}.${IMGEXT[i] || 'png'}` : `/img?${Q}&i=${i}`;
 const lightURL = (i, light) => STATIC ? `data/${encodeURIComponent(P())}/${light}/${i}.png` : `/img?${Q}&i=${i}&${light}=1`;
-const DISPLAY_LIGHTS = { colour:{ label:'Colour' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
+const DISPLAY_LIGHTS = { color:{ label:'Color' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
-try { const saved = localStorage.getItem('studio.lighting'); if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
+try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
 function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }
 for (const [id, preset] of Object.entries(DISPLAY_LIGHTS)) {
   const button = document.createElement('button'); button.id = id; button.type = 'button'; button.textContent = preset.label;
@@ -437,14 +437,14 @@ function displayPic(im, e, caption, label) {
   const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
   const lit = eligible && preset.image && e[lightName];
   const describe = () => {
-    const actual = DISPLAY_LIGHTS[im.dataset.light || 'colour'];
-    const light = actual.image ? actual.label : preset.image && eligible ? `Colour · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Colour' : '';
+    const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
+    const light = actual.image ? actual.label : preset.image && eligible ? `Color · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Color' : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
   if (lit) urls.unshift(url);
   describe();
-  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'colour'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
+  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
 }
 const zoomURL = im => im.dataset.zoom || im.src;
 function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }

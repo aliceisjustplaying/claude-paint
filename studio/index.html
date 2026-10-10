@@ -124,7 +124,7 @@
   #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:#fff; text-align:center; white-space:normal; overflow-wrap:anywhere }
   #other { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center }
   #other .box { height:100% } #other img { object-position:right center }
-  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:block; color:#dcb8ea; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:inline; color:#dcb8ea; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
   #cropbox { position:absolute; border:2px solid #dcb8ea; box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
   #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:rgba(11,11,13,.8); border:1px solid #3a3226; border-radius:6px; padding:3px 10px; text-decoration:none }
   #finished:hover { color:var(--fg) }
@@ -281,7 +281,7 @@ let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
-const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+const hhmm = ts => new Date(ts).toLocaleTimeString([], {hour:'numeric', minute:'2-digit', hour12:true}).replace(/^0(?=\d:)/, '');
 const ago = s => s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' : Math.round(s/3600) + ' h ago';
 // the static export (studio/export_static.py) sets STUDIO_STATIC: the same data, read from files, loaded once
 const STATIC = !!window.STUDIO_STATIC;
@@ -1114,15 +1114,11 @@ function snapshotAge(k, sc) {
     (x.kind === 'paint' && !x.err || x.kind === 'image' && !x.ref && !isPalette(x)));
   if (!newer) return '';
   const minutes = Math.max(0, Math.ceil((Date.parse(events[pos].ts) - Date.parse(e.ts)) / 60000));
-  const age = Number.isFinite(minutes) ? `${minutes || '<1'} min before this moment` : 'from an earlier moment';
-  return `${age} · Not current`;
+  return Number.isFinite(minutes) ? `${minutes || '<1'} min earlier` : 'earlier';
 }
-function pictureCaption(k, sc, named = false) {
-  const e = events[k], name = sc ? 'Scratch canvas · ' : named ? 'The painting · ' : '';
-  const whole = wholePicture(e), detail = lookWords(sc ? unscratched(e.look) : e.look)[0];
-  const age = snapshotAge(k, sc);
-  if (!age) return whole ? name + hhmm(e.ts) + (!hasLooks ? '  ' + fname(e.path) : '') : `${name}${detail} · ${hhmm(e.ts)} · No whole look recorded`;
-  return `${name}${whole ? 'Last whole look' : detail} · ${hhmm(e.ts)} · ${age}${whole ? '' : ' · No whole look recorded'}`;
+function pictureCaption(k, sc) {
+  const e = events[k], detail = wholePicture(e) ? '' : lookWords(sc ? unscratched(e.look) : e.look)[0].split(',')[0].toLowerCase();
+  return [sc ? 'Scratch canvas' : 'The painting', detail, hhmm(e.ts), snapshotAge(k, sc)].filter(Boolean).join(' · ');
 }
 // a reference picture in words: whose painting it is when the studio's brief says (reference_artist, from the server)
 function refWords() {
@@ -1135,12 +1131,11 @@ function second(k, w = -1) {
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
   if (on) { const e = events[k], [t, why] = e.ref ? refWords() : lookWords(e.look), u = viewURL(e.img);
     setPic($('img2'), [u, imgURL(e.img), thumbURL(e.img)]);
-    $('cap2').querySelector('b').textContent = t;
+    $('cap2').querySelector('b').textContent = e.ref ? t : lookWords(unscratched(e.look))[0].split(',')[0];
     const detail = e.ref ? null : cropOf(e.look);
     crop = detail && w >= k && wholePicture(events[w]) ? detail : null;
     const age = e.ref ? '' : snapshotAge(k, isScratch(e));
-    const sq = !e.ref && /squint|blur/.test(e.look || ''), gray = !e.ref && /value|gray/.test(e.look || ''), by = e.ref && why.match(/^A painting by (.+?) that/);
-    $('cap2').querySelector('span').textContent = e.ref ? (by ? 'a painting by ' + by[1] : '') : [hhmm(e.ts), age, sq && 'blurred on purpose', gray && 'in grays', detail && !crop && 'no matching whole look'].filter(Boolean).join(' · ');
+    $('cap2').querySelector('span').textContent = ' · ' + [hhmm(e.ts), age].filter(Boolean).join(' · ');
     $('cap2').title = e.ref ? why : `Recorded look at ${hhmm(e.ts)}${age ? ': ' + age : ''}${why ? '. ' + why : ''}${crop ? '. Outlined on the painting.' : detail ? '. No outline: the whole look is older or unavailable.' : '.'}`;
     $('img2').alt = e.ref ? 'a reference picture' : t; }
   else clearPic($('img2'));
@@ -1191,7 +1186,7 @@ function pictures() {
     $('img').alt = sc ? 'the scratch canvas' : 'the painting';
     second(o, w); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
-  else { noPicture(); if (sc) { $('nopic').textContent = 'No verified look recorded for this scratch canvas at this moment'; $('cap').textContent = 'Scratch canvas'; } }
+  else { noPicture(); if (sc) { $('nopic').textContent = 'No current scratch look'; $('cap').textContent = 'Scratch canvas'; } }
   palette(paletteAt(pos));
   const curK = o >= 0 ? o : w;
   // the strip follows: to the current thumbnail, else the last one before this point, else its start (before the first look)
@@ -1207,7 +1202,7 @@ function pip(k, sc) {
   const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
   if (!on) { clearPic($('pipimg')); return; }
   setPic($('pipimg'), [thumbURL(pipI), viewURL(pipI), imgURL(pipI)]);
-  $('pipcap').textContent = pictureCaption(k, !sc, true);
+  $('pipcap').textContent = pictureCaption(k, !sc);
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
 $('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = imgURL(pipI); $('zoom').style.display = 'flex'; } };

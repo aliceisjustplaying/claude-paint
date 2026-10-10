@@ -571,12 +571,12 @@ function waitChip(e, i) {
     }
     if (before === null || end <= before) return null;
     const duration = waitDuration(end - before);
-    return ['wait', '◷', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'The easel’s clock advance for this chunk, including any painting time after the wait.'];
+    return ['wait', '⏳', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'The easel’s clock advance for this chunk, including any painting time after the wait.'];
   }
   if (!/^\s*(?:wait\s*\(\s*\d+(?:\.\d+)?(?:\s*\*\s*\d+(?:\.\d+)?)*\s*\)\s*;?\s*)+$/.test(code)) return null;
   const minutes = [...code.matchAll(/wait\s*\(([^)]*)\)/g)].reduce((sum, m) => sum + m[1].split('*').reduce((n, x) => n * Number(x), 1), 0);
   const duration = waitDuration(minutes);
-  return duration ? ['wait', '◷', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'Rest time from a chunk containing only literal wait calls; this older easel recorded no clock.'] : null;
+  return duration ? ['wait', '⏳', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'Rest time from a chunk containing only literal wait calls; this older easel recorded no clock.'] : null;
 }
 function kindOf(e) {
   const f = fname(e.path);

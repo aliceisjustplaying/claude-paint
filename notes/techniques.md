@@ -47,15 +47,16 @@ does; this says how to use them. What you paint is yours to choose.
 - **Values.** Check `mode: "value,squint"`: do the large lights, middles
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
-- **Light has a source.** Every light and shadow in the picture follows
-  from it. A large area of one flat tone looks dead, and a long
-  ruler-straight boundary between big masses looks too hard: lose it in
+- **A light-giving passage has a gradient.** Where the picture shows the
+  passage the light comes from, it is warmer and lighter toward the light,
+  and it explains every light and shadow it falls on. One flat tone there
+  looks dead, and a ruler-straight edge to it looks too hard: lose it in
   places.
 - **Forms meet each other physically.** Where two surfaces meet there is an
   edge, a turn or a shadow that belongs to both. A boundary drawn as a
   mask's edge and nothing else flattens the space.
-- **Composition**: unequal masses, a dominant side, one place that is
-  clearly the most important. A centered target is the usual trap.
+- **Composition**: judge how the masses work together for the effect you
+  chose. Where the emphasis sits is yours to choose.
 
 ## Marks
 
@@ -67,11 +68,11 @@ does; this says how to use them. What you paint is yours to choose.
   recedes.
 - **Marks follow the form.** Strokes that wander in every direction read as
   noise.
-- **Light is soft and quiet.** The brightest passages have soft edges and
-  little texture. Busy, outlined strokes, or strokes circling a center
+- **Light is soft and quiet.** Glare, and passages lit through openings,
+  have soft edges and little texture. Busy, outlined strokes, or strokes circling a center
   inside the light, turn the light into an object.
-- **Glitter** (small points of reflected light) is small, sharp and dense
-  far off, breaking into scattered flecks near you; big uniform dabs read as
+- **Glitter** on a level reflecting surface is small, sharp and dense far
+  off, breaking into scattered flecks near you; big uniform dabs read as
   beads. Tie it to its light source.
 
 ## Spatter
@@ -84,17 +85,16 @@ does; this says how to use them. What you paint is yours to choose.
   spatters; blotted paint hardly does. A hard flick gives a fine spray, a
   gentle one fat drops.
 - **Mask what must stay clean** with `clip=`: droplets fly past any edge.
-- A little goes a long way: a few flicks over a passage, then look.
+- A few flicks over a passage, then look.
 
 ## Forms and shadows
 
 - **A form is one mass.** Build a rounded form as one shape whose parts
-  flow into each other, modeled from light to shadow. Parts placed on top
-  of parts read as a diagram. `form{}` and its solids give a single lit
-  volume to paint by.
-- **Shadows take color from around them**: near its base a shadow takes
-  the color of light reflected from the lit surface around it, and it is
-  cooler where cooler light reaches it. Grade it in separate passes with
+  flow into each other, modeled from light to shadow. `form{}` and its
+  solids give a single lit volume to paint by.
+- **Shadows take color from around them**: with warm light reflected up
+  near its base and cooler light from above, a shadow is warmer near its
+  base and cooler above. Grade it in separate passes with
   different `pile=` values (one flat violet is the usual trap), and keep it
   a different value and temperature from the object casting it.
 - **Distance lightens and cools**: far forms are paler and bluer than near
@@ -140,7 +140,7 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Impasto
 
-- **Thick where it counts.** Most of a canvas is thin: lay-in and shadows
+- **Thick paint for lights and accents.** Most of a canvas is thin: lay-in and shadows
   lean (turpentine), middle tones as from the tube. Keep the thick, blotted
   paint for the lights and the accents. Impasto everywhere reads as flat.
   `load_at=` varies the load across a pass; `scale_at` gives ridges of

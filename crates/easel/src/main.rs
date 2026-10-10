@@ -1515,6 +1515,27 @@ fn run(args: &[String]) -> Result<(), String> {
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
+    if let Some(dir) = std::env::var_os("BRUSH_PROTO_RENDER_DIR") {
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        for (label, pixels) in [("flat", c.seen()), ("gallery", c.seen_lit(115.0, 55.0, 1.0))] {
+            let f = c.window();
+            let buf: Vec<u8> = pixels.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+            image::save_buffer(dir.join(format!("{label}-native.png")), &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| e.to_string())?;
+            for (name, crop) in [("full", None), ("mountain-sky", Some([530.0, 110.0, 830.0, 350.0])), ("houses", Some([390.0, 390.0, 810.0, 555.0])), ("path-foliage", Some([480.0, 570.0, 800.0, 790.0]))] {
+                let v = look::View { crop, ..look::View::default() };
+                let (_, _, png) = look::render_seen(&c, &v, Some(&pixels))?;
+                std::fs::write(dir.join(format!("{label}-{name}.png")), png).map_err(|e| e.to_string())?;
+            }
+        }
+        let heights: Vec<f32> = c.surface_um().iter().enumerate().map(|(i, h)| *h + c.wet_um(c.frame().ux(i % c.frame().w), c.frame().uy(i / c.frame().w))).collect();
+        let bytes: Vec<u8> = heights.iter().flat_map(|h| h.to_le_bytes()).collect();
+        std::fs::write(dir.join("height.f32"), bytes).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("material.txt"), format!("material_total={}\nwet_total={}\n", c.material_total(), c.wet_total())).map_err(|e| e.to_string())?;
+        let mut checkpoint = std::fs::File::create(dir.join("canvas.state")).map_err(|e| e.to_string())?;
+        c.write_state(&mut checkpoint, "brush-texture-proto").map_err(|e| e.to_string())?;
+        eprintln!("prototype material: material_total={} wet_total={} height_sum_um={}", c.material_total(), c.wet_total(), heights.iter().map(|h| *h as f64).sum::<f64>());
+    }
     deliver_lit(&c, &out, light)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {

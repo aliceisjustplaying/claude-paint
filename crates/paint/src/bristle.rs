@@ -511,8 +511,13 @@ impl Held {
         let full = self.full();
         let scatter = paint.scatter();
         let t = paint.thinner;
+        #[cfg(feature = "brush-texture-proto")]
+        let weights = self.texture_load_weights(paint.stiff * (1.0 - paint.solvent).powi(2) * (1.0 - paint.thinner).powi(2));
         for (i, b) in self.bristles.iter_mut().enumerate() {
+            #[cfg(not(feature = "brush-texture-proto"))]
             let k = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            #[cfg(feature = "brush-texture-proto")]
+            let k = weights[i];
             if t > 0.0 {
                 // a thinned load: the hairs take up `amount` of liquid, the
                 // share `t` of it solvent (crate::thinner)
@@ -538,12 +543,32 @@ impl Held {
         let lat = paint.latent();
         let full = self.full();
         let scatter = paint.scatter();
+        #[cfg(feature = "brush-texture-proto")]
+        let weights = {
+            let mut ws = self.texture_load_weights(paint.stiff * (1.0 - paint.solvent).powi(2) * (1.0 - paint.thinner).powi(2));
+            let mut old = 0.0;
+            for (i, (w, b)) in ws.iter_mut().zip(&self.bristles).enumerate() {
+                let p = part.weight(b.rx, i);
+                old += (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * p;
+                *w *= p;
+            }
+            let new: f32 = ws.iter().sum();
+            if new > 0.0 {
+                for w in &mut ws {
+                    *w *= old / new;
+                }
+            }
+            ws
+        };
         for (i, b) in self.bristles.iter_mut().enumerate() {
             let w = part.weight(b.rx, i);
             if w <= 0.0 {
                 continue;
             }
+            #[cfg(not(feature = "brush-texture-proto"))]
             let k = (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * w;
+            #[cfg(feature = "brush-texture-proto")]
+            let k = weights[i];
             if paint.thinner > 0.0 {
                 // (a thinned load, as `load`: part paint, part solvent)
                 let v = amount * full * k;
@@ -583,6 +608,106 @@ impl Held {
     /// `Canvas::wet_total` (coats × square units).
     pub fn carried(&self) -> (f64, f64) {
         self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
+    }
+
+    #[cfg(feature = "brush-texture-proto")]
+    fn texture_load_weights(&self, body: f32) -> Vec<f32> {
+        let strength = self.tool.stiffness * body.clamp(0.0, 1.0);
+        let mut weights: Vec<f32> = self.bristles.iter().enumerate().map(|(i, b)| {
+            let base = 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3);
+            let bundle = texture_bundle(b.rx, &self.tool, self.bristles[0].seed);
+            base * lerp_f(1.0, 0.08 + 2.4 * bundle.powi(2), strength)
+        }).collect();
+        let before: f32 = (0..weights.len()).map(|i| 0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)).sum();
+        let after: f32 = weights.iter().sum();
+        for w in &mut weights {
+            *w *= before / after;
+        }
+        weights
+    }
+}
+
+#[cfg(feature = "brush-texture-proto")]
+fn texture_bundle(rx: f32, tool: &Tool, seed: u64) -> f32 {
+    let groups = (tool.width / (3.0 * tool.hair_radius())).clamp(3.0, 32.0);
+    let u = (rx + 1.0) * 0.5 * groups;
+    let k = u.floor() as i64;
+    let f = smoothstep(0.0, 1.0, u - u.floor());
+    lerp_f(crate::rng::hash2(k, 83, seed), crate::rng::hash2(k + 1, 83, seed), f)
+}
+
+#[cfg(feature = "brush-texture-proto")]
+fn texture_body(br: &Bristle) -> f32 {
+    let solids = br.vol / (br.vol + br.solvent).max(1e-9);
+    (br.hide[1] * (1.0 - br.hide[3]).powi(2) * solids.powi(2)).clamp(0.0, 1.0)
+}
+
+#[cfg(feature = "brush-texture-proto")]
+fn texture_tip_len(br: &Bristle, tool: &Tool) -> f32 {
+    let body = texture_body(br);
+    let bundle = texture_bundle(br.rx, tool, 0xB715);
+    (br.len * (1.0 + 0.4 * tool.stiffness * body * (2.0 * bundle - 1.0))).clamp(0.4, LEN_MAX)
+}
+
+#[cfg(feature = "brush-texture-proto")]
+fn texture_root_x(br: &Bristle, tool: &Tool) -> f32 {
+    let body = texture_body(br);
+    let a = texture_bundle(br.rx - 0.04, tool, 0xB715);
+    let b = texture_bundle(br.rx + 0.04, tool, 0xB715);
+    (br.rx + 0.45 * tool.stiffness * body * (b - a) * (1.0 - br.rx * br.rx).max(0.0)).clamp(-ROOT_MAX, ROOT_MAX)
+}
+
+#[cfg(all(test, feature = "brush-texture-proto"))]
+mod texture_proto_tests {
+    use super::*;
+
+    #[test]
+    fn loading_redistributes_without_adding_paint() {
+        for tool in [Tool::hog_flat(12.0), Tool::filbert(12.0), Tool::round_sable(12.0)] {
+            for part in [Part::ALL, Part { side: 1.0, share: 0.5, streak: 0.8, seed: 31 }] {
+                let mut h = Held::new(tool.clone(), 73);
+                let expected: f64 = h.bristles.iter().enumerate().map(|(i, b)| (h.full() * (0.75 + 0.5 * crate::rng::hash2(i as i64, 17, 3)) * part.weight(b.rx, i)) as f64).sum();
+                h.load_part(Paint::body([0.3; 3]), 1.0, &part);
+                assert!((h.carried().0 - expected).abs() < expected * 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn finite_reservoirs_conserve_at_wet_crossings_and_touches() {
+        for tool in [Tool::hog_flat(12.0), Tool::filbert(12.0), Tool::round_sable(12.0)] {
+            for load in [0.08, 0.5, 1.0] {
+                let mut c = Canvas::new(240, 1.0, [0.3; 3]).with_engine(5).with_linen(crate::surface::Linen::fine(3));
+                let mut under = Held::new(Tool::filbert(20.0), 3);
+                under.load(Paint::body([0.1, 0.2, 0.4]), 1.0);
+                c.drag(&mut under, &Gesture::line((300.0, 500.0), (700.0, 500.0)).pressure(0.85, 0.85), None);
+                let mut b = Held::new(tool.clone(), 73);
+                b.load(Paint::body([0.5, 0.3, 0.1]), load);
+                let before = c.wet_total() + b.carried().0;
+                c.drag(&mut b, &Gesture::line((250.0, 470.0), (750.0, 520.0)).pressure(0.3, 0.85), None);
+                c.touch(&mut b, &Touch::at(500.0, 500.0).pressure(0.7), None);
+                let after = c.wet_total() + b.carried().0;
+                assert!((after - before).abs() < before * 2e-3, "{load}: {before} -> {after}");
+                assert!(b.bristles.iter().all(|b| b.vol.is_finite() && b.vol >= 0.0));
+                assert!(c.seen_lit(115.0, 55.0, 1.0).iter().flatten().all(|x| x.is_finite()));
+            }
+        }
+    }
+
+    #[test]
+    fn scheduled_work_and_stipple_are_thread_deterministic() {
+        let render = |threads| {
+            rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(|| {
+                let mut c = Canvas::new(240, 1.0, [0.3; 3]).with_engine(5).with_linen(crate::surface::Linen::fine(3));
+                let m = Mask::from_fn(c.frame(), |x, y| if (200.0..800.0).contains(&x) && (200.0..800.0).contains(&y) { 1.0 } else { 0.0 });
+                let hd = crate::Handling::new(Tool::hog_flat(20.0)).length(40.0, 80.0).coverage(0.3).color(|_, _| [0.3, 0.2, 0.1]).paint(0.92, 1.0).load(0.5);
+                c.work(&m, &hd, 19);
+                let sp = crate::Stipple::new(Tool::filbert(12.0)).coverage(|_, _| 0.2).color(|_, _| [0.1, 0.2, 0.3]).paint(0.92, 1.0).dips(8, 0.08, 1.0);
+                c.stipple(&m, &sp, 31);
+                (c.wet.vol.clone(), c.wet.lat.clone(), c.seen_lit(115.0, 55.0, 1.0))
+            })
+        };
+        assert_eq!(render(1), render(2));
     }
 }
 
@@ -1208,10 +1333,16 @@ pub(crate) unsafe fn drag_on(
             }
             // bristles wander a little across the stroke
             let wv = wander(d / s / tool.width.max(2.0) * 1.3, b.seed) * tool.ragged;
+            #[cfg(not(feature = "brush-texture-proto"))]
             let (ox, oy) = ((b.rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
+            #[cfg(feature = "brush-texture-proto")]
+            let (ox, oy) = ((texture_root_x(b, &tool) + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
+            #[cfg(not(feature = "brush-texture-proto"))]
             let trail = tool.length * s * b.len * p;
+            #[cfg(feature = "brush-texture-proto")]
+            let trail = tool.length * s * texture_tip_len(b, &tool) * p;
             let spread = tool.splay * p * 0.3;
             let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
             b.bend.0 += (target.0 - b.bend.0) * rate;
@@ -1485,12 +1616,18 @@ unsafe fn exchange(
         let wet = smoothstep(0.1, 0.8, liquid / full);
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
+        #[cfg(feature = "brush-texture-proto")]
+        let texture = tool.stiffness * texture_body(br);
+        #[cfg(feature = "brush-texture-proto")]
+        let dry = texture * (1.0 - smoothstep(0.08, 0.8, liquid / full)) * (1.0 - 0.65 * reach.clamp(0.0, 1.0));
 
         // pass 1: contact weights
         let bw = x1 - x0;
         wts.clear();
         wts.resize(bw * (y1 - y0), 0.0);
         let mut sum_w = 0.0f32;
+        #[cfg(feature = "brush-texture-proto")]
+        let mut original_w = 0.0f32;
         let mut sum_cov = 0.0f32;
         let mut sum_tack = 0.0f32;
         // past a fence a lifting brush lays a thinner film too (see `Clip`)
@@ -1534,6 +1671,12 @@ unsafe fn exchange(
                         wt
                     }
                 };
+                #[cfg(feature = "brush-texture-proto")]
+                let wt = {
+                    original_w += wt;
+                    let peak = smoothstep(0.05 + 0.95 * dry, 0.4 + 0.8 * dry, surf);
+                    wt * peak
+                };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
                 if !sf.dry.is_null() {
@@ -1555,7 +1698,10 @@ unsafe fn exchange(
         let travel = if exch { travel * (1.0 - phi).powf(crate::thinner::exchange_kj().0) } else { travel };
         // only the part of the footprint actually in contact takes paint: a
         // bristle skimming the weave peaks keeps most of its load
+        #[cfg(not(feature = "brush-texture-proto"))]
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
+        #[cfg(feature = "brush-texture-proto")]
+        let touch = (original_w.min(sum_w * 4.0) / sum_cov.max(1e-6)).min(1.0);
         let dep_total = match dep {
             None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
             Some(v) => v.min(liquid * 0.5) * touch,
@@ -1999,8 +2145,14 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
                 continue;
             }
             // tips slide outward as the belly flattens; longer hairs farther
+            #[cfg(not(feature = "brush-texture-proto"))]
             let spread = (1.0 + tool.splay * pk * 0.3) * (1.0 + 0.5 * (b.len - 1.0));
+            #[cfg(feature = "brush-texture-proto")]
+            let spread = (1.0 + tool.splay * pk * 0.3) * (1.0 + 0.5 * (texture_tip_len(b, &tool) - 1.0));
+            #[cfg(not(feature = "brush-texture-proto"))]
             let (ox, oy) = (b.rx * half * spread, b.ry * half * spread);
+            #[cfg(feature = "brush-texture-proto")]
+            let (ox, oy) = (texture_root_x(b, &tool) * half * spread, b.ry * half * spread);
             let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);

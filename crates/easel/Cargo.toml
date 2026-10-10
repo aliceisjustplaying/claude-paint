@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [features]
+brush-texture-proto = ["paint/brush-texture-proto"]
 default = ["replay", "finish"]
 # The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
 # `easel run` (with --dump-surface) and `hash-probe`. Without it (the

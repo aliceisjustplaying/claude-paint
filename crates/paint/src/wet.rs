@@ -358,6 +358,10 @@ impl Canvas {
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)
     }
 
+    pub fn material_total(&self) -> f64 {
+        (self.film.iter().map(|&v| v as f64).sum::<f64>() + self.wet.vol.iter().map(|&v| v as f64).sum::<f64>()) / (self.f.scale as f64 * self.f.scale as f64)
+    }
+
     /// Solvent in the open film at a point (units), µm: 0 where there is
     /// none (`crate::thinner`). `wet_um` is the paint alone.
     pub fn solvent_um(&self, x: f32, y: f32) -> f32 {

@@ -15,8 +15,8 @@ earlier work and exposed light ground can appear together. A picture
 reconsidered over a long time can still have few complete layers [NG; BUT].
 
 **Evidence limits.** A pigment identified in one painting tells you about
-that painting. A sketchbook shopping list records a purchase, without
-proving use in an oil painting. Wet-over-dry marks give a sequence without
+that painting. A sketchbook shopping list lists pigments; it proves
+neither purchase nor use in an oil painting. Wet-over-dry marks give a sequence without
 the number of days between sittings. Bernard, Vollard and Gasquet report
 his words and practice in their own accounts: valuable, but mediated [NG].
 
@@ -168,8 +168,8 @@ about 40 µm each. Each sample is local. Together they rule out both
 **Oil and solvent.** National Gallery analyses identify partially heat-bodied
 linseed oil and, in a white highlight of *Bathers*, partially heat-bodied
 poppy oil; other samples suggest mixed linseed/poppy, and walnut is
-possible. Turpentine use is inferred from appearance and testimony; a
-solvent leaves nothing in the paint to identify. A 1905 order names
+possible. Turpentine use is inferred from appearance and testimony;
+turpentine is not identifiable in the examined films. A 1905 order names
 Haarlem siccative, a resin/oil/diluent preparation of unknown exact
 formulation; none was identified in the examined paintings [NG, p.10].
 These sources establish no general blotting-paper treatment and no fixed
@@ -223,8 +223,8 @@ behaviour is in `notes/easel_guide.md`, especially “Tubes and piles,”
 “Colour, planes and open coverage.”
 
 **Planes and colour modulation.** Reissner describes complementary
-contrasts and warm/cool juxtapositions creating form and space, in
-addition to blended light/dark modelling and linear perspective. Solidity
+contrasts and warm/cool juxtapositions creating form and space, rather
+than blended light/dark modelling alone or linear perspective. Solidity
 is still the aim [NG, pp.23–25]. Warm colours tend to advance and cool
 ones to recede, relative to each other, as a museum interpretation
 illustrates; value, saturation, adjacency and overlap affect depth too
@@ -295,12 +295,13 @@ application and visible priming in c.1883. The c.1885 examination combines
 very open and densely built passages, with low impasto locally; the
 1885–86 label links warm/cool modulation and exposed preparation, and
 the Met describes volumetric geometric rhythms [BUT, Technique; AIC4, Technical Summary; BKM; MET].
-**Synthesis (inferred):** the mid-1880s pictures show colour-built
-solidity, compressed plane relationships and varied coverage, with form
-still solid, before its later dissolution. **Easel translation:** vary
+**Synthesis (inferred from these examples, not a general chronology):**
+the examined mid-1880s pictures show colour-built solidity, compressed
+plane relationships and varied coverage, with form still solid; they are
+more than an early stage of the later dissolution of form. **Easel translation:** vary
 `load`, `coverage`, paint dilution and direction from passage to passage.
 
-## 7. Easel tube mapping
+## 9. The tubes here
 
 This maps the oil findings in §3 to the tubes of the `cezanne` box, a
 selection from the historical palette. Lead white → lead white;

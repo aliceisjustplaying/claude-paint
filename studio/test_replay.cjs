@@ -18,7 +18,7 @@ const initial = [ev('start', { cwd:'/painter' }), ev('think', { text:'# First\n\
   ev('look', { text:'mode normal' }, 13), ev('paint', { code:'local pending=4' }, 14),
   ev('sitting', { n:2 }, 20), ev('say', { text:'## Done\n\n3. ordered\n4. list\n\n---\n\n_literal_ <tag>' }, 21)];
 
-async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true } = {}) {
+async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false } = {}) {
   const page = await browser.newPage();
   const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0 };
   page.on('pageerror', e => report.pageErrors.push(String(e)));
@@ -36,6 +36,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
       return route.fulfill({ json:{ epoch:state.epoch, sittings:2, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
     }
     if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { state.files++; return route.fulfill({ contentType:'text/plain', body:state.file }); }
+    if (u.pathname === '/img' || u.pathname.includes('/img/')) return route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800"><rect width="1000" height="800" fill="green"/></svg>' });
     const file = path.join(root, u.pathname);
     if (!u.pathname.includes('..') && fs.existsSync(file) && fs.statSync(file).isFile()) {
       const contentType = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.css') ? 'text/css' : 'application/octet-stream';
@@ -43,7 +44,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
     }
     return route.fulfill({ status:404, body:'' });
   });
-  await page.goto(origin + '/?p=fixture');
+  await page.goto(origin + '/?p=fixture' + (streamMode ? '&stream=1' : ''));
   await page.waitForFunction(() => events.length > 0 && !document.querySelector('#togglecode').disabled);
   if (liveFile) await page.waitForFunction(() => document.querySelector('#code .src')?.textContent.includes('live'));
   return { page, state };
@@ -84,6 +85,74 @@ async function pollUpdate(v, i, replacement) {
 (async () => {
   const browser = await chromium.launch({ channel:'chrome', headless:true });
   try {
+    const canvas = [ev('start'), ev('look', {text:'scratch True'}, 1), ev('image', {img:0, look:'scratch True'}, 2),
+      ev('paint', {scratch:true, code:'work{}', out:'ok'}, 3), ev('look', {text:'scratch True, crop 100,100,300,300'}, 4),
+      ev('image', {img:1, look:'scratch True, crop 100,100,300,300'}, 5), ev('look', {text:''}, 6), ev('image', {img:2, look:''}, 7),
+      ev('paint', {scratch:true, new_scratch:true, code:'work{}', out:'ok'}, 8), ev('look', {text:'scratch True, crop 100,100,300,300'}, 9),
+      ev('image', {img:3, look:'scratch True, crop 100,100,300,300'}, 10), ev('look', {text:'scratch True, palette True'}, 11),
+      ev('image', {img:4, look:'scratch True, palette True'}, 12), ev('paint', {scratch:true, new_scratch:true, err:true, code:'bad(', out:'error'}, 13),
+      ev('look', {text:'scratch True, crop 100,100,300,300'}, 14), ev('image', {img:5, look:'scratch True, crop 100,100,300,300'}, 15),
+      ev('look', {text:'crop 100,100,300,300'}, 16), ev('image', {img:6, look:'crop 100,100,300,300'}, 17),
+      ev('paint', {code:'work{}', out:'ok'}, 18), ev('look', {text:''}, 19), ev('image', {img:7, look:''}, 20), ev('say', {text:'done'}, 21)];
+    for (const staticMode of [false, true]) for (const streamMode of [false, true]) {
+      const v = await viewer(browser, canvas, {staticMode, streamMode, liveFile:false});
+      const times = await v.page.evaluate(() => events.map(e => hhmm(e.ts)));
+      assert.deepEqual(await v.page.evaluate(() => [new Date(2026, 0, 1, 9, 4, 5), new Date(2026, 0, 1, 21, 4, 5)].map(hhmm)), ['9:04 AM', '9:04 PM']);
+      await seek(v.page, 5);
+      assert.equal(await v.page.locator('#cap').textContent(), `Scratch canvas · ${times[2]} · 3 min earlier`);
+      assert.equal(await v.page.locator('#cropbox').isVisible(), false);
+      assert.equal(await v.page.locator('#img2').isVisible(), true);
+      assert.equal(await v.page.locator('#cap2').textContent(), `Close-up · ${times[5]}`);
+      assert.match(await v.page.locator('#cap2').getAttribute('title'), /No outline: the whole look is older or unavailable/);
+      await seek(v.page, 8);
+      assert.equal(await v.page.locator('#img').getAttribute('src'), null);
+      assert.equal(await v.page.locator('#nopic').textContent(), 'No current scratch look');
+      await seek(v.page, 10);
+      assert.equal(await v.page.evaluate(() => viewI), 3);
+      assert.equal(await v.page.locator('#cap').textContent(), `Scratch canvas · close-up · ${times[10]}`);
+      assert.equal(await v.page.locator('#cropbox').isVisible(), false);
+      await v.page.evaluate(() => { events[11] = {...events[11], kind:'paint', scratch:true, code:'work{}', out:'ok'}; show(11); });
+      assert.equal(await v.page.locator('#cap').textContent(), `Scratch canvas · close-up · ${times[10]} · 1 min earlier`);
+      await v.page.evaluate(e => { events[11] = e; }, canvas[11]);
+      await seek(v.page, 13);
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), -1);
+      assert.equal(await v.page.evaluate(() => paletteAt(pos)), -1);
+      await v.page.evaluate(() => { delete events[13].new_scratch; pictures(); });
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), -1);
+      assert.equal(await v.page.evaluate(() => paletteAt(pos)), -1);
+      await seek(v.page, 15);
+      assert.equal(await v.page.evaluate(() => viewI), 5);
+      await seek(v.page, 17);
+      assert.equal(await v.page.evaluate(() => viewI), 2);
+      assert.equal(await v.page.locator('#cap').textContent(), `The painting · ${times[7]} · 10 min earlier`);
+      assert.equal(await v.page.locator('#cropbox').isVisible(), false);
+      await seek(v.page, 18);
+      assert.equal(await v.page.locator('#cap').textContent(), `The painting · ${times[7]} · 11 min earlier`);
+      assert.equal(await v.page.locator('#cap2').textContent(), `Close-up · ${times[17]} · 1 min earlier`);
+      assert.equal(await v.page.locator('#pipcap').textContent(), `Scratch canvas · close-up · ${times[15]}`);
+      assert.doesNotMatch(await v.page.locator('#cap2').getAttribute('title'), /looking at now/);
+      await v.page.setViewportSize({width:390, height:844});
+      for (const id of ['cap', 'cap2']) assert.equal(await v.page.locator('#' + id).evaluate(el => el.scrollWidth <= el.clientWidth), true, id + ' snapshot warning must wrap, not clip');
+      await v.page.setViewportSize({width:1280, height:720});
+      await seek(v.page, 20);
+      assert.equal(await v.page.evaluate(() => viewI), 7);
+      assert.equal(await v.page.locator('#cap').textContent(), `The painting · ${times[20]}`);
+      await seek(v.page, 2);
+      assert.equal(await v.page.evaluate(() => viewI), 0);
+      assert.equal(await v.page.locator('#cap').textContent(), `Scratch canvas · ${times[2]}`);
+      await v.page.evaluate(() => { live = false; show(10); });
+      await pollUpdate(v, 8, {...canvas[8], new_scratch:undefined, out:'a fresh scratch canvas (the last one\'s log is paintings/lua/scratch-1.lua)\nok'});
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 10);
+      await v.page.evaluate(() => { events[8] = {...events[8], out:'ok'}; pictures(); });
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 2);
+      assert.equal(await v.page.locator('#cap').textContent(), `Scratch canvas · ${times[2]} · 8 min earlier`);
+      await pollUpdate(v, 8, {...canvas[8], new_scratch:undefined, out:'x'.repeat(1500)});
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 2);
+      await pollUpdate(v, 8, {...canvas[8], new_scratch:undefined, scratch_reset:true, out:'x'.repeat(1500)});
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 10);
+      await v.page.close();
+    }
+    report.checks.push('canvas reset boundaries, stale whole-look ages, safe crop outlines and rewind in normal/stream and API/static views');
     const waits = JSON.parse(fs.readFileSync(path.join(root, 'fixtures/monet-waits.json'), 'utf8')).cases;
     for (const staticMode of [false, true]) {
       const sample = waits[1];

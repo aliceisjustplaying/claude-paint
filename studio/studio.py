@@ -377,10 +377,14 @@ def _parse(path):
             parent = c["calls"].get(m.get("toolCallId"))
             txt = _text(content)
             if parent is not None and (txt or m.get("isError")):
+                ev = c["events"][parent]
+                if ev["kind"] == "paint" and ev.get("scratch") and re.search(
+                        r"^a (?:fresh scratch canvas|scratch canvas beside the painting)|\(the scratch canvas couldn't be reopened, so it is put aside\)", txt, re.M):
+                    ev["scratch_reset"] = True
                 if txt:
-                    c["events"][parent]["out"] = txt[-1500:]
+                    ev["out"] = txt[-1500:]
                 if m.get("isError"):
-                    c["events"][parent]["err"] = True
+                    ev["err"] = True
                 c["changed"].append(parent)
             for x in content:
                 if x.get("type") == "image" and x.get("data"):

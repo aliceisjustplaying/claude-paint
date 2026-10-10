@@ -100,7 +100,8 @@ does; this says how to use them. What you paint is yours to choose.
   middle ones, some small accents. One stroke size and one shape over a whole
   area reads as texture.
 - **Mark scale and distance.** `scale_at` can shrink marks through a
-  passage so it recedes; marks of similar scale throughout compress depth.
+  passage, which can suggest recession; marks of similar scale throughout
+  can compress depth.
   Either is a choice.
 - **Mark direction and form.** Direction can turn with a plane, or bind
   neighbouring planes through a shared rhythm. Decide by the whole picture.
@@ -129,8 +130,8 @@ does; this says how to use them. What you paint is yours to choose.
   different `pile=` values can vary a shadow's colour. Judge its value and
   temperature against the passages around it; one violet for every shadow
   is the usual trap.
-- **Distance and colour.** Lightening and cooling suggest recession;
-  similar intensity in near and far planes compresses it. Choose what the
+- **Distance and colour.** Lightening and cooling can suggest recession;
+  similar intensity in near and far planes can compress depth. Choose what the
   painting needs.
 
 ## The palette

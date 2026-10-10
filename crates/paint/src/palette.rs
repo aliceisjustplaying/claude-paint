@@ -88,18 +88,18 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(tube_box, feature = "box-friedrich", feature = "box-every"))]
         tube("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
         tube("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
         #[cfg(any(tube_box, feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-friedrich", feature = "box-every"))]
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         // (every box but the giverny box, which has no black)
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, drier::BONE_BLACK).engine3(drier::engine3::BONE_BLACK),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-inness", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, drier::COBALT_BLUE).engine3(drier::engine3::COBALT_BLUE),
-        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(tube_box, feature = "box-sargent", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
         // (tinting strength 3, below the sourced "very high", because
@@ -132,7 +132,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(any(feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
         tube("deep cadmium", "cadmium sulfide, a deep grade", "#e8861e", 0.9, 0.6, 1.2, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
-        #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-inness", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         #[cfg(any(feature = "box-sargent", feature = "box-impressionist", feature = "box-every"))]
         tube("Indian yellow", "magnesium and calcium euxanthate", "#e1a11e", 0.15, 0.4, 0.8, drier::INDIAN_YELLOW),
@@ -162,7 +162,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
         #[cfg(any(feature = "box-inness", feature = "box-every"))]
         tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
-        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-every"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-giverny", feature = "box-impressionist", feature = "box-friedrich", feature = "box-seurat", feature = "box-every"))]
         tube("rose madder", "madder lake on alumina", "#8e2238", 0.1, 0.35, 0.9, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         #[cfg(any(feature = "box-tonn", feature = "box-every"))]
         tube("permanent alizarin", "a quinacridone", "#5e1624", 0.15, 0.45, 1.3, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
@@ -182,7 +182,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("bitumen", "asphaltum", "#2e2017", 0.12, 0.3, 0.7, drier::BITUMEN),
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-hopper", feature = "box-impressionist", feature = "box-every"))]
         tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.8, 0.7, 0.6, drier::COBALT_BLUE),
-        #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.1, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         // the last, palest extraction of natural ultramarine: mostly
         // colorless matter, so weak and transparent
@@ -190,9 +190,9 @@ pub fn catalog() -> Vec<Tube> {
         tube("ultramarine ash", "natural ultramarine, a pale last extraction", "#7d8aa8", 0.15, 0.5, 0.3, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         #[cfg(any(feature = "box-inness", feature = "box-every"))]
         tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
-        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-alma-tadema", feature = "box-hopper", feature = "box-giverny", feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("viridian", "hydrated chromium oxide", "#1c4a40", 0.3, 0.5, 0.9, drier::VIRIDIAN),
-        #[cfg(any(feature = "box-sargent", feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-sargent", feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 0.6, drier::COPPER),
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
@@ -201,12 +201,12 @@ pub fn catalog() -> Vec<Tube> {
         // (Otero et al. 2017, Heritage Science 5:46: L*a*b* 94/-11/55, 90/-8/52,
         // 87/5/89; tinting 78%, 92%, 65% of lead chromate), masstones
         // darkened for oil; hiding from their refractive indices
-        #[cfg(any(feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("strontium yellow", "strontium chromate", "#f2df53", 0.55, 0.65, 0.8, drier::CHROMATE),
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
         tube("barium yellow", "barium chromate (lemon yellow)", "#efd75c", 0.45, 0.7, 0.9, drier::CHROMATE),
         // zinc yellow darkens with time (to dichromate brown or Cr2O3 green)
-        #[cfg(any(feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
+        #[cfg(any(feature = "box-giverny", feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("zinc yellow", "potassium zinc chromate", "#fcc400", 0.4, 0.6, 0.65, drier::ZINC_YELLOW),
         // cochineal lake: found with madder in late-19th-c. French paint
         // (Pozzi et al. 2014); fugitive. Estimates
@@ -341,6 +341,13 @@ const BOXES: &[(&str, &[&str])] = &[
         "impressionist",
         &[
             "lead white", "zinc white", "cobalt blue", "ultramarine blue", "cerulean blue", "Prussian blue", "emerald green", "viridian", "chrome yellow", "orange chrome", "barium yellow", "strontium yellow", "zinc yellow", "pale cadmium", "cadmium yellow", "deep cadmium", "Naples yellow", "Indian yellow", "yellow lake", "yellow ochre", "red earth", "raw sienna", "burnt sienna", "vermilion", "red lead", "rose madder", "carmine lake", "cobalt violet", "bone black", "vine black",
+        ],
+    ),
+    #[cfg(feature = "box-seurat")]
+    (
+        "seurat",
+        &[
+            "lead white", "chrome yellow", "cadmium yellow", "strontium yellow", "zinc yellow", "vermilion", "rose madder", "yellow ochre", "red earth", "bone black", "cobalt blue", "ultramarine blue", "viridian", "emerald green",
         ],
     ),
     // every tube in the catalog (round 31: "all the colors")
@@ -681,6 +688,15 @@ mod tests {
         assert_eq!(have, want);
     }
 
+    #[test]
+    #[cfg(feature = "box-seurat")]
+    fn seurat_has_only_its_documented_tubes() {
+        let box_ = Palette::named_box("seurat").unwrap();
+        assert_eq!(box_.tubes.iter().map(|t| t.name).collect::<Vec<_>>(), [
+            "lead white", "chrome yellow", "cadmium yellow", "strontium yellow", "zinc yellow", "vermilion", "rose madder", "yellow ochre", "red earth", "bone black", "cobalt blue", "ultramarine blue", "viridian", "emerald green",
+        ]);
+    }
+
     /// Every box's tubes come from the catalog, each once, and a box is
     /// found by its name; an unknown name finds none.
     #[test]
@@ -700,7 +716,7 @@ mod tests {
         }
         assert!(Palette::named_box("no such box").is_none());
         #[cfg(feature = "all-boxes")]
-        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist", "every"]);
+        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist", "seurat", "every"]);
     }
 }
 

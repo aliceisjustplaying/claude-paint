@@ -203,11 +203,21 @@ fn the_box_file_and_easel_box_must_agree_on_a_box_there_is() {
 #[test]
 fn the_replay_build_holds_every_box() {
     use paint::palette::{Palette, catalog};
-    assert_eq!(Palette::box_names(), ["tube box", "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist"]);
+    assert_eq!(Palette::box_names(), ["tube box", "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist", "seurat", "every"]);
     let mut want: Vec<&str> = Palette::box_names().into_iter().flat_map(|b| Palette::named_box(b).unwrap().tubes.into_iter().map(|t| t.name)).collect();
     want.sort();
     want.dedup();
     let mut have: Vec<&str> = catalog().iter().map(|t| t.name).collect();
     have.sort();
     assert_eq!(have, want);
+}
+
+#[test]
+fn seurat_exposes_its_documented_tubes() {
+    let dir = base("seurat");
+    let table = ok(&plain(), &dir, Some("seurat"), &["tubes", "--markdown"]);
+    let names: Vec<&str> = table.lines().skip(2).map(|line| line.split('|').nth(1).unwrap().trim()).collect();
+    assert_eq!(names, [
+        "lead white", "chrome yellow", "cadmium yellow", "strontium yellow", "zinc yellow", "vermilion", "rose madder", "yellow ochre", "red earth", "bone black", "cobalt blue", "ultramarine blue", "viridian", "emerald green",
+    ]);
 }

@@ -23,7 +23,7 @@ main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
 #strip .refthumb b { font-size: 11px !important }
 #nopic, .jempty { font-size: 26px !important }
 #finished { display: none !important }
-.th { font-size: 28px !important; line-height: 1.5 !important; padding-left: 18px !important; border-left: 3px solid #5e5e6d !important }
+.th { font-size: 28px !important; line-height: 1.5 !important; padding-left: 18px !important; border-left: 3px solid var(--line) !important }
 .say { font-size: 27px !important; margin: 18px 0 !important }
 .chip { font-size: 21px !important; padding: 2px 10px !important }
 .tm { font-size: 17px !important }
@@ -36,7 +36,7 @@ main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
 #who { max-width: 820px !important } #who .t { font-size: 24px !important } #who .m { font-size: 18px !important } #who .caret { display: none !important }
 #cap { font-size: 17px !important }
 /* the site's address in the header, right of the clock */
-header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); font: 600 26px -apple-system, system-ui, sans-serif; color: var(--acc); letter-spacing: .01em }
+#studio-bar::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line); font: 600 26px -apple-system, system-ui, sans-serif; color: var(--acc); letter-spacing: .01em }
 #allwrap { display: none !important }
 /* the palette (its newest palette look): its own place, beside what the painter studies now (or alone under the painting) */
 #view.pal { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }
@@ -49,3 +49,12 @@ header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-
 #view.pal.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w p' !important }
 #view.two.pal.tall { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w o' 'w p' !important }
 #view.two.pal.tall #cap, #view.two.pal.tall #cap2 { min-height: 0 !important }
+@media (max-width: 720px) {
+  #studio-bar::after { display: none }
+  #who { max-width: none !important }
+  #who .t { font-size: 12.5px !important }
+  #who .m { font-size: 10.5px !important }
+  #badge { font-size: 9px !important; padding: 1px 6px !important }
+  #clock { font-size: 13px !important }
+  #pclock b { font-size: 9.5px !important }
+}

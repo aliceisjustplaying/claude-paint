@@ -87,6 +87,22 @@ def session_model(path):
     return _models[path]
 
 
+MODEL_NAMES = {
+    "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
+    "claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5": "Claude Sonnet 5",
+    "claude-sonnet-5-5": "Claude Sonnet 5.5", "gpt-6-astra": "GPT-6 Astra",
+    "gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol",
+    "gemini-3.8-flash": "Gemini 3.8 Flash", "muse-spark-1.3": "Muse Spark 1.3",
+    "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3",
+    "mistral-large-4-0": "Mistral Large 4", "space-bunny-free": "Space Bunny",
+}
+
+
+def model_name(model):
+    return " → ".join(MODEL_NAMES.get(m.split("/")[-1], m) for m in model.split(" → "))
+
+
 # Painters' sessions, by folder: round 16+ studios, the round 14-15 chain painters and the
 # earlier rounds' painter worktrees (rounds 1-4 and 7-13). Everything else (judges, tests, work on the project)
 # shows only with "all".
@@ -168,7 +184,7 @@ _subjects = {}  # studio -> (BRIEF.md mtime, what its brief says: see about_brie
 
 def _artist_of(brief):
     """The artist a brief names, in full ("in the manner of Kendric Tonn" -> "Kendric Tonn"), or ""."""
-    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    m = re.search(r"in\s+the\s+manner\s+of\s+(?:later\s+)?((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
     return " ".join(m.group(1).split()) if m else ""
 
 
@@ -251,7 +267,7 @@ def list_sessions():
     for d, fs in files.items():
         name = short(d)
         fs.sort(key=os.path.basename)  # session file names begin with the start time
-        info = [{"path": f, "model": session_model(f), "mtime": os.path.getmtime(f), "size": os.path.getsize(f)} for f in fs]
+        info = [{"path": f, "model": model_name(session_model(f)), "mtime": os.path.getmtime(f), "size": os.path.getsize(f)} for f in fs]
         if name in SPLIT:
             for p, start in SPLIT[name].items():
                 for i in info:

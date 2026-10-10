@@ -10,46 +10,71 @@
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://stillwet.art/img/og-card.jpg">
 <!-- STUDIO_META_END -->
 <link rel="icon" type="image/png" href="/favicon.png">
+<script>
+try { document.documentElement.dataset.theme = localStorage.getItem('stillwet-theme') === 'dark' ? 'dark' : 'light'; }
+catch (e) { document.documentElement.dataset.theme = 'light'; }
+</script>
 <style>
   html.studio-route-pending #who, html.studio-route-pending #badge, html.studio-route-pending #img { visibility:hidden }
   :root {
-    --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
-    --fg:#f0f0f2; --soft:#d4d4da; --dim:#aeaeb6; --faint:#85858e;
-    --acc:#f2b865; --live:#e0564f; --blue:#7d9fd4; --ref:#7fd6c2;
+    color-scheme:light;
+    --bg:#f7f4ed; --panel:#fcfaf6; --panel2:#f0ece3; --line:#ded7cb;
+    --fg:#141312; --soft:#39362f; --dim:#5e5950; --faint:#70695d;
+    --acc:#8a6a1c; --live:#bd3933; --blue:#355d8c; --ref:#246b58;
+    --selected:#eee5d1; --hover:#a69c89; --look:#73548a; --paint:#32694c;
+    --code-k:#78528d; --code-s:#50672e; --code-n:#915421; --code-f:#766018;
+    --shadow:rgba(0,0,0,.16); --header-height:104px;
     --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  :root[data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#0c0b0a; --panel:#14120f; --panel2:#1a1713; --line:#3a3631;
+    --fg:#f6f2ea; --soft:#e1dacd; --dim:#c9c2b4; --faint:#a39a89;
+    --acc:#ecd9a8; --live:#e0564f; --blue:#9abce8; --ref:#7fd6c2;
+    --selected:#30291b; --hover:#706655; --look:#dcb8ea; --paint:#9fd0b4;
+    --code-k:#c792d6; --code-s:#a8c38a; --code-n:#e0a36b; --code-f:#e6d6a8;
+    --shadow:rgba(0,0,0,.6);
   }
   * { box-sizing:border-box } html, body { height:100% } [hidden] { display:none !important }
   body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, system-ui, sans-serif; -webkit-font-smoothing:antialiased;
          display:grid; grid-template-rows: auto minmax(0,1fr) auto; grid-template-columns: minmax(0,1fr); width:100vw; overflow:hidden }
   header, main, footer { min-width:0 } #strip, #transport { min-width:0 }
-  ::-webkit-scrollbar { width:9px; height:9px } ::-webkit-scrollbar-thumb { background:#27272e; border-radius:5px } ::-webkit-scrollbar-track { background:transparent }
+  ::-webkit-scrollbar { width:9px; height:9px } ::-webkit-scrollbar-thumb { background:var(--line); border-radius:5px } ::-webkit-scrollbar-track { background:transparent }
   button, select { font:inherit; font-size:13.5px; color:var(--soft); background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:4px 10px; cursor:pointer }
-  button:hover, select:hover { color:var(--fg); border-color:#30303a }
+  button:hover, select:hover { color:var(--fg); border-color:var(--hover) }
+  a:focus-visible, button:focus-visible, select:focus-visible { outline:2px solid var(--acc); outline-offset:3px }
 
   /* top: which painter, what it's doing now, live state */
-  header { display:flex; align-items:center; gap:14px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); min-width:0 }
+  header { background:var(--panel); border-bottom:1px solid var(--line) }
+  #site-bar { display:flex; align-items:center; gap:24px; padding:10px 14px; border-bottom:1px solid var(--line) }
+  #site-nav { display:flex; align-items:center; gap:22px; margin-left:auto; font-size:14px }
+  #site-nav a { color:var(--dim); text-decoration:none; white-space:nowrap }
+  #site-nav a:hover { color:var(--acc) }
+  #site-nav a[aria-current] { color:var(--fg); text-decoration:underline; text-decoration-color:var(--acc); text-underline-offset:6px }
+  #theme-toggle { flex:none; background:none; color:var(--acc); font-size:18px; line-height:1; width:32px; height:32px; padding:0; border-radius:50% }
+  #studio-bar { display:flex; align-items:center; gap:14px; padding:9px 14px; min-width:0 }
   /* the public copy (static): a way back to the gallery, and a word for someone who has never seen this */
-  #home { display:none; flex:none; color:var(--fg); text-decoration:none; font:19px/1 "Iowan Old Style", Palatino, Georgia, serif; letter-spacing:.02em; padding-right:4px }
-  #home:hover { color:var(--acc) } body.static #home { display:block }
-  #intro { position:fixed; z-index:8; top:58px; left:50%; transform:translateX(-50%); width:min(600px, calc(100vw - 24px)); background:#1d1d24; border:1px solid #33333d;
-           border-radius:10px; padding:14px 16px; box-shadow:0 16px 48px rgba(0,0,0,.6); font-size:14.5px; line-height:1.55; color:var(--soft) }
+  #home { flex:none; color:var(--fg); text-decoration:none; font:26px/1 "Iowan Old Style", Palatino, Georgia, serif; letter-spacing:.03em }
+  #home:hover { color:var(--acc) }
+  #intro { position:fixed; z-index:8; top:calc(var(--header-height) + 8px); left:50%; transform:translateX(-50%); width:min(600px, calc(100vw - 24px)); background:var(--panel); border:1px solid var(--line);
+           border-radius:10px; padding:14px 16px; box-shadow:0 16px 48px var(--shadow); font-size:14.5px; line-height:1.55; color:var(--soft); max-height:calc(100dvh - var(--header-height) - 20px); overflow:auto }
   #intro b { color:var(--fg); font-weight:600 } #intro .live { color:var(--live); font-weight:700 }
   #intro .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:10px }
-  #intro .row a { color:var(--dim); font-size:13.5px } #intro button { color:#111; background:var(--acc); border-color:var(--acc); font-weight:600 }
+  #intro .row a { color:var(--acc); font-size:13.5px } #intro button { color:var(--bg); background:var(--acc); border-color:var(--acc); font-weight:600 }
   /* the painter we're watching (title and model): the button that opens the picker */
   #who { flex:0 1 auto; min-width:0; max-width:480px; display:flex; align-items:baseline; gap:8px; text-align:left; padding:4px 10px }
   #who .t { font-size:14.5px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
   #who .m { font-size:12.5px; color:var(--dim); white-space:nowrap; flex:none } #who .caret { color:var(--dim); font-size:11px; flex:none }
   /* the picker: every painter as a picture, a title, its model, subject and date; working ones first */
-  #picker { position:fixed; z-index:7; top:52px; left:12px; width:min(1040px, calc(100vw - 24px)); max-height:calc(100vh - 68px); overflow:auto; overscroll-behavior:contain;
-            background:#17171c; border:1px solid #33333d; border-radius:10px; padding:10px 12px 14px; box-shadow:0 16px 48px rgba(0,0,0,.65) }
+  #picker { position:fixed; z-index:7; top:calc(var(--header-height) + 4px); left:12px; width:min(1040px, calc(100vw - 24px)); max-height:calc(100dvh - var(--header-height) - 16px); overflow:auto; overscroll-behavior:contain;
+            background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px 14px; box-shadow:0 16px 48px var(--shadow) }
   .pkhead { display:flex; align-items:center; gap:12px; margin:0 0 8px; font-size:13px; color:var(--dim) } .pkhead b { color:var(--fg); font-size:14px; font-weight:600 }
   .pkhead .sp { flex:1 } #pkclose { padding:2px 9px }
   #allwrap { font-size:12.5px; color:var(--dim); display:flex; align-items:center; gap:4px; flex:none; cursor:pointer }
   .pkgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:8px }
   .pk { display:flex; gap:11px; align-items:center; text-align:left; padding:6px; border-radius:8px; min-width:0 }
-  .pk.on { border-color:var(--acc); background:#221e17 } .pk:focus-visible, #who:focus-visible { outline:2px solid var(--acc); outline-offset:1px }
-  .pki { flex:none; width:96px; height:68px; background:#0b0b0d; border-radius:4px; overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--faint); font-size:11px }
+  .pk.on { border-color:var(--acc); background:var(--selected) } .pk:focus-visible, #who:focus-visible { outline:2px solid var(--acc); outline-offset:1px }
+  .pki { flex:none; width:96px; height:68px; background:var(--bg); border-radius:4px; overflow:hidden; display:flex; align-items:center; justify-content:center; color:var(--faint); font-size:11px }
   .pki img { width:100%; height:100%; object-fit:cover }
   .pkx { min-width:0; display:flex; flex-direction:column; gap:1px }
   .pkt { color:var(--fg); font-weight:600; font-size:14px; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical }
@@ -61,7 +86,7 @@
   #badge { flex:none; font-size:11.5px; font-weight:700; letter-spacing:.12em; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--dim) }
   #badge:empty { display:none }
   #badge.live { color:#fff; background:var(--live); border-color:var(--live); animation:glow 2s infinite }
-  #badge.replay { color:var(--blue); border-color:#2b3b58 }
+  #badge.replay { color:var(--blue); border-color:var(--blue) }
   @keyframes glow { 0% { box-shadow:0 0 0 0 rgba(224,86,79,.45) } 70% { box-shadow:0 0 0 8px rgba(224,86,79,0) } 100% { box-shadow:none } }
   @keyframes blink { 50% { opacity:.3 } }
   #clockbox { flex:none; text-align:right; line-height:1.1; display:flex; gap:18px; align-items:flex-end } #clockbox[hidden] { display:none } #realclock { display:block } #clocklbl { font-size:11px; color:var(--dim); display:block }
@@ -76,18 +101,18 @@
   .pane { min-height:0; display:flex; flex-direction:column; border-right:1px solid var(--line) }
   .pane > h4 { margin:0; padding:8px 14px 6px; font-size:11px; font-weight:600; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; display:flex; gap:8px; align-items:center }
   .pane > h4 span { text-transform:none; letter-spacing:0; font:12px var(--mono); color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  #codepane { position:fixed; z-index:6; top:60px; bottom:120px; left:12px; width:min(720px, calc(100vw - 24px)); min-width:0;
-              background:var(--panel); border:1px solid #33333d; border-radius:10px; box-shadow:0 16px 48px rgba(0,0,0,.65) }
+  #codepane { position:fixed; z-index:6; top:calc(var(--header-height) + 8px); bottom:120px; left:12px; width:min(720px, calc(100vw - 24px)); min-width:0;
+              background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 16px 48px var(--shadow) }
   #codepane > h4 { flex-wrap:wrap } #codepane #file { flex:1; min-width:0 }
   #codepane #codeformat { flex:none; font:11px -apple-system,system-ui,sans-serif }
   #codeclose { padding:2px 9px }
-  #code { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; margin:0; padding:4px 0 12px; font:13px/1.6 var(--mono); color:#d0d0d6; white-space:normal; tab-size:4 }
+  #code { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; margin:0; padding:4px 0 12px; font:13px/1.6 var(--mono); color:var(--soft); white-space:normal; tab-size:4 }
   #code > .code-line { content-visibility:auto; contain-intrinsic-size:auto 20.8px; display:grid; grid-template-columns:var(--gutter, 4ch) minmax(0,1fr); padding-right:12px }
   #code .ln { color:var(--faint); user-select:none; text-align:right; padding-right:1ch; line-height:1.6 }
   #code .src { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere }
   #code .new { background:rgba(214,162,90,.10); box-shadow:inset 3px 0 0 var(--acc) }
-  .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#9a9aa3; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
-  #viewpane { background:#070708; position:relative }
+  .k { color:var(--code-k) } .s { color:var(--code-s) } .c { color:var(--faint); font-style:italic } .n { color:var(--code-n) } .m { color:var(--blue) } .f { color:var(--code-f) }
+  #viewpane { background:var(--bg); position:relative }
   /* the painting (its newest whole look) and, when the painter is studying something else right now (a close-up,
      a squint, a check in grays), that look too: secondary here, as big as the painting in stream.css */
   #view { flex:1; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); gap:10px; padding:12px 12px 8px }
@@ -99,7 +124,7 @@
   #pband { flex:none; display:grid; grid-auto-flow:column; grid-template-rows:repeat(2,52px); grid-auto-columns:88px; grid-template-columns:14px; align-items:center; gap:8px; padding:7px 12px 9px; overflow-x:auto; border-top:1px solid var(--line); scrollbar-width:thin }
   #pband[hidden] { display:none }
   .palette-toggle { display:none }
-  #pband .lbl { grid-row:span 2; writing-mode:vertical-rl; transform:rotate(180deg); font:600 10px -apple-system,sans-serif; color:#9fd0b4; text-transform:uppercase }
+  #pband .lbl { grid-row:span 2; writing-mode:vertical-rl; transform:rotate(180deg); font:600 10px -apple-system,sans-serif; color:var(--paint); text-transform:uppercase }
   #pband .palette-chip { width:88px; height:52px; padding:0; border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px }
   #pband canvas:first-child { width:80px; height:30px; border-radius:4px; box-shadow:0 1px 3px #0009 }
   #pband .palette-swatch { width:80px; height:30px; flex:none; border-radius:4px; overflow:hidden }
@@ -109,40 +134,40 @@
   #pband span.pile-name { height:18px; font:14px/18px ui-monospace,Menlo,monospace; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   @media(max-width:700px) { #pband { gap:6px; padding:5px 8px 6px } }
   #pal .box { height:100% } #pal img { object-position:right center }
-  #cap3 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap3 b { display:block; color:#9fd0b4; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+  #cap3 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap3 b { display:block; color:var(--paint); font-size:12px; letter-spacing:.1em; text-transform:uppercase }
   #view.two.pal #other, #view.two.pal #pal { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:4px } #view.two.pal #cap2, #view.two.pal #cap3 { order:0 } #view.two.pal #cap2 b, #view.two.pal #cap3 b { display:inline; margin-right:8px }
   .pic { margin:0; min-height:0; min-width:0; display:flex; flex-direction:column; gap:5px }
   .pic .box { flex:1; min-height:0; position:relative }
-  .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; cursor:zoom-in; filter:drop-shadow(0 10px 30px rgba(0,0,0,.7)) }
+  .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; cursor:zoom-in; filter:drop-shadow(0 10px 30px var(--shadow)) }
   .pic img:not([src]) { visibility:hidden }
   /* the other canvas, small in the corner: the scratch canvas while the painter paints, the painting while it tries
      things on the scratch canvas */
-  #pip { position:absolute; right:14px; bottom:14px; width:17%; max-width:240px; margin:0; padding:5px; z-index:3; background:rgba(12,12,14,.92); border:1px solid var(--line); border-radius:5px; display:flex; flex-direction:column; gap:4px }
+  #pip { position:absolute; right:14px; bottom:14px; width:17%; max-width:240px; margin:0; padding:5px; z-index:3; background:var(--panel); border:1px solid var(--line); border-radius:5px; display:flex; flex-direction:column; gap:4px }
   #pip[hidden] { display:none }
   #pip img { display:block; width:100%; height:auto; cursor:zoom-in }
-  #pip figcaption { font:600 13px/1.3 -apple-system,system-ui,sans-serif; color:#fff }
-  #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:#fff; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  #pip figcaption { font:600 13px/1.3 -apple-system,system-ui,sans-serif; color:var(--fg) }
+  #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:var(--fg); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   #other { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center }
   #other .box { height:100% } #other img { object-position:right center }
-  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:block; color:#dcb8ea; font-size:12px; letter-spacing:.1em; text-transform:uppercase }
-  #cropbox { position:absolute; border:2px solid #dcb8ea; box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
-  #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:rgba(11,11,13,.8); border:1px solid #3a3226; border-radius:6px; padding:3px 10px; text-decoration:none }
+  #cap2 { order:2; font-size:13px; line-height:1.4; color:var(--soft) } #cap2 b { display:block; color:var(--look); font-size:12px; letter-spacing:.1em; text-transform:uppercase }
+  #cropbox { position:absolute; border:2px solid var(--look); box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
+  #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:var(--panel); border:1px solid var(--acc); border-radius:6px; padding:3px 10px; text-decoration:none }
   #finished:hover { color:var(--fg) }
   #nopic { position:absolute; inset:0; margin:0; padding:0 8%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--dim); font-size:15px; line-height:1.6 }
   /* a reference picture the painter is studying (read from its studio's reference/): someone else's painting, never this painter's. Its own color, and a tag on the picture itself */
-  #other.ref #cap2 b { color:var(--ref) } #reftag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#0b0b0d; background:var(--ref); padding:2px 8px; border-radius:0 0 4px 0; pointer-events:none; white-space:nowrap }
+  #other.ref #cap2 b { color:var(--ref) } #reftag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--bg); background:var(--ref); padding:2px 8px; border-radius:0 0 4px 0; pointer-events:none; white-space:nowrap }
   #journal { background:var(--panel2); border-right:none }
   #jbody { flex:1; min-height:0; overflow:auto; padding:12px 16px 16px }
-  .th { margin:10px 0 12px; padding:2px 0 2px 13px; border-left:2px solid #5e5e6d; font-size:15px; line-height:1.6; color:var(--soft); word-break:break-word }
-  .th.last { color:#ffffff } .say { margin:13px 0; color:var(--fg); font-size:15px; line-height:1.6; word-break:break-word }
+  .th { margin:10px 0 12px; padding:2px 0 2px 13px; border-left:2px solid var(--line); font-size:15px; line-height:1.6; color:var(--soft); word-break:break-word }
+  .th.last { color:var(--fg) } .say { margin:13px 0; color:var(--fg); font-size:15px; line-height:1.6; word-break:break-word }
   /* the painter's markdown, rendered (escaped first: see md()) */
   .th p, .say p { margin:0 0 .6em } .th > :last-child, .say > :last-child { margin-bottom:0 }
   .th ul, .th ol, .say ul, .say ol { margin:0 0 .6em; padding-left:1.4em } .th li, .say li { margin:.1em 0 }
   .mh { margin:.5em 0 .3em; font-size:1em; font-weight:700; color:var(--fg) } .th b, .say b { color:var(--fg); font-weight:650 }
-  .th code, .say code { font:.88em var(--mono); background:#24242c; border-radius:4px; padding:0 4px } .th hr, .say hr { border:none; border-top:1px solid var(--line); margin:.6em 0 }
+  .th code, .say code { font:.88em var(--mono); background:var(--panel2); border-radius:4px; padding:0 4px } .th hr, .say hr { border:none; border-top:1px solid var(--line); margin:.6em 0 }
   .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 }
-  .chip { font-size:13px; color:var(--soft); background:#202027; border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
-  .chip.code { color:var(--acc) } .chip.render { color:#a9c9f2 } .chip.look { color:#dcb8ea; cursor:pointer } .chip.ref { color:var(--ref) } .chip.fail { color:#ff9d93 }
+  .chip { font-size:13px; color:var(--soft); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:1px 8px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; cursor:default }
+  .chip.code { color:var(--acc) } .chip.render { color:var(--blue) } .chip.look { color:var(--look); cursor:pointer } .chip.ref { color:var(--ref) } .chip.fail { color:var(--live) }
   .tm { font:11px var(--mono); color:var(--faint); display:block; margin-top:12px } .jempty { color:var(--dim); line-height:1.6; margin:14px 0 }
   .cursor { display:inline-block; width:7px; height:1em; vertical-align:text-bottom; background:var(--acc); animation:blink 1s infinite }
 
@@ -153,7 +178,7 @@
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   /* a reference picture in the strip: marked, so it doesn't read as a state of the canvas */
   #strip .refthumb { position:relative; flex:none; height:58px; cursor:pointer; border-bottom:3px solid var(--ref); box-sizing:content-box }
-  #strip .refthumb b { position:absolute; left:0; top:0; font-size:9px; font-weight:700; letter-spacing:.08em; color:#0b0b0d; background:var(--ref); padding:0 4px; border-radius:3px 0 3px 0; line-height:14px }
+  #strip .refthumb b { position:absolute; left:0; top:0; font-size:9px; font-weight:700; letter-spacing:.08em; color:var(--bg); background:var(--ref); padding:0 4px; border-radius:3px 0 3px 0; line-height:14px }
   #strip .refthumb.on img { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   /* a swipe along the strip moves only the strip (not the page, not the browser's back gesture) */
   #strip { overscroll-behavior-x:contain }
@@ -178,7 +203,7 @@
   /* phone: stacked panes, touch transport, home-indicator safe area. LAST in the sheet so it
      overrides the base rules above (equal specificity, later wins). The 1920px stream is untouched. */
   @media (max-width: 720px) {
-    #codepane { top:46px; bottom:100px; left:6px; width:calc(100vw - 12px) }
+    #codepane { top:calc(var(--header-height) + 4px); bottom:100px; left:6px; width:calc(100vw - 12px) }
     /* Narrow windows scroll as one column; the palette never steals canvas height. */
     main { display:block; overflow-y:auto }
     #view { flex:none; display:flex; flex-direction:column }
@@ -202,16 +227,19 @@
     #viewpane { border-right:none; border-bottom:1px solid var(--line) } #view { padding:4px; gap:4px }
     #view.two, #view.pal { grid-template-rows:minmax(0,2fr) minmax(0,1fr) } #cap3 { font-size:11.5px; line-height:1.3 } #cap3 b { font-size:10.5px } #cap { font-size:10.5px } #cap2 { font-size:11.5px; line-height:1.3 } #cap2 b { font-size:10.5px }
     #finished { top:4px; right:6px; font-size:11.5px; padding:2px 7px }
-    #picker { top:42px; left:0; width:100vw; max-height:calc(100dvh - 42px); border-radius:0 0 10px 10px; border-left:none; border-right:none; padding:8px 8px 12px }
+    #picker { top:var(--header-height); left:0; width:100vw; max-height:calc(100dvh - var(--header-height)); border-radius:0 0 10px 10px; border-left:none; border-right:none; padding:8px 8px 12px }
     .pkgrid { grid-template-columns:minmax(0,1fr); gap:6px } .pki { width:84px; height:60px }
     /* (3px around the thumbnails: room for the current one's outline; min-height: room for a reference's
        underline from the start, so the strip doesn't grow when the painter first reads one) */
     #strip { height:auto; min-height:58px; gap:5px; padding:3px 3px 4px; margin:0 -3px 2px; touch-action:pan-x }
     #strip img { height:48px; width:67px } #strip .refthumb, #strip .sep { height:48px }
-    header { gap:6px; padding:4px 8px; flex-wrap:nowrap; row-gap:0 }
+    #site-bar { flex-wrap:wrap; gap:8px; padding:8px 10px }
+    #site-nav { order:2; flex-basis:100%; justify-content:space-between; gap:8px; font-size:13px }
+    #theme-toggle { margin-left:auto }
+    #studio-bar { gap:6px; padding:4px 8px }
     #who { flex:1 1 auto; min-width:0; max-width:none; flex-direction:column; align-items:flex-start; gap:0; padding:2px 8px; line-height:1.25 }
     #who .t { font-size:12.5px; max-width:100% } #who .m { font-size:10.5px } #who .caret { display:none } #doing { display:none }
-    #home { font-size:15px; padding-right:0 } #intro { top:44px; font-size:13.5px; padding:12px 14px }
+    #home { font-size:22px } #intro { font-size:13.5px; padding:12px 14px }
     #clock { font-size:13px } #clocklbl { display:none } #clockbox { flex-direction:column-reverse; gap:0 } #pclock .pl { display:none } #pclock b { font-size:9.5px; line-height:1.1 } #badge { font-size:9px; padding:1px 6px }
     .pane > h4 { padding:4px 10px 2px; font-size:10px } #jbody { padding:8px 12px 12px }
     .th, .say { font-size:14px } .chip { font-size:12px } .tm { font-size:10px }
@@ -226,11 +254,17 @@
 </style></head>
 <body class="nocode">
 <header>
-  <a id="home" href="/" title="all the finished paintings">stillwet</a>
+  <div id="site-bar">
+    <a id="home" href="/" title="stillwet home">stillwet</a>
+    <nav id="site-nav" aria-label="Main navigation"><a href="/paintings/">Paintings</a><a href="/studio/" aria-current="page">Studio</a><a href="/experiments/">Experiments</a><a href="/about/">About</a></nav>
+    <button id="theme-toggle" type="button" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">☾</button>
+  </div>
+  <div id="studio-bar">
   <button id="who" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="picker" title="choose another painter"><span class="t">Choose a painter</span><span class="m"></span><span class="caret">▼</span></button>
   <div id="doing"><span class="what"></span><span class="detail"></span></div>
   <span id="badge"></span>
   <div id="clockbox"><span id="pclock" hidden><span class="pl">on the painting's own clock</span><b></b></span><span id="realclock"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></span></div>
+  </div>
 </header>
 <main>
   <section class="pane" id="codepane" role="dialog" aria-label="Painter code" aria-hidden="true" inert><h4>code <span id="file"></span><span id="codeformat"></span><button id="codeclose" type="button" aria-label="Close code">✕</button></h4><pre id="code"></pre></section>
@@ -271,11 +305,26 @@
   The big picture is the painting as it last saw it whole; when it studies a detail up close, squints or checks the picture in grays, that view shows below it.
   Its thinking runs beside the picture. <span class="live">LIVE</span> means it's working right now.
   Press <b>▶ Replay</b> to watch the painting grow, or tap the painter's name at the top to choose another.
-  <div class="row"><a href="/">See the finished paintings</a><button id="introok">Got it</button></div>
+  <div class="row"><a href="/paintings/">See the finished paintings</a><button id="introok">Got it</button></div>
 </div>
 <script src="code-display.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+function renderTheme() {
+  const dark = document.documentElement.dataset.theme === 'dark', label = `Switch to ${dark ? 'light' : 'dark'} theme`;
+  $('theme-toggle').textContent = dark ? '☀' : '☾';
+  $('theme-toggle').setAttribute('aria-label', label);
+  $('theme-toggle').setAttribute('aria-pressed', String(dark));
+  $('theme-toggle').title = label;
+}
+$('theme-toggle').onclick = () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('stillwet-theme', theme); } catch (e) {}
+  renderTheme();
+};
+renderTheme();
+new ResizeObserver(([entry]) => document.documentElement.style.setProperty('--header-height', `${entry.target.getBoundingClientRect().height}px`)).observe(document.querySelector('header'));
 // Q: what we watch, as a query: 'p=<painter folder>' (all its sittings, stitched) or 's=<session file>' (one session)
 let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
@@ -300,10 +349,10 @@ const thumbURL = i => webURL('t', i), viewURL = i => webURL('v', i);
 let viewI = -1, viewI2 = -1;  // the looks in the main view: the painting, and what the painter is studying now
 let hasLooks = false;  // the painter uses the easel's look tool (round 19 on); before it, the main view is simply the last picture it saw
 // model ids as people say them
-const NAMES = {'claude-opus-5-5':'Claude Opus 5.5', 'claude-fable-5-1':'Claude Fable 5.1', 'claude-sonnet-5':'Claude Sonnet 5', 'claude-sonnet-5-5':'Claude Sonnet 5.5',
+const NAMES = {'claude-opus-5-5':'Claude Opus 5.5', 'claude-fable-5-1':'Claude Fable 5.1', 'claude-haiku-5-5':'Claude Haiku 5.5', 'claude-sonnet-5':'Claude Sonnet 5', 'claude-sonnet-5-5':'Claude Sonnet 5.5',
   'gpt-6-astra':'GPT-6 Astra', 'gpt-6-luna':'GPT-6 Luna', 'gpt-6.1-sol':'GPT-6.1 Sol', 'gemini-3.8-flash':'Gemini 3.8 Flash', 'muse-spark-1.3':'Muse Spark 1.3',
-  'glm-5.3-flash':'GLM-5.3 Flash', 'mimo-v2.6-pro':'MiMo v2.6 Pro', 'deepseek-v4.1-flash':'DeepSeek V4.1 Flash', 'kimi-k3':'Kimi K3', 'space-bunny-free':'Space Bunny'};
-const modelName = m => NAMES[m] || m;
+  'glm-5.3-flash':'GLM-5.3 Flash', 'mimo-v2.6-pro':'MiMo v2.6 Pro', 'deepseek-v4.1-flash':'DeepSeek V4.1 Flash', 'kimi-k3':'Kimi K3', 'mistral-large-4-0':'Mistral Large 4', 'space-bunny-free':'Space Bunny'};
+const modelName = m => String(m || '').split(' → ').map(id => NAMES[id.split('/').pop()] || id).join(' → ');
 const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
 const qOf = s => s.p ? 'p=' + encodeURIComponent(s.p) : 's=' + encodeURIComponent(s.s);
 

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply } from "../easel-client.ts";
+import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
 test("read opens only studio files, however the path is spelled", () => {
 	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
@@ -106,6 +106,26 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 		assert.match(await atEasel(studio, ["note", "-"], "first note"), /noted/);
 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
 		assert.match(await atEasel(studio, ["status"], undefined), /^2 chunks/);
+		for (const blocked of [".gallery", ".relief"]) {
+			const ordinary = await atEasel(studio, ["look"], undefined);
+			const primary = resolve(studio, /^(.+\.png)(?: \(.*)?$/m.exec(ordinary)![1]);
+			const companion = join(dirname(primary), blocked, basename(primary));
+			const old = readFileSync(companion);
+			chmodSync(dirname(companion), 0o555);
+			try {
+				const renamed = renameLooks(studio, ordinary);
+				assert.ok(!existsSync(join(dirname(companion), basename(renamed.paths[0]))));
+			} finally {
+				chmodSync(dirname(companion), 0o755);
+			}
+			assert.deepEqual(readFileSync(companion), old);
+			const analytical = await atEasel(studio, ["look", "--mode", "value"], undefined);
+			const fresh = /^(.+\.png)(?: \(.*)?$/m.exec(analytical)![1];
+			assert.notEqual(basename(fresh), basename(primary));
+			const renamed = renameLooks(studio, analytical).paths[0];
+			for (const folder of [".gallery", ".relief"]) assert.ok(!existsSync(resolve(studio, dirname(renamed), folder, basename(renamed))));
+			assert.deepEqual(readFileSync(companion), old);
+		}
 	} finally {
 		await easel(studio, ["close"]);
 	}

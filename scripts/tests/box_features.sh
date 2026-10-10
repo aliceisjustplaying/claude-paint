@@ -50,7 +50,7 @@ refused() {
 }
 
 painter_test=(--test painter the_build_holds_only_its_box_s_tubes -- --exact)
-for f in "" box-friedrich box-sargent box-inness box-alma-tadema box-tonn box-hopper box-giverny box-impressionist box-seurat; do
+for f in "" box-friedrich box-sargent box-inness box-alma-tadema box-tonn box-hopper box-giverny box-impressionist box-seurat box-cezanne; do
   features=(--no-default-features)
   [ -z "$f" ] || features+=(--features "$f")
   passes 3 "paint ${f:-no box}" -p paint "${features[@]}" --lib -- palette::tests::the_catalog palette::tests::every_box
@@ -58,6 +58,8 @@ for f in "" box-friedrich box-sargent box-inness box-alma-tadema box-tonn box-ho
 done
 refused "paint box-sargent,box-inness" -p paint --no-default-features --features box-sargent,box-inness
 refused "easel box-inness,box-tonn (painter)" -p easel --no-default-features --features box-inness,box-tonn
+refused "paint box-cezanne,box-seurat" -p paint --no-default-features --features box-cezanne,box-seurat
+refused "easel box-cezanne,box-seurat (painter)" -p easel --no-default-features --features box-cezanne,box-seurat
 passes 3 "paint all-boxes (default)" -p paint --lib -- palette::tests::the_catalog palette::tests::every_box
 passes 1 "easel replay (default)" -p easel --test boxes the_replay_build_holds_every_box -- --exact
 echo "box_features: no box, each box alone, two boxes and the replay build hold the boxes they should"

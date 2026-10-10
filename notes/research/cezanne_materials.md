@@ -2,8 +2,8 @@
 
 *Technical research for a written-description oil-painting study, October 2026.
 No reference images were used. Source keys below distinguish examination of
-objects, contemporary testimony and later interpretation. Recommendations for
-our easel belong in `notes/cezanne.md`, not in the historical findings.*
+objects, contemporary testimony and later interpretation. This note reports
+historical findings, not recommendations for a subject or canvas.*
 
 ## Summary
 
@@ -131,8 +131,8 @@ bright yellow in *Millstone*. She observes extra bulk and texture in the
 portrait's paint. These are local microscopic estimates, not quantities to
 add to every mixture [BUT, Pigments].
 
-**Correction to the house precedent.** The Cézanne row in
-`impressionist_materials.md` compresses Butler's sample into a career-wide
+**Correction to the house precedent.** A short house summary of Cézanne's
+materials compresses Butler's sample into a career-wide
 chronology. Its c.1898 cobalt start and last-decade chrome-yellow cutoff
 need the qualifications above. The precedent is left unchanged in this task.
 
@@ -250,10 +250,8 @@ The red lake and black are practical existing-tube proxies, not an exact
 analysed batch or a claim that every oil contained the same black grade.
 Cobalt's increasing prominence and the conflicting late chrome-yellow
 findings do not establish universal first-use or cutoff dates. Findings in
-watercolour remain separate from the oil evidence. The full source
-research handoff, with subject-choice-neutral guidance, is retained in `notes/research/cezanne_materials_full.md`;
-this profile copy removes the name of another artist for studio isolation.
-No tube values or other boxes change.
+watercolour remain separate from the oil evidence. No tube values or other
+boxes change.
 
 ## Sources
 

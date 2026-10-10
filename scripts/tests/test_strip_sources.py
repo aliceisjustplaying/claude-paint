@@ -29,6 +29,7 @@ class HopperPainterCopy(unittest.TestCase):
         self.assertNotRegex(painter, r"https?://|www\.")
         self.assertNotIn("## Sources", painter)
         self.assertNotIn("<!--", painter)
+        self.assertNotIn("91.9 × 127.2 cm", painter)
         self.assertIn("## Night and artificial light", painter)
         self.assertIn("almost painting white on white", " ".join(painter.split()))
         self.assertEqual(source.read_text(encoding="utf-8"), original)

@@ -80,8 +80,9 @@ the fatty acids of the oil.
   most of them date from his student years, his stay in Paris (1906–07)
   and the late 1910s [WAPI]. Most of his canvases there from the 1920s
   on measure between about 64 × 92 cm and 102 × 153 cm; a few are
-  smaller [WAPI]. One of 1939 measures 91.9 × 127.2 cm [CGA p.247]. His
-  biographer mentions a "ten-by-twelve-inch sketch on canvas board"
+  smaller [WAPI].
+  <!-- research: One of 1939 measures 91.9 × 127.2 cm [CGA p.247]. -->
+  His biographer mentions a "ten-by-twelve-inch sketch on canvas board"
   (1914) and "small paintbox-panel-sized studies" made "for
   quick preliminary effects" [LEV].
 - **Original size kept.** Both examined canvases of 1939 keep their

@@ -85,27 +85,27 @@ does; this says how to use them. What you paint is yours to choose.
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
 - **Light relationships.** Relate the light and shadow of each passage to
-  the intended effect. A uniform band or a firm boundary may be deliberate;
-  judge it in context rather than treating it as automatically wrong.
+  the effect you want. A uniform band or a firm boundary can be deliberate;
+  judge it in context.
 - **Forms meet through relationships.** Overlap, colour and edge handling
-  can distinguish or connect adjacent planes. A mask boundary alone does
-  not establish a spatial relationship.
-- **Composition**: judge how the relationships between masses support your
-  chosen effect. A central or off-centre emphasis is yours to choose.
+  separate or connect adjacent planes; a mask's edge by itself sets no
+  spatial relationship.
+- **Composition**: judge how the masses work together for the effect you
+  chose. Where the emphasis sits, central or off-centre, is yours to
+  choose.
 
 ## Marks
 
 - **A hierarchy of marks.** A few large decisive strokes (`b:gesture`), many
   middle ones, some small accents. One stroke size and one shape over a whole
   area reads as texture.
-- **Mark scale can establish distance.** `scale_at` can shrink marks through
-  a passage. Keeping their scale similar can instead compress depth; neither
-  choice is compulsory.
-- **Mark direction can articulate form.** Direction may turn with a plane
-  or bind neighbouring planes through a shared rhythm. Decide by the whole
-  picture, not by a rule that every stroke must follow a contour.
-- **Light and texture.** Quiet passages and active marks affect the reading
-  of light differently. Compare them before expanding either treatment.
+- **Mark scale and distance.** `scale_at` can shrink marks through a
+  passage so it recedes; marks of similar scale throughout compress depth.
+  Either is a choice.
+- **Mark direction and form.** Direction can turn with a plane, or bind
+  neighbouring planes through a shared rhythm. Decide by the whole picture.
+- **Light and texture.** Quiet passages and active marks read differently
+  as light. Compare them before extending either.
 
 ## Spatter
 
@@ -122,16 +122,16 @@ does; this says how to use them. What you paint is yours to choose.
 ## Forms and shadows
 
 - **A form can read as one mass.** Relate its parts through colour and
-  overlap instead of treating each part as an isolated symbol. `form{}`
-  provides a lit-volume guide; colour modulation is another way to build
-  solidity, without following its lighting mechanically.
+  overlap so they hold together. `form{}` gives a lit-volume guide; colour
+  modulation is another way to build solidity, with or without its
+  lighting.
 - **Shadows take colour from surrounding light.** Separate passes with
   different `pile=` values can vary a shadow's colour. Judge its value and
-  temperature against neighbouring passages rather than assuming one violet
-  fits every shadow.
-- **Distance and colour.** Lightening and cooling can suggest recession;
-  comparable intensity in near and far planes can compress it. Choose the
-  relationship that serves the painting.
+  temperature against the passages around it; one violet for every shadow
+  is the usual trap.
+- **Distance and colour.** Lightening and cooling suggest recession;
+  similar intensity in near and far planes compresses it. Choose what the
+  painting needs.
 
 ## The palette
 
@@ -249,9 +249,9 @@ does; this says how to use them. What you paint is yours to choose.
   Keep what later chunks need as globals: paths, recipes, protection masks.
   Before redrawing something by eye, look for its saved path. Keep big
   temporary masks local (memory).
-- **Small forms** drawn as a neat diagram of
-  separate parts can read as icons. A few thick, irregular touches of two or
-  three colors read as the thing.
+- **Small forms** drawn as a neat diagram of separate parts can read as
+  icons. A few thick, irregular touches of two or three colors read as the
+  thing.
 - **Taking paint off**: wet paint comes off with the rag (below) or the
   knife, down to the first set layer. Set paint stays: paint over it or
   glaze it. Either way it costs only painted time.

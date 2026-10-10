@@ -18,7 +18,7 @@ const initial = [ev('start', { cwd:'/painter' }), ev('think', { text:'# First\n\
   ev('look', { text:'mode normal' }, 13), ev('paint', { code:'local pending=4' }, 14),
   ev('sitting', { n:2 }, 20), ev('say', { text:'## Done\n\n3. ordered\n4. list\n\n---\n\n_literal_ <tag>' }, 21)];
 
-async function viewer(browser, fixture, { old = false, staticMode = false } = {}) {
+async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true } = {}) {
   const page = await browser.newPage();
   const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0 };
   page.on('pageerror', e => report.pageErrors.push(String(e)));
@@ -45,7 +45,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false } = {}
   });
   await page.goto(origin + '/?p=fixture');
   await page.waitForFunction(() => events.length > 0 && !document.querySelector('#togglecode').disabled);
-  await page.waitForFunction(() => document.querySelector('#code .src')?.textContent.includes('live'));
+  if (liveFile) await page.waitForFunction(() => document.querySelector('#code .src')?.textContent.includes('live'));
   return { page, state };
 }
 async function seek(page, i) {
@@ -84,6 +84,31 @@ async function pollUpdate(v, i, replacement) {
 (async () => {
   const browser = await chromium.launch({ channel:'chrome', headless:true });
   try {
+    const waits = JSON.parse(fs.readFileSync(path.join(root, 'fixtures/monet-waits.json'), 'utf8')).cases;
+    for (const staticMode of [false, true]) {
+      const sample = waits[1];
+      const v = await viewer(browser, [ev('start'), ev('paint', { code:'work{}', out:sample.before }), sample.event], { staticMode, liveFile:false });
+      await seek(v.page, 2);
+      assert.deepEqual(await v.page.locator('#jbody .chip').allTextContents(), ['🖌 paints', '🖌 paints', '◷ waits 1 week']);
+      await v.page.evaluate(() => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'stream.css'; document.head.append(link); document.body.classList.add('stream'); });
+      assert.equal(await v.page.locator('#jbody .chip.wait').textContent(), '◷ waits 1 week');
+      const result = await v.page.evaluate(cases => {
+        const saved = events;
+        const real = cases.map(({ before, event }) => { events = before ? [{kind:'paint', scratch:event.scratch, out:before}, event] : [event]; return waitChip(event, events.length - 1)?.[2]; });
+        const extract = (code, out = 'ok', fields = {}) => { const e = {kind:'paint', code, out, ...fields}; events = [e]; return waitChip(e, 0)?.[2] || null; };
+        const fallback = ['wait(120)', 'wait(3*24*60)', 'wait(6*7*24*60)', 'wait(60); wait(60)', 'wait(0)', 'for i=1,3 do wait(60) end', 'wait(minutes)', 'wait(60); work{}', '-- wait(60)\nwork{}', 'print("wait(60)")', 'if false then wait(60) end', '--[=[ wait(60) ]=]\nwork{}'].map(code => extract(code));
+        const failed = extract('wait(60)', 'day 2, 09:00\nok', {err:true});
+        const missing = extract('wait(60)', 'day 2, 09:00\nok');
+        events = saved;
+        return {real, fallback, failed, missing, durations:[1, 59, 60, 120, 1680, 4320, 60480, 90*1440, 525960, 0, -1].map(waitDuration)};
+      }, waits);
+      assert.deepEqual(result.real, ['waits 1 week on the scratch canvas', 'waits 1 week', 'waits 1 week on the scratch canvas', 'waits 1 week']);
+      assert.deepEqual(result.fallback, ['waits 2 hours', 'waits 3 days', 'waits 6 weeks', 'waits 2 hours', null, null, null, null, null, null, null, null]);
+      assert.equal(result.failed, null); assert.equal(result.missing, null);
+      assert.deepEqual(result.durations, ['1 minute', '59 minutes', '1 hour', '2 hours', '1 day', '3 days', '6 weeks', '2 months', '1 year', null, null]);
+      report.checks.push(staticMode ? 'static wait chips and real Monet clocks' : 'live wait chips, conservative fallback and duration formatting');
+      await v.page.close();
+    }
     for (const staticMode of [false, true]) {
       const v = await viewer(browser, initial, { staticMode });
       const old = baseline && await viewer(browser, initial, { old:true, staticMode });

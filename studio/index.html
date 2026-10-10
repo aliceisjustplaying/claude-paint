@@ -531,6 +531,39 @@ function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }
 // ---- what an event is, in a few words
 // a chunk ran if its call has a result that isn't an error (since round 21.3 the easel answers a plain "ok", no chunk number)
 const paintOK = e => e.out !== undefined && !e.err;
+function waitDuration(min) {
+  if (!Number.isFinite(min) || min <= 0) return null;
+  for (const [size, unit] of [[525960, 'year'], [43830, 'month'], [10080, 'week'], [1440, 'day'], [60, 'hour'], [1, 'minute']]) {
+    if (unit === 'month' && min < 61 * 1440) continue;
+    if (min >= size || size === 1) { const n = Math.max(1, Math.floor(min / size)); return `${n} ${unit}${n === 1 ? '' : 's'}`; }
+  }
+}
+function waitChip(e, i) {
+  if (e.kind !== 'paint' || !paintOK(e)) return null;
+  const code = (e.code || '').replace(/--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, ' ');
+  const firstWait = code.search(/\bwait\s*\(/);
+  if (firstWait < 0 || /\b(?:if|for|while|repeat|function|return)\b/.test(code.slice(0, firstWait))) return null;
+  const clock = text => { const m = [...(text || '').matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); return m ? (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 : null; };
+  const end = clock(e.out);
+  if (end !== null) {
+    let before = e.new_scratch ? 0 : null;
+    for (let k = i - 1; before === null && k >= 0; k--) {
+      const prev = events[k];
+      if (prev.kind === 'paint' && !!prev.scratch === !!e.scratch) {
+        if (prev.err) continue;
+        before = paintOK(prev) ? clock(prev.out) : null;
+        if (before === null) return null;
+      } else if (!e.scratch && prev.clock) before = clock(prev.clock);
+    }
+    if (before === null || end <= before) return null;
+    const duration = waitDuration(end - before);
+    return ['wait', '◷', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'The easel’s clock advance for this chunk, including any painting time after the wait.'];
+  }
+  if (!/^\s*(?:wait\s*\(\s*\d+(?:\.\d+)?(?:\s*\*\s*\d+(?:\.\d+)?)*\s*\)\s*;?\s*)+$/.test(code)) return null;
+  const minutes = [...code.matchAll(/wait\s*\(([^)]*)\)/g)].reduce((sum, m) => sum + m[1].split('*').reduce((n, x) => n * Number(x), 1), 0);
+  const duration = waitDuration(minutes);
+  return duration ? ['wait', '◷', `waits ${duration}${e.scratch ? ' on the scratch canvas' : ''}`, 'Rest time from a chunk containing only literal wait calls; this older easel recorded no clock.'] : null;
+}
 function kindOf(e) {
   const f = fname(e.path);
   if (e.kind === 'write' || e.kind === 'edit') {
@@ -607,6 +640,7 @@ function invalidateReplay(i) {
   if (fileScan && i <= fileScan.at) fileScan = null;
   for (const [p, s] of sourceViews) if (i <= s.at) sourceViews.delete(p);
   journalItems.delete(i + 1);  // image suppression and sitting gaps depend on the preceding event
+  for (const k of journalItems.keys()) if (k >= i && events[k]?.kind === 'paint') journalItems.delete(k);
 }
 function replayCache() {
   if (replayEvents !== events || replayCwd !== cwd) {
@@ -762,6 +796,8 @@ function journal(i) {
         if (c && !(e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')))) {
           const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
           html = '<span class="chip ' + c[0] + '" title="' + title + '"' + (e.kind === 'image' ? ' data-i="' + k + '"' : '') + '>' + c[1] + ' ' + esc(c[2]) + '</span>';
+          const w = waitChip(e, k);
+          if (w) html += '<span class="chip ' + w[0] + '" title="' + esc(w[3]) + '">' + w[1] + ' ' + esc(w[2]) + '</span>';
         }
       }
       item = { event:e, html }; journalItems.set(k, item);

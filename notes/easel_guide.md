@@ -36,7 +36,7 @@ Beside the painting is a scratch canvas to try things on (see [The scratch canva
 
 In the examples below, `<tube>` stands for a name from the tube box and
 `<parts>` for a number of parts you choose. Other numbers in the examples
-only show how a call is written; they aren't recommended values.
+show how a call is written; the values are yours to choose.
 
 ## The canvas
 
@@ -115,11 +115,11 @@ little slower) or `"poppy"` (dries much slower, yellows least).
 first, which draws out that share of its own oil (0 to 0.5):
 `pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
 more opaque and much stiffer: it holds the ridges and furrows of the brush
-as it dries. A pile takes medium or blot, not both.
+as it dries. A pile takes either medium or blot.
 
 **The palette board.** Every pile is a heap on the board beside the easel.
 
-- `pile{..., name="sky"}` names it.
+- `pile{..., name="cool_mix"}` names it.
 - `look --palette` (the `look` tool's `palette: true`) shows the board: each
   heap knifed out thick (its masstone and body) with a smear dragged from
   thick to thin across a black stripe (its tint as it thins, how much it
@@ -127,7 +127,7 @@ as it dries. A pile takes medium or blot, not both.
   canvas.
 - `p:add{{"<tube>", <parts>}, ..., medium=}` knifes more tube paint into a
   heap, in the units its recipe was given in (a pile knifed as
-  `{"lead white", 4}, {"cerulean blue", 0.35}` takes `{"cerulean blue", 0.1}`
+  `{"<tube A>", 4}, {"<tube B>", 0.35}` takes `{"<tube B>", 0.1}`
   as a tenth of a part more): look, adjust, look again. It returns the pile,
   its recipe with the added parts. The added paint is tube paint (linseed,
   unthinned), so it dilutes the heap's turpentine, its `thinner` and its oil;
@@ -169,7 +169,7 @@ transparent, 1 opaque). Stiffness is the paint's body as it comes from the
 tube (0 fluid, 1 stiff). Tinting strength is relative to an average
 pigment. Drying is the rate relative to average paint (higher dries
 faster); a pile dries at its tubes' rates mixed by volume. These numbers
-are estimates from the pigment literature, not measurements.
+are estimates from the pigment literature.
 
 ### Thinner
 
@@ -180,9 +180,9 @@ print(w.thinner)                 -- 0.5 (0.0 for a pile without it)
 ```
 
 `thinner` is the share of solvent (turpentine, spirits) by volume knifed
-into the pile, 0 to 0.9. It is not `medium`: medium is oil and stays in
-the film; the solvent leaves it. What a pile is made of doesn't change
-with thinner: its pigments, oil, body and drying rate are the paint's own.
+into the pile, 0 to 0.9. Medium is oil and stays in the film; the solvent
+leaves it. With thinner, the pile's pigments, oil, body and drying rate
+stay the paint's own.
 
 What it does:
 
@@ -208,7 +208,7 @@ from the brush or the pile on the palette (a pile keeps its thinner), it
 doesn't soak into the ground, and it doesn't dissolve paint that has set
 or dried underneath. Solvent-wet paint comes up on a brush or rag no more
 readily than the same paint without it. The thickness limits and the
-evaporation times are estimates, not measurements.
+evaporation times are estimates.
 
 Thinner is new with this engine: a painting started on an older one
 doesn't have it.
@@ -499,9 +499,9 @@ retains the cloth's dampness; another dip adds spirits.
 
 What it lifts soaks into the cloth. `r.load` is how loaded the part in use
 is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
-turns a cleaner part outward, but no part is cleaner than what has soaked
-through the whole cloth (`r.soaked`, 0..1) leaves it; `rag()` takes a
-fresh one. These numbers can be read, not set. Over a mask, `refold=`
+turns a cleaner part outward, though every part holds at least what has
+soaked through the whole cloth (`r.soaked`, 0..1); `rag()` takes a fresh
+one. These numbers can be read, not set. Over a mask, `refold=`
 refolds whenever the load passes that value.
 
 Over a mask, `wipe` lays wipes side by side across it in `angle`'s
@@ -563,8 +563,8 @@ default), `water` (`{level=, ripple=}`: a level reflecting surface),
 azimuth 0 is straight ahead, -90 to the left, 180 behind the eye),
 `visibility` and `backdrop`. View queries: `v:water()` and `v:mirror(x,
 y)` (with `water`), `v:land()` and `v:sky()` (where the surface and the
-space above it are seen). `w:proxy(s, body)` places a body that casts a
-shadow but isn't seen. `w:aerial(Z)` and `aerial(dist, visibility)` give
+space above it are seen). `w:proxy(s, body)` places an unseen body that
+casts a shadow. `w:aerial(Z)` and `aerial(dist, visibility)` give
 how much air lies between the eye and a distance (0..1).
 
 **Depth.** A view knows what lies behind what. `w = w:layer(name, mask,
@@ -578,18 +578,18 @@ Things are named by body number, layer name, `"ground"`, `"water"`,
 `"surface"`, `"sky"`, `"bodies"`, `"layers"`, a mask or a list. Passes take
 `visible=` (only where that is seen), `behind=` (only where nothing in
 front of it is) and `at=` (a depth in meters): strokes still overrun the
-mask's own edges, never what is in front.
+mask's own edges and stop at what is in front.
 
 ## Time
 
 Painting takes time, and paint dries on the painting's clock. Only
 painting operations (strokes, touches, passes, trips to the palette) and
 `wait(minutes)` advance it. Real time between chunks does not: paint
-doesn't dry while you think. `wait(minutes)` passes painting time at once;
-it doesn't make you wait that many real minutes.
+doesn't dry while you think. `wait(minutes)` passes that much painting
+time at once.
 
-Every successful paint reply reports the current painting time automatically,
-before `ok`.
+Every successful paint reply reports the current painting time, before
+`ok`.
 
 - **Hand time.** Every stroke, touch, pass and trip to the palette takes
   the time a hand takes to make it: a stroke by its length and the
@@ -642,8 +642,8 @@ in canvas units, not a position and width/height.
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
 
-The grid is drawn on the PNG only, never on the canvas, like the squares
-ruled over a drawing to transfer it.
+The grid is drawn on the PNG only, like the squares ruled over a drawing
+to transfer it.
 
 `look` with `palette: true` shows the palette board instead of the canvas:
 each live heap's masstone and body paint, with a smear dragged across a

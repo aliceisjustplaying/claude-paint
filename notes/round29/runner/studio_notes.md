@@ -3,8 +3,8 @@
 Observations of the canvas, the paint and the tools at this easel, by
 operation: what was done, what the paint did and, where it's known, why.
 Each was seen under particular conditions and may be incomplete or wrong.
-They describe the easel; they aren't instructions. Widths and positions
-are in canvas units (the canvas is 1000 units wide).
+They describe how the easel behaves. Widths and positions are in canvas
+units (the canvas is 1000 units wide).
 
 ## The canvas and ground
 
@@ -24,15 +24,15 @@ are in canvas units (the canvas is 1000 units wide).
 5. A coat of paint over paint of its own masstone looks the same at any
    thickness, so a mark from a pile matching what it lies on disappears
    into it.
-6. A thin film doesn't look like its pile. Thin dark or earth mixtures over
+6. A thin film looks different from its pile. Thin dark or earth mixtures over
    a pale passage come out lighter, warmer and more saturated than the
    masstone on the palette.
 7. The thin fringe of an umber or black stroke over a light field dries
    as a warm brown to warm gray halo. A blue stroke's fringe stays blue.
 8. Lead white hides strongly (its hiding in the guide's tube table is
-   0.82; how much a coat covers also depends on its thickness). A thin veil of a pale
-   lead-white mixture veils and lightens what is under it, like a scumble,
-   rather than tinting it.
+   0.82; how much a coat covers also depends on its thickness). A thin veil
+   of a pale lead-white mixture lies over what is under it and lightens it,
+   like a scumble.
 
 ## Brushes
 
@@ -62,16 +62,15 @@ are in canvas units (the canvas is 1000 units wide).
 16. `clip=true` stops every bristle on the mask's edge, weighted by the
     mask's value. A clipped fill reproduces the mask's outline exactly, as
     one even line, steps and corners included. The `detail` and `blend`
-    hands are clipped by default. `broad`, `body`, `hatch`, `glaze` and
-    `scumble` are not.
+    hands are clipped by default; `broad`, `body`, `hatch`, `glaze` and
+    `scumble` are unclipped.
 17. Unclipped strokes run past the mask's edge by their own length and
     width. Along a long straight edge they throw small irregular patches into the field
     beyond, and a brush wider than a band spreads well outside it.
 18. The square ends of unclipped strokes notch a shape's edge into steps.
 19. In `work`, the mask's value decides where strokes are anchored (at or
-    above `threshold`: 0.3, or 0.1 for `detail`). Unclipped, a soft mask
-    edge doesn't make a soft paint edge; strokes end where their lengths
-    end.
+    above `threshold`: 0.3, or 0.1 for `detail`). Unclipped, strokes end
+    where their lengths end, however soft the mask's edge.
 20. `work` leaves the ground showing between its strokes. With `fill=true`
     it looks at its passage afterward and dabs paint into the bare spots its
     strokes left. Single `stroke` and `touch` calls don't fill in.
@@ -82,7 +81,7 @@ are in canvas units (the canvas is 1000 units wide).
 23. `cut_in` with a round along a curved edge lays short strokes that follow
     it as a string of small bumps.
 24. In a smooth lean passage, the loaded starts of broad strokes stay as
-    lighter patches. Blending reduces them but doesn't remove them.
+    lighter patches. Blending reduces them and leaves traces.
 
 ## Wet into wet
 
@@ -126,8 +125,8 @@ are in canvas units (the canvas is 1000 units wide).
 39. `blend` stays inside its mask by default. Unclipped, it drags wet paint
     across the mask's edge.
     A local blend can leave a seam where lifted or moved paint meets the
-    untouched paint outside that mask. A soft mask does not prevent wet
-    dark and light passages inside it from mixing.
+    untouched paint outside that mask. Inside a soft mask, wet dark and
+    light passages still mix.
 40. Touches stippled into a wet layer and then blended fuse into it. Only
     the strongest contrasts survive, as thin traces. Touches laid after the
     blending pass stay on top as a lacy texture.
@@ -137,12 +136,12 @@ are in canvas units (the canvas is 1000 units wide).
 
 ## Glazing
 
-43. A brushed glaze (`hand="glaze"`) isn't clipped.
+43. A brushed glaze (`hand="glaze"`) is unclipped.
 
 ## Masks
 
-44. Every mask covers the whole canvas. A mask function that isn't zero far
-    from the spot you mean paints there too.
+44. Every mask covers the whole canvas. A mask function that stays above
+    zero far from the spot you mean paints there too.
 45. Masks from shapes (`poly`, `rect`, `ellipse`, `ribbon`) are crisp.
     `soften` and `blur` give them a ramp. `roughen` replaces the ramp with a
     new edge at the 0.5 level, so a long soft fade comes back as a hard
@@ -161,7 +160,7 @@ are in canvas units (the canvas is 1000 units wide).
     Drying depends on pigment, thickness and oil; the guide describes
     the times at this easel.
 50. `wait` ages every point of the canvas at once. Which passages have set
-    depends on their pigment, thickness and oil, not on where you worked.
+    depends on their pigment, thickness and oil.
 51. A long pass is painted in 15-minute slices that age
     between them, so its first part is older than its last. While the work
     goes on, the paint under a later passage is still open and comes up

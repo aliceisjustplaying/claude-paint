@@ -74,6 +74,34 @@ fn a_failed_look_after_a_chunk_still_reports_the_chunk() {
 }
 
 #[test]
+fn an_implicit_scratch_reset_survives_a_failed_chunk() {
+    struct Closing;
+    impl Drop for Closing {
+        fn drop(&mut self) {
+            let _ = cmd(&["-s", "scratch-notice", "close"]);
+        }
+    }
+    let _closing = Closing;
+    ok(&["open", "scratch-notice"]);
+    ok(&["-s", "scratch-notice", "do", "canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{\"lead white\",5},{\"yellow ochre\",1}}, um=80, apply=\"knife\"}}}"]);
+    ok(&["-s", "scratch-notice", "do", "local old_swatch=1", "--scratch"]);
+    ok(&["-s", "scratch-notice", "close"]);
+    let log = root().join("paintings/lua/scratch-notice-scratch.lua");
+    let mut old = std::fs::read_to_string(&log).unwrap();
+    old.push_str("\nbad(\n");
+    std::fs::write(&log, old).unwrap();
+    ok(&["open", "scratch-notice"]);
+    let o = cmd(&["-s", "scratch-notice", "do", "error('new scratch chunk fails')", "--scratch"]);
+    assert!(!o.status.success());
+    let error = String::from_utf8(o.stderr).unwrap();
+    assert!(error.contains("a scratch canvas beside the painting"), "{error}");
+    assert!(error.contains("new scratch chunk fails"), "{error}");
+    assert!(error.contains("the chunk failed and changed nothing"), "{error}");
+    assert!(!std::fs::read_to_string(log).unwrap().contains("old_swatch"));
+    assert!(root().join("paintings/lua/scratch-notice-scratch-1.lua").exists());
+}
+
+#[test]
 fn journal_uses_the_selected_painting_clock() {
     ok(&["open", "journal"]);
     let result = cmd(&["-s", "journal", "note", "painting clock"]);

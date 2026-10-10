@@ -394,13 +394,17 @@ def _parse(path):
                     c["images"].append((x.get("mimeType", "image/jpeg"), x["data"]))
                     src = c["events"][parent].get("path", "") if parent is not None else ""
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
+                    display_path = ""
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
                         if picture_n < len(picture_paths):
-                            lit = gallery_companion(c["cwd"], picture_paths[picture_n])
-                            if lit:
-                                c["gallery"][idx] = ("image/png", base64.b64encode(lit).decode())
-                                ev["gallery"] = True
+                            display_path = picture_paths[picture_n]
+                    elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
+                        display_path = src
+                    lit = gallery_companion(c["cwd"], display_path) if display_path else None
+                    if lit:
+                        c["gallery"][idx] = ("image/png", base64.b64encode(lit).decode())
+                        ev["gallery"] = True
                     picture_n += 1
                     if re.search(r"palette (?!False)", ev.get("look", "")):
                         chips = palette_board(base64.b64decode(x["data"]))

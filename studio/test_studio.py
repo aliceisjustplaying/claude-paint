@@ -322,6 +322,23 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
 
 
+def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server):
+    import base64
+    _, studio, log = home
+    path = "out/easel/painting/tile.png"
+    lit = b"\x89PNG\r\n\x1a\nfixture"
+    companion = studio / "out/easel/painting/.gallery/tile.png"
+    companion.parent.mkdir(parents=True)
+    companion.write_bytes(lit)
+    log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "r1", "name": "read", "arguments": {"path": path}}]}})
+        + line({"type": "message", "message": {"role": "toolResult", "toolCallId": "r1", "content": [
+            {"type": "image", "mimeType": "image/png", "data": base64.b64encode(lit).decode()}]}}))
+    events = json.loads(server(f"/api/events?p={PAINTER}")[1])["events"]
+    assert next(e for e in events if e["kind"] == "image")["gallery"] is True
+    assert server(f"/img?p={PAINTER}&i=0&gallery=1") == (200, lit)
+
+
 def test_export_makes_small_web_copies_of_each_look_and_remakes_them_when_it_changes(home):
     Image = pytest.importorskip("PIL.Image")
     import io

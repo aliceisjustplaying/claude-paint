@@ -925,6 +925,11 @@ fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let number = |name: &str| name.strip_prefix("look-")?.strip_suffix(".png")?.parse::<u64>().ok();
     let mut n = std::fs::read_dir(dir).map_err(|e| e.to_string())?.filter_map(|e| number(&e.ok()?.file_name().to_string_lossy())).max().unwrap_or(0);
+    for preset in look::DISPLAY_PRESETS {
+        if let Ok(entries) = std::fs::read_dir(dir.join(preset.folder)) {
+            n = n.max(entries.filter_map(|e| number(&e.ok()?.file_name().to_string_lossy())).max().unwrap_or(0));
+        }
+    }
     loop {
         n = n.checked_add(1).ok_or_else(|| format!("{}: no look number above look-{n}.png is left", dir.display()))?;
         let p = dir.join(format!("look-{n:04}.png"));
@@ -1719,6 +1724,20 @@ mod tests {
         let r = r.expect("new_look panicked");
         assert!(r.as_ref().is_err_and(|e| e.contains("look")), "{r:?}");
         assert_eq!(names.len(), 1, "a look was written: {names:?}");
+    }
+
+    #[test]
+    fn orphaned_companion_names_are_never_reused_for_a_new_look() {
+        for preset in look::DISPLAY_PRESETS {
+            let dir = std::env::temp_dir().join(format!("easel-look-orphan-{}-{}", preset.name, std::process::id()));
+            std::fs::create_dir_all(dir.join(preset.folder)).unwrap();
+            std::fs::write(dir.join(preset.folder).join("look-0007.png"), b"old companion").unwrap();
+            let path = new_look(&dir, b"new primary").unwrap();
+            assert_eq!(path.file_name().unwrap(), "look-0008.png");
+            assert_eq!(std::fs::read(&path).unwrap(), b"new primary");
+            assert!(!dir.join(preset.folder).join(path.file_name().unwrap()).exists());
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     /// The lock-on-stdin signal is for this server only: once read it leaves the

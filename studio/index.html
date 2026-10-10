@@ -432,9 +432,10 @@ function setPic(im, urls, loaded) {
   go();
 }
 function displayPic(im, e, caption, label) {
-  const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], lit = preset.image && e[lightName], url = preset.image && preset.image(e.img);
+  const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], url = preset.image && preset.image(e.img);
   const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
-  const eligible = !e.ref && !/light|compare|hold|palette/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
+  const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
+  const lit = eligible && preset.image && e[lightName];
   const describe = () => {
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'colour'];
     const light = actual.image ? actual.label : preset.image && eligible ? `Colour · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Colour' : '';

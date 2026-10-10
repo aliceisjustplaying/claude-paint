@@ -19,10 +19,12 @@ const fixtures = {
   scratch:[...whole.slice(0, 4), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
     e('look', { text:'scratch True' }), e('image', { img:2, look:'scratch True', gallery:true, relief:true }), e('think', { text:'Trying a mark on the scratch canvas.' })],
   fallback:[...whole.slice(0, 3), e('image', { img:0, look:'' })],
+  falsePalette:[...whole.slice(0, 2), e('look', { text:'palette False' }), e('image', { img:0, look:'palette False' })],
   broken:[...whole.slice(0, 3), e('image', { img:3, look:'', gallery:true, relief:true })],
   galleryOnly:[...whole.slice(0, 3), e('image', { img:0, look:'', gallery:true })],
   reliefOnly:[...whole.slice(0, 3), e('image', { img:0, look:'', relief:true })],
   analytical:[...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })],
+  flaggedAnalytical:[...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value', gallery:true, relief:true })],
   agedScratch:[e('start', { cwd:'/fixture' }), e('look', { text:'' }),
     e('image', { img:0, look:'', gallery:true, relief:true, ts:new Date(Date.parse(stamp) - 120000).toISOString() }),
     e('paint', { code:'work{}', out:'ok' }), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
@@ -119,7 +121,7 @@ async function ready(page, which, light) {
       await shot(`after-${stream ? 'stream' : 'normal'}-scratch-colour`);
       for (const light of ['gallery', 'relief']) {
         await page.locator('#' + light).click();
-        for (const p of ['fallback', 'broken']) {
+        for (const p of ['fallback', 'falsePalette', 'broken']) {
           await page.goto(url(p)); await ready(page, 'img', false);
           await page.waitForFunction(light => document.getElementById('cap').textContent.includes((light === 'gallery' ? 'gallery light' : 'relief') + ' unavailable'), light);
           assert.equal(await page.locator('#' + light).getAttribute('aria-pressed'), 'true');
@@ -143,6 +145,13 @@ async function ready(page, which, light) {
       await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'img2', false);
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
       await page.locator('#gallery').click(); await ready(page, 'img', true);
+      for (const light of ['gallery', 'relief']) {
+        await page.locator('#' + light).click(); await page.goto(url('flaggedAnalytical'));
+        await ready(page, 'img', light); await ready(page, 'img2', false);
+        assert.match(await page.locator('#cap2').textContent(), /^Value check · /);
+        assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
+      }
+      await page.locator('#gallery').click();
       fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })];
       let holdLit = false, holdColour = false;
       const held = [];
@@ -172,7 +181,7 @@ async function ready(page, which, light) {
       await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
       holdColour = false; await release(); await ready(page, 'img', false);
       await page.locator('#gallery').click(); await ready(page, 'img', true);
-      holdColour = true; await page.goto(url('fallback'));
+      holdColour = true; await page.goto(url('fallback'), { waitUntil:'domcontentloaded' });
       await page.waitForFunction(() => events.length > 0 && document.getElementById('img').dataset.want);
       await page.locator('#colour').click(); holdColour = false; await release(); await ready(page, 'img', false);
       assert.match(await page.locator('#cap').textContent(), / · Colour$/);

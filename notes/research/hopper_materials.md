@@ -9,7 +9,10 @@ as quoted by a biographer and the technical notes of a few museum
 catalogues. Much of the record-book evidence and the biographical
 evidence was read through search excerpts. The two 1939 museum technical
 accounts were also read through search excerpts; the preparatory-drawing
-and 1935 conservation reports were read through search summaries.*
+and 1935 conservation reports were read through search summaries. The
+night-light section below adds directly read museum accounts, archival
+statements and scholarship; it distinguishes these from visual inference
+and practical translations to this easel.*
 
 <!-- research: Little laboratory analysis of his oils has been published; no pigment survey, ground analysis or
 medium analysis was found. -->
@@ -79,7 +82,7 @@ the fatty acids of the oil.
   on measure between about 64 × 92 cm and 102 × 153 cm; a few are
   smaller [WAPI]. One of 1939 measures 91.9 × 127.2 cm [CGA p.247]. His
   biographer mentions a "ten-by-twelve-inch sketch on canvas board"
-  (1914) and "small paintbox-panel-sized studies" made one summer "for
+  (1914) and "small paintbox-panel-sized studies" made "for
   quick preliminary effects" [LEV].
 - **Original size kept.** Both examined canvases of 1939 keep their
   tacking margins, so they are close to their original dimensions
@@ -250,9 +253,7 @@ brushes in the Washington Square studio, at Village Preservation, has no descrip
 - **Late additions.** One early canvas had a passage added in June 1959,
   decades after it was begun [LED].
 - **Studio work.** The record books note where each canvas was painted,
-  usually his New York or South Truro studio [LED; CGA p.249 n.2]. In
-  Paris in 1906–07 he painted outdoors almost every day [LEV], on small
-  panels of about 24 × 33 cm and canvases of about 60 × 73 cm [WAPI].
+  usually his New York or South Truro studio [LED; CGA p.249 n.2].
 
 ## 8. Condition and aging
 
@@ -274,6 +275,98 @@ brushes in the Washington Square studio, at Village Preservation, has no descrip
   in 1980 [NGA-E; NGA-G]. *Read through search excerpts.*
 - **Few other problems.** In 1959 he knew of only one painting that had
   needed attention [MORSE]. *His own account.*
+
+## Night and artificial light
+
+The evidence does not establish a separate, fixed night palette or a
+special night ground. His statements document materials; museum
+accounts and drawings document light relationships. Recipes and edge
+handling inferred from those relationships are marked as such. They do
+not determine what is painted.
+
+- **White for brilliance.** In 1959 he remembered using zinc white in
+  one night canvas to obtain "a more brilliant and less warm white."
+  He thought that passage had needed restoration, and said he now used
+  only lead white [MORSE]. This is his recollection, not a laboratory
+  identification of every light passage. Whiteness and temperature were
+  deliberate material decisions, not just effects of a dark surround.
+- **Electric-light color.** Museum accounts distinguish warm electric
+  illumination from harsh fluorescent light [Y-NIGHT; W-LIGHT]. An Art
+  Institute curator describes acid greens against bright yellows and
+  oranges [AIC-COLOR]. Warmth can suggest incandescent light, but these
+  accounts do not establish lamp specifications or color temperatures.
+  Fluorescent-looking light need not be blue-white; yellow-green and
+  nearly white passages can coexist. *Interpretation of museum accounts,
+  not a pigment analysis.*
+- **Mixing at this easel.** The whites, cadmium yellows, yellow ochre,
+  viridian and blues in §9 can make pale warm whites, yellow-green
+  whites, and cooler muted tints. Bone black with ultramarine or
+  viridian can make chromatic near-blacks; burnt sienna or red earth can
+  warm or neutralize them. These are available mixing routes, not
+  recovered Hopper formulas. The historical evidence for individual
+  colored pigments remains that in §4; no complete night-specific
+  laboratory palette was located.
+- **Darks are colored.** A museum reproduction shows dark green-blue
+  passages alongside warmer brown-red darks, with some shapes almost
+  merging in value [AIC-IMAGE]. Darkness is not uniformly blue or an
+  undifferentiated black. Broad, relatively quiet fields can contain
+  small changes of value and temperature. *Visual inference from a
+  reproduction, not measured reflectance.* No calibrated value scale
+  for his night oils was found; numerical darkness limits would be
+  invented. Pictorial flatness does not establish physical smoothness.
+- **Light spreading and being cut off.** Where light passes through an
+  opening, its spill changes with the receiving plane and intervening
+  edges. A frame can interrupt it into bands or angular cast shapes;
+  a local source can make a bounded pool. Museum accounts describe such
+  spill and cast shadows [DARK]. A practical translation is to separate
+  the lit plane, the weaker spill and the unlit plane, rather than blur
+  every boundary into a halo. An occlusion edge can be firm while an
+  unobstructed falloff is gradual. *Inference from depicted light, not
+  a documented optical construction or a fixed falloff formula.*
+- **Several lights, several near-whites.** Hopper described the
+  difficulty of overlapping illumination as "almost painting white on
+  white" and said that a resulting strong edge accent was difficult
+  to subordinate [LIGHT]. Small shifts among pale values and tints can
+  distinguish contributions from different sources. A light boundary
+  should not automatically become the strongest edge in the picture.
+  *The first statement is documented; the application is inference.*
+- **Readable value structure.** Surviving studies use rich dark chalk
+  and white chalk to investigate both contrast and subtle modulation
+  [W-LIGHT]. Light could clarify the design, while darkness suppressed
+  extraneous detail [AIC-ORDER; DARK]. The practical lesson is to keep
+  large value relationships legible before adding small distinctions.
+  Close-valued dark passages need not each receive a bright outline;
+  hue, a restrained reflected light or a selected edge can distinguish
+  them. *Practical inference, not a prescribed arrangement of masses.*
+- **Paint, not a light source.** His general practice was direct oil
+  painting, rarely glazing, beginning with turpentine-rich paint and
+  adding oil sparingly [MORSE]. Technical examinations of other oils
+  show thin opaque layers and localized thick passages [NGA-G; HUNT].
+  Those findings do not prove that he always painted lights thickly
+  and darks thinly. No night-specific map of thickness or brush types
+  was located. At this easel, clean pale mixtures and controlled opaque
+  coverage can keep lit passages distinct; restrained brush variation
+  can hold a dark passage together. Let the painted light relationship,
+  rather than an automatic impasto rule, govern the handling.
+  *Practical translation of the evidence, not a historical recipe.*
+- **Surface and ground.** He bought prepared linen and painted directly
+  on its ground; he could not identify its composition [MORSE]. There
+  is no basis here for prescribing a black night ground. He used
+  retouching varnish to restore the "proper value" of areas that had
+  dried in [MORSE]; apparent darkness depends on surface condition as
+  well as pigment. This does not document a uniformly matte night
+  surface. The easel's ground, solvent, oil and drying controls
+  are described in the easel guide; they are simulations, not analyses
+  of his canvases.
+- **Observation, studies, records.** Scholarship and a museum record
+  document repeated observations after dark while a painting was in
+  progress [LEV-1980 p.50; Y-NIGHT]. Tonal studies investigated the
+  light, and at least one may have continued after painting had begun
+  [W-LIGHT]. The record-book sketches were made after completion, not
+  as preparatory plans [W-LED]. They record completed work and materials;
+  they should not be mistaken for instructions to copy a scene. The
+  evidence establishes nighttime observation, not a rule that he painted
+  his oils at night.
 
 ## 9. The tubes here
 
@@ -309,3 +402,12 @@ burnt sienna → burnt sienna. Burnt sienna rests on an uncertain reading
 - **[WAPI]** Whitney Museum of American Art, collection records for Hopper's paintings (medium, date, dimensions), retrieved through the museum's public API. https://whitney.org/api/artworks?q[display_artist_text_eq]=Edward%20Hopper&q[classification_eq]=Paintings . The ledger volumes themselves: https://whitney.org/collection/works/11015
 - **[AP1]** Feller, R. L. (ed.), *Artists' Pigments* vol. 1 (1986): cadmium names p.67; zinc white films p.175. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol1.pdf
 - **[AP2]** Roy, A. (ed.), *Artists' Pigments* vol. 2 (1993): "Permanent blue" as a synonym of synthetic ultramarine, p.55. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol2.pdf
+- **[LIGHT]** Hopper to Norman Geske, 25 August 1948, Walker Art Center Archives. Light-related passages reproduced by Jill Vuchetich, Walker Art Center, 29 April 2025, from a 1996 gallery guide. Directly read; full source reference is in the researcher dossier, not this painter's reading list.
+- **[W-LIGHT]** Whitney Museum of American Art, drawing accession 2011.65, 1941 or 1942; fabricated chalk and charcoal on paper. Carter Foster's audio commentary on dark/white chalk, modulation and fluorescent light. Record and transcript directly read. https://whitney.org/collection/works/38986
+- **[W-LED]** Whitney Museum of American Art, artist's ledger, Book II, accession 96.209; museum account of the timing and purpose of the record drawings. Directly read. https://whitney.org/collection/works/11015
+- **[AIC-COLOR]** Art Institute of Chicago, *Essentials Tour*, Judith Barter, transcript at 0:52–1:08 on green, yellow and orange color relationships. Directly read. https://www.artic.edu/videos/21
+- **[AIC-ORDER]** Art Institute of Chicago, 2007–08 Hopper exhibition web essay, on light ordering, balancing and clarifying a painting. Directly read. Full source reference is in the researcher dossier.
+- **[AIC-IMAGE]** Art Institute of Chicago, museum reproduction, accession 1942.51, archived 2007–08 exhibition site. Viewed at 250 × 137 pixels; used only for broad hue/value observations, not surface examination or color measurement. https://archive.artic.edu/hopper/images/G23602.jpg
+- **[Y-NIGHT]** Yale University Art Gallery, accession 1961.18.30, oil of 1945; museum account of warm electric illumination and repeated nighttime observation. Directly read. https://artgallery.yale.edu/collections/objects/52638
+- **[DARK]** Comey, Janet L., *Edward Hopper Hours of Darkness*, *Antiques & Fine Art*, 2007, republished by Incollect, 22 May 2007. Directly read, including notes; descriptions of light are curatorial interpretation, not technical analysis. https://www.incollect.com/articles/edward-hopper-hours-of-darkness_1
+- **[LEV-1980]** Levin, Gail, *Edward Hopper: The Art and the Artist* (New York: W. W. Norton in association with the Whitney Museum of American Art, 1980), p.50 (repeat nighttime observation), pp.59–60 (lighting statement). Read in the digitized catalogue text. https://archive.org/details/edwardhopperarta00levi

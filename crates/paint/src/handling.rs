@@ -915,6 +915,8 @@ impl Canvas {
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+            #[cfg(feature = "brush-sim-1")]
+            { held = held.with_engine(surf.engine); }
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
             let mut k = 0u32;
@@ -925,6 +927,8 @@ impl Canvas {
                 });
                 if p.fresh {
                     held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                    #[cfg(feature = "brush-sim-1")]
+                    { held = held.with_engine(surf.engine); }
                 }
                 if let Some(paint) = p.dip {
                     if hd.blender {
@@ -1797,4 +1801,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

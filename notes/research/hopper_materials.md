@@ -330,7 +330,7 @@ not determine what is painted.
   distinguish contributions from different sources. A light boundary
   should not automatically become the strongest edge in the picture.
   *The first statement is documented; the application is inference.*
-- **Readable value structure.** Surviving studies use rich dark chalk
+- **Readable value structure.** One surviving tonal study uses rich dark chalk
   and white chalk to investigate both contrast and subtle modulation
   [W-LIGHT]. Light could clarify the design, while darkness suppressed
   extraneous detail [AIC-ORDER; DARK]. The practical lesson is to keep
@@ -403,11 +403,11 @@ burnt sienna → burnt sienna. Burnt sienna rests on an uncertain reading
 - **[AP1]** Feller, R. L. (ed.), *Artists' Pigments* vol. 1 (1986): cadmium names p.67; zinc white films p.175. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol1.pdf
 - **[AP2]** Roy, A. (ed.), *Artists' Pigments* vol. 2 (1993): "Permanent blue" as a synonym of synthetic ultramarine, p.55. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol2.pdf
 - **[LIGHT]** Hopper to Norman Geske, 25 August 1948, Walker Art Center Archives. Light-related passages reproduced by Jill Vuchetich, Walker Art Center, 29 April 2025, from a 1996 gallery guide. Directly read; full source reference is in the researcher dossier, not this painter's reading list.
-- **[W-LIGHT]** Whitney Museum of American Art, drawing accession 2011.65, 1941 or 1942; fabricated chalk and charcoal on paper. Carter Foster's audio commentary on dark/white chalk, modulation and fluorescent light. Record and transcript directly read. https://whitney.org/collection/works/38986
+- **[W-LIGHT]** Whitney Museum of American Art, drawing accession 2011.65, 1941 or 1942; fabricated chalk and charcoal on paper. Carter Foster's audio commentary on dark/white chalk, modulation and fluorescent light. Record and transcript directly read; full source reference is in the researcher dossier.
 - **[W-LED]** Whitney Museum of American Art, artist's ledger, Book II, accession 96.209; museum account of the timing and purpose of the record drawings. Directly read. https://whitney.org/collection/works/11015
-- **[AIC-COLOR]** Art Institute of Chicago, *Essentials Tour*, Judith Barter, transcript at 0:52–1:08 on green, yellow and orange color relationships. Directly read. https://www.artic.edu/videos/21
+- **[AIC-COLOR]** Art Institute of Chicago, *Essentials Tour*, Judith Barter, transcript at 0:52–1:08 on green, yellow and orange color relationships. Directly read; full source reference is in the researcher dossier.
 - **[AIC-ORDER]** Art Institute of Chicago, 2007–08 Hopper exhibition web essay, on light ordering, balancing and clarifying a painting. Directly read. Full source reference is in the researcher dossier.
-- **[AIC-IMAGE]** Art Institute of Chicago, museum reproduction, accession 1942.51, archived 2007–08 exhibition site. Viewed at 250 × 137 pixels; used only for broad hue/value observations, not surface examination or color measurement. https://archive.artic.edu/hopper/images/G23602.jpg
-- **[Y-NIGHT]** Yale University Art Gallery, accession 1961.18.30, oil of 1945; museum account of warm electric illumination and repeated nighttime observation. Directly read. https://artgallery.yale.edu/collections/objects/52638
+- **[AIC-IMAGE]** Art Institute of Chicago, museum reproduction, accession 1942.51, archived 2007–08 exhibition site. Viewed at 250 × 137 pixels; used only for broad hue/value observations, not surface examination or color measurement. Full source reference is in the researcher dossier; no visual asset is supplied to the painter.
+- **[Y-NIGHT]** Yale University Art Gallery, accession 1961.18.30, oil of 1945; museum account of warm electric illumination and repeated nighttime observation. Directly read; full source reference is in the researcher dossier.
 - **[DARK]** Comey, Janet L., *Edward Hopper Hours of Darkness*, *Antiques & Fine Art*, 2007, republished by Incollect, 22 May 2007. Directly read, including notes; descriptions of light are curatorial interpretation, not technical analysis. https://www.incollect.com/articles/edward-hopper-hours-of-darkness_1
 - **[LEV-1980]** Levin, Gail, *Edward Hopper: The Art and the Artist* (New York: W. W. Norton in association with the Whitney Museum of American Art, 1980), p.50 (repeat nighttime observation), pp.59–60 (lighting statement). Read in the digitized catalogue text. https://archive.org/details/edwardhopperarta00levi

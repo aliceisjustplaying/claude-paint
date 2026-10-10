@@ -99,13 +99,35 @@ async function pollUpdate(v, i, replacement) {
         const fallback = ['wait(120)', 'wait(3*24*60)', 'wait(6*7*24*60)', 'wait(60); wait(60)', 'wait(0)', 'for i=1,3 do wait(60) end', 'wait(minutes)', 'wait(60); work{}', '-- wait(60)\nwork{}', 'print("wait(60)")', 'if false then wait(60) end', '--[=[ wait(60) ]=]\nwork{}'].map(code => extract(code));
         const failed = extract('wait(60)', 'day 2, 09:00\nok', {err:true});
         const missing = extract('wait(60)', 'day 2, 09:00\nok');
+        const before = {kind:'paint', code:'work{}', out:'day 1, 09:00\nok'};
+        const conditional = ['local skipped = false and wait(10080); work{}', 'local skipped = true or wait(10080); work{}', 'wait(0); work{}', 'other.wait(10080); work{}'].map(code => {
+          const e = {kind:'paint', code, out:'day 1, 09:19\nok'}; events = [before, e]; return waitChip(e, 1)?.[2] || null;
+        });
+        const resetWait = {kind:'paint', scratch:true, code:'wait(20160)', out:'day 15, 09:00\nok'};
+        events = [{...before, scratch:true, out:'day 8, 09:00\nok'}, {kind:'paint', scratch:true, new_scratch:true, code:'error("failure")', err:true, out:'failure'}, resetWait];
+        const reset = waitChip(resetWait, 2)?.[2];
+        const fresh = {...resetWait, out:"[scratch canvas]\na scratch canvas beside the painting, set up as the painting's canvas was\nday 15, 09:00\nok"};
+        events = [fresh]; const implicit = waitChip(fresh, 0)?.[2];
         events = saved;
-        return {real, fallback, failed, missing, durations:[1, 59, 60, 120, 1680, 4320, 60480, 90*1440, 525960, 0, -1].map(waitDuration)};
+        return {real, fallback, failed, missing, conditional, reset, implicit, durations:[1, 59, 60, 120, 1680, 4320, 60480, 90*1440, 525960, 0, -1].map(waitDuration)};
       }, waits);
       assert.deepEqual(result.real, ['waits 1 week on the scratch canvas', 'waits 1 week', 'waits 1 week on the scratch canvas', 'waits 1 week']);
       assert.deepEqual(result.fallback, ['waits 2 hours', 'waits 3 days', 'waits 6 weeks', 'waits 2 hours', null, null, null, null, null, null, null, null]);
       assert.equal(result.failed, null); assert.equal(result.missing, null);
+      assert.deepEqual(result.conditional, [null, null, null, null]);
+      assert.equal(result.reset, 'waits 2 weeks on the scratch canvas');
+      assert.equal(result.implicit, 'waits 2 weeks on the scratch canvas');
       assert.deepEqual(result.durations, ['1 minute', '59 minutes', '1 hour', '2 hours', '1 day', '3 days', '6 weeks', '2 months', '1 year', null, null]);
+      await v.page.evaluate(() => {
+        events = [{kind:'paint', code:'work{}', out:'day 1, 09:00\nok'}, {kind:'paint', code:'local skipped = false and wait(10080); work{}', out:'day 1, 09:19\nok'}].map(e => ({...e, ts:'2026-10-06T10:00:00Z'}));
+        live = false; show(1);
+      });
+      assert.equal(await v.page.locator('#jbody .chip.wait').count(), 0);
+      await v.page.evaluate(() => {
+        events = [{kind:'paint', scratch:true, code:'wait(10080)', out:'day 8, 09:00\nok'}, {kind:'paint', scratch:true, new_scratch:true, code:'error("failure")', err:true, out:'failure'}, {kind:'paint', scratch:true, code:'wait(20160)', out:'day 15, 09:00\nok'}].map(e => ({...e, ts:'2026-10-06T10:00:00Z'}));
+        show(2);
+      });
+      assert.equal(await v.page.locator('#jbody .chip.wait').last().textContent(), '◷ waits 2 weeks on the scratch canvas');
       report.checks.push(staticMode ? 'static wait chips and real Monet clocks' : 'live wait chips, conservative fallback and duration formatting');
       await v.page.close();
     }

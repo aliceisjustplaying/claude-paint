@@ -47,7 +47,7 @@ stay frozen [4][S]. For thixotropic paint, τ_y(t) recovers after brushing, so l
 | 500 Pa | ~15–30 µm | effectively frozen |
 | 3000 Pa | ~90–200 µm | frozen |
 
-The ranges come from comparing the thin-film form with a deep-layer form, a_c ≈ τ_yλ²/(4π²σ), derived for h ≳ λ/2π, where the lubrication assumption fails [E]. **Case-specific inference:** at the example's λ = 0.3 mm and h = 100 µm, the estimated arrest amplitude rises from about 0.5–1 µm at 15 Pa to about 3–6 µm at 100 Pa. This is not a universal visibility threshold: retained relief depends on wavelength, thickness, initial amplitude and recovering rheology. The Newtonian glaze example predicts rapid leveling of fine striations, but these calculations alone do not determine which marks remain visible.
+The ranges come from comparing the thin-film form with a deep-layer form, a_c ≈ τ_yλ²/(4π²σ), derived for h ≳ λ/2π, where the lubrication assumption fails [E]. **Inferred for this case:** at the example's λ = 0.3 mm and h = 100 µm, the estimated arrest amplitude rises from about 0.5–1 µm at 15 Pa to about 3–6 µm at 100 Pa. Retained relief depends on wavelength, thickness, initial amplitude and recovering rheology, so no single yield stress marks where striations become visible. The Newtonian glaze example predicts rapid leveling of fine striations; which marks stay visible takes more than these calculations to decide.
 
 ## 2. Brush marks
 
@@ -81,7 +81,7 @@ In profilometry of oil paintings, the height features that best identify the pai
 
   Lead white's strain at break fell from **7.3% at 0.2 years** to under 1% at 31 years [12][S]. Chalk-glue grounds are modeled with a break strain of **0.002** [21][V].
 - **Layer thicknesses.** A three-layer commercial ground from about 1880 measured **1.5–30 µm (chalk), 5–35 µm and 10–45 µm (lead white)** [9][V]. Mock-up oil layers measured **59–125 µm for one coat** and 110–188 µm for two [29][S]. Single paint layers run roughly 10–200+ µm [S; general cross-section ranges, low confidence].
-- **Conformal or filling.** That ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. In the Newtonian free-surface model, thinner films level more slowly at fixed viscosity and wavelength because τ ∝ h⁻³. But at η = 1 Pa·s and σ = 0.035 N/m, λ = 0.3–0.8 mm and h = 10–20 µm give 1/e times of about 0.056–22.5 seconds, not necessarily slow compared with drying. Preservation of weave relief also depends on viscosity, yield stress, contact during application and drying; film thickness alone does not establish that paint remains conformal [3][E].
+- **Conformal or filling.** That ground is "thicker and smoother, greatly diminishing the texture of the canvas weave" [9][V]. In the Newtonian free-surface model, thinner films level more slowly at fixed viscosity and wavelength, because τ ∝ h⁻³. At η = 1 Pa·s and σ = 0.035 N/m, λ = 0.3–0.8 mm and h = 10–20 µm give 1/e times of about 0.056–22.5 seconds, which can be fast compared with drying. Whether weave relief survives depends on viscosity, yield stress, contact during application and drying, as well as on film thickness [3][E].
 
 ## 4. Canvas and ground
 

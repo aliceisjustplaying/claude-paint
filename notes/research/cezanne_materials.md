@@ -1,82 +1,79 @@
 # Cézanne: materials and method
 
-*Technical research for a written-description oil-painting study, October 2026.
-No reference images were used. Source keys below distinguish examination of
-objects, contemporary testimony and later interpretation. This note reports
-historical findings, not recommendations for a subject or canvas.*
+*Technical research from written sources, October 2026; no reference images
+were used. It reports historical findings about his materials and method,
+and marks which come from examination of the paintings, which from
+contemporary testimony and which from later interpretation.*
 
 ## Summary
 
-Cézanne builds solidity through relationships between coloured marks, not a
-smooth monochrome model covered with local colour. Parallel, often diagonal
-strokes are especially characteristic of the late 1870s and 1880s, but neither
-one stroke direction nor one layering scheme defines his whole career. Thin
-opaque paint, translucent drawing, occasional thicker patches, visible earlier
-work and exposed light ground can coexist. Slow reconsideration does not mean
-that every picture has many complete layers [NG; BUT].
+Cézanne builds solidity from relationships between coloured marks.
+Parallel, often diagonal strokes are most characteristic of the late 1870s
+and 1880s; stroke direction and layering vary across his career. Thin
+opaque paint, translucent drawing, occasional thicker patches, visible
+earlier work and exposed light ground can appear together. A picture
+reconsidered over a long time can still have few complete layers [NG; BUT].
 
-**Evidence limits.** A pigment identified in one painting is not a universal
-palette. A sketchbook shopping list is not proof of use in an oil painting.
-Wet-over-dry marks establish a sequence, not an exact number of days between
-sittings. Bernard, Vollard and Gasquet supply valuable but mediated testimony;
-their accounts are not the artist's own laboratory record [NG].
+**Evidence limits.** A pigment identified in one painting tells you about
+that painting. A sketchbook shopping list records a purchase, without
+proving use in an oil painting. Wet-over-dry marks give a sequence without
+the number of days between sittings. Bernard, Vollard and Gasquet report
+his words and practice in their own accounts: valuable, but mediated [NG].
 
 ## 1. Constructive strokes: patches before individual things
 
 **Documented in examined paintings.** Butler describes Philadelphia's
 200-1979-1 (1877–79) as patches of parallel strokes, often diagonal,
-laid with enough paint on a brush for several strokes of one mixture. Adjacent
-patches were brushed together wet-in-wet. In 127-1980-1 (1879–82)
+laid with enough paint on a brush for several strokes of one mixture.
+Adjacent patches were brushed together wet-in-wet. In 127-1980-1 (1879–82)
 similar marks articulate recession more clearly, with less heavy coverage.
 In 63-116-21 (1879–82 in Butler's opening list), green and orange marks have
 low impasto; more intermittent application elsewhere admits white priming.
 In 63-116-2 (c.1880), parallel patches coexist with heavily applied,
 descriptive strokes; in 67-30-17 (1886–87), thin parallel patches coexist
-with washes and visible priming. Neither uniform hatching nor uniform thinness follows
-from the evidence [BUT, Technique].
+with washes and visible priming. Hatching and thickness vary from picture
+to picture [BUT, Technique].
 
-Reissner explicitly limits the nearly systematic use of the flat-ended,
-parallel diagonal “constructive stroke” to the late 1870s and 1880s. Later
-marks include broad, wavy, curving, linear, tapering and flat-ended strokes.
-Even the often-cited *Château de Médan* (c.1880) is not exclusively diagonal. Descriptive
-strokes and more structural ones can coexist [NG, pp.21–23, 26]. The term's
-scholarly precedent is Theodore Reff's 1962 article, cited by Reissner; that
-article was not independently consulted here.
+Reissner dates the nearly systematic use of the flat-ended, parallel
+diagonal “constructive stroke” to the late 1870s and 1880s. Later marks
+include broad, wavy, curving, linear, tapering and flat-ended strokes. Even
+the often-cited *Château de Médan* (c.1880) mixes diagonal strokes with
+others. Descriptive strokes and more structural ones can coexist [NG, pp.21–23, 26].
+The term goes back to Theodore Reff's 1962 article, known here only through
+Reissner's citation.
 
-**Size is picture-dependent.** In two Philadelphia paintings of 1902–06,
-Butler infers quarter-inch and half-inch-wide brushes in different passages.
-These are estimates from marks, not surviving brushes. For Philadelphia's
-W37-1-1 (1906) she describes parallel diagonal marks about one inch long, apparently
-from a half-inch-wide brush [BUT]. These are useful scale anchors (about
-6.4/12.7 mm wide and 25.4 mm long), not a recipe for every Cézanne.
+**Size depends on the picture.** In two Philadelphia paintings of 1902–06,
+Butler infers quarter-inch and half-inch-wide brushes in different passages,
+estimated from the marks. For Philadelphia's W37-1-1 (1906) she describes
+parallel diagonal marks about one inch long, apparently from a
+half-inch-wide brush [BUT]. That gives a scale for those pictures: about
+6.4/12.7 mm wide and 25.4 mm long.
 
 The c.1885 Chicago examination finds series of parallel, often diagonal
 marks, intermittent strips of unpainted ground along a boundary, and
-differences in density between passages. This is evidence for differentiated
-handling, not a late-career template imposed on the 1880s [AIC4, Paint Layer,
-paras.49–50, figs.4.35–4.39].
+differences in density between passages: varied handling within one
+mid-1880s picture [AIC4, Paint Layer, paras.49–50, figs.4.35–4.39].
 
 For a later comparison, the Nelson-Atkins 1904–05 technical entry records
 horizontal, vertical and angled marks in different zones, and discontinuous
-blue contours whose openings communicate between planes [NA, figs.9–13].
-This is evidence for variation, not a mid-1880s formula.
+blue contours whose openings connect planes [NA, figs.9–13]. This is later
+evidence of the same variation.
 
-**Interpretation for painting.** A patch is a local proposition about a plane:
-several related marks establish its colour and tilt; the neighbouring patch
-changes that proposition. Marks need not mimic every detail or follow every
-surface contour. Their common rhythm also holds the picture's surface
-together. Equally, a single screen-wide hatch angle loses the differentiated
-handling documented above.
+**Interpretation.** A patch states a plane: several related marks set its
+colour and tilt, and the next patch states the next plane. Marks can leave
+out detail and cross surface contours; their shared rhythm also holds the
+picture's surface together. One hatch angle across the whole picture loses
+the varied handling documented above.
 
 ## 2. Modulation, passage and reserves
 
 **Scholarly interpretation supported by examination.** Reissner contrasts
 modelling by blended light/dark tones with modulation through complementary
 contrasts and warm/cool relationships. Juxtaposed blue and yellow strokes
-in *Avenue at Chantilly* (1888) are her concrete example. Solidity remains the goal;
-this is not a claim that Cézanne eliminated values, white, black or all
-blending [NG, pp.23–25]. Butler even records blended sequences of colour in
-Philadelphia's 63-116-4 (1898–1900) [BUT].
+in *Avenue at Chantilly* (1888) are her example. Solidity remains the goal,
+and values, white, black and some blending stay in use [NG, pp.23–25].
+Butler records blended sequences of colour in Philadelphia's 63-116-4
+(1898–1900) [BUT].
 
 Art Institute examination of *The Basket of Apples* (c.1893) finds solid opaque
 green, orange, yellow and red marks building volume. An apparently white
@@ -86,62 +83,61 @@ lead white, emerald green, viridian, Prussian blue and ultramarine [AIC22].
 **Passage is selective continuity across a boundary.** The Art Institute
 catalogue describes colour slipping over an edge and white passing over a
 pink stripe in *The Basket of Apples*. Forms and spaces can share a plane
-without all contours dissolving. The c.1885 examination's intermittent
-reserve along a boundary offers a different means of keeping a contour
-open [AIC10, Distortion; AIC4, Paint Layer]. “Passage” here names these effects; it is not a
-documented universal step in the artist's instructions.
+while some contours stay intact. The c.1885 examination's intermittent
+reserve along a boundary is another way of keeping a contour open
+[AIC10, Distortion; AIC4, Paint Layer]. “Passage” here names these effects
+as they are seen in the paintings.
 
-**Bare canvas usually means exposed priming, not raw cloth.** Cézanne's
+**Bare canvas is usually exposed priming over the cloth.** Cézanne's
 National Gallery pictures expose light ground between strokes and sometimes
 use it for a light or a projecting part of a form. Earlier wash or drawing
 may also remain visible [NG, pp.14–20]. Butler describes white priming
-contributing to luminosity and functioning as a highlight [BUT].
+contributing to luminosity and working as a highlight [BUT].
 
-**Primary evidence complicates “intentional unfinishedness.”** In his
-23 October 1905 letter Cézanne says colour sensations prevent him from
-covering the canvas and delimiting objects at delicate points of contact;
-he calls the picture incomplete and rejects enclosing everything with a
-black line [LETTER, inscription; paraphrase of French]. Thus not every
-reserve was an aesthetic decision made in advance. Reissner also argues
-that incomplete coverage kept later decisions possible, and that finish
-cannot be inferred simply from a signature or a bare patch [NG, pp.19–21].
+**Unfinished passages in his own words.** In his 23 October 1905 letter
+Cézanne says colour sensations prevent him from covering the canvas and
+delimiting objects at delicate points of contact; he calls the picture
+incomplete and rejects enclosing everything with a black line [LETTER, inscription; paraphrase of French].
+So some reserves came out of difficulty during the work. Reissner also
+argues that incomplete coverage kept later decisions open, and that a
+signature or a bare patch alone says little about finish [NG, pp.19–21].
 
-## 3. Palette by period: observations, not a fixed tube list
+## 3. Palette by period
 
-| Period / evidence | What can safely be said |
+| Period / evidence | What the evidence shows |
 |---|---|
-| 1860s, early work | Thick, often knife-applied paint and dark tonal contrasts are documented historically [MET]; the examined *Stove in the Studio* includes red earth, carbon black and Prussian blue [NG, Pigments]. This research does not establish an exhaustive early palette. |
+| 1860s, early work | Thick, often knife-applied paint and dark tonal contrasts are documented historically [MET]; the examined *Stove in the Studio* includes red earth, carbon black and Prussian blue [NG, Pigments]. The early palette is known only in part. |
 | 1870s transition and 1877–83 Philadelphia landscapes | Butler links the 1870s transition years with clearer, lighter colour and smaller patches. Lead white, vermilion, emerald green and artificial ultramarine dominate her sampled mature oils; red lake, yellow iron oxide, viridian and carbon black are frequent secondary components. Chrome yellow can be abundant in particular early works [BUT]. |
-| 1880s–early 1890s | The same base persists; actual mixtures vary. NG4136 has a yellow lake as well as ochres, vermilion, ultramarine and greens [NG]. Do not date that picture solely from the older 1985 bulletin's attribution: the 2008 technical study dates it c.1890–92. |
-| Later oils, 1890s–1906 | Cobalt becomes prominent in Butler's later sample and is the only blue identified in her two examined paintings of 1902–06. This is not evidence that he first used cobalt c.1898: Reissner notes sketchbook listings in 1875–78 (medium unspecified), and increasing outdoor use after 1886. AIC finds both cobalt and ultramarine in *The Vase of Tulips* (c.1890) [BUT; NG, pp.9–10; AIC22]. |
-| Late chrome-yellow caution | Chrome yellow disappears in Butler's last-decade sample, but the National Gallery finds it in *Bathers*. Bernard's 1905 palette testimony also lists it. “Cézanne stopped using chrome yellow in the 1890s” is therefore not a secure general rule [BUT; NG, pp.9–10]. |
-| Late watercolours, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These findings must not silently become a late-oil palette [WATER]. |
+| 1880s–early 1890s | The same base persists; actual mixtures vary. NG4136 has a yellow lake as well as ochres, vermilion, ultramarine and greens [NG]. The 2008 technical study dates that picture c.1890–92, revising the older 1985 bulletin's attribution. |
+| Later oils, 1890s–1906 | Cobalt becomes prominent in Butler's later sample and is the only blue identified in her two examined paintings of 1902–06. Earlier cobalt is recorded too: Reissner notes sketchbook listings in 1875–78 (medium unspecified), and increasing outdoor use after 1886. AIC finds both cobalt and ultramarine in *The Vase of Tulips* (c.1890) [BUT; NG, pp.9–10; AIC22]. |
+| Late chrome yellow | Chrome yellow disappears in Butler's last-decade sample, but the National Gallery finds it in *Bathers*, and Bernard's 1905 palette testimony lists it. So whether he stopped using chrome yellow in the 1890s is uncertain [BUT; NG, pp.9–10]. |
+| Late watercolours, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These are watercolour findings, separate from the oils [WATER]. |
 
 **Names matter.** *Vert Véronèse* is emerald green (copper aceto-arsenite);
 *vert émeraude* is viridian (hydrated chromium oxide) in the cited French
-lists. They are not interchangeable. Bernard's list includes Naples and
-brilliant yellow, but no Naples yellow was identified in the National
-Gallery study; period commercial nomenclature is a possible explanation
+lists. They are different pigments. Bernard's list includes Naples and
+brilliant yellow, but the National Gallery study identified no Naples
+yellow; period trade names may explain the difference
 [NG, pp.9–10].
 
 **Exceptional or uncertain identifications.** Butler reports Indian yellow
-in Philadelphia's 63-116-21, supported by magnesium analysis. Her identifications
-of trace orpiment, green earth, red lead and cobalt violet were not confirmed
-by a second analytical method; she labels the yellow-earth/yellow-lake
-mixture unresolved. Do not treat these traces as essentials [BUT, Pigments].
-Black is genuinely documented; “he never used black” is false [NG; BUT].
+in Philadelphia's 63-116-21, supported by magnesium analysis. Her
+identifications of trace orpiment, green earth, red lead and cobalt violet
+were not confirmed by a second analytical method, and she labels the
+yellow-earth/yellow-lake mixture unresolved. These traces are uncertain
+exceptions [BUT, Pigments]. Black is documented, despite the common claim
+that he never used it [NG; BUT].
 
-**Paint extenders are part of the evidence, too.** Butler estimates calcium
-carbonate at 20% in black and 25% in blue-black passages of the earlier
-painting beneath Philadelphia's 63-116-21, and about 47% in a sampled
-bright yellow in 63-116-4. She observes extra bulk and texture in the
-earlier paint. These are local microscopic estimates, not quantities to
-add to every mixture [BUT, Pigments].
+**Extenders.** Butler estimates calcium carbonate at 20% in black and 25%
+in blue-black passages of the earlier painting beneath Philadelphia's
+63-116-21, and about 47% in a sampled bright yellow in 63-116-4. She
+observes extra bulk and texture in the earlier paint. These are local
+microscopic estimates [BUT, Pigments].
 
 **Correction to the house precedent.** A short house summary of Cézanne's
-materials compresses Butler's sample into a career-wide
-chronology. Its c.1898 cobalt start and last-decade chrome-yellow cutoff
-need the qualifications above. The precedent is left unchanged in this task.
+materials compresses Butler's sample into a career-wide chronology. Its
+c.1898 cobalt start and last-decade chrome-yellow cutoff need the
+qualifications above.
 
 ## 4. Supports, paint body and medium
 
@@ -152,181 +148,171 @@ quartz and barium sulphate. *Avenue at Chantilly* has a grey ground;
 *Bathers* and *Old Woman with a Rosary* have white over chalk. Ground binder
 analyses include partially heat-bodied linseed oil. Commercial preparation
 is generally more likely than priming by Cézanne himself [NG, pp.7–9].
-Philadelphia examples include white and grey grounds; no one ground fits
-all paintings [BUT, Pigments / primings].
+Philadelphia examples include white and grey grounds; grounds vary from
+painting to painting [BUT, Pigments / primings].
 
-**Thin is not synonymous with transparent.** Reissner says oil paint is
-generally fairly thin and opaque. Translucent later drawing and overlaps
-also occur; even earth pigments and mixtures containing white can be made
-translucent. Traditional “true glazes” are occasional, not a systematic
-final varnish-like campaign. Her warning directly addresses Vollard's
+**Thin paint is usually opaque.** Reissner says his oil paint is generally
+fairly thin and opaque. Translucent later drawing and overlaps also occur;
+even earth pigments and mixtures containing white can be made translucent.
+Traditional “true glazes” are occasional. Here she is answering Vollard's
 description of layers “as thin as watercolour” [NG, pp.22–23].
 
-**Measured examples, not a prescribed film thickness.** Butler's
-samples in Philadelphia's 63-116-21 have a paint layer 16–48 µm thick, and
-those in 63-116-3 (c.1883) 16–20 µm. Her 63-116-4 has a sampled golden-brown
-layer 8–12 µm thick; E36-1-1 (1902–04) has three superposed green/yellow/
-green layers averaging about 40 µm each. Sampling is local. These findings
-contradict both “everything is impasto” and “all late paint is one wash”
+**Measured film thicknesses.** Butler's samples in Philadelphia's 63-116-21
+have a paint layer 16–48 µm thick, and those in 63-116-3 (c.1883)
+16–20 µm. Her 63-116-4 has a sampled golden-brown layer 8–12 µm thick;
+E36-1-1 (1902–04) has three superposed green/yellow/green layers averaging
+about 40 µm each. Each sample is local. Together they rule out both
+“everything is impasto” and “all late paint is one wash”
 [BUT, Technique].
 
 **Oil and solvent.** National Gallery analyses identify partially heat-bodied
 linseed oil and, in a white highlight of *Bathers*, partially heat-bodied
-poppy oil; other samples suggest mixed linseed/poppy, with walnut not
-entirely excluded. Turpentine use is inferred from appearance and testimony,
-not recoverable as a surviving solvent identification. A 1905 order names
-Haarlem siccative, a resin/oil/diluent preparation whose exact formulation
-is unknown; none was identified in the examined paintings [NG, p.10].
-Neither a universal blotting-paper treatment nor one fixed medium recipe
-is established by these sources.
+poppy oil; other samples suggest mixed linseed/poppy, and walnut is
+possible. Turpentine use is inferred from appearance and testimony; a
+solvent leaves nothing in the paint to identify. A 1905 order names
+Haarlem siccative, a resin/oil/diluent preparation of unknown exact
+formulation; none was identified in the examined paintings [NG, p.10].
+These sources establish no general blotting-paper treatment and no fixed
+medium recipe.
 
-**Surface finish.** The National Gallery works are varnished, obscuring
-original matte/gloss differences. Butler records the unvarnished
+**Surface finish.** The National Gallery works are varnished, which hides
+their original matte/gloss differences. Butler records the unvarnished
 Philadelphia *Large Bathers* as matte despite apparently medium-rich
-application. Neither observation justifies a career-wide matte or glossy
-finish rule [NG, p.23; BUT].
+application. The original finish is known only case by case
+[NG, p.23; BUT].
 
 ## 5. Order, time and revision
 
-1. **Light initial placement.** Some pictures have graphite; others do not.
+1. **Light initial placement.** Some pictures have graphite drawing.
    The National Gallery study identifies dilute blue or blue-grey painted
    drawing with uneven blue/green washes, keeping the ground luminous.
-   These are not a complete grisaille or one uniform first coat [NG,
-   pp.12–15]. AIC identifies dilute blue placement in *The Vase of Tulips*
-   and a more detailed underdrawing in *The Basket of Apples* [AIC22].
+   These washes are partial and uneven, short of a full grisaille or one
+   even first coat [NG, pp.12–15]. AIC identifies dilute blue placement
+   in *The Vase of Tulips* and a more detailed underdrawing in *The Basket
+   of Apples* [AIC22].
 2. **Develop relationships across the picture.** Background and objects
-   are mutually adjusted. AIC shows later work closing in around
-   existing forms and changes to their placement. Reissner says the
-   exact sequence after drawing and washes is difficult to establish; no
-   universal background-first or darkest-first order follows [AIC22;
+   are adjusted to each other. AIC shows later work closing in around
+   existing forms and changes to their placement. Reissner says the exact
+   sequence after drawing and washes is hard to establish; the evidence
+   fixes no single order, background-first or darkest-first [AIC22;
    NG, pp.15–19].
-3. **Use both open paint and earlier set paint.** Butler observes wet-in-wet
-   patch edges. The c.1885 Chicago examination records wet-on-wet
-   application; the later Nelson-Atkins examination records wet-over-dry
-   marks. In heavily reworked National Gallery paintings, dried paint fragments
-   suggest later disturbance of partly dried surfaces [BUT; AIC4, Paint Layer;
-   NA, fig.9; NG, p.20]. No exact drying calendar is documented.
-4. **Reconsider locally, sometimes for a long time.** The famous 115 sittings
-   for Vollard's portrait are testimony cited by Reissner, not an instruction
-   for a new painting. London *Bathers* has documentary and physical
-   evidence for prolonged work; extensive reworking is expressly not the
-   norm for every Cézanne [NG, pp.20, 29].
-5. **Later drawing can search again.** Blue or dark lines may belong to late
-   stages, not just preliminary outlines. Stop without equalising coverage:
-   evidence allows reserve, revision and unresolved form, but does not prove
-   that every unfinished-looking region was deliberately left so [NG;
-   LETTER].
+3. **Use both open paint and earlier set paint.** Butler observes
+   wet-in-wet patch edges. The c.1885 Chicago examination records
+   wet-on-wet application; the later Nelson-Atkins examination records
+   wet-over-dry marks. In heavily reworked National Gallery paintings,
+   dried paint fragments suggest later disturbance of partly dried surfaces
+   [BUT; AIC4, Paint Layer; NA, fig.9; NG, p.20]. No exact drying calendar
+   is documented.
+4. **Reconsider locally, sometimes for a long time.** The famous 115
+   sittings for Vollard's portrait are testimony cited by Reissner. London
+   *Bathers* has documentary and physical evidence for prolonged work; the
+   study says this much reworking was not the norm [NG, pp.20, 29].
+5. **Later drawing can search again.** Blue or dark lines may belong to
+   late stages as well as to preliminary outlines. Coverage can stay uneven
+   at the end: the evidence allows reserve, revision and unresolved form,
+   though it can't show that every unfinished-looking region was left so
+   on purpose [NG; LETTER].
 
 ## 6. Construction: planes, colour and space
 
-This section concerns ways of constructing a picture, not what to depict.
-Historical observations and scholarly interpretations are distinguished
-from practical translations into the simulator. Those translations are
-options, not a prescribed composition or a reconstruction of his procedure.
-Tool behaviour is documented in `notes/easel_guide.md`, especially “Tubes
-and piles,” “Brushes and strokes,” “Covering an area,” “Masks and geometry,”
-and “Colour, planes and open coverage.”
+This section is about how a picture is built. Each part gives the
+historical evidence, then an **Easel translation**: an optional way to get
+a similar effect with the easel's tools, inferred from that evidence. Tool
+behaviour is in `notes/easel_guide.md`, especially “Tubes and piles,”
+“Brushes and strokes,” “Covering an area,” “Masks and geometry,” and
+“Colour, planes and open coverage.”
 
-**Planes and colour modulation.** Reissner describes complementary contrasts
-and warm/cool juxtapositions creating form and space, rather than relying
-only on blended light/dark modelling or linear perspective. Solidity is
-still the aim [NG, pp.23–25]. Warm advances and cool recedes is a useful
-relative tendency, illustrated in museum interpretation, not a law assigning
-every hue a fixed depth. Value, saturation, adjacency and overlap also
-matter [QAG-C]. **Easel translation:** the `cezanne` tubes allow related
-warm/cool `pile{}` mixtures; separate `b:stroke` marks keep their
-juxtaposition visible, while `work`'s `piles` weights can vary mixtures
-within a passage. Inspect laid trials rather than assuming a palette
-temperature will produce the desired depth.
+**Planes and colour modulation.** Reissner describes complementary
+contrasts and warm/cool juxtapositions creating form and space, in
+addition to blended light/dark modelling and linear perspective. Solidity
+is still the aim [NG, pp.23–25]. Warm colours tend to advance and cool
+ones to recede, relative to each other, as a museum interpretation
+illustrates; value, saturation, adjacency and overlap affect depth too
+[QAG-C]. **Easel translation:** the `cezanne` tubes give related warm/cool
+`pile{}` mixtures. Separate `b:stroke` marks keep the juxtaposition
+visible; `work`'s `piles` weights vary the mixture within a passage. Judge
+the depth from a laid trial.
 
 **High viewpoints, stacked bands and tilted planes.** The c.1885 Chicago
 technical report describes evenly intense colour compressing space and
 horizontal bands appearing stacked. Its catalogue explains compression
 between near and far through the relation of viewing distance and position.
 A later catalogue case describes a high viewpoint making a plane rise and
-press forward [AIC4, Technical Summary, para.31; catalogue, para.15;
-AIC10, Distortion, para.7]. These are readings of particular spatial effects,
-not a claim that every high viewpoint compresses depth. **Easel translation:**
-freely drawn `poly` masks and `b:stroke` paths can adjust plane tilt, overlap
-and spacing without a common vanishing point; retaining comparable colour
-intensity across depth is an option. Neither `world{}` nor automatic
-perspective is required. The painter chooses the viewpoint and arrangement.
+press forward [AIC4, Technical Summary, para.31; catalogue, para.15; AIC10, Distortion, para.7].
+These describe effects in particular pictures. **Easel translation:**
+freely drawn `poly` masks and `b:stroke` paths set each plane's tilt,
+overlap and spacing directly, with no shared vanishing point; similar
+colour intensity near and far is one option. `world{}` perspective is
+optional. You choose the viewpoint and arrangement.
 
 **Volumes and facets.** The museum's mid-1880s analysis describes geometric
 rhythms and volumetric pattern; another museum label describes architectonic
 and organic forms animated by warm/cool shifts [MET; BKM]. This supports
-thinking in substantial volumes articulated by smaller colour planes,
-not replacing every form with a schematic solid. **Easel translation:**
-draw the large mass and its plane divisions independently with `poly` or
-brush paths, then distinguish adjacent facets through colour and mark
-direction. `form{}` can supply a volume guide if wanted, but its lighting
-is not a substitute for the painter's colour relationships.
+thinking in substantial volumes divided into smaller colour planes.
+**Easel translation:** draw the large mass and its plane divisions
+separately with `poly` or brush paths, then tell adjacent facets apart by
+colour and mark direction. `form{}` can give a volume guide; the colour of
+each facet is yours to set.
 
 **Constructive direction binds adjacent planes.** Butler documents patches
 of parallel, often diagonal strokes in the late 1870s, with adjacent patch
 edges brushed together wet-in-wet. Reissner identifies the late 1870s and
 1880s as the period when this unifying stroke approached systematic use,
-but stresses exceptions [BUT, Technique; NG, pp.21–23]. **Practical inference:**
-related directions across neighbouring planes can connect them while local
-changes of direction articulate their different tilts. **Easel translation:**
+and stresses the exceptions [BUT, Technique; NG, pp.21–23]. Inferred from
+this: related directions across neighbouring planes connect them, and local
+changes of direction show their different tilts. **Easel translation:**
 `brush{kind="flat", width=..., point=0}` with `b:stroke`, or `work` with
-`tool`, `length`, `angle` and `dips`, permits grouped directional marks.
-`angle` may vary by passage; `clip=false` permits crossing a boundary.
-The `hatch` hand uses a round brush by default, not a flat-ended one.
+`tool`, `length`, `angle` and `dips`, lays grouped directional marks.
+`angle` can change from passage to passage; `clip=false` lets strokes cross
+a boundary. The `hatch` hand's default brush is a round.
 
-**Deliberate reserves and bare ground.** Reissner finds reserves established
-in initial washes, not rigidly followed later; the c.1885 technical entry
-records open coverage and narrow unpainted strips along a boundary. The
-1885–86 museum label describes exposed base coat contributing light
-[NG, pp.14–20; AIC4, Paint Layer, para.49; BKM]. Deliberately preserving
-ground is a supported possibility, but incomplete coverage alone does not
-prove intent or completion; later testimony also records difficulty covering
-the surface [LETTER]. **Easel translation:** `canvas{ground=...}` sets the
-prepared surface, not raw cloth; `coverage`, `load`, `hug=false` and
-`fill=false` control open paint. A region never painted preserves ground;
-lifting wet paint may leave a stain and cannot uncover ground below set paint.
+**Deliberate reserves and bare ground.** Reissner finds reserves set in the
+first washes and then followed loosely; the c.1885 technical entry records
+open coverage and narrow unpainted strips along a boundary. The 1885–86
+museum label describes exposed base coat contributing light
+[NG, pp.14–20; AIC4, Paint Layer, para.49; BKM]. Keeping ground on purpose
+is supported, though bare ground alone shows neither intent nor finish; his
+1905 letter records difficulty covering the surface [LETTER]. **Easel
+translation:** `canvas{ground=...}` sets the primed surface. `coverage`,
+`load`, `hug=false` and `fill=false` control how open the paint is. An
+unpainted region keeps its ground; lifting wet paint can leave a stain, and
+ground under set paint stays covered.
 
 **Multiple viewpoints.** A later catalogue distinguishes implied changes
 of viewpoint from literal movement while painting; perceptual scanning and
 design-based interpretations can both explain incompatible alignments.
 Technical examination finds some disjunctions already in the underdrawing
-[AIC10, “Cezanne's Way of Seeing” and “Multiple Viewpoints,” paras.9, 17–18;
-Technical Summary]. This is not a documented protocol of moving between
-stations, nor evidence that every mid-1880s painting uses it. **Easel
-translation:** separately drawn plane masks and paths may express locally
-different orientations without imposing one global projection. Their
-relationships still need to hold as a whole in `look`.
+[AIC10, “Cezanne's Way of Seeing” and “Multiple Viewpoints,” paras.9, 17–18; Technical Summary].
+This evidence covers particular pictures and documents no method of moving
+between stations. **Easel translation:** separately drawn plane masks and
+paths can each take their own orientation, with no single projection over
+the whole. Check in `look` that they hold together.
 
 **From the late 1870s into the mid-1880s.** Butler's examined sequence moves
 from controlled, loaded parallel patches with wet-in-wet edges in 1877–79
 to clearer recession with less heavy coverage in 1879–82, then more broken
 application and visible priming in c.1883. The c.1885 examination combines
 very open and densely built passages, with low impasto locally; the
-1885–86 label links warm/cool modulation and exposed preparation, while
-the Met describes volumetric geometric rhythms [BUT, Technique; AIC4,
-Technical Summary; BKM; MET]. **Synthesis, not a universal chronology:**
-the mid-1880s offer colour-built solidity, compressed plane relationships
-and differentiated coverage, not simply the later dissolution of form.
-**Easel translation:** vary `load`, `coverage`, paint dilution and direction
-locally, rather than enforcing one thin wash, one hatch angle or one depth
-scale across the picture. No change of subject follows from this development.
+1885–86 label links warm/cool modulation and exposed preparation, and
+the Met describes volumetric geometric rhythms [BUT, Technique; AIC4, Technical Summary; BKM; MET].
+**Synthesis (inferred):** the mid-1880s pictures show colour-built
+solidity, compressed plane relationships and varied coverage, with form
+still solid, before its later dissolution. **Easel translation:** vary
+`load`, `coverage`, paint dilution and direction from passage to passage.
 
 ## 7. Easel tube mapping
 
-This repository appendix maps the oil findings in §3 to the dedicated
-`cezanne` box, not to an exhaustive historical palette. Lead white → lead white;
+This maps the oil findings in §3 to the tubes of the `cezanne` box, a
+selection from the historical palette. Lead white → lead white;
 vermilion → vermilion; emerald green → emerald green;
 artificial ultramarine → ultramarine blue; cobalt blue → cobalt blue;
 viridian → viridian; red lake → rose madder;
 yellow iron oxide → yellow ochre; chrome yellow → chrome yellow;
 red iron oxide earth → red earth; carbon/bone black → bone black.
 
-The red lake and black are practical existing-tube proxies, not an exact
-analysed batch or a claim that every oil contained the same black grade.
-Cobalt's increasing prominence and the conflicting late chrome-yellow
-findings do not establish universal first-use or cutoff dates. Findings in
-watercolour remain separate from the oil evidence. No tube values or other
-boxes change.
+Rose madder and bone black are practical stand-ins for the red lake and
+the black. Cobalt and chrome yellow have no secure
+first-use or cutoff dates (§3). The mapping uses the oil evidence only.
 
 ## Sources
 

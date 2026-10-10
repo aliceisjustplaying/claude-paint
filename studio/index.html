@@ -540,18 +540,20 @@ function waitDuration(min) {
 }
 function waitChip(e, i) {
   if (e.kind !== 'paint' || !paintOK(e)) return null;
-  const code = (e.code || '').replace(/--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, ' ');
+  const executable = text => (text || '').replace(/--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, ' ');
+  const code = executable(e.code);
   const firstWait = code.search(/\bwait\s*\(/);
   if (firstWait < 0 || /[.:]\s*$|\b(?:if|for|while|repeat|function|return|goto|break|and|or)\b/.test(code.slice(0, firstWait))) return null;
   const shadowsWait = text => /\bwait\s*(?:<\s*(?:const|close)\s*>\s*)?[,=]|\bfunction\s+wait\s*\(|\b_G\b/.test(text);
-  const freshScratch = e.scratch && (e.new_scratch || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out));
+  const scratchReset = event => event.scratch && (event.new_scratch || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(event.out || ''));
+  const freshScratch = scratchReset(e);
   if (shadowsWait(code.slice(0, firstWait))) return null;
   for (let k = i - 1; k >= 0; k--) {
     const prev = events[k];
     if (prev.kind !== 'paint' || !!prev.scratch !== !!e.scratch) continue;
     if (freshScratch) break;
-    if (paintOK(prev) && shadowsWait(prev.code || '')) return null;
-    if (e.scratch && prev.new_scratch) break;
+    if (paintOK(prev) && shadowsWait(executable(prev.code))) return null;
+    if (scratchReset(prev)) break;
   }
   const literal = code.slice(firstWait).match(/^wait\s*\(\s*((?:\d+(?:\.\d*)?|\.\d+)(?:\s*\*\s*(?:\d+(?:\.\d*)?|\.\d+))*)\s*\)/);
   if (!literal || literal[1].split('*').some(x => Number(x) === 0)) return null;

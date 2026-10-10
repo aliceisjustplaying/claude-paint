@@ -103,9 +103,56 @@ async function ready(page, which, lit) {
       await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
       assert.match(await page.locator('#cap2').textContent(), /grays/);
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
+      for (const mode of ['normal,value', 'normal,mirror', 'normal,squint', 'normal, value, size 1000']) {
+        fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode ' + mode }), e('image', { img:1, look:'mode ' + mode })];
+        await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
+        assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
+      }
+      fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })];
+      let holdLit = false, holdColour = false;
+      const held = [];
+      await page.route(u => u.pathname === '/img' || /\/(?:img|gallery)\/\d+\.png$/.test(u.pathname), route => {
+        const u = new URL(route.request().url()), lit = u.searchParams.has('gallery') || u.pathname.includes('/gallery/');
+        if (lit ? holdLit : holdColour) held.push(route); else return route.continue();
+      });
+      const release = async () => { for (const route of held.splice(0)) await route.continue(); };
+      await page.locator('#colour').click(); await page.goto(url('normal')); await ready(page, 'img', false); await ready(page, 'img2', false);
+      holdLit = true; await page.locator('#gallery').click();
+      await page.waitForFunction(() => document.getElementById('img2').dataset.want.includes('gallery'));
+      assert.equal(await page.locator('#img2').getAttribute('data-light'), 'colour');
+      assert.doesNotMatch(await page.locator('#cap2').textContent(), /Gallery light/);
+      await page.locator('#img2').click(); await ready(page, 'zimg', false); await page.locator('#zoom').click();
+      await page.locator('#colour').click(); holdLit = false; await release(); await ready(page, 'img', false);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
+      holdLit = true; await page.locator('#gallery').click();
+      await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:4, look:'', gallery:true }); show(events.length - 1); });
+      await page.locator('#img').click(); await ready(page, 'zimg', false);
+      assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/0\.png$/ : /i=0$/);
+      await page.locator('#zoom').click(); holdLit = false; await release(); await ready(page, 'img', true);
+      await page.waitForFunction(() => /(?:i=4|\/4\.png)/.test(document.getElementById('img').src));
+      holdColour = true; await page.locator('#colour').click();
+      assert.equal(await page.locator('#img').getAttribute('data-light'), 'gallery');
+      assert.match(await page.locator('#cap').textContent(), /Gallery light/);
+      await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
+      holdColour = false; await release(); await ready(page, 'img', false);
+      await page.locator('#gallery').click(); await ready(page, 'img', true);
+      holdColour = true; await page.goto(url('fallback'));
+      await page.waitForFunction(() => events.length > 0 && document.getElementById('img').dataset.want);
+      await page.locator('#colour').click(); holdColour = false; await release(); await ready(page, 'img', false);
+      assert.match(await page.locator('#cap').textContent(), / · Colour$/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
+      await page.locator('#gallery').click();
+      await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:3, look:'', gallery:true }); show(events.length - 1); });
+      await page.locator('#img').click(); await ready(page, 'zimg', false);
+      assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/0\.png$/ : /i=0$/);
+      await page.locator('#zoom').click();
+      await page.waitForFunction(() => /(?:i=3|\/3\.png)/.test(document.getElementById('img').dataset.zoom || ''));
+      assert.match(await page.locator('#cap').textContent(), /Colour · gallery light unavailable/);
+      await page.locator('#img').click(); await ready(page, 'zimg', false);
+      assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/3\.png$/ : /i=3$/);
       await context.close();
     }
     assert.deepEqual(errors, []);
-    console.log('PASS gallery default, colour toggle, persistence, normal/stream/static, scratch, close-up/zoom, missing/broken fallback, analytical view');
+    console.log('PASS gallery default, colour toggle, persistence, normal/stream/static, scratch, close-up/zoom, missing/broken fallback, combined analytical modes, deferred loads and toggles');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; server.close(); });

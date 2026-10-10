@@ -89,9 +89,9 @@ async function pollUpdate(v, i, replacement) {
       const sample = waits[1];
       const v = await viewer(browser, [ev('start'), ev('paint', { code:'work{}', out:sample.before }), sample.event], { staticMode, liveFile:false });
       await seek(v.page, 2);
-      assert.deepEqual(await v.page.locator('#jbody .chip').allTextContents(), ['🖌 paints', '🖌 paints', '⏳ waits 1 week']);
+      assert.deepEqual(await v.page.locator('#jbody .chip').allTextContents(), ['🖌 paints', '🖌 paints', '🕒 waits 1 week']);
       await v.page.evaluate(() => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'stream.css'; document.head.append(link); document.body.classList.add('stream'); });
-      assert.equal(await v.page.locator('#jbody .chip.wait').textContent(), '⏳ waits 1 week');
+      assert.equal(await v.page.locator('#jbody .chip.wait').textContent(), '🕒 waits 1 week');
       const result = await v.page.evaluate(cases => {
         const saved = events;
         const real = cases.map(({ before, event }) => { events = before ? [{kind:'paint', scratch:event.scratch, out:before}, event] : [event]; return waitChip(event, events.length - 1)?.[2]; });
@@ -138,13 +138,13 @@ async function pollUpdate(v, i, replacement) {
           events = [{kind:'paint', code, out:'day 1, 09:59\nok'}, {kind:'paint', code:'wait(10080)', out:'day 8, 09:59\nok'}].map(e => ({...e, ts:'2026-10-06T10:00:00Z'}));
           show(1);
         }, code);
-        assert.equal(await v.page.locator('#jbody .chip.wait').textContent(), '⏳ waits 1 week');
+        assert.equal(await v.page.locator('#jbody .chip.wait').textContent(), '🕒 waits 1 week');
       }
       await v.page.evaluate(() => {
         events = [{kind:'paint', scratch:true, code:'wait(10080)', out:'day 8, 09:00\nok'}, {kind:'paint', scratch:true, new_scratch:true, code:'error("failure")', err:true, out:'failure'}, {kind:'paint', scratch:true, code:'wait(20160)', out:'day 15, 09:00\nok'}].map(e => ({...e, ts:'2026-10-06T10:00:00Z'}));
         show(2);
       });
-      assert.equal(await v.page.locator('#jbody .chip.wait').last().textContent(), '⏳ waits 2 weeks on the scratch canvas');
+      assert.equal(await v.page.locator('#jbody .chip.wait').last().textContent(), '🕒 waits 2 weeks on the scratch canvas');
       report.checks.push(staticMode ? 'static wait chips and real Monet clocks' : 'live wait chips, conservative fallback and duration formatting');
       await v.page.close();
     }

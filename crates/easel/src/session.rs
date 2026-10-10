@@ -1394,7 +1394,7 @@ mod tests {
     fn brush_sim_rollback_and_replay_preserve_dip_entropy() {
         for engine in [6, 7, 8] {
             let mut s = with_engine(engine);
-            s.run(r#"canvas{size=160, aspect=2, seed=73}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
+            s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
             let before = state(&s);
             assert!(s.run(r#"b:load(p,0.6); b:stroke({{100,240},{900,260}}); error("stop")"#).unwrap_err().contains("stop"));
             assert_eq!(state(&s), before);

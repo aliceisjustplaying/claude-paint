@@ -286,6 +286,9 @@ impl Canvas {
     /// Paint with engine version `v` (see `crate::ENGINE`): a replay
     /// paints as the version its painting was painted with.
     pub fn with_engine(mut self, v: u32) -> Self {
+        assert!((1..=crate::SUPPORTED_ENGINE).contains(&v), "unsupported paint engine {v}");
+        #[cfg(feature = "brush-sim-1")]
+        if self.engine != v { self.base = None; }
         self.engine = v;
         self
     }

@@ -878,9 +878,9 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
             break;
         }
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
-            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::SUPPORTED_ENGINE).contains(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::SUPPORTED_ENGINE));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -942,7 +942,11 @@ fn box_list() -> String {
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+        let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
+        if let Ok(choice) = std::env::var("EASEL_BRUSH_SIM") {
+            b.engine = brush_sim_engine(&choice)?;
+        }
+        return Ok(b);
     };
     let engine = logged_engine(text)?;
     let logged = logged_box(text)?;
@@ -961,6 +965,48 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let mut b = find_box(name)?;
     b.engine = engine;
     Ok(b)
+}
+
+fn brush_sim_engine(choice: &str) -> Result<u32, String> {
+    if choice == "off" {
+        return Ok(paint::ENGINE);
+    }
+    if !cfg!(feature = "brush-sim-1") {
+        return Err("brush simulation requires a build with --features brush-sim-1".into());
+    }
+    match choice {
+        "lean" => Ok(6),
+        "body" => Ok(7),
+        "wild" => Ok(8),
+        _ => Err("EASEL_BRUSH_SIM must be off, lean, body or wild".into()),
+    }
+}
+
+#[cfg(test)]
+mod brush_sim_tests {
+    use super::*;
+
+    #[test]
+    fn selection_is_explicit_and_feature_gated() {
+        assert_eq!(brush_sim_engine("off"), Ok(5));
+        assert!(brush_sim_engine("invalid").is_err());
+        for (choice, engine) in [("lean", 6), ("body", 7), ("wild", 8)] {
+            if cfg!(feature = "brush-sim-1") {
+                assert_eq!(brush_sim_engine(choice), Ok(engine));
+                assert_eq!(logged_engine(&format!("--@ engine {engine}\n")), Ok(engine));
+            } else {
+                assert!(brush_sim_engine(choice).is_err());
+                assert!(logged_engine(&format!("--@ engine {engine}\n")).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn defaults_and_historical_logs_keep_their_engines() {
+        assert_eq!(paint::ENGINE, 5);
+        assert_eq!(logged_engine("--@ engine 5\n"), Ok(5));
+        assert_eq!(logged_engine("canvas{}\n"), Ok(1));
+    }
 }
 
 /// Split a session file into chunks.
@@ -1341,6 +1387,20 @@ mod tests {
         let mut tubes = Palette::tube_box();
         tubes.engine = v;
         Session::with_box(W, tubes).unwrap()
+    }
+
+    #[test]
+    #[cfg(all(feature = "brush-sim-1", tube_box))]
+    fn brush_sim_rollback_and_replay_preserve_dip_entropy() {
+        for engine in [6, 7, 8] {
+            let mut s = with_engine(engine);
+            s.run(r#"canvas{size=160, aspect=2, seed=73}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
+            let before = state(&s);
+            assert!(s.run(r#"b:load(p,0.6); b:stroke({{100,240},{900,260}}); error("stop")"#).unwrap_err().contains("stop"));
+            assert_eq!(state(&s), before);
+            s.run(r#"b:load(p,0.3); b:stroke({{100,240},{900,260}})"#).unwrap();
+            assert_eq!(state(&s), state(&replayed(&s)));
+        }
     }
 
     /// A fresh replay of a session's log, as a reopen or `easel run` makes it.

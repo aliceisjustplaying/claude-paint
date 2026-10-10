@@ -94,6 +94,11 @@ pub use shape::Shape;
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 pub const ENGINE: u32 = 5;
 
+#[cfg(feature = "brush-sim-1")]
+pub const SUPPORTED_ENGINE: u32 = 8;
+#[cfg(not(feature = "brush-sim-1"))]
+pub const SUPPORTED_ENGINE: u32 = ENGINE;
+
 /// Hermite smoothstep.
 #[inline]
 pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {

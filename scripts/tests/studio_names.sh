@@ -67,6 +67,10 @@ d=$(studio run-together "Nothing here.")
 printf 'bone blacktonnlead white\n' > "$d/bin/easel"
 expect fail "$d" Sargent
 expect pass "$d" Tonn
+d=$(studio run-together-seurat "Nothing here.")
+printf 'bone blackseuratlead white\n' > "$d/bin/easel"
+expect fail "$d" Sargent
+expect pass "$d" Seurat
 # an accented name in the binary's bytes, between NULs
 d=$(studio accented "Nothing here.")
 printf 'lead white\0C\303\251zanne\0bone black\0' > "$d/bin/easel"

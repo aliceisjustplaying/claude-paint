@@ -8,7 +8,7 @@ const evidence = process.env.GALLERY_SCREENSHOTS;
 const renderRoot = process.env.GALLERY_RENDERS;
 const scratchRoot = process.env.GALLERY_SCRATCH;
 const tiny = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6XioAAAAASUVORK5CYII=', 'base64');
-const image = (lit, i) => scratchRoot && i === 2 ? fs.readFileSync(path.join(scratchRoot, lit ? '.gallery' : '', 'look-0001.png')) : renderRoot ? fs.readFileSync(path.join(renderRoot, `${lit ? 'B' : 'A'}-${i === 1 ? 'houses' : 'full'}.png`)) : tiny;
+const image = (lit, i, p) => scratchRoot && (i === 2 || p === 'agedScratch' && [1, 5].includes(i)) ? fs.readFileSync(path.join(scratchRoot, lit ? '.gallery' : '', i === 2 ? 'look-0001.png' : 'look-0002.png')) : renderRoot ? fs.readFileSync(path.join(renderRoot, `${lit ? 'B' : 'A'}-${i === 1 ? 'houses' : 'full'}.png`)) : tiny;
 const stamp = new Date().toISOString();
 const e = (kind, fields = {}) => ({ ts:stamp, kind, ...fields });
 const whole = [e('start', { cwd:'/fixture' }), e('paint', { code:'canvas{}', out:'day 1, 09:00' }), e('look', { text:'' }),
@@ -21,6 +21,13 @@ const fixtures = {
   fallback:[...whole.slice(0, 3), e('image', { img:0, look:'' })],
   broken:[...whole.slice(0, 3), e('image', { img:3, look:'', gallery:true })],
   analytical:[...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })],
+  agedScratch:[e('start', { cwd:'/fixture' }), e('look', { text:'' }),
+    e('image', { img:0, look:'', gallery:true, ts:new Date(Date.parse(stamp) - 120000).toISOString() }),
+    e('paint', { code:'work{}', out:'ok' }), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
+    e('look', { text:'scratch True' }),
+    e('image', { img:2, look:'scratch True', gallery:true, ts:new Date(Date.parse(stamp) - 60000).toISOString() }),
+    e('paint', { scratch:true, code:'work{}', out:'ok' }), e('look', { text:'scratch True, crop 100,100,300,300' }),
+    e('image', { img:1, look:'scratch True, crop 100,100,300,300', gallery:true }), e('think', { text:'A fresh mark after the whole-canvas look.' })],
 };
 const sessions = Object.keys(fixtures).map(p => ({ p, folder:p, painter:true, active:true, sittings:1, mtime:Date.now() / 1000, title:'Gallery lighting fixture' }));
 let servingStatic = false;
@@ -41,7 +48,7 @@ const server = http.createServer((req, res) => {
     const i = +(u.searchParams.get('i') || path.basename(u.pathname).split('.')[0]);
     const lit = u.searchParams.has('gallery') || u.pathname.includes('/gallery/');
     if (lit && i === 3) { res.writeHead(404); return res.end(); }
-    body = image(lit, i); type = 'image/png';
+    body = image(lit, i, p); type = 'image/png';
   } else if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { body = ''; type = 'text/plain'; }
   else if (Object.hasOwn({ 'code-display.js':1, 'code-format.js':1, 'stream.css':1 }, u.pathname.slice(1)) || u.pathname.startsWith('/vendor/')) {
     const file = path.join(root, u.pathname);
@@ -101,7 +108,7 @@ async function ready(page, which, lit) {
         assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
       }
       await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
-      assert.match(await page.locator('#cap2').textContent(), /grays/);
+      assert.match(await page.locator('#cap2').textContent(), /^Value check · /);
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
       for (const mode of ['normal,value', 'normal,mirror', 'normal,squint', 'normal, value, size 1000']) {
         fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode ' + mode }), e('image', { img:1, look:'mode ' + mode })];
@@ -150,6 +157,23 @@ async function ready(page, which, lit) {
       assert.match(await page.locator('#cap').textContent(), /Colour · gallery light unavailable/);
       await page.locator('#img').click(); await ready(page, 'zimg', false);
       assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/3\.png$/ : /i=3$/);
+      await page.locator('#zoom').click();
+      await page.goto(url('agedScratch')); await ready(page, 'img', true); await ready(page, 'img2', true); await ready(page, 'pipimg', true);
+      assert.match(await page.locator('#cap').textContent(), /^Scratch canvas · .* · 1 min earlier · Gallery light$/);
+      assert.match(await page.locator('#pipcap').textContent(), /^The painting · .* · 2 min earlier · Gallery light$/);
+      assert.match(await page.locator('#cap2').textContent(), /^Close-up · .* · Gallery light$/);
+      assert.equal(await page.locator('#cropbox').isVisible(), false);
+      await shot(`after-${stream ? 'stream' : 'normal'}-scratch-age`);
+      await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'paint', scratch:true, new_scratch:true, err:true, code:'bad(', out:'error' }); show(events.length - 1); });
+      assert.equal(await page.locator('#img').getAttribute('src'), null);
+      assert.equal(await page.locator('#nopic').textContent(), 'No current scratch look');
+      assert.equal(await page.locator('#cropbox').isVisible(), false);
+      await shot(`after-${stream ? 'stream' : 'normal'}-scratch-reset`);
+      await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:5, look:'scratch True, crop 100,100,300,300', gallery:true }); show(events.length - 1); });
+      await ready(page, 'img', true);
+      assert.match(await page.locator('#img').getAttribute('src'), staticMode ? /\/gallery\/5\.png$/ : /i=5&gallery=1$/);
+      assert.match(await page.locator('#cap').textContent(), /^Scratch canvas · close-up · .* · Gallery light$/);
+      assert.equal(await page.locator('#cropbox').isVisible(), false);
       await context.close();
     }
     assert.deepEqual(errors, []);

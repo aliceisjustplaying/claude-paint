@@ -8,7 +8,11 @@ easel=$("$repo/scripts/replay_easel")
 for box in hopper friedrich default; do
   studio=$work/$box
   mkdir -p "$studio/paintings/lua"
-  E() { (cd "$studio" && EASEL_ROOT="$studio" EASEL_SESSION=painting EASEL_BOX="$box" "$easel" "$@"); }
+  E() {
+    (cd "$studio"
+     if [ "$box" = default ]; then unset EASEL_BOX; else export EASEL_BOX="$box"; fi
+     EASEL_ROOT="$studio" EASEL_SESSION=painting "$easel" "$@")
+  }
   trap 'E close >/dev/null 2>&1 || true' EXIT
   E open painting >/dev/null
   E do 'canvas{size=300, aspect=1, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"yellow ochre", 1}}, um=80, apply="knife"}}}' >/dev/null
@@ -19,11 +23,16 @@ for box in hopper friedrich default; do
   cp "$studio/out/easel/painting/live.png" "$studio/plain.png"
   for source in save replay; do
     out=$studio/${source}_FRDC1_finished.png
-    "$repo/scripts/finish_painting" "$log" "$out" >"$studio/$source.log" 2>&1
+    opts=(--coats 0.4)
+    [ "$box" = friedrich ] || opts+=(--relief)
+    "$repo/scripts/finish_painting" "$log" "$out" "${opts[@]}" >"$studio/$source.log" 2>&1
     if [ "$box" = friedrich ]; then
       grep -q 'when_dry(function() varnish{coats=0.4} end)' "${out%.png}.lua"
       grep -q 'when_dry(function() cracks{} end)' "${out%.png}.lua"
-      ! cmp -s "$studio/plain.png" "$out"
+      if cmp -s "$studio/plain.png" "$out"; then
+        echo "finish_policy: Friedrich finishing did not change the picture" >&2
+        exit 1
+      fi
     else
       cmp "$log" "${out%.png}.lua"
       cmp "$studio/plain.png" "$out"
@@ -40,3 +49,12 @@ studio=$work/friedrich
 cmp "$studio/paintings/lua/painting.lua" "$studio/plain-finished.lua"
 cmp "$studio/plain.png" "$studio/plain-finished.png"
 echo "finish_policy: Friedrich opt-out passed"
+
+studio=$work/default
+log=$studio/paintings/lua/painting.lua
+awk '/^--@ chunk 1$/ { print "  " $0; print "--@ box friedrich"; next } { print }' "$log" > "$log.part"
+mv "$log.part" "$log"
+"$repo/scripts/finish_painting" "$log" "$studio/indented.png" >"$studio/indented.log" 2>&1
+cmp "$log" "$studio/indented.lua"
+cmp "$studio/plain.png" "$studio/indented.png"
+echo "finish_policy: indented chunk boundary passed"

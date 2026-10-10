@@ -10,7 +10,7 @@
 #
 #   scripts/finish_painting <studio>/paintings/lua/painting.lua <out.png> [options]
 #
-# options:
+# options (Friedrich only):
 #   --coats C     varnish coats (default 0.4, the easel's default)
 #   --no-varnish  skip the varnish
 #   --no-cracks   skip the cracks
@@ -43,10 +43,14 @@ while [ $# -gt 0 ]; do
 done
 [[ $coats =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || { echo "--coats takes a number, not '$coats'" >&2; exit 2; }
 [ -f "$log" ] || { echo "no log at $log" >&2; exit 1; }
-box=$(awk '/^--@ chunk/ { exit } /^--@ box / { print $3; exit }' "$log")
+box=$(awk '/^[[:space:]]*--@ chunk/ { exit }
+  /^[[:space:]]*--@ box / {
+    sub(/^[[:space:]]*--@ box[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit
+  }' "$log")
 if [ "$box" != friedrich ]; then
   varnish=0
   cracks=0
+  relief=0
 fi
 
 repo=$(cd "$(dirname "$0")/.." && pwd)

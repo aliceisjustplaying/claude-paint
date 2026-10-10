@@ -131,6 +131,7 @@ async function ready(page, which, lit) {
       await page.locator('#img2').click(); await ready(page, 'zimg', false); await page.locator('#zoom').click();
       await page.locator('#colour').click(); holdLit = false; await release(); await ready(page, 'img', false);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
+      await page.goto(url('normal')); await ready(page, 'img', false); await ready(page, 'img2', false);
       holdLit = true; await page.locator('#gallery').click();
       await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:4, look:'', gallery:true }); show(events.length - 1); });
       await page.locator('#img').click(); await ready(page, 'zimg', false);

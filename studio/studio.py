@@ -184,7 +184,7 @@ _subjects = {}  # studio -> (BRIEF.md mtime, what its brief says: see about_brie
 
 def _artist_of(brief):
     """The artist a brief names, in full ("in the manner of Kendric Tonn" -> "Kendric Tonn"), or ""."""
-    m = re.search(r"in\s+the\s+manner\s+of\s+(?:later\s+)?((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
     return " ".join(m.group(1).split()) if m else ""
 
 

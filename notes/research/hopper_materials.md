@@ -3,16 +3,16 @@
 
 *A sourced technical report. Every claim cites a source key; the sources
 are listed at the end. "Uncertain" marks claims that are unverified,
-disputed or taken from a single object. The evidence assembled here
-comes mainly from his record books, a 1959 interview, his wife's diary
+disputed or taken from a single object. The evidence comes mainly from
+his record books, a 1959 interview, his wife's diary
 as quoted by a biographer and the technical notes of a few museum
 catalogues. Much of the record-book evidence and the biographical
 evidence was read through search excerpts. The two 1939 museum technical
 accounts were also read through search excerpts; the preparatory-drawing
 and 1935 conservation reports were read through search summaries. The
-night-light section below adds directly read museum accounts, archival
-statements and scholarship; it distinguishes these from visual inference
-and practical translations to this easel.*
+night-light section adds museum accounts, archival statements and
+scholarship that were read directly, and marks which points are visual
+inference or translations to this easel.*
 
 <!-- research: Little laboratory analysis of his oils has been published; no pigment survey, ground analysis or
 medium analysis was found. -->
@@ -20,8 +20,7 @@ medium analysis was found. -->
 ## Summary
 
 Hopper's mature oils are on commercially primed canvas, mostly linen.
-He bought it ready-primed from colormen and did not prepare his own
-grounds [MORSE; LED; NGA-E; NGA-G]. He worked out the design in drawings
+He bought it ready-primed from colormen [MORSE; LED; NGA-E; NGA-G]. He worked out the design in drawings
 on paper first. Then he drew on the canvas in charcoal or graphite; in
 one recorded case he went over the lines in blue paint [LEV; NGA-G;
 YALE]. He started with paint thinned almost wholly with turpentine and
@@ -142,7 +141,7 @@ the fatty acids of the oil.
 
 The record books name the colormen for most paintings and individual
 pigments now and then. Many of the color words in them describe the
-picture rather than name a paint [LED; CGA p.249 n.2]. He reported using
+picture's colors, and only some name a paint [LED; CGA p.249 n.2]. He reported using
 about twelve or thirteen colors [MORSE].
 
 <!-- research: He said he could not list the twelve or thirteen colors [MORSE]. No published laboratory pigment
@@ -162,7 +161,7 @@ survey of his oils was found; the Huntington's analyses of the 1935 canvas are a
 | Yellow ochre | One pigment list in an entry; other mentions may be color words [LED] | |
 | Black | "touch of black" in one entry [LED] | |
 <!-- research: the kind of black is not stated. -->
-| Burnt sienna | Two entries [LED] | *Uncertain*: possibly a color description, not a pigment |
+| Burnt sienna | Two entries [LED] | *Uncertain*: possibly a color description |
 
 - **Brands.** He named one London colorman as his maker in 1959
   [MORSE]. The record books show a Dutch colorman's paints in the early
@@ -279,95 +278,88 @@ brushes in the Washington Square studio, at Village Preservation, has no descrip
 
 ## Night and artificial light
 
-The evidence does not establish a separate, fixed night palette or a
-special night ground. His statements document materials; museum
-accounts and drawings document light relationships. Recipes and edge
-handling inferred from those relationships are marked as such. They do
-not determine what is painted.
+No separate night palette or night ground is documented. His
+statements document materials; museum accounts and drawings document
+light relationships. Recipes and edge handling inferred from those
+relationships are marked as inferred.
 
 - **White for brilliance.** In 1959 he remembered using zinc white in
   one night canvas to obtain "a more brilliant and less warm white."
   He thought that passage had needed restoration, and said he now used
-  only lead white [MORSE]. This is his recollection, not a laboratory
-  identification of every light passage. Whiteness and temperature were
-  deliberate material decisions, not just effects of a dark surround.
+  only lead white [MORSE]. This is his recollection, without laboratory
+  confirmation. It shows him choosing a white for its brilliance and
+  coolness in the paint itself, beyond the effect of the dark around it.
 - **Electric-light color.** Museum accounts distinguish warm electric
   illumination from harsh fluorescent light [YUAG-NIGHT; WMAA-LIGHT]. An Art
   Institute curator describes acid greens against bright yellows and
-  oranges [AIC-COLOR]. Warmth can suggest incandescent light, but these
-  accounts do not establish lamp specifications or color temperatures.
-  Fluorescent-looking light need not be blue-white; yellow-green and
-  nearly white passages can coexist. *Interpretation of museum accounts,
-  not a pigment analysis.*
+  oranges [AIC-COLOR]. Warmth can suggest incandescent light; the
+  accounts give no lamp types or color temperatures. Fluorescent-looking
+  light can be yellow-green as well as near-white, side by side.
+  *Interpretation of museum accounts.*
 - **Mixing at this easel.** The whites, cadmium yellows, yellow ochre,
   viridian and blues in §9 can make pale warm whites, yellow-green
   whites, and cooler muted tints. Bone black with ultramarine or
   viridian can make chromatic near-blacks; burnt sienna or red earth can
-  warm or neutralize them. These are available mixing routes, not
-  recovered Hopper formulas. The historical evidence for individual
-  colored pigments remains that in §4; no complete night-specific
-  laboratory palette was located.
+  warm or neutralize them. These are mixtures the box allows; his own
+  formulas are unknown. The evidence for individual pigments is in §4,
+  and no laboratory palette of his night pictures was found.
 - **Darks are colored.** A museum reproduction shows dark green-blue
   passages alongside warmer brown-red darks, with some shapes almost
-  merging in value [AIC-IMAGE]. Darkness is not uniformly blue or an
-  undifferentiated black. Broad, relatively quiet fields can contain
-  small changes of value and temperature. *Visual inference from a
-  reproduction, not measured reflectance.* No calibrated value scale
-  for his night oils was found; numerical darkness limits would be
-  invented. Pictorial flatness does not establish physical smoothness.
-- **Light spreading and being cut off.** Where light passes through an
-  opening, its spill changes with the receiving plane and intervening
-  edges. A frame can interrupt it into bands or angular cast shapes;
-  a local source can make a bounded pool. Museum accounts describe such
-  spill and cast shadows [DARK]. A practical translation is to separate
-  the lit plane, the weaker spill and the unlit plane, rather than blur
-  every boundary into a halo. An occlusion edge can be firm while an
-  unobstructed falloff is gradual. *Inference from depicted light, not
-  a documented optical construction or a fixed falloff formula.*
+  merging in value [AIC-IMAGE]. Broad, relatively quiet fields can
+  contain small changes of value and temperature. *Visual inference from
+  a small reproduction.* No measured value scale for his night oils was
+  found, so this note gives no numbers for how dark. A passage that
+  looks flat may still have surface texture.
+- **Light spreading and being cut off.** Spilled light changes with the
+  surface it falls on and the edges in its way. Edges in its path can
+  cut it into bands or angular cast shapes; a local source can make a
+  bounded pool. Museum accounts describe such spill and cast shadows
+  [DARK]. At this easel, the lit plane, the weaker spill and the unlit
+  plane can each be painted as its own passage: an edge where something
+  blocks the light can be firm, while open falloff is gradual.
+  *Inferred from depicted light; no optical construction or falloff
+  formula is documented.*
 - **Several lights, several near-whites.** Hopper described the
   difficulty of overlapping illumination as "almost painting white on
   white" and said that a resulting strong edge accent was difficult
   to subordinate [LIGHT]. Small shifts among pale values and tints can
-  distinguish contributions from different sources. A light boundary
-  should not automatically become the strongest edge in the picture.
-  *The first statement is documented; the application is inference.*
+  tell the sources apart, and the boundary of a light can stay quieter
+  than the picture's strongest edge. *His statement is documented; the
+  application is inferred.*
 - **Readable value structure.** One surviving tonal study uses rich dark chalk
   and white chalk to investigate both contrast and subtle modulation
   [WMAA-LIGHT]. Light could clarify the design, while darkness suppressed
-  extraneous detail [AIC-ORDER; DARK]. The practical lesson is to keep
-  large value relationships legible before adding small distinctions.
-  Close-valued dark passages need not each receive a bright outline;
-  hue, a restrained reflected light or a selected edge can distinguish
-  them. *Practical inference, not a prescribed arrangement of masses.*
-- **Paint, not a light source.** His general practice was direct oil
+  extraneous detail [AIC-ORDER; DARK]. Inferred for this easel: settle
+  the large value relationships before small distinctions. Close-valued
+  darks can be told apart by hue, a restrained reflected light or a
+  chosen edge.
+- **Handling of lights and darks.** His general practice was direct oil
   painting, rarely glazing, beginning with turpentine-rich paint and
   adding oil sparingly [MORSE]. Technical examinations of other oils
   show thin opaque layers and localized thick passages [NGA-G; HUNT].
-  Those findings do not prove that he always painted lights thickly
-  and darks thinly. No night-specific map of thickness or brush types
-  was located. At this easel, clean pale mixtures and controlled opaque
-  coverage can keep lit passages distinct; restrained brush variation
-  can hold a dark passage together. Let the painted light relationship,
-  rather than an automatic impasto rule, govern the handling.
-  *Practical translation of the evidence, not a historical recipe.*
+  They leave open whether he painted lights thick and darks thin, and no
+  map of thickness or brush types for his night pictures was found. At
+  this easel, clean pale mixtures and controlled opaque coverage can
+  keep lit passages distinct, and restrained brush variation can hold a
+  dark passage together. Let the light relationships you paint decide
+  the handling, including where paint goes on thick. *Translation of the
+  evidence to this easel.*
 - **Surface and ground.** He bought prepared linen and painted directly
-  on its ground; he could not identify its composition [MORSE]. There
-  is no basis here for prescribing a black night ground. He used
-  retouching varnish to restore the "proper value" of areas that had
-  dried in [MORSE]; apparent darkness depends on surface condition as
-  well as pigment. This does not document a uniformly matte night
-  surface. The easel's ground, solvent, oil and drying controls
-  are described in the easel guide; they are simulations, not analyses
-  of his canvases.
+  on its ground; he could not identify its composition [MORSE]. Nothing
+  in the evidence points to a black night ground. He used retouching
+  varnish to restore the "proper value" of areas that had dried in
+  [MORSE]; apparent darkness depends on surface condition as well as
+  pigment. A uniformly matte night surface is undocumented too. The
+  easel guide describes the easel's ground, solvent, oil and drying
+  controls, which are general simulations of oil paint.
 - **Observation, studies, records.** Scholarship and a museum record
   document repeated observations after dark while a painting was in
   progress [LEV-1980 p.50; YUAG-NIGHT]. Tonal studies investigated the
   light, and at least one may have continued after painting had begun
-  [WMAA-LIGHT]. The record-book sketches were made after completion, not
-  as preparatory plans [WMAA-LED]. They record completed work and materials;
-  they should not be mistaken for instructions to copy a scene. The
-  evidence establishes nighttime observation, not a rule that he painted
-  his oils at night.
+  [WMAA-LIGHT]. The record-book sketches were made after each painting
+  was finished, as a record of the work and its materials [WMAA-LED].
+  The evidence shows that he observed at night; it leaves open whether
+  he painted the oils at night.
 
 ## 9. The tubes here
 
@@ -385,8 +377,8 @@ burnt sienna → burnt sienna. Burnt sienna rests on an uncertain reading
 
 - **Support.** Plain-weave linen with ground layers laid from the tubes.
 - **Paint.** Pigment from the tubes with an oil-medium share.
-- **Taking paint off.** A brush picks up wet paint as it passes; that is
-  how paint comes off the canvas.
+- **Taking paint off.** Wet paint comes off with a brush, a rag or the
+  knife (see the easel guide).
 - **Everything else** the easel does is in the easel guide.
 
 ## Sources

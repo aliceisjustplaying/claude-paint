@@ -1584,9 +1584,6 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     if !number {
         return Err(format!("--coats takes a number, not '{coats}'"));
     }
-    if !(varnish || cracks || relief) {
-        return Err("nothing to do".into());
-    }
     let chunk = finish::chunk(&coats, varnish, cracks, relief);
     if print_chunk {
         if !files.is_empty() {
@@ -1607,11 +1604,15 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     }
     let restored = t0.elapsed().as_secs_f64();
     let mut s = r.session;
-    let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
-    print!("{}", ran.out);
+    let mut finish_secs = 0.0;
+    if !chunk.is_empty() {
+        let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
+        print!("{}", ran.out);
+        finish_secs = ran.secs;
+    }
     let c = s.canvas().ok_or("the save holds no canvas")?;
     deliver(&c, Path::new(out))?;
-    eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, ran.secs, t0.elapsed().as_secs_f64());
+    eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, finish_secs, t0.elapsed().as_secs_f64());
     Ok(())
 }
 

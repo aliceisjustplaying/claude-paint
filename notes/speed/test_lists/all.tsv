@@ -23,6 +23,7 @@ cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo
 script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s
 script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh
 script	replay-env	60	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
+script	finish-policy	60	4	^finish_policy: .* passed	bash scripts/tests/finish_policy.sh
 script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_live.sh
 script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
 cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke	w

@@ -189,7 +189,7 @@ catch (e) { document.documentElement.dataset.theme = 'light'; }
   #ticks { position:absolute; inset:0; pointer-events:none }
   #ticks span { position:absolute; top:-13px; transform:translateX(-50%); font:10px var(--mono); color:var(--acc); white-space:nowrap }
   #ticks span::after { content:''; position:absolute; left:50%; top:13px; width:2px; height:14px; margin-left:-1px; background:var(--acc); opacity:.8 }
-  #strip .sep { flex:none; align-self:stretch; height:58px; width:18px; border-left:2px solid var(--acc); color:var(--acc); font:10px var(--mono); writing-mode:vertical-rl; text-align:center; padding-left:2px; opacity:.85; white-space:nowrap }
+  #strip .sep { flex:none; align-self:stretch; height:58px; width:18px; border-left:2px solid var(--acc); color:var(--acc); font:10px var(--mono); writing-mode:vertical-rl; text-align:center; padding-left:2px; white-space:nowrap }
   .sit { margin:22px 0 10px; padding:5px 0 0; border-top:2px solid var(--acc); color:var(--acc); font-size:13px; font-weight:600; letter-spacing:.04em }
   .sit span { color:var(--dim); font-weight:400; letter-spacing:0 }
   #golive { font-weight:700; letter-spacing:.06em } #golive.end { font-weight:400; letter-spacing:0 }
@@ -285,7 +285,7 @@ catch (e) { document.documentElement.dataset.theme = 'light'; }
   <div id="transport">
     <button id="prevlook" title="previous look  [">⏮</button>
     <button id="play" title="watch the painting grow, one look at a time  space">▶ Replay</button>
-    <select id="speed" title="replay speed: pictures per second"><option value="0.5">slow</option><option value="1" selected>1 / s</option><option value="2">2 / s</option><option value="4">4 / s</option></select>
+    <select id="speed" aria-label="Replay speed" title="replay speed: pictures per second"><option value="0.5">slow</option><option value="1" selected>1 / s</option><option value="2">2 / s</option><option value="4">4 / s</option></select>
     <button id="nextlook" title="next look  ]">⏭</button>
     <div id="scrubwrap"><input type="range" id="scrub" aria-label="Painting timeline" min="0" max="0" value="0"><div id="ticks"></div></div>
     <span id="pos"></span>

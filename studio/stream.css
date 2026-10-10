@@ -11,7 +11,7 @@ main { grid-template-columns: minmax(0,54fr) minmax(0,46fr) !important }
 #view.two { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px !important }
 #other:not([hidden]) { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 6px !important }
 #other img { object-position: center !important }
-#cap2 { order: 0 !important; font-size: 19px !important; text-align: center !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#cap2 { order: 0 !important; font-size: 19px !important; text-align: center !important; white-space: normal; overflow-wrap: anywhere }
 #cap2 b { display: inline !important; font-size: 19px !important; margin-right: 10px }
 /* a tall canvas (portrait, square or nearly: #view.tall): side by side, each the pane's full height, instead of two half-height rows */
 #view.two.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important }

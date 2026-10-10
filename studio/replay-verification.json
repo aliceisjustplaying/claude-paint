@@ -1,0 +1,51 @@
+{
+  "checks": [
+    "canvas reset boundaries, stale whole-look ages, safe crop outlines and rewind in normal/stream and API/static views",
+    "live wait chips, conservative fallback and duration formatting",
+    "static wait chips and real Monet clocks",
+    "dynamic replay, updates, reset, opening, stale formatting",
+    "static replay, updates, reset, opening, stale formatting",
+    "write/edit reconstruction and first-file tie ordering",
+    "sliding journal equivalence and retained blocks",
+    "every typewriter prefix preserves markdown"
+  ],
+  "comparisons": 0,
+  "pageErrors": [],
+  "timings": {
+    "candidate": {
+      "samplesMs": [
+        0.29999998211860657,
+        1,
+        1.2000000178813934,
+        0.5999999940395355,
+        0.5999999940395355,
+        1,
+        0.5999999940395355,
+        0.5,
+        1.100000023841858,
+        0.699999988079071,
+        0.5,
+        1.0999999940395355,
+        0.5,
+        0.5999999940395355,
+        1.100000023841858,
+        0.5999999940395355,
+        0.5999999940395355,
+        1.0999999940395355,
+        0.5999999940395355,
+        0.6000000238418579,
+        1,
+        0.699999988079071,
+        0.699999988079071,
+        1.100000023841858,
+        1.7999999821186066,
+        0.800000011920929,
+        1.199999988079071,
+        0.7000000178813934,
+        0.699999988079071,
+        1.0999999940395355
+      ],
+      "totalMs": 24.69999998807907
+    }
+  }
+}

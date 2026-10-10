@@ -543,11 +543,22 @@ function waitChip(e, i) {
   const code = (e.code || '').replace(/--\[(=*)\[[\s\S]*?\]\1\]|--[^\n]*|\[(=*)\[[\s\S]*?\]\2\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, ' ');
   const firstWait = code.search(/\bwait\s*\(/);
   if (firstWait < 0 || /[.:]\s*$|\b(?:if|for|while|repeat|function|return|goto|break|and|or)\b/.test(code.slice(0, firstWait))) return null;
-  if (/^wait\s*\(\s*0(?:\.0+)?\s*\)/.test(code.slice(firstWait))) return null;
+  const shadowsWait = text => /\bwait\s*(?:<\s*(?:const|close)\s*>\s*)?[,=]|\bfunction\s+wait\s*\(|\b_G\b/.test(text);
+  const freshScratch = e.scratch && (e.new_scratch || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out));
+  if (shadowsWait(code.slice(0, firstWait))) return null;
+  for (let k = i - 1; k >= 0; k--) {
+    const prev = events[k];
+    if (prev.kind !== 'paint' || !!prev.scratch !== !!e.scratch) continue;
+    if (freshScratch) break;
+    if (paintOK(prev) && shadowsWait(prev.code || '')) return null;
+    if (e.scratch && prev.new_scratch) break;
+  }
+  const literal = code.slice(firstWait).match(/^wait\s*\(\s*((?:\d+(?:\.\d*)?|\.\d+)(?:\s*\*\s*(?:\d+(?:\.\d*)?|\.\d+))*)\s*\)/);
+  if (literal && literal[1].split('*').some(x => Number(x) === 0)) return null;
   const clock = text => { const m = [...(text || '').matchAll(/day (\d+), (\d\d):(\d\d)/g)].pop(); return m ? (+m[1] - 1) * 1440 + +m[2] * 60 + +m[3] - 540 : null; };
   const end = clock(e.out);
   if (end !== null) {
-    let before = e.scratch && (e.new_scratch || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out)) ? 0 : null;
+    let before = freshScratch ? 0 : null;
     for (let k = i - 1; before === null && k >= 0; k--) {
       const prev = events[k];
       if (prev.kind === 'paint' && !!prev.scratch === !!e.scratch) {

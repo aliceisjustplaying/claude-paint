@@ -85,7 +85,7 @@ In profilometry of oil paintings, the height features that best identify the pai
 
 ## 4. Canvas and ground
 
-**Thread counts (plain weave unless noted).** Each row is one measured painting.
+**Thread counts (plain weave unless noted).** These are measurements of individual paintings, not period averages.
 
 | Canvas | Threads/cm | Tag |
 |---|---|---|

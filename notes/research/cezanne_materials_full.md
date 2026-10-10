@@ -200,7 +200,7 @@ finish rule [NG, p.23; BUT].
    NG, p.20]. No exact drying calendar is documented.
 4. **Reconsider locally, sometimes for a long time.** The famous 115 sittings
    for Vollard's portrait are testimony cited by Reissner, not an instruction
-   for a still-life exercise. London *Bathers* has documentary and physical
+   for a new painting. London *Bathers* has documentary and physical
    evidence for prolonged work; extensive reworking is expressly not the
    norm for every Cézanne [NG, pp.20, 29].
 5. **Later drawing can search again.** Blue or dark lines may belong to late
@@ -209,36 +209,32 @@ finish rule [NG, p.23; BUT].
    that every unfinished-looking region was deliberately left so [NG;
    LETTER].
 
-## 6. Subjects and the first study
+## 6. Subject range
 
-**Still life.** Fruit, a vessel, cloth and a table make a compact laboratory
-for colour-built volume. The Art Institute documents tilted tables,
+**Still life.** The Art Institute's examinations of fruit, vessels, cloth
+and tables document colour-built volume, tilted tables,
 misaligned table edges already present in drawing, later revisions and
 passage. A high viewpoint brings the tabletop forward [AIC10; AIC22].
 “Multiple viewpoints” is a useful interpretive description of the resulting
 space, not proof that he followed a mechanical viewpoint-switching protocol.
-Do not mistake composition for random crookedness.
 
-**Mont Sainte-Victoire.** Repeat observation of one motif permits changes
-of viewpoint, composition and patch structure. A late study can juxtapose
+**Landscape.** Repeated paintings of Mont Sainte-Victoire show changes
+of viewpoint, composition and patch structure. The examined late mountain juxtaposes
 an angular pale mountain, cool sky, warm fields and blue-green trees, with
-directional brushwork differing between zones [NA; MET]. Its risk for a
-first trial is generic scenery with hatch texture added on top.
+directional brushwork differing between zones [NA; MET]. Houses, fields and
+trees also participate in those colour and spatial relationships.
+
+**Portraits.** The documentary accounts of long sittings and the examined
+paintings record repeated adjustments of colour and form, but do not
+establish a prescribed number of sittings for a new painting [NG; MET].
 
 **Bathers.** Bodies and trees organise one landscape, often drawing on
 memory and earlier art rather than a group posed outdoors [MET; NG,
-pp.28–29]. Anatomical interdependence and large-scale revision make this
-the hardest first study; simply inserting finished figures into scenery
-misses the problem.
+pp.28–29]. Interdependent anatomy and substantial compositional revision
+are documented features, not grounds for recommending or postponing a subject.
 
-**Recommendation (ours, not a historical claim).** Begin with a small
-invented still life: several uneven green-red apples, one plain pale vessel
-and a rumpled light cloth on a warm wooden table, against a quiet cool wall.
-View enough of the table from above that its plane presses forward. Let the
-vessel's opening and the table's exposed edges answer different local views,
-without specifying coordinates or copying an existing arrangement. This
-tests modulation, patch-built planes, passage and reserve together, with
-few objects. A late mountain is the second study; bathers come after both.
+These are examples of Cézanne's subject range, not recommendations for a
+first, second or later study. The painter chooses its own subject and canvas.
 
 ## Sources
 

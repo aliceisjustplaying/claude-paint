@@ -114,6 +114,9 @@ async function pollUpdate(v, i, replacement) {
       await seek(v.page, 13);
       assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), -1);
       assert.equal(await v.page.evaluate(() => paletteAt(pos)), -1);
+      await v.page.evaluate(() => { delete events[13].new_scratch; pictures(); });
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), -1);
+      assert.equal(await v.page.evaluate(() => paletteAt(pos)), -1);
       await seek(v.page, 15);
       assert.equal(await v.page.evaluate(() => viewI), 5);
       await seek(v.page, 17);
@@ -122,6 +125,9 @@ async function pollUpdate(v, i, replacement) {
       assert.equal(await v.page.locator('#cropbox').isVisible(), false);
       await seek(v.page, 18);
       assert.match(await v.page.locator('#cap').textContent(), /Not current/);
+      assert.match(await v.page.locator('#cap2').textContent(), /1 min before this moment.*Not current/);
+      assert.doesNotMatch(await v.page.locator('#cap2').textContent(), /No whole look recorded/);
+      assert.doesNotMatch(await v.page.locator('#cap2').getAttribute('title'), /looking at now/);
       await seek(v.page, 20);
       assert.equal(await v.page.evaluate(() => viewI), 7);
       assert.doesNotMatch(await v.page.locator('#cap').textContent(), /Not current/);
@@ -134,6 +140,10 @@ async function pollUpdate(v, i, replacement) {
       await v.page.evaluate(() => { events[8] = {...events[8], out:'ok'}; pictures(); });
       assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 2);
       assert.match(await v.page.locator('#cap').textContent(), /Not current/);
+      await pollUpdate(v, 8, {...canvas[8], new_scratch:undefined, out:'x'.repeat(1500)});
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 2);
+      await pollUpdate(v, 8, {...canvas[8], new_scratch:undefined, scratch_reset:true, out:'x'.repeat(1500)});
+      assert.equal(await v.page.evaluate(() => picturesAt(pos, true, true)[0]), 10);
       await v.page.close();
     }
     report.checks.push('canvas reset boundaries, stale whole-look ages, safe crop outlines and rewind in normal/stream and API/static views');

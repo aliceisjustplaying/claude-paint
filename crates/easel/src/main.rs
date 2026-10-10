@@ -1244,14 +1244,16 @@ impl Server {
             out += &self.resume_scratch();
         }
         if new || (self.scratch.is_none() && cmd == "do") {
-            out += &self.new_scratch()?;
+            let fresh = self.new_scratch().map_err(|e| format!("{out}{e}"))?;
+            out += &fresh;
         }
         let sc = self.scratch.as_mut().ok_or("there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting")?;
         if let Err(e) = sc.ready() {
             self.scratch = None;
-            return Err(format!("{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
+            return Err(format!("{out}{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
         }
-        out += &sc.serve_cmd(cmd, &args, payload)?;
+        let reply = sc.serve_cmd(cmd, &args, payload).map_err(|e| format!("{out}{e}"))?;
+        out += &reply;
         Ok(out)
     }
 

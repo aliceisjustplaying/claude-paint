@@ -96,6 +96,34 @@ def test_a_late_result_reaches_a_client_that_already_had_the_call(home, server):
     assert r3["updates"] == []
 
 
+@pytest.mark.parametrize("failed", [False, True])
+@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("notice", ["a fresh scratch canvas (the last one's log is paintings/lua/scratch-1.lua)\n",
+                                  "a scratch canvas beside the painting, set up as the painting's canvas was\n"])
+def test_scratch_reset_metadata_survives_result_truncation_and_errors(home, server, monkeypatch, failed, verbose, notice):
+    root, studio, log = home
+    monkeypatch.setattr(S, "PUBLIC", True)
+    log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "scratch", "name": "paint", "arguments": {"scratch": True, "lua": "work{}"}}]}}))
+    before = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    text = notice + ("x" * 1700 if verbose else "") + ("\n(the chunk failed and changed nothing)" if failed else "\nday 1, 09:00\nok")
+    with log.open("a") as fh:
+        fh.write(line({"type": "message", "message": {"role": "toolResult", "toolCallId": "scratch", "isError": failed,
+                       "content": [{"type": "text", "text": text}]}}))
+    after = json.loads(server(f"/api/events?p={PAINTER}&since={before['total']}&epoch={before['epoch']}&u={before['nupdates']}")[1])
+    event = after["updates"][0][1]
+    assert event["scratch_reset"] is True
+    assert bool(event.get("err")) is failed
+    assert len(event["out"]) <= 1500
+    if verbose:
+        assert notice.strip() not in event["out"]
+    out = root / "exported"
+    result = export(root, out)
+    assert result.returncode == 0, result.stderr
+    exported = json.loads((out / "data" / PAINTER / "events.json").read_text())
+    assert next(e for e in exported["events"] if e["kind"] == "paint")["scratch_reset"] is True
+
+
 @pytest.mark.parametrize("entry", ["compaction", "recovery"])
 def test_saved_clock_survives_compaction_and_recovery_text_truncation(home, server, entry):
     _, studio, log = home

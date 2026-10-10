@@ -128,6 +128,9 @@ async function pollUpdate(v, i, replacement) {
       assert.match(await v.page.locator('#cap2').textContent(), /1 min before this moment.*Not current/);
       assert.doesNotMatch(await v.page.locator('#cap2').textContent(), /No whole look recorded/);
       assert.doesNotMatch(await v.page.locator('#cap2').getAttribute('title'), /looking at now/);
+      await v.page.setViewportSize({width:390, height:844});
+      for (const id of ['cap', 'cap2']) assert.equal(await v.page.locator('#' + id).evaluate(el => el.scrollWidth <= el.clientWidth), true, id + ' snapshot warning must wrap, not clip');
+      await v.page.setViewportSize({width:1280, height:720});
       await seek(v.page, 20);
       assert.equal(await v.page.evaluate(() => viewI), 7);
       assert.doesNotMatch(await v.page.locator('#cap').textContent(), /Not current/);

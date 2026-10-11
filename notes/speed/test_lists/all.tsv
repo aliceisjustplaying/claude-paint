@@ -35,3 +35,4 @@ script	box-tubes	60	1	^box_tubes: \d+ fixture easels checked	scripts/tests/box_t
 script	studio-names	60	1	^studio_names: all fixture studios	scripts/tests/studio_names.sh	w
 script	peek	60	1	^peek: whole PNG	sh scripts/tests/peek.sh	w
 script	easel-mcp	60	14	^test_.* \.\.\. ok$	uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v	w
+script	easel-mcp-remote	60	13	^(test_.* \.\.\. ok|ok)$	uv run --no-project --script harness/easel_mcp/test_remote.py -v	w

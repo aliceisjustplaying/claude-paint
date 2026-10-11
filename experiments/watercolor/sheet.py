@@ -21,7 +21,7 @@ cases = [
 ]
 sheet = Image.new("RGB", (1152, 2840), "#f4f1e9")
 draw = ImageDraw.Draw(sheet)
-draw.text((24, 18), "WATERCOLOR 1 / isolated material pilot", font=title, fill="#20251e")
+draw.text((24, 18), "WATERCOLOR 2 / correlated material pilot", font=title, fill="#20251e")
 draw.text((24, 57), "Diffuse gallery-like light", font=small, fill="#50554b")
 draw.text((590, 57), "Raking light / paper relief", font=small, fill="#50554b")
 for row, (name, label) in enumerate(cases):
@@ -30,7 +30,7 @@ for row, (name, label) in enumerate(cases):
     for column, view in enumerate(["gallery", "raking"]):
         image = Image.open(root / f"{name}-{view}.ppm")
         image.save(root / f"{name}-{view}.png")
-        image = image.resize((540, 336), Image.Resampling.NEAREST)
+        image = image.resize((540, 336), Image.Resampling.LANCZOS)
         sheet.paste(image, (24 + column * 566, top + 32))
 sheet.save(root / "probe-sheet.png")
 
@@ -43,13 +43,14 @@ for i, time in enumerate([0, 0.25, 0.5, 1, 2, 4, 8]):
     for row, view in enumerate(["gallery", "raking"]):
         image = Image.open(root / f"bloom-{i}-{view}.ppm")
         image.save(root / f"bloom-{i}-{view}.png")
-        image = image.crop((72, 32, 132, 84)).resize((180, 156), Image.Resampling.NEAREST)
+        scale = image.width / 180
+        image = image.crop(tuple(int(v * scale) for v in (72, 32, 132, 84))).resize((180, 156), Image.Resampling.LANCZOS)
         strip.paste(image, (x, 81 + row * 165))
 strip.save(root / "bloom-strip.png")
 
 frames = []
 for path in sorted((root / "slow-bloom").glob("*-gallery.ppm")):
-    image = Image.open(path).resize((540, 336), Image.Resampling.NEAREST)
+    image = Image.open(path).resize((540, 336), Image.Resampling.LANCZOS)
     image = image.quantize(colors=128)
     frames.append(image)
 if frames:
@@ -57,7 +58,7 @@ if frames:
                    duration=120, loop=0, optimize=False, disposal=2)
 
 rows = list(csv.DictReader((root / "conservation.csv").open()))
-report = ["# Conservation", "", "Water is in pixel-mm (multiply by 0.04 mm² for mm³). Pigment is arbitrary areal mass times pixels, not calibrated grams.",
+report = ["# Conservation", "", "Water is in pixel-mm (multiply by 0.01 mm² for mm³). Pigment is arbitrary areal mass times pixels, not calibrated grams.",
           "", "Water columns: surface, capillary, no bound channel. Pigment columns: suspended, deposited, bound. Boundary outflow is zero.", "",
           "| Probe | Constituent | Input | Surface / suspended | Pore / deposited | Bound | Evaporated | Lifted | Error |",
           "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
@@ -66,4 +67,19 @@ for row in rows:
     values += [f"{float(row[key]):.7g}" for key in ["input", "surface_or_suspended", "capillary_or_deposited", "bound", "evaporated", "lifted", "error"]]
     report.append("| " + " | ".join(values) + " |")
 (root / "conservation.md").write_text("\n".join(report) + "\n")
+if len(sys.argv) > 2:
+    prior = Path(sys.argv[2])
+    comparison = Image.new("RGB", (1152, 2840), "#f4f1e9")
+    d = ImageDraw.Draw(comparison)
+    d.text((24, 18), "ROUND 1 / ROUND 2 / diffuse gallery-like light", font=title, fill="#20251e")
+    d.text((24, 57), "Round 1", font=font, fill="#50554b")
+    d.text((590, 57), "Round 2", font=font, fill="#50554b")
+    for row, (name, label) in enumerate(cases):
+        top = 91 + row * 391
+        d.text((24, top), label, font=font, fill="#20251e")
+        for column, directory in enumerate([prior, root]):
+            image = Image.open(directory / f"{name}-gallery.png")
+            mode = Image.Resampling.NEAREST if column == 0 else Image.Resampling.LANCZOS
+            comparison.paste(image.resize((540, 336), mode), (24 + column * 566, top + 32))
+    comparison.save(root / "round-1-vs-2.png")
 print("Probe sheet, bloom strip, slow GIF and conservation table written")

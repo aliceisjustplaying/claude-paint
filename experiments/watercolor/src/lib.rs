@@ -5,6 +5,7 @@ mod rng;
 pub const TICK_NS: u64 = 62_500_000;
 pub const DT: f64 = 0.0625;
 pub const PIGMENTS: usize = 3;
+pub const CELL_MM: f64 = 0.1;
 
 #[derive(Clone, Copy)]
 pub struct Pigment {
@@ -74,6 +75,36 @@ fn smooth(seed: u64, x: f64, y: f64) -> f64 {
     a * (1.0 - ty) + b * ty
 }
 
+fn correlate(values: &[f64], width: usize, height: usize, radius: usize) -> Vec<f64> {
+    let mut rows = vec![0.0; values.len()];
+    let mut output = vec![0.0; values.len()];
+    for y in 0..height {
+        for x in 0..width {
+            let mut weight = 0.0;
+            for k in -(radius as isize)..=radius as isize {
+                let xx = (x as isize + k).clamp(0, width as isize - 1) as usize;
+                let w = (radius + 1) as f64 - k.unsigned_abs() as f64;
+                rows[y * width + x] += values[y * width + xx] * w;
+                weight += w;
+            }
+            rows[y * width + x] /= weight;
+        }
+    }
+    for y in 0..height {
+        for x in 0..width {
+            let mut weight = 0.0;
+            for k in -(radius as isize)..=radius as isize {
+                let yy = (y as isize + k).clamp(0, height as isize - 1) as usize;
+                let w = (radius + 1) as f64 - k.unsigned_abs() as f64;
+                output[y * width + x] += rows[yy * width + x] * w;
+                weight += w;
+            }
+            output[y * width + x] /= weight;
+        }
+    }
+    output
+}
+
 impl Paper {
     pub fn cold_press(width: usize, height: usize, seed: u64) -> Self {
         let mut paper = Self {
@@ -91,24 +122,30 @@ impl Paper {
             }),
             ..fiber_paper::Paper::drawing(seed)
         };
-        let sheet = fiber_paper::lay(&support, 0, 0, width, height, 0.2);
+        let sheet = fiber_paper::lay(&support, 0, 0, width, height, CELL_MM as f32);
+        let raw: Vec<_> = sheet.height.iter().map(|v| *v as f64).collect();
+        let fine = correlate(&raw, width, height, 2);
+        let broad = correlate(&raw, width, height, 5);
+        let gram: Vec<_> = sheet.grammage.iter().map(|v| *v as f64).collect();
+        let gram = correlate(&gram, width, height, 3);
         for y in 0..height {
             for x in 0..width {
                 let i = y * width + x;
                 let (x, y) = (x as f64, y as f64);
-                let h = (0.5 + 0.48 * (sheet.height[i] as f64 / 23.0).tanh()).clamp(0.0, 1.0);
+                let h =
+                    (0.5 + 0.48 * ((0.7 * fine[i] + 0.3 * broad[i]) / 20.0).tanh()).clamp(0.0, 1.0);
                 paper.height.push(h);
-                paper
-                    .sizing
-                    .push(0.3 + 0.58 * smooth(seed + 3, x / 9.0, y / 9.0));
+                paper.sizing.push(
+                    0.3 + 0.58 * smooth(seed.wrapping_add(3), x * CELL_MM / 1.8, y * CELL_MM / 1.8),
+                );
                 paper.capacity.push(
                     (support.caliper_um() as f64 * support.porosity as f64 / 1000.0
-                        * (sheet.grammage[i] as f64 / 300.0))
+                        * (gram[i] / 300.0))
                         .clamp(0.1, 0.4),
                 );
                 paper.clump.push(
-                    (0.3 + 1.4 * smooth(seed + 4, x / 2.3, y / 2.3))
-                        * (sheet.micro[i] as f64 / 6.0).clamp(0.5, 1.5),
+                    0.65 + 0.7
+                        * smooth(seed.wrapping_add(4), x * CELL_MM / 0.65, y * CELL_MM / 0.65),
                 );
             }
         }
@@ -175,7 +212,7 @@ impl Watercolor {
         assert!(width > 1 && height > 1);
         let n = width * height;
         Self {
-            schema: 1,
+            schema: 2,
             width,
             height,
             paper: Paper::cold_press(width, height, seed),
@@ -259,7 +296,7 @@ impl Watercolor {
             .width
             .checked_mul(state.height)
             .ok_or("grid overflow")?;
-        if state.schema != 1
+        if state.schema != 2
             || state.width < 2
             || state.height < 2
             || state.residual_ns >= TICK_NS
@@ -361,11 +398,13 @@ impl Watercolor {
             } else {
                 self.flux_y[i]
             };
-            let head_i = self.water[i] + 0.012 * self.paper.height[i];
-            let head_j = self.water[j] + 0.012 * self.paper.height[j];
+            let head_i = self.water[i] + 0.004 * self.paper.height[i];
+            let head_j = self.water[j] + 0.004 * self.paper.height[j];
             let depth = (self.water[i] + self.water[j]) * 0.5;
             let flux = if old_front[i] && old_front[j] {
-                0.55 * previous + DT * 65.0 * depth * (head_i - head_j)
+                let mobility = (depth / 0.04).clamp(0.0, 1.0).powi(2);
+                0.4 * mobility * previous
+                    + DT * (260.0 * depth).min(24.0) * mobility * (head_i - head_j)
             } else {
                 0.0
             };
@@ -415,7 +454,7 @@ impl Watercolor {
                     continue;
                 }
                 let diff = DT
-                    * 0.045
+                    * (0.18 + 0.45 * (1.0 - PALETTE[p].granulation))
                     * self.water[i].min(self.water[j])
                     * (self.suspended[i][p] / self.water[i] - self.suspended[j][p] / self.water[j]);
                 let (from, to, m) = if diff >= 0.0 {
@@ -442,7 +481,7 @@ impl Watercolor {
         let mut cap_in = vec![0.0; n];
         for &(i, j, _) in &faces {
             let d = DT
-                * 0.035
+                * 0.14
                 * (self.capillary[i] / self.paper.capacity[i]
                     - self.capillary[j] / self.paper.capacity[j]);
             let (a, b, m) = if d >= 0.0 { (i, j, d) } else { (j, i, -d) };
@@ -496,10 +535,10 @@ impl Watercolor {
             self.ledger.water_evaporated += evap + cap_evap;
             let wet = (self.water[i] / 0.035).clamp(0.0, 1.0);
             for (p, pigment) in PALETTE.iter().enumerate() {
-                let valley = (1.0 - self.paper.height[i]).powi(3) * 9.0 * self.paper.clump[i];
+                let valley = (1.0 - self.paper.height[i]).powi(2) * 4.0 * self.paper.clump[i];
                 let rate =
                     pigment.settling * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet));
-                let adsorbed = if self.water[i] < 1e-10 {
+                let adsorbed = if self.water[i] < 0.0002 {
                     self.suspended[i][p]
                 } else {
                     self.suspended[i][p] * (1.0 - (-rate * DT).exp())
@@ -628,9 +667,9 @@ impl Watercolor {
             let dx = self.paper.height[right] - self.paper.height[left];
             let dy = self.paper.height[down] - self.paper.height[up];
             let shade = if raking {
-                (0.91 + 0.6 * (dx - dy)).clamp(0.62, 1.15)
+                (0.97 + 0.18 * (dx - dy)).clamp(0.87, 1.06)
             } else {
-                (0.99 + 0.08 * (dx - dy)).clamp(0.94, 1.04)
+                (0.996 + 0.025 * (dx - dy)).clamp(0.98, 1.01)
             };
             for c in reflectance {
                 let linear = (c * shade).clamp(0.0, 1.0);

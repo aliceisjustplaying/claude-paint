@@ -2000,6 +2000,27 @@ mod tests {
             assert(k:fullness() > 0)"#).unwrap();
     }
 
+    #[test]
+    #[cfg(all(tube_box, feature = "knife-2"))]
+    fn knife_2_model_and_dirty_blade_survive_chunk_rollback() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=75, model="knife-2", flex=0.65}; p = pile{{"yellow ochre",1}}
+            k:load(p,0.7); k:lay({{150,250},{750,250}}, {pressure={0.4,0.7}, tilt=20, lift=0.3})"#).unwrap();
+        let before = bits(&s);
+        let blade = format!("{:?}", s.st.borrow_mut().live_knives()[0].borrow());
+        assert!(blade.contains("knife_2_flex"));
+        for call in [
+            "k:lay({{200,250},{650,250}}, {tilt=0/0})",
+            "knife{model='knife-2',flex=-0.1}",
+            "k:scrape({{200,250},{650,250}}, {tilt=75}); k:lay({{200,450},{650,450}}, {lift=0.4}); error('stop')",
+        ] {
+            assert!(s.run(call).is_err());
+            assert_eq!(before,bits(&s));
+            assert_eq!(blade,format!("{:?}",s.st.borrow_mut().live_knives()[0].borrow()));
+        }
+    }
+
     /// A double-loaded, streaky pass paints something else than the plain
     /// pass, and the same again in a second session; a part-loaded brush too.
     #[test]

@@ -229,6 +229,9 @@ impl WorkingSurface {
     pub fn refold(&mut self, rag: &mut Rag) {
         rag.refold_at(self.canvas.now_min(), self.canvas.tally_mut());
     }
+    pub fn age_rag(&self, rag: &mut Rag) {
+        rag.age_transport(&self.canvas);
+    }
     pub fn wipe(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pressure: &[f32], seed: u64) -> f64 {
         self.canvas.rag_wipe(rag, pts, pressure, seed)
     }
@@ -273,6 +276,16 @@ impl WorkingSurface {
 
     pub fn buried_paint_mm3(&self) -> f64 {
         self.inventory().paint_mm3 - self.working_paint_mm3()
+    }
+    pub fn opened_paint_mm3(&self) -> f64 {
+        self.canvas
+            .wet
+            .working_layers
+            .as_ref()
+            .unwrap()
+            .opened_mm3
+            .iter()
+            .sum()
     }
 
     fn projection(&self) -> (Canvas, Vec<Rgb>) {

@@ -1053,6 +1053,19 @@ mod brush_sim_tests {
             }
         }
     }
+
+    #[test]
+    fn iteration_four_selection_is_explicit_and_feature_gated() {
+        for (choice, engine) in [("lean4", 15), ("body4", 16), ("wild4", 17)] {
+            if cfg!(feature = "brush-sim-4") {
+                assert_eq!(brush_sim_engine(choice), Ok(engine));
+                assert_eq!(logged_engine(&format!("--@ engine {engine}\n")), Ok(engine));
+            } else {
+                assert!(brush_sim_engine(choice).is_err());
+                assert!(logged_engine(&format!("--@ engine {engine}\n")).is_err());
+            }
+        }
+    }
 }
 
 /// Split a session file into chunks.
@@ -1467,6 +1480,20 @@ mod tests {
     #[cfg(all(feature = "brush-sim-3", tube_box))]
     fn brush_sim_three_rollback_and_replay_preserve_bundle_history() {
         for engine in [12, 13, 14] {
+            let mut s = with_engine(engine);
+            s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8); b:stroke({{100,140},{900,160}})"#).unwrap();
+            let before = state(&s);
+            assert!(s.run(r#"b:load(p,0.6); b:stroke({{400,400},{700,240}}); error("stop")"#).unwrap_err().contains("stop"));
+            assert_eq!(state(&s), before);
+            s.run(r#"b:load(p,0.3); b:stroke({{100,240},{900,260}})"#).unwrap();
+            assert_eq!(state(&s), state(&replayed(&s)));
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "brush-sim-4", tube_box))]
+    fn brush_sim_four_rollback_and_replay_preserve_leveled_history() {
+        for engine in [15, 16, 17] {
             let mut s = with_engine(engine);
             s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8); b:stroke({{100,140},{900,160}})"#).unwrap();
             let before = state(&s);

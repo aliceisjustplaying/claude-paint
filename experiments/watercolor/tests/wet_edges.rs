@@ -79,7 +79,7 @@ fn wet_pigment_join_moves_across_a_material_dependent_front() {
     }
     s.ledger.water_added += 0.22 * 80.0 * 64.0;
     s.wait_seconds(4.0);
-    let amount = |i| s.suspended[i][0] + s.active.deposited[i][0] + s.active.bound[i][0];
+    let amount = |i: usize| s.suspended[i][0] + s.active.deposited[i][0] + s.active.bound[i][0];
     assert!(amount(16 * 80 + 44) > 1e-7);
     assert!(amount(16 * 80 + 44) > amount(48 * 80 + 44) * 1.1);
     conserved(&s);

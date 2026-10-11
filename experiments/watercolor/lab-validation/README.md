@@ -42,6 +42,10 @@ It reports original and Rust standing-plus-capillary water and suspended-plus-
 deposited pigment totals. Upstream's semi-Lagrangian gather is not conservative;
 the diagnostic reports that behavior without changing it.
 
+`RESULTS.md` records the measured max/mean tables and known salt failure. The
+full parity command intentionally returns nonzero for that failure; supported
+passes are reported separately, not disguised as an overall green result.
+
 ## Seven matched marks
 
 `marks.json` is the single input for both capture runners. It pins a 1056×704

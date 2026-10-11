@@ -143,6 +143,7 @@ class KnownRagTests(unittest.TestCase):
             ("linux", "x86_64", "image comparison: FAIL: alpha differs", 1),
             ("linux", "x86_64", IMAGE.replace("FAIL: ", "FAIL: cross-platform (macos-aarch64 -> linux-x86_64); "), 0),
             ("darwin", "arm64", "image comparison: FAIL: byte-exact; 707/8192 pixels changed; max RGB delta 109/255", 0),
+            ("darwin", "arm64", "image comparison: FAIL: byte-exact comparison (macos-aarch64 -> macos-aarch64); 707/8192 pixels changed; max RGB delta 109/255", 0),
             ("darwin", "arm64", IMAGE.replace("707/", "708/"), 1),
         ]:
             with self.subTest(host=host, report=report):

@@ -75,6 +75,7 @@ pub fn export(args: &[String]) -> Result<(), String> {
             return Err(invalid("snapshot output must be outside the committed store"));
         }
         let revision = crate::painting_store::ReadRevision::open(dir.into())?;
+        revision.protect_output(out)?;
         let checkpoint = revision.checkpoint()?;
         if crate::same_file(&checkpoint, out).map_err(invalid)? { return Err(invalid("snapshot must not replace its material input")); }
         let restored = crate::save::read(&checkpoint).map_err(invalid)?;

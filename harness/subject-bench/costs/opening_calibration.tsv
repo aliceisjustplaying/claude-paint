@@ -1,0 +1,11 @@
+label	provider	model	cached_same_workload_usd	uncached_same_workload_usd	assumed_input_tokens	assumed_cache_read_tokens	assumed_cache_write_5m_tokens	assumed_cache_write_1h_tokens	assumed_output_tokens	assumed_reasoning_subset_tokens	uncached_scenario_input_tokens	status
+Claude Haiku 5.5 CPA	anthropic	claude-haiku-5-5	0.00589867	0.0124811	12	81697	30812	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+Claude Sonnet 5.5 CPA	anthropic	claude-sonnet-5-5	0.1098037	0.249622	12	81697	30812	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+Claude Opus 5.5 CPA	anthropic	claude-opus-5-5	0.2196074	0.499244	12	81697	30812	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+GPT 6.1 Sol Codex	openai-codex	gpt-6.1-sol	0.0943977	0.249622	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+GPT 6 Luna Codex	openai-codex	gpt-6-luna	0.00512837	0.0124811	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+Kimi K3 Go	opencode-go	kimi-k3	0.1538511	0.374433	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+DeepSeek V4.1 Flash Go	opencode-go	deepseek-v4.1-flash	0.012686982	0.0367059	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+GLM 5.3 Flash Go	opencode-go	glm-5.3-flash	0.00830351	0.01810715	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+MiMo V2.6 Pro Go	opencode-go	mimo-v2.6-pro	0.0158410092	0.051085095	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured
+Gemini 3.8 Flash OpenRouter	openrouter	google/gemini-3.8-flash	0.038462775	0.09360825	30824	81697	0	0	2458	1197	112521	Measured Opus workload repriced; target model behavior and tokenization not measured

@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test test/*.test.ts"},
+  "dependencies": {"@earendil-works/pi-ai": "1.1.0", "@earendil-works/pi-coding-agent": "1.1.0"}
+}

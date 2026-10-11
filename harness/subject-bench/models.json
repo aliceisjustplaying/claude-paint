@@ -1,0 +1,24 @@
+{
+  "pricing_checked": "2026-10-10",
+  "defaults": { "contextWindow": 131072, "maxTokens": 2048, "dollar_cap": 2, "reasoning": true, "thinking": "low" },
+  "routes": {
+    "mock": { "provider": "subject-mock", "thinking": "off" },
+    "cpa": { "provider": "subject-cpa", "api": "anthropic-messages", "base_url": "https://cpa.mosphere.at", "key_env": "CPA_API_KEY" },
+    "codex": { "provider": "openai-codex" },
+    "go": { "provider": "subject-go", "api": "openai-completions", "base_url": "https://opencode.ai/zen/go/v1", "key_env": "OPENCODE_GO_API_KEY" },
+    "openrouter": { "provider": "subject-openrouter", "api": "openai-completions", "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY", "dollar_cap": 0.75 }
+  },
+  "models": [
+    { "id": "mock", "route": "mock", "model": "stub", "reasoning": false, "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 } },
+    { "id": "haiku", "route": "cpa", "model": "claude-haiku-5-5", "contextWindow": 100000, "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.2 } },
+    { "id": "sonnet", "route": "cpa", "model": "claude-sonnet-5-5", "dollar_cap": 10, "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 4 } },
+    { "id": "opus", "route": "cpa", "model": "claude-opus-5-5", "dollar_cap": 20, "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 8 } },
+    { "id": "sol", "route": "codex", "model": "gpt-6.1-sol", "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 } },
+    { "id": "luna", "route": "codex", "model": "gpt-6-luna", "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.125 } },
+    { "id": "kimi", "route": "go", "model": "kimi-k3", "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 6 } },
+    { "id": "deepseek", "route": "go", "model": "deepseek-v4.1-flash", "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0.3 } },
+    { "id": "glm", "route": "go", "model": "glm-5.3-flash", "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0.15 } },
+    { "id": "mimo", "route": "go", "model": "mimo-v2.6-pro", "reasoning": false, "thinking": "off", "cost": { "input": 0.435, "output": 0.87, "cacheRead": 0.0036, "cacheWrite": 0.435 } },
+    { "id": "gemini", "route": "openrouter", "model": "google/gemini-3.8-flash", "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0.75 } }
+  ]
+}

@@ -22,7 +22,7 @@ The disk quota defaults to 2048 MiB. Override it with `--state-budget-mib N` for
 
 ## Authority and capabilities
 
-`CURRENT` contains one revision ID. Its immutable JSON manifest names the parent, the accepted source's length and SHA-256, chunk count, material object, schema, native geometry, physical pixel scale, pigment box, engine and actual executable SHA-256. Capability flags distinguish renderable and finishable state from resumability. Before a canvas exists, a source-only revision is valid but cannot render.
+`CURRENT` contains one revision ID, or an explicit empty-root sentinel before the first publication. Losing the pointer while objects exist is refused without collecting those objects. Its immutable JSON manifest names the parent, the accepted source's length and SHA-256, chunk count, material object, schema, native geometry, physical pixel scale, pigment box, engine and actual executable SHA-256. Capability flags distinguish renderable and finishable state from resumability. Before a canvas exists, a source-only revision is valid but cannot render.
 
 Object IDs hash canonical uncompressed bytes with their object type and schema. Source and checkpoint objects are independently compressed with lossless zstd, including a frame checksum. Readers verify the strong hash and exact byte count, then check that the checkpoint's envelope agrees with the accepted journal. SHA-256 provides local integrity, not authentication against someone who can replace every object and root.
 

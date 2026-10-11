@@ -180,7 +180,7 @@ class Easel:
             old = Path(match[1])
             new = old.with_name(f"{uuid4()}.png")
             source.rename(self.studio / new)
-            for folder in (".gallery", ".relief"):
+            for folder in (".gallery", ".relief", ".museum"):
                 sibling = source.parent / folder / source.name
                 if sibling.is_file():
                     try:
@@ -275,10 +275,15 @@ class Easel:
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--studio", default=os.environ.get("EASEL_ROOT"))
+    parser.add_argument("--sessions-root", type=Path, help="opt in to durable viewer session recording")
     args = parser.parse_args()
     if not args.studio:
         parser.error("set --studio or EASEL_ROOT to an exported studio")
     easel = Easel(Path(args.studio))
+    recorded = None
+    if args.sessions_root:
+        from remote import RemoteStudio
+        recorded = RemoteStudio(easel.studio, args.sessions_root, response_wait=24 * 60 * 60, easel=easel)
     server = Server("easel")
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
 
@@ -289,13 +294,19 @@ async def main():
     @server.call_tool()
     async def call_tool(name, arguments):
         async with easel.lock:
+            if recorded:
+                return await recorded.call(name, dict(arguments, call_id=str(uuid4())))
             try:
                 return types.CallToolResult(content=await easel.call(name, arguments))
             except (ValueError, OSError) as error:
                 return types.CallToolResult(isError=True, content=[types.TextContent(type="text", text=str(error))])
 
-    async with stdio_server() as (read, write):
-        await server.run(read, write, server.create_initialization_options())
+    try:
+        async with stdio_server() as (read, write):
+            await server.run(read, write, server.create_initialization_options())
+    finally:
+        if recorded:
+            await recorded.close()
 
 
 if __name__ == "__main__":

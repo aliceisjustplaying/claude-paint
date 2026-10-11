@@ -39,6 +39,34 @@ fn replay(src: &Path, threads: Option<usize>, tag: &str, width: usize) -> (Strin
 const CANVAS: &str = r#"canvas{size=440, aspect=1.6, linen=15, seed=7, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
 
 #[test]
+fn field_digests_are_opt_in_read_only_and_thread_independent() {
+    let src = dir().join("field-digests.lua");
+    std::fs::write(&src, format!("--@ chunk 1\n{CANVAS}\n--@ chunk 2\nwork(rect(0, 0, 500, 400), {{hand=\"broad\", pile=pile{{{{\"bone black\", 1}}}}}})\nprint(wait(5))\n")).unwrap();
+    let (_, baseline) = replay(&src, Some(1), "field-digests-baseline", 32);
+    let mut receipts = Vec::new();
+    for threads in [1, 4] {
+        let png = dir().join(format!("field-digests-{threads}.png"));
+        let fields = dir().join(format!("field-digests-{threads}.txt"));
+        let out = Command::new(env!("CARGO_BIN_EXE_easel"))
+            .args(["run", src.to_str().unwrap(), "--width", "32", "--out", png.to_str().unwrap(), "--field-digest", fields.to_str().unwrap()])
+            .env("RAYON_NUM_THREADS", threads.to_string())
+            .output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(std::fs::read(png).unwrap(), baseline);
+        let text = std::fs::read_to_string(fields).unwrap();
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].starts_with("chunk 1 width=32 height=20 color="));
+        assert!(lines[1].contains(" height="));
+        assert!(lines[1].contains(" wet.vol="));
+        assert!(lines[1].contains(" clock.cure="));
+        assert!(!text.contains("secs="));
+        receipts.push(text);
+    }
+    assert_eq!(receipts[0], receipts[1]);
+}
+
+#[test]
 fn object_keyed_tables_replay_the_same_in_every_process() {
     let program = format!(
         r#"
@@ -210,4 +238,3 @@ print(r, r.load, r.soaked, r.fold)
     assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
     assert!(o1.contains("rag(width 91, load 0."), "{o1}");
 }
-

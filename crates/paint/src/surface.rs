@@ -291,7 +291,10 @@ impl Canvas {
                     return self.height[i];
                 }
                 let keep = (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
-                fine[i] + (self.height[i] - fine[i]) * keep + a
+                let top = fine[i] + (self.height[i] - fine[i]) * keep + a;
+                #[cfg(feature = "brush-sim-5")]
+                let top = if (18..=20).contains(&self.engine) { top.max(self.height[i] + a.min(PEAK_FILM_UM)) } else { top };
+                top
             })
             .collect()
     }
@@ -583,7 +586,9 @@ mod tests {
         };
         assert_eq!(c.wet_surface(), c.height);
         c.wet.vol.fill(0.2);
-        assert!(rms(&c.wet_surface()) > 0.7 * rms(&c.height));
+        let thin = c.wet_surface();
+        assert!(rms(&thin) > 0.7 * rms(&c.height));
+        assert!(thin.iter().zip(&c.height).all(|(top, dry)| top >= dry));
         c.wet.vol.fill(16.0);
         let before = (c.material_total(), c.solvent_total(), c.seen(), c.wet.vol.clone());
         let old = c.clone().with_engine(15).wet_surface();

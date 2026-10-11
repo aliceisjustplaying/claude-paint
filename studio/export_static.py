@@ -297,21 +297,24 @@ def write(path, data):
 
 def text(path, data):
     body = S.scrub(data if isinstance(data, bytes) else data.encode())
-    if S.HOME.encode() in body or re.search(re.escape(S.USER.encode()), body, re.I):
+    if S.HOME.encode() in body or (S.USER != "user" and re.search(re.escape(S.USER.encode()), body, re.I)):
         sys.exit(f"export: {path} still names the home folder or account after scrubbing")
     write(path, body)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("out")
-    ap.add_argument("--skip", nargs="*", default=[], help="painter folders to leave out (test runs)")
-    a = ap.parse_args()
+def export(out, skip=(), only=None, live=False):
     S.PUBLIC = True
-    out = os.path.abspath(a.out)
+    WRITTEN.clear()
+    out = os.path.abspath(out)
     before = owned(out)
-    ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions() if s.get("painter") and s["p"] not in a.skip]
+    ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions()
+          if s.get("painter") and s["p"] not in skip and (only is None or s["p"] == only)]
+    if only is not None and len(ss) != 1:
+        raise ValueError("the selected painter has no viewer session yet")
     runner_states(ss, working_studios(), time.time())
+    if live:
+        for s in ss:
+            s["active"] = not s.get("outcome") and 0 <= time.time() - s["mtime"] < 1800
     n_img = n_web = 0
     pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
     for s in ss:
@@ -398,9 +401,13 @@ def main():
     assert b"STUDIO_STATIC = true" in page, "index.html changed: the static switch didn't go in"
     # the gallery's page-view counter (Plausible, served from stillwet.art/v/), on the public copy only
     page = page.replace(b"</head>", PLAUSIBLE + b"</head>", 1)
-    text(os.path.join(out, "index.html"), card_page(page, featured(ss), homepage=True))
-    for s in ss:
-        text(inside(out, "share", s["p"] + ".html"), card_page(page, s))
+    if live:
+        page = page.replace(b"window.STUDIO_STATIC = true;", b"window.STUDIO_STATIC = true;window.STUDIO_LIVE = true;")
+        text(os.path.join(out, "index.html"), page)
+    else:
+        text(os.path.join(out, "index.html"), card_page(page, featured(ss), homepage=True))
+        for s in ss:
+            text(inside(out, "share", s["p"] + ".html"), card_page(page, s))
     for asset in S.VIEWER_ASSETS:
         with open(os.path.join(S.HERE, asset), "rb") as fh:
             write(os.path.join(out, asset), fh.read())
@@ -418,6 +425,14 @@ def main():
     with open(os.path.join(out, MARKER), "w") as fh:
         fh.write("".join(r + "\n" for r in now))
     print(f"exported {len(ss)} painters, {n_img} images ({n_web} new web copies) to {out} ({stale} stale files removed)")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("out")
+    ap.add_argument("--skip", nargs="*", default=[], help="painter folders to leave out (test runs)")
+    a = ap.parse_args()
+    export(a.out, skip=a.skip)
 
 
 if __name__ == "__main__":

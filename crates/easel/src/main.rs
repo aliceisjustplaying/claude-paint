@@ -113,7 +113,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
       [--width <px>]   replay narrower, a preview for development (not the painting)
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
                       finish a closed session's save (out/easel/<name>/live.ckpt) without a replay
-  easel render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]
+  easel render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief|museum] [--look-version 1|2] [--look] [--log painting.lua]
                       render saved state without replay or aging (default gallery; --look uses look sizing)
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
 

@@ -93,7 +93,7 @@ fn checkpoint_render_matches_native_color_and_look_companions_for_every_engine()
         assert_eq!(restored.chunks, 2);
         assert_eq!(restored.session.globals(), "");
         assert!(restored.session.lua.globals().get::<mlua::Value>("continuation").unwrap().is_nil());
-        for (mode, light) in [("color", None), ("gallery", Some(GALLERY_LIGHT)), ("relief", Some(look::DISPLAY_PRESETS[1].light))] {
+        for (mode, light) in [("color", None), ("gallery", Some(GALLERY_LIGHT)), ("relief", look::DISPLAY_PRESETS[1].view.light)] {
             let out = temp.file("rendered.png");
             render_checkpoint(&[checkpoint.clone(), out.clone(), "--mode".into(), mode.into()]).unwrap();
             let expected = temp.file("expected.png");

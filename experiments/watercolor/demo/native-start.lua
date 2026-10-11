@@ -19,5 +19,4 @@ frames{prefix="native-bloom",every=0.25,width=480}
 wait(8)
 frames(false)
 look{path="native-bloom-end.png",width=1200,mode="gallery"}
-wait(300)
 assert(balance().conserved)

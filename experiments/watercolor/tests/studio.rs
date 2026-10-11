@@ -137,3 +137,22 @@ fn named_checkpoint_can_resume_and_a_loop_is_bounded() {
     assert_eq!(bytes, fs::read(p.join("checkpoint.json")).unwrap());
     fs::remove_dir_all(p).unwrap();
 }
+
+#[test]
+fn look_without_arguments_uses_color_and_keeps_material_unchanged() {
+    let p = root();
+    let state = studio::run(&p, "paper{size=3}; look()").unwrap();
+    studio::render(
+        state.canvas.as_ref().unwrap(),
+        &p.join("expected.png"),
+        "color",
+        1200,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(p.join("look.png")).unwrap(),
+        fs::read(p.join("expected.png")).unwrap()
+    );
+    fs::remove_dir_all(p).unwrap();
+}

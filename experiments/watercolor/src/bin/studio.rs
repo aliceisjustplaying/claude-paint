@@ -5,7 +5,7 @@ fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let result = (|| -> mlua::Result<()> {
         if args.len() < 4 || args[0] != "--box" || args[1] != "watercolor" {
-            return Err(mlua::Error::external("explicit --box watercolor required; commands: init DIR, run DIR SCRIPT, render DIR OUTPUT.png"));
+            return Err(mlua::Error::external("explicit --box watercolor required; commands: init DIR, run DIR SCRIPT, render DIR OUTPUT.png, restore DIR NAME.json"));
         }
         let root = Path::new(&args[3]);
         match args[2].as_str() {

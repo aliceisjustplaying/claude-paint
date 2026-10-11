@@ -85,11 +85,11 @@ does; this says how to use them. What you paint is yours to choose.
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
 - **Light relationships.** Relate the light and shadow of each passage to
-  the effect you want. A uniform band or a firm boundary can be deliberate;
-  judge it in context.
+  the effect you want. A uniform band or a firm boundary can serve the
+  picture; judge it against the whole.
 - **Forms meet through relationships.** Overlap, colour and edge handling
-  separate or connect adjacent planes; a mask's edge by itself sets no
-  spatial relationship.
+  separate or connect adjacent planes. A boundary that is only a mask's
+  edge leaves their spatial relationship unstated.
 - **Composition**: judge how the masses work together for the effect you
   chose. Where the emphasis sits, central or off-centre, is yours to
   choose.
@@ -99,14 +99,15 @@ does; this says how to use them. What you paint is yours to choose.
 - **A hierarchy of marks.** A few large decisive strokes (`b:gesture`), many
   middle ones, some small accents. One stroke size and one shape over a whole
   area reads as texture.
-- **Mark scale and distance.** `scale_at` can shrink marks through a
-  passage, which can suggest recession; marks of similar scale throughout
+- **Mark scale and distance.** Marks that shrink through a passage
+  (`scale_at`) can suggest recession; marks of similar scale throughout
   can compress depth.
-  Either is a choice.
-- **Mark direction and form.** Direction can turn with a plane, or bind
-  neighbouring planes through a shared rhythm. Decide by the whole picture.
-- **Light and texture.** Quiet passages and active marks read differently
-  as light. Compare them before extending either.
+- **Mark direction and form.** Direction can turn with a plane or bind
+  neighbouring planes through a shared rhythm. Strokes that wander in
+  every direction read as noise.
+- **Light and texture.** Bright light reads as light with soft edges and
+  little texture. Busy or outlined strokes inside it, or strokes circling
+  a centre, turn it into an object.
 
 ## Spatter
 
@@ -123,16 +124,17 @@ does; this says how to use them. What you paint is yours to choose.
 ## Forms and shadows
 
 - **A form can read as one mass.** Relate its parts through colour and
-  overlap so they hold together. `form{}` gives a lit-volume guide; colour
-  modulation is another way to build solidity, with or without its
-  lighting.
-- **Shadows take colour from surrounding light.** Separate passes with
-  different `pile=` values can vary a shadow's colour. Judge its value and
-  temperature against the passages around it; one violet for every shadow
-  is the usual trap.
-- **Distance and colour.** Lightening and cooling can suggest recession;
-  similar intensity in near and far planes can compress depth. Choose what the
-  painting needs.
+  overlap so they hold together. `form{}` gives a lit-volume guide, and
+  colour modulation builds solidity with or without that lighting.
+- **Shadows take colour from surrounding light.** With warm light reflected
+  up near its base and cooler light from above, a shadow is warmer near its
+  base and cooler above. Grade it in separate passes with different `pile=`
+  values, and judge its value and temperature against the object casting
+  it and the passages around it. One violet for every shadow is the usual
+  trap.
+- **Distance and colour.** Distance lightens and cools: far forms are paler
+  and bluer than near ones and closer to each other in tone. Similar
+  intensity in near and far planes can compress depth.
 
 ## The palette
 

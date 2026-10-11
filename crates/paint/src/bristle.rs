@@ -2966,6 +2966,8 @@ pub struct Knife {
     cure: f32,
     #[cfg(feature = "knife-1")]
     flex: Option<f32>,
+    #[cfg(feature = "knife-2")]
+    second: bool,
 }
 
 impl std::fmt::Debug for Knife {
@@ -2974,7 +2976,12 @@ impl std::fmt::Debug for Knife {
         d.field("width", &self.width).field("vol", &self.vol).field("solvent", &self.solvent)
             .field("lat", &self.lat).field("hide", &self.hide).field("cure", &self.cure);
         #[cfg(feature = "knife-1")]
-        if let Some(flex) = self.flex { d.field("knife_1_flex", &flex); }
+        if let Some(flex) = self.flex {
+            let name = "knife_1_flex";
+            #[cfg(feature = "knife-2")]
+            let name = if self.second { "knife_2_flex" } else { name };
+            d.field(name, &flex);
+        }
         d.finish()
     }
 }
@@ -3002,6 +3009,8 @@ impl Knife {
         Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0,
             #[cfg(feature = "knife-1")]
             flex: None,
+            #[cfg(feature = "knife-2")]
+            second: false,
         }
     }
     /// A full load: a bead along the blade twice its length deep and 12

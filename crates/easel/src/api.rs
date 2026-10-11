@@ -2106,6 +2106,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("knife", lua.create_function(move |_, o: Option<Table>| {
             #[cfg(feature = "knife-1")]
             let mut flex = None;
+            #[cfg(feature = "knife-2")]
+            let mut second = false;
             let width = match &o {
                 Some(o) => {
                     #[cfg(not(feature = "knife-1"))]
@@ -2117,7 +2119,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     {
                         let model: Option<String> = o.get("model")?;
                         if let Some(model) = model {
-                            if model != "knife-1" { return err("knife: experimental model is \"knife-1\""); }
+                            let valid = model == "knife-1";
+                            #[cfg(feature = "knife-2")]
+                            let valid = { second = model == "knife-2"; valid || second };
+                            if !valid { return err("knife: this build does not include that experimental model"); }
                             let f = num(o, "flex")?.unwrap_or(0.65);
                             if !(0.0..=1.0).contains(&f) { return err("knife: flex is the blade's compliance, 0 to 1"); }
                             flex = Some(f);
@@ -2133,6 +2138,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let blade = paint::Knife::new(width);
             #[cfg(feature = "knife-1")]
             let blade = if let Some(f) = flex { blade.experimental(f) } else { blade };
+            #[cfg(feature = "knife-2")]
+            let blade = if second { blade.experimental_2(flex.unwrap()) } else { blade };
             let k = Rc::new(RefCell::new(blade));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             Ok(KnifeU { k, st: st1.clone() })

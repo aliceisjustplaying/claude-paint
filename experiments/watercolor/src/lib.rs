@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 mod fiber_paper;
 mod rng;
 pub mod studio;
+mod lab_adapter;
 
 pub const TICK_NS: u64 = 62_500_000;
 pub const DT: f64 = 0.0625;
@@ -199,6 +200,8 @@ pub struct Ledger {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Watercolor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lab: Option<lab_adapter::LabSheet>,
     pub schema: u32,
     pub cell_mm: f64,
     pub width: usize,
@@ -284,6 +287,7 @@ impl Watercolor {
         assert!(cell_mm.is_finite() && (0.025..=0.1).contains(&cell_mm));
         let n = width * height;
         Self {
+            lab: None,
             schema: 3,
             cell_mm,
             width,
@@ -452,6 +456,17 @@ impl Watercolor {
         let steps = total / TICK_NS;
         let residual = total % TICK_NS;
         self.residual_ns = 0;
+        if self.lab.is_some() {
+            for _ in 0..steps {
+                self.lab.as_mut().unwrap().advance_tick();
+                self.tick += 1;
+                if every_ticks > 0 && self.tick.is_multiple_of(every_ticks) {
+                    observer(self);
+                }
+            }
+            self.residual_ns = residual;
+            return;
+        }
         if every_ticks == 0
             && self.water.iter().all(|v| *v == 0.0)
             && self.capillary.iter().all(|v| *v == 0.0)
@@ -488,6 +503,9 @@ impl Watercolor {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(lab) = &self.lab {
+            lab.validate(self.width, self.height)?;
+        }
         let state = self;
         let n = state
             .width
@@ -955,6 +973,9 @@ impl Watercolor {
     }
 
     pub fn finish_glaze(&mut self) -> Result<(), &'static str> {
+        if let Some(lab) = &self.lab {
+            return if lab.is_dry() { Ok(()) } else { Err("glaze is still wet") };
+        }
         if self.water.iter().chain(&self.capillary).any(|v| *v > 1e-10)
             || self.suspended.iter().flatten().any(|v| *v > 1e-10)
         {
@@ -1031,12 +1052,18 @@ impl Watercolor {
     }
 
     pub fn rgb_color(&self) -> Vec<u8> {
+        if let Some(lab) = &self.lab {
+            return lab.project(self.cell_mm, None);
+        }
         self.project(None)
     }
 
     pub fn rgb_lit(&self, azimuth: f64, elevation: f64, intensity: f64) -> Vec<u8> {
         assert!(azimuth.is_finite() && elevation.is_finite() && (1.0..=90.0).contains(&elevation));
         assert!(intensity.is_finite() && intensity >= 0.0);
+        if let Some(lab) = &self.lab {
+            return lab.project(self.cell_mm, Some((azimuth.to_radians(), elevation.to_radians(), intensity)));
+        }
         self.project(Some((
             azimuth.to_radians(),
             elevation.to_radians(),

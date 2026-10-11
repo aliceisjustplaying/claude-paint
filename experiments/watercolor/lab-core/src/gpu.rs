@@ -488,37 +488,39 @@ impl GpuSimulation {
             0,
             bytemuck::cast_slice(&self.settings(evap)),
         );
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        for _ in 0..count {
-            for (pass, outputs, swap) in [
-                (0, &[9][..], true),
-                (1, &[1][..], true),
-                (2, &[0][..], true),
-                (3, &[2, 3, 4][..], true),
-                (5, &[5, 6][..], false),
-                (4, &[2, 3, 4][..], false),
-            ] {
-                self.run(&mut encoder, pass, outputs);
-                if swap {
-                    for i in outputs {
-                        self.current[*i] = 1 - self.current[*i];
+        for start in (0..count).step_by(32) {
+            let mut encoder = self.device.create_command_encoder(&Default::default());
+            for _ in start..(start + 32).min(count) {
+                for (pass, outputs, swap) in [
+                    (0, &[9][..], true),
+                    (1, &[1][..], true),
+                    (2, &[0][..], true),
+                    (3, &[2, 3, 4][..], true),
+                    (5, &[5, 6][..], false),
+                    (4, &[2, 3, 4][..], false),
+                ] {
+                    self.run(&mut encoder, pass, outputs);
+                    if swap {
+                        for i in outputs {
+                            self.current[*i] = 1 - self.current[*i];
+                        }
                     }
                 }
+                for i in [2, 3, 4, 5, 6] {
+                    self.current[i] = 1 - self.current[i];
+                }
+                self.run(&mut encoder, 6, &[7]);
+                self.current[7] = 1 - self.current[7];
+                self.run(&mut encoder, 7, &[8]);
+                self.current[8] = 1 - self.current[8];
+                self.run(&mut encoder, 8, &[2, 3, 4]);
+                self.run(&mut encoder, 9, &[5, 6]);
+                for i in [2, 3, 4, 5, 6] {
+                    self.current[i] = 1 - self.current[i];
+                }
             }
-            for i in [2, 3, 4, 5, 6] {
-                self.current[i] = 1 - self.current[i];
-            }
-            self.run(&mut encoder, 6, &[7]);
-            self.current[7] = 1 - self.current[7];
-            self.run(&mut encoder, 7, &[8]);
-            self.current[8] = 1 - self.current[8];
-            self.run(&mut encoder, 8, &[2, 3, 4]);
-            self.run(&mut encoder, 9, &[5, 6]);
-            for i in [2, 3, 4, 5, 6] {
-                self.current[i] = 1 - self.current[i];
-            }
+            self.queue.submit([encoder.finish()]);
         }
-        self.queue.submit([encoder.finish()]);
     }
 
     pub fn update(&mut self) {

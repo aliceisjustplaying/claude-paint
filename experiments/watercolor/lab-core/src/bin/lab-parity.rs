@@ -387,7 +387,9 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
                 continue;
             }
             let rgba = if let Some(gpu) = &gpu {
+                eprintln!("{name}/{stage_name}: submitted, reading fields");
                 pollster::block_on(gpu.download(&mut sim))?;
+                eprintln!("{name}/{stage_name}: fields read");
                 pollster::block_on(gpu.render_rgba(0.0, 0))?
             } else {
                 sim.render_rgba(0.0, 0)

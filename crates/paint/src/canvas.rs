@@ -550,12 +550,15 @@ impl Canvas {
     /// more of the room's light fills the shadows (a raking lamp in a dim
     /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        self.light_colors(self.seen(), azimuth, elevation, strength)
+    }
+
+    pub(crate) fn light_colors(&self, base: Vec<Rgb>, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
         use rayon::prelude::*;
         // the room's light that fills the shadows: little where one low lamp
         // rakes across the picture in a dim room, much under a gallery's high
         // light, where walls and ceiling light the picture too
         let ambient = crate::lerp(0.3, 0.55, crate::smoothstep(10.0, 55.0, elevation));
-        let base = self.seen();
         let (w, h) = (self.f.w, self.f.h);
         let um_px = self.px_mm() * 1000.0;
         // the surface: dry height plus the wet film where paint is wet

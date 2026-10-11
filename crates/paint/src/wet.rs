@@ -180,11 +180,12 @@ pub(crate) struct Wet {
     pub(crate) laid: Vec<f32>,
     pub(crate) laid_id: Vec<u32>,
     pub(crate) solvent_ledger: Option<crate::rag::transport::SolventLedger>,
+    pub(crate) working_layers: Option<Box<crate::working_layer::Layers>>,
 }
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new(), solvent_ledger: None }
+        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new(), solvent_ledger: None, working_layers: None }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is

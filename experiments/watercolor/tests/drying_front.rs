@@ -78,3 +78,39 @@ fn contact_line_pinning_does_not_amplify_an_interior_checkerboard() {
     );
     assert!(s.balance().water_error.abs() < 1e-8);
 }
+
+#[test]
+fn high_head_ticks_damp_grid_waves_at_each_supported_resolution() {
+    for cell_mm in [0.025, 0.05, 0.1] {
+        let mut base = Watercolor::new_at(128, 128, 7, cell_mm);
+        base.paper.height.fill(0.5);
+        base.paper.sizing.fill(0.6);
+        base.paper.capacity.fill(0.22);
+        base.paper.clump.fill(1.0);
+        base.capillary.fill(0.22);
+        base.wet_front.fill(true);
+        base.active.coverage.fill(1.0);
+        for depth in [1.0, 5.0] {
+            let mut s = base.clone();
+            for y in 0..128 {
+                for x in 0..128 {
+                    let sign = if (x + y) % 2 == 0 { 1.0 } else { -1.0 };
+                    s.water[y * 128 + x] = depth + sign * 1e-8;
+                }
+            }
+            s.ledger.water_added = s.water.iter().sum::<f64>() + 0.22 * 16384.0;
+            s.wait_ns(TICK_NS);
+            let mut amplitude = 0.0;
+            for y in 48..80 {
+                for x in 48..80 {
+                    let sign = if (x + y) % 2 == 0 { 1.0 } else { -1.0 };
+                    amplitude += sign * s.water[y * 128 + x] / 1024.0;
+                }
+            }
+            assert!(
+                amplitude.abs() <= 1.05e-8,
+                "cell {cell_mm}, depth {depth}: {amplitude}"
+            );
+        }
+    }
+}

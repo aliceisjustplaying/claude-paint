@@ -47,6 +47,8 @@ def sheet(names, views, detail, filename):
 
 
 sheet(["baseline", "body3", chosen], ["gallery"], False, "gallery-comparison")
+if receipt.get("target_policy") == "baseline":
+    shutil.copy2(destination / f"{prefix}gallery-comparison.png", destination / f"{prefix}original-volume-gallery.png")
 sheet(["baseline", "body3", chosen], ["color"], False, "color-comparison")
 sheet(variants, ["gallery", "color"], True, "dark-wall-comparison")
 sheet(["lean4", "body4", "wild4"], ["gallery"], False, "entropy-gallery")

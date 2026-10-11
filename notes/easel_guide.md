@@ -720,6 +720,21 @@ with `scratch: true`; without it they work on the painting.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
 
+## Colour, planes and open coverage
+
+These tools build a picture from colour and separately drawn planes,
+alongside the lit-volume and perspective scaffolds above. The subject,
+canvas and arrangement are yours:
+
+| Idea | Tools and parameters |
+|---|---|
+| Colour-built space | Related warm/cool `pile{}` mixtures; separate `b:stroke` marks, or `work` with weighted `piles`. Relative warmth can advance and coolness recede; check the effect with a laid trial. |
+| Compressed depth and tilted planes | Separately drawn `poly` masks and stroke paths; adjust spacing, tilt, overlap and relative colour intensity. A `world{}` projection is optional. |
+| Volumes and facets | Plane divisions drawn with `poly` or brush paths, related through colour; `form{}` is optional, as a volume guide. |
+| Constructive direction | Blunt `brush{kind="flat", point=0, width=...}` with `b:stroke`; or `work` with `tool`, `length`, `angle`, `dips`. The `hatch` hand's default brush is a round. |
+| Reserves | Prepared `canvas{ground=...}`; `work`'s `coverage`, `load`, `hug=false`, `fill=false`. An untouched area keeps its preparation; a wet lift may leave a stain. |
+| Multiple viewpoints | Separately drawn plane masks and paths can each take their own orientation; `look` checks how they relate across the whole picture. |
+
 ## The journal
 
 `notes/journal.md` is your working journal. `note` appends an entry

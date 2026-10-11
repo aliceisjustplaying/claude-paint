@@ -229,6 +229,7 @@ pub struct Balance {
 }
 
 struct Scratch {
+    wet_height: Vec<f64>,
     head: Vec<f64>,
     faces: Vec<(usize, usize, bool)>,
     surface_faces: Vec<(usize, usize, bool)>,
@@ -246,8 +247,15 @@ struct Scratch {
 }
 
 impl Scratch {
-    fn new(n: usize) -> Self {
+    fn new(state: &Watercolor) -> Self {
+        let n = state.water.len();
         Self {
+            wet_height: correlate(
+                &state.paper.height,
+                state.width,
+                state.height,
+                (0.15 / state.cell_mm).round().max(1.0) as usize,
+            ),
             head: vec![0.0; n],
             faces: Vec::new(),
             surface_faces: Vec::new(),
@@ -453,7 +461,7 @@ impl Watercolor {
             self.residual_ns = residual;
             return;
         }
-        let mut scratch = Scratch::new(self.water.len());
+        let mut scratch = Scratch::new(self);
         for done in 0..steps {
             if !self.step(&mut scratch) && every_ticks == 0 {
                 self.tick = self
@@ -598,6 +606,7 @@ impl Watercolor {
     fn solve_substep(&mut self, dt: f64, scratch: &mut Scratch, surface: bool) {
         let n = self.water.len();
         let Scratch {
+            wet_height,
             head,
             faces,
             surface_faces,
@@ -650,7 +659,7 @@ impl Watercolor {
                 } else {
                     0.0
                 };
-                *head = self.water[i] + 0.025 * self.paper.height[i]
+                *head = self.water[i] + 0.025 * wet_height[i]
                     - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
             }
             transfers.clear();
@@ -678,7 +687,7 @@ impl Watercolor {
                 let flux = if old_front[i] && old_front[j] {
                     let mobility = (depth / 0.008).clamp(0.0, 1.0).powi(2);
                     let sizing = (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5;
-                    let tooth = (self.paper.height[i] + self.paper.height[j]) * 0.5;
+                    let tooth = (wet_height[i] + wet_height[j]) * 0.5;
                     let pore = (self.paper.capacity[i] + self.paper.capacity[j]) / 0.56;
                     let permeability = (2.0
                         * (0.15 + 2.3 * (1.0 - sizing).powi(2))
@@ -686,7 +695,7 @@ impl Watercolor {
                         * pore.clamp(0.6, 1.4))
                     .clamp(0.12, 2.2);
                     let permeability = if depth < 0.06 {
-                        permeability * (-6.0 * (tooth - 0.5) * (1.0 - depth / 0.06)).exp()
+                        permeability * (-0.9 * (tooth - 0.5) * (1.0 - depth / 0.06)).exp()
                     } else {
                         permeability
                     };
@@ -761,12 +770,8 @@ impl Watercolor {
                     let diff = dt
                         * (CELL_MM / self.cell_mm).powi(2)
                         * self.water[i].min(self.water[j])
-                        * ((0.18 + 0.45 * (1.0 - properties.granulation)) * (ci - cj)
-                            + 0.12
-                                * properties.granulation
-                                * (ci + cj)
-                                * 0.5
-                                * (self.paper.height[i] - self.paper.height[j]));
+                        * (0.18 + 0.45 * (1.0 - properties.granulation))
+                        * (ci - cj);
                     let (from, to, m) = if diff >= 0.0 {
                         (i, j, diff)
                     } else {
@@ -882,6 +887,11 @@ impl Watercolor {
                 speed += self.flux_y[i - self.width].abs();
             }
             let speed = (speed / self.water[i].max(0.01)).min(8.0);
+            let deposited = std::iter::once(&self.active)
+                .chain(&self.glazes)
+                .map(|g| g.deposited[i].iter().sum::<f64>() + g.bound[i].iter().sum::<f64>())
+                .sum::<f64>();
+            let relief = 0.06 / (self.water[i] + 0.06) * 0.002 / (deposited + 0.002);
             for (p, pigment) in PALETTE.iter().enumerate() {
                 if self.suspended[i][p] == 0.0
                     && self.active.deposited[i][p] == 0.0
@@ -896,8 +906,7 @@ impl Watercolor {
                 if self.suspended[i][p] == 0.0 && wet == 0.0 && room == 0.0 {
                     continue;
                 }
-                let valley =
-                    (1.0 - self.paper.height[i]).powi(2) * 4.0 * (0.9 + 0.1 * self.paper.clump[i]);
+                let valley = 1.0 + 0.95 * ((0.5 - wet_height[i]) / 0.08).tanh() * relief;
                 let rate = pigment.settling
                     * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet))
                     + 1.8 * pigment.staining.powi(3);

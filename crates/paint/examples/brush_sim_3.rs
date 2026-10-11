@@ -10,12 +10,14 @@ const VARIANTS: [(u32, &str); 5] = [
     (13, "body3"),
     (14, "wild3"),
 ];
-const SCENES: [&str; 7] = [
+const SCENES: [&str; 9] = [
     "crossing",
     "spent",
     "dark",
     "wet",
     "thin-dark",
+    "thin-loaded-dark",
+    "loaded-light",
     "impasto-light",
     "lit-window",
 ];
@@ -87,8 +89,8 @@ fn tube(name: &str, medium: f32) -> Paint {
 
 fn scene(name: &str, engine: u32, factor: f32) -> Run {
     let ground = match name {
-        "dark" | "thin-dark" => "#eee8da",
-        "impasto-light" | "lit-window" => "#343941",
+        "dark" | "thin-dark" | "thin-loaded-dark" => "#eee8da",
+        "loaded-light" | "impasto-light" | "lit-window" => "#343941",
         _ => "#bcb3a2",
     };
     let mut c = Canvas::new(640, 2.0, hex(ground))
@@ -205,6 +207,26 @@ fn scene(name: &str, engine: u32, factor: f32) -> Run {
             &[Gesture::line((110.0, 250.0), (930.0, 250.0)).pressure(0.75, 0.75)],
             &mut ledger,
         ),
+        "thin-loaded-dark" => pull(
+            &mut c,
+            engine,
+            73,
+            black.with_thinner(0.12),
+            0.9 * factor,
+            110.0,
+            &[Gesture::line((110.0, 250.0), (930.0, 250.0)).pressure(0.85, 0.85)],
+            &mut ledger,
+        ),
+        "loaded-light" => pull(
+            &mut c,
+            engine,
+            90,
+            white,
+            0.95 * factor,
+            130.0,
+            &[Gesture::line((330.0, 245.0), (620.0, 257.0)).pressure(0.85, 0.7)],
+            &mut ledger,
+        ),
         "impasto-light" => {
             for (i, y) in [205.0, 245.0, 285.0].into_iter().enumerate() {
                 pull(
@@ -312,7 +334,7 @@ fn rois(name: &str) -> Vec<(&'static str, (usize, usize, usize, usize))> {
             ("soft_edge", (258, 75, 286, 220)),
             ("wet_wall", (100, 100, 220, 220)),
         ],
-        "impasto-light" => vec![
+        "loaded-light" | "impasto-light" => vec![
             ("light_core", (230, 128, 370, 188)),
             ("light_edge", (210, 115, 395, 200)),
         ],

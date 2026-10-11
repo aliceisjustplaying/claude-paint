@@ -645,6 +645,15 @@ impl Held {
             let target = 1.15 * sim.strength(br, &self.tool) * sim.deflect(br.rx + old[i], self.tool.width) * (0.35 + 0.65 * pressure);
             let attraction = if weight > 1e-6 { 0.55 * cohesion * (moment / weight - br.rx) } else { 0.0 };
             let target = (target + attraction).clamp(-0.22, 0.22);
+            #[cfg(feature = "brush-sim-4")]
+            let target = if sim.model.level > 0.0 {
+                let count = 3.0 + (crate::rng::hash2(0, 27, sim.seed) * 3.0).floor();
+                let moving = 0.08 * wander(sim.distance_mm / 21.0, sim.seed ^ 0x914);
+                let rank = (((br.rx - moving + 1.0) * 0.5 * count).floor()).clamp(0.0, count - 1.0);
+                let jitter = 0.2 * wander(rank, sim.seed ^ 0x941);
+                let center = -1.0 + 2.0 * (rank + 0.5 + jitter) / count + moving;
+                (0.82 * cohesion * (center - br.rx) + 0.18 * target).clamp(-0.22, 0.22)
+            } else { target };
             self.bundle_offsets[i] = (old[i] + (target - old[i]) * rate).clamp(-ROOT_MAX - br.rx, ROOT_MAX - br.rx);
         }
         let parity = (sim.distance_mm / 1.3).floor() as usize % 2;
@@ -706,27 +715,34 @@ struct BrushSim {
     entropy: f32,
     next: bool,
     bundles: bool,
+    level: f32,
 }
 
 #[cfg(feature = "brush-sim-1")]
 impl BrushSim {
     fn for_engine(engine: u32) -> Option<Self> {
         match engine {
-            6 => Some(Self { release: 0.85, entropy: 1.0, next: false, bundles: false }),
-            7 => Some(Self { release: 1.05, entropy: 1.0, next: false, bundles: false }),
-            8 => Some(Self { release: 0.95, entropy: 2.8, next: false, bundles: false }),
+            6 => Some(Self { release: 0.85, entropy: 1.0, next: false, bundles: false, level: 0.0 }),
+            7 => Some(Self { release: 1.05, entropy: 1.0, next: false, bundles: false, level: 0.0 }),
+            8 => Some(Self { release: 0.95, entropy: 2.8, next: false, bundles: false, level: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            9 => Some(Self { release: 1.05, entropy: 2.2, next: true, bundles: false }),
+            9 => Some(Self { release: 1.05, entropy: 2.2, next: true, bundles: false, level: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            10 => Some(Self { release: 1.2, entropy: 2.8, next: true, bundles: false }),
+            10 => Some(Self { release: 1.2, entropy: 2.8, next: true, bundles: false, level: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            11 => Some(Self { release: 1.25, entropy: 4.0, next: true, bundles: false }),
+            11 => Some(Self { release: 1.25, entropy: 4.0, next: true, bundles: false, level: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            12 => Some(Self { release: 1.05, entropy: 2.7, next: true, bundles: true }),
+            12 => Some(Self { release: 1.05, entropy: 2.7, next: true, bundles: true, level: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            13 => Some(Self { release: 1.2, entropy: 3.4, next: true, bundles: true }),
+            13 => Some(Self { release: 1.2, entropy: 3.4, next: true, bundles: true, level: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            14 => Some(Self { release: 1.05, entropy: 4.6, next: true, bundles: true }),
+            14 => Some(Self { release: 1.05, entropy: 4.6, next: true, bundles: true, level: 0.0 }),
+            #[cfg(feature = "brush-sim-4")]
+            15 => Some(Self { release: 1.05, entropy: 3.0, next: true, bundles: true, level: 0.65 }),
+            #[cfg(feature = "brush-sim-4")]
+            16 => Some(Self { release: 1.15, entropy: 3.6, next: true, bundles: true, level: 1.0 }),
+            #[cfg(feature = "brush-sim-4")]
+            17 => Some(Self { release: 1.05, entropy: 4.8, next: true, bundles: true, level: 1.25 }),
             _ => None,
         }
     }
@@ -748,6 +764,14 @@ impl SimContact {
     fn at(self, rx: f32, width: f32) -> (f32, f32) {
         #[cfg(feature = "brush-sim-3")]
         let rx = if self.model.bundles { rx + self.offset } else { rx };
+        #[cfg(feature = "brush-sim-4")]
+        if self.model.level > 0.0 {
+            let count = 3.0 + (crate::rng::hash2(0, 27, self.seed) * 3.0).floor();
+            let moving = 0.08 * wander(self.distance_mm / 21.0, self.seed ^ 0x914);
+            let group = wander((rx - moving) * count * 0.5, self.seed ^ 0xB72);
+            let fold = 0.35 * wander(rx * 2.3 + self.distance_mm / 17.0, self.seed ^ 0x53C);
+            return (group, fold);
+        }
         let x = rx * width * self.mm_per_unit * 0.5;
         let d = self.distance_mm;
         let warp = wander(d / 13.7, self.seed ^ 0xA61) + 0.5 * wander(x / 2.9 + d / 17.3, self.seed ^ 0x973);

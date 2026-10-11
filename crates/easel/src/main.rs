@@ -106,6 +106,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel run <file.lua> [--out path.png] [--gallery [--also-color path.png]] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+      [--material-report path.csv] [--save-final-canvas path]   chunk volume proxies and one final canvas checkpoint
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
@@ -1446,14 +1447,25 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--also-color path.png] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--also-color path.png] [--look] [--state-digest digests.txt] [--material-report path.csv] [--save-final-canvas path] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
     let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
+    let mut material_report = None;
+    let mut save_final_canvas = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
+            "--material-report" | "--save-final-canvas" => {
+                let option = &args[i];
+                let path = args.get(i + 1).filter(|p| !p.is_empty() && !p.starts_with('-')).ok_or_else(|| format!("{option}: want a path ({RUN_USAGE})"))?;
+                let target = if option == "--material-report" { &mut material_report } else { &mut save_final_canvas };
+                if target.replace(PathBuf::from(path)).is_some() {
+                    return Err(format!("{option}: specified twice"));
+                }
+                i += 2;
+            }
             "--out" | "--also-color" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
@@ -1476,6 +1488,38 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         if path == &out {
             return Err("--also-color must differ from --out".into());
+        }
+    }
+    if material_report.is_some() || save_final_canvas.is_some() {
+        let mut outputs = vec![("--out", out.clone())];
+        for option in ["--also-color", "--state-digest", "--dump-surface", "--dump-state", "--frames-dir"] {
+            if let Some(path) = flag(args, option) {
+                outputs.push((option, PathBuf::from(path)));
+            }
+        }
+        if args.iter().any(|a| a == "--look") {
+            outputs.push(("--look", out.with_extension("look.png")));
+        }
+        outputs.extend(material_report.iter().cloned().map(|p| ("--material-report", p)));
+        outputs.extend(save_final_canvas.iter().cloned().map(|p| ("--save-final-canvas", p)));
+        let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+        let normalized = |path: &Path| {
+            let mut result = PathBuf::new();
+            for component in cwd.join(path).components() {
+                match component {
+                    std::path::Component::ParentDir => { result.pop(); }
+                    std::path::Component::CurDir => {}
+                    other => result.push(other.as_os_str()),
+                }
+            }
+            result
+        };
+        for (i, (option, path)) in outputs.iter().enumerate() {
+            for (other, other_path) in &outputs[..i] {
+                if normalized(path) == normalized(other_path) {
+                    return Err(format!("{option} must differ from {other}: {}", path.display()));
+                }
+            }
         }
     }
     let chunks = parse_program(&text);
@@ -1501,6 +1545,10 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
+    let mut materials = material_report.as_ref().map(|p| std::fs::File::create(p).map_err(|e| format!("{}: {e}", p.display()))).transpose()?;
+    if let Some(f) = materials.as_mut() {
+        writeln!(f, "chunk_index,native_width_px,native_height_px,recorded_engine,material_total_volume_proxy_coats_times_square_units,solvent_total_volume_proxy_coats_times_square_units").map_err(|e| format!("--material-report: {e}"))?;
+    }
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
@@ -1508,6 +1556,16 @@ fn run(args: &[String]) -> Result<(), String> {
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
+        }
+        if let Some(f) = materials.as_mut() {
+            let c = s.canvas().ok_or_else(|| format!("--material-report: chunk {} has no canvas", i + 1))?;
+            let material = c.material_total();
+            let solvent = c.solvent_total();
+            if !material.is_finite() || !solvent.is_finite() {
+                return Err(format!("--material-report: chunk {} has non-finite volume proxies", i + 1));
+            }
+            let frame = c.window();
+            writeln!(f, "{},{},{},{},{material},{solvent}", i + 1, frame.w, frame.h, c.engine()).map_err(|e| format!("--material-report: {e}"))?;
         }
         // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
         if let Some(d) = flag(args, "--dump-state") {
@@ -1542,6 +1600,14 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(path) = &also_color {
         deliver(&c, path)?;
         eprintln!("wrote {} (Color from the same final canvas)", path.display());
+    }
+    if let Some(path) = &save_final_canvas {
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+        let mut f = std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| format!("{}: {e}", path.display()))?);
+        c.write_state(&mut f, &text).map_err(|e| format!("--save-final-canvas: {e}"))?;
+        f.flush().map_err(|e| format!("--save-final-canvas: {e}"))?;
     }
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {

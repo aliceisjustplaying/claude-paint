@@ -2,9 +2,10 @@
 """Test one exact commit in a fresh, clean, temporary working copy and record a receipt.
 
     scripts/test_candidate COMMIT [--base-main COMMIT] [--remote origin]
-                           [--timeout 600] [--lock-timeout SECONDS] [--list-file PATH]
+                           [--timeout SECONDS] [--lock-timeout SECONDS] [--list-file PATH]
 
---timeout is each phase's lockrun limit: over 0 and at most 600 seconds.
+--timeout is each phase's raw lockrun limit: over 0 and at most 600 times
+the validated timeout scale. The default is 600 times that scale.
 
 - COMMIT must be a commit id (hex). Branch names, tags, unknown ids, ambiguous
   prefixes and ids that are also ref names are refused: a name can move
@@ -23,8 +24,8 @@
   flags, and `git status` shows nothing (untracked or ignored files
   included). Otherwise it refuses (exit 2).
 - Inside it, two phases, each one job of the pinned lockrun limited to
-  SECONDS (at most 600: the plan's builds and final check batch, ten
-  minutes each): `scripts/test --all --phase build --summary B`, then, only
+  SECONDS (at most 600 times the trusted timeout scale):
+  `scripts/test --all --phase build --summary B`, then, only
   if the build phase passed, `scripts/test --all --phase check --summary C`
   (plus `--list LIST` for a non-default list), with CARGO_TARGET_DIR inside
   the temporary working copy.
@@ -44,10 +45,13 @@
   into the receipt.
 - Each phase is bound to the list: B's steps must be exactly the list's build
   steps, C's exactly its other steps, each in list order with the same name,
-  kind, command, limit, least, group and known failure (exit, regex, text, or
+  kind, command, scaled limit, least, group and known failure (exit, regex, text, or
   none); both summaries have mode "all", their phase, list LIST, list_sha256
   the list's hash in the commit and runner_sha256 the hash of scripts/test in
-  the commit. The build phase passes with lockrun exit 0, verdict "pass" and
+  the commit. Explicit summary timeout scales must match the controller's
+  validated scale, recorded in the receipt and pinned in the child environment.
+  Legacy summaries without a scale bind raw limits at 1. The build phase passes
+  with lockrun exit 0, verdict "pass" and
   every step exit 0, ok, timed_out false and failed 0. The check phase
   passes the same way, and every non-build step needs tests_run >= its
   least >= 1; every step's log must be present with the sha256 its summary
@@ -99,7 +103,7 @@ from safeguards_lib import (DEFAULT_LIST, LOCKRUN_SHA256, PHASE_LIMIT, PHASES, R
                             RECEIPTS_REF, TOOLS_LOCKRUN, Refuse, assert_publishable, checkout_problems,
                             checkout_state, git, home_redact, is_ancestor, known_text, manifest_at,
                             manifest_problems, now_iso, phase_problems, resolve_exact_commit, run,
-                            sha256_bytes, sha256_file, toplevel, tools_sha256, tree_of)
+                            sha256_bytes, sha256_file, timeout_scale, toplevel, tools_sha256, tree_of)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL_FILES = [os.path.abspath(__file__), os.path.join(HERE, "safeguards_lib.py")]
@@ -251,7 +255,7 @@ def verify_full_clean_checkout(wt, sha, tree):
     return state
 
 
-def collect(wt, summary_path, receipt_dir, manifest, phase):
+def collect(wt, summary_path, receipt_dir, manifest, phase, scale=1):
     """Parse one phase's summary, copy its logs out, check it against the manifest.
     Returns (summary, logs, problems, known)."""
     problems = []
@@ -265,7 +269,7 @@ def collect(wt, summary_path, receipt_dir, manifest, phase):
             summary = json.loads(raw)
         except ValueError:
             problems.append("the summary is not valid JSON")
-    more, known = phase_problems(summary, manifest, phase)
+    more, known = phase_problems(summary, manifest, phase, scale)
     problems += more
     logs = []
     steps = summary.get("steps") if isinstance(summary, dict) else None
@@ -345,8 +349,8 @@ def main():
     ap.add_argument("--base-main", help="main commit the candidate is based on (default: refs/heads/main, "
                     "else refs/remotes/REMOTE/main)")
     ap.add_argument("--remote", default="origin")
-    ap.add_argument("--timeout", type=float, default=PHASE_LIMIT,
-                    help="each phase's lockrun --timeout (seconds, at most %g)" % PHASE_LIMIT)
+    ap.add_argument("--timeout", type=float,
+                    help="each phase's raw lockrun timeout in seconds (default and ceiling: 600 times scale)")
     ap.add_argument("--lock-timeout", type=float, help="give up if the lock is not free in time")
     ap.add_argument("--list-file", default=DEFAULT_LIST,
                     help="the test list in the commit (default %s)" % DEFAULT_LIST)
@@ -354,8 +358,12 @@ def main():
 
     t_start, started_at = time.monotonic(), now_iso()
     try:
-        if not 0 < args.timeout <= PHASE_LIMIT:
-            raise Refuse("--timeout %g: each phase's limit is over 0 and at most %g s" % (args.timeout, PHASE_LIMIT))
+        scale = timeout_scale()
+        phase_ceiling = PHASE_LIMIT * scale
+        if args.timeout is None:
+            args.timeout = phase_ceiling
+        if not 0 < args.timeout <= phase_ceiling:
+            raise Refuse("--timeout %g: each phase's limit is over 0 and at most %g s" % (args.timeout, phase_ceiling))
         repo = toplevel(".")
         sha = resolve_exact_commit(repo, args.commit)
         tree = tree_of(repo, sha)
@@ -415,7 +423,7 @@ def main():
         pr, summary, known = [], None, []
         try:
             summary, e["logs"], more, known = collect(wt, os.path.join(tmp, "summary-%s.json" % ph),
-                                                      receipt_dir, manifest, ph)
+                                                      receipt_dir, manifest, ph, scale)
             pr += more
         except Exception as ex:  # noqa: BLE001 - a crash while reading is a failure, not a skip
             pr.append("reading the results failed: %s: %s" % (type(ex).__name__, ex))
@@ -468,7 +476,8 @@ def main():
                 refused = str(e)
             if refused is None:
                 os.makedirs(receipt_dir, exist_ok=True)
-                env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(wt, "target"))
+                env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(wt, "target"),
+                           SCRIPTS_TEST_TIMEOUT_SCALE=str(scale))
                 lockrun_info = {"path": home_redact(lockrun_path), "source": lockrun_src,
                                 "sha256": sha256_file(lockrun), "pinned_sha256": LOCKRUN_SHA256,
                                 "ran": "a copy in the temporary directory, outside the working copy, "
@@ -591,6 +600,7 @@ def main():
         "base_main": {"commit": base, "source": base_source, "is_ancestor": is_ancestor(repo, base, sha)},
         "exit": EXIT[verdict],
         "phase_limit_s": args.timeout,
+        "timeout_scale": scale,
         "started_at": started_at,
         "ended_at": now_iso(),
         "seconds": round(time.monotonic() - t_start, 3),

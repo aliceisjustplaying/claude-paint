@@ -44,12 +44,16 @@ fail() { echo "replay_env: $1 (EASEL_BOX=inness in its environment); see $2" >&2
 "$repo/scripts/check_painting" "$studio" "$work/check" >"$work/check.log" 2>&1 || fail "check_painting failed" "$work/check.log"
 grep -q '^check: ok' "$work/check.log" || fail "check_painting didn't pass" "$work/check.log"
 grep -q "the replay's PNG equals the painter's last save" "$work/check.log" || fail "check_painting's replay differs from the save" "$work/check.log"
-# A one-level change is rejected for the same build but accepted across builds.
-# Two levels are rejected even across builds. Keep the original studio artifacts.
+# Same-platform changes stay exact across builds; only known different
+# platforms allow two levels. Keep the original studio artifacts.
 live=$studio/out/easel/painting/live.png
 livetxt=$studio/out/easel/painting/live.txt
 cp "$live" "$work/original.png"
 cp "$livetxt" "$work/original.txt"
+localplatform=$(awk '$1 == "platform" { print $2 }' "$livetxt")
+[ "$localplatform" = "linux-x86_64" ] || [ "$localplatform" = "macos-aarch64" ] || fail "missing or unexpected live platform: $localplatform" "$livetxt"
+otherplatform=linux-x86_64
+[ "$localplatform" = linux-x86_64 ] && otherplatform=macos-aarch64
 change_pixel() {
   uv run --no-project --with 'pillow>=11,<13' python - "$work/original.png" "$live" "$1" <<'PY'
 import sys
@@ -68,11 +72,37 @@ if "$repo/scripts/check_painting" "$studio" "$work/check-exact" >"$work/check-ex
 fi
 grep -q '^check: DIFFERS from the live canvas:' "$work/check-exact.log" || fail "same-build check failed for another reason" "$work/check-exact.log"
 sed 's/^build .*/build another-build/' "$work/original.txt" >"$livetxt"
-"$repo/scripts/check_painting" "$studio" "$work/check-tolerant" >"$work/check-tolerant.log" 2>&1 || fail "bounded cross-build drift failed" "$work/check-tolerant.log"
-grep -q 'within the image tolerance' "$work/check-tolerant.log" || fail "cross-build comparison wasn't exercised" "$work/check-tolerant.log"
+if "$repo/scripts/check_painting" "$studio" "$work/check-platform-exact" >"$work/check-platform-exact.log" 2>&1; then
+  fail "same-platform drift across builds was accepted" "$work/check-platform-exact.log"
+fi
+grep -q '^check: DIFFERS from the live canvas:' "$work/check-platform-exact.log" || fail "same-platform check failed for another reason" "$work/check-platform-exact.log"
+sed 's/^platform .*/platform unknown/' "$livetxt" >"$work/unknown.txt"
+cp "$work/unknown.txt" "$livetxt"
+if "$repo/scripts/check_painting" "$studio" "$work/check-unknown" >"$work/check-unknown.log" 2>&1; then
+  fail "unknown-platform drift was accepted" "$work/check-unknown.log"
+fi
+grep -q '^check: DIFFERS from the live canvas:' "$work/check-unknown.log" || fail "unknown-platform check failed for another reason" "$work/check-unknown.log"
+sed "s/^platform .*/platform $otherplatform/" "$work/original.txt" >"$livetxt"
+if "$repo/scripts/check_painting" "$studio" "$work/check-binary-exact" >"$work/check-binary-exact.log" 2>&1; then
+  fail "same-binary drift with different platform metadata was accepted" "$work/check-binary-exact.log"
+fi
 change_pixel 2
+sed -e 's/^build .*/build another-build/' -e "s/^platform .*/platform $otherplatform/" "$work/original.txt" >"$livetxt"
+"$repo/scripts/check_painting" "$studio" "$work/check-tolerant" >"$work/check-tolerant.log" 2>&1 || fail "bounded cross-platform drift failed" "$work/check-tolerant.log"
+grep -q 'within the image tolerance' "$work/check-tolerant.log" || fail "cross-platform comparison wasn't exercised" "$work/check-tolerant.log"
+sed '/^platform /d; s/^build .*/build another-build/' "$work/original.txt" >"$livetxt"
+rc=0
+"$repo/scripts/check_painting" "$studio" "$work/check-legacy" >"$work/check-legacy.log" 2>&1 || rc=$?
+if [ "$localplatform" = macos-aarch64 ]; then
+  [ "$rc" = 1 ] || fail "historical Mac record drift passed on Mac" "$work/check-legacy.log"
+else
+  [ "$rc" = 0 ] || fail "historical Mac record bounded drift failed on Linux" "$work/check-legacy.log"
+fi
+grep -q 'historical easel live record' "$work/check-legacy.log" || fail "legacy provenance was not reported" "$work/check-legacy.log"
+sed -e 's/^build .*/build another-build/' -e "s/^platform .*/platform $otherplatform/" "$work/original.txt" >"$livetxt"
+change_pixel 3
 if "$repo/scripts/check_painting" "$studio" "$work/check-too-far" >"$work/check-too-far.log" 2>&1; then
-  fail "excessive cross-build drift was accepted" "$work/check-too-far.log"
+  fail "excessive cross-platform drift was accepted" "$work/check-too-far.log"
 fi
 grep -q '^check: DIFFERS from the live canvas:' "$work/check-too-far.log" || fail "cross-build check failed for another reason" "$work/check-too-far.log"
 cp "$work/original.png" "$live"

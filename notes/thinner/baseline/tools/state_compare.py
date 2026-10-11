@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare state dumps (`easel run --dump-state`, format CPSTATE1) field by field.
 
-    state_compare.py BASELINE NEW [--added-zero] [--ignore NAME]... [--quiet]
+    state_compare.py BASELINE NEW [--added-zero] [--ignore NAME]... [--quiet] [--linux-tolerance]
 
 BASELINE and NEW are two .state files (raw, .xz or .gz) or two directories
 of them (every chunk-*.state[.xz|.gz] in BASELINE is compared with the file
@@ -15,6 +15,11 @@ e.g. brushes[0].bristles[3].vol, and compared value by value the same way.
 Fields or named values only the new dump has (a later engine's solvent, say)
 are listed, not failed; with --added-zero each of them must be zero
 (numbers 0, booleans false, None, empty lists).
+
+--linux-tolerance opts into measured absolute limits for the six 128 px
+engine-3 baseline scenes across macOS arm64 and Linux x86_64. Unlisted
+fields, integers, structure, nonfinite values and added-zero checks stay
+exact. Each bounded field reports its maximum allowed and observed error.
 
 Exit 0: equal on every baseline field; 1: a difference; 2: a usage or
 format error. Only Python's standard library.
@@ -31,6 +36,30 @@ import struct
 import sys
 
 DT = {"f32": ("f", 4), "f64": ("d", 8), "u32": ("I", 4), "u64": ("Q", 8)}
+
+LINUX_LIMITS = {
+    "color": 5e-6,
+    "height": 1.3e-4,
+    "film": 6e-6,
+    "wet.vol": 8e-6,
+    "wet.lat": 1.6e-7,
+    "wet.hide": 5e-7,
+    "wet.floor": 8e-6,
+    "clock.cure": 4e-7,
+    "clock.lev": 7e-5,
+    "clock.seen": 8e-6,
+    "clock.th": 6e-6,
+    "clock.sub": 1.6e-5,
+    "clock.srate": 2.2e-9,
+    "brushes.debug:brushes[].bristles[].vol": 1.1e-3,
+    "brushes.debug:brushes[].bristles[].rx": 6.1e-8,
+    "brushes.debug:brushes[].bristles[].ry": 2.1e-8,
+    "brushes.debug:brushes[].bristles[].thresh": 3.1e-8,
+    "brushes.debug:brushes[].bristles[].bend[]": 1.1e-7,
+    "brushes.debug:brushes[].bristles[].lat[]": 1.1e-7,
+    "brushes.debug:brushes[].bristles[].hide[]": 3.1e-7,
+    "brushes.debug:brushes[].bristles[].cure": 6.1e-12,
+}
 
 
 class FormatError(Exception):
@@ -205,11 +234,24 @@ def zero_value(node):
 
 # ---------------------------------------------------------------- compare
 
-def compare_numeric(name, a, b, problems):
+def float_within_limit(name, x, y, limits, observed):
+    limit = limits.get(name)
+    if limit is None:
+        return False
+    d = abs(x - y) if math.isfinite(x) and math.isfinite(y) else math.inf
+    observed[name] = max(observed.get(name, 0.0), d)
+    return 0.0 < d <= limit
+
+
+def compare_numeric(name, a, b, problems, limits=None, observed=None):
+    limits = limits or {}
+    observed = observed if observed is not None else {}
     (da, sa, ra), (db, sb, rb) = a, b
     if da != db or sa != sb:
         problems.append("%s: dtype/shape %s %s -> %s %s" % (name, da, list(sa), db, list(sb)))
         return
+    if name in limits and da in ("f32", "f64"):
+        observed.setdefault(name, 0.0)
     if ra == rb:
         return
     code, size = DT[da]
@@ -226,30 +268,45 @@ def compare_numeric(name, a, b, problems):
         d = abs(x - y) if not (isinstance(x, float) and (math.isnan(x) or math.isnan(y))) else math.inf
         if d > worst:
             worst, at = d, i
-    problems.append("%s: %d of %d values differ (largest |diff| %g at flat index %d: %r -> %r)"
-                    % (name, len(diff), n, worst, at, va[at], vb[at]))
+    failed = [i for i in diff if da not in ("f32", "f64") or
+              not float_within_limit(name, va[i], vb[i], limits, observed)]
+    if failed:
+        problems.append("%s: %d of %d values differ%s (largest |diff| %g at flat index %d: %r -> %r)"
+                        % (name, len(failed), n, " beyond tolerance" if name in limits else "",
+                           worst, at, va[at], vb[at]))
 
 
-def compare_text(name, a, b, problems, added, added_zero):
+def compare_text(name, a, b, problems, added, added_zero, limits=None, observed=None, ignore_values=()):
+    limits = limits or {}
+    observed = observed if observed is not None else {}
     ta, tb = a[2].decode(), b[2].decode()
     if ta == tb:
         return
     va, vb = debug_values(name, ta), debug_values(name, tb)
     bad = 0
     for k, x in va.items():
+        if k in ignore_values:
+            continue
         y = vb.get(k)
+        field = name + ":" + re.sub(r"\[\d+\]", "[]", k)
+        if field in limits:
+            observed.setdefault(field, 0.0)
         if y is None:
-            problems.append("%s: %s is gone (was %s)" % (name, k, x[1]))
+            if bad < 20:
+                problems.append("%s: %s is gone (was %s)" % (name, k, x[1]))
             bad += 1
         elif x != y:
-            # Debug prints a float in its shortest round-trip form: equal text is an
-            # equal value (bit for bit, but NaN payloads), different text a different one
-            problems.append("%s: %s %s -> %s" % (name, k, x[1], y[1] if len(y) > 1 else y))
+            if x[0] == y[0] == "num" and not re.fullmatch(r"-?\d+", x[1]) and not re.fullmatch(r"-?\d+", y[1]):
+                if float_within_limit(field, num(x[1]), num(y[1]), limits, observed):
+                    continue
+            if bad < 20:
+                problems.append("%s: %s %s -> %s" % (name, k, x[1], y[1] if len(y) > 1 else y))
             bad += 1
-        if bad >= 20:
-            problems.append("%s: (more differences not listed)" % name)
-            break
+    if bad > 20:
+        problems.append("%s: (more differences not listed)" % name)
     for k, y in vb.items():
+        if k in ignore_values:
+            continue
         if k not in va:
             added.append("%s: %s = %s" % (name, k, y[1]))
             if added_zero and not zero_value(y) and not k.endswith(".len"):
@@ -270,9 +327,10 @@ def compare_files(pa, pb, args):
             if a[0] != b[0]:
                 problems.append("%s: dtype %s -> %s" % (name, a[0], b[0]))
             else:
-                compare_text(name, a, b, problems, added, args.added_zero)
+                compare_text(name, a, b, problems, added, args.added_zero, args.limits, args.observed,
+                             getattr(args, "ignore_values", {}).get(name, ()))
         else:
-            compare_numeric(name, a, b, problems)
+            compare_numeric(name, a, b, problems, args.limits, args.observed)
     for name, b in fb.items():
         if name in fa or name in args.ignore:
             continue
@@ -302,7 +360,10 @@ def main():
     ap.add_argument("--added-zero", action="store_true", help="fields only the new dump has must be zero")
     ap.add_argument("--ignore", action="append", default=[], help="skip a field (repeatable)")
     ap.add_argument("--quiet", action="store_true", help="print only differences and the verdict")
+    ap.add_argument("--linux-tolerance", action="store_true", help="use measured Linux absolute float limits and report maximum errors")
     args = ap.parse_args()
+    args.limits = LINUX_LIMITS if args.linux_tolerance else {}
+    args.observed = {}
     try:
         if os.path.isdir(args.baseline):
             if not os.path.isdir(args.new):
@@ -334,13 +395,16 @@ def main():
                 for p in problems:
                     print("  " + p)
             elif not args.quiet:
-                print("%s: equal on every baseline field" % k)
+                print("%s: %s on every baseline field" % (k, "within Linux tolerance" if args.linux_tolerance else "equal"))
             if added and not args.quiet:
                 print("  only in the new dump: %d (%s%s)" % (len(added), "; ".join(added[:6]), "; ..." if len(added) > 6 else ""))
     except FormatError as e:
         print("state_compare: %s" % e, file=sys.stderr)
         return 2
-    print("state_compare: %s (%d of %d chunks differ)" % ("DIFFERENT" if failed else "EQUAL", failed, len(pairs)))
+    for name, observed in sorted(args.observed.items()):
+        print("%s: maximum allowed |diff| %.9g; maximum observed |diff| %.9g" % (name, args.limits[name], observed))
+    verdict = "DIFFERENT" if failed else "WITHIN LINUX TOLERANCE" if args.linux_tolerance else "EQUAL"
+    print("state_compare: %s (%d of %d chunks differ)" % (verdict, failed, len(pairs)))
     return 1 if failed else 0
 
 

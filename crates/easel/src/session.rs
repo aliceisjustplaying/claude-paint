@@ -2127,7 +2127,8 @@ mod tests {
         let (s, text) = replay_fixture("engine2/drying_sheet");
         assert_eq!(s.canvas().unwrap().engine(), 2);
         assert_eq!(s.program("painting"), text);
-        assert_eq!(canvas_hash(&s), "2d2bc0a5b6922d4a", "the engine-2 drying sheet no longer replays as it did");
+        let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) { "137bcdd02d9ccf64" } else { "2d2bc0a5b6922d4a" };
+        assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
     }
 
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log

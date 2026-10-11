@@ -194,19 +194,18 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
         luminance(mean_rgb(&cv, band(c, 2))) - luminance(mean_rgb(&cv, band(c, 1)))
     };
     let before: Vec<f32> = (0..n).map(|c| contrast(&s, c)).collect();
-    let mut chunk = String::new();
+    let mut solvent_after = Vec::with_capacity(n);
     for (c, &(load, t)) in cells.iter().enumerate() {
         let (x0, _, x1, _) = strip(c);
         let th = if t > 0.0 { format!(", thinner={t}") } else { String::new() };
-        chunk += &format!("work(rect({x0}, 0, {}, {}), {{hand=\"body\", pile=pile{{{parts}{th}}}, load={load}, clip=true, seed={}}})\n", x1 - x0, 3.0 * BAND, 11 + c);
+        run(&mut s, &format!("work(rect({x0}, 0, {}, {}), {{hand=\"body\", pile=pile{{{parts}{th}}}, load={load}, clip=true, seed={}}})\n", x1 - x0, 3.0 * BAND, 11 + c));
+        solvent_after.push(sum_in(&s.canvas().unwrap(), strip(c), solvent_um));
     }
-    run(&mut s, &chunk);
     let tau_now = |s: &Session| -> f64 {
         let cv = s.canvas().unwrap();
         let top = (0..n).map(|c| max_in(&cv, strip(c), |cv, x, y| cv.wet_um(x, y))).fold(0.0, f32::max);
         evaporation_tau_min(top)
     };
-    let solvent_after: Vec<f64> = (0..n).map(|c| sum_in(&s.canvas().unwrap(), strip(c), solvent_um)).collect();
     let tau_after = tau_now(&s);
     let canvas_after = s.canvas().unwrap().solvent_total();
     let waited = (10.0 * tau_after).ceil() + 1.0;
@@ -234,6 +233,16 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
 }
 
 // ---------------------------------------------------------------- old files
+
+#[test]
+fn card_samples_solvent_after_each_own_pass() {
+    let cells = card(128, RAW_SIENNA, &[(0.3, 0.5), (0.6, 0.5)]);
+    assert_eq!(cells.len(), 2);
+    for cell in cells {
+        assert!(cell.solvent_after_pass > 0.0, "{cell:?}");
+        assert!(cell.solvent_at_measure < 1e-3 * cell.solvent_after_pass, "{cell:?}");
+    }
+}
 
 /// A file of notes/thinner/baseline/old_files/ (made by unchanged af49348).
 pub fn old_file(name: &str) -> std::path::PathBuf {

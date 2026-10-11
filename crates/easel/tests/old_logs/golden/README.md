@@ -1,7 +1,10 @@
 # Goldens of the old-log cases (scripts/tests/old_logs.sh)
 
-As of 2026-10-05, the PNG files accompany these hashes so cross-build
-comparisons can enforce the bounded image tolerance in `notes/workflow.md`.
+The historical references were produced on macOS arm64 (`platform.txt`:
+`macos-aarch64`). PNG bytes must match exactly on that platform. Only a known
+different platform uses the bounded image tolerance in `notes/workflow.md`.
+New recordings write their producing platform alongside the images.
+As of 2026-10-05, the PNG files accompany these hashes.
 Each PNG was recovered using the pre-change release executable and verified
 against its existing `png_sha256` and every recorded state digest before
 being added. The historical `.txt` references below were not regenerated.

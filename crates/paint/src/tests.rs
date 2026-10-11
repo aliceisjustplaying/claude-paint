@@ -148,26 +148,37 @@ fn fixture_is_deterministic_across_thread_counts() {
 #[cfg(tube_box)]
 fn fixture_matches_golden() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.png");
+    let platform_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.platform");
+    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     if std::env::var("UPDATE_GOLDEN").is_ok() {
         fixture().save(path).unwrap();
+        std::fs::write(platform_path, format!("{platform}\n")).unwrap();
         return;
     }
     let rendered = std::env::temp_dir().join(format!("paint-golden-{}.png", std::process::id()));
     fixture().save(&rendered).unwrap();
-    let got = image::open(&rendered).unwrap().to_rgb8();
+    let got_bytes = std::fs::read(&rendered).unwrap();
+    let got = image::open(&rendered).unwrap().to_rgba8();
     std::fs::remove_file(rendered).unwrap();
-    let want = image::open(path).expect("no golden: run with UPDATE_GOLDEN=1").to_rgb8();
+    let reference_platform = std::fs::read_to_string(platform_path).unwrap_or_else(|_| "unknown".into());
+    let known_platforms = ["macos-aarch64", "macos-x86_64", "linux-aarch64", "linux-x86_64", "windows-aarch64", "windows-x86_64"];
+    if reference_platform.trim() == platform || !known_platforms.contains(&reference_platform.trim()) || !known_platforms.contains(&platform.as_str()) {
+        assert!(got_bytes == std::fs::read(path).unwrap(), "golden PNG bytes changed on the same or unknown platform");
+        return;
+    }
+    let want = image::open(path).expect("no golden: run with UPDATE_GOLDEN=1").to_rgba8();
     assert_eq!(got.dimensions(), want.dimensions());
     let mut changed = 0usize;
     let mut maximum = 0u8;
     for (a, b) in got.pixels().zip(want.pixels()) {
-        let delta = a.0.into_iter().zip(b.0).map(|(x, y)| x.abs_diff(y)).max().unwrap();
+        assert_eq!(a.0[3], b.0[3], "golden image alpha changed");
+        let delta = a.0[..3].iter().zip(&b.0[..3]).map(|(x, y)| x.abs_diff(*y)).max().unwrap();
         changed += usize::from(delta != 0);
         maximum = maximum.max(delta);
     }
     let pixels = got.width() as usize * got.height() as usize;
-    assert!(maximum <= 1 && changed * 10_000 <= pixels,
-            "golden image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <=0.01% pixels and <=1/255 per channel");
+    assert!(maximum <= 2 && changed * 1_000 < pixels,
+            "cross-platform golden image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <0.1% pixels and <=2/255 per channel");
 }
 
 #[test]

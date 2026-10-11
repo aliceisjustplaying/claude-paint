@@ -84,6 +84,9 @@ impl Session {
             return Err(error("unsupported studio checkpoint"));
         }
         if let Some(canvas) = &state.canvas {
+            if canvas.glazes.len() > 12 || canvas.tick > 1_000_000_000_000 {
+                return Err(error("checkpoint exceeds experimental layer/clock limits"));
+            }
             state.canvas = Some(Watercolor::restore(&canvas.snapshot()).map_err(error)?);
         }
         for (name, brush) in &state.brushes {
@@ -646,7 +649,16 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
     let c = ctx.clone();
     globals.set(
         "glaze",
-        lua.create_function(move |_, ()| c.borrow_mut().canvas()?.finish_glaze().map_err(error))?,
+        lua.create_function(move |_, ()| {
+            let mut c = c.borrow_mut();
+            let canvas = c.canvas()?;
+            if canvas.glazes.len() >= 12 {
+                return Err(error(
+                    "experimental studio supports at most 12 archived glazes",
+                ));
+            }
+            canvas.finish_glaze().map_err(error)
+        })?,
     )?;
     let c = ctx.clone();
     globals.set(

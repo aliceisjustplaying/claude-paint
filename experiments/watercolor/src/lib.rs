@@ -312,7 +312,23 @@ impl Watercolor {
                     tooth += self.paper.height[yy * self.width + xx] * wx * wy;
                 }
             }
-            let t = ((tooth - (0.62 - pressure * 0.25)) / 0.13).clamp(0.0, 1.0);
+            let reach = (0.6 / CELL_MM).round() as isize;
+            let mut datum = 0.0;
+            for (dx, dy) in [
+                (-reach, -reach),
+                (0, -reach),
+                (reach, -reach),
+                (-reach, 0),
+                (reach, 0),
+                (-reach, reach),
+                (0, reach),
+                (reach, reach),
+            ] {
+                let xx = (ix as isize + dx).clamp(0, self.width as isize - 1) as usize;
+                let yy = (iy as isize + dy).clamp(0, self.height as isize - 1) as usize;
+                datum += self.paper.height[yy * self.width + xx] / 8.0;
+            }
+            let t = ((tooth - datum - (0.035 - pressure * 0.06)) / 0.10).clamp(0.0, 1.0);
             let w = (-distance * CELL_MM / 0.25).exp();
             contact += t * t * (3.0 - 2.0 * t) * w;
             weight += w;
@@ -496,8 +512,14 @@ impl Watercolor {
             let depth = (self.water[i] + self.water[j]) * 0.5;
             let flux = if old_front[i] && old_front[j] {
                 let mobility = (depth / 0.02).clamp(0.0, 1.0).powi(2);
-                let permeability =
-                    0.4 + 0.8 * (1.0 - (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5);
+                let sizing = (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5;
+                let tooth = (self.paper.height[i] + self.paper.height[j]) * 0.5;
+                let pore = (self.paper.capacity[i] + self.paper.capacity[j]) / 0.56;
+                let permeability = (2.0
+                    * (0.15 + 2.3 * (1.0 - sizing).powi(2))
+                    * (0.3 + 1.4 * (1.0 - tooth))
+                    * pore.clamp(0.6, 1.4))
+                .clamp(0.12, 2.2);
                 (-14.0 * dt).exp() * mobility * previous
                     + dt * 390.0 * depth * mobility * permeability * (head_i - head_j)
             } else {

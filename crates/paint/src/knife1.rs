@@ -1,5 +1,35 @@
 use super::*;
 
+#[cfg(feature = "knife-2")]
+#[derive(Clone, Debug)]
+pub(super) struct Face {
+    paint: f64,
+    solvent: f64,
+    lat: Latent,
+    hide: Prop,
+    cure: f32,
+}
+
+#[cfg(feature = "knife-2")]
+impl Face {
+    fn bind(&self, k: &mut Knife) -> (f64, f64) {
+        k.vol = self.paint as f32;
+        k.solvent = self.solvent as f32;
+        k.lat = self.lat;
+        k.hide = self.hide;
+        k.cure = self.cure;
+        (self.paint, self.solvent)
+    }
+
+    fn store(&mut self, k: &Knife, paint: f64, solvent: f64) {
+        self.paint = paint;
+        self.solvent = solvent;
+        self.lat = k.lat;
+        self.hide = k.hide;
+        self.cure = k.cure;
+    }
+}
+
 impl Knife {
     #[cfg(feature = "knife-2")]
     pub fn experimental_2(mut self, flex: f32) -> Self {
@@ -13,6 +43,7 @@ impl Knife {
             #[cfg(feature = "knife-2")]
             {
                 self.second = false;
+                self.faces = None;
             }
         }
         self
@@ -23,11 +54,78 @@ impl Knife {
     }
 
     pub fn paint_volume(&self) -> f64 {
+        #[cfg(feature = "knife-2")]
+        if let Some(faces) = &self.faces {
+            return faces.iter().map(|f| f.paint).sum();
+        }
         self.vol as f64
     }
 
     pub fn solvent_volume(&self) -> f64 {
+        #[cfg(feature = "knife-2")]
+        if let Some(faces) = &self.faces {
+            return faces.iter().map(|f| f.solvent).sum();
+        }
         self.solvent as f64
+    }
+
+    #[cfg(feature = "knife-2")]
+    fn make_faces(&self) -> Box<[Face; 8]> {
+        Box::new(std::array::from_fn(|_| Face {
+            paint: self.vol as f64 / 8.0,
+            solvent: self.solvent as f64 / 8.0,
+            lat: self.lat,
+            hide: self.hide,
+            cure: self.cure,
+        }))
+    }
+
+    #[cfg(feature = "knife-2")]
+    pub(super) fn load_faces(&mut self, paint: Paint, amount: f32) {
+        let mut faces = self.faces.take().unwrap_or_else(|| self.make_faces());
+        let liquid = amount * self.full();
+        let volume = (liquid * (1.0 - paint.thinner)) as f64 / 8.0;
+        let solvent = (liquid * paint.thinner) as f64 / 8.0;
+        let lat = paint.latent();
+        let hide = paint.prop();
+        for face in faces.iter_mut() {
+            if volume > 0.0 {
+                let a = (volume / (face.paint + volume)) as f32;
+                for j in 0..LAT {
+                    face.lat[j] += (lat[j] - face.lat[j]) * a;
+                }
+                for j in 0..5 {
+                    face.hide[j] += (hide[j] - face.hide[j]) * a;
+                }
+                face.cure *= 1.0 - a;
+                face.paint += volume;
+            }
+            face.solvent += solvent;
+        }
+        self.faces = Some(faces);
+        self.project_faces();
+    }
+
+    #[cfg(feature = "knife-2")]
+    fn project_faces(&mut self) {
+        let Some(faces) = &self.faces else { return };
+        let total: f64 = faces.iter().map(|f| f.paint).sum();
+        self.vol = total as f32;
+        self.solvent = faces.iter().map(|f| f.solvent).sum::<f64>() as f32;
+        if total > 0.0 {
+            for j in 0..LAT {
+                self.lat[j] =
+                    (faces.iter().map(|f| f.paint * f.lat[j] as f64).sum::<f64>() / total) as f32;
+            }
+            for j in 0..5 {
+                self.hide[j] = (faces
+                    .iter()
+                    .map(|f| f.paint * f.hide[j] as f64)
+                    .sum::<f64>()
+                    / total) as f32;
+            }
+            self.cure = (faces.iter().map(|f| f.paint * f.cure as f64).sum::<f64>() / total) as f32;
+        }
     }
 }
 
@@ -62,6 +160,10 @@ impl Canvas {
         let second = false;
         #[cfg(feature = "knife-2")]
         let second = k.second;
+        #[cfg(feature = "knife-2")]
+        if second && k.faces.is_none() && (!lay || k.hide[1] > 0.35) {
+            k.faces = Some(k.make_faces());
+        }
         let body_pass = second && lay && k.hide[1] > 0.35 && tilt < 65.0;
         let bed = if body_pass {
             Some(crate::surface::box_blur(
@@ -109,6 +211,8 @@ impl Canvas {
         let mut bounds: Bounds = None;
         let mut blade_paint = k.vol as f64;
         let mut blade_solvent = k.solvent as f64;
+        #[cfg(feature = "knife-2")]
+        let mut faces = k.faces.take();
         let mut seg = 0;
         let mut last = (path[0], (1.0, 0.0), (0.0, 1.0));
         for step in 0..=n {
@@ -196,6 +300,12 @@ impl Canvas {
                 })
                 .collect();
             for &(i, u, x, y, q) in &cells {
+                #[cfg(feature = "knife-2")]
+                let face_id = (((u + 1.0) * 4.0).floor() as usize).min(7);
+                #[cfg(feature = "knife-2")]
+                if let Some(faces) = &faces {
+                    (blade_paint, blade_solvent) = faces[face_id].bind(k);
+                }
                 let rest = rest[q];
                 let noise = crate::surface::vnoise(u * 4.0 + 9.0, d * mm_px * 0.8, seed) * 0.75
                     + crate::surface::vnoise(u * 13.0, d * mm_px * 2.1, seed ^ 41) * 0.25;
@@ -272,12 +382,15 @@ impl Canvas {
                             })
                             * COAT_UM;
                     let edge = u.abs() > 0.8 && noise < (u.abs() - 0.8) * 3.5;
-                    let spent = (k.fullness() / 0.12).min(1.0);
+                    let fill = k.fullness();
+                    #[cfg(feature = "knife-2")]
+                    let fill = if faces.is_some() { fill * 8.0 } else { fill };
+                    let spent = (fill / 0.12).min(1.0);
                     let skip = if body_pass {
                         let island =
                             crate::surface::vnoise(u * 3.5 + 5.0, d * mm_px * 0.18, seed ^ 0xC0A7);
                         let contact = 0.75 * island + 0.25 * noise;
-                        contact < 0.54 * (1.0 - smoothstep(0.04, 0.5, k.fullness()))
+                        contact < 0.54 * (1.0 - smoothstep(0.04, 0.5, fill))
                     } else {
                         noise < (1.0 - spent) * 0.33
                     };
@@ -288,7 +401,7 @@ impl Canvas {
                     let wet_reach = reach + 220.0 * flow * pr;
                     let fluid_contact = flow > 0.0 && now - plane <= 45.0 * pr;
                     let adhesion = if body_pass {
-                        (6.0 + 35.0 * (1.0 - pr)) * smoothstep(0.0, 0.25, k.fullness())
+                        (6.0 + 35.0 * (1.0 - pr)) * smoothstep(0.0, 0.25, fill)
                     } else {
                         0.0
                     };
@@ -382,6 +495,10 @@ impl Canvas {
                     }
                     *sf.stroke.add(i) = id;
                 }
+                #[cfg(feature = "knife-2")]
+                if let Some(faces) = &mut faces {
+                    faces[face_id].store(k, blade_paint, blade_solvent);
+                }
                 grow(
                     &mut bounds,
                     x as usize,
@@ -390,6 +507,12 @@ impl Canvas {
                     y as usize + 1,
                 );
             }
+        }
+        #[cfg(feature = "knife-2")]
+        if let Some(owned) = faces.take() {
+            k.faces = Some(owned);
+            k.project_faces();
+            faces = k.faces.take();
         }
         if lay && lift > 0.0 && k.vol > 1e-9 {
             let (c, dir, e) = last;
@@ -439,44 +562,67 @@ impl Canvas {
                     let x = c.0 + e.0 * u * half + dir.0 * (back - retreat);
                     let y = c.1 + e.1 * u * half + dir.1 * (back - retreat);
                     if let Some(i) = pix(x, y) {
-                        cells.push((i, weight, x, y));
+                        cells.push((i, weight, x, y, (((u + 1.0) * 4.0).floor() as usize).min(7)));
                     }
                 }
             }
             cells.sort_by_key(|v| v.0);
             cells.dedup_by_key(|v| v.0);
-            let sum: f32 = cells.iter().map(|v| v.1).sum();
-            if sum > 0.0 {
-                let liquid = blade_paint + blade_solvent;
-                let peel_coats = if body_pass { 44.0 } else { 18.0 };
-                let leave =
-                    (liquid * lift.clamp(0.0, 1.0) as f64).min((sum * area * peel_coats) as f64);
-                let phi = (blade_solvent / liquid) as f32;
-                for (i, weight, x, y) in cells {
-                    let give = (leave * weight as f64 / sum as f64 / area as f64) as f32;
-                    let paint = give * (1.0 - phi);
-                    let solvent = give * phi;
-                    unsafe {
-                        sf.add(i, paint, &k.lat, k.hide, k.cure);
-                        if !sf.solv.is_null() {
-                            *sf.solv.add(i) += solvent * COAT_UM;
-                        }
-                        *sf.cover.add(i) = 1.0;
-                        *sf.stroke.add(i) = id;
-                    }
-                    blade_paint = (blade_paint - paint as f64 * area as f64).max(0.0);
-                    blade_solvent = (blade_solvent - solvent as f64 * area as f64).max(0.0);
-                    grow(
-                        &mut bounds,
-                        x as usize,
-                        y as usize,
-                        x as usize + 1,
-                        y as usize + 1,
-                    );
+            let groups = 1;
+            #[cfg(feature = "knife-2")]
+            let groups = if faces.is_some() { 8 } else { groups };
+            for group in 0..groups {
+                #[cfg(feature = "knife-2")]
+                if let Some(faces) = &faces {
+                    (blade_paint, blade_solvent) = faces[group].bind(k);
                 }
-                k.vol = blade_paint as f32;
-                k.solvent = blade_solvent as f32;
+                let portion: Vec<_> = cells
+                    .iter()
+                    .copied()
+                    .filter(|v| groups == 1 || v.4 == group)
+                    .collect();
+                let sum: f32 = portion.iter().map(|v| v.1).sum();
+                if sum > 0.0 && blade_paint + blade_solvent > 1e-12 {
+                    let liquid = blade_paint + blade_solvent;
+                    let peel_coats = if body_pass { 44.0 } else { 18.0 };
+                    let leave = (liquid * lift.clamp(0.0, 1.0) as f64)
+                        .min((sum * area * peel_coats) as f64);
+                    let phi = (blade_solvent / liquid) as f32;
+                    for (i, weight, x, y, _) in portion {
+                        let give = (leave * weight as f64 / sum as f64 / area as f64) as f32;
+                        let paint = give * (1.0 - phi);
+                        let solvent = give * phi;
+                        unsafe {
+                            sf.add(i, paint, &k.lat, k.hide, k.cure);
+                            if !sf.solv.is_null() {
+                                *sf.solv.add(i) += solvent * COAT_UM;
+                            }
+                            *sf.cover.add(i) = 1.0;
+                            *sf.stroke.add(i) = id;
+                        }
+                        blade_paint = (blade_paint - paint as f64 * area as f64).max(0.0);
+                        blade_solvent = (blade_solvent - solvent as f64 * area as f64).max(0.0);
+                        grow(
+                            &mut bounds,
+                            x as usize,
+                            y as usize,
+                            x as usize + 1,
+                            y as usize + 1,
+                        );
+                    }
+                    k.vol = blade_paint as f32;
+                    k.solvent = blade_solvent as f32;
+                }
+                #[cfg(feature = "knife-2")]
+                if let Some(faces) = &mut faces {
+                    faces[group].store(k, blade_paint, blade_solvent);
+                }
             }
+        }
+        #[cfg(feature = "knife-2")]
+        if faces.is_some() {
+            k.faces = faces;
+            k.project_faces();
         }
         if let Some((x0, y0, x1, y1)) = bounds {
             self.wet
@@ -951,5 +1097,108 @@ mod round_two_tests {
                     .all(|v| v.is_finite() && *v >= -1e-5)
             );
         }
+    }
+
+    #[test]
+    fn knife_2_dirty_faces_keep_pickup_local_across_passes_and_reload() {
+        let mut c = Canvas::new(320, 1.0, crate::hex("#d6cebb"))
+            .with_size_mm(300.0)
+            .with_engine(5);
+        let mut base = Knife::new(40.0);
+        base.load(Paint::body(crate::hex("#164f9c")), 0.7);
+        c.knife(
+            &mut base,
+            &[(150.0, 210.0), (500.0, 210.0)],
+            (0.3, 0.3),
+            None,
+            true,
+            0.0,
+        );
+        let yellow = Paint::body(crate::hex("#d8b757"));
+        let original = yellow.latent();
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        k.load(yellow, 0.25);
+        let before = (
+            c.wet_total() + k.paint_volume(),
+            c.solvent_total() + k.solvent_volume(),
+        );
+        c.knife_1(
+            &mut k,
+            &[(180.0, 250.0), (650.0, 250.0)],
+            (0.75, 0.75),
+            None,
+            true,
+            0.0,
+            25.0,
+        );
+        close(&c, &k, before);
+        let faces = k.faces.as_ref().unwrap();
+        assert_ne!(faces[0].lat, original, "the contacted end picks up blue");
+        assert_eq!(faces[7].lat, original, "the untouched end retains yellow");
+        c.knife_1(
+            &mut k,
+            &[(180.0, 650.0), (650.0, 650.0)],
+            (0.65, 0.65),
+            None,
+            true,
+            0.15,
+            20.0,
+        );
+        close(&c, &k, before);
+        assert_ne!(
+            k.faces.as_ref().unwrap()[0].lat,
+            k.faces.as_ref().unwrap()[7].lat
+        );
+        let amount = 0.1;
+        let paint = Paint::body(crate::hex("#bd7045")).with_thinner(0.4);
+        let liquid = amount * k.full();
+        k.load(paint, amount);
+        close(
+            &c,
+            &k,
+            (
+                before.0 + (liquid * (1.0 - paint.thinner)) as f64,
+                before.1 + (liquid * paint.thinner) as f64,
+            ),
+        );
+        k.wipe();
+        assert_eq!(k.paint_volume(), 0.0);
+        assert_eq!(k.solvent_volume(), 0.0);
+        assert!(k.faces.is_none());
+    }
+
+    #[test]
+    fn knife_2_zero_load_is_material_identity_and_clean_scrapes_are_local() {
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        let before = format!("{k:?}");
+        k.load(Paint::body(crate::hex("#d8b757")), 0.0);
+        assert_eq!(before, format!("{k:?}"));
+        let mut c = Canvas::new(240, 1.0, crate::hex("#d6cebb"))
+            .with_size_mm(300.0)
+            .with_engine(5);
+        let mut base = Knife::new(40.0);
+        base.load(Paint::body(crate::hex("#164f9c")), 0.7);
+        c.knife(
+            &mut base,
+            &[(150.0, 210.0), (500.0, 210.0)],
+            (0.3, 0.3),
+            None,
+            true,
+            0.0,
+        );
+        let inventory = (c.wet_total(), c.solvent_total());
+        c.knife_1(
+            &mut k,
+            &[(180.0, 250.0), (650.0, 250.0)],
+            (1.0, 1.0),
+            None,
+            false,
+            0.0,
+            75.0,
+        );
+        close(&c, &k, inventory);
+        let faces = k.faces.as_ref().unwrap();
+        assert!(faces[0].paint > 0.0);
+        assert_eq!(faces[7].paint, 0.0);
     }
 }

@@ -40,6 +40,7 @@ pub mod style;
 pub mod hand;
 pub mod outline;
 pub mod surface;
+pub mod body_relaxation;
 pub mod thinner;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};

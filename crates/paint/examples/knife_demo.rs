@@ -30,6 +30,10 @@ mod demo {
         if model == 3 {
             k = k.experimental_3(0.65);
         }
+        #[cfg(feature = "knife-4")]
+        if model == 4 {
+            k = k.experimental_4(0.65);
+        }
         k.load(p.paint, p.amount);
         if model != 0 {
             c.knife_1(&mut k, p.points, p.pressure, p.angle, p.lay, p.lift, p.tilt);
@@ -161,8 +165,10 @@ mod demo {
         initial.prime(hex("#dfd3ba"), 0.9, 90.0, 0.6, 0.25, 44);
         #[cfg(not(feature = "knife-3"))]
         let models = &[("baseline", 0), ("knife-2", 2)][..];
-        #[cfg(feature = "knife-3")]
+        #[cfg(all(feature = "knife-3", not(feature = "knife-4")))]
         let models = &[("baseline", 0), ("knife-2", 2), ("knife-3", 3)][..];
+        #[cfg(feature = "knife-4")]
+        let models = &[("baseline", 0), ("knife-2", 2), ("knife-3", 3), ("knife-4", 4)][..];
         for &(name, model) in models {
             let c = study(initial.clone(), model);
             save(&output.join(format!("{name}-color.png")), &c, c.seen())?;

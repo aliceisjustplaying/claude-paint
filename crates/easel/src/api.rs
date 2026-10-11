@@ -2110,6 +2110,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut second = false;
             #[cfg(feature = "knife-3")]
             let mut third = false;
+            #[cfg(feature = "knife-4")]
+            let mut fourth = false;
             let width = match &o {
                 Some(o) => {
                     #[cfg(not(feature = "knife-1"))]
@@ -2126,6 +2128,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                             let valid = { second = model == "knife-2"; valid || second };
                             #[cfg(feature = "knife-3")]
                             let valid = { third = model == "knife-3"; valid || third };
+                            #[cfg(feature = "knife-4")]
+                            let valid = { fourth = model == "knife-4"; valid || fourth };
                             if !valid { return err("knife: this build does not include that experimental model"); }
                             let f = num(o, "flex")?.unwrap_or(0.65);
                             if !(0.0..=1.0).contains(&f) { return err("knife: flex is the blade's compliance, 0 to 1"); }
@@ -2146,6 +2150,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let blade = if second { blade.experimental_2(flex.unwrap()) } else { blade };
             #[cfg(feature = "knife-3")]
             let blade = if third { blade.experimental_3(flex.unwrap()) } else { blade };
+            #[cfg(feature = "knife-4")]
+            let blade = if fourth { blade.experimental_4(flex.unwrap()) } else { blade };
             let k = Rc::new(RefCell::new(blade));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             Ok(KnifeU { k, st: st1.clone() })

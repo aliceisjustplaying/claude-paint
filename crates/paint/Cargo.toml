@@ -7,6 +7,7 @@ edition = "2024"
 knife-1 = []
 knife-2 = ["knife-1"]
 knife-3 = ["knife-2"]
+knife-4 = ["knife-3"]
 # `tally::hand_hook`: a callback after each slice of hand time goes on the
 # clock (easel's replay build uses it for hand-time frames). Off by default,
 # so the painter build has no hook at all.

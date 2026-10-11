@@ -84,8 +84,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let models = &["baseline", "knife-1"][..];
         #[cfg(all(feature = "knife-2", not(feature = "knife-3")))]
         let models = &["baseline", "knife-1", "knife-2"][..];
-        #[cfg(feature = "knife-3")]
+        #[cfg(all(feature = "knife-3", not(feature = "knife-4")))]
         let models = &["baseline", "knife-1", "knife-2", "knife-3"][..];
+        #[cfg(feature = "knife-4")]
+        let models = &["baseline", "knife-1", "knife-2", "knife-3", "knife-4"][..];
         for &model in models {
             let mut c = initial.clone();
             let width = if probe == "edge" { 75.0 } else { 110.0 };
@@ -100,6 +102,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(feature = "knife-3")]
             if model == "knife-3" {
                 k = k.experimental_3(0.65);
+            }
+            #[cfg(feature = "knife-4")]
+            if model == "knife-4" {
+                k = k.experimental_4(0.65);
             }
             let (paint, amount, pressure, angle, tilt, lift, lay) = match probe {
                 "slab" => (

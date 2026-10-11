@@ -8,6 +8,15 @@ called through `paint`.
 
 ## Configuration
 
+For watercolor, `scripts/export_r16_studio watercolor DEST` supplies
+`bin/watercolor-studio`, this adapter and the draft watercolor guide. The
+adapter selects that binary automatically for both stdio and remote HTTP.
+New paper defaults to the hardware-GPU Lab engine with coordinates in cells.
+Watercolor looks support color, gallery, relief, size and crop; a Color look
+has the same display companion filenames as oil. Scratch calls use separate
+paper state and numbered log/checkpoint archives. The draft guide needs text
+review and approval before a painter launch.
+
 Use `scripts/prepare_capy_studio` as described in the root README. Give it
 an approved house BRIEF and, if that brief names it, an approved studio
 notes file. The script changes only the brief's studio path. The guide,

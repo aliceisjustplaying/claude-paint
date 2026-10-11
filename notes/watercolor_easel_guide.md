@@ -13,6 +13,7 @@ Those values are the defaults, so `paper{}` creates the same sheet. Width and
 height are simulation cells. Width accepts integers from 2 to 2,400 and height
 from 2 to 1,600. Paper is created once. A continuation chunk uses the existing
 sheet. `kind` can be `"cold-press"`, `"hot-press"` or `"rough"`.
+Seed accepts an integer from 0 to 4,294,967,295.
 
 Coordinates and brush widths are cells, with the origin at the upper-left
 corner, x increasing to the right and y downward. Fractional coordinates are
@@ -105,7 +106,7 @@ two opposite corners in integer cells and returns that region at 1:1.
 Supported MCP look options are `mode`, `size`, `crop` and `scratch`.
 
 Within Lua, `look{path="look.png", mode="color", width=1200}` writes a PNG
-into the studio, with width from 16 to 2,400 pixels. Lua crops use
+into the studio, with width from 1 to 2,400 pixels. Lua crops use
 `crop={x,y,width,height}` in output pixels. A named `save("name.json")`
 captures the sheet, clock and brush loads. Successful chunks also save an
 automatic checkpoint; the next chunk loads it. An identical completed

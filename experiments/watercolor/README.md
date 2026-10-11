@@ -2,26 +2,26 @@
 
 ## Watercolor Lab port
 
-The accepted solver is still the default. Select the pinned Watercolor Lab solver when creating a new sheet:
+New paper uses the pinned Watercolor Lab solver on a hardware GPU. The painter API uses cells:
 
 ```lua
-paper{solver="lab",kind="cold-press",size=52.8,aspect=1.5,cell=0.05,seed=71}
-local b=brush{name="round",width=2}
-b:load{water=2,pigments={ultramarine=0.1,earth=0.02}}
-b:stroke({{8,12,0.2,0},{20,13,0.8,0.3},{40,12,0.4,0.8}},{duration=0.8})
+paper{width=1056,height=704,kind="cold-press",seed=71}
+local b=brush{name="round",width=40}
+b:load{water=2,pigments={["french-ultramarine"]=0.1,["burnt-sienna"]=0.02}}
+b:stroke({{160,240,0.2,0},{400,260,0.8,0.3},{800,240,0.4,0.8}},{duration=0.8})
 ```
 
-The added point fields are pressure and elapsed stroke time in seconds. They are optional; pressure defaults to the stroke's `pressure` option and timing defaults to 40 mm/s. A moving Lab stroke requires positive time. Width follows pressure, stamps follow Watercolor Lab's distance-carry resampler and water/pigment release stops when the named brush's finite inventory runs out. The reference brush's 0.15 reservoir floor remains inside the port; the finite inventory cap is outside it. Lab washes use moving rows. Existing strokes with the default solver retain their accepted behavior.
+The added point fields are pressure and elapsed stroke time in seconds. They are optional; pressure defaults to the stroke's `pressure` option and timing defaults to 800 cells/s. A moving Lab stroke requires positive time. Width follows pressure, stamps follow Watercolor Lab's distance-carry resampler and water/pigment release stops when the named brush's finite inventory runs out. The reference brush's 0.15 reservoir floor remains inside the port; the finite inventory cap is outside it. Lab washes use moving rows. Select `solver="current"` explicitly for the retained legacy millimeter API and CPU solver.
 
 `lab-core/` is a mechanical Rust port of Watercolor Lab at `a19bfa2a026856a98ceb400a8eec41f091f04a11`, with CPU and wgpu backends. Its passes use reference cell units, f32 shader arithmetic, LINEAR sampling, CLAMP_TO_EDGE boundaries and RGBA16F storage. The GPU uses instanced additive splats and one shader per original pass. The CPU fallback emulates raster precision with four subpixel bits by default. Paper and brush generation preserve the original JavaScript double precision before texture/attribute uploads. All 36 pigments and the MIT notice are included.
 
-The native map is 0.05 mm/cell, so the reference 1056×704 grid represents 52.8×35.2 mm. One unit of standing-water depth maps to 1 mm only at the adapter boundary. Lua time maps to 180 reference substeps per second (three steps per 60 Hz frame). This is an explicit playback map, not a new physical time constant inside the core. The existing 0.0625-second clock, pending residual, saved state, named brushes, checkpoint restore, frame hook and Color/Gallery/Relief exports remain. Legacy sheets remain schema 3; Lab sheets are schema 4 so older runners refuse them instead of silently losing the port's texture state. Native views use the existing studio light presets over the port's KM color; comparisons and the app use the unchanged reference display.
+The geometry adapter passes Lab coordinates and widths directly in cells, up to 2400×1600. Its existing 0.05-cell-area conversion for finite water/pigment inventories remains internal; the shader physics and time mapping are unchanged. Lua time maps to 180 reference substeps per second (three steps per 60 Hz frame). The existing 0.0625-second clock, pending residual, saved state, named brushes, checkpoint restore, frame hook and Color/Gallery/Relief exports remain. Cell-based Lab sheets use schema 5; schema 3 legacy CPU sheets and schema 4 millimeter Lab sheets remain readable. Native views use the existing studio light presets over the port's KM color; comparisons and the app use the unchanged reference display.
 
-Lab's `ultramarine`, `phthalo` and `earth` API inventories use the library's French ultramarine, phthalo blue and burnt sienna. The browser exposes all library pans. Lab glazes fold into the reference's single dried-reflectance layer automatically; `glaze()` checks the reference dry condition. Lab lifting uses the reference scrub field. `blot{}` has no reference counterpart and returns an explicit unsupported-operation error for Lab sheets. The current solver's blot and glaze stack are unchanged.
+`palette()` and `b:load` expose all 36 library pigment ids on cell-based Lab sheets. Lab glazes fold into the reference's single dried-reflectance layer automatically; `glaze()` checks the reference dry condition. Lab lifting uses the reference scrub field. `blot{}` has no reference counterpart and returns an explicit unsupported-operation error for Lab sheets. The current solver's blot and glaze stack are unchanged.
 
 The reference does not conserve pigment during semi-Lagrangian sampling. Its dried reflectance also cannot recover per-pigment mass. `balance()` for Lab sheets therefore reports `conserved=false`, current water/live pigment and finite brush-release inventory; it does not pretend the reference satisfies the current solver's strict conservation invariant. Checkpoint validation still rejects malformed textures, parameters and brush-release ledgers. The existing solver keeps its strict conservation checks.
 
-The browser fork and local build instructions are in `lab-app/README.md`. It keeps the pinned UI and runs the shared Rust wgpu backend at 1056×704 through WebGPU. Native Lab sheets use wgpu when an adapter is available and fall back to the CPU port otherwise. The CPU fallback uses round-toward-zero half-float quantization. The A/B switch is removed because WebGL and WebGPU cannot share a canvas; the original website remains the comparison. Salt stays hidden because its amplified sine hash is backend-sensitive. No salt workaround is applied to the core.
+The browser fork and local build instructions are in `lab-app/README.md`. It keeps the pinned UI and runs the shared Rust wgpu backend at 1056×704 through WebGPU. New native Lab sheets require a hardware GPU; older schema 4 sheets retain their CPU fallback. The CPU fallback uses round-toward-zero half-float quantization. The A/B switch is removed because WebGL and WebGPU cannot share a canvas; the original website remains the comparison. Salt stays hidden because its amplified sine hash is backend-sensitive. No salt workaround is applied to the core.
 
 The per-pass readPixels comparison and matched capture commands are in `lab-validation/`. `LAB_GPU=1 node lab-validation/capture-native.mjs OUTPUT_DIR` runs the seven fixed recipes on the GPU against the matched M1 reference images. Hardware fractional-offset filtering differs from the CPU implementation, so the removed CPU/GPU checkpoint is not an acceptance reference. No new tests are added. See the task report for hardware measurements and remaining visual differences.
 
@@ -38,7 +38,20 @@ cargo build --release --locked --manifest-path experiments/watercolor/Cargo.toml
 
 The two smoke chunks demonstrate saved continuation through the public Lua API. Their scene is an engine demo for people reviewing the implementation. Painter notes are a separate draft in the Captain's drive and require approval before use.
 
-## Developer API inventory
+## Watercolor painter export
+
+`scripts/export_r16_studio watercolor DEST` exports the committed current branch's
+`watercolor-studio`, MCP adapter, draft `notes/watercolor_easel_guide.md`, its house
+`notes/easel_guide.md` alias and an empty journal. Set `R16_BRANCH` to choose another
+committed ref and `STUDIO_BUILDS` for a private build directory. Run
+`uv run --no-project --script DEST/bin/mcp/server.py --studio DEST`. The existing
+`--sessions-root` option records viewer-compatible Pi JSONL. Painter Color looks
+have `.gallery/<same-name>.png` and `.relief/<same-name>.png` display companions.
+Scratch paper uses separate studio state; `new_scratch` keeps numbered `.lua` and
+`.json` archives together in `paintings/lua/`. The draft guide requires text review
+and approval before a painter launch.
+
+## Legacy CPU API inventory (`solver="current"`)
 
 - `paper{kind="cold-press"|"hot-press", size=WIDTH_MM, aspect=WIDTH_OVER_HEIGHT, cell=CELL_MM, seed=N}` initializes once. The prototype accepts widths of 2–60 mm, aspects of 0.5–3, cell sizes of 0.025–0.1 mm and at most 1,500,000 simulation cells. The default cell is 0.05 mm. A 60 mm sheet with aspect 1.5 has 1200×800 real simulation cells. A finer grid must fit the cell-count limit.
 - `brush{name=NAME, width=MM}` creates a named brush; the same name retrieves its saved width and load. Changing its width requires a new name. `b:status()` reports water, pigment and width.

@@ -228,8 +228,12 @@ pub fn render(
     width: u32,
     crop: Option<[u32; 4]>,
 ) -> Result<()> {
-    if !(16..=2400).contains(&width) {
-        return Err(error("render width must be 16..2400"));
+    if !(if canvas.schema == 5 { 1 } else { 16 }..=2400).contains(&width) {
+        return Err(error(if canvas.schema == 5 {
+            "render width must be 1..2400"
+        } else {
+            "render width must be 16..2400"
+        }));
     }
     let rgb = match mode {
         "color" => canvas.rgb_color(),
@@ -798,7 +802,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 .get::<Option<String>>("kind")?
                 .unwrap_or("cold-press".into());
             let solver = t.get::<Option<String>>("solver")?.unwrap_or("lab".into());
-            let seed = t.get::<Option<u32>>("seed")?.unwrap_or(71);
+            let seed = t.get::<Option<u64>>("seed")?.unwrap_or(71);
             if solver == "lab" {
                 if t.contains_key("size")? || t.contains_key("aspect")? || t.contains_key("cell")? {
                     return Err(error("Lab paper uses width and height in cells"));
@@ -813,7 +817,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                     Watercolor::new_lab(
                         t.get::<Option<usize>>("width")?.unwrap_or(1056),
                         t.get::<Option<usize>>("height")?.unwrap_or(704),
-                        seed,
+                        u32::try_from(seed).map_err(error)?,
                         kind,
                     )
                     .map_err(error)?,
@@ -837,7 +841,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             if w * h > 1_500_000 {
                 return Err(error("experimental paper exceeds 1500000 cells"));
             }
-            let mut paper = Watercolor::new_at(w, h, seed as u64, cell_mm);
+            let mut paper = Watercolor::new_at(w, h, seed, cell_mm);
             match kind.as_str() {
                 "cold-press" => {}
                 "hot-press" => {

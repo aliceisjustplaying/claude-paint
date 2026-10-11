@@ -119,8 +119,17 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     use crate::session::{BOX_MARK, ENGINE_MARK};
     use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut r = std::io::BufReader::with_capacity(1 << 20, f);
+    let input: Box<dyn std::io::Read> = if path.extension().is_some_and(|e| e == "zst") {
+        Box::new(zstd::stream::read::Decoder::new(f).map_err(|e| format!("{}: {e}", path.display()))?)
+    } else {
+        Box::new(f)
+    };
+    let mut r = std::io::BufReader::with_capacity(1 << 20, input);
     let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut extra = [0];
+    if std::io::Read::read(&mut r, &mut extra).map_err(|e| format!("{}: {e}", path.display()))? != 0 {
+        return Err(format!("{}: trailing data after the canvas", path.display()));
+    }
     let mut lines = head.lines();
     if lines.next() != Some(MAGIC) {
         return Err(format!("{}: not an easel save (its header doesn't start {MAGIC:?})", path.display()));

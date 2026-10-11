@@ -297,9 +297,14 @@ impl PaintingStore {
             if std::fs::read_dir(dir.join("objects"))?.next().is_some() || std::fs::read_dir(dir.join("revisions"))?.next().is_some() {
                 return Err(invalid("painting store lost its current pointer; accepted objects will not be collected"));
             }
-            let mut file = OpenOptions::new().write(true).create_new(true).open(dir.join("CURRENT"))?;
-            file.write_all(b"none\n")?;
-            file.sync_all()?;
+            let (pending, mut file) = temp(&dir)?;
+            let result = (|| {
+                file.write_all(b"none\n")?;
+                file.sync_all()?;
+                std::fs::rename(&pending, dir.join("CURRENT"))
+            })();
+            if result.is_err() { let _ = std::fs::remove_file(pending); }
+            result?;
         }
         sync_dir(&dir)?;
         for ancestor in dir.ancestors() {

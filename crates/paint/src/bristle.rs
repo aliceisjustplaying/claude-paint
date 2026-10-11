@@ -883,7 +883,7 @@ mod leveling_tests {
             c.wet.solv[i] = c.wet.vol[i] * 12.0;
             c.wet.lat[i] = [i as f32 / 64.0; LAT];
             c.wet.hide[i] = [0.3, 0.5, 0.7, 0.0, 0.8];
-            c.wet.clock.px[i].cure = i as f32 / 300.0;
+            c.wet.clock.px[i].cure = i as f32 / 1000.0;
         }
         c
     }
@@ -1482,12 +1482,18 @@ pub(crate) type Rect = (usize, usize, usize, usize);
 /// can overshoot its control points), hand shake, root offsets with wander
 /// and splay, bristle bend (it relaxes from zero toward targets bounded by
 /// the trail and spread), the capsule radius, and the plough destination.
+#[cfg(test)]
 pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
-    footprint_checked(tool, pts, shake, scale, w, h).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
+    footprint_for_engine(5, tool, pts, shake, scale, w, h)
+}
+
+pub(crate) fn footprint_for_engine(engine: u32, tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    let broad = cfg!(feature = "brush-sim-4") && (15..=17).contains(&engine);
+    footprint_checked(tool, pts, shake, scale, w, h, broad).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
 }
 
 /// `footprint`, or None if it isn't finite.
-fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
+fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize, broad: bool) -> Option<Option<Rect>> {
     if pts.is_empty() {
         return Some(None);
     }
@@ -1506,8 +1512,7 @@ fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w:
     let root = (ROOT_MAX + 0.12 * tool.ragged.abs()) * std::f32::consts::SQRT_2 * half;
     let bend = tool.length * s * LEN_MAX + root * tool.splay.abs() * 0.3;
     let rb = (tool.hair_radius() * s).max(0.55);
-    #[cfg(feature = "brush-sim-4")]
-    let rb = rb * 3.5;
+    let rb = if broad { rb * 3.5 } else { rb };
     // exchange rect: capsule ± (rb + 1); plough target ≤ off from a pixel in
     // it, off = rb + 1; bounds padding off + 2; plus rounding
     // a pointed tool's hairs lay tracks up to the tool's half-width wide
@@ -1569,7 +1574,11 @@ pub(crate) unsafe fn drag_on(
     let step = rb.max(1.25);
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
-    let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
+    #[cfg(not(feature = "brush-sim-4"))]
+    let broad = false;
+    #[cfg(feature = "brush-sim-4")]
+    let broad = sf.sim.is_some_and(|sim| sim.model.level > 0.0);
+    let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh, broad));
 
     for b in &mut held.bristles {
         b.prev = [None, None];

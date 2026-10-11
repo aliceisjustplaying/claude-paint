@@ -6,6 +6,7 @@ publish = false
 
 [features]
 knife-1 = ["paint/knife-1"]
+knife-2 = ["knife-1", "paint/knife-2"]
 default = ["replay", "finish"]
 # The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
 # `easel run` (with --dump-surface) and `hash-probe`. Without it (the

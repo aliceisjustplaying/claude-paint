@@ -80,12 +80,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             / (0.64 * 0.64);
         let dry_height = field(&initial, "height");
         let dry_color = field(&initial, "color");
-        for model in ["baseline", "knife-1"] {
+        #[cfg(not(feature = "knife-2"))]
+        let models = &["baseline", "knife-1"][..];
+        #[cfg(feature = "knife-2")]
+        let models = &["baseline", "knife-1", "knife-2"][..];
+        for &model in models {
             let mut c = initial.clone();
             let width = if probe == "edge" { 75.0 } else { 110.0 };
             let mut k = Knife::new(width);
             if model == "knife-1" {
                 k = k.experimental(0.65);
+            }
+            #[cfg(feature = "knife-2")]
+            if model == "knife-2" {
+                k = k.experimental_2(0.65);
             }
             let (paint, amount, pressure, angle, tilt, lift, lay) = match probe {
                 "slab" => (
@@ -155,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 vec![(190.0, 250.0), (450.0, 248.0), (790.0, 250.0)]
             };
-            if model == "knife-1" {
+            if model != "baseline" {
                 c.knife_1(&mut k, &path, pressure, angle, lay, lift, tilt);
             } else {
                 c.knife(&mut k, &path, pressure, angle, lay, lift);
@@ -172,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             let after_paint = (dry_film + c.wet_total() + k.paint_volume()) * factor;
             let after_solvent = (c.solvent_total() + k.solvent_volume()) * factor;
-            if model == "knife-1" {
+            if model != "baseline" {
                 assert!((before_paint - after_paint).abs() < active_before.max(1.0) * 3e-6);
                 assert!((before_solvent - after_solvent).abs() < before_solvent.max(1.0) * 3e-6);
             }

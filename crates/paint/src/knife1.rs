@@ -1,6 +1,12 @@
 use super::*;
 
 impl Knife {
+    #[cfg(feature = "knife-2")]
+    pub fn experimental_2(mut self, flex: f32) -> Self {
+        self = self.experimental(flex);
+        self.second = self.flex.is_some();
+        self
+    }
     pub fn experimental(mut self, flex: f32) -> Self {
         if flex.is_finite() && (0.0..=1.0).contains(&flex) {
             self.flex = Some(flex);
@@ -48,6 +54,21 @@ impl Canvas {
             .stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         let seed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xB1ADE;
+        #[cfg(not(feature = "knife-2"))]
+        let second = false;
+        #[cfg(feature = "knife-2")]
+        let second = k.second;
+        let body_pass = second && lay && k.hide[1] > 0.35 && tilt < 65.0;
+        let bed = if body_pass {
+            Some(crate::surface::box_blur(
+                &self.height,
+                self.f.w,
+                self.f.h,
+                (1.2 / self.px_mm()).ceil().max(1.0) as usize,
+            ))
+        } else {
+            None
+        };
         let height = self.height.as_ptr();
         let sf = self.surf();
         let s = sf.scale;
@@ -114,16 +135,31 @@ impl Canvas {
                 (pressure.0 + (pressure.1 - pressure.0) * step as f32 / n as f32).clamp(0.0, 1.0);
             let gap = 280.0 * (1.0 - pr).powf(1.6) * (1.0 - 0.7 * upright);
             let mut cells = Vec::new();
+            let peel_span = (12.0 / mm_px).min(total * 0.25).max(1.0);
+            let peeling = if body_pass && total > 0.0 {
+                smoothstep(total - peel_span, total, d)
+            } else {
+                0.0
+            };
             for q in 0..=nx {
                 let u = -1.0 + 2.0 * q as f32 / nx as f32;
                 let drift = 0.7 * crate::surface::vnoise(u * 3.0, d * mm_px * 0.6, seed) - 0.35;
                 let parting = depth
                     * 0.65
                     * (crate::surface::vnoise(u * 6.0 + 2.0, d * mm_px * 0.2, seed ^ 0xED6E) - 0.5);
+                let retreat = (6.0 + 6.0 * lift.clamp(0.0, 1.0)) / mm_px
+                    * (0.25
+                        + 0.75
+                            * crate::surface::vnoise(
+                                u * 4.0 + 4.0,
+                                total * mm_px * 0.15,
+                                seed ^ 0x1AF7,
+                            ))
+                    * peeling;
                 for r in 0..=ny {
                     let back = depth * r as f32 / ny as f32 + parting;
-                    let x = c.0 + e.0 * (u * half + drift) + face.0 * back;
-                    let y = c.1 + e.1 * (u * half + drift) + face.1 * back;
+                    let x = c.0 + e.0 * (u * half + drift) + face.0 * back - dir.0 * retreat;
+                    let y = c.1 + e.1 * (u * half + drift) + face.1 * back - dir.1 * retreat;
                     if let Some(i) = pix(x, y) {
                         cells.push((i, u, x, y, q));
                     }
@@ -134,13 +170,14 @@ impl Canvas {
             if cells.is_empty() {
                 continue;
             }
+            let support_height = bed.as_ref().map_or(height, |v| v.as_ptr());
             let rigid = cells
                 .iter()
-                .map(|v| unsafe { *height.add(v.0) })
+                .map(|v| unsafe { *support_height.add(v.0) })
                 .fold(f32::MIN, f32::max);
             let mut support = vec![f32::MIN; nx + 1];
             for cell in &cells {
-                support[cell.4] = support[cell.4].max(unsafe { *height.add(cell.0) });
+                support[cell.4] = support[cell.4].max(unsafe { *support_height.add(cell.0) });
             }
             let radius = (((1.0 + 5.0 * (1.0 - flex)) / (k.width * self.mm_per_unit)) * nx as f32)
                 .ceil()
@@ -168,7 +205,7 @@ impl Canvas {
                     } else {
                         *sf.solv.add(i) / COAT_UM
                     };
-                    let top = *height.add(i) + (v + sol) * COAT_UM;
+                    let top = *support_height.add(i) + (v + sol) * COAT_UM;
                     let fluid = if sf.dry.is_null() {
                         1.0
                     } else {
@@ -222,7 +259,7 @@ impl Canvas {
                         k.vol = blade_paint as f32;
                         k.solvent = blade_solvent as f32;
                     }
-                    let now = *height.add(i)
+                    let now = *support_height.add(i)
                         + (*sf.vol.add(i)
                             + if sf.solv.is_null() {
                                 0.0
@@ -232,32 +269,85 @@ impl Canvas {
                             * COAT_UM;
                     let edge = u.abs() > 0.8 && noise < (u.abs() - 0.8) * 3.5;
                     let spent = (k.fullness() / 0.12).min(1.0);
-                    let skip = noise < (1.0 - spent) * 0.33;
+                    let skip = if body_pass {
+                        let island =
+                            crate::surface::vnoise(u * 3.5 + 5.0, d * mm_px * 0.18, seed ^ 0xC0A7);
+                        let contact = 0.75 * island + 0.25 * noise;
+                        contact < 0.54 * (1.0 - smoothstep(0.04, 0.5, k.fullness()))
+                    } else {
+                        noise < (1.0 - spent) * 0.33
+                    };
                     let flow = 1.0 - smoothstep(0.15, 0.35, k.hide[1]);
                     let wet_reach = reach + 220.0 * flow * pr;
                     let fluid_contact = flow > 0.0 && now - plane <= 45.0 * pr;
+                    let adhesion = if body_pass {
+                        (6.0 + 35.0 * (1.0 - pr)) * smoothstep(0.0, 0.25, k.fullness())
+                    } else {
+                        0.0
+                    };
+                    let body_target = if body_pass {
+                        (plane - *support_height.add(i)).max(adhesion)
+                    } else {
+                        0.0
+                    };
+                    let body_coating = (body_target - (now - *support_height.add(i))).max(0.0);
                     if lay
                         && !edge
                         && !skip
-                        && (plane > now || fluid_contact)
-                        && plane - now <= wet_reach
+                        && (plane > now || fluid_contact || body_coating > 0.0)
+                        && (plane - now <= wet_reach || body_pass)
                         && k.vol > 1e-9
                     {
                         let liquid = blade_paint + blade_solvent;
                         let film = (4.0 + 60.0 * (1.0 - pr) - (now - *height.add(i))).max(0.0);
-                        let thickness = (plane - now).max(0.0) * (1.0 - flow) + film * flow;
+                        let thickness = if body_pass {
+                            body_coating
+                        } else {
+                            (plane - now).max(0.0) * (1.0 - flow) + film * flow
+                        };
                         let give = (thickness / COAT_UM * duty * (0.65 + noise))
                             .min((liquid / area as f64 * 0.12) as f32);
                         let phi = (blade_solvent / liquid) as f32;
                         let paint = give * (1.0 - phi);
                         let solvent = give * phi;
-                        sf.add(i, paint, &k.lat, k.hide, k.cure);
+                        let side = if body_pass && u.abs() > 0.7 {
+                            let offset =
+                                u.signum() * (half * 1.03 + 0.3 * noise / mm_px) - u * half;
+                            pix(x + e.0 * offset, y + e.1 * offset)
+                        } else {
+                            None
+                        };
+                        let share = if side.is_some() {
+                            ((u.abs() - 0.7) / 0.3).clamp(0.0, 1.0) * 0.7
+                        } else {
+                            0.0
+                        };
+                        let side_paint = paint * share;
+                        let side_solvent = solvent * share;
+                        let face_paint = paint - side_paint;
+                        let face_solvent = solvent - side_solvent;
+                        sf.add(i, face_paint, &k.lat, k.hide, k.cure);
                         if !sf.solv.is_null() {
-                            *sf.solv.add(i) += solvent * COAT_UM;
+                            *sf.solv.add(i) += face_solvent * COAT_UM;
                         }
                         *sf.cover.add(i) = 1.0;
-                        blade_paint = (blade_paint - paint as f64 * area as f64).max(0.0);
-                        blade_solvent = (blade_solvent - solvent as f64 * area as f64).max(0.0);
+                        if let Some(j) = side {
+                            sf.add(j, side_paint, &k.lat, k.hide, k.cure);
+                            if !sf.solv.is_null() {
+                                *sf.solv.add(j) += side_solvent * COAT_UM;
+                            }
+                            *sf.cover.add(j) = 1.0;
+                            *sf.stroke.add(j) = id;
+                            let rx = sf.ox + j % sf.w;
+                            let ry = sf.oy + j / sf.w;
+                            grow(&mut bounds, rx, ry, rx + 1, ry + 1);
+                        }
+                        blade_paint = (blade_paint
+                            - (face_paint as f64 + side_paint as f64) * area as f64)
+                            .max(0.0);
+                        blade_solvent = (blade_solvent
+                            - (face_solvent as f64 + side_solvent as f64) * area as f64)
+                            .max(0.0);
                         k.vol = blade_paint as f32;
                         k.solvent = blade_solvent as f32;
                     }
@@ -278,11 +368,39 @@ impl Canvas {
             for q in 0..=nx {
                 let u = -1.0 + 2.0 * q as f32 / nx as f32;
                 let noise = crate::surface::vnoise(u * 5.0, total * mm_px, seed ^ 0x11F7);
-                for back in 0..3 {
-                    let x = c.0 + e.0 * u * half + dir.0 * back as f32;
-                    let y = c.1 + e.1 * u * half + dir.1 * back as f32;
+                let retreat = if body_pass {
+                    (6.0 + 6.0 * lift.clamp(0.0, 1.0)) / mm_px
+                        * (0.25
+                            + 0.75
+                                * crate::surface::vnoise(
+                                    u * 4.0 + 4.0,
+                                    total * mm_px * 0.15,
+                                    seed ^ 0x1AF7,
+                                ))
+                } else {
+                    0.0
+                };
+                let rows = if body_pass {
+                    (2.5 / mm_px).ceil().max(3.0) as usize
+                } else {
+                    3
+                };
+                for row in 0..rows {
+                    let t = row as f32 / (rows - 1) as f32;
+                    let back = if body_pass {
+                        (1.0 + 1.7 * noise) / mm_px * (t - 0.45)
+                    } else {
+                        row as f32
+                    };
+                    let weight = if body_pass {
+                        (0.15 + 0.85 * noise) * (std::f32::consts::PI * t).sin().max(0.0)
+                    } else {
+                        noise * (1.0 - 0.22 * row as f32)
+                    };
+                    let x = c.0 + e.0 * u * half + dir.0 * (back - retreat);
+                    let y = c.1 + e.1 * u * half + dir.1 * (back - retreat);
                     if let Some(i) = pix(x, y) {
-                        cells.push((i, noise * (1.0 - 0.22 * back as f32), x, y));
+                        cells.push((i, weight, x, y));
                     }
                 }
             }
@@ -291,7 +409,9 @@ impl Canvas {
             let sum: f32 = cells.iter().map(|v| v.1).sum();
             if sum > 0.0 {
                 let liquid = blade_paint + blade_solvent;
-                let leave = (liquid * lift.clamp(0.0, 1.0) as f64).min((sum * area * 18.0) as f64);
+                let peel_coats = if body_pass { 44.0 } else { 18.0 };
+                let leave =
+                    (liquid * lift.clamp(0.0, 1.0) as f64).min((sum * area * peel_coats) as f64);
                 let phi = (blade_solvent / liquid) as f32;
                 for (i, weight, x, y) in cells {
                     let give = (leave * weight as f64 / sum as f64 / area as f64) as f32;
@@ -571,6 +691,140 @@ mod tests {
                     .collect::<Vec<_>>()
             );
             assert_eq!(blade, format!("{k:?}"));
+        }
+    }
+}
+
+#[cfg(all(test, feature = "knife-2"))]
+mod round_two_tests {
+    use super::*;
+
+    fn fixture() -> Canvas {
+        let mut c = Canvas::new(640, 2.0, crate::hex("#d6cebb"))
+            .with_size_mm(300.0)
+            .with_engine(5)
+            .with_linen(crate::Linen::fine(23));
+        c.prime(crate::hex("#e2d7bf"), 0.9, 65.0, 0.6, 0.35, 17);
+        c
+    }
+
+    fn close(c: &Canvas, k: &Knife, before: (f64, f64)) {
+        for (a, b) in [
+            (c.wet_total() + k.paint_volume(), before.0),
+            (c.solvent_total() + k.solvent_volume(), before.1),
+        ] {
+            assert!((a - b).abs() < b.abs().max(1.0) * 3e-6, "{a} != {b}");
+        }
+    }
+
+    #[test]
+    fn knife_2_spent_body_loses_thread_scale_grid_without_losing_paint() {
+        let mark = |second| {
+            let mut c = fixture();
+            let mut k = Knife::new(110.0);
+            k = if second {
+                k.experimental_2(0.65)
+            } else {
+                k.experimental(0.65)
+            };
+            k.load(Paint::body(crate::hex("#d8b757")), 0.15);
+            let before = (
+                c.wet_total() + k.paint_volume(),
+                c.solvent_total() + k.solvent_volume(),
+            );
+            c.knife_1(
+                &mut k,
+                &[(190.0, 250.0), (790.0, 250.0)],
+                (0.65, 0.8),
+                None,
+                true,
+                0.0,
+                25.0,
+            );
+            close(&c, &k, before);
+            let mut variation = 0.0;
+            let mut volume = 0.0;
+            let s = c.f.scale;
+            for y in (225.0 * s) as usize..(275.0 * s) as usize {
+                for x in (400.0 * s) as usize..(760.0 * s) as usize {
+                    let i = y * c.f.w + x;
+                    volume += c.wet.vol[i] as f64;
+                    variation += (c.wet.vol[i] - c.wet.vol[i + 1]).abs() as f64
+                        + (c.wet.vol[i] - c.wet.vol[i + c.f.w]).abs() as f64;
+                }
+            }
+            assert!(volume > 0.0);
+            variation / volume
+        };
+        let previous = mark(false);
+        let current = mark(true);
+        assert!(
+            current < previous * 0.7,
+            "thread-scale jumps: knife-1={previous}, knife-2={current}"
+        );
+    }
+
+    #[test]
+    fn knife_2_preserves_fluid_veil_exactly() {
+        let mut initial = fixture();
+        initial.prime(crate::hex("#294867"), 0.9, 100.0, 0.6, 0.08, 29);
+        let mark = |second| {
+            let mut c = initial.clone();
+            let mut k = Knife::new(110.0);
+            k = if second {
+                k.experimental_2(0.65)
+            } else {
+                k.experimental(0.65)
+            };
+            k.load(
+                Paint::new(crate::hex("#c8a647"), 0.25, 0.1).with_thinner(0.35),
+                0.1,
+            );
+            c.knife_1(
+                &mut k,
+                &[(190.0, 250.0), (450.0, 248.0), (790.0, 250.0)],
+                (0.75, 0.8),
+                None,
+                true,
+                0.0,
+                10.0,
+            );
+            (
+                c.state_fields()
+                    .into_iter()
+                    .map(|f| f.values.le_bytes())
+                    .collect::<Vec<_>>(),
+                k.vol,
+                k.solvent,
+            )
+        };
+        assert_eq!(mark(false), mark(true));
+    }
+
+    #[test]
+    fn knife_2_transport_stays_finite_and_protects_set_layers() {
+        let mut c = fixture();
+        let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        k.load(Paint::body(crate::hex("#bd7045")).with_thinner(0.4), 0.4);
+        let before = (
+            c.wet_total() + k.paint_volume(),
+            c.solvent_total() + k.solvent_volume(),
+        );
+        for (path, lay, tilt) in [
+            (vec![(-20.0, 250.0), (1020.0, 250.0)], true, 20.0),
+            (vec![(200.0, 250.0), (790.0, 250.0)], false, 75.0),
+        ] {
+            c.knife_1(&mut k, &path, (0.7, 0.9), None, lay, 0.2, tilt);
+            close(&c, &k, before);
+            assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+            assert!(
+                c.wet
+                    .vol
+                    .iter()
+                    .chain(c.wet.solv.iter())
+                    .all(|v| v.is_finite() && *v >= -1e-5)
+            );
         }
     }
 }

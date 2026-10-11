@@ -27,16 +27,20 @@ def main():
     header = ImageFont.truetype(font_path, 23)
     crop = (40, 70, 600, 245)
     width, height = crop[2] - crop[0], crop[3] - crop[1]
+    models = ["baseline", "knife-1"]
+    if (args.directory / "slab-knife-2-gallery.png").exists():
+        models.append("knife-2")
+    round_number = 2 if len(models) == 3 else 1
     for view, label in [("color", "Color"), ("gallery", "Gallery 115 / 55 / 1"), ("relief", "Relief 135 / 25 / 1")]:
-        sheet = Image.new("RGB", (2 * width + 48, 100 + len(probes) * (height + 40)), "#202020")
+        sheet = Image.new("RGB", (len(models) * (width + 16) + 16, 100 + len(probes) * (height + 40)), "#202020")
         draw = ImageDraw.Draw(sheet)
-        draw.text((16, 10), f"Knife round 1: {label}", font=header, fill="white")
-        draw.text((16, 53), "Baseline", font=font, fill="white")
-        draw.text((width + 32, 53), "Knife-1 (explicit opt-in)", font=font, fill="white")
+        draw.text((16, 10), f"Knife round {round_number}: {label}", font=header, fill="white")
+        for col, model in enumerate(models):
+            draw.text((16 + col * (width + 16), 53), model.capitalize(), font=font, fill="white")
         for row, (probe, label) in enumerate(probes):
             y = 90 + row * (height + 40)
             draw.text((16, y), label, font=font, fill="white")
-            for col, model in enumerate(["baseline", "knife-1"]):
+            for col, model in enumerate(models):
                 with Image.open(args.directory / f"{probe}-{model}-{view}.png") as image:
                     sheet.paste(image.crop(crop), (16 + col * (width + 16), y + 28))
         sheet.save(args.directory / f"sheet-{view}.png")

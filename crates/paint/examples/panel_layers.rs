@@ -169,9 +169,9 @@ fn metrics(c: &Canvas, name: &str, stage: &str, rect: [f32; 4], output: &mut Str
 fn layers(c: &mut Canvas, name: &str, dir: &Path, receipt: &mut String, numbers: &mut String) {
     let warm = Paint {
         oil: 1.5,
-        ..Paint::new(hex("#a26a32"), 0.36, 0.18)
+        ..Paint::new(hex("#a26a32"), 0.18, 0.18)
     };
-    band(c, warm, [70.0, 70.0, 930.0, 350.0], 0.36, 0.42, 701);
+    band(c, warm, [70.0, 70.0, 930.0, 350.0], 0.16, 0.16, 701);
     c.dry();
     metrics(c, name, "warm-first", [160.0, 120.0, 830.0, 310.0], numbers);
     views(c, dir, &format!("{name}-warm"), receipt);
@@ -179,8 +179,8 @@ fn layers(c: &mut Canvas, name: &str, dir: &Path, receipt: &mut String, numbers:
         oil: 1.6,
         ..Paint::new(hex("#29211a"), 0.55, 0.12)
     };
-    band(c, dark, [510.0, 70.0, 930.0, 350.0], 0.22, 0.30, 702);
-    band(c, dark, [70.0, 430.0, 930.0, 610.0], 0.38, 0.32, 703);
+    band(c, dark, [510.0, 70.0, 930.0, 350.0], 0.10, 0.18, 702);
+    band(c, dark, [70.0, 430.0, 930.0, 610.0], 0.10, 0.12, 703);
     c.dry();
     metrics(
         c,

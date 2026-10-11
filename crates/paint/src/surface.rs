@@ -280,7 +280,12 @@ impl Canvas {
         let Bands { r1, .. } = Bands::at(self.px_mm());
         #[cfg(feature = "brush-sim-5")]
         let r1 = if (18..=20).contains(&self.engine) {
-            self.linen.map_or(r1, |linen| r1.max(((10.0 / linen.warp_per_cm).max(10.0 / linen.weft_per_cm) / self.px_mm()).ceil() as usize))
+            let limit = w.max(h).max(1);
+            let base = r1.min(limit);
+            self.linen.filter(|linen| linen.warp_per_cm.is_finite() && linen.weft_per_cm.is_finite() && linen.warp_per_cm > 0.0 && linen.weft_per_cm > 0.0).map_or(base, |linen| {
+                let radius = ((10.0 / linen.warp_per_cm).max(10.0 / linen.weft_per_cm) / self.px_mm()).ceil();
+                if radius.is_finite() { base.max(radius.min(limit as f32) as usize) } else { limit }
+            })
         } else { r1 };
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
         (0..w * h)
@@ -596,6 +601,20 @@ mod tests {
         assert!(rms(&top) < 0.3 * rms(&old), "new {} old {}", rms(&top), rms(&old));
         assert_eq!(before, (c.material_total(), c.solvent_total(), c.seen(), c.wet.vol.clone()));
         assert_eq!(c.clone().with_engine(15).seen(), c.seen());
+    }
+
+    #[test]
+    #[cfg(feature = "brush-sim-5")]
+    fn experimental_support_bridging_bounds_zero_and_tiny_thread_densities() {
+        for (warp, weft) in [(0.0, 16.0), (16.0, 0.0), (-1.0, 16.0), (f32::MIN_POSITIVE, 16.0)] {
+            let mut c = Canvas::new(32, 2.0, hex("#343941")).with_engine(18);
+            c.linen = Some(Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1906) });
+            c.height.fill(180.0);
+            c.wet.vol.fill(4.0);
+            let top = c.wet_surface();
+            assert_eq!(top.len(), 512);
+            assert!(top.iter().all(|value| value.is_finite() && (*value - 280.0).abs() < 1e-3));
+        }
     }
 
     /// The exact global correction stops each pixel at its bound (the peak

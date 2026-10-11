@@ -2,7 +2,8 @@
 
 The painter runs in Capy while this HTTP MCP service and its exported easel
 run on the Mac. The existing studio viewers read its tool journal and image
-results. No viewer, OBS or existing tunnel configuration needs to change.
+results. No viewer code or existing tunnel configuration needs to change.
+Select the new studio in the viewer and OBS using the normal launch workflow.
 
 ## Start locally
 

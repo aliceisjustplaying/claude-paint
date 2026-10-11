@@ -31,3 +31,18 @@ fn a_thinning_film_does_not_make_a_threshold_capture_seam() {
     }
     assert!(largest_jump < 0.004 * 0.02, "capture jump {largest_jump}");
 }
+
+#[test]
+fn pore_water_does_not_keep_a_dried_surface_front_open() {
+    let mut s = Watercolor::new_at(16, 16, 7, 0.05);
+    s.capillary.fill(0.1);
+    s.ledger.water_added = 0.1 * 256.0;
+    s.wet_front.fill(true);
+    s.flux_x.fill(1.0);
+    s.flux_y.fill(1.0);
+    s.wait_ns(TICK_NS);
+    assert!(s.capillary.iter().any(|v| *v > 0.0));
+    assert!(s.water.iter().all(|v| *v == 0.0));
+    assert!(s.flux_x.iter().chain(&s.flux_y).all(|v| *v == 0.0));
+    assert!(s.balance().water_error.abs() < 1e-10);
+}

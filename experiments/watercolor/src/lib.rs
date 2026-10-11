@@ -606,17 +606,22 @@ impl Watercolor {
             for (i, head) in head.iter_mut().enumerate() {
                 let x = (i % self.width) as isize;
                 let y = (i / self.width) as isize;
-                let mut neighbor_coverage = 1.0_f64;
+                let mut neighbor_wet = 1.0_f64;
                 for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
                     let xx = x + dx;
                     let yy = y + dy;
                     if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
-                        neighbor_coverage = neighbor_coverage
-                            .min(self.active.coverage[yy as usize * self.width + xx as usize]);
+                        let j = yy as usize * self.width + xx as usize;
+                        let wetted = if old_front[j] {
+                            (self.water[j] / 0.01).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        neighbor_wet = neighbor_wet.min(wetted);
                     }
                 }
                 let pin = if old_front[i] {
-                    1.0 - neighbor_coverage
+                    1.0 - neighbor_wet
                 } else {
                     0.0
                 };
@@ -784,6 +789,7 @@ impl Watercolor {
         for (i, change) in change.iter().enumerate() {
             self.capillary[i] += change;
         }
+        old_front.clone_from(&self.wet_front);
         edge_water.clone_from(&self.water);
         for i in 0..n {
             if self.water[i] == 0.0
@@ -811,7 +817,7 @@ impl Watercolor {
                     edge += 0.25;
                 } else {
                     let j = ny as usize * self.width + nx as usize;
-                    edge += if !self.wet_front[j] {
+                    edge += if !old_front[j] {
                         0.25
                     } else {
                         0.25 * (1.0 - edge_water[j] / edge_water[i].max(1e-30)).clamp(0.0, 1.0)

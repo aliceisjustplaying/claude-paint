@@ -7,6 +7,7 @@ pub enum Topography {
     Smooth,
     QuarterSawnOak,
     QuarterSawnOakRays,
+    QuarterSawnOakGallery,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,14 +60,19 @@ impl Panel {
                 let uneven = 0.6 + 0.8 * vnoise(x / 12.0, y / 16.0, s ^ 0x395);
                 uneven * (oak + ridge)
             }
-            Topography::QuarterSawnOakRays => {
+            Topography::QuarterSawnOakRays | Topography::QuarterSawnOakGallery => {
+                let gallery = self.topography == Topography::QuarterSawnOakGallery;
                 let wander = 0.9 * (vnoise(x / 24.0, y / 15.0, s ^ 0x396) - 0.5)
                     + 0.25 * (vnoise(x / 9.0, y / 6.0, s ^ 0x397) - 0.5);
                 let along = x + wander;
-                let growth = 8.0
-                    * (crate::smoothstep(0.42, 0.67, vnoise(along / 1.4, y / 95.0, s ^ 0x398))
-                        - 0.5);
-                let fine = 3.0 * (vnoise(along / 0.21, y / 60.0, s ^ 0x399) - 0.5);
+                let growth = (if gallery { 10.0 } else { 8.0 })
+                    * (crate::smoothstep(
+                        if gallery { 0.46 } else { 0.42 },
+                        if gallery { 0.61 } else { 0.67 },
+                        vnoise(along / 1.4, y / 95.0, s ^ 0x398),
+                    ) - 0.5);
+                let fine = (if gallery { 8.0 } else { 3.0 })
+                    * (vnoise(along / 0.21, y / 60.0, s ^ 0x399) - 0.5);
                 let ray = crate::smoothstep(
                     0.57,
                     0.76,
@@ -484,5 +490,59 @@ mod tests {
         };
         assert!(sheen(&oily, &o) > sheen(&matte, &m) + 0.005);
         assert_eq!(matte.px, oily.px);
+    }
+
+    #[test]
+    fn gallery_oak_resolves_more_fine_relief_without_weave() {
+        let build = |topography| {
+            Canvas::new_window(640, 1.0, Panel::chalk(23).color(), None)
+                .with_size_mm(40.0)
+                .with_panel(Panel {
+                    topography,
+                    ..Panel::chalk(23)
+                })
+        };
+        let old = build(Topography::QuarterSawnOakRays);
+        let new = build(Topography::QuarterSawnOakGallery);
+        let rms = |c: &Canvas| {
+            let lit = c.seen_lit(115.0, 55.0, 1.0);
+            let mean = lit
+                .iter()
+                .map(|p| crate::color::luminance(*p) as f64)
+                .sum::<f64>()
+                / lit.len() as f64;
+            (lit.iter()
+                .map(|p| (crate::color::luminance(*p) as f64 - mean).powi(2))
+                .sum::<f64>()
+                / lit.len() as f64)
+                .sqrt()
+        };
+        assert!(rms(&new) > 1.5 * rms(&old));
+        assert!(new.linen.is_none());
+        let state = bytes(&new);
+        let (restored, _) = Canvas::read_state(&mut state.as_slice()).unwrap();
+        assert_eq!(new.panel(), restored.panel());
+        assert_eq!(state, bytes(&restored));
+    }
+
+    #[cfg(feature = "brush-sim-2")]
+    #[test]
+    fn combined_panel_and_body2_checkpoint_resumes_exactly() {
+        let mut c = sample(Panel {
+            topography: Topography::QuarterSawnOakGallery,
+            ..Panel::chalk(23)
+        })
+        .with_engine(10);
+        stroke(&mut c);
+        c.wait(30.0);
+        let state = bytes(&c);
+        let (mut d, _) = Canvas::read_state(&mut state.as_slice()).unwrap();
+        assert_eq!(state, bytes(&d));
+        stroke(&mut c);
+        stroke(&mut d);
+        c.wait(90.0);
+        d.wait(90.0);
+        assert_eq!(bytes(&c), bytes(&d));
+        assert!(c.panel_oil_absorbed().unwrap().iter().any(|&v| v > 0.0));
     }
 }

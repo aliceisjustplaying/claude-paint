@@ -45,3 +45,7 @@ required-features = ["experimental-panel"]
 [[example]]
 name = "panel_layers"
 required-features = ["experimental-panel"]
+
+[[example]]
+name = "panel_winter_3"
+required-features = ["experimental-panel", "brush-sim-2"]

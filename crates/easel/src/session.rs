@@ -1394,12 +1394,21 @@ mod tests {
     fn brush_sim_rollback_and_replay_preserve_dip_entropy() {
         for engine in [6, 7, 8] {
             let mut s = with_engine(engine);
-            s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
-            let before = state(&s);
+            let setup = r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#;
+            s.run(setup).unwrap();
+            let mut control = with_engine(engine);
+            control.run(setup).unwrap();
+            assert!(control.run(r#"error("stop")"#).unwrap_err().contains("stop"));
             assert!(s.run(r#"b:load(p,0.6); b:stroke({{100,240},{900,260}}); error("stop")"#).unwrap_err().contains("stop"));
-            assert_eq!(state(&s), before);
-            s.run(r#"b:load(p,0.3); b:stroke({{100,240},{900,260}})"#).unwrap();
-            assert_eq!(state(&s), state(&replayed(&s)));
+            let after = state(&s);
+            let expected = state(&control);
+            assert!(after.0 == expected.0, "engine {engine}: the failed chunk kept canvas state");
+            assert!(after.1.lines().next() == expected.1.lines().next(), "engine {engine}: the failed chunk kept brush state");
+            let next = r#"b:load(p,0.3); b:stroke({{100,240},{900,260}})"#;
+            s.run(next).unwrap();
+            control.run(next).unwrap();
+            assert!(state(&s) == state(&control), "engine {engine}: the failed chunk affected the next chunk");
+            assert!(state(&s) == state(&replayed(&s)), "engine {engine}: replay changed state");
         }
     }
 

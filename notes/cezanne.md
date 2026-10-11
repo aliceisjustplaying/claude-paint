@@ -1,21 +1,17 @@
 # Cézanne at this easel
 
-Goal: an invented oil painting in Cézanne's mature manner, made from written
-knowledge, not reference images. Historical evidence and source keys are in
-`notes/research/cezanne_materials.md`; the short painter-facing principles
-are in `notes/research/cezanne_painter.md`. Everything numerical below is an
-untested study suggestion, not a promoted sketchbook recipe.
+Goal: an invented oil painting in Cézanne's manner, made from written
+knowledge without reference images. Historical evidence and source keys are
+in `notes/research/cezanne_materials.md`. Every number below is an untested
+suggestion.
 
-## Choose the problem, not the texture
+## Relationships first
 
-Cézanne painted still lifes, landscapes, portraits and bathers. Subject,
-setting, composition and canvas are the painter's choices. The technical
-examples in these notes illustrate possibilities, not a sequence of studies.
-Across subjects, warm and cool patches can give forms weight and connect
-them with surrounding space [AIC10; AIC22; NA]. For example, these relations
-may occur between fruit and cloth, mountain and sky, houses and fields,
-trees and ground, or figures and their setting. Constructive marks build
-the planes rather than decorate smoothly shaded forms afterwards.
+Subject, setting, composition and canvas are the painter's choices. The
+technical examples in these notes illustrate possibilities. Warm and cool
+patches can give forms weight and connect them with the surrounding space
+[AIC10; AIC22; NA]. Constructive marks build the planes, and the form
+comes from them.
 
 ## The studio must provide the right box
 
@@ -62,9 +58,9 @@ problem, not a missing pigment implementation.
 **Mark scale.** Canvas width is always 1000 units. If, for example, the
 painter chooses a 500 mm-wide canvas, one unit is 0.5 mm. Butler's inferred quarter-/half-inch brush widths would
 therefore correspond to nominal widths around 13/25 units; actual footprint
-depends on pressure. Her one-inch bather stroke would be about 51 units long.
-These describe particular late works, not a prescribed canvas size or a
-minimum brush for fruit, distant houses, trees or other forms.
+depends on pressure. Her one-inch stroke in a late painting would be about
+51 units long. These figures describe particular late works; the painter
+sets the canvas size and brush sizes.
 Try a flat/filbert patch and a smaller searching round on the scratch canvas.
 Compare at whole-picture distance before committing to one scale.
 
@@ -82,10 +78,9 @@ functions or its automatic field construction.
    lightly place them and keep the ground available.
 2. Mix a few piles. Test neighbouring warm/cool patches over the same
    preparation on scratch, including one wet edge and one dry overlap.
-3. Work one local problem, then answer it elsewhere. Illustrative examples
-   include apple and cloth, vessel and wall, mountain and sky, house and
-   field, or tree and ground. Do not finish all foreground before
-   beginning the background. Exact historical order after lay-in is unknown.
+3. Work one local relationship, then answer it elsewhere in the picture,
+   so near and far passages develop together. The exact historical order
+   after lay-in is unknown.
 4. Look at the whole and a detail. Decide which relationship needs revision,
    whether some paint must first set, and where an earlier state should remain.
 5. Return in separate sittings. Stop when the

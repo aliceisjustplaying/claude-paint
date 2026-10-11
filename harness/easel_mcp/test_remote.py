@@ -8,6 +8,7 @@ import base64
 from contextlib import asynccontextmanager
 import http.server
 import importlib.util
+from importlib.machinery import SourceFileLoader
 import json
 from pathlib import Path
 import secrets
@@ -16,6 +17,9 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+from io import StringIO
+import plistlib
 
 import httpx
 from mcp import ClientSession, types
@@ -121,6 +125,16 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
             done = await client.call_tool("paint", arguments)
             self.assertEqual(done.content[0].text, "ok")
         self.assertEqual(len(self.fake.calls), 1)
+        self.assertNotIn("slow-1", self.owner.tasks)
+
+    async def test_distinct_calls_are_serialized(self):
+        async with self.client() as client:
+            await client.call_tool("paint", {"lua": "slow", "call_id": "serial-1"})
+            await client.call_tool("paint", {"lua": "next", "call_id": "serial-2"})
+            self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow"])
+            self.fake.gate.set()
+            await client.call_tool("paint", {"lua": "next", "call_id": "serial-2"})
+        self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow", "next"])
 
     async def test_dropped_client_does_not_cancel_chunk(self):
         self.owner.response_wait = 1
@@ -193,6 +207,8 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
             result = await first.call("paint", {"lua": "a", "call_id": "restart-1"})
             journal = first.journal.read_bytes()
             await first.close()
+            with (path / "out/easel/mcp/session.jsonl").open("ab") as file:
+                file.write(b"an uncommitted partial projection")
             fake = FakeEasel()
             second = RemoteStudio(path, root / "sessions", easel=fake)
             try:
@@ -220,6 +236,38 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(fake.calls, [])
             finally:
                 await second.close()
+
+
+class HelperTests(unittest.TestCase):
+    def load(self, name):
+        path = Path(__file__).resolve().parents[2] / "scripts" / name
+        loader = SourceFileLoader(name, str(path))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, loader))
+        loader.exec_module(module)
+        return module
+
+    def test_registration_uses_latest_url_and_secret_reference(self):
+        helper = self.load("easel_mcp_registration")
+        config = helper.registration("https://old-url.trycloudflare.com\nhttps://new-url.trycloudflare.com", "EASEL_MCP_AUTHORIZATION")
+        self.assertEqual(config["source"]["transport"]["url"], "https://new-url.trycloudflare.com/mcp")
+        self.assertEqual(config["secrets"], {"credential_header:Authorization": {"project_env": "EASEL_MCP_AUTHORIZATION"}})
+        with self.assertRaises(ValueError):
+            helper.registration("a log without a URL")
+
+    def test_launchd_is_staged_without_secret_values(self):
+        helper = self.load("prepare_remote_easel_launchd")
+        with tempfile.TemporaryDirectory(prefix="mcp-plist-") as temp:
+            out = Path(temp).resolve() / "stage"
+            argv = ["prepare_remote_easel_launchd", "--studio", str(Path(temp) / "paint-studio-aabbcc"), "--token-file", str(Path(temp) / "token"), "--out", str(out), "--uv", "/path/to/uv", "--cloudflared", "/path/to/cloudflared"]
+            with patch.object(sys, "argv", argv), patch.object(sys, "stdout", StringIO()):
+                helper.main()
+            plists = [plistlib.loads(path.read_bytes()) for path in out.glob("*.plist")]
+            self.assertEqual(len(plists), 2)
+            tunnel = next(plist for plist in plists if plist["Label"].endswith("tunnel"))
+            args = tunnel["ProgramArguments"]
+            self.assertIn("--http-host-header", args)
+            self.assertIn("localhost:8790", args)
+            self.assertFalse(any("EnvironmentVariables" in plist for plist in plists))
 
 
 if __name__ == "__main__":

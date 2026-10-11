@@ -49,9 +49,15 @@ class RemoteStudio:
         self.serial = asyncio.Lock()
         self.journal = self.state / "session.jsonl"
         sessions = Path(sessions_root).expanduser().resolve()
-        directory = sessions / f"--mcp-src-a-{self.studio.name}--"
+        folder = "--" + str(self.studio).strip("/").replace("/", "-") + "--"
+        if "-src-a-" not in folder:
+            folder = f"--mcp-src-a-{self.studio.name}--"
+        directory = sessions / folder
         directory.mkdir(parents=True, exist_ok=True)
-        link = directory / "2000-easel-mcp.jsonl"
+        saved = self.db.execute("SELECT value FROM meta WHERE key = 'viewer_link'").fetchone()
+        link = Path(saved[0]) if saved else directory / (stamp().replace(":", "-") + "-easel-mcp.jsonl")
+        if link.parent != directory:
+            raise ValueError("the studio's viewer session root changed; use its original sessions-root")
         if link.is_symlink():
             if link.resolve() != self.journal:
                 raise ValueError("this viewer session folder belongs to another studio")
@@ -59,6 +65,9 @@ class RemoteStudio:
             raise ValueError("the remote MCP viewer session path already exists")
         else:
             link.symlink_to(self.journal)
+        if not saved:
+            with self.db:
+                self.db.execute("INSERT INTO meta VALUES ('viewer_link', ?)", (str(link),))
         if not self.db.execute("SELECT 1 FROM events LIMIT 1").fetchone():
             with self.db:
                 self.event({"type": "session", "cwd": str(self.studio)})
@@ -115,6 +124,8 @@ class RemoteStudio:
             if row[0] != request:
                 return text_result("call_id already belongs to a different call", error=True)
             if row[1] is not None:
+                if task and task[1].done():
+                    self.tasks.pop(call_id, None)
                 return types.CallToolResult.model_validate_json(row[1])
             if task is None:
                 return text_result("This call was interrupted before its result was recorded. It will not run again. Check log and status before continuing.", error=True)

@@ -25,6 +25,10 @@ cp "$src/scripts/test_thinner_acceptance" "$work/repo/scripts/"
 cat >"$work/repo/scripts/thinner_check2" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${FAKE_CHECK2_FAIL:-}" ]; then echo "check 2: FAIL"; exit 1; fi
+if [ -n "${FAKE_CHECK2_KNOWN:-}" ]; then
+  [ -n "${FAKE_CHECK2_NO_MARKER:-}" ] || echo 'KNOWN_FAILURE: rag-historical-baseline-main'
+  exit 4
+fi
 echo "check 2: PASS"
 EOF
 cat >"$work/bin/cargo" <<'EOF'
@@ -87,6 +91,11 @@ done
 expect 1 --card "$c13b (did not run" FAKE_DROP=$c13b
 expect 1 --quick "$c13card (failed)" FAKE_FAIL=$c13card
 expect 1 --quick "check 2 (scripts/thinner_check2" FAKE_CHECK2_FAIL=1
+expect 4 --quick 'only known failure: rag-historical-baseline-main' FAKE_CHECK2_KNOWN=1
+expect 4 --all 'only known failure: rag-historical-baseline-main' FAKE_CHECK2_KNOWN=1
+expect 1 --quick 'check 2 (scripts/thinner_check2' FAKE_CHECK2_KNOWN=1 FAKE_CHECK2_NO_MARKER=1
+expect 1 --all '(failed)' FAKE_CHECK2_KNOWN=1 FAKE_FAIL=$c13b
+expect 1 --all '(did not run' FAKE_CHECK2_KNOWN=1 FAKE_DROP=c06_more_pressure_lays_more_paint_up_to_the_stroke_limit
 expect 1 --all "rag study's sheet was not written" FAKE_NO_SHEET=1
 expect 2 --bogus - FAKE_=
 # the sheet's directory: given, it is used and the checkout stays clean

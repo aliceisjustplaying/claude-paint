@@ -278,6 +278,26 @@ impl Scratch {
 }
 
 impl Watercolor {
+    pub fn new_lab(
+        width: usize,
+        height: usize,
+        seed: u32,
+        kind: watercolor_lab_core::paper::PaperKind,
+    ) -> Result<Self, String> {
+        if !(2..=2400).contains(&width) || !(2..=1600).contains(&height) {
+            return Err("paper width must be 2..2400 cells and height 2..1600 cells".into());
+        }
+        let mut sheet = Self::new_at(2, 2, seed as u64, 0.05);
+        sheet.width = width;
+        sheet.height = height;
+        sheet.schema = 5;
+        sheet.lab = Some(lab_adapter::LabSheet::new(
+            watercolor_lab_core::Simulation::new(width, height, kind, seed),
+        ));
+        sheet.lab.as_mut().unwrap().require_gpu()?;
+        Ok(sheet)
+    }
+
     pub fn new(width: usize, height: usize, seed: u64) -> Self {
         Self::new_at(width, height, seed, CELL_MM)
     }
@@ -507,6 +527,17 @@ impl Watercolor {
     pub fn validate(&self) -> Result<(), String> {
         if let Some(lab) = &self.lab {
             lab.validate(self.width, self.height)?;
+            if self.schema == 5 {
+                if !(2..=2400).contains(&self.width)
+                    || !(2..=1600).contains(&self.height)
+                    || self.cell_mm != 0.05
+                    || self.residual_ns >= TICK_NS
+                    || !self.glazes.is_empty()
+                {
+                    return Err("invalid cell-based Lab sheet".into());
+                }
+                return Ok(());
+            }
         }
         let state = self;
         let n = state

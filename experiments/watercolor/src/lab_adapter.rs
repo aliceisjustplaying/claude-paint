@@ -74,6 +74,15 @@ impl LabSheet {
         self.gpu.gpu = pollster::block_on(GpuSimulation::from_state(&self.simulation)).ok();
     }
 
+    pub fn require_gpu(&mut self) -> Result<String, String> {
+        self.ensure_gpu();
+        self.gpu
+            .gpu
+            .as_ref()
+            .map(|g| format!("{} ({:?})", g.adapter_info.name, g.adapter_info.backend))
+            .ok_or_else(|| "Watercolor Lab needs a hardware GPU adapter".into())
+    }
+
     pub fn splat(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>) {
         self.ensure_gpu();
         if let Some(gpu) = &mut self.gpu.gpu {

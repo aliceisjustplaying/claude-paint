@@ -22,10 +22,10 @@ unset EASEL_BOX
 work=$(mktemp -d "$TMPDIR/box-notes.XXXXXX")
 if [ $# -eq 0 ]; then
   : "${R16_BRANCH:?set R16_BRANCH to the branch to export, or name exported studios}"
-  for profile in friedrich sargent inness alma-tadema tonn hopper giverny impressionist seurat; do
+  for profile in friedrich sargent inness alma-tadema tonn hopper giverny impressionist seurat cezanne; do
     # (only the two newest boxes may be missing, from an older branch; a missing note of the others fails the export)
     case $profile in
-      giverny|impressionist|seurat) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${profile}_materials.md" 2>/dev/null || continue ;;
+      giverny|impressionist|seurat|cezanne) git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/${profile}_materials.md" 2>/dev/null || continue ;;
     esac
     "$repo/scripts/export_r16_studio" "$profile" "$work/$profile" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
     set -- "$@" "$work/$profile"

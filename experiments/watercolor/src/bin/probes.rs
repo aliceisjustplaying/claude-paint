@@ -1,7 +1,7 @@
 use std::{fs, io::Write, path::Path};
 use watercolor_pilot::{Watercolor, PALETTE, PIGMENTS};
 
-const SCALE: usize = 2;
+const SCALE: usize = 4;
 const W: usize = 180 * SCALE;
 const H: usize = 112 * SCALE;
 
@@ -28,7 +28,15 @@ fn wash(
                 for sx in 0..4 {
                     let px = (x as f64 + (sx as f64 + 0.5) / 4.0) / SCALE as f64;
                     let py = (y as f64 + (sy as f64 + 0.5) / 4.0) / SCALE as f64;
-                    hits += usize::from(shape(px, py, center.0, center.1, radius.0, radius.1));
+                    let tooth = s.paper.height[y * W + x] - 0.5;
+                    hits += usize::from(shape(
+                        px,
+                        py,
+                        center.0,
+                        center.1,
+                        radius.0 + tooth * 0.9,
+                        radius.1 + tooth * 0.9,
+                    ));
                 }
             }
             if hits > 0 {
@@ -94,7 +102,7 @@ fn main() {
     fs::create_dir_all(out).unwrap();
     let mut csv = String::from("probe,reservoir,input,surface_or_suspended,capillary_or_deposited,bound,evaporated,lifted,error\n");
     if enabled("flat") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (90.0, 56.0),
@@ -110,7 +118,7 @@ fn main() {
     }
 
     if enabled("bloom") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (90.0, 56.0),
@@ -162,7 +170,7 @@ fn main() {
     }
 
     if enabled("graded") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (90.0, 56.0),
@@ -177,7 +185,7 @@ fn main() {
     }
 
     if enabled("granulation") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (48.0, 56.0),
@@ -200,7 +208,7 @@ fn main() {
     }
 
     if enabled("dry-brush") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         for y in 25 * SCALE..86 * SCALE {
             for x in 16 * SCALE..165 * SCALE {
                 let px = x as f64 / SCALE as f64;
@@ -223,7 +231,7 @@ fn main() {
     }
 
     if enabled("glaze") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (65.0, 54.0),
@@ -249,7 +257,7 @@ fn main() {
     }
 
     if enabled("lifting") {
-        let mut s = Watercolor::new(W, H, 71);
+        let mut s = Watercolor::new_at(W, H, 71, 0.05);
         wash(
             &mut s,
             (48.0, 56.0),

@@ -273,7 +273,8 @@ fn stroke_mask(canvas: &Watercolor, path: &[[f64; 2]], width: f64) -> Vec<(usize
                             direction = d;
                         }
                     }
-                    hits += usize::from(distance < width * 0.5);
+                    let tooth = canvas.paper.height[y * canvas.width + x];
+                    hits += usize::from(distance < width * 0.5 + (tooth - 0.5) * 0.18);
                 }
             }
             if hits > 0 {

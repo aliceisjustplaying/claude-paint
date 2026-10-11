@@ -229,6 +229,38 @@ pub struct Balance {
     pub pigment_error: [f64; PIGMENTS],
 }
 
+struct Scratch {
+    faces: Vec<(usize, usize, bool)>,
+    transfers: Vec<(usize, usize, f64, usize, bool, f64)>,
+    old_front: Vec<bool>,
+    outgoing: Vec<f64>,
+    delta: Vec<f64>,
+    pigment_delta: Vec<[f64; PIGMENTS]>,
+    moves: Vec<(usize, usize, f64)>,
+    out: Vec<f64>,
+    change: Vec<f64>,
+    cap_in: Vec<f64>,
+    edge_water: Vec<f64>,
+}
+
+impl Scratch {
+    fn new(n: usize) -> Self {
+        Self {
+            faces: Vec::new(),
+            transfers: Vec::new(),
+            old_front: vec![false; n],
+            outgoing: vec![0.0; n],
+            delta: vec![0.0; n],
+            pigment_delta: vec![[0.0; PIGMENTS]; n],
+            moves: Vec::new(),
+            out: vec![0.0; n],
+            change: vec![0.0; n],
+            cap_in: vec![0.0; n],
+            edge_water: vec![0.0; n],
+        }
+    }
+}
+
 impl Watercolor {
     pub fn new(width: usize, height: usize, seed: u64) -> Self {
         Self::new_at(width, height, seed, CELL_MM)
@@ -359,6 +391,14 @@ impl Watercolor {
             weight += w;
         }
         contact /= weight;
+        let x = (cell % self.width) as f64 * self.cell_mm;
+        let y = (cell / self.width) as f64 * self.cell_mm;
+        let along = (direction[0] * x + direction[1] * y) / norm;
+        let across = (-direction[1] * x + direction[0] * y) / norm;
+        let wander = 0.024 * (smooth(731, along / 1.5, across / 0.6) - 0.5);
+        let filament =
+            ((std::f64::consts::TAU * (across + wander) / 0.14).cos() * 0.5 + 0.5).powi(4);
+        contact *= 0.04 + 0.96 * filament;
         self.active.coverage[cell] = self.active.coverage[cell].max(contact);
         for (p, amount) in load.iter().enumerate() {
             let m = amount * contact;
@@ -395,8 +435,9 @@ impl Watercolor {
             self.residual_ns = residual;
             return;
         }
+        let mut scratch = Scratch::new(self.water.len());
         for done in 0..steps {
-            if !self.step() && every_ticks == 0 {
+            if !self.step(&mut scratch) && every_ticks == 0 {
                 self.tick = self
                     .tick
                     .checked_add(steps - done - 1)
@@ -495,8 +536,8 @@ impl Watercolor {
         Ok(())
     }
 
-    fn faces(&self) -> Vec<(usize, usize, bool)> {
-        let mut faces = Vec::new();
+    fn faces(&self, faces: &mut Vec<(usize, usize, bool)>) {
+        faces.clear();
         for i in 0..self.water.len() {
             for (j, horizontal) in [(i + 1, true), (i + self.width, false)] {
                 if (horizontal && i % self.width + 1 == self.width) || j >= self.water.len() {
@@ -511,29 +552,41 @@ impl Watercolor {
                 }
             }
         }
-        faces
     }
 
-    fn step(&mut self) -> bool {
+    fn step(&mut self, scratch: &mut Scratch) -> bool {
         let wet = self.water.iter().any(|v| *v > 0.0);
         let pore = self.capillary.iter().any(|v| *v > 0.0);
         let active = wet || pore || self.suspended.iter().flatten().any(|v| *v > 0.0);
         if active {
             let substeps = if wet { 4 } else { 1 };
             for _ in 0..substeps {
-                self.solve_substep(DT / substeps as f64);
+                self.solve_substep(DT / substeps as f64, scratch);
             }
         }
         self.tick += 1;
         active
     }
 
-    fn solve_substep(&mut self, dt: f64) {
+    fn solve_substep(&mut self, dt: f64, scratch: &mut Scratch) {
         let n = self.water.len();
-        let faces = self.faces();
-        let old_front = self.wet_front.clone();
-        let mut transfers = Vec::with_capacity(faces.len());
-        for &(i, j, horizontal) in &faces {
+        let Scratch {
+            faces,
+            transfers,
+            old_front,
+            outgoing,
+            delta,
+            pigment_delta,
+            moves,
+            out,
+            change,
+            cap_in,
+            edge_water,
+        } = scratch;
+        self.faces(faces);
+        old_front.clone_from(&self.wet_front);
+        transfers.clear();
+        for &(i, j, horizontal) in faces.iter() {
             if self.capillary[j] / self.paper.capacity[j] > 0.001
                 && old_front[i]
                 && self.water[i] > 0.22
@@ -555,7 +608,7 @@ impl Watercolor {
             let head_j = self.water[j] + 0.025 * self.paper.height[j];
             let depth = (self.water[i] + self.water[j]) * 0.5;
             let flux = if old_front[i] && old_front[j] {
-                let mobility = (depth / 0.02).clamp(0.0, 1.0).powi(2);
+                let mobility = (depth / 0.008).clamp(0.0, 1.0).powi(2);
                 let sizing = (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5;
                 let tooth = (self.paper.height[i] + self.paper.height[j]) * 0.5;
                 let pore = (self.paper.capacity[i] + self.paper.capacity[j]) / 0.56;
@@ -564,12 +617,17 @@ impl Watercolor {
                     * (0.3 + 1.4 * (1.0 - tooth))
                     * pore.clamp(0.6, 1.4))
                 .clamp(0.12, 2.2);
+                let concentration = (self.suspended[i].iter().sum::<f64>()
+                    + self.suspended[j].iter().sum::<f64>())
+                    / (self.water[i] + self.water[j]).max(0.001);
+                let viscosity = 1.0 / (1.0 + 45.0 * concentration);
                 (-14.0 * dt).exp() * mobility * previous
-                    + dt * 390.0
+                    + dt * 1560.0
                         * (CELL_MM / self.cell_mm).powi(2)
                         * depth
                         * mobility
                         * permeability
+                        * viscosity
                         * (head_i - head_j)
             } else {
                 0.0
@@ -585,14 +643,14 @@ impl Watercolor {
                 transfers.push((j, i, -flux * dt, i, horizontal, -1.0));
             }
         }
-        let mut outgoing = vec![0.0; n];
-        for &(i, _, amount, _, _, _) in &transfers {
+        outgoing.fill(0.0);
+        for &(i, _, amount, _, _, _) in transfers.iter() {
             outgoing[i] += amount;
         }
-        let mut delta = vec![0.0; n];
-        let mut pigment_delta = vec![[0.0; PIGMENTS]; n];
-        for &(i, j, requested, face, horizontal, sign) in &transfers {
-            let amount = requested * (self.water[i] / outgoing[i].max(1e-30)).min(1.0);
+        delta.fill(0.0);
+        pigment_delta.fill([0.0; PIGMENTS]);
+        for &(i, j, requested, face, horizontal, sign) in transfers.iter() {
+            let amount = requested * (0.35 * self.water[i] / outgoing[i].max(1e-30)).min(1.0);
             if horizontal {
                 self.flux_x[face] = sign * amount / dt;
             } else {
@@ -616,17 +674,23 @@ impl Watercolor {
             }
         }
         for (p, properties) in PALETTE.iter().enumerate() {
-            let mut moves = Vec::new();
-            let mut out = vec![0.0; n];
-            for &(i, j, _) in &faces {
+            moves.clear();
+            out.fill(0.0);
+            for &(i, j, _) in faces.iter() {
                 if self.water[i] < 1e-7 || self.water[j] < 1e-7 {
                     continue;
                 }
+                let ci = self.suspended[i][p] / self.water[i];
+                let cj = self.suspended[j][p] / self.water[j];
                 let diff = dt
-                    * (0.18 + 0.45 * (1.0 - properties.granulation))
                     * (CELL_MM / self.cell_mm).powi(2)
                     * self.water[i].min(self.water[j])
-                    * (self.suspended[i][p] / self.water[i] - self.suspended[j][p] / self.water[j]);
+                    * ((0.18 + 0.45 * (1.0 - properties.granulation)) * (ci - cj)
+                        + 0.9
+                            * properties.granulation
+                            * (ci + cj)
+                            * 0.5
+                            * (self.paper.height[i] - self.paper.height[j]));
                 let (from, to, m) = if diff >= 0.0 {
                     (i, j, diff)
                 } else {
@@ -637,8 +701,8 @@ impl Watercolor {
                     moves.push((from, to, m));
                 }
             }
-            let mut change = vec![0.0; n];
-            for (i, j, requested) in moves {
+            change.fill(0.0);
+            for (i, j, requested) in moves.drain(..) {
                 let moved = requested * (self.suspended[i][p] / out[i].max(1e-30)).min(1.0);
                 change[i] -= moved;
                 change[j] += moved;
@@ -650,11 +714,11 @@ impl Watercolor {
                 self.suspended[i][p] = (self.suspended[i][p] + d).max(0.0);
             }
         }
-        let mut cap_change = vec![0.0; n];
-        let mut cap_moves = Vec::new();
-        let mut cap_out = vec![0.0; n];
-        let mut cap_in = vec![0.0; n];
-        for &(i, j, _) in &faces {
+        change.fill(0.0);
+        moves.clear();
+        out.fill(0.0);
+        cap_in.fill(0.0);
+        for &(i, j, _) in faces.iter() {
             let d = dt
                 * 0.14
                 * (CELL_MM / self.cell_mm).powi(2)
@@ -662,23 +726,23 @@ impl Watercolor {
                     - self.capillary[j] / self.paper.capacity[j]);
             let (a, b, m) = if d >= 0.0 { (i, j, d) } else { (j, i, -d) };
             if m != 0.0 {
-                cap_out[a] += m;
+                out[a] += m;
                 cap_in[b] += m;
-                cap_moves.push((a, b, m));
+                moves.push((a, b, m));
             }
         }
-        for (i, j, m) in cap_moves {
-            let limit = (self.capillary[i] / cap_out[i].max(1e-30))
+        for (i, j, m) in moves.drain(..) {
+            let limit = (self.capillary[i] / out[i].max(1e-30))
                 .min(1.0)
                 .min((self.paper.capacity[j] - self.capillary[j]) / cap_in[j].max(1e-30));
             let moved = m * limit.max(0.0);
-            cap_change[i] -= moved;
-            cap_change[j] += moved;
+            change[i] -= moved;
+            change[j] += moved;
         }
-        for (i, change) in cap_change.iter().enumerate() {
+        for (i, change) in change.iter().enumerate() {
             self.capillary[i] += change;
         }
-        let edge_water = self.water.clone();
+        edge_water.clone_from(&self.water);
         for i in 0..n {
             if self.water[i] == 0.0
                 && self.capillary[i] == 0.0
@@ -696,7 +760,8 @@ impl Watercolor {
             let mut edge = 0.0;
             let x = i % self.width;
             let y = i / self.width;
-            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            let reach = (0.2 / self.cell_mm).round().max(1.0) as isize;
+            for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
                 let nx = x as isize + dx;
                 let ny = y as isize + dy;
                 if nx < 0 || ny < 0 || nx >= self.width as isize || ny >= self.height as isize {
@@ -708,7 +773,7 @@ impl Watercolor {
                     }
                 }
             }
-            let evap = (dt * 0.0035 * (0.75 + 0.5 * self.paper.sizing[i]) * (1.0 + edge * 8.0))
+            let evap = (dt * 0.0035 * (0.75 + 0.5 * self.paper.sizing[i]) * (1.0 + edge * 16.0))
                 .min(self.water[i]);
             self.water[i] -= evap;
             let cap_evap = (dt
@@ -735,7 +800,8 @@ impl Watercolor {
                 if self.suspended[i][p] == 0.0 && wet == 0.0 && room == 0.0 {
                     continue;
                 }
-                let valley = (1.0 - self.paper.height[i]).powi(2) * 4.0 * self.paper.clump[i];
+                let valley =
+                    (1.0 - self.paper.height[i]).powi(3) * 8.0 * (0.9 + 0.1 * self.paper.clump[i]);
                 let rate = pigment.settling
                     * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet))
                     + 1.8 * pigment.staining.powi(3);

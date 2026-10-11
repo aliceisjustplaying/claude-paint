@@ -278,6 +278,14 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
         }
         let start = std::time::Instant::now();
         let mut sim = Simulation::new(width, height, PaperKind::ColdPress, seed);
+        let mut gpu = if args[1] == "--gpu-marks" {
+            let gpu =
+                pollster::block_on(watercolor_lab_core::gpu::GpuSimulation::from_state(&sim))?;
+            println!("Adapter: {:?}", gpu.adapter_info);
+            Some(gpu)
+        } else {
+            None
+        };
         let mut tool_id = ToolId::Round;
         let mut pigment = pigment_by_id("french-ultramarine");
         let mut size = 0.42;
@@ -289,16 +297,27 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
             for op in stage["program"].as_array().unwrap() {
                 let a = &op[1];
                 match op[0].as_str().unwrap() {
-                    "paper" => sim.set_paper(serde_json::from_value(a.clone())?, true, seed),
+                    "paper" => {
+                        let kind = serde_json::from_value(a.clone())?;
+                        sim.set_paper(kind, true, seed);
+                        if let Some(gpu) = &mut gpu {
+                            gpu.set_paper(kind, true, seed);
+                        }
+                    }
                     "tool" => tool_id = serde_json::from_value(a.clone())?,
                     "pig" => pigment = pigment_by_id(a.as_str().unwrap()),
                     "size" => size = a.as_f64().unwrap(),
                     "water" => water = a.as_f64().unwrap(),
                     "load" => load = a.as_f64().unwrap(),
-                    "step" => sim.step_many(
-                        a.as_u64().unwrap() as usize,
-                        op.get(2).and_then(Value::as_f64).unwrap_or(1.0) as f32,
-                    ),
+                    "step" => {
+                        let count = a.as_u64().unwrap() as usize;
+                        let evap = op.get(2).and_then(Value::as_f64).unwrap_or(1.0) as f32;
+                        if let Some(gpu) = &mut gpu {
+                            gpu.step_many(count, evap);
+                        } else {
+                            sim.step_many(count, evap);
+                        }
+                    }
                     "path" => {
                         let points = a.as_array().unwrap();
                         let scale = width as f64 / 1056.0;
@@ -318,18 +337,19 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
                                 point["y"].as_f64().unwrap() * scale,
                                 0.55,
                             );
-                            sim.splat(
-                                &stamps,
-                                if brush.tool.pigment > 0.0 {
-                                    pigment.as_ref()
-                                } else {
-                                    None
-                                },
-                            );
-                            sim.step_many(
-                                op.get(2).and_then(Value::as_u64).unwrap_or(1) as usize,
-                                1.0,
-                            );
+                            let pigment = if brush.tool.pigment > 0.0 {
+                                pigment.as_ref()
+                            } else {
+                                None
+                            };
+                            let steps = op.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
+                            if let Some(gpu) = &mut gpu {
+                                gpu.splat(&stamps, pigment);
+                                gpu.step_many(steps, 1.0);
+                            } else {
+                                sim.splat(&stamps, pigment);
+                                sim.step_many(steps, 1.0);
+                            }
                         }
                     }
                     kind => return Err(format!("unsupported mark instruction {kind}").into()),
@@ -337,6 +357,9 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
             }
             let stage_name = stage["name"].as_str().unwrap();
             if stage_name == "setup" {
+                if gpu.is_some() {
+                    continue;
+                }
                 let mut diagnostic = sim.clone();
                 let before = stage_stats(&diagnostic)["live_pigment_total"]
                     .as_f64()
@@ -363,7 +386,12 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
                 )?;
                 continue;
             }
-            let rgba = sim.render_rgba(0.0, 0);
+            let rgba = if let Some(gpu) = &gpu {
+                pollster::block_on(gpu.download(&mut sim))?;
+                pollster::block_on(gpu.render_rgba(0.0, 0))?
+            } else {
+                sim.render_rgba(0.0, 0)
+            };
             let mut image = format!("P6\n{width} {height}\n255\n").into_bytes();
             image.extend(rgba.chunks_exact(4).flat_map(|p| p[..3].iter().copied()));
             fs::write(out.join(format!("{name}-{stage_name}.ppm")), image)?;
@@ -397,7 +425,96 @@ fn capture_marks(args: &[String]) -> Result<(), Box<dyn Error>> {
 // Source orchestration: src/engine/simulation.ts:408–410,446–575 at the pinned commit.
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("--marks") {
+    if args.get(1).map(String::as_str) == Some("--gpu-checkpoint") {
+        let mut cpu = Simulation::new(16, 12, PaperKind::ColdPress, 71);
+        for y in 0..12 {
+            for x in 0..16 {
+                let i = y * 16 + x;
+                let inside = x > 1 && x < 14 && y > 1 && y < 10;
+                let c = if inside {
+                    0.03 + ((x + y * 3) % 7) as f32 * 0.007
+                } else {
+                    0.0
+                };
+                cpu.flow.read[i] = [
+                    0.0,
+                    0.0,
+                    if inside {
+                        0.018 + ((x * 3 + y) % 9) as f32 * 0.014
+                    } else {
+                        0.0
+                    },
+                    if inside {
+                        0.6 + ((x + y) % 4) as f32 * 0.1
+                    } else {
+                        0.0
+                    },
+                ];
+                cpu.sus_k.read[i] = [c * 1.1, c * 0.9, c * 0.3, c];
+                cpu.sus_s.read[i] = [c * 0.22, c * 0.25, c * 0.28, 0.0];
+                cpu.sus_p.read[i] = [c * 0.65, c * 0.8, c * 0.35, 0.0];
+                cpu.dep_k.read[i] = [c * 0.21, c * 0.17, c * 0.06, c * 0.2];
+                cpu.dep_s.read[i] = [c * 0.044, c * 0.05, c * 0.056, c * 0.07];
+                cpu.cap.read[i] = [
+                    if inside {
+                        0.08 + ((x + y) % 3) as f32 * 0.025
+                    } else {
+                        0.0
+                    },
+                    if inside && x == 8 { 0.03 } else { 0.0 },
+                    if inside && y == 6 { 0.02 } else { 0.0 },
+                    0.0,
+                ];
+            }
+        }
+        for pair in [
+            &mut cpu.flow,
+            &mut cpu.sus_k,
+            &mut cpu.sus_s,
+            &mut cpu.sus_p,
+            &mut cpu.dep_k,
+            &mut cpu.dep_s,
+            &mut cpu.cap,
+        ] {
+            for pixel in &mut pair.read {
+                *pixel = pixel.map(|v| half::f16::from_f32(v).to_f32());
+            }
+        }
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .ok_or("No GPU adapter")?;
+        let mut gpu = pollster::block_on(watercolor_lab_core::gpu::GpuSimulation::from_adapter(
+            &adapter, &cpu,
+        ))?;
+        println!("Adapter: {:?}", gpu.adapter_info);
+        let mut actual = cpu.clone();
+        gpu.substep(1.0);
+        pollster::block_on(gpu.download(&mut actual))?;
+        cpu.substep(1.0);
+        let expected = capture(&cpu, "");
+        let actual = capture(&actual, "");
+        let mut failures = 0;
+        let mut metrics = BTreeMap::new();
+        for (name, field) in expected {
+            let metric = differences(field, actual[name], 16);
+            failures += metric["over_tolerance"].as_u64().unwrap();
+            metrics.insert(name, metric);
+        }
+        let result = json!({"adapter": format!("{:?}", gpu.adapter_info), "fields": metrics, "over_tolerance": failures});
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        if let Some(path) = args.get(2) {
+            fs::write(path, serde_json::to_vec_pretty(&result)?)?;
+        }
+        if failures > 0 {
+            return Err(format!("GPU checkpoint: {failures} components over tolerance").into());
+        }
+        return Ok(());
+    }
+    if matches!(
+        args.get(1).map(String::as_str),
+        Some("--marks" | "--gpu-marks")
+    ) {
         return capture_marks(&args);
     }
     if args.len() != 3 {

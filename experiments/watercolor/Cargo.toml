@@ -15,6 +15,7 @@ rayon = "1"
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 watercolor-lab-core = { path = "lab-core" }
+pollster = "0.4"
 
 [profile.test]
 opt-level = 2

@@ -612,12 +612,7 @@ impl Watercolor {
                     let yy = y + dy;
                     if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
                         let j = yy as usize * self.width + xx as usize;
-                        let wetted = if old_front[j] {
-                            (self.water[j] / 0.01).clamp(0.0, 1.0)
-                        } else {
-                            0.0
-                        };
-                        neighbor_wet = neighbor_wet.min(wetted);
+                        neighbor_wet = neighbor_wet.min(self.active.coverage[j]);
                     }
                 }
                 let pin = if old_front[i] {

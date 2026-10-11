@@ -46,3 +46,35 @@ fn pore_water_does_not_keep_a_dried_surface_front_open() {
     assert!(s.flux_x.iter().chain(&s.flux_y).all(|v| *v == 0.0));
     assert!(s.balance().water_error.abs() < 1e-10);
 }
+
+#[test]
+fn contact_line_pinning_does_not_amplify_an_interior_checkerboard() {
+    let mut s = Watercolor::new_at(64, 64, 7, 0.05);
+    s.paper.height.fill(0.5);
+    s.paper.sizing.fill(0.6);
+    s.paper.capacity.fill(0.22);
+    s.paper.clump.fill(1.0);
+    s.capillary.fill(0.22);
+    s.wet_front.fill(true);
+    s.active.coverage.fill(1.0);
+    for y in 0..64 {
+        for x in 0..64 {
+            let sign = if (x + y) % 2 == 0 { 1.0 } else { -1.0 };
+            s.water[y * 64 + x] = 0.008 + sign * 1e-8;
+        }
+    }
+    s.ledger.water_added = s.water.iter().sum::<f64>() + 0.22 * 4096.0;
+    s.wait_ns(TICK_NS);
+    let mut amplitude = 0.0;
+    for y in 16..48 {
+        for x in 16..48 {
+            let sign = if (x + y) % 2 == 0 { 1.0 } else { -1.0 };
+            amplitude += sign * s.water[y * 64 + x] / 1024.0;
+        }
+    }
+    assert!(
+        amplitude.abs() <= 1.001e-8,
+        "checkerboard amplitude {amplitude}"
+    );
+    assert!(s.balance().water_error.abs() < 1e-8);
+}

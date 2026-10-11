@@ -33,14 +33,17 @@ for name, source, width in cases:
         env = {**os.environ, "EASEL_ROOT": str(out / "runtime"), "RAYON_NUM_THREADS": "2", "EASEL_BRUSH_SIM": "off"}
         env.pop("EASEL_BOX", None)
         png, dig = out / f"{name}.png", out / f"{name}.digests"
-        result = subprocess.run(["nice", "-n", "15", binary, "run", str(source), "--width", str(width), "--gallery", "--out", str(png), "--state-digest", str(dig)], env=env, cwd=repo, capture_output=True, text=True)
+        command = ["nice", "-n", "15", binary, "run", str(source), "--width", str(width), "--out", str(png), "--state-digest", str(dig)]
+        if name != "engine5-layered-passage":
+            command.append("--gallery")
+        result = subprocess.run(command, env=env, cwd=repo, capture_output=True, text=True)
         (out / f"{name}.stdout").write_text(result.stdout)
         (out / f"{name}.stderr").write_text(result.stderr)
         result.check_returncode()
         state = re.sub(r" secs=[^ \n]+", "", dig.read_text())
         got[mode] = dict(png_sha256=hashlib.sha256(png.read_bytes()).hexdigest(), digest_sha256=hashlib.sha256(state.encode()).hexdigest(), chunks=len(state.splitlines()), stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest())
     assert len({json.dumps(v, sort_keys=True) for v in got.values()}) == 1, (name, got)
-    receipt["cases"].append(dict(name=name, width=width, source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), matching_outputs=got))
+    receipt["cases"].append(dict(name=name, width=width, view="color" if name == "engine5-layered-passage" else "gallery", source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), matching_outputs=got))
     print(name, "byte-identical PNG, stdout and chunk state")
 receipt["result"] = "all byte-identical"
 (root / "default-off-proof.json").write_text(json.dumps(receipt, indent=2) + "\n")

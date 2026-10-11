@@ -204,7 +204,7 @@ finish rule [NG, p.23; BUT].
    evidence for prolonged work; extensive reworking is expressly not the
    norm for every Cézanne [NG, pp.20, 29].
 5. **Later drawing can search again.** Blue or dark lines may belong to late
-   stages, not just preliminary outlines. Stop without equalising coverage:
+   stages, not just preliminary outlines. Stop without equalizing coverage:
    evidence allows reserve, revision and unresolved form, but does not prove
    that every unfinished-looking region was deliberately left so [NG;
    LETTER].

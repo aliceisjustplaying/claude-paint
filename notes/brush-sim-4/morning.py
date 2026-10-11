@@ -17,6 +17,8 @@ def main():
     parser.add_argument("binary", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--tolerance", type=float, default=0.0003)
+    parser.add_argument("--target", choices=["baseline", "lowest-equal-input"], default="lowest-equal-input")
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     source = (repo / "notes/brush-sim-3/morning.lua").read_text()
@@ -25,6 +27,13 @@ def main():
     binary = args.binary.resolve()
     receipt = {"commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(), "source_sha256": hashlib.sha256(source.encode()).hexdigest(), "width": 1200, "strokes": 18, "volume_definition": "final material_total minus primed material_total, coats times square canvas units; not physical mass", "matching_scope": "whole study, common multiplier for all requested brush loads; ground and strokes unchanged", "runs": [], "selected": {}}
     cache = {}
+    if args.resume:
+        saved = json.loads((root / "receipt.json").read_text())
+        assert saved["binary_sha256"] == receipt["binary_sha256"]
+        assert saved["source_sha256"] == receipt["source_sha256"]
+        receipt["previous_target"] = saved.get("target")
+        receipt["runs"] = saved["runs"]
+        cache = {(row["variant"], row["factor"]): row for row in receipt["runs"]}
 
     def run(name, factor):
         key = (name, factor)
@@ -54,8 +63,9 @@ def main():
         return row
 
     equal = {name: run(name, 1.0) for name in VARIANTS}
-    target = equal["baseline"]["deposited_volume"]
+    target = equal["baseline"]["deposited_volume"] if args.target == "baseline" else min(row["deposited_volume"] for row in equal.values())
     receipt["target"] = target
+    receipt["target_policy"] = args.target
     receipt["equal_input"] = equal
     for name in VARIANTS:
         best = equal[name]

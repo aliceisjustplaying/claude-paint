@@ -133,13 +133,13 @@ impl Paper {
             &raw,
             width,
             height,
-            (0.12 / cell_mm).round().max(1.0) as usize,
+            (0.18 / cell_mm).round().max(1.0) as usize,
         );
         let broad = correlate(
             &raw,
             width,
             height,
-            (0.4 / cell_mm).round().max(1.0) as usize,
+            (0.5 / cell_mm).round().max(1.0) as usize,
         );
         let gram: Vec<_> = sheet.grammage.iter().map(|v| *v as f64).collect();
         let gram = correlate(
@@ -153,7 +153,7 @@ impl Paper {
                 let i = y * width + x;
                 let (x, y) = (x as f64, y as f64);
                 let h =
-                    (0.5 + 0.48 * ((0.7 * fine[i] + 0.3 * broad[i]) / 20.0).tanh()).clamp(0.0, 1.0);
+                    (0.5 + 0.48 * ((0.7 * fine[i] + 0.3 * broad[i]) / 32.0).tanh()).clamp(0.0, 1.0);
                 paper.height.push(h);
                 paper.sizing.push(
                     0.3 + 0.58 * smooth(seed.wrapping_add(3), x * cell_mm / 1.8, y * cell_mm / 1.8),
@@ -801,7 +801,7 @@ impl Watercolor {
                     continue;
                 }
                 let valley =
-                    (1.0 - self.paper.height[i]).powi(3) * 8.0 * (0.9 + 0.1 * self.paper.clump[i]);
+                    (1.0 - self.paper.height[i]).powi(2) * 4.0 * (0.9 + 0.1 * self.paper.clump[i]);
                 let rate = pigment.settling
                     * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet))
                     + 1.8 * pigment.staining.powi(3);

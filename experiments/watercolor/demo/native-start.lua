@@ -13,7 +13,7 @@ for i=0,60 do
 end
 distance:stroke(ridge)
 wait(1)
-drop{x=32,y=20.8333333333,water=8.8888888889,radius=1.1666666667}
+drop{x=32,y=18.5,water=8.8888888889,radius=1.1666666667}
 look{path="native-bloom-start.png",width=1200,mode="gallery"}
 frames{prefix="native-bloom",every=0.25,width=480}
 wait(8)

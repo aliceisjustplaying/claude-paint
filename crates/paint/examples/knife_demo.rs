@@ -102,7 +102,7 @@ mod demo {
             second,
             Pass {
                 width: 130.0,
-                paint: Paint::body(hex("#bcb192")),
+                paint: Paint::body(hex("#a28f70")),
                 amount: 0.9,
                 points: &[(220.0, 520.0), (440.0, 500.0), (670.0, 528.0)],
                 pressure: (0.18, 0.32),

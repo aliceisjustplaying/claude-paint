@@ -23,7 +23,7 @@ def main():
             with Image.open(args.directory / f"{model}-{view}.png") as image:
                 sheet.paste(image.resize((600, 400), Image.Resampling.LANCZOS), (x, 44))
         sheet.save(args.directory / f"comparison-{view}.png")
-    for name, box in [("detail-scrape", (350, 250, 900, 500)), ("detail-ridge", (580, 540, 930, 720))]:
+    for name, box in [("detail-scrape", (350, 250, 900, 500)), ("detail-ridge", (360, 530, 860, 720))]:
         width, height = box[2] - box[0], box[3] - box[1]
         sheet = Image.new("RGB", (2 * width + 48, height + 56), "#202020")
         draw = ImageDraw.Draw(sheet)

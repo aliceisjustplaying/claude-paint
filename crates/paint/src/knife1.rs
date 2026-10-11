@@ -126,6 +126,9 @@ impl Knife {
             }
             self.cure = (faces.iter().map(|f| f.paint * f.cure as f64).sum::<f64>() / total) as f32;
         }
+        if total == 0.0 && faces.iter().all(|f| f.solvent == 0.0) {
+            self.faces = None;
+        }
     }
 }
 
@@ -160,6 +163,11 @@ impl Canvas {
         let second = false;
         #[cfg(feature = "knife-2")]
         let second = k.second;
+        let pressure = if second {
+            (pressure.0.clamp(0.0, 1.0), pressure.1.clamp(0.0, 1.0))
+        } else {
+            pressure
+        };
         #[cfg(feature = "knife-2")]
         if second && k.faces.is_none() && (!lay || k.hide[1] > 0.35) {
             k.faces = Some(k.make_faces());
@@ -1176,6 +1184,20 @@ mod round_two_tests {
         let mut c = Canvas::new(240, 1.0, crate::hex("#d6cebb"))
             .with_size_mm(300.0)
             .with_engine(5);
+        c.knife_1(
+            &mut k,
+            &[(180.0, 250.0), (650.0, 250.0)],
+            (1.0, 1.0),
+            None,
+            false,
+            0.0,
+            75.0,
+        );
+        assert_eq!(
+            before,
+            format!("{k:?}"),
+            "an empty scrape retains no phantom reservoirs"
+        );
         let mut base = Knife::new(40.0);
         base.load(Paint::body(crate::hex("#164f9c")), 0.7);
         c.knife(
@@ -1200,5 +1222,30 @@ mod round_two_tests {
         let faces = k.faces.as_ref().unwrap();
         assert!(faces[0].paint > 0.0);
         assert_eq!(faces[7].paint, 0.0);
+    }
+
+    #[test]
+    fn knife_2_finite_extreme_pressure_is_clamped_before_interpolation() {
+        let mut c = fixture();
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        k.load(Paint::body(crate::hex("#bd7045")), 0.3);
+        let before = (
+            c.wet_total() + k.paint_volume(),
+            c.solvent_total() + k.solvent_volume(),
+        );
+        c.knife_1(
+            &mut k,
+            &[(190.0, 250.0), (790.0, 250.0)],
+            (f32::MAX, -f32::MAX),
+            None,
+            true,
+            0.2,
+            20.0,
+        );
+        close(&c, &k, before);
+        assert!(c.state_fields().into_iter().all(|f| match f.values {
+            crate::state_dump::Values::F32(v) => v.iter().all(|v| v.is_finite()),
+            _ => true,
+        }));
     }
 }

@@ -1,4 +1,5 @@
 import asyncio
+from collections import OrderedDict
 import copy
 from datetime import datetime, timezone
 import fcntl
@@ -46,6 +47,12 @@ class RemoteStudio:
         self.easel = easel or Easel(self.studio)
         self.response_wait = response_wait
         self.tasks = {}
+        self.completed = OrderedDict()
+        self.completed_ttl = 10 * 60
+        self.max_completed = 8
+        self.max_waiting = 4
+        self.cleanup_handle = None
+        self.closed = False
         self.serial = asyncio.Lock()
         self.journal = self.state / "session.jsonl"
         sessions = Path(sessions_root).expanduser().resolve()
@@ -114,7 +121,29 @@ class RemoteStudio:
             self.project()
             return result
 
+    def evict_completed(self):
+        if self.cleanup_handle:
+            self.cleanup_handle.cancel()
+            self.cleanup_handle = None
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        while self.completed:
+            completed_at, _ = next(iter(self.completed.values()))
+            if len(self.completed) <= self.max_completed and now < completed_at + self.completed_ttl:
+                break
+            self.completed.popitem(last=False)
+        if self.completed:
+            completed_at, _ = next(iter(self.completed.values()))
+            self.cleanup_handle = loop.call_later(completed_at + self.completed_ttl - now, self.evict_completed)
+
+    def finished(self, call_id, task):
+        self.tasks.pop(call_id, None)
+        if not task.cancelled() and task.exception() is None and not self.closed:
+            self.completed[call_id] = (asyncio.get_running_loop().time(), task)
+            self.evict_completed()
+
     async def call(self, name, arguments):
+        self.evict_completed()
         arguments = dict(arguments)
         call_id = arguments.pop("call_id")
         request = json.dumps({"name": name, "arguments": arguments}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -124,8 +153,9 @@ class RemoteStudio:
             if row[0] != request:
                 return text_result("call_id already belongs to a different call", error=True)
             if row[1] is not None:
-                if task and task[1].done():
-                    self.tasks.pop(call_id, None)
+                completed = self.completed.get(call_id)
+                if completed:
+                    return completed[1].result()
                 return types.CallToolResult.model_validate_json(row[1])
             if task is None:
                 return text_result("This call was interrupted before its result was recorded. It will not run again. Check log and status before continuing.", error=True)
@@ -133,22 +163,28 @@ class RemoteStudio:
             if task[0] != request:
                 return text_result("call_id already belongs to a different call", error=True)
         else:
+            if len(self.tasks) >= 1 + self.max_waiting:
+                return text_result("The easel is busy. Retry this same call with the same call_id later.", error=True)
             task = (request, asyncio.create_task(self.execute(call_id, name, arguments, request)))
             self.tasks[call_id] = task
+            task[1].add_done_callback(lambda done: self.finished(call_id, done))
         try:
             result = await asyncio.wait_for(asyncio.shield(task[1]), self.response_wait)
         except asyncio.TimeoutError:
             return text_result(f"Call {call_id} is still running. Retry this same call with the same call_id to get its result.")
-        finally:
-            if task[1].done():
-                self.tasks.pop(call_id, None)
         return result
 
     async def close(self):
+        self.closed = True
         tasks = [task[1] for task in self.tasks.values()]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        if self.cleanup_handle:
+            self.cleanup_handle.cancel()
+            self.cleanup_handle = None
+        self.tasks.clear()
+        self.completed.clear()
         self.db.close()
         self.owner.close()
 

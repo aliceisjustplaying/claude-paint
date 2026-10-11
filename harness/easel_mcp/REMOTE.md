@@ -54,6 +54,17 @@ the running chunk. A slow call returns a “still running” reply after 20 seco
 by default; retry that same call to retrieve its result. This bounds HTTP
 requests while the easel keeps its existing chunk and rebuild time budgets.
 
+Admission is bounded to one running call and four waiting calls. A new call
+beyond that gets a “busy, retry later” error and is not recorded or executed;
+retry it unchanged after the queue drains. Retries of admitted calls and
+cached results remain available even while the queue is full.
+
+Completed tasks stay in memory for at most ten minutes, with at most eight
+retained. The oldest is evicted when the count limit is reached, and a timer
+expires tasks even if no client reconnects. The durable SQLite result is kept
+after memory eviction, so a later reconnect still retrieves the same result
+without executing the call again. These limits do not expire durable call IDs.
+
 After a server crash, a completed record is still replayable. A pending record
 has an uncertain outcome and fails closed: the adapter never runs it again.
 Use new `log` and `status` calls to inspect the painting, and ask the operator

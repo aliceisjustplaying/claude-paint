@@ -288,7 +288,7 @@ impl Canvas {
     pub fn with_engine(mut self, v: u32) -> Self {
         assert!((1..=crate::SUPPORTED_ENGINE).contains(&v), "unsupported paint engine {v}");
         #[cfg(feature = "brush-sim-1")]
-        if self.engine != v { self.base = None; }
+        if (self.engine >= 6) != (v >= 6) { self.base = None; }
         self.engine = v;
         self
     }

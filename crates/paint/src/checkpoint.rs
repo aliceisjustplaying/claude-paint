@@ -343,7 +343,7 @@ impl Canvas {
         #[cfg(feature = "experimental-panel")]
         if let Some(s) = &self.panel {
             use crate::panel::{Ground, Topography};
-            put_u64(w, match s.descriptor.topography { Topography::Smooth => 0, Topography::QuarterSawnOak => 1, Topography::QuarterSawnOakRays => 2 })?;
+            put_u64(w, match s.descriptor.topography { Topography::Smooth => 0, Topography::QuarterSawnOak => 1, Topography::QuarterSawnOakRays => 2, Topography::QuarterSawnOakGallery => 3 })?;
             put_u64(w, match s.descriptor.ground { Ground::ChalkGlue => 0, Ground::OilPrimed => 1 })?;
             put_u64(w, s.descriptor.seed)?;
             put_all(w, s.oil_absorbed.iter().copied())?;
@@ -528,7 +528,7 @@ impl Canvas {
             if c.linen.is_some() {
                 return Err(bad("checkpoint panel cannot have linen"));
             }
-            let topography = match get_u64(r)? { 0 => Topography::Smooth, 1 => Topography::QuarterSawnOak, 2 => Topography::QuarterSawnOakRays, _ => return Err(bad("checkpoint panel topography is invalid")) };
+            let topography = match get_u64(r)? { 0 => Topography::Smooth, 1 => Topography::QuarterSawnOak, 2 => Topography::QuarterSawnOakRays, 3 => Topography::QuarterSawnOakGallery, _ => return Err(bad("checkpoint panel topography is invalid")) };
             let ground = match get_u64(r)? { 0 => Ground::ChalkGlue, 1 => Ground::OilPrimed, _ => return Err(bad("checkpoint panel ground is invalid")) };
             let descriptor = Panel { topography, ground, seed: get_u64(r)? };
             let oil_absorbed = get_all(r, n)?;

@@ -163,7 +163,9 @@ fn main() {
         .expect("panel_probe <output-directory>");
     let dir = Path::new(&arg);
     std::fs::create_dir_all(dir).unwrap();
-    let oak = if std::env::args().nth(2).as_deref() == Some("rays") {
+    let oak = if std::env::args().nth(2).as_deref() == Some("gallery") {
+        Topography::QuarterSawnOakGallery
+    } else if std::env::args().nth(2).as_deref() == Some("rays") {
         Topography::QuarterSawnOakRays
     } else {
         Topography::QuarterSawnOak

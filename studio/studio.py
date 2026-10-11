@@ -28,7 +28,7 @@ from datetime import datetime
 from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
-DISPLAY_LIGHTS = ("gallery", "relief")
+DISPLAY_LIGHTS = ("gallery", "relief", "museum")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
 PUBLIC = False
 HOME = os.path.expanduser("~")

@@ -628,6 +628,37 @@ impl Canvas {
             .collect()
     }
 
+    pub fn seen_museum(&self, contrast: f32) -> Vec<Rgb> {
+        let contrast = if contrast.is_finite() { contrast.clamp(0.0, 1.0) } else { 0.0 };
+        let base = self.seen();
+        if contrast == 0.0 {
+            return base;
+        }
+        let (w, h) = (self.f.w, self.f.h);
+        let radius = (0.15 / self.px_mm()).round().max(1.0) as usize;
+        let surf = crate::surface::box_blur(&self.wet_surface(), w, h, radius);
+        let lights: Vec<_> = (0..8).map(|i| {
+            let az = (i as f32 * 45.0).to_radians();
+            let el = 60.0f32.to_radians();
+            let weight = 1.0 + 0.15 * (az - 115.0f32.to_radians()).cos();
+            ([el.cos() * az.cos(), -el.cos() * az.sin(), el.sin()], weight)
+        }).collect();
+        let flat: f32 = lights.iter().map(|(l, weight)| l[2] * weight).sum();
+        let k = 0.5 / (self.px_mm() * 1000.0);
+        base.into_par_iter().enumerate().map(|(i, p)| {
+            let (x, y) = (i % w, i / w);
+            let at = |xx: usize, yy: usize| surf[yy.min(h - 1) * w + xx.min(w - 1)];
+            let dx = (at(x + 1, y) - at(x.saturating_sub(1), y)) * k;
+            let dy = (at(x, y + 1) - at(x, y.saturating_sub(1))) * k;
+            let soft = 1.0 / (1.0 + (dx * dx + dy * dy).sqrt() / 1.2);
+            let (dx, dy) = (dx * soft, dy * soft);
+            let m = (dx * dx + dy * dy + 1.0).sqrt();
+            let diffuse: f32 = lights.iter().map(|(l, weight)| ((-dx * l[0] - dy * l[1] + l[2]) / m).max(0.0) * weight).sum();
+            let shade = 1.0 + contrast * (diffuse / flat - 1.0);
+            p.map(|v| (v * shade).max(0.0))
+        }).collect()
+    }
+
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
     /// long, low-contrast gradients). A crop render saves just
     /// the crop (without its margin).
@@ -809,6 +840,41 @@ mod tests {
 #[cfg(test)]
 mod review_lighting_tests {
     use super::*;
+
+    #[test]
+    fn museum_is_diffuse_color_preserving_and_read_only() {
+        let mut c = Canvas::new_window(64, 1.0, [0.2, 0.3, 0.4], None);
+        assert_eq!(c.seen_museum(0.32), c.seen());
+        for y in 0..c.f.h {
+            for x in 0..c.f.w {
+                c.height[y * c.f.w + x] = 400.0 * (x as f32 * 0.4).sin();
+            }
+        }
+        let mut before = Vec::new();
+        c.write_state(&mut before, "museum").unwrap();
+        let base = c.seen();
+        assert_eq!(c.seen_museum(0.0), base);
+        assert_eq!(c.seen_museum(f32::NAN), base);
+        let mut last_error = 0.0;
+        for contrast in [0.08, 0.18, 0.32] {
+            let seen = c.seen_museum(contrast);
+            let mut error = 0.0;
+            for (p, original) in seen.iter().zip(&base) {
+                let shade = p[0] / original[0];
+                for channel in 0..3 {
+                    assert!(p[channel].is_finite());
+                    assert!((p[channel] / original[channel] - shade).abs() < 1e-6);
+                    assert!((p[channel] - original[channel]).abs() <= original[channel] * contrast);
+                    error += (p[channel] - original[channel]).abs();
+                }
+            }
+            assert!(error > last_error);
+            last_error = error;
+        }
+        let mut after = Vec::new();
+        c.write_state(&mut after, "museum").unwrap();
+        assert_eq!(before, after);
+    }
 
     #[test]
     fn review_tall_relief_casts_shadows_beyond_64_pixels() {

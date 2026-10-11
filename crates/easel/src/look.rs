@@ -24,11 +24,16 @@ pub struct View {
     /// Raking light on the paint's relief (wet and dry): (azimuth, elevation)
     /// in degrees, see `Canvas::seen_lit`.
     pub light: Option<(f32, f32)>,
+    pub museum: Option<f32>,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery,museum,museum-flat,museum-surface --light azimuth,elevation --grid [step] --size N | --palette";
+
+pub const MUSEUM_FLAT: f32 = 0.08;
+pub const MUSEUM: f32 = 0.18;
+pub const MUSEUM_SURFACE: f32 = 0.32;
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
@@ -39,7 +44,15 @@ fn is_num(s: Option<&String>) -> bool {
 
 impl View {
     pub fn display_eligible(&self) -> bool {
-        !(self.value || self.squint || self.mirror || self.light.is_some() || self.palette)
+        !(self.value || self.squint || self.mirror || self.light.is_some() || self.museum.is_some() || self.palette)
+    }
+
+    pub fn seen(&self, c: &Canvas) -> Vec<Rgb> {
+        match (self.museum, self.light) {
+            (Some(contrast), _) => c.seen_museum(contrast),
+            (_, Some((az, el))) => c.seen_lit(az, el, 1.0),
+            _ => c.seen(),
+        }
     }
 
     /// Parse look arguments (see `LOOK_ARGS`).
@@ -74,7 +87,10 @@ impl View {
                             "mirror" => v.mirror = true,
                             "relief" | "raking" => v.light = Some(v.light.unwrap_or(RAKING)),
                             "gallery" => v.light = Some(v.light.unwrap_or(crate::GALLERY_LIGHT)),
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief, gallery (comma-separated)")),
+                            "museum" => v.museum = Some(MUSEUM),
+                            "museum-flat" => v.museum = Some(MUSEUM_FLAT),
+                            "museum-surface" => v.museum = Some(MUSEUM_SURFACE),
+                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief, gallery, museum, museum-flat, museum-surface (comma-separated)")),
                         }
                     }
                 }
@@ -99,7 +115,10 @@ impl View {
             }
             i += 1;
         }
-        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some()) {
+        if v.museum.is_some() && v.light.is_some() {
+            return Err("look: museum takes no directional light or gallery/relief mode".into());
+        }
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.museum.is_some() || v.size.is_some() || v.grid.is_some()) {
             return Err("look: --palette takes no other option".into());
         }
         Ok(v)
@@ -358,24 +377,32 @@ pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usi
 pub struct DisplayPreset {
     pub name: &'static str,
     pub folder: &'static str,
-    pub light: (f32, f32),
+    pub view: View,
 }
 
-pub const DISPLAY_PRESETS: [DisplayPreset; 2] = [
-    DisplayPreset { name: "gallery", folder: ".gallery", light: crate::GALLERY_LIGHT },
-    DisplayPreset { name: "relief", folder: ".relief", light: RAKING },
+pub const DISPLAY_PRESETS: [DisplayPreset; 3] = [
+    DisplayPreset { name: "gallery", folder: ".gallery", view: View::display(Some(crate::GALLERY_LIGHT), None) },
+    DisplayPreset { name: "relief", folder: ".relief", view: View::display(Some(RAKING), None) },
+    DisplayPreset { name: "museum", folder: ".museum", view: View::display(None, Some(MUSEUM)) },
 ];
+
+impl View {
+    const fn display(light: Option<(f32, f32)>, museum: Option<f32>) -> Self {
+        Self { light, museum, crop: None, value: false, squint: false, mirror: false, size: None, grid: None, palette: false }
+    }
+}
 
 pub fn companions(c: &Canvas, views: &[(View, PathBuf)]) {
     if !views.iter().any(|(v, _)| v.display_eligible()) {
         return;
     }
     for preset in DISPLAY_PRESETS {
-        let seen = c.seen_lit(preset.light.0, preset.light.1, 1.0);
+        let seen = preset.view.seen(c);
         for (v, out) in views.iter().filter(|(v, _)| v.display_eligible()) {
             let result = (|| -> Result<(), String> {
                 let mut lit = v.clone();
-                lit.light = Some(preset.light);
+                lit.light = preset.view.light;
+                lit.museum = preset.view.museum;
                 let (_, _, png) = render_seen(c, &lit, Some(&seen))?;
                 let dir = out.parent().unwrap_or_else(|| Path::new("")).join(preset.folder);
                 let name = out.file_name().ok_or("display companion needs a PNG filename")?;
@@ -450,10 +477,7 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
     let px: &[Rgb] = match seen {
         Some(px) => px,
         None => {
-            own = match v.light {
-                Some((az, el)) => c.seen_lit(az, el, 1.0),
-                None => c.seen(),
-            };
+            own = v.seen(c);
             &own
         }
     };
@@ -700,7 +724,7 @@ mod tests {
             let original = render(&c, &v).unwrap();
             assert_eq!(std::fs::read(&path).unwrap(), original.2);
             for preset in DISPLAY_PRESETS {
-                let lit = View { light: Some(preset.light), ..v.clone() };
+                let lit = View { light: preset.view.light, museum: preset.view.museum, ..v.clone() };
                 let expected = render(&c, &lit).unwrap();
                 assert_eq!((expected.0, expected.1), (original.0, original.1));
                 assert_eq!(std::fs::read(dir.join(preset.folder).join(path.file_name().unwrap())).unwrap(), expected.2);
@@ -718,7 +742,7 @@ mod tests {
         let dir = out_dir().join(format!("display-eligibility-{}", std::process::id()));
         for args in [
             vec!["--value"], vec!["--squint"], vec!["--mirror"], vec!["--mode", "relief"],
-            vec!["--mode", "gallery"], vec!["--light", "115,55"], vec!["--palette"],
+            vec!["--mode", "gallery"], vec!["--mode", "museum"], vec!["--mode", "museum-flat"], vec!["--mode", "museum-surface"], vec!["--light", "115,55"], vec!["--palette"],
             vec!["--mode", "normal,value"], vec!["--mode", "gray,blur,mirror"],
         ] {
             let v = View::parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
@@ -743,7 +767,7 @@ mod tests {
             assert_eq!(std::fs::read(&path).unwrap(), original);
             assert_eq!(std::fs::read(dir.join(blocked.folder)).unwrap(), b"blocked");
             for preset in DISPLAY_PRESETS.into_iter().filter(|p| p.folder != blocked.folder) {
-                let expected = render(&c, &View { light: Some(preset.light), ..v.clone() }).unwrap();
+                let expected = render(&c, &View { light: preset.view.light, museum: preset.view.museum, ..v.clone() }).unwrap();
                 assert_eq!(std::fs::read(dir.join(preset.folder).join("normal.png")).unwrap(), expected.2);
             }
             std::fs::remove_dir_all(dir).unwrap();
@@ -899,6 +923,21 @@ mod tests {
         assert_eq!(parse(&["--light", "45,15", "--mode", "relief,mirror"]).unwrap().light, Some((45.0, 15.0)));
         for bad in [&["--light", "45"][..], &["--light", "45,0"], &["--light", "a,b"], &["--light"]] {
             assert!(parse(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn museum_modes_take_diffuse_contrast_and_combine_with_analytical_views() {
+        for (mode, contrast) in [("museum-flat", MUSEUM_FLAT), ("museum", MUSEUM), ("museum-surface", MUSEUM_SURFACE)] {
+            let view = View::parse(&["--mode".into(), mode.into()]).unwrap();
+            assert_eq!(view.museum, Some(contrast));
+            assert_eq!(view.light, None);
+            let view = View::parse(&["--mode".into(), format!("{mode},value,mirror")]).unwrap();
+            assert!(view.value && view.mirror);
+            assert_eq!(view.museum, Some(contrast));
+        }
+        for args in [vec!["--mode", "museum,gallery"], vec!["--mode", "relief,museum"], vec!["--light", "115,55", "--mode", "museum"], vec!["--palette", "--mode", "museum"]] {
+            assert!(View::parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>()).is_err());
         }
     }
 

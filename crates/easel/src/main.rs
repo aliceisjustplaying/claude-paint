@@ -105,9 +105,11 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
+  easel render-checkpoint <save.ckpt> <out.png> [--mode normal,gallery,relief,museum,museum-flat,museum-surface]
+                      render a native-size view from the saved canvas
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
                       finish a closed session's save (out/easel/<name>/live.ckpt) without a replay
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
@@ -137,6 +139,8 @@ fn main() -> ExitCode {
         "serve" => serve(&rest),
         #[cfg(feature = "replay")]
         "run" => run(&rest),
+        #[cfg(feature = "replay")]
+        "render-checkpoint" => render_checkpoint(&rest),
         #[cfg(all(feature = "replay", feature = "finish"))]
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
@@ -891,7 +895,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
     }
-    let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
+    let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, museum: v.museum, ..look::View::default() };
     let (_, _, png) = look::render(&c, &seen_as(crop))?;
     let mut passage = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     // the knife: its paint laid thick on a steel blade, on a board of its own with the
@@ -1149,10 +1153,7 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let view = look::View::parse(args)?;
-        let seen = match view.light {
-            Some((az, el)) => c.seen_lit(az, el, 1.0),
-            None => c.seen(),
-        };
+        let seen = view.seen(&c);
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
@@ -1433,11 +1434,15 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 /// `deliver`, lit from (azimuth, elevation) in degrees on the paint's relief
 /// (`Canvas::seen_lit`), or not lit (None: color only).
 fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), String> {
-    let f = c.window();
     let px = match light {
         Some((az, el)) => c.seen_lit(az, el, 1.0),
         None => c.seen(),
     };
+    deliver_seen(c, out, &px)
+}
+
+fn deliver_seen(c: &Canvas, out: &Path, px: &[paint::Rgb]) -> Result<(), String> {
+    let f = c.window();
     let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
@@ -1446,7 +1451,21 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+
+#[cfg(feature = "replay")]
+fn render_checkpoint(args: &[String]) -> Result<(), String> {
+    if args.len() < 2 || args[..2].iter().any(|a| a.starts_with('-')) {
+        return Err("render-checkpoint <save.ckpt> <out.png> [--mode normal,gallery,relief,museum,museum-flat,museum-surface] [--light az,el]".into());
+    }
+    let view = look::View::parse(&args[2..])?;
+    if view.crop.is_some() || view.size.is_some() || view.value || view.squint || view.mirror || view.grid.is_some() || view.palette {
+        return Err("render-checkpoint writes a native-size color or lit view; use only --mode or --light".into());
+    }
+    let mut reader = std::io::BufReader::new(std::fs::File::open(&args[0]).map_err(|e| format!("{}: {e}", args[0]))?);
+    let (canvas, _) = Canvas::read_state(&mut reader).map_err(|e| format!("{}: {e}", args[0]))?;
+    deliver_seen(&canvas, Path::new(&args[1]), &view.seen(&canvas))
+}
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
@@ -1454,7 +1473,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--out" | "--checkpoint" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1511,6 +1530,13 @@ fn run(args: &[String]) -> Result<(), String> {
     let paint_secs = t0.elapsed().as_secs_f64();
     if let Some(d) = flag(args, "--dump-state") {
         state_dump::write_save(&s, &text, Path::new(&d))?;
+    }
+    if let Some(p) = flag(args, "--checkpoint") {
+        let path = Path::new(&p);
+        if let Some(parent) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        save::write(&s, &text, path)?;
     }
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
     if frames {
@@ -1671,6 +1697,34 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[cfg(feature = "replay")]
+    fn final_checkpoint_reconstructs_every_display_without_replaying() {
+        use super::*;
+        let dir = std::env::temp_dir().join(format!("museum-checkpoint-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("painting.lua");
+        std::fs::write(&log, "--@ chunk 1\ncanvas{size=300, aspect=1.25, linen=12, seed=3, ground={{pile={{\"lead white\",1}},um=60,apply=\"knife\"}}}\n").unwrap();
+        let out = dir.join("normal.png");
+        let checkpoint = dir.join("finals/final.ckpt");
+        run(&[log.display().to_string(), "--width".into(), "64".into(), "--out".into(), out.display().to_string(), "--checkpoint".into(), checkpoint.display().to_string()]).unwrap();
+        let original = std::fs::read(&out).unwrap();
+        let bytes = std::fs::read(&checkpoint).unwrap();
+        let (canvas, _) = Canvas::read_state(&mut bytes.as_slice()).unwrap();
+        for mode in ["normal", "gallery", "relief", "museum-flat", "museum", "museum-surface"] {
+            let image = dir.join(format!("{mode}.png"));
+            render_checkpoint(&[checkpoint.display().to_string(), image.display().to_string(), "--mode".into(), mode.into()]).unwrap();
+            let view = look::View::parse(&["--mode".into(), mode.into()]).unwrap();
+            let expected = dir.join("expected.png");
+            deliver_seen(&canvas, &expected, &view.seen(&canvas)).unwrap();
+            assert_eq!(std::fs::read(image).unwrap(), std::fs::read(expected).unwrap());
+        }
+        assert_eq!(original, std::fs::read(dir.join("normal.png")).unwrap());
+        assert_eq!(std::fs::read(&checkpoint).unwrap(), bytes);
+        assert!(render_checkpoint(&[checkpoint.display().to_string(), "bad.png".into(), "--size".into(), "1000".into()]).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn a_long_session_dir_gets_a_short_socket() {
         use std::os::unix::fs::MetadataExt;

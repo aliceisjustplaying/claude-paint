@@ -122,7 +122,8 @@ Gemini has a **$0.75 hard per-run cap**. Every request reserves its full local
 131,072-token input window and 2,048-token output ceiling at the highest
 configured rate, without refunding unused reservations. That allows seven
 requests at the dated rates. OpenRouter gets matching maximum prompt/output
-prices. Payloads exceeding a conservative byte/token bound, with 65,536 extra
+prices, with provider fallback disabled and supported parameters required.
+Payloads exceeding a conservative byte/token bound, with 65,536 extra
 tokens per image marker, are refused. Output ceilings are verified before
 transport. Provider/agent retries and automatic compaction are disabled. A
 stopped run exits inside the final pre-transport hook because Pi catches hook

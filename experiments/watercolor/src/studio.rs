@@ -686,8 +686,11 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
     let c = ctx.clone();
     globals.set(
         "look",
-        lua.create_function(move |_, t: Option<Table>| {
-            let t = t.ok_or_else(|| error("look expects a table"))?;
+        lua.create_function(move |lua, t: Option<Table>| {
+            let t = match t {
+                Some(t) => t,
+                None => lua.create_table()?,
+            };
             let name = t
                 .get::<Option<String>>("path")?
                 .unwrap_or("look.png".into());

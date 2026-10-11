@@ -299,6 +299,11 @@ impl WorkingSurface {
         if held.tool.point > 0.0 {
             return Err("layered brush work requires full-coverage bristles");
         }
+        if !held.supports_layered_exchange() {
+            return Err(
+                "layered brush work requires separately tracked solvent: use an engine-3+ brush",
+            );
+        }
         let mut next = self.canvas.clone();
         if let Some(mask) = clip {
             next.check_mask(mask);
@@ -691,6 +696,19 @@ mod tests {
         assert_eq!(c.seen(), w.seen());
         assert_eq!(c.seen_lit(115.0, 55.0, 1.0), w.seen_lit(115.0, 55.0, 1.0));
         assert_eq!(c.pixels(), w.protected_pixels());
+    }
+
+    #[test]
+    fn brush_work_rejects_implicit_solvent_before_changing_any_material() {
+        let mut w = passage();
+        let mut b = Held::new(Tool::hog_flat(100.0), 71);
+        b.load(Paint::body([0.8, 0.16, 0.07]).with_thinner(0.4), 0.4);
+        let before = (w.inventory(), w.brush_inventory(&b), w.seen());
+        assert!(
+            w.work_drag(&mut b, &Gesture::line((200.0, 500.0), (800.0, 500.0)), None)
+                .is_err()
+        );
+        assert_eq!(before, (w.inventory(), w.brush_inventory(&b), w.seen()));
     }
 
     #[test]

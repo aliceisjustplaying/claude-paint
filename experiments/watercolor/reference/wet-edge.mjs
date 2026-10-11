@@ -41,7 +41,7 @@ try {
       S.clear();
       h.setBrushPreset('round');
       V.brushRadius = manifest.brush.width_mm / .4;
-      V.brushWater = manifest.brush.water_film_mm;
+      V.brushWater = manifest.brush.wet_edge_water_level;
       V.brushPigment = manifest.brush.wet_edge_strength;
       V.simSpeed = 600;
       V.dipLoad = 1;

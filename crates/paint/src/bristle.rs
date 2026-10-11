@@ -2968,6 +2968,8 @@ pub struct Knife {
     flex: Option<f32>,
     #[cfg(feature = "knife-2")]
     second: bool,
+    #[cfg(feature = "knife-3")]
+    third: bool,
     #[cfg(feature = "knife-2")]
     faces: Option<Box<[knife1::Face; 8]>>,
 }
@@ -2982,6 +2984,8 @@ impl std::fmt::Debug for Knife {
             let name = "knife_1_flex";
             #[cfg(feature = "knife-2")]
             let name = if self.second { "knife_2_flex" } else { name };
+            #[cfg(feature = "knife-3")]
+            let name = if self.third { "knife_3_flex" } else { name };
             d.field(name, &flex);
             #[cfg(feature = "knife-2")]
             if self.second && self.faces.is_some() { d.field("knife_2_faces", &self.faces); }
@@ -3015,6 +3019,8 @@ impl Knife {
             flex: None,
             #[cfg(feature = "knife-2")]
             second: false,
+            #[cfg(feature = "knife-3")]
+            third: false,
             #[cfg(feature = "knife-2")]
             faces: None,
         }

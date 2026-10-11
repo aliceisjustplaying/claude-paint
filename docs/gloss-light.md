@@ -35,6 +35,10 @@ These are bounded display lobes, not a radiometrically calibrated microfacet BRD
 
 The flat dark matte regression requires exact linear Color values and exact Color PNG channel values, with at most 2/255 per-channel difference from look 1. Its flat glossy counterpart is also byte-identical to Color in look 2; only look 1's spurious broad lift disappears. Raised matte surfaces retain the same diffuse shading response, and fresh paint keeps its contrast against the matte ground.
 
+Saved-state Gallery controls require at least 85% of look 1's surface-relief contrast. On the retained 320-pixel probes and native r40 crop, the measured ratios are 99.94% for raised-matte, 97.66% for the fresh-stroke interior and 103.03% for the r40 wall. The metric is the standard deviation of the 5×5 high-pass of linear luminance `(Gallery − Color)` on fixed regions. Subtracting Color and excluding design boundaries isolates paint-surface texture; whole-image standard deviation can hide its loss behind the painting's color design. Total visible high-pass contrast is also required to retain 85%, and passes on all three regions. Both metrics and region definitions are in `renders/gloss-light/relief-retention.json` and `relief_metrics.py` in the Captain's Drive.
+
+`gloss_light_probe <output-directory> <saved-state-directory>` relights the five retained probe checkpoints without depositing paint again. With no saved-state argument it creates the deterministic controls once and saves them before rendering.
+
 ## Compatibility
 
 `run --checkpoint` remains an alias for the durable `--checkpoint-out` export introduced by state-stage1. Saved-state rendering accepts compressed studio saves, Museum modes and both look versions, and never executes the painting log. Re-rendering the same saved state in Color is byte-identical between look versions. Look 1 retains the previous Gallery, Relief and Museum arithmetic for historical exports.

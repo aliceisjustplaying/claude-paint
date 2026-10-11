@@ -559,18 +559,19 @@ impl Watercolor {
     fn step(&mut self, scratch: &mut Scratch) -> bool {
         let wet = self.water.iter().any(|v| *v > 0.0);
         let pore = self.capillary.iter().any(|v| *v > 0.0);
-        let active = wet || pore || self.suspended.iter().flatten().any(|v| *v > 0.0);
+        let surface = wet || self.suspended.iter().flatten().any(|v| *v > 0.0);
+        let active = surface || pore;
         if active {
             let substeps = if wet { 4 } else { 1 };
             for _ in 0..substeps {
-                self.solve_substep(DT / substeps as f64, scratch);
+                self.solve_substep(DT / substeps as f64, scratch, surface);
             }
         }
         self.tick += 1;
         active
     }
 
-    fn solve_substep(&mut self, dt: f64, scratch: &mut Scratch) {
+    fn solve_substep(&mut self, dt: f64, scratch: &mut Scratch, surface: bool) {
         let n = self.water.len();
         let Scratch {
             head,
@@ -587,156 +588,161 @@ impl Watercolor {
             edge_water,
         } = scratch;
         self.faces(faces);
-        old_front.clone_from(&self.wet_front);
-        let reach = (0.15 / self.cell_mm).round().max(1.0) as isize;
-        for (i, head) in head.iter_mut().enumerate() {
-            let x = (i % self.width) as isize;
-            let y = (i / self.width) as isize;
-            let mut neighbor_coverage = 1.0_f64;
-            for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
-                let xx = x + dx;
-                let yy = y + dy;
-                if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
-                    neighbor_coverage = neighbor_coverage
-                        .min(self.active.coverage[yy as usize * self.width + xx as usize]);
+        if surface {
+            old_front.clone_from(&self.wet_front);
+            let reach = (0.15 / self.cell_mm).round().max(1.0) as isize;
+            for (i, head) in head.iter_mut().enumerate() {
+                let x = (i % self.width) as isize;
+                let y = (i / self.width) as isize;
+                let mut neighbor_coverage = 1.0_f64;
+                for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
+                    let xx = x + dx;
+                    let yy = y + dy;
+                    if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
+                        neighbor_coverage = neighbor_coverage
+                            .min(self.active.coverage[yy as usize * self.width + xx as usize]);
+                    }
                 }
-            }
-            let pin = if old_front[i] {
-                1.0 - neighbor_coverage
-            } else {
-                0.0
-            };
-            *head = self.water[i] + 0.025 * self.paper.height[i]
-                - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
-        }
-        transfers.clear();
-        for &(i, j, horizontal) in faces.iter() {
-            if self.capillary[j] / self.paper.capacity[j] > 0.001
-                && old_front[i]
-                && self.water[i] > 0.22
-            {
-                self.wet_front[j] = true;
-            }
-            if self.capillary[i] / self.paper.capacity[i] > 0.001
-                && old_front[j]
-                && self.water[j] > 0.22
-            {
-                self.wet_front[i] = true;
-            }
-            let previous = if horizontal {
-                self.flux_x[i]
-            } else {
-                self.flux_y[i]
-            };
-            let head_i = head[i];
-            let head_j = head[j];
-            let depth = (self.water[i] + self.water[j]) * 0.5;
-            let flux = if old_front[i] && old_front[j] {
-                let mobility = (depth / 0.008).clamp(0.0, 1.0).powi(2);
-                let sizing = (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5;
-                let tooth = (self.paper.height[i] + self.paper.height[j]) * 0.5;
-                let pore = (self.paper.capacity[i] + self.paper.capacity[j]) / 0.56;
-                let permeability = (2.0
-                    * (0.15 + 2.3 * (1.0 - sizing).powi(2))
-                    * (0.3 + 1.4 * (1.0 - tooth))
-                    * pore.clamp(0.6, 1.4))
-                .clamp(0.12, 2.2);
-                let concentration = (self.suspended[i].iter().sum::<f64>()
-                    + self.suspended[j].iter().sum::<f64>())
-                    / (self.water[i] + self.water[j]).max(0.001);
-                let viscosity = 1.0 / (1.0 + 45.0 * concentration);
-                (-14.0 * dt).exp() * mobility * previous
-                    + dt * 780.0
-                        * (CELL_MM / self.cell_mm).powi(2)
-                        * depth
-                        * mobility
-                        * permeability
-                        * viscosity
-                        * (head_i - head_j)
-            } else {
-                0.0
-            };
-            if horizontal {
-                self.flux_x[i] = flux;
-            } else {
-                self.flux_y[i] = flux;
-            }
-            if flux > 0.0 {
-                transfers.push((i, j, flux * dt, i, horizontal, 1.0));
-            } else if flux < 0.0 {
-                transfers.push((j, i, -flux * dt, i, horizontal, -1.0));
-            }
-        }
-        outgoing.fill(0.0);
-        for &(i, _, amount, _, _, _) in transfers.iter() {
-            outgoing[i] += amount;
-        }
-        delta.fill(0.0);
-        pigment_delta.fill([0.0; PIGMENTS]);
-        for &(i, j, requested, face, horizontal, sign) in transfers.iter() {
-            let amount = requested * (0.35 * self.water[i] / outgoing[i].max(1e-30)).min(1.0);
-            if horizontal {
-                self.flux_x[face] = sign * amount / dt;
-            } else {
-                self.flux_y[face] = sign * amount / dt;
-            }
-            delta[i] -= amount;
-            delta[j] += amount;
-            for (p, mass) in self.suspended[i].iter().enumerate() {
-                let moved = mass * amount / self.water[i].max(1e-30);
-                pigment_delta[i][p] -= moved;
-                pigment_delta[j][p] += moved;
-                if moved > 0.0 && self.active.coverage[j] == 0.0 {
-                    self.active.coverage[j] = self.active.coverage[i].max(0.05);
-                }
-            }
-        }
-        for i in 0..n {
-            self.water[i] = (self.water[i] + delta[i]).max(0.0);
-            for (p, delta) in pigment_delta[i].iter().enumerate() {
-                self.suspended[i][p] = (self.suspended[i][p] + delta).max(0.0);
-            }
-        }
-        for (p, properties) in PALETTE.iter().enumerate() {
-            moves.clear();
-            out.fill(0.0);
-            for &(i, j, _) in faces.iter() {
-                if self.water[i] < 1e-7 || self.water[j] < 1e-7 {
-                    continue;
-                }
-                let ci = self.suspended[i][p] / self.water[i];
-                let cj = self.suspended[j][p] / self.water[j];
-                let diff = dt
-                    * (CELL_MM / self.cell_mm).powi(2)
-                    * self.water[i].min(self.water[j])
-                    * ((0.18 + 0.45 * (1.0 - properties.granulation)) * (ci - cj)
-                        + 0.12
-                            * properties.granulation
-                            * (ci + cj)
-                            * 0.5
-                            * (self.paper.height[i] - self.paper.height[j]));
-                let (from, to, m) = if diff >= 0.0 {
-                    (i, j, diff)
+                let pin = if old_front[i] {
+                    1.0 - neighbor_coverage
                 } else {
-                    (j, i, -diff)
+                    0.0
                 };
-                if m != 0.0 {
-                    out[from] += m;
-                    moves.push((from, to, m));
+                *head = self.water[i] + 0.025 * self.paper.height[i]
+                    - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
+            }
+            transfers.clear();
+            for &(i, j, horizontal) in faces.iter() {
+                if self.capillary[j] / self.paper.capacity[j] > 0.001
+                    && old_front[i]
+                    && self.water[i] > 0.22
+                {
+                    self.wet_front[j] = true;
+                }
+                if self.capillary[i] / self.paper.capacity[i] > 0.001
+                    && old_front[j]
+                    && self.water[j] > 0.22
+                {
+                    self.wet_front[i] = true;
+                }
+                let previous = if horizontal {
+                    self.flux_x[i]
+                } else {
+                    self.flux_y[i]
+                };
+                let head_i = head[i];
+                let head_j = head[j];
+                let depth = (self.water[i] + self.water[j]) * 0.5;
+                let flux = if old_front[i] && old_front[j] {
+                    let mobility = (depth / 0.008).clamp(0.0, 1.0).powi(2);
+                    let sizing = (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5;
+                    let tooth = (self.paper.height[i] + self.paper.height[j]) * 0.5;
+                    let pore = (self.paper.capacity[i] + self.paper.capacity[j]) / 0.56;
+                    let permeability = (2.0
+                        * (0.15 + 2.3 * (1.0 - sizing).powi(2))
+                        * (0.3 + 1.4 * (1.0 - tooth))
+                        * pore.clamp(0.6, 1.4))
+                    .clamp(0.12, 2.2);
+                    let concentration = (self.suspended[i].iter().sum::<f64>()
+                        + self.suspended[j].iter().sum::<f64>())
+                        / (self.water[i] + self.water[j]).max(0.001);
+                    let viscosity = 1.0 / (1.0 + 45.0 * concentration);
+                    (-14.0 * dt).exp() * mobility * previous
+                        + dt * 780.0
+                            * (CELL_MM / self.cell_mm).powi(2)
+                            * depth
+                            * mobility
+                            * permeability
+                            * viscosity
+                            * (head_i - head_j)
+                } else {
+                    0.0
+                };
+                if horizontal {
+                    self.flux_x[i] = flux;
+                } else {
+                    self.flux_y[i] = flux;
+                }
+                if flux > 0.0 {
+                    transfers.push((i, j, flux * dt, i, horizontal, 1.0));
+                } else if flux < 0.0 {
+                    transfers.push((j, i, -flux * dt, i, horizontal, -1.0));
                 }
             }
-            change.fill(0.0);
-            for (i, j, requested) in moves.drain(..) {
-                let moved = requested * (self.suspended[i][p] / out[i].max(1e-30)).min(1.0);
-                change[i] -= moved;
-                change[j] += moved;
-                if moved > 0.0 && self.active.coverage[j] == 0.0 {
-                    self.active.coverage[j] = self.active.coverage[i].max(0.05);
+            outgoing.fill(0.0);
+            for &(i, _, amount, _, _, _) in transfers.iter() {
+                outgoing[i] += amount;
+            }
+            delta.fill(0.0);
+            pigment_delta.fill([0.0; PIGMENTS]);
+            for &(i, j, requested, face, horizontal, sign) in transfers.iter() {
+                let amount = requested * (0.35 * self.water[i] / outgoing[i].max(1e-30)).min(1.0);
+                if horizontal {
+                    self.flux_x[face] = sign * amount / dt;
+                } else {
+                    self.flux_y[face] = sign * amount / dt;
+                }
+                delta[i] -= amount;
+                delta[j] += amount;
+                for (p, mass) in self.suspended[i].iter().enumerate() {
+                    let moved = mass * amount / self.water[i].max(1e-30);
+                    pigment_delta[i][p] -= moved;
+                    pigment_delta[j][p] += moved;
+                    if moved > 0.0 && self.active.coverage[j] == 0.0 {
+                        self.active.coverage[j] = self.active.coverage[i].max(0.05);
+                    }
                 }
             }
-            for (i, d) in change.iter().enumerate() {
-                self.suspended[i][p] = (self.suspended[i][p] + d).max(0.0);
+            for i in 0..n {
+                self.water[i] = (self.water[i] + delta[i]).max(0.0);
+                for (p, delta) in pigment_delta[i].iter().enumerate() {
+                    self.suspended[i][p] = (self.suspended[i][p] + delta).max(0.0);
+                }
             }
+            for (p, properties) in PALETTE.iter().enumerate() {
+                moves.clear();
+                out.fill(0.0);
+                for &(i, j, _) in faces.iter() {
+                    if self.water[i] < 1e-7 || self.water[j] < 1e-7 {
+                        continue;
+                    }
+                    let ci = self.suspended[i][p] / self.water[i];
+                    let cj = self.suspended[j][p] / self.water[j];
+                    let diff = dt
+                        * (CELL_MM / self.cell_mm).powi(2)
+                        * self.water[i].min(self.water[j])
+                        * ((0.18 + 0.45 * (1.0 - properties.granulation)) * (ci - cj)
+                            + 0.12
+                                * properties.granulation
+                                * (ci + cj)
+                                * 0.5
+                                * (self.paper.height[i] - self.paper.height[j]));
+                    let (from, to, m) = if diff >= 0.0 {
+                        (i, j, diff)
+                    } else {
+                        (j, i, -diff)
+                    };
+                    if m != 0.0 {
+                        out[from] += m;
+                        moves.push((from, to, m));
+                    }
+                }
+                change.fill(0.0);
+                for (i, j, requested) in moves.drain(..) {
+                    let moved = requested * (self.suspended[i][p] / out[i].max(1e-30)).min(1.0);
+                    change[i] -= moved;
+                    change[j] += moved;
+                    if moved > 0.0 && self.active.coverage[j] == 0.0 {
+                        self.active.coverage[j] = self.active.coverage[i].max(0.05);
+                    }
+                }
+                for (i, d) in change.iter().enumerate() {
+                    self.suspended[i][p] = (self.suspended[i][p] + d).max(0.0);
+                }
+            }
+        } else {
+            self.flux_x.fill(0.0);
+            self.flux_y.fill(0.0);
         }
         change.fill(0.0);
         moves.clear();
@@ -775,6 +781,7 @@ impl Watercolor {
                 self.wet_front[i] = false;
                 continue;
             }
+            let before = self.water[i];
             let saturation = self.capillary[i] / self.paper.capacity[i];
             let uptake = (dt * 0.016 * (1.0 - self.paper.sizing[i]) * (1.0 - saturation))
                 .min(self.water[i])
@@ -792,13 +799,18 @@ impl Watercolor {
                     edge += 0.25;
                 } else {
                     let j = ny as usize * self.width + nx as usize;
-                    if !self.wet_front[j] || edge_water[j] < edge_water[i] * 0.3 {
-                        edge += 0.25;
-                    }
+                    edge += if !self.wet_front[j] {
+                        0.25
+                    } else {
+                        0.25 * (1.0 - edge_water[j] / edge_water[i].max(1e-30)).clamp(0.0, 1.0)
+                    };
                 }
             }
-            let evap = (dt * 0.0035 * (0.75 + 0.5 * self.paper.sizing[i]) * (1.0 + edge * 16.0))
-                .min(self.water[i]);
+            let evap = (dt
+                * 0.0035
+                * (0.75 + 0.5 * self.paper.sizing[i])
+                * (1.0 + edge * 16.0 * (self.water[i] / 0.004).clamp(0.0, 1.0)))
+            .min(self.water[i]);
             self.water[i] -= evap;
             let cap_evap = (dt
                 * 0.0018
@@ -817,6 +829,12 @@ impl Watercolor {
             }
             let speed = (speed / self.water[i].max(0.01)).min(8.0);
             for (p, pigment) in PALETTE.iter().enumerate() {
+                if self.suspended[i][p] == 0.0
+                    && self.active.deposited[i][p] == 0.0
+                    && self.glazes.iter().all(|g| g.deposited[i][p] == 0.0)
+                {
+                    continue;
+                }
                 let room = (pigment.staining
                     * (self.active.deposited[i][p] + self.active.bound[i][p])
                     - self.active.bound[i][p])
@@ -829,10 +847,15 @@ impl Watercolor {
                 let rate = pigment.settling
                     * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet))
                     + 1.8 * pigment.staining.powi(3);
-                let adsorbed = if self.water[i] < 0.0002 {
+                let dry_capture = if before > 0.0 {
+                    (1.0 - self.water[i] / before) * 0.003 / (before + 0.003)
+                } else {
+                    1.0
+                };
+                let adsorbed = if self.water[i] == 0.0 {
                     self.suspended[i][p]
                 } else {
-                    self.suspended[i][p] * (1.0 - (-rate * dt).exp())
+                    self.suspended[i][p] * (1.0 - (1.0 - dry_capture) * (-rate * dt).exp())
                 };
                 self.suspended[i][p] -= adsorbed;
                 self.active.deposited[i][p] += adsorbed;

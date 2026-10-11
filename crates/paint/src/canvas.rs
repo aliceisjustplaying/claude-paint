@@ -15,9 +15,18 @@ pub(crate) const SURFACE_REFLECTANCE: f32 = 0.04;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LookVersion {
-    Legacy,
     #[default]
+    Legacy,
     Gloss,
+}
+
+impl LookVersion {
+    pub fn number(self) -> u32 {
+        match self {
+            Self::Legacy => 1,
+            Self::Gloss => 2,
+        }
+    }
 }
 
 fn surface_sheen(n: [f32; 3], half: [f32; 3], gloss: f32, wet: f32) -> (f32, f32) {

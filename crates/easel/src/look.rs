@@ -39,6 +39,14 @@ pub const MUSEUM_SURFACE: f32 = 0.32;
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
 
+pub fn version_of(label: &str) -> Result<paint::LookVersion, String> {
+    match label {
+        "1" | "legacy" => Ok(paint::LookVersion::Legacy),
+        "2" | "gloss" => Ok(paint::LookVersion::Gloss),
+        _ => Err("--look-version: 1 (legacy) or 2 (gloss)".into()),
+    }
+}
+
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
 }
@@ -113,11 +121,7 @@ impl View {
                 }
                 "--palette" => v.palette = true,
                 "--look-version" => {
-                    v.look_version = match next()?.as_str() {
-                        "1" | "legacy" => paint::LookVersion::Legacy,
-                        "2" | "gloss" => paint::LookVersion::Gloss,
-                        _ => return Err("--look-version: 1 (legacy) or 2 (gloss)".into()),
-                    };
+                    v.look_version = version_of(&next()?)?;
                 }
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
@@ -396,7 +400,7 @@ pub const DISPLAY_PRESETS: [DisplayPreset; 3] = [
 
 impl View {
     const fn display(light: Option<(f32, f32)>, museum: Option<f32>) -> Self {
-        Self { light, museum, look_version: paint::LookVersion::Gloss, crop: None, value: false, squint: false, mirror: false, size: None, grid: None, palette: false }
+        Self { light, museum, look_version: paint::LookVersion::Legacy, crop: None, value: false, squint: false, mirror: false, size: None, grid: None, palette: false }
     }
 }
 

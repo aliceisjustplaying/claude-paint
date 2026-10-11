@@ -14,6 +14,7 @@ set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: compare_build.sh <easel> [state_compare flags]" >&2; exit 2; }
 easel=$1; shift
 here=$(cd "$(dirname "$0")/.." && pwd)
+repo=$(cd "$here/../../.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/baseline-compare.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 "$here/tools/run_scenes.sh" "$easel" "$work" --dump >/dev/null
@@ -26,7 +27,7 @@ for d in "$here"/state/*/; do
     failed=1
     echo "$s: STATE DIFFERS"; sed 's/^/  /' "$work/$s.cmp"
   fi
-  cmp -s "$here/ref/png/$s.png" "$work/png/$s.png" && png=same || png=DIFFERENT
+  uv run --script "$repo/scripts/compare_images.py" "$here/ref/png/$s.png" "$work/png/$s.png" --expected-platform "$(cat "$here/ref/png/platform.txt" 2>/dev/null || echo unknown)" --actual-platform current && png=same || png=DIFFERENT
   cmp -s <(sed 's/ secs=[^ ]*//' "$here/ref/digest/$s.txt") <(sed 's/ secs=[^ ]*//' "$work/digest/$s.txt") && dg=same || dg=different
   cmp -s "$here/ref/out/$s.txt" "$work/out/$s.txt" && out=same || out=DIFFERENT
   echo "  png $png as af49348's; printed output $out; state digests $dg"

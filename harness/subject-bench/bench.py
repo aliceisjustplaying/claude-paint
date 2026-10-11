@@ -279,6 +279,8 @@ def main():
     for path in sorted((REPO / "harness/painter").glob("*")):
         if path.suffix in (".ts", ".md"):
             manifest[str(path.relative_to(REPO))] = digest(path.read_bytes())
+    for name in ("extension.ts", "routes.ts", "policy.ts", "package-lock.json"):
+        manifest["harness/subject-bench/" + name] = digest((HERE / name).read_bytes())
     prompt_hash = digest(json.dumps(manifest, sort_keys=True).encode())
     (args.output / "prompt-manifest.json").write_text(json.dumps(manifest, indent=2))
     (args.output / "prompt-hash.txt").write_text(prompt_hash + "\n")

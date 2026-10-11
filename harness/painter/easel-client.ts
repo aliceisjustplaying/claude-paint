@@ -236,7 +236,7 @@ function isFile(path: string): boolean {
 }
 
 function renameCompanions(studio: string, before: string, after: string): void {
-	for (const folder of [".gallery", ".relief"]) {
+	for (const folder of [".gallery", ".relief", ".museum"]) {
 		const sibling = resolve(studio, dirname(before), folder, basename(before));
 		if (!isFile(sibling)) continue;
 		try {

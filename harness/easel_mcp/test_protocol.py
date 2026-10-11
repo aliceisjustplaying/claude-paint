@@ -102,6 +102,30 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    async def test_opt_in_recording_preserves_stdio_tools_and_results(self):
+        studio = self.studio / "paint-studio-abcd"
+        studio.mkdir()
+        for name in ("bin", "notes"):
+            (self.studio / name).rename(studio / name)
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(studio), "--sessions-root", str(self.studio / "sessions")])
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                listed = await session.list_tools()
+                self.assertEqual([tool.model_dump(exclude_none=True) for tool in listed.tools], json.loads(SERVER.with_name("tools.json").read_text()))
+                result = await session.call_tool("paint", {"lua": "canvas{}"})
+                self.assertFalse(result.isError)
+                failed = await session.call_tool("paint", {"lua": "fail"})
+                self.assertTrue(failed.isError)
+                look = await session.call_tool("look", {})
+                self.assertEqual(look.content[1].type, "image")
+        events = [json.loads(line) for line in (studio / "out/easel/mcp/session.jsonl").read_text().splitlines()]
+        results = [e["message"] for e in events if e.get("message", {}).get("role") == "toolResult"]
+        self.assertEqual(len(results), 3)
+        self.assertEqual([r["isError"] for r in results], [False, True, False])
+        self.assertEqual(results[2]["content"][1]["data"], look.content[1].data)
+        self.assertEqual(len(list((self.studio / "sessions").glob("*/*.jsonl"))), 1)
+
     @connected
     async def test_initialize_and_tool_wording(self):
         self.assertEqual(self.initialized.serverInfo.name, "easel")
@@ -285,6 +309,16 @@ class PreparationTests(unittest.TestCase):
         with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run") as export, patch.object(sys, "stderr", StringIO()), self.assertRaises(SystemExit):
             self.prepare.main()
         export.assert_not_called()
+
+    def test_optional_recording_registration(self):
+        shutil.copy2(SERVER.with_name("remote.py"), self.repo / "harness/easel_mcp/remote.py")
+        output = StringIO()
+        sessions = self.root / "sessions"
+        with patch.object(sys, "argv", self.args + ["--sessions-root", str(sessions)]), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), patch.object(sys, "stdout", output):
+            self.prepare.main()
+        registration = json.loads(output.getvalue())
+        self.assertEqual(registration["args"][-2:], ["--sessions-root", str(sessions)])
+        self.assertEqual((self.dest / "bin/mcp/remote.py").read_bytes(), SERVER.with_name("remote.py").read_bytes())
 
     def test_missing_reading_is_rejected(self):
         self.brief.write_text(self.original + "notes/missing.md\n")

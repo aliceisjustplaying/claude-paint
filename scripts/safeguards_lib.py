@@ -1,4 +1,4 @@
-"""Shared code for scripts/test_candidate, scripts/golden_approve and
+"""Shared code for scripts/test, scripts/test_candidate, scripts/golden_approve and
 scripts/merge_candidate (Python standard library only).
 
 See notes/speed/SAFEGUARDS.md for how the three tools fit together.
@@ -49,7 +49,7 @@ class Refuse(Exception):
 
 def validate_timeout_scale(value):
     if type(value) not in (int, float) or not 1 <= value <= 16 or not math.isfinite(value):
-        raise Refuse("timeout scale %r must be a finite number from 1 through 16" % value)
+        raise Refuse("timeout scale %r must be a finite number from 1 to 16" % value)
     return value
 
 
@@ -60,7 +60,7 @@ def timeout_scale():
         try:
             return validate_timeout_scale(float(override))
         except (ValueError, Refuse):
-            raise Refuse("SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number from 1 through 16")
+            raise Refuse("SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number from 1 to 16")
     if sys.platform != "linux":
         return 1.0
     try:

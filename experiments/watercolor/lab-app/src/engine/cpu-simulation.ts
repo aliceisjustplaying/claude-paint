@@ -30,6 +30,7 @@ export class CpuSimulation implements SheetSimulation {
   constructor(canvas: HTMLCanvasElement, readonly simWidth: number, readonly simHeight: number) {
     this.core = new WasmSimulation(simWidth, simHeight, this.paperKind, this.paperSeed);
     this.ctx = createGL(canvas);
+    this.core.set_raster_subpixel_bits(this.ctx.gl.getParameter(this.ctx.gl.SUBPIXEL_BITS));
     this.vao = createFullscreenVAO(this.ctx);
     this.paint = createProgram(this.ctx, RENDER_FRAG);
     this.xray = createProgram(this.ctx, XRAY_FRAG);

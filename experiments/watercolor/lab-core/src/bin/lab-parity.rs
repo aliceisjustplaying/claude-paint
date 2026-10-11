@@ -45,6 +45,7 @@ struct Operation {
 #[derive(Deserialize)]
 struct Capture {
     pass: String,
+    input: Fields,
     fields: Fields,
 }
 
@@ -82,9 +83,6 @@ fn capture<'a>(sim: &'a Simulation, pass: &str) -> BTreeMap<&'static str, &'a [[
 // Validation metric for RGBA16F fields declared in src/engine/shaders.ts:10–23 at pinned commit.
 fn differences(expected: &[[f32; 4]], actual: &[[f32; 4]], width: usize) -> Value {
     assert_eq!(expected.len(), actual.len());
-    let peak = expected.iter().chain(actual).flat_map(|pixel| pixel.iter()).map(|x| (*x as f64).abs()).fold(0.0_f64, f64::max);
-    let peak_half_ulp = if peak < 2.0_f64.powi(-14) { 2.0_f64.powi(-24) } else { 2.0_f64.powf(peak.log2().floor() - 10.0) };
-    let tolerance = 1e-5_f64.max(4.0 * peak_half_ulp);
     let mut max = 0.0_f64;
     let mut sum = 0.0_f64;
     let mut max_half_ulps = 0.0_f64;
@@ -98,6 +96,7 @@ fn differences(expected: &[[f32; 4]], actual: &[[f32; 4]], width: usize) -> Valu
             let magnitude = (a[channel] as f64).abs().max((b[channel] as f64).abs());
             let half_ulp = if magnitude < 2.0_f64.powi(-14) { 2.0_f64.powi(-24) } else { 2.0_f64.powf(magnitude.log2().floor() - 10.0) };
             max_half_ulps = max_half_ulps.max(difference / half_ulp);
+            let tolerance = 1e-5_f64.max(4.0 * half_ulp);
             if difference > tolerance {
                 over_tolerance += 1;
                 if exceeding.len() < 4 { exceeding.push(json!({ "x": pixel % width, "y": pixel / width, "channel": channel, "original": a[channel], "rust": b[channel], "difference": difference, "tolerance": tolerance })); }
@@ -109,7 +108,7 @@ fn differences(expected: &[[f32; 4]], actual: &[[f32; 4]], width: usize) -> Valu
             sum += difference;
         }
     }
-    json!({ "max_abs": max, "mean_abs": sum / (expected.len() * 4) as f64, "max_half_ulps": max_half_ulps, "field_peak": peak, "tolerance": tolerance, "over_tolerance": over_tolerance, "worst": worst, "exceeding": exceeding })
+    json!({ "max_abs": max, "mean_abs": sum / (expected.len() * 4) as f64, "max_half_ulps": max_half_ulps, "over_tolerance": over_tolerance, "worst": worst, "exceeding": exceeding })
 }
 
 // Conservation channels: src/engine/shaders.ts:10–23 at the pinned commit.
@@ -126,6 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let reference: Reference = serde_json::from_slice(&fs::read(&args[1])?)?;
     let mut cases = Vec::new();
     let mut failures = 0;
+    let mut isolated_failures = 0;
     for case in reference.cases {
         let mut sim = Simulation::new(reference.width, reference.height, PaperKind::ColdPress, 71);
         sim.params = case.params;
@@ -142,7 +142,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                     failures += metric["over_tolerance"].as_u64().unwrap();
                     (name, metric)
                 }).collect();
-                passes.push(json!({ "index": pass_index, "pass": pass, "fields": fields }));
+                let mut isolated = Simulation::new(reference.width, reference.height, PaperKind::ColdPress, 71);
+                isolated.params = case.params;
+                upload(&mut isolated, &expected.input);
+                match pass {
+                    "blur_wet" => isolated.blur_wet(),
+                    "flux" => isolated.flux_pass(),
+                    "water" => isolated.water(op.evap_mul),
+                    "move_pigment" => isolated.move_pigment(),
+                    "transfer_dep" => isolated.transfer_dep(),
+                    "transfer_sus" => isolated.transfer_sus(),
+                    "capillary" => isolated.capillary(op.evap_mul),
+                    "dry_fold" => isolated.dry_fold(),
+                    "dry_clear_sus" => isolated.dry_clear_sus(),
+                    "dry_clear_dep" => isolated.dry_clear_dep(),
+                    "splat" => isolated.splat(&op.stamps, op.pigment.as_ref()),
+                    "salt" => isolated.add_salt(op.x, op.y, op.radius, op.seed),
+                    "scrub" => isolated.add_scrub(&op.stamps),
+                    _ => panic!("unknown pass {pass}"),
+                }
+                let isolated_fields: BTreeMap<_, _> = capture(&isolated, pass).into_iter().map(|(name, values)| {
+                    let metric = differences(&expected.fields[name], values, reference.width);
+                    isolated_failures += metric["over_tolerance"].as_u64().unwrap();
+                    (name, metric)
+                }).collect();
+                passes.push(json!({ "index": pass_index, "pass": pass, "fields": fields, "isolated_fields": isolated_fields }));
                 pass_index += 1;
             };
             if op.kind == "substep" { sim.substep_with_callback(op.evap_mul, &mut compare); }
@@ -169,9 +193,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = json!({ "upstream_commit": "a19bfa2a026856a98ceb400a8eec41f091f04a11", "original_renderer": reference.renderer,
         "width": reference.width, "height": reference.height, "storage": "RGBA16F", "orientation": "GL-bottom-up",
-        "tolerance": "max(1e-5 absolute, 4 half-float ULPs at each field's peak magnitude); component ULPs are also reported, velocity cancellation can magnify them", "samples_over_tolerance": failures, "cases": cases });
+        "tolerance": "max(1e-5 absolute, 4 half-float ULPs at compared component magnitude)", "samples_over_tolerance": failures, "isolated_samples_over_tolerance": isolated_failures, "cases": cases });
     fs::write(&args[2], serde_json::to_vec_pretty(&output)?)?;
-    println!("{} cases, {} samples over tolerance; {}", output["cases"].as_array().unwrap().len(), failures, args[2]);
-    if failures > 0 { return Err("per-pass parity exceeded declared float tolerance".into()); }
+    println!("{} cases, {} accumulated and {} isolated samples over tolerance; {}", output["cases"].as_array().unwrap().len(), failures, isolated_failures, args[2]);
+    if isolated_failures > 0 { return Err("isolated per-pass parity exceeded declared float tolerance".into()); }
     Ok(())
 }

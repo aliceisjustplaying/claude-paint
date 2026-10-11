@@ -30,7 +30,7 @@ export const SIM_H = 704;
   const m = /[?&]sim=(\d+)x(\d+)/.exec(location.search);
   if (m) return { w: Math.min(2048, Number(m[1])), h: Math.min(2048, Number(m[2])) };
   const portrait = window.matchMedia("(max-width: 720px)").matches;
-  return portrait ? { w: SIM_H / 4, h: SIM_W / 4 } : { w: SIM_W / 4, h: SIM_H / 4 };
+  return portrait ? { w: SIM_H / 8, h: SIM_W / 8 } : { w: SIM_W / 8, h: SIM_H / 8 };
 }
 
 export interface AppApi {
@@ -894,7 +894,7 @@ const ICONS: Record<string, string> = {
     el("div", { class: "engine-buttons", role: "group", "aria-label": "Blind engine comparison" }, ...engineButtons,
       el("button", { class: "btn", type: "button", onclick: () => comparison.reveal() }, "Reveal")),
     el("p", {}, "Switching engines clears the sheet. Paper, brush, paint and display settings stay the same."),
-    el("p", {}, `Both engines use a ${dims.w} × ${dims.h} simulation grid on the same size sheet. The grid is reduced for interactive CPU speed; paper grain and fine edges may look coarser. Each frame runs the original three substeps. Speed and stroke lag may still identify an engine. Reveal prints the mapping only in the console.`));
+    el("p", {}, `Both engines use a ${dims.w} × ${dims.h} simulation grid on the same size sheet. The grid is reduced for interactive CPU speed; paper grain and fine edges may look coarser. Each frame runs the original three substeps, so the simulation clock slows when frame rate drops. Speed and stroke lag may still identify an engine. Reveal prints the mapping only in the console.`));
   const easel = el("div", { class: "easel" }, canvas, ring, hint, phone ? null : focusBtn);
 
   // ---- the thumb bar (phone) ------------------------------------------------

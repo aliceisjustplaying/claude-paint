@@ -3,7 +3,7 @@
 # every state field af49348 had, after every chunk of the six scenes, equal
 # bit for bit on macOS, within measured float limits on Linux x86_64;
 # fields a newer engine adds zero (--added-zero); and every
-# scene's PNG within the cross-build image tolerance. (The thinner's check 2: "no
+# scene's PNG under the platform-aware image policy. (The thinner's check 2: "no
 # thinner" leaves engine 3 as it was.)
 #
 #   scripts/tests/baseline_state.sh [<release easel>]   (default $CARGO_TARGET_DIR or target, /release/easel)
@@ -34,7 +34,7 @@ for dir in "$baseline"/state/*/; do
   else
     state_failed=1
   fi
-  if ! uv run --script "$repo/scripts/compare_images.py" "$baseline/ref/png/$name.png" "$work/png/$name.png" >"$work/$name.image-report"; then
+  if ! uv run --script "$repo/scripts/compare_images.py" "$baseline/ref/png/$name.png" "$work/png/$name.png" --expected-platform "$(cat "$baseline/ref/png/platform.txt" 2>/dev/null || echo unknown)" --actual-platform current >"$work/$name.image-report"; then
     image_failed=1
   fi
   cat "$work/$name.image-report"
@@ -57,4 +57,4 @@ if [ "$known_rag" = 1 ]; then
   echo "baseline_state: other five scenes meet the state and image criteria; rag is a known historical-baseline mismatch"
   exit 4
 fi
-echo "baseline_state: all $scenes scenes $state_summary; PNGs meet the cross-build tolerance"
+echo "baseline_state: all $scenes scenes $state_summary; PNGs meet their platform image criteria"

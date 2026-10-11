@@ -507,6 +507,11 @@ on a 4-vCPU VM. If the unchanged, pre-existing rag assertion is the sole Rust
 failure, the Cargo gate reports `known_failure` and exits 4; it never silently
 reports a green gate.
 
+The Python gate suites use a per-step neutral pytest base directory and a
+synthetic fixture home. This keeps temporary paths account-free and avoids
+the Linux account name `user` colliding with ordinary `user-select` CSS in
+the export fixture. The production home/account-name guard stays unchanged.
+
 Two pre-existing rag failures are explicitly tracked on macOS and Linux:
 
 - `rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground`

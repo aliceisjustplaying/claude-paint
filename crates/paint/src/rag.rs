@@ -284,10 +284,7 @@ impl Rag {
     /// soaked through the whole cloth so far (`soaked`) leaves it. Counts
     /// the hand time in `t`.
     pub fn refold(&mut self, t: &mut Tally) {
-        if self.transport.is_some() {
-            self.transport_refold(t);
-            return;
-        }
+        assert!(self.transport.is_none(), "experimental cloth needs refold_at(now_min, tally)");
         self.fold = self.fold.wrapping_add(1);
         self.load = self.soaked.clamp(0.0, 1.0);
         // (what was wet at the old face's surface is folded inside, in
@@ -1058,7 +1055,11 @@ impl Canvas {
                 if let Some(lim) = o.refold
                     && rag.load > lim
                 {
-                    rag.refold(&mut self.tally);
+                    if rag.transport.is_some() {
+                        rag.refold_at(self.now_min(), &mut self.tally);
+                    } else {
+                        rag.refold(&mut self.tally);
+                    }
                 }
                 let p = (o.pressure * (1.0 + 0.1 * rng.normal())).clamp(0.0, 1.0);
                 let prof = [p * rng.range(0.8, 0.95), p, p * rng.range(0.85, 1.0)];

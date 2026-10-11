@@ -16,6 +16,12 @@ pub const FOLDED_SOLVENT_HALF_SECS: f64 = 540.0;
 pub const DRY_MOBILE_HALF_SECS: f64 = 8.0;
 pub const WET_MOBILE_HALF_SECS: f64 = 60.0;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SolventLedger {
+    pub evaporated_mm3: f64,
+    pub discarded_trace_mm3: f64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Material {
     pub paint_mm3: f64,
@@ -270,8 +276,17 @@ impl Rag {
         self.wet_at = cloth.at_min;
     }
 
-    pub(super) fn transport_refold(&mut self, tally: &mut Tally) {
+    pub fn refold_at(&mut self, now_min: f64, tally: &mut Tally) {
+        if self.transport.is_none() {
+            self.refold(tally);
+            return;
+        }
+        assert!(
+            now_min.is_finite(),
+            "experimental cloth fold time must be finite"
+        );
         let cloth = self.transport.as_mut().unwrap();
+        cloth.sync(now_min, tally.secs);
         cloth.advance(pace::REFOLD);
         cloth.at_hand_secs += pace::REFOLD;
         if cloth.hand_time {
@@ -321,6 +336,10 @@ struct Contact {
 }
 
 impl Canvas {
+    pub fn rag_solvent_ledger(&self) -> Option<SolventLedger> {
+        self.wet.solvent_ledger
+    }
+
     pub(super) fn check_rag_transport(&self, rag: &Rag, pts: &[(f32, f32)], pressure: &[f32]) {
         let cloth = rag.transport.as_ref().unwrap();
         assert!(
@@ -417,6 +436,9 @@ impl Canvas {
             }
         }
         self.wet.ensure_solvent();
+        self.wet
+            .solvent_ledger
+            .get_or_insert_with(SolventLedger::default);
         let mut released = [0.0; CELLS];
         let mut laid = [Material::default(); CELLS];
         let face = &mut cloth.faces[cloth.active];
@@ -529,6 +551,35 @@ impl Canvas {
             let solvent = self.rag_take(i, take) as f64 * unit;
             got[k].add(Material::picked(paint, solvent, lat, prop, cure));
         }
+        let mut solvent_asks = Vec::new();
+        let mut solvent_wanted = [0.0; CELLS];
+        for c in &contacts {
+            let solvent = self.wet.solv[c.i] as f64 * area / 1000.0;
+            if solvent <= 0.0 {
+                continue;
+            }
+            let sat =
+                ((face.cells[c.cell].solvent() + got[c.cell].solvent_mm3) / cap).clamp(0.0, 1.0);
+            let fraction = 1.0
+                - (-(LIFT as f64) * (0.7 + 0.6 * p as f64) * c.exposure * (1.0 - sat.powi(2)))
+                    .exp();
+            let ask = solvent * fraction;
+            solvent_wanted[c.cell] += ask;
+            solvent_asks.push((c.i, c.cell, ask));
+        }
+        let solvent_room: [f64; CELLS] =
+            std::array::from_fn(|k| (cap - face.cells[k].solvent() - got[k].solvent_mm3).max(0.0));
+        for (i, k, ask) in solvent_asks {
+            let room = solvent_room[k];
+            let scale = if solvent_wanted[k] > room {
+                room / solvent_wanted[k]
+            } else {
+                1.0
+            };
+            let before = self.wet.solv[i];
+            self.wet.solv[i] = (before - (ask * scale * 1000.0 / area) as f32).max(0.0);
+            got[k].solvent_mm3 += (before as f64 - self.wet.solv[i] as f64) * area / 1000.0;
+        }
         for c in &contacts {
             let store = &laid[c.cell];
             let weight = c.exposure * c.rim / smear_weights[c.cell];
@@ -592,13 +643,16 @@ mod tests {
                 c.wet.solv.get(i).copied().unwrap_or(0.0) as f64 / COAT_UM as f64 * unit,
                 c.wet.lat[i],
                 c.wet.hide[i],
-                0.0,
+                c.wet.clock.px.get(i).map_or(0.0, |p| p.cure),
             ));
         }
         let cloth = r.transport.as_ref().unwrap();
         total.add(cloth.inventory());
         total.add(cloth.waste);
         total.solvent_mm3 += cloth.evaporated_solvent_mm3 - cloth.solvent_input_mm3;
+        if let Some(ledger) = c.rag_solvent_ledger() {
+            total.solvent_mm3 += ledger.evaporated_mm3 + ledger.discarded_trace_mm3;
+        }
         total
     }
 
@@ -606,6 +660,7 @@ mod tests {
         let near = |x: f64, y: f64| assert!((x - y).abs() < 2e-6 * x.abs().max(1.0), "{x} != {y}");
         near(a.paint_mm3, b.paint_mm3);
         near(a.solvent_mm3, b.solvent_mm3);
+        near(a.cure_moment, b.cure_moment);
         for (x, y) in a.latent_moment.into_iter().zip(b.latent_moment) {
             near(x, y);
         }
@@ -630,11 +685,11 @@ mod tests {
                 && cloth.solvent_absorbed_mm3 > 0.0
                 && cloth.redeposited_mm3 > 0.0
         );
-        r.refold(c.tally_mut());
+        r.refold_at(c.now_min(), c.tally_mut());
         c.rag_blot(&mut r, 300.0, 500.0, 0.6, 42);
         close(initial, inventory(&c, &r));
         for _ in 1..FACE_COUNT {
-            r.refold(c.tally_mut());
+            r.refold_at(c.now_min(), c.tally_mut());
         }
         c.rag_wipe(&mut r, &[(850.0, 650.0), (150.0, 650.0)], &[0.5], 43);
         close(initial, inventory(&c, &r));
@@ -674,13 +729,13 @@ mod tests {
         let original = r.transport.as_ref().unwrap().faces[0];
         let mass = original.cells.iter().map(Cell::paint).sum::<f64>();
         assert!(mass > 0.0);
-        r.refold(c.tally_mut());
+        r.refold_at(c.now_min(), c.tally_mut());
         assert_eq!(r.transport.as_ref().unwrap().active, 1);
         assert_eq!(r.load, 0.0);
         c.rag_wipe(&mut r, &[(650.0, 700.0), (850.0, 700.0)], &[0.5], 41);
         assert_eq!(c.wet_um(750.0, 700.0), 0.0);
         for _ in 1..FACE_COUNT {
-            r.refold(c.tally_mut());
+            r.refold_at(c.now_min(), c.tally_mut());
         }
         assert_eq!(r.transport.as_ref().unwrap().active, 0);
         let returned = &r.transport.as_ref().unwrap().faces[0];
@@ -845,5 +900,124 @@ mod tests {
         close(a.inventory(), b.inventory());
         assert!((a.mobile_mm3() - b.mobile_mm3()).abs() < 1e-12);
         assert!((a.evaporated_solvent_mm3 - b.evaporated_solvent_mm3).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_wait_before_refolding_ages_the_old_exposed_face_in_both_clock_modes() {
+        for hand in [false, true] {
+            let mut c = canvas(0.7, 0.0);
+            if hand {
+                c.set_hand_time(Some(1.0));
+            }
+            let mut r = Rag::new(126.0, 7).with_transport(&c);
+            r.dip(1.0, c.now_min(), c.tally_mut());
+            let original_solvent = r.solvent_mm3;
+            let (mut ca, mut cb, mut a, mut b) = (c.clone(), c.clone(), r, r);
+            ca.wait(3.0);
+            cb.wait(3.0);
+            a.refold_at(ca.now_min(), ca.tally_mut());
+            a.age_transport(&ca);
+            b.age_transport(&cb);
+            b.refold_at(cb.now_min(), cb.tally_mut());
+            b.age_transport(&cb);
+            assert_eq!(a.transport, b.transport);
+            let expected = original_solvent
+                * 0.5
+                * (-pace::REFOLD * std::f64::consts::LN_2 / EXPOSED_SOLVENT_HALF_SECS).exp();
+            assert!((a.solvent_mm3 - expected).abs() < 1e-8);
+            assert_eq!(a.transport.as_ref().unwrap().active, 1);
+        }
+    }
+
+    #[test]
+    fn solvent_only_puddles_are_absorbed_even_when_paint_capacity_is_full() {
+        let mut c = canvas(0.2, 0.0);
+        c.wet.vol.fill(0.0);
+        let mut donor = Rag::new(126.0, 7).with_transport(&c);
+        donor.dip(1.0, c.now_min(), c.tally_mut());
+        c.rag_blot(&mut donor, 500.0, 500.0, 0.9, 41);
+        let before = c.solvent_total();
+        assert!(before > 0.0);
+        for full in [false, true] {
+            let mut c = c.clone();
+            let mut receiver = Rag::new(126.0, 8).with_transport(&c);
+            if full {
+                let cloth = receiver.transport.as_mut().unwrap();
+                let cap = cloth.face_capacity_mm3 / CELLS as f64;
+                for cell in &mut cloth.faces[0].cells {
+                    cell.bound =
+                        Material::picked(cap, 0.0, [0.1; LAT], [0.8, 0.7, 1.0, 0.0, 1.0], 0.2);
+                }
+            }
+            let initial = inventory(&c, &receiver);
+            let paint_before = receiver.transport.as_ref().unwrap().inventory().paint_mm3;
+            c.rag_blot(&mut receiver, 500.0, 500.0, 0.9, 41);
+            close(initial, inventory(&c, &receiver));
+            assert!(c.solvent_total() < before);
+            assert!(receiver.damp > 0.0 && receiver.solvent_mm3 > 0.0);
+            let cloth = receiver.transport.as_ref().unwrap();
+            assert!(cloth.solvent_absorbed_mm3 > 0.0);
+            assert_eq!(cloth.inventory().paint_mm3, paint_before);
+            let cap = cloth.face_capacity_mm3 / CELLS as f64;
+            assert!(
+                cloth.faces[0]
+                    .cells
+                    .iter()
+                    .all(|cell| cell.solvent() <= cap + 1e-6)
+            );
+        }
+    }
+
+    #[test]
+    fn nonzero_cure_moments_survive_mechanical_exchange_binding_and_disposal() {
+        let mut c = canvas(0.4, 0.0);
+        c.wet.clock.px = vec![crate::drying::Px::FRESH; c.wet.vol.len()];
+        for (i, p) in c.wet.clock.px.iter_mut().enumerate() {
+            p.cure = if i % 96 < 24 { 0.12 } else { 0.28 };
+            p.seen = c.wet.vol[i];
+        }
+        let mut r = Rag::new(126.0, 7).with_transport(&c);
+        let initial = inventory(&c, &r);
+        assert!(initial.cure_moment > 0.0);
+        r.dip(0.6, c.now_min(), c.tally_mut());
+        c.rag_wipe(&mut r, &[(150.0, 500.0), (850.0, 500.0)], &[0.6], 41);
+        close(initial, inventory(&c, &r));
+        assert!(r.transport.as_ref().unwrap().inventory().cure_moment > 0.0);
+        for _ in 0..FACE_COUNT {
+            r.refold_at(c.now_min(), c.tally_mut());
+        }
+        r.dip(0.95, c.now_min(), c.tally_mut());
+        c.rag_wipe(&mut r, &[(650.0, 700.0), (850.0, 700.0)], &[0.4], 41);
+        close(initial, inventory(&c, &r));
+        r.transport.as_mut().unwrap().discard();
+        close(initial, inventory(&c, &r));
+        assert!(r.transport.as_ref().unwrap().waste.cure_moment > 0.0);
+    }
+
+    #[test]
+    fn solvent_only_waits_have_an_independent_evaporation_and_trace_ledger() {
+        let mut c = canvas(0.2, 0.0);
+        c.wet.vol.fill(0.0);
+        let mut r = Rag::new(126.0, 7).with_transport(&c);
+        r.dip(1.0, c.now_min(), c.tally_mut());
+        c.rag_blot(&mut r, 500.0, 500.0, 0.9, 41);
+        let unit = (c.mm_per_unit() as f64).powi(2) * COAT_UM as f64 / 1000.0;
+        let initial = c.solvent_total() * unit;
+        let protected = (c.pixels().to_vec(), c.surface_um().to_vec());
+        c.wait(2.0);
+        let first = c.rag_solvent_ledger().unwrap();
+        assert!(first.evaporated_mm3 > 0.0 && c.solvent_total() > 0.0);
+        c.wait(2.0);
+        assert!(c.rag_solvent_ledger().unwrap().evaporated_mm3 > first.evaporated_mm3);
+        c.wait(60.0);
+        let loss = c.rag_solvent_ledger().unwrap();
+        assert_eq!(c.solvent_total(), 0.0);
+        assert!(loss.discarded_trace_mm3 > 0.0);
+        assert!(
+            (loss.evaporated_mm3 + loss.discarded_trace_mm3 - initial).abs()
+                < 2e-6 * initial.max(1.0)
+        );
+        assert_eq!(protected.0, c.pixels());
+        assert_eq!(protected.1, c.surface_um());
     }
 }

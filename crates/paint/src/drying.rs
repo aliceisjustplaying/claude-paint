@@ -726,7 +726,7 @@ impl Canvas {
     /// A film baked into the dry picture holds no solvent any more (by then
     /// it has long gone; `dry` takes the rest with it).
     fn clear_bare_solvent(&mut self, ex: (usize, usize, usize, usize)) {
-        if self.wet.solv.is_empty() {
+        if self.wet.solv.is_empty() || self.wet.solvent_ledger.is_some() {
             return;
         }
         let w = self.f.w;

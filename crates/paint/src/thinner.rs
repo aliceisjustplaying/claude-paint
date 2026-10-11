@@ -221,17 +221,25 @@ impl Canvas {
     /// adds receivers. It is rebuilt at every wait, so brushwork and saves
     /// need no cache invalidation or checkpoint-format change.
     pub(crate) fn evaporate_indices(&mut self, dt: f32, solvent: &mut Vec<usize>) {
+        let sunit = if self.wet.solvent_ledger.is_some() { (self.px_mm() as f64).powi(2) / 1000.0 } else { 0.0 };
         solvent.retain(|&i| {
             let s = &mut self.wet.solv[i];
             if *s > 0.0 {
                 let h = self.wet.vol[i] * COAT_UM;
+                let before = *s;
                 *s = (*s as f64 * (-(dt as f64) / evaporation_tau_min(h)).exp()) as f32;
+                if let Some(ledger) = &mut self.wet.solvent_ledger {
+                    ledger.evaporated_mm3 += (before as f64 - *s as f64) * sunit;
+                }
                 // Engine 5: a trace below ten parts per million of the
                 // local film is numerically gone. The 2 µm term keeps
                 // the threshold finite on bare weave. A numerical estimate,
                 // not a measured evaporation law; earlier engines keep 1e-8.
                 let floor = if self.engine >= 5 { SOLVENT_FLOOR.max(1e-5 * (h + THIN_FILM_UM)) } else { SOLVENT_FLOOR };
-                if *s < floor { *s = 0.0; }
+                if *s < floor {
+                    if let Some(ledger) = &mut self.wet.solvent_ledger { ledger.discarded_trace_mm3 += *s as f64 * sunit; }
+                    *s = 0.0;
+                }
             }
             *s > 0.0
         });

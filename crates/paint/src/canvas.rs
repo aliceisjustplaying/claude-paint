@@ -958,6 +958,33 @@ mod review_lighting_tests {
     }
 
     #[test]
+    fn gloss_light_only_sheens_on_a_light_facing_slope() {
+        let mut c = Canvas::new_window(32, 1.0, [0.02; 3], None);
+        c.gloss.fill(1.0);
+        let az = 115.0f32.to_radians();
+        let slope = 17.5f32.to_radians().tan();
+        let raw_slope = slope / (1.0 - slope / 1.2);
+        let step = c.px_mm() * 1000.0 * raw_slope;
+        let i = 16 * 32 + 16;
+        for facing in [1.0, -1.0] {
+            for y in 0..32 {
+                for x in 0..32 {
+                    c.height[y * 32 + x] = facing * step * (-az.cos() * x as f32 + az.sin() * y as f32);
+                }
+            }
+            let glossy = c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss)[i][0];
+            c.gloss.fill(0.05);
+            let matte = c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss)[i][0];
+            c.gloss.fill(1.0);
+            if facing > 0.0 {
+                assert!(glossy > matte + 0.019, "facing slope: {glossy} vs {matte}");
+            } else {
+                assert!(glossy <= matte, "away slope: {glossy} vs {matte}");
+            }
+        }
+    }
+
+    #[test]
     fn museum_is_diffuse_color_preserving_and_read_only() {
         let mut c = Canvas::new_window(64, 1.0, [0.2, 0.3, 0.4], None);
         assert_eq!(c.seen_museum(0.32), c.seen());

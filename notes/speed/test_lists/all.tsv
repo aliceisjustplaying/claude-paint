@@ -35,3 +35,4 @@ script	replay-clip	60	1	^replay_clip test: 	scripts/tests/replay_clip.sh	w
 script	box-tubes	60	1	^box_tubes: \d+ fixture easels checked	scripts/tests/box_tubes.sh	w
 script	studio-names	60	1	^studio_names: all fixture studios	scripts/tests/studio_names.sh	w
 script	peek	60	1	^peek: whole PNG	sh scripts/tests/peek.sh	w
+script	easel-mcp	60	14	^test_.* \.\.\. ok$	uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v	w

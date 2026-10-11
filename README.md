@@ -25,6 +25,30 @@ scripts/test --all                    # every required check (notes/speed/SKIPPE
 - `crates/easel`: the live Lua session over it.
 - `THIRD_PARTY_NOTICES.md`: licenses of the code this builds on.
 
+## Painting with Capy
+
+Install Rust, a C compiler, Python 3.10+, uv and Perl on the painter's
+machine. Prepare an exported studio with an approved house brief:
+
+```sh
+scripts/lockrun --timeout 600 -- scripts/prepare_capy_studio hopper /path/to/studio \
+  --brief /path/to/approved/BRIEF.md \
+  --studio-notes /path/to/approved/studio_notes.md
+```
+
+The script uses the existing studio exporter, builds a painter-only easel
+from `HEAD` (or `--ref`), copies the brief with only its studio path changed
+and prints JSON with the exact MCP stdio `command`, `args`, `cwd` and `env`.
+It refuses a nonempty destination. Keep export diagnostics on stderr when
+capturing that JSON. The exported studio includes its own copy of the MCP
+adapter; it needs no source checkout at runtime.
+
+Register that configuration in the Capy painter thread. The adapter exposes
+`paint`, `look`, `note`, `status` and `log` with the pi harness's descriptions
+and arguments. `look` returns PNG image content inline with its caption.
+`wait(minutes)` remains Lua inside `paint`. See
+[the adapter README](harness/easel_mcp/README.md) for configuration and tests.
+
 ## For developers
 
 - Finished paintings, videos, prompts and painter notes are indexed in

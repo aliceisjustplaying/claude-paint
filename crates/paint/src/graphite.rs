@@ -503,6 +503,10 @@ impl Canvas {
 
     /// Radius (px) over which the point rides on the tops of the ground.
     fn tooth_px(&self) -> isize {
+        #[cfg(feature = "experimental-panel")]
+        if self.panel.is_some() {
+            return (0.15 / self.px_mm()).round().max(1.0) as isize;
+        }
         (0.35 / self.px_mm()).round().max(1.0) as isize
     }
 
@@ -575,6 +579,8 @@ impl Canvas {
         // (its averaged height overstates how far the point is from them)
         // and averages many crumbs of the deposit
         let sub = (0.15 / self.px_mm()).min(1.0);
+        #[cfg(feature = "experimental-panel")]
+        let sub = if self.panel.is_some() { (0.08 / self.px_mm()).min(1.0) } else { sub };
         let (depth_k, crumble) = (sub.powf(0.6), lead.crumble * sub.sqrt());
         self.drawing_mut();
         let film = std::mem::take(&mut self.film);

@@ -751,6 +751,8 @@ pub(crate) struct Surf {
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
     absorb: *mut f32,
+    #[cfg(feature = "experimental-panel")]
+    panel_oil_absorbed: *mut f32,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
@@ -820,6 +822,10 @@ impl Surf {
                     let take = (*cap).min(0.8 * oil_in);
                     if take > 0.0 {
                         *cap -= take;
+                        #[cfg(feature = "experimental-panel")]
+                        if !self.panel_oil_absorbed.is_null() {
+                            *self.panel_oil_absorbed.add(i) += take;
+                        }
                         let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
                         let lean = (take / film_oil).min(0.9);
                         hd[4] *= 1.0 - lean;
@@ -893,6 +899,8 @@ impl Canvas {
             clump: self.engine >= 4,
             lean: self.engine >= 4,
             absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
+            #[cfg(feature = "experimental-panel")]
+            panel_oil_absorbed: self.panel.as_mut().map_or(std::ptr::null_mut(), |s| s.oil_absorbed.as_mut_ptr()),
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },

@@ -148,6 +148,8 @@ impl Canvas {
     /// (`Fabric::is_valid`); panics otherwise, and on a crop render
     /// (`set_crop`): the weave is measured over the whole cloth.
     pub fn raw_canvas(&mut self, fabric: Fabric, seed: u64) {
+        #[cfg(feature = "experimental-panel")]
+        assert!(self.panel.is_none(), "a panel cannot also be raw fabric");
         assert!(self.f.is_whole(), "a raw canvas is painted whole, not as a crop render: the weave is measured over the whole cloth");
         assert!(self.engine >= 3, "a raw canvas is engine 3's");
         assert!(fabric.is_valid(), "an invalid fabric: {fabric:?}");

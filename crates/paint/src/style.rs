@@ -171,6 +171,14 @@ impl Style {
         self.prepare_on(Canvas::new_window(width_px, aspect, self.raw, crop), seed)
     }
 
+    #[cfg(feature = "experimental-panel")]
+    pub fn prepare_panel(&self, width_px: usize, aspect: f32, panel: crate::panel::Panel) -> Canvas {
+        Canvas::new(width_px, aspect, panel.color())
+            .with_engine(self.palette.engine)
+            .with_size_mm(self.width_mm)
+            .with_panel(panel)
+    }
+
     fn prepare_on(&self, c: Canvas, seed: u64) -> Canvas {
         let mut c = c
             .with_engine(self.palette.engine)

@@ -441,6 +441,10 @@ struct Builder {
 
 impl Builder {
     fn new(k: &Cracks, size: V2, pitch: V2) -> Self {
+        Self::new_on(k, size, pitch, false)
+    }
+
+    fn new_on(k: &Cracks, size: V2, pitch: V2, rigid: bool) -> Self {
         let s = k.island().max(0.2);
         let gc = s * GRID;
         let gx = (size[0] / gc).ceil() as usize + 1;
@@ -451,7 +455,7 @@ impl Builder {
         let patchy_s = Fbm::new(seed as u32 ^ 0x52, 3, 2.5 * s);
         let diag = (size[0] * size[0] + size[1] * size[1]).sqrt();
         let zone = CORNER_ZONE * diag;
-        let corners = k.corners;
+        let corners = k.corners && !rigid;
         let vary = k.vary.clamp(0.0, 1.0);
         // uneven aging: the film shrank more here than there (drying,
         // humidity, restorations), over some centimeters
@@ -465,7 +469,7 @@ impl Builder {
         let patchy = k.patchy.clamp(0.0, 1.0);
         // grain: the canvas pulled tighter along its length, the direction
         // drifting ±25° over the canvas
-        let grain = GRAIN * k.grain.clamp(0.0, 1.0);
+        let grain = if rigid { 0.0 } else { GRAIN * k.grain.clamp(0.0, 1.0) };
         let drift = Fbm::new(seed as u32 ^ 0x57, 2, 180.0);
         let along_x = size[0] >= size[1];
         let cells: Vec<([f32; 3], f32)> = (0..gx * gy)
@@ -474,7 +478,7 @@ impl Builder {
                 let p = [(i % gx) as f32 * gc + 0.5 * gc, (i / gx) as f32 * gc + 0.5 * gc];
                 let mut m = 1.0 + 0.12 * broad.get(p[0], p[1]) + 0.3 * vary * uneven.get(p[0], p[1]);
                 let mut t = [m, m, 0.0];
-                if vary > 0.0 {
+                if vary > 0.0 && !rigid {
                     // the stretcher bars: the canvas over a bar is held and
                     // cracks less; along a bar's inner edge it flexes, and
                     // cracks run parallel to the edge (a stress across it)
@@ -538,7 +542,7 @@ impl Builder {
             step,
             sub,
             pitch,
-            weave: k.weave(),
+            weave: if rigid { 0.0 } else { k.weave() },
             grain,
             gc,
             gx,
@@ -1351,7 +1355,13 @@ impl Canvas {
         let pitch = self.linen.map_or([10.0 / 14.0, 10.0 / 12.0], |l| [10.0 / l.warp_per_cm, 10.0 / l.weft_per_cm]);
         // the network grows over the whole canvas (a crop render too, so its
         // cracks are the same ones); only the window is rasterized
-        let net = network(k, [f.full_w as f32 * px, f.full_h as f32 * px], pitch);
+        #[cfg(not(feature = "experimental-panel"))]
+        let rigid = false;
+        #[cfg(feature = "experimental-panel")]
+        let rigid = self.panel.is_some();
+        let net = if rigid {
+            Builder::new_on(k, [f.full_w as f32 * px, f.full_h as f32 * px], [0.25, 0.25], true).run()
+        } else { network(k, [f.full_w as f32 * px, f.full_h as f32 * px], pitch) };
         let local = self.crack_local(k);
         let mut r = raster_window(&net, k, &local, (f.x0, f.y0, f.w, f.h), px);
         // a raw canvas (`crate::soak`) has no ground: the bare cloth has
@@ -1378,6 +1388,8 @@ impl Canvas {
         let gr = k.grime.clamp(0.0, 1.0);
         // a raw canvas's cracks cut down to its cloth, not to a ground
         let under = self.soak.as_ref().map_or(GROUND_WALL, |s| s.fabric.color);
+        #[cfg(feature = "experimental-panel")]
+        let under = self.panel.as_ref().map_or(under, |s| s.descriptor.color());
         let (w, x0, y0) = (f.w, f.x0, f.y0);
         self.px.par_iter_mut().enumerate().for_each(|(i, p)| {
             let c = (r.cover[i] + 0.25 * (r.shoulder[i] - r.cover[i])).min(1.0);

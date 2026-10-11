@@ -4,6 +4,38 @@ use crate::Crop;
 const REVISION: [u8; 32] = [0x35; 32];
 const RUNTIME: [u8; 32] = [0xa7; 32];
 
+#[test]
+#[ignore = "explicit full-resolution budget and native parity pilot"]
+fn full_resolution_native_float_parity_and_raw_budget() {
+    let mut canvas = Canvas::new(2400, 1.25, [0.3, 0.5, 0.2]).with_size_mm(440.0);
+    for i in 0..canvas.px.len() {
+        canvas.height[i] = (i % 13) as f32 * 43.0;
+        canvas.wet.vol[i] = (i % 7) as f32 * 0.07;
+        canvas.gloss[i] = (i % 5) as f32 * 0.2;
+    }
+    let snapshot = RenderSnapshot::capture(&canvas, REVISION, RUNTIME).unwrap();
+    assert_eq!(snapshot.dimensions(), (2400, 1920));
+    struct Count(u64);
+    impl Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> { self.0 += bytes.len() as u64; Ok(bytes.len()) }
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+    let mut count = Count(0);
+    snapshot.write(&mut count).unwrap();
+    assert_eq!(count.0, 92_160_180);
+    let native = canvas.seen();
+    assert_eq!(native.len(), snapshot.color().len());
+    assert!(native.iter().flatten().zip(snapshot.color().iter().flatten()).all(|(a, b)| a.to_bits() == b.to_bits()));
+    drop(native);
+    for (az, el) in [(115.0, 55.0), (135.0, 25.0)] {
+        let native = canvas.seen_lit(az, el, 1.0);
+        let compact = snapshot.lit(az, el, 1.0);
+        assert_eq!(native.len(), compact.len());
+        assert!(native.iter().flatten().zip(compact.iter().flatten()).all(|(a, b)| a.to_bits() == b.to_bits()));
+    }
+    println!("2400×1920: {} encoded bytes; native Color/Gallery/Relief f32 bits identical", count.0);
+}
+
 fn canvas(engine: u32, crop: Option<Crop>) -> Canvas {
     let mut canvas = Canvas::new_window(48, 1.25, [0.3, 0.5, 0.2], crop).with_engine(engine);
     canvas.wet.solv.resize(canvas.px.len(), 0.0);

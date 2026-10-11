@@ -92,3 +92,47 @@ fn live_save_refuses_store_inode_aliases_and_reopen_keeps_the_accepted_root() {
     assert_eq!(std::fs::read(dir.join("CURRENT")).unwrap(), pointer);
     success(temp.command(&["-s", "sketch-output", "close"]));
 }
+
+#[test]
+fn final_destinations_preserve_log_alias_checks_journal_exports_and_png_format() {
+    let temp = Temp::new("final-destination");
+    success(temp.command(&["open", "sketch-output"]));
+    success(temp.command(&["-s", "sketch-output", "do", CANVAS]));
+    let state = temp.0.join("out/easel/sketch-output/state");
+    let log = temp.0.join("paintings/lua/sketch-output.lua");
+    let witness = temp.0.join("out/easel/sketch-output/committed.lua");
+    let accepted = std::fs::read(&log).unwrap();
+    let pointer = std::fs::read(state.join("CURRENT")).unwrap();
+    for export in [&log, &witness] {
+        assert_eq!(std::fs::read(export).unwrap(), accepted);
+        for path in [export.to_path_buf(), temp.0.join("journal-alias.png")] {
+            if path != *export { std::fs::hard_link(export, &path).unwrap(); }
+            for bounded in [false, true] {
+                let mut args = vec!["render-state", state.to_str().unwrap(), path.to_str().unwrap(), "--log", export.to_str().unwrap()];
+                if bounded { args.push("--look"); }
+                let result = temp.command(&args);
+                assert!(!result.status.success());
+                assert!(String::from_utf8_lossy(&result.stderr).contains("output must differ from the source log"));
+                assert_eq!(std::fs::read(export).unwrap(), accepted);
+            }
+            let result = temp.command(&["-s", "sketch-output", "save", path.to_str().unwrap()]);
+            assert!(!result.status.success());
+            assert!(String::from_utf8_lossy(&result.stderr).contains("journal exports"));
+            assert_eq!(std::fs::read(export).unwrap(), accepted);
+            if path != *export { std::fs::remove_file(path).unwrap(); }
+        }
+    }
+    for filename in ["unrelated.lua", "unsupported.jpg", "no-extension"] {
+        let path = temp.0.join(filename);
+        std::fs::write(&path, b"keep this file").unwrap();
+        assert!(!temp.command(&["-s", "sketch-output", "save", path.to_str().unwrap()]).status.success());
+        assert!(!temp.command(&["render-state", state.to_str().unwrap(), path.to_str().unwrap()]).status.success());
+        assert_eq!(std::fs::read(path).unwrap(), b"keep this file");
+    }
+    success(temp.command(&["-s", "sketch-output", "status"]));
+    success(temp.command(&["-s", "sketch-output", "close"]));
+    success(temp.command(&["open", "sketch-output"]));
+    assert_eq!(std::fs::read(&log).unwrap(), accepted);
+    assert_eq!(std::fs::read(state.join("CURRENT")).unwrap(), pointer);
+    success(temp.command(&["-s", "sketch-output", "close"]));
+}

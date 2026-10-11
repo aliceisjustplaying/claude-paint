@@ -252,10 +252,16 @@ impl GpuSimulation {
                     defines: Default::default(),
                 },
             });
-        let source = source.replace(
-            "hash12(gl_FragCoord.xy)",
-            "hash12(vec2(gl_FragCoord.x, q[10].x - gl_FragCoord.y))",
-        );
+        let source = source
+            .replacen(
+                "#version 450",
+                "#version 450\n#define texture(TEX, UV) textureLod(TEX, UV, 0.0)",
+                1,
+            )
+            .replace(
+                "hash12(gl_FragCoord.xy)",
+                "hash12(vec2(gl_FragCoord.x, q[10].x - gl_FragCoord.y))",
+            );
         let fragment = self
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {

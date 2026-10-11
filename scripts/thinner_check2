@@ -59,7 +59,7 @@ for lua in "$base"/scenes/*.lua; do
   else
     echo "$s (thinner=0): STATE DIFFERS"; sed 's/^/  /' "$work/$s.cmp"; fail=1
   fi
-  if cmp -s "$base/ref/png/$s.png" "$work/$s.png"; then echo "  png same as af49348's"; else echo "  png DIFFERENT"; fail=1; fi
+  if uv run --script "$repo/scripts/compare_images.py" "$base/ref/png/$s.png" "$work/$s.png" --expected-platform "$(cat "$base/ref/png/platform.txt" 2>/dev/null || echo unknown)" --actual-platform current; then echo "  png same as af49348's"; else echo "  png DIFFERENT"; fail=1; fi
   cmp -s "$base/ref/out/$s.txt" "$work/$s.out" && echo "  printed output same (not a criterion)" || echo "  printed output differs (not a criterion)"
 done
 

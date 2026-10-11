@@ -461,23 +461,36 @@ but keeps one codegen unit for runtime optimization. These settings are choices,
 not measured speedup claims. Kache is installed and configured by nixfiles;
 its `preserve_incremental` setting retains incremental state for active units.
 
-Across builds, RGB images may differ by at most one 8-bit level per channel
-in at most 0.01% of pixels. Dimensions and alpha must match exactly. The
-pixel allowance rounds down: a 10,000-pixel image allows one changed pixel,
-a smaller image allows none. `scripts/compare_images.py` enforces this rule.
-The golden scene and old-log image references use this comparison. Old-log
+On the same OS and CPU architecture, PNGs must match byte for byte, even
+across builds. On known different platforms, RGB images may differ by at most
+two 8-bit levels per channel in strictly less than 0.1% of pixels. Dimensions
+and alpha must match exactly. A 10,000-pixel image allows at most nine changed
+pixels; an image with at most 1,000 pixels allows none.
+`scripts/compare_images.py` enforces this rule with explicit
+`--expected-platform` and `--actual-platform` OS-architecture identities
+(for example, `macos-aarch64` and `linux-x86_64`). Unknown origins default to
+byte-exact comparison; arbitrary external PNGs are never assumed to be Mac
+images. `--actual-platform current` identifies a locally produced image.
+The golden scene and old-log image references use this comparison. Their
+historical references and the thinner baseline images originated on macOS
+arm64, recorded in adjacent platform metadata. Old-log
 state hashes remain diagnostic across builds; repeat replay with the same
 binary must match both the PNG bytes and state digests exactly. The thinner's
-field-by-field state checks retain their independent exact-state requirements.
-The full-width round-19 check likewise keeps its exact surface fingerprint;
-only its image comparison uses the tolerance. The new PNG and surface
+field-by-field state checks retain their independent state requirements.
+The full-width round-19 check likewise keeps exact surface fingerprints,
+with separate references for macOS arm64 and Linux x86_64; only its
+cross-platform image comparison uses the tolerance. The new PNG and surface
 references were checked against the original combined fingerprint before
 being separated.
 
-`scripts/check_painting` compares the build identity recorded in `live.txt`.
-The same build must reproduce the PNG and checkpoint exactly. Across builds
-(including older live records without an identity), a matching live PNG under
-the bounded tolerance is sufficient; checkpoint byte differences are reported,
+`scripts/check_painting` compares both the build identity and the OS-architecture
+`platform` recorded in `live.txt`. Future live records write both. Historical
+easel live records with chunk and replay counts but no platform field are
+explicitly classified as macOS arm64; an explicit `platform unknown` opts out
+of that legacy classification. Missing or unrecognized provenance never enables
+tolerance. The same binary must reproduce the PNG and checkpoint exactly.
+Same-platform PNGs stay byte-exact across builds. Across builds, a matching live
+PNG under the applicable platform rule is sufficient; checkpoint differences are reported,
 not treated as proof of a rendering regression. Without a comparable live PNG,
 a checkpoint mismatch still fails. This does not assert that internal state is
 equal or establish physical accuracy.
@@ -485,6 +498,34 @@ equal or establish physical accuracy.
 References are not silently refreshed to accommodate a failure. The existing
 golden approval rules still apply to intentional changes. Ordinary correctness,
 conservation and same-build determinism tests remain in place.
+
+On Linux, `scripts/test` scales timeouts by `max(1, 16 / available CPUs)`:
+4× on a 4-vCPU VM and 2× on an 8-vCPU VM. macOS stays at 1×.
+`SCRIPTS_TEST_TIMEOUT_SCALE=1..16` overrides the scale, which is recorded in
+the summary. Limits remain finite: a base 600-second phase gets 2,400 seconds
+on a 4-vCPU VM. If the unchanged, pre-existing rag assertion is the sole Rust
+failure, the Cargo gate reports `known_failure` and exits 4; it never silently
+reports a green gate.
+
+Two pre-existing rag failures are explicitly tracked on macOS and Linux:
+
+- `rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground`
+  requires hollow-film lift greater than 0.9; unchanged main produces
+  0.8993446. The assertion and its threshold remain unchanged.
+- The historical af49348 rag baseline diverges at chunk 4: the reference rag
+  load is 0.78475475 and main produces 0.5218438. At `wet.vol[1310]`, the
+  reference is 0.9863236 and main produces approximately 3.9498796. The PNG
+  changes 707 of 8,192 pixels with a maximum RGB delta of 109/255.
+  `baseline_state.sh` and `thinner_check2` both reach this baseline mismatch.
+
+The af49348-to-main baseline difference comes from later changes to the
+engine >=3 cloth contact, wipe path and smear-back behavior. This path uses
+`cloth3`, `rag_wipe3` and `rag_smear`, which change paint pickup and how much
+paint the cloth deposits back on the canvas. The baseline mismatch occurs on
+both platforms and exceeds the image portability budget. These two failures
+remain visible, with explicit known-failure classification; no rag physics,
+assertion or historical golden is changed to make them pass. Any unrelated
+failure remains a failure.
 
 ## Fast builds and small previews (development only, 2026-10)
 

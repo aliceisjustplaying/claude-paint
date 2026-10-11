@@ -1144,7 +1144,7 @@ impl Server {
             let _ = std::fs::remove_file(&ckpt);
             eprintln!("the save file couldn't be written: {e}");
         }
-        std::fs::write(&txt, format!("chunks {}\nreplayed {}\nbuild {:016x}\n", self.s.log.len(), self.replayed, self.build)).map_err(|e| format!("{}: {e}", txt.display()))?;
+        std::fs::write(&txt, format!("chunks {}\nreplayed {}\nbuild {:016x}\nplatform {}-{}\n", self.s.log.len(), self.replayed, self.build, std::env::consts::OS, std::env::consts::ARCH)).map_err(|e| format!("{}: {e}", txt.display()))?;
         Ok(format!("the live canvas is in {}\n", png.display()))
     }
 

@@ -13,6 +13,7 @@
 <style>
   html.studio-route-pending #who, html.studio-route-pending #badge, html.studio-route-pending #img { visibility:hidden }
   :root {
+    color-scheme:dark;
     --bg:#0b0b0d; --panel:#111114; --panel2:#16161b; --line:#1f1f26;
     --fg:#f0f0f2; --soft:#d4d4da; --dim:#aeaeb6; --faint:#85858e;
     --acc:#f2b865; --live:#e0564f; --blue:#7d9fd4; --ref:#7fd6c2;
@@ -22,6 +23,7 @@
   body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, system-ui, sans-serif; -webkit-font-smoothing:antialiased;
          display:grid; grid-template-rows: auto minmax(0,1fr) auto; grid-template-columns: minmax(0,1fr); width:100vw; overflow:hidden }
   header, main, footer { min-width:0 } #strip, #transport { min-width:0 }
+  * { scrollbar-color:#27272e transparent }
   ::-webkit-scrollbar { width:9px; height:9px } ::-webkit-scrollbar-thumb { background:#27272e; border-radius:5px } ::-webkit-scrollbar-track { background:transparent }
   button, select { font:inherit; font-size:13.5px; color:var(--soft); background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:4px 10px; cursor:pointer }
   button:hover, select:hover { color:var(--fg); border-color:#30303a }
@@ -88,6 +90,9 @@
   #code .new { background:rgba(214,162,90,.10); box-shadow:inset 3px 0 0 var(--acc) }
   .k { color:#c792d6 } .s { color:#a8c38a } .c { color:#9a9aa3; font-style:italic } .n { color:#e0a36b } .m { color:#7fb3d9 } .f { color:#e6d6a8 }
   #viewpane { background:#070708; position:relative }
+  #viewpane:has(#pip:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) clamp(130px,17%,240px); grid-template-rows:auto minmax(0,1fr) auto }
+  #viewpane:has(#pip:not([hidden])) #lighting { grid-column:1 / -1 }
+  #viewpane:has(#pip:not([hidden])) #view { grid-column:1; grid-row:2 }
   #lighting { display:flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px 0; font-size:12px; color:var(--dim) }
   #lighting button { padding:3px 9px; font-size:12px }
   #lighting button[aria-pressed="true"] { color:var(--acc); border-color:var(--acc) }
@@ -99,16 +104,16 @@
   #view.two.pal { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:'w w' 'o p' } #view.pal #whole { grid-area:w } #view.pal #other { grid-area:o } #view.pal #pal { grid-area:p }
   #view.pal:not(.two) { grid-template-areas:'w' 'p' }
   #pal { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center } #pal[hidden] { display:none }
-  #pband { flex:none; display:grid; grid-auto-flow:column; grid-template-rows:repeat(2,52px); grid-auto-columns:88px; grid-template-columns:14px; align-items:center; gap:8px; padding:7px 12px 9px; overflow-x:auto; border-top:1px solid var(--line); scrollbar-width:thin }
+  #pband { flex:none; grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); align-items:center; gap:8px; padding:7px 12px 9px; border-top:1px solid var(--line) }
   #pband[hidden] { display:none }
   .palette-toggle { display:none }
-  #pband .lbl { grid-row:span 2; writing-mode:vertical-rl; transform:rotate(180deg); font:600 10px -apple-system,sans-serif; color:#9fd0b4; text-transform:uppercase }
-  #pband .palette-chip { width:88px; height:52px; padding:0; border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px }
-  #pband canvas:first-child { width:80px; height:30px; border-radius:4px; box-shadow:0 1px 3px #0009 }
-  #pband .palette-swatch { width:80px; height:30px; flex:none; border-radius:4px; overflow:hidden }
+  #pband .lbl { grid-column:1 / -1; font:600 10px -apple-system,sans-serif; color:#9fd0b4; text-transform:uppercase }
+  #pband .palette-chip { width:100%; min-width:0; height:52px; padding:0; border:0; background:none; display:flex; flex-direction:column; align-items:center; gap:4px }
+  #pband canvas:first-child { width:100%; max-width:80px; height:30px; border-radius:4px; box-shadow:0 1px 3px #0009 }
+  #pband .palette-swatch { width:100%; max-width:80px; height:30px; flex:none; border-radius:4px; overflow:hidden }
   #pband .palette-swatch div:first-child { height:60% }
   #pband .palette-swatch div:last-child { height:40% }
-  #pband .pile-name { height:16px; max-width:88px; image-rendering:pixelated }
+  #pband .pile-name { height:16px; max-width:100%; image-rendering:pixelated }
   #pband span.pile-name { height:18px; font:14px/18px ui-monospace,Menlo,monospace; color:var(--soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   @media(max-width:700px) { #pband { gap:6px; padding:5px 8px 6px } }
   #pal .box { height:100% } #pal img { object-position:right center }
@@ -120,9 +125,9 @@
   .pic img:not([src]) { visibility:hidden }
   /* the other canvas, small in the corner: the scratch canvas while the painter paints, the painting while it tries
      things on the scratch canvas */
-  #pip { position:absolute; right:14px; bottom:14px; width:17%; max-width:240px; margin:0; padding:5px; z-index:3; background:rgba(12,12,14,.92); border:1px solid var(--line); border-radius:5px; display:flex; flex-direction:column; gap:4px }
+  #pip { grid-column:2; grid-row:2; align-self:end; min-height:0; max-height:100%; margin:12px 14px 8px 0; padding:5px; background:rgba(12,12,14,.92); border:1px solid var(--line); border-radius:5px; display:flex; flex-direction:column; gap:4px }
   #pip[hidden] { display:none }
-  #pip img { display:block; width:100%; height:auto; cursor:zoom-in }
+  #pip img { display:block; min-height:0; width:100%; height:auto; object-fit:contain; cursor:zoom-in }
   #pip figcaption { font:600 13px/1.3 -apple-system,system-ui,sans-serif; color:#fff }
   #cap { position:relative; z-index:1; font:600 14.5px -apple-system,system-ui,sans-serif; color:#fff; text-align:center; white-space:normal; overflow-wrap:anywhere }
   #other { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center }
@@ -151,7 +156,7 @@
 
   /* bottom: looks + transport */
   footer { background:var(--panel); border-top:1px solid var(--line); padding:8px 14px 10px }
-  #strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; height:74px }
+  #strip { display:flex; gap:6px; overflow-x:auto; padding:3px 3px 8px; margin:0 -3px; height:74px }
   #strip img { height:58px; width:81px; object-fit:contain; background:var(--panel2); border-radius:3px; cursor:pointer; opacity:.6; transition:opacity .12s; flex:none }
   #strip img:hover { opacity:.8 } #strip img.on { opacity:1; outline:2px solid var(--acc); outline-offset:1px }
   /* a reference picture in the strip: marked, so it doesn't read as a state of the canvas */
@@ -177,10 +182,11 @@
   #zoom { position:fixed; inset:0; background:rgba(0,0,0,.94); display:none; align-items:center; justify-content:center; cursor:zoom-out; z-index:9 }
   #zoom img { max-width:98vw; max-height:98vh }
   @media (max-height:500px) { #codepane { top:8px; bottom:8px } }
+  @media (max-height:500px) and (pointer:coarse) { #whole img { max-height:55dvh; object-fit:contain } }
 
   /* phone: stacked panes, touch transport, home-indicator safe area. LAST in the sheet so it
      overrides the base rules above (equal specificity, later wins). The 1920px stream is untouched. */
-  @media (max-width: 720px) {
+  @media (max-width: 720px), (max-height:500px) and (pointer:coarse) {
     #codepane { top:46px; bottom:100px; left:6px; width:calc(100vw - 12px) }
     /* Narrow windows scroll as one column; the palette never steals canvas height. */
     main { display:block; overflow-y:auto }
@@ -190,12 +196,15 @@
     #whole .box:has(img:not([src])) { min-height:180px }
     #other .box { height:auto }
     #other img { position:relative; display:block; height:auto; max-height:180px }
-    #jbody { flex:none; max-height:60dvh; overflow:auto }
+    #jbody { flex:none; max-height:none; overflow:visible }
+    #viewpane:has(#pip:not([hidden])) { display:flex }
+    #pip { flex:none; align-self:stretch; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,130px); align-items:center; max-height:none; margin:6px 8px 8px; gap:8px }
+    #pip img { max-height:120px }
     #pband { grid-auto-flow:row; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); grid-template-rows:none; grid-auto-columns:auto; gap:4px 6px; overflow:visible }
     #pband .lbl { grid-column:1 / -1; grid-row:auto; writing-mode:horizontal-tb; transform:none }
     #pband .palette-chip { width:100%; height:42px; min-width:0 }
     #pband canvas:first-child { width:100%; max-width:80px; height:20px }
-    #pband .pile-name { max-width:100% }
+    #pband span.pile-name { font-size:12px }
     #pband .palette-swatch { width:100%; max-width:80px; height:20px }
     #pband .lbl { display:flex; align-items:center; justify-content:space-between }
     .palette-toggle { display:block; padding:0 2px; border:0; background:none; font:13px/24px -apple-system,sans-serif; color:var(--soft); text-transform:none }
@@ -825,12 +834,18 @@ function codeAt(i) {
 let typed = -1, typer = null, jgen = 0, journalView = null, journalItems = new Map(), journalNodes = new Map(), typingThought = null;
 // (a look's chip shows that look)
 $('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i); } };
-function journal(i) {
+function journalScroll() {
+  const jb = $('jbody'), el = getComputedStyle(jb).overflowY === 'visible' ? jb.closest('main') : jb;
+  return { el, following:el === jb || el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
+}
+function journal(i, scroll) {
   const jb = $('jbody');
+  if (journalView?.i === i && journalView.live === live && journalView.length === events.length && journalView.revision === replayRevision && journalView.gen === gen && journalView.events === events) return;
+  const initiallyFollowing = scroll.following || !journalView || journalView.events !== events || journalView.gen !== gen ||
+    !live && journalView.i !== i || live && !journalView.live;
   if (journalView?.events !== events || journalView?.gen !== gen) {
     clearInterval(typer); typingThought = null; journalItems.clear(); journalNodes.clear(); jb.replaceChildren();
   }
-  if (journalView?.i === i && journalView.live === live && journalView.length === events.length && journalView.revision === replayRevision && journalView.gen === gen && journalView.events === events) return;
   journalView = { i, live, length:events.length, revision:replayRevision, gen, events };
   const from = Math.max(0, i - 250); let blocks = [], chips = [], firstChip = -1, lastTm = 0, lastThink = -1;
   for (let k = i; k >= from; k--) if (events[k].kind === 'think') { lastThink = k; break; }
@@ -869,9 +884,11 @@ function journal(i) {
   const keys = new Set(blocks.map(b => b.key));
   for (const [key, entry] of journalNodes) if (!keys.has(key)) { entry.el.remove(); journalNodes.delete(key); }
   // Newest content first; only new or changed blocks are parsed. Older work yields as before.
-  const g = ++jgen, generation = gen; let at = blocks.length, anchor = null;
+  const g = ++jgen, generation = gen; let at = blocks.length, anchor = null, firstPiece = true;
   const piece = () => {
     if (g !== jgen || generation !== gen) return;
+    const state = firstPiece ? scroll : journalScroll(), following = firstPiece ? initiallyFollowing : state.following;
+    firstPiece = false;
     const h = jb.scrollHeight; let size = 0;
     while (at > 0 && size < 12000) {
       const b = blocks[--at]; let entry = journalNodes.get(b.key);
@@ -885,10 +902,11 @@ function journal(i) {
       if (el.parentNode !== jb || el.nextSibling !== anchor) jb.insertBefore(el, anchor);
       anchor = el;
     }
-    jb.scrollTop += jb.scrollHeight - h;
+    if (state.el === jb) jb.scrollTop += jb.scrollHeight - h;
+    else if (following) state.el.scrollTop = 1e9;
     if (at) setTimeout(piece, 0);
   };
-  piece(); jb.scrollTop = 1e9;
+  piece(); if (scroll.el === jb) jb.scrollTop = 1e9;
   if (startTyping) {
     typed = lastThink;
     const el = journalNodes.get('think:' + lastThink).el, txt = events[lastThink].text.trim();
@@ -897,6 +915,7 @@ function journal(i) {
     let n = 0, offset = 0;
     const timer = setInterval(() => {
       if (generation !== gen || typingThought !== thought || !el.isConnected) { clearInterval(timer); return; }
+      const state = journalScroll();
       n = Math.min(txt.length, n + Math.max(3, txt.length / 120 | 0));
       let end;
       while ((end = txt.indexOf('\n', offset)) >= 0 && end < n) { markdownLine(parser, txt.slice(offset, end)); offset = end + 1; }
@@ -912,7 +931,7 @@ function journal(i) {
         cursor.remove(); clearInterval(timer); typingThought = null;
         journalNodes.get('think:' + lastThink).html = html.join('');
       }
-      jb.scrollTop = 1e9;
+      if (state.following) state.el.scrollTop = 1e9;
     }, 30);
     typer = timer;
   }
@@ -1243,7 +1262,8 @@ function pip(k, sc) {
 $('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg')); $('zoom').style.display = 'flex'; } };
 function show(i) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
-  pictures(); codeAt(pos); journal(pos); status();
+  const scroll = journalScroll();
+  pictures(); codeAt(pos); journal(pos, scroll); status();
   $('pos').textContent = `${pos + 1}/${events.length}`;
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }

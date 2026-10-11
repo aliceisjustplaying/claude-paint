@@ -547,4 +547,42 @@ mod tests {
         assert_eq!(bytes(&c), bytes(&d));
         assert!(c.panel_oil_absorbed().unwrap().iter().any(|&v| v > 0.0));
     }
+
+    #[cfg(feature = "brush-sim-2")]
+    #[test]
+    fn finite_brush_inventory_includes_the_chalk_oil_sink() {
+        let mut c = sample(Panel {
+            topography: Topography::QuarterSawnOakGallery,
+            ..Panel::chalk(23)
+        })
+        .with_engine(10);
+        let mut h = Held::new(Tool::hog_flat(80.0), 19).with_engine(10);
+        h.load(
+            Paint {
+                oil: 1.5,
+                ..Paint::new(crate::hex("#773d25"), 0.2, 0.3)
+            },
+            0.7,
+        );
+        let input = h.carried().0;
+        let before = c.material_total();
+        c.drag(
+            &mut h,
+            &Gesture::line((100.0, 400.0), (900.0, 500.0)).shake(0.2),
+            None,
+        );
+        let absorbed = c
+            .panel_oil_absorbed()
+            .unwrap()
+            .iter()
+            .map(|&v| v as f64)
+            .sum::<f64>()
+            / (c.f.scale as f64).powi(2);
+        let final_inventory = c.material_total() - before + absorbed + h.carried().0;
+        assert!(absorbed > 0.0);
+        assert!(
+            (final_inventory - input).abs() / input < 1e-5,
+            "input {input}, accounted {final_inventory}"
+        );
+    }
 }

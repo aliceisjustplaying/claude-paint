@@ -15,6 +15,91 @@ mod round_three_tests {
     use super::*;
 
     #[test]
+    fn knife_3_fluid_veil_is_exactly_the_round_two_path() {
+        let initial = Canvas::new(320, 2.0, crate::hex("#35556a"))
+            .with_size_mm(300.0)
+            .with_engine(5)
+            .with_linen(crate::Linen::fine(41));
+        let mark = |third| {
+            let mut c = initial.clone();
+            let mut k = Knife::new(110.0);
+            k = if third {
+                k.experimental_3(0.65)
+            } else {
+                k.experimental_2(0.65)
+            };
+            k.load(
+                Paint::new(crate::hex("#baa452"), 0.25, 0.1).with_thinner(0.35),
+                0.15,
+            );
+            c.knife_1(
+                &mut k,
+                &[(170.0, 250.0), (650.0, 250.0)],
+                (0.75, 0.82),
+                None,
+                true,
+                0.0,
+                10.0,
+            );
+            (
+                c.state_fields()
+                    .into_iter()
+                    .map(|f| f.values.le_bytes())
+                    .collect::<Vec<_>>(),
+                k.paint_volume(),
+                k.solvent_volume(),
+            )
+        };
+        assert_eq!(mark(false), mark(true));
+    }
+
+    #[test]
+    fn knife_3_contact_variation_conserves_faces_and_protects_set_layers_across_scales() {
+        for (seed, width, pressure, tilt, flex) in [
+            (7, 35.0, (0.0, 0.3), 10.0, 0.0),
+            (23, 110.0, (0.35, 0.6), 20.0, 0.65),
+            (41, 190.0, (0.8, 1.0), 45.0, 1.0),
+            (59, 75.0, (f32::MAX, -f32::MAX), 80.0, 0.65),
+        ] {
+            let mut c = Canvas::new(320, 2.0, crate::hex("#d6cebb"))
+                .with_size_mm(300.0)
+                .with_engine(5)
+                .with_linen(crate::Linen::fine(seed));
+            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+            let mut k = Knife::new(width).experimental_3(flex);
+            k.load(Paint::body(crate::hex("#b3673e")).with_thinner(0.2), 0.8);
+            let before = (
+                c.wet_total() + k.paint_volume(),
+                c.solvent_total() + k.solvent_volume(),
+            );
+            for (points, lay, tilt) in [
+                (vec![(-30.0, 250.0), (1030.0, 250.0)], true, tilt),
+                (vec![(190.0, 250.0), (790.0, 250.0)], false, 75.0),
+                (vec![(190.0, 380.0), (790.0, 380.0)], true, 20.0),
+            ] {
+                c.knife_1(&mut k, &points, pressure, None, lay, 0.25, tilt);
+                for (after, before) in [
+                    (c.wet_total() + k.paint_volume(), before.0),
+                    (c.solvent_total() + k.solvent_volume(), before.1),
+                ] {
+                    assert!(
+                        (after - before).abs() < before.abs().max(1.0) * 3e-6,
+                        "{after} != {before}"
+                    );
+                }
+                assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+                assert!(
+                    c.wet
+                        .vol
+                        .iter()
+                        .chain(c.wet.solv.iter())
+                        .all(|v| v.is_finite() && *v >= -1e-5)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn knife_3_scrape_contacts_a_footprint_over_set_tooth_without_a_pixel_grid() {
         let mark = |third| {
             let mut c = Canvas::new(640, 2.0, crate::hex("#35556a"))
@@ -24,7 +109,11 @@ mod round_three_tests {
             let orange = Paint::body(crate::hex("#b3673e"));
             for y in 0..c.f.h {
                 for x in 0..c.f.w {
-                    c.height[y * c.f.w + x] = if (x / 2 + y / 2) % 2 == 0 { 220.0 } else { 340.0 };
+                    c.height[y * c.f.w + x] = if (x / 2 + y / 2) % 2 == 0 {
+                        220.0
+                    } else {
+                        340.0
+                    };
                 }
             }
             let sf = c.surf();
@@ -38,8 +127,20 @@ mod round_three_tests {
             let dry = (c.px.clone(), c.height.clone(), c.film.clone());
             let before = c.wet_total();
             let mut k = Knife::new(110.0);
-            k = if third { k.experimental_3(0.65) } else { k.experimental_2(0.65) };
-            c.knife_1(&mut k, &[(190.0, 250.0), (790.0, 250.0)], (1.0, 1.0), None, false, 0.0, 75.0);
+            k = if third {
+                k.experimental_3(0.65)
+            } else {
+                k.experimental_2(0.65)
+            };
+            c.knife_1(
+                &mut k,
+                &[(190.0, 250.0), (790.0, 250.0)],
+                (1.0, 1.0),
+                None,
+                false,
+                0.0,
+                75.0,
+            );
             assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
             assert!((c.wet_total() + k.paint_volume() - before).abs() < before * 3e-6);
             let mut jumps = 0.0;
@@ -54,8 +155,14 @@ mod round_three_tests {
         };
         let previous = mark(false);
         let current = mark(true);
-        assert!(previous > 100.0, "the old pixel cutoff must be exercised: {previous}");
-        assert!(current < previous * 0.35, "knife-2={previous}, knife-3={current}");
+        assert!(
+            previous > 100.0,
+            "the old pixel cutoff must be exercised: {previous}"
+        );
+        assert!(
+            current < previous * 0.35,
+            "knife-2={previous}, knife-3={current}"
+        );
     }
 }
 
@@ -96,7 +203,9 @@ impl Knife {
         if flex.is_finite() && (0.0..=1.0).contains(&flex) {
             self.flex = Some(flex);
             #[cfg(feature = "knife-3")]
-            { self.third = false; }
+            {
+                self.third = false;
+            }
             #[cfg(feature = "knife-2")]
             {
                 self.second = false;
@@ -310,6 +419,14 @@ impl Canvas {
             last = (c, dir, e);
             let pr =
                 (pressure.0 + (pressure.1 - pressure.0) * step as f32 / n as f32).clamp(0.0, 1.0);
+            let pr = if third && (body_pass || !lay) {
+                (pr + 0.09
+                    * flex
+                    * (crate::surface::vnoise(d * mm_px * 0.065, 7.0, seed ^ 0xF1E7) - 0.5))
+                    .clamp(0.0, 1.0)
+            } else {
+                pr
+            };
             let gap = 280.0 * (1.0 - pr).powf(1.6) * (1.0 - 0.7 * upright);
             let mut cells = Vec::new();
             let peel_span = (12.0 / mm_px).min(total * 0.25).max(1.0);
@@ -359,13 +476,33 @@ impl Canvas {
             let radius = (((1.0 + 5.0 * (1.0 - flex)) / (k.width * self.mm_per_unit)) * nx as f32)
                 .ceil()
                 .max(1.0) as usize;
+            let local_pressure: Vec<_> = (0..=nx)
+                .map(|q| {
+                    if third && (body_pass || !lay) {
+                        let transverse = (-1.0 + 2.0 * q as f32 / nx as f32) * half * mm_px;
+                        let bend = crate::surface::vnoise(
+                            transverse * 0.13,
+                            d * mm_px * 0.025,
+                            seed ^ 0xB1ADE3,
+                        ) - 0.5;
+                        let drag = crate::surface::vnoise(
+                            transverse * 0.65,
+                            d * mm_px * 0.035,
+                            seed ^ 0xD2A6,
+                        ) - 0.5;
+                        (pr + flex * pr.sqrt() * (0.24 * bend + 0.055 * drag)).clamp(0.0, 1.0)
+                    } else {
+                        pr
+                    }
+                })
+                .collect();
             let rest: Vec<_> = (0..=nx)
                 .map(|q| {
                     let local = support[q.saturating_sub(radius)..(q + radius + 1).min(nx + 1)]
                         .iter()
                         .copied()
                         .fold(f32::MIN, f32::max);
-                    rigid + (local - rigid) * flex * pr.sqrt()
+                    rigid + (local - rigid) * flex * local_pressure[q].sqrt()
                 })
                 .collect();
             for &(i, u, x, y, q) in &cells {
@@ -376,10 +513,37 @@ impl Canvas {
                     (blade_paint, blade_solvent) = faces[face_id].bind(k);
                 }
                 let rest = rest[q];
+                let pr = local_pressure[q];
+                let gap = if third && (body_pass || !lay) {
+                    280.0 * (1.0 - pr).powf(1.6) * (1.0 - 0.7 * upright)
+                } else {
+                    gap
+                };
                 let noise = crate::surface::vnoise(u * 4.0 + 9.0, d * mm_px * 0.8, seed) * 0.75
                     + crate::surface::vnoise(u * 13.0, d * mm_px * 2.1, seed ^ 41) * 0.25;
+                let scrape_edge = if third && !lay {
+                    let transverse = u * half * mm_px;
+                    let wander =
+                        1.2 * (crate::surface::vnoise(d * mm_px * 0.045, 5.0, seed ^ 0x5C2A) - 0.5);
+                    let warp = transverse
+                        + wander
+                        + 2.0
+                            * (crate::surface::vnoise(
+                                transverse * 0.09,
+                                d * mm_px * 0.018,
+                                seed ^ 0xB022,
+                            ) - 0.5);
+                    crate::surface::vnoise(warp * 0.43, d * mm_px * 0.012, seed ^ 0xED6E3)
+                } else {
+                    0.0
+                };
                 let penetration = 85.0 * pr * pr * (0.25 + 0.75 * upright) * (0.3 + 0.7 * flex);
                 let plane = rest + gap * (0.7 + 0.6 * noise) - penetration;
+                let plane = if third && !lay {
+                    plane + (45.0 + 105.0 * flex) * smoothstep(0.35, 0.85, scrape_edge)
+                } else {
+                    plane
+                };
                 let reach = (2.0 * gap + 45.0 * pr) * (0.45 + noise);
                 unsafe {
                     let v = *sf.vol.add(i);
@@ -501,8 +665,21 @@ impl Canvas {
                         let paint = give * (1.0 - phi);
                         let solvent = give * phi;
                         let side = if body_pass && u.abs() > 0.7 {
-                            let offset =
-                                u.signum() * (half * 1.03 + 0.3 * noise / mm_px) - u * half;
+                            let offset = if third {
+                                u.signum()
+                                    * (half
+                                        + (0.5
+                                            + 0.6
+                                                * crate::surface::vnoise(
+                                                    d * mm_px * 0.12,
+                                                    u.signum() + 4.0,
+                                                    seed ^ 0x11F3,
+                                                ))
+                                            / mm_px)
+                                    - u * half
+                            } else {
+                                u.signum() * (half * 1.03 + 0.3 * noise / mm_px) - u * half
+                            };
                             pix(x + e.0 * offset, y + e.1 * offset)
                         } else {
                             None
@@ -517,7 +694,36 @@ impl Canvas {
                             1.0
                         };
                         let side_inner = if side.is_some() {
-                            let offset = u.signum() * (half * 1.03 + (0.3 * noise - 0.55) / mm_px)
+                            let offset = if third {
+                                u.signum()
+                                    * (half
+                                        + (-0.9
+                                            + 0.6
+                                                * crate::surface::vnoise(
+                                                    d * mm_px * 0.12,
+                                                    u.signum() + 4.0,
+                                                    seed ^ 0x11F3,
+                                                ))
+                                            / mm_px)
+                                    - u * half
+                            } else {
+                                u.signum() * (half * 1.03 + (0.3 * noise - 0.55) / mm_px) - u * half
+                            };
+                            pix(x + e.0 * offset, y + e.1 * offset)
+                        } else {
+                            None
+                        };
+                        let side_middle = if third && side.is_some() {
+                            let offset = u.signum()
+                                * (half
+                                    + (0.05
+                                        + 0.6
+                                            * crate::surface::vnoise(
+                                                d * mm_px * 0.12,
+                                                u.signum() + 4.0,
+                                                seed ^ 0x11F3,
+                                            ))
+                                        / mm_px)
                                 - u * half;
                             pix(x + e.0 * offset, y + e.1 * offset)
                         } else {
@@ -525,7 +731,7 @@ impl Canvas {
                         };
                         let share = if side.is_some() {
                             ((u.abs() - 0.7) / 0.3).clamp(0.0, 1.0)
-                                * 0.7
+                                * if third { 0.85 } else { 0.7 }
                                 * (0.35 + 0.65 * side_noise)
                         } else {
                             0.0
@@ -541,7 +747,15 @@ impl Canvas {
                         *sf.cover.add(i) = 1.0;
                         if let Some(j) = side {
                             let inner = side_inner.unwrap_or(j);
-                            for (j, fraction) in [(inner, 0.65), (j, 0.35)] {
+                            let lip = if third {
+                                [(inner, 0.5), (side_middle.unwrap_or(j), 0.35), (j, 0.15)]
+                            } else {
+                                [(inner, 0.65), (j, 0.35), (j, 0.0)]
+                            };
+                            for (j, fraction) in lip {
+                                if fraction == 0.0 {
+                                    continue;
+                                }
                                 sf.add(j, side_paint * fraction, &k.lat, k.hide, k.cure);
                                 if !sf.solv.is_null() {
                                     *sf.solv.add(j) += side_solvent * fraction * COAT_UM;
@@ -602,14 +816,19 @@ impl Canvas {
                     0.0
                 };
                 let rows = if body_pass {
-                    (2.5 / mm_px).ceil().max(3.0) as usize
+                    ((if third { 3.8 } else { 2.5 }) / mm_px).ceil().max(3.0) as usize
                 } else {
                     3
                 };
                 for row in 0..rows {
                     let t = row as f32 / (rows - 1) as f32;
                     let back = if body_pass {
-                        (1.0 + 1.7 * noise) / mm_px * (t - 0.45)
+                        (if third {
+                            1.8 + 2.0 * noise
+                        } else {
+                            1.0 + 1.7 * noise
+                        }) / mm_px
+                            * (t - 0.45)
                     } else {
                         row as f32
                     };

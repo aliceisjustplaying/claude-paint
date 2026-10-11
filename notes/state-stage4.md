@@ -23,7 +23,7 @@ All captured window pixels, including the lighting context around a crop, remain
 
 The reader validates dimensions and offsets before allocating: at most 16 million held pixels, whole dimensions at most 9600×9600, positive finite scales, engine 1–5 and valid visible bounds. It rejects unknown versions, non-finite optical values, negative wet volume, digest mismatch, every truncation and trailing bytes. Serialization and decoding use blocks at most 64 KiB; there is no full serialized payload clone. The optical arrays require 20 bytes per pixel; shading and PNG encoding allocate additional working buffers. Material capture still incurs the existing trusted checkpoint decoder's memory cost.
 
-Exports and standalone PNGs use exclusively created temporary files, file sync, atomic rename and parent-directory sync. Failure before rename preserves the old output and removes the partial temporary file. Snapshot output must be outside the store and cannot alias any of its files. PNG output cannot alias the snapshot input.
+Exports and standalone PNGs use exclusively created temporary files, file sync, atomic rename and parent-directory sync. Failure before rename preserves the old output and removes the partial temporary file. Snapshot output must use the `.view` extension, stay outside the store and cannot alias any of its files. An existing destination must already be a verified snapshot; journal exports, their hard links and unrelated files are refused before staging, even when named `.view`. Remove a damaged derived artifact explicitly before regenerating it. PNG output cannot alias the snapshot input.
 
 ## Companions and bounded cache
 

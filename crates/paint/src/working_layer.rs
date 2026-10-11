@@ -27,6 +27,81 @@ impl Layers {
     }
 }
 
+fn open_stack(
+    stack: &mut Vec<Material>,
+    work_um: &mut f64,
+    opened_mm3: &mut f64,
+    area: f64,
+    pressure: f32,
+    exposure: f64,
+    shear: f64,
+) -> Material {
+    *work_um +=
+        (0.5 + WORK_DEPTH_UM * (pressure.clamp(0.0, 1.0) as f64).powi(3)) * exposure * shear;
+    let mut wanted = (*work_um * area / 1000.0 - *opened_mm3).max(0.0);
+    let mut got = Material::default();
+    while wanted > 1e-12 {
+        let Some(top) = stack.last_mut() else { break };
+        let part = top.take((wanted / top.paint_mm3).min(1.0));
+        wanted -= part.paint_mm3;
+        *opened_mm3 += part.paint_mm3;
+        got.add(part);
+        if top.paint_mm3 <= 0.0 {
+            stack.pop();
+        }
+    }
+    while stack.len() > MAX_BURIED_LAYERS {
+        let oldest = stack.remove(0);
+        stack[0].add(oldest);
+    }
+    got
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BrushLayers {
+    buried: *mut Vec<Material>,
+    work_um: *mut f64,
+    opened_mm3: *mut f64,
+    pub(crate) area: f64,
+}
+
+impl BrushLayers {
+    pub(crate) fn new(layers: &mut Layers, area: f64) -> Self {
+        Self {
+            buried: layers.buried.as_mut_ptr(),
+            work_um: layers.work_um.as_mut_ptr(),
+            opened_mm3: layers.opened_mm3.as_mut_ptr(),
+            area,
+        }
+    }
+
+    pub(crate) unsafe fn coats(&self, i: usize) -> f32 {
+        unsafe {
+            ((*self.buried.add(i))
+                .iter()
+                .map(|m| m.paint_mm3)
+                .sum::<f64>()
+                * 1000.0
+                / self.area
+                / COAT_UM as f64) as f32
+        }
+    }
+
+    pub(crate) unsafe fn open(&self, i: usize, pressure: f32, exposure: f64) -> Material {
+        unsafe {
+            open_stack(
+                &mut *self.buried.add(i),
+                &mut *self.work_um.add(i),
+                &mut *self.opened_mm3.add(i),
+                self.area,
+                pressure,
+                exposure,
+                1.0,
+            )
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct WorkingSurface {
     canvas: Canvas,
@@ -96,23 +171,15 @@ impl Canvas {
         } else {
             0.35 * secs as f64 / crate::rag::pace::BLOT_PRESS
         };
-        layers.work_um[i] +=
-            (0.5 + WORK_DEPTH_UM * (pressure.clamp(0.0, 1.0) as f64).powi(3)) * exposure * shear;
-        let mut wanted = (layers.work_um[i] * area / 1000.0 - layers.opened_mm3[i]).max(0.0);
-        let mut got = Material::default();
-        while wanted > 1e-12 {
-            let Some(top) = layers.buried[i].last_mut() else {
-                break;
-            };
-            let part = top.take((wanted / top.paint_mm3).min(1.0));
-            wanted -= part.paint_mm3;
-            layers.opened_mm3[i] += part.paint_mm3;
-            got.add(part);
-            if top.paint_mm3 <= 0.0 {
-                layers.buried[i].pop();
-            }
-        }
-        layers.compact(i);
+        let got = open_stack(
+            &mut layers.buried[i],
+            &mut layers.work_um[i],
+            &mut layers.opened_mm3[i],
+            area,
+            pressure,
+            exposure,
+            shear,
+        );
         if got.paint_mm3 <= 0.0 {
             return;
         }
@@ -221,6 +288,59 @@ impl WorkingSurface {
     pub fn rag(&self, width: f32, seed: u64) -> Rag {
         Rag::new(width, seed).with_transport(&self.canvas)
     }
+
+    pub fn work_drag(
+        &mut self,
+        held: &mut Held,
+        gesture: &Gesture,
+        clip: Option<&Mask>,
+    ) -> Result<(), &'static str> {
+        held.tool.assert_valid();
+        if held.tool.point > 0.0 {
+            return Err("layered brush work requires full-coverage bristles");
+        }
+        let mut next = self.canvas.clone();
+        if let Some(mask) = clip {
+            next.check_mask(mask);
+        }
+        next.begin_working_pass();
+        let mut layers = next.wet.working_layers.take().unwrap();
+        let contact = BrushLayers::new(&mut layers, (next.px_mm() as f64).powi(2));
+        let mut brush = held.clone();
+        next.tally
+            .stroke(&brush.tool, &gesture.pts, next.mm_per_unit);
+        let id = next.next_stroke_ids(1);
+        let mut surface = next.surf();
+        surface.layers = Some(contact);
+        let bounds = unsafe {
+            crate::bristle::drag_on(
+                surface,
+                &mut brush,
+                gesture,
+                clip.map(crate::bristle::Clip::Mask),
+                id,
+                &mut Vec::new(),
+            )
+        };
+        if let Some((x0, y0, x1, y1)) = bounds {
+            next.wet.touch(x0, y0, x1, y1);
+        }
+        if next.px != self.canvas.px
+            || next.height != self.canvas.height
+            || next
+                .wet
+                .vol
+                .iter()
+                .zip(&next.wet.cover)
+                .any(|(&v, &cover)| v > 0.0 && (!v.is_finite() || cover != 1.0))
+        {
+            return Err("layered brush work must preserve the baked picture and full coverage");
+        }
+        next.wet.working_layers = Some(layers);
+        self.canvas = next;
+        *held = brush;
+        Ok(())
+    }
     pub fn dip(&mut self, rag: &mut Rag, amount: f32) {
         rag.dip(amount, self.canvas.now_min(), self.canvas.tally_mut());
     }
@@ -264,6 +384,10 @@ impl WorkingSurface {
             }
         }
         total
+    }
+
+    pub fn brush_inventory(&self, held: &Held) -> Material {
+        held.material(self.canvas.mm_per_unit)
     }
 
     pub fn working_paint_mm3(&self) -> f64 {
@@ -450,6 +574,120 @@ mod tests {
             .shake(0.0);
         c.drag(&mut normal, &g, None);
         w.lay_drag(&mut b, &g, None).unwrap();
+        assert_eq!(c.seen(), w.seen());
+        assert_eq!(c.seen_lit(115.0, 55.0, 1.0), w.seen_lit(115.0, 55.0, 1.0));
+        assert_eq!(c.pixels(), w.protected_pixels());
+    }
+
+    #[test]
+    fn brush_work_lifts_wet_material_and_carries_it_onto_empty_ground() {
+        let mut c = base();
+        c.wet.solv.fill(2.0);
+        for y in 0..96 {
+            for x in 0..96 {
+                let i = y * 96 + x;
+                if !(18..46).contains(&x) || !(35..61).contains(&y) {
+                    c.wet.vol[i] = 0.0;
+                    c.wet.solv[i] = 0.0;
+                }
+            }
+        }
+        let mut w = WorkingSurface::new(c).unwrap();
+        let mut brush = Held::new(Tool::hog_flat(100.0), 71).with_engine(5);
+        let initial = w.inventory();
+        let fixed = (
+            w.protected_pixels().to_vec(),
+            w.protected_surface_um().to_vec(),
+        );
+        w.work_drag(
+            &mut brush,
+            &Gesture::line((200.0, 500.0), (850.0, 500.0))
+                .pressure(0.85, 0.85)
+                .shake(0.0),
+            None,
+        )
+        .unwrap();
+        assert!(w.brush_inventory(&brush).paint_mm3 > 0.05);
+        assert!(w.brush_inventory(&brush).solvent_mm3 > 0.0);
+        assert!(w.brush_inventory(&brush).cure_moment > 0.0);
+        let lane: f32 = (35..61)
+            .flat_map(|y| (62..77).map(move |x| y * 96 + x))
+            .map(|i| w.canvas.wet.vol[i])
+            .sum();
+        assert!(lane > 0.01);
+        let mut final_total = w.inventory();
+        final_total.add(w.brush_inventory(&brush));
+        close(initial, final_total);
+        assert_eq!(
+            fixed,
+            (
+                w.protected_pixels().to_vec(),
+                w.protected_surface_um().to_vec()
+            )
+        );
+    }
+
+    #[test]
+    fn loaded_brush_work_conserves_all_moments_and_respects_pressure_and_mask() {
+        let w = passage();
+        let mut brush = Held::new(Tool::hog_flat(100.0), 71).with_engine(5);
+        brush.load(
+            Paint::body([0.8, 0.16, 0.07])
+                .with_stiff(0.6)
+                .with_thinner(0.4),
+            0.4,
+        );
+        let mut initial = w.inventory();
+        initial.add(w.brush_inventory(&brush));
+        let mut opened = Vec::new();
+        for pressure in [0.15, 0.85] {
+            let mut surface = w.clone();
+            let mut b = brush.clone();
+            surface
+                .work_drag(
+                    &mut b,
+                    &Gesture::line((200.0, 500.0), (800.0, 500.0))
+                        .pressure(pressure, pressure)
+                        .shake(0.0),
+                    None,
+                )
+                .unwrap();
+            let mut total = surface.inventory();
+            total.add(surface.brush_inventory(&b));
+            close(initial, total);
+            opened.push(surface.opened_paint_mm3());
+        }
+        assert!(opened[0] > 0.0 && opened[1] > 2.0 * opened[0]);
+        let mut masked = w.clone();
+        let mut b = brush.clone();
+        let mask = Mask::from_fn(w.frame(), |_, _| 0.0);
+        masked
+            .work_drag(
+                &mut b,
+                &Gesture::line((200.0, 500.0), (800.0, 500.0)).pressure(0.85, 0.85),
+                Some(&mask),
+            )
+            .unwrap();
+        close(w.inventory(), masked.inventory());
+        assert_eq!(w.brush_inventory(&brush), masked.brush_inventory(&b));
+        assert_eq!(masked.opened_paint_mm3(), 0.0);
+        assert_eq!(w.seen(), masked.seen());
+    }
+
+    #[test]
+    fn brush_work_over_a_dried_picture_does_not_lift_protected_paint() {
+        let mut c = base();
+        c.wet.touch(0, 0, 96, 96);
+        c.dry();
+        let mut w = WorkingSurface::new(c.clone()).unwrap();
+        let mut b = Held::new(Tool::hog_flat(100.0), 71).with_engine(5);
+        let mut normal = b.clone();
+        let g = Gesture::line((200.0, 500.0), (800.0, 500.0))
+            .pressure(0.85, 0.85)
+            .shake(0.0);
+        c.drag(&mut normal, &g, None);
+        w.work_drag(&mut b, &g, None).unwrap();
+        assert_eq!(w.brush_inventory(&b), Material::default());
         assert_eq!(c.seen(), w.seen());
         assert_eq!(c.seen_lit(115.0, 55.0, 1.0), w.seen_lit(115.0, 55.0, 1.0));
         assert_eq!(c.pixels(), w.protected_pixels());

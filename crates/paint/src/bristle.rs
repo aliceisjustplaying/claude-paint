@@ -800,6 +800,52 @@ impl SimContact {
     }
 }
 
+#[cfg(all(test, feature = "brush-sim-3"))]
+mod bundle_tests {
+    use super::*;
+    use crate::hex;
+
+    fn moments(h: &Held) -> Vec<f64> {
+        let mut values = vec![0.0; LAT + 8];
+        for b in &h.bristles {
+            values[0] += b.vol as f64;
+            values[1] += b.solvent as f64;
+            values[2] += b.cure as f64 * b.vol as f64;
+            for (i, lat) in b.lat.iter().enumerate() { values[3 + i] += *lat as f64 * b.vol as f64; }
+            for (i, property) in b.hide.iter().enumerate() { values[3 + LAT + i] += *property as f64 * b.vol as f64; }
+        }
+        values
+    }
+
+    #[test]
+    fn local_reservoir_flow_preserves_every_material_moment() {
+        let mut h = Held::new(Tool::badger(85.0), 73).with_engine(13);
+        h.load_part(Paint::body(hex("#be5e32")).with_thinner(0.25), 0.7, &Part { side: -1.0, share: 0.45, streak: 0.6, seed: 17 });
+        h.load_part(Paint::body(hex("#456e8a")).with_stiff(0.6).with_thinner(0.6), 0.3, &Part { side: 1.0, share: 0.4, streak: 0.8, seed: 31 });
+        for (i, b) in h.bristles.iter_mut().enumerate() { b.cure = (i % 17) as f32 / 25.0; }
+        let before = moments(&h);
+        for i in 0..160 {
+            h.evolve_bundles(SimContact { model: BrushSim::for_engine(13).unwrap(), mm_per_unit: 0.16, distance_mm: i as f32 * 0.25, seed: 73, offset: 0.0 }, 0.85, 0.25);
+        }
+        for (i, (a, b)) in before.iter().zip(moments(&h)).enumerate() {
+            assert!((a - b).abs() < 1e-5 * a.abs().max(1.0), "moment {i}: {a} {b}");
+        }
+        assert!(h.bundle_offsets.iter().all(|x| x.is_finite() && x.abs() <= 0.22));
+        assert!(h.bundle_offsets.iter().any(|x| x.abs() > 1e-5));
+        assert!(h.bristles.iter().all(|b| b.vol >= 0.0 && b.solvent >= 0.0));
+    }
+
+    #[test]
+    fn empty_hairs_relax_without_inventing_a_load() {
+        let mut h = Held::new(Tool::hog_flat(85.0), 73).with_engine(13);
+        h.bundle_offsets.fill(0.1);
+        let model = BrushSim::for_engine(13).unwrap();
+        h.evolve_bundles(SimContact { model, mm_per_unit: 0.16, distance_mm: 12.0, seed: 73, offset: 0.0 }, 0.9, 0.25);
+        assert_eq!(h.carried(), (0.0, 0.0));
+        assert!(h.bundle_offsets.iter().all(|x| *x < 0.1 && *x > 0.0));
+    }
+}
+
 /// Which of a brush's bristles a dip reaches, and how much each takes up
 /// (see `Held::load_part`).
 #[derive(Clone, Copy, Debug, PartialEq)]

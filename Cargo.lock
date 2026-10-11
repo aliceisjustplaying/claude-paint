@@ -388,6 +388,7 @@ dependencies = [
  "mixbox",
  "noise",
  "rayon",
+ "sha2",
  "tiny-skia",
 ]
 

@@ -34,6 +34,8 @@ mod look;
 mod save;
 #[cfg(feature = "state-store")]
 mod painting_store;
+#[cfg(all(feature = "replay", feature = "render-snapshot"))]
+mod optical;
 mod palette_look;
 mod session;
 #[cfg(feature = "replay")]
@@ -148,6 +150,12 @@ fn main() -> ExitCode {
         "render-checkpoint" => render_checkpoint(&rest),
         #[cfg(all(feature = "replay", feature = "state-store"))]
         "render-state" => render_state(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "snapshot-state" => optical::export(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "render-snapshot" => optical::render(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "snapshot-companions" => optical::companions(&rest),
         #[cfg(all(feature = "replay", feature = "finish"))]
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
@@ -181,6 +189,8 @@ fn print_usage() {
     println!("{USAGE}");
     #[cfg(all(feature = "replay", feature = "state-store"))]
     println!("\n  run … --state-store DIR [--state-budget-mib N]   publish each successful chunk\n  render-state DIR out.png [--mode color|gallery|relief] [--look]   open the committed revision\n  EASEL_STATE_SESSION=<name> opts that live painting into per-chunk state publication");
+    #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+    println!("\n  snapshot-state DIR out.view   export compact optics of the committed revision\n  render-snapshot out.view out.png [--mode color|gallery|relief] [--light az,el,strength] [--crop x0,y0,x1,y1]\n  snapshot-companions out.view CACHE [--gallery-light az,el,strength] [--relief-light az,el,strength] [--crop x0,y0,x1,y1] [--cache-budget-mib N]");
 }
 
 /// The session a command is for: `-s <name>` (taken out of `args`), else

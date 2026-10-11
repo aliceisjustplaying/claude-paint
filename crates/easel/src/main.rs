@@ -246,7 +246,6 @@ fn journal_path() -> PathBuf {
     root().join("notes/journal.md")
 }
 
-#[cfg(feature = "replay")]
 fn flag(args: &[String], f: &str) -> Option<String> {
     args.iter().position(|a| a == f).and_then(|i| args.get(i + 1).cloned())
 }
@@ -2193,6 +2192,18 @@ mod tests {
         for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
             assert!(args(bad).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn save_display_version_selection_is_available_without_replay() {
+        for (label, expected) in [("1", paint::LookVersion::Legacy), ("2", paint::LookVersion::Gloss), ("legacy", paint::LookVersion::Legacy), ("gloss", paint::LookVersion::Gloss)] {
+            let args: Vec<_> = ["a.png", "--gallery", "--look-version", label].into_iter().map(String::from).collect();
+            assert!(save_args(&args).is_ok());
+            assert_eq!(look::version_of(&flag(&args, "--look-version").unwrap()).unwrap(), expected);
+        }
+        assert_eq!(paint::LookVersion::default(), paint::LookVersion::Legacy);
+        assert!(save_args(&["--look-version".into()]).is_err());
+        assert!(save_args(&["--look-version".into(), "3".into()]).is_err());
     }
 
     /// A new session is a sketch by its name; a log by what its head says.

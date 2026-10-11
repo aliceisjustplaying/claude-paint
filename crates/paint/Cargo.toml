@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+brush-sim-5 = ["brush-sim-4"]
 brush-sim-4 = ["brush-sim-3"]
 brush-sim-3 = ["brush-sim-2"]
 brush-sim-2 = ["brush-sim-1"]

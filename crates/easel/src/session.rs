@@ -986,6 +986,9 @@ fn brush_sim_engine(choice: &str) -> Result<u32, String> {
         return Err("brush simulation requires a build with --features brush-sim-1".into());
     }
     match choice {
+        "lean5" if cfg!(feature = "brush-sim-5") => Ok(18),
+        "body5" if cfg!(feature = "brush-sim-5") => Ok(19),
+        "wild5" if cfg!(feature = "brush-sim-5") => Ok(20),
         "lean4" if cfg!(feature = "brush-sim-4") => Ok(15),
         "body4" if cfg!(feature = "brush-sim-4") => Ok(16),
         "wild4" if cfg!(feature = "brush-sim-4") => Ok(17),
@@ -998,7 +1001,7 @@ fn brush_sim_engine(choice: &str) -> Result<u32, String> {
         "lean" => Ok(6),
         "body" => Ok(7),
         "wild" => Ok(8),
-        _ => Err("EASEL_BRUSH_SIM must be off, lean/body/wild, lean2/body2/wild2, lean3/body3/wild3 or lean4/body4/wild4 (build with the matching brush-sim feature)".into()),
+        _ => Err("EASEL_BRUSH_SIM must be off, lean/body/wild, lean2/body2/wild2, lean3/body3/wild3, lean4/body4/wild4 or lean5/body5/wild5 (build with the matching brush-sim feature)".into()),
     }
 }
 

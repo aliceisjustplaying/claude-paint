@@ -1,6 +1,6 @@
 # Display look 2: local gloss and wet sheen
 
-Gallery, Relief and the three Museum modes now use display look **2** by default. Color and the painter's ordinary unlit look retain their exact previous transform. Paint deposition, curing, RNG, checkpoints and engine editions are unchanged.
+Display look **2** is opt-in for Gallery, Relief and the three Museum modes. Every existing display/export path defaults to look **1** until Alice chooses a migration. Color and the painter's ordinary unlit look retain their exact previous transform. Paint deposition, curing, RNG, checkpoints and engine editions are unchanged.
 
 Look 1 remains available:
 
@@ -11,7 +11,15 @@ easel render-checkpoint live.ckpt.zst after.png --mode gallery --look-version 2
 easel render-checkpoint live.ckpt.zst museum.png --mode museum --look-version 2
 ```
 
-`legacy` and `gloss` are aliases for 1 and 2. The public `Canvas::seen_lit` and `Canvas::seen_museum` methods retain look 1 for historical callers; the new `*_version` methods select explicitly. The easel's display companions, lit final exports and lit process frames select look 2. Existing companion PNGs must be regenerated from saved state to adopt it. Cached display images must include the look version alongside source revision, light and size.
+`legacy` and `gloss` are aliases for 1 and 2. The public `Canvas::seen_lit` and `Canvas::seen_museum` methods retain look 1 for historical callers; the new `*_version` methods select explicitly. `look`, `render-checkpoint`, `run`, `save` and `finish` accept `--look-version`; lit process frames inherit `run`'s selection. Companion views and held-knife passage/blade views inherit the requested version. Existing companion PNGs must be explicitly regenerated from saved state to adopt look 2. Cached display images must include the look version alongside source revision, light and size. The export log records the version and light; `frames.tsv` adds a trailing `look_version` column without moving its existing fields.
+
+```sh
+easel run painting.lua --gallery --look-version 2 --out gallery.png
+easel save gallery.png --gallery --look-version 2
+easel finish live.ckpt final.png --gallery --look-version 2
+```
+
+`finish --relief` remains the historical destructive finishing operation. Its equations and output are unchanged; `--look-version` selects only the optional display illumination added by `--gallery` or `--light`. For display-only Relief without finishing or aging, use `render-checkpoint --mode relief --look-version 2`.
 
 ## Optical approximation
 

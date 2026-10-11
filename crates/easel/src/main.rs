@@ -898,7 +898,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
     }
-    let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, museum: v.museum, ..look::View::default() };
+    let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, museum: v.museum, look_version: v.look_version, ..look::View::default() };
     let (_, _, png) = look::render(&c, &seen_as(crop))?;
     let mut passage = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     // the knife: its paint laid thick on a steel blade, on a board of its own with the
@@ -1368,7 +1368,8 @@ impl Server {
                 let (path, light) = save_args(args)?;
                 let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
                 let c = self.s.canvas().ok_or("no canvas yet")?;
-                deliver_lit(&c, &p, light)?;
+                let version = look::version_of(&flag(args, "--look-version").unwrap_or_else(|| "1".into()))?;
+                deliver_lit_version(&c, &p, light, version)?;
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
@@ -1420,6 +1421,10 @@ fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), S
                 i += 1;
             }
             "--gallery" => light = Some(GALLERY_LIGHT),
+            "--look-version" => {
+                look::version_of(args.get(i + 1).ok_or("--look-version needs 1 or 2")?)?;
+                i += 1;
+            }
             a if !a.starts_with('-') && path.is_none() => path = Some(PathBuf::from(a)),
             o => return Err(format!("save [path] [--light az,el | --gallery]: unknown {o:?}")),
         }
@@ -1437,11 +1442,17 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 /// `deliver`, lit from (azimuth, elevation) in degrees on the paint's relief
 /// (`Canvas::seen_lit`), or not lit (None: color only).
 fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), String> {
+    deliver_lit_version(c, out, light, paint::LookVersion::Legacy)
+}
+
+fn deliver_lit_version(c: &Canvas, out: &Path, light: Option<(f32, f32)>, version: paint::LookVersion) -> Result<(), String> {
     let px = match light {
-        Some((az, el)) => c.seen_lit_version(az, el, 1.0, paint::LookVersion::Gloss),
+        Some((az, el)) => c.seen_lit_version(az, el, 1.0, version),
         None => c.seen(),
     };
-    deliver_seen(c, out, &px)
+    deliver_seen(c, out, &px)?;
+    eprintln!("display: {} look-version {} light {light:?}", out.display(), version.number());
+    Ok(())
 }
 
 fn deliver_seen(c: &Canvas, out: &Path, px: &[paint::Rgb]) -> Result<(), String> {
@@ -1454,7 +1465,7 @@ fn deliver_seen(c: &Canvas, out: &Path, px: &[paint::Rgb]) -> Result<(), String>
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look-version 1|2] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
@@ -1511,12 +1522,13 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--look-version" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let version = look::version_of(&flag(args, "--look-version").unwrap_or_else(|| "1".into()))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
     // a development preview may replay narrower (kernel radii are in mm, so it is not the
     // painting at a smaller size: see notes/workflow.md); the painting is the width it was
@@ -1582,7 +1594,7 @@ fn run(args: &[String]) -> Result<(), String> {
         (Some(e), Some(d)) => {
             let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
             let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
-            frames::start(every, PathBuf::from(d), fw, light)?;
+            frames::start_version(every, PathBuf::from(d), fw, light, version)?;
             true
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
@@ -1627,7 +1639,7 @@ fn run(args: &[String]) -> Result<(), String> {
             flag(args, "--frames-dir").unwrap_or_default()
         );
     }
-    deliver_lit(&c, &out, light)?;
+    deliver_lit_version(&c, &out, light, version)?;
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
@@ -1639,7 +1651,7 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     if args.iter().any(|a| a == "--look") {
         let jpg = out.with_extension("look.png");
-        let (w, h) = look::look(&c, &look::View::default(), &jpg)?;
+        let (w, h) = look::look(&c, &look::View { look_version: version, ..look::View::default() }, &jpg)?;
         println!("{} ({w}x{h})", jpg.display());
     }
     drop(c);
@@ -1708,12 +1720,12 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
     } else {
         deliver_seen(&c, Path::new(out), &view.seen(&c))?;
     }
-    eprintln!("wrote {out} ({} saved chunks, {mode}, no replay, {:.2}s)", r.chunks, t0.elapsed().as_secs_f64());
+    eprintln!("wrote {out} ({} saved chunks, {mode}, look-version {}, no replay, {:.2}s)", r.chunks, view.look_version.number(), t0.elapsed().as_secs_f64());
     Ok(())
 }
 
 #[cfg(all(feature = "replay", feature = "finish"))]
-const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
+const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief] [--gallery | --light az,el] [--look-version 1|2]
        finish --print-chunk [--coats C] [--no-varnish] [--no-cracks] [--relief]";
 
 /// `easel finish <save> <out.png> [options]`: restore a live session's save (live.ckpt,
@@ -1724,6 +1736,7 @@ const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [-
 fn finish_cmd(args: &[String]) -> Result<(), String> {
     let (mut coats, mut varnish, mut cracks, mut relief) = ("0.4".to_string(), true, true, false);
     let (mut print_chunk, mut log, mut files) = (false, None::<String>, Vec::new());
+    let (mut version, mut light) = (paint::LookVersion::Legacy, None);
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -1736,6 +1749,15 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
                 i += 1;
             }
             "--no-varnish" => varnish = false,
+            "--look-version" if i + 1 < args.len() => {
+                version = look::version_of(&args[i + 1])?;
+                i += 1;
+            }
+            "--light" if i + 1 < args.len() => {
+                light = Some(light_of(&args[i + 1])?);
+                i += 1;
+            }
+            "--gallery" => light = Some(GALLERY_LIGHT),
             "--no-cracks" => cracks = false,
             "--relief" => relief = true,
             "--print-chunk" => print_chunk = true,
@@ -1775,7 +1797,7 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
     print!("{}", ran.out);
     let c = s.canvas().ok_or("the save holds no canvas")?;
-    deliver(&c, Path::new(out))?;
+    deliver_lit_version(&c, Path::new(out), light, version)?;
     eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, ran.secs, t0.elapsed().as_secs_f64());
     Ok(())
 }
@@ -1977,6 +1999,42 @@ mod tests {
     }
 
     const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
+
+    #[cfg(feature = "replay")]
+    #[test]
+    fn held_knife_display_versions_match_the_passage_and_blade() {
+        let mut s = Session::new(256).unwrap();
+        s.run(PALETTE_CANVAS).unwrap();
+        s.run(r#"k = knife{width=40}; k:load(pile{{"raw umber", 2}, {"bone black", 1}}, 0.8)"#).unwrap();
+        let before = state_digest_line(&s, 2, 0.0);
+        let c = s.canvas().unwrap();
+        let at = (400.0, 320.0);
+        let crop = [at.0 - HOLD_HALF, at.1 - HOLD_HALF, at.0 + HOLD_HALF, at.1 + HOLD_HALF];
+        let (paint, blade, full) = s.held("k").unwrap();
+        let (len, wide) = (2.0 * blade, blade + 12.0);
+        let board_h = wide + 20.0;
+        let mut board = Canvas::new(c.frame().full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine());
+        let mut knife = paint::Knife::new(blade);
+        knife.load(paint, full);
+        let cy = board_h / 2.0;
+        board.knife(&mut knife, &[(10.0, cy), (50.0 + len, cy)], (0.15, 0.1), None, true, 0.25);
+        let f = c.frame();
+        for version in [paint::LookVersion::Legacy, paint::LookVersion::Gloss] {
+            let view = look::View { crop: Some(crop), light: Some(GALLERY_LIGHT), look_version: version, ..look::View::default() };
+            let pixels = c.seen_lit_version(115.0, 55.0, 1.0, version);
+            let mut expected = image::load_from_memory(&look::render_seen(&c, &view, Some(&pixels)).unwrap().2).unwrap().to_rgb8();
+            let blade_view = look::View { crop: Some([30.0, cy - wide / 2.0, 30.0 + len, cy + wide / 2.0]), ..view.clone() };
+            let blade_pixels = board.seen_lit_version(115.0, 55.0, 1.0, version);
+            let blade_image = image::load_from_memory(&look::render_seen(&board, &blade_view, Some(&blade_pixels)).unwrap().2).unwrap().to_rgb8();
+            let x = (at.0 * f.scale).round() as i64 - (crop[0] * f.scale).round() as i64;
+            let y = (at.1 * f.scale).round() as i64 - (crop[1] * f.scale).round() as i64 - blade_image.height() as i64 / 2;
+            image::imageops::overlay(&mut expected, &blade_image, x, y);
+            let actual = image::load_from_memory(&hold_look(&s, "k", at, &view).unwrap().2).unwrap().to_rgb8();
+            assert_eq!(actual, expected, "passage and blade look-version {}", version.number());
+        }
+        drop(c);
+        assert_eq!(before, state_digest_line(&s, 2, 0.0));
+    }
 
     /// The held knife (speculative) only reads, as the palette look: the state digest, the
     /// log, the globals and the clock are as they were. It shows the passage with a knife

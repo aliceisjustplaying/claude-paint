@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+brush-sim-3 = ["brush-sim-2"]
 brush-sim-2 = ["brush-sim-1"]
 brush-sim-1 = []
 # `tally::hand_hook`: a callback after each slice of hand time goes on the

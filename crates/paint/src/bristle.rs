@@ -359,6 +359,10 @@ pub struct Held {
     dip: u64,
     #[cfg(feature = "brush-sim-2")]
     travel_mm: f32,
+    #[cfg(feature = "brush-sim-3")]
+    bundle_offsets: Vec<f32>,
+    #[cfg(feature = "brush-sim-3")]
+    bundle_order: Vec<usize>,
     /// Painting with engine 3 (`with_engine`): its `Debug` names each
     /// bristle's `solvent`. Not printed itself.
     shows_solvent: bool,
@@ -419,6 +423,8 @@ impl std::fmt::Debug for Held {
         if self.sim.is_some() { d.field("dip", &self.dip); }
         #[cfg(feature = "brush-sim-2")]
         if self.sim.is_some_and(|sim| sim.next) { d.field("travel_mm", &self.travel_mm); }
+        #[cfg(feature = "brush-sim-3")]
+        if self.sim.is_some_and(|sim| sim.bundles) { d.field("bundle_offsets", &self.bundle_offsets); }
         d.finish()
     }
 }
@@ -488,7 +494,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, #[cfg(feature = "brush-sim-1")] sim: None, #[cfg(feature = "brush-sim-1")] dip: 0, #[cfg(feature = "brush-sim-2")] travel_mm: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, #[cfg(feature = "brush-sim-1")] sim: None, #[cfg(feature = "brush-sim-1")] dip: 0, #[cfg(feature = "brush-sim-2")] travel_mm: 0.0, #[cfg(feature = "brush-sim-3")] bundle_offsets: Vec::new(), #[cfg(feature = "brush-sim-3")] bundle_order: Vec::new() }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -497,6 +503,12 @@ impl Held {
     pub fn with_engine(mut self, v: u32) -> Self {
         #[cfg(feature = "brush-sim-1")]
         { self.sim = BrushSim::for_engine(v); }
+        #[cfg(feature = "brush-sim-3")]
+        if self.sim.is_some_and(|sim| sim.bundles) && self.bundle_order.is_empty() {
+            self.bundle_order = (0..self.bristles.len()).collect();
+            self.bundle_order.sort_by(|a, b| self.bristles[*a].rx.total_cmp(&self.bristles[*b].rx));
+            self.bundle_offsets = vec![0.0; self.bristles.len()];
+        }
         self.shows_solvent = v >= 3;
         self.shows_oil = v >= 4;
         self
@@ -607,6 +619,59 @@ impl Held {
         self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
     }
 
+    #[cfg(feature = "brush-sim-3")]
+    fn evolve_bundles(&mut self, sim: SimContact, pressure: f32, step_mm: f32) {
+        let old = self.bundle_offsets.clone();
+        let full = self.full();
+        let half_mm = self.tool.width * sim.mm_per_unit * 0.5;
+        let rate = 1.0 - (-step_mm / (0.8 + 2.0 * (1.0 - self.tool.stiffness))).exp();
+        for (rank, &i) in self.bundle_order.iter().enumerate() {
+            let br = &self.bristles[i];
+            let liquid = br.vol + br.solvent;
+            let fill = smoothstep(0.03, 0.65, liquid / full);
+            let body = br.hide[1] * (1.0 - br.hide[3]).powi(2) * (br.vol / liquid.max(1e-9));
+            let cohesion = fill * body * pressure;
+            let mut moment = 0.0;
+            let mut weight = 0.0;
+            for &j in &self.bundle_order[rank.saturating_sub(2)..(rank + 3).min(self.bundle_order.len())] {
+                if i == j { continue; }
+                let other = &self.bristles[j];
+                let dx = (other.rx + old[j] - br.rx - old[i]) * half_mm;
+                let dy = (other.ry - br.ry) * half_mm;
+                let w = (-(dx * dx + dy * dy) / 2.25).exp();
+                moment += (other.rx + old[j]) * w;
+                weight += w;
+            }
+            let target = 1.15 * sim.strength(br, &self.tool) * sim.deflect(br.rx + old[i], self.tool.width) * (0.35 + 0.65 * pressure);
+            let attraction = if weight > 1e-6 { 0.55 * cohesion * (moment / weight - br.rx) } else { 0.0 };
+            let target = (target + attraction).clamp(-0.22, 0.22);
+            self.bundle_offsets[i] = (old[i] + (target - old[i]) * rate).clamp(-ROOT_MAX - br.rx, ROOT_MAX - br.rx);
+        }
+        let parity = (sim.distance_mm / 1.3).floor() as usize % 2;
+        for rank in (parity..self.bundle_order.len().saturating_sub(1)).step_by(2) {
+            let (i, j) = (self.bundle_order[rank], self.bundle_order[rank + 1]);
+            let (a, b) = (&self.bristles[i], &self.bristles[j]);
+            let dx = (a.rx + self.bundle_offsets[i] - b.rx - self.bundle_offsets[j]) * half_mm;
+            let dy = (a.ry - b.ry) * half_mm;
+            let contact = (-(dx * dx + dy * dy) / 1.44).exp();
+            let fluid = (1.0 - 0.5 * (a.hide[1] + b.hide[1])).clamp(0.0, 1.0);
+            let k = (1.0 - (-step_mm / 4.0).exp()) * (1.0 - self.tool.stiffness) * pressure * fluid * contact;
+            let delta = ((a.vol + a.solvent) - (b.vol + b.solvent)) * k * 0.5;
+            let (from, to, amount) = if delta >= 0.0 { (i, j, delta) } else { (j, i, -delta) };
+            let donor = &mut self.bristles[from];
+            let liquid = donor.vol + donor.solvent;
+            if amount <= 1e-9 || liquid <= 1e-9 { continue; }
+            let fraction = (amount / liquid).min(0.25);
+            let (paint, solvent, lat, hide, cure) = (donor.vol * fraction, donor.solvent * fraction, donor.lat, donor.hide, donor.cure);
+            donor.vol -= paint;
+            donor.solvent -= solvent;
+            let receiver = &mut self.bristles[to];
+            receiver.cure = mix_cure(receiver.cure, receiver.vol, cure, paint);
+            mix_into(&mut receiver.vol, &mut receiver.lat, &mut receiver.hide, paint, &lat, hide);
+            receiver.solvent += solvent;
+        }
+    }
+
     #[cfg(feature = "brush-sim-1")]
     fn sim_load_weights(&mut self, sim: BrushSim, paint: Paint, part: Option<&Part>) -> Vec<f32> {
         self.dip = self.dip.wrapping_add(1);
@@ -640,21 +705,28 @@ struct BrushSim {
     release: f32,
     entropy: f32,
     next: bool,
+    bundles: bool,
 }
 
 #[cfg(feature = "brush-sim-1")]
 impl BrushSim {
     fn for_engine(engine: u32) -> Option<Self> {
         match engine {
-            6 => Some(Self { release: 0.85, entropy: 1.0, next: false }),
-            7 => Some(Self { release: 1.05, entropy: 1.0, next: false }),
-            8 => Some(Self { release: 0.95, entropy: 2.8, next: false }),
+            6 => Some(Self { release: 0.85, entropy: 1.0, next: false, bundles: false }),
+            7 => Some(Self { release: 1.05, entropy: 1.0, next: false, bundles: false }),
+            8 => Some(Self { release: 0.95, entropy: 2.8, next: false, bundles: false }),
             #[cfg(feature = "brush-sim-2")]
-            9 => Some(Self { release: 1.05, entropy: 2.2, next: true }),
+            9 => Some(Self { release: 1.05, entropy: 2.2, next: true, bundles: false }),
             #[cfg(feature = "brush-sim-2")]
-            10 => Some(Self { release: 1.2, entropy: 2.8, next: true }),
+            10 => Some(Self { release: 1.2, entropy: 2.8, next: true, bundles: false }),
             #[cfg(feature = "brush-sim-2")]
-            11 => Some(Self { release: 1.25, entropy: 4.0, next: true }),
+            11 => Some(Self { release: 1.25, entropy: 4.0, next: true, bundles: false }),
+            #[cfg(feature = "brush-sim-3")]
+            12 => Some(Self { release: 1.05, entropy: 2.7, next: true, bundles: true }),
+            #[cfg(feature = "brush-sim-3")]
+            13 => Some(Self { release: 1.2, entropy: 3.4, next: true, bundles: true }),
+            #[cfg(feature = "brush-sim-3")]
+            14 => Some(Self { release: 1.05, entropy: 4.6, next: true, bundles: true }),
             _ => None,
         }
     }
@@ -667,11 +739,15 @@ struct SimContact {
     mm_per_unit: f32,
     distance_mm: f32,
     seed: u64,
+    #[cfg(feature = "brush-sim-3")]
+    offset: f32,
 }
 
 #[cfg(feature = "brush-sim-1")]
 impl SimContact {
     fn at(self, rx: f32, width: f32) -> (f32, f32) {
+        #[cfg(feature = "brush-sim-3")]
+        let rx = if self.model.bundles { rx + self.offset } else { rx };
         let x = rx * width * self.mm_per_unit * 0.5;
         let d = self.distance_mm;
         let warp = wander(d / 13.7, self.seed ^ 0xA61) + 0.5 * wander(x / 2.9 + d / 17.3, self.seed ^ 0x973);
@@ -1026,7 +1102,7 @@ impl Canvas {
             #[cfg(feature = "brush-sim-1")]
             engine: self.engine,
             #[cfg(feature = "brush-sim-1")]
-            sim: BrushSim::for_engine(self.engine).map(|model| SimContact { model, mm_per_unit: self.mm_per_unit, distance_mm: 0.0, seed: 0 }),
+            sim: BrushSim::for_engine(self.engine).map(|model| SimContact { model, mm_per_unit: self.mm_per_unit, distance_mm: 0.0, seed: 0, #[cfg(feature = "brush-sim-3")] offset: 0.0 }),
             w: self.f.w,
             h: self.f.h,
             ox: self.f.x0,
@@ -1356,6 +1432,8 @@ pub(crate) unsafe fn drag_on(
         let p = sf.sim.filter(|sim| sim.model.next).map_or(p, |sim| {
             (p * (1.0 + g.shake * 0.045 * sim.model.entropy * wander(sim.distance_mm / 7.7, sim.seed ^ 0x812))).clamp(0.0, 1.0)
         });
+        #[cfg(feature = "brush-sim-3")]
+        if let Some(sim) = sf.sim && sim.model.bundles { held.evolve_bundles(sim, p, step / s * sim.mm_per_unit); }
         let theta = match g.orient {
             Orient::Across => dir.1.atan2(dir.0) + std::f32::consts::FRAC_PI_2,
             Orient::Along => dir.1.atan2(dir.0),
@@ -1386,6 +1464,8 @@ pub(crate) unsafe fn drag_on(
             let rx = b.rx;
             #[cfg(feature = "brush-sim-1")]
             let rx = sf.sim.map_or(rx, |sim| (rx + sim.strength(b, &tool) * sim.deflect(rx, tool.width)).clamp(-ROOT_MAX, ROOT_MAX));
+            #[cfg(feature = "brush-sim-3")]
+            let rx = if sf.sim.is_some_and(|sim| sim.model.bundles) { (b.rx + held.bundle_offsets[bi]).clamp(-ROOT_MAX, ROOT_MAX) } else { rx };
             let (ox, oy) = ((rx + wv * 0.12) * half, (b.ry + wv * 0.05) * half);
             let root = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             // tips trail behind the motion and splay outward under pressure
@@ -1436,9 +1516,17 @@ pub(crate) unsafe fn drag_on(
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
+            #[cfg(feature = "brush-sim-3")]
+            let sf = {
+                let mut hair = sf;
+                if let Some(sim) = &mut hair.sim && sim.model.bundles { sim.offset = held.bundle_offsets[bi]; }
+                hair
+            };
             unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
+        #[cfg(feature = "brush-sim-3")]
+        if sf.sim.is_some_and(|sim| sim.model.bundles) { continue; }
         feed(&mut held.bristles, feed_k);
     }
     #[cfg(feature = "brush-sim-2")]
@@ -2237,6 +2325,8 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
         if let Some(sim) = &mut sf.sim { sim.distance_mm = u * dlen / s * sim.mm_per_unit; }
         #[cfg(feature = "brush-sim-2")]
         if let Some(sim) = &mut sf.sim && sim.model.next { sim.distance_mm = held.travel_mm + u * contact_travel / s * sim.mm_per_unit; }
+        #[cfg(feature = "brush-sim-3")]
+        if let Some(sim) = sf.sim && sim.model.bundles { held.evolve_bundles(sim, pk, contact_travel / steps as f32 / s * sim.mm_per_unit); }
         let half = touch_half(&tool, pk, s);
         let theta = t.angle + t.twist * u;
         let (st, ct) = theta.sin_cos();
@@ -2252,11 +2342,19 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let rx = b.rx;
             #[cfg(feature = "brush-sim-1")]
             let rx = sf.sim.map_or(rx, |sim| (rx + sim.strength(b, &tool) * sim.deflect(rx, tool.width)).clamp(-ROOT_MAX, ROOT_MAX));
+            #[cfg(feature = "brush-sim-3")]
+            let rx = if sf.sim.is_some_and(|sim| sim.model.bundles) { (b.rx + held.bundle_offsets[bi]).clamp(-ROOT_MAX, ROOT_MAX) } else { rx };
             let (ox, oy) = (rx * half * spread, b.ry * half * spread);
             let cur = (hx + ox * ct - oy * st, hy + ox * st + oy * ct);
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
+            #[cfg(feature = "brush-sim-3")]
+            let sf = {
+                let mut hair = sf;
+                if let Some(sim) = &mut hair.sim && sim.model.bundles { sim.offset = held.bundle_offsets[bi]; }
+                hair
+            };
             unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }

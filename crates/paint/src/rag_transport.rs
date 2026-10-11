@@ -76,7 +76,7 @@ impl Material {
         out
     }
 
-    fn picked(paint_mm3: f64, solvent_mm3: f64, lat: Latent, prop: Prop, cure: f32) -> Self {
+    pub(crate) fn picked(paint_mm3: f64, solvent_mm3: f64, lat: Latent, prop: Prop, cure: f32) -> Self {
         Self {
             paint_mm3,
             solvent_mm3,
@@ -471,6 +471,7 @@ impl Canvas {
         for c in &contacts {
             let solvent = released[c.cell] * c.exposure / weights[c.cell];
             self.wet.solv[c.i] += (solvent * 1000.0 / area) as f32;
+            self.open_working_layer(c.i, p * c.press, c.exposure, touch.secs, touch.slip_mm, cloth.width_mm);
         }
         let rb = ((BRIDGE_MM / px_mm).round() as usize).max(1);
         let (bx0, by0, bx1, by1) = (
@@ -484,7 +485,7 @@ impl Canvas {
             .flat_map(|y| (bx0..bx1).map(move |x| (y, x)))
             .map(|(y, x)| {
                 let i = y * f.w + x;
-                self.height[i] + self.wet.vol[i].max(0.0) * COAT_UM + self.wet.solv[i]
+                self.height[i] + self.wet.vol[i].max(0.0) * COAT_UM + self.wet.solv[i] + self.buried_height_um(i)
             })
             .collect();
         let peaks = local_max(&surf, bw, by1 - by0, rb);

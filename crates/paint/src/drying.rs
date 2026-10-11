@@ -383,6 +383,7 @@ impl Canvas {
     /// Panics if `minutes` is infinite: a non-finite wait is a caller's
     /// bug, not a way to dry the canvas (that is `dry()`).
     pub fn wait(&mut self, minutes: f32) {
+        assert!(self.wet.working_layers.is_none(), "working-layer aging is not implemented");
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
@@ -620,6 +621,7 @@ impl Canvas {
     /// have waiting; then the rest of the way to touch-dry is the shortcut
     /// above.
     pub fn dry(&mut self) {
+        assert!(self.wet.working_layers.is_none(), "working-layer baking is not implemented");
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_out_solvent();
         }

@@ -787,6 +787,10 @@ impl Canvas {
         if pts.len() == 1 || len < 1e-3 {
             return self.rag_blot(rag, pts[0].0, pts[0].1, pr(0.0), seed);
         }
+        if self.wet.working_layers.is_some() {
+            assert!(rag.transport.is_some(), "working layers require the experimental cloth");
+            self.begin_working_pass();
+        }
         let mmu = self.mm_per_unit;
         self.tally.rag_stroke((len * mmu) as f64, (rag.width * mmu) as f64);
         let cs = rag.cloth_seed(seed);
@@ -993,6 +997,10 @@ impl Canvas {
     pub fn rag_blot(&mut self, rag: &mut Rag, x: f32, y: f32, pressure: f32, seed: u64) -> f64 {
         if rag.transport.is_some() {
             self.check_rag_transport(rag, &[(x, y)], &[pressure]);
+        }
+        if self.wet.working_layers.is_some() {
+            assert!(rag.transport.is_some(), "working layers require the experimental cloth");
+            self.begin_working_pass();
         }
         self.tally.rag_blot();
         let cs = rag.cloth_seed(seed);

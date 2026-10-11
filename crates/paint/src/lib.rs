@@ -41,6 +41,7 @@ pub mod hand;
 pub mod outline;
 pub mod surface;
 pub mod thinner;
+pub mod working_layer;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;

@@ -206,6 +206,9 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        if self.wet.working_layers.is_some() || self.wet.solvent_ledger.is_some() {
+            return Err(io::Error::new(io::ErrorKind::Unsupported, "experimental working layers and solvent ledgers are not checkpointed"));
+        }
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));

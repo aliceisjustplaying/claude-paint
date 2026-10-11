@@ -847,6 +847,7 @@ impl Surf {
 
 impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
+        assert!(self.wet.working_layers.is_none(), "use WorkingSurface::lay_drag for a layered surface");
         // the raw views below index 0..w*h: every buffer must be that long
         let n = self.f.w * self.f.h;
         if self.engine >= 3 {

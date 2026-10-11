@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ryan McCarty. MIT License.
+// Port of uxpreview/watercolor-lab a19bfa2a026856a98ceb400a8eec41f091f04a11.
+// Full license: ../../THIRD_PARTY_NOTICES.md.
 use crate::{
     paper::PaperKind,
     simulation::{Pixel, Simulation},
@@ -79,6 +82,7 @@ impl GpuSimulation {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
+            .filter(|adapter| adapter.get_info().device_type != wgpu::DeviceType::Cpu)
             .ok_or("No GPU adapter")?;
         Self::from_adapter(&adapter, state).await
     }

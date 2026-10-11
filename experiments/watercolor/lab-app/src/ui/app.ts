@@ -165,7 +165,7 @@ const ICONS: Record<string, string> = {
     hintTimer = window.setTimeout(/* Source: src/ui/app.ts:161-161 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => hint.classList.remove("is-visible"), 3200);
   };
   const checkLiftTarget = /* Source: src/ui/app.ts:163-167 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ async (x: number, y: number) => {
-    const probe = await sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5) * refScale);
+    const probe = await sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5));
     const cured = probe.dried > 0.02 && probe.workable < 0.004 && probe.wet < 0.02;
     if (cured) showHint("That paint has dried and is cured. Lift works on damp washes. Wet it first, or paint over it.");
   };
@@ -226,7 +226,7 @@ const ICONS: Record<string, string> = {
       }
       return;
     }
-    stroke = beginStroke(TOOLS[tool], size, water, load, at.x, at.y, (e.pointerId + 1) * 7919, refScale);
+    stroke = beginStroke(TOOLS[tool], size, water, load, at.x, at.y, (e.pointerId + 1) * 7919);
     strokeMoved = false;
     if (tool === "lift") checkLiftTarget(at.x, at.y);
   });
@@ -540,7 +540,7 @@ const ICONS: Record<string, string> = {
         ctx2d.fill();
       }
     }
-    const share = Math.round(((radiusSim * refScale * 2) / dims.w) * 100);
+    const share = Math.round(((radiusSim * 2) / dims.w) * 100);
     const what = isSalt ? "salt throw" : brushPigment && pigmentAmt > 0 ? "one dab" : "clean water";
     previewLine.textContent = `${what} · ${share}% of the sheet's width`;
   };
@@ -556,7 +556,7 @@ const ICONS: Record<string, string> = {
     const host = easel.getBoundingClientRect();
     const scale = rect.width / dims.w;
     const radiusSim = tool === "salt" ? 46 : brushRadius(TOOLS[tool as ToolId], size);
-    const px = radiusSim * refScale * scale;
+    const px = radiusSim * scale;
     ring.style.width = `${px * 2}px`;
     ring.style.height = `${px * 2}px`;
     ring.style.transform = `translate(${e.clientX - host.left - px}px, ${e.clientY - host.top - px}px)`;
@@ -780,29 +780,33 @@ const ICONS: Record<string, string> = {
       onclick: /* Source: src/ui/app.ts:776-802 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ async () => {
         saveBtn.textContent = "Drying…";
         (saveBtn as HTMLButtonElement).disabled = true;
-        sim.stepMany(500, 28);
-        const dried = await sim.serializeDried();
-        if (dried) {
-          try {
+        const metadata = {
+          width: sim.simWidth,
+          height: sim.simHeight,
+          paperKind: sim.paperKind,
+          paperSeed: sim.paperSeed,
+        };
+        try {
+          sim.stepMany(500, 28);
+          const dried = await sim.serializeDried();
+          if (dried) {
             await saveSheet({
-              width: sim.simWidth,
-              height: sim.simHeight,
-              paperKind: sim.paperKind,
-              paperSeed: sim.paperSeed,
+              ...metadata,
               dried,
               savedAt: Date.now(),
             });
             saveBtn.textContent = "Saved";
-          } catch {
+          } else {
             saveBtn.textContent = "Save failed";
           }
-        } else {
+        } catch {
           saveBtn.textContent = "Save failed";
-        }
-        setTimeout(/* Source: src/ui/app.ts:798-801 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => {
-          saveBtn.textContent = "Save sheet";
+        } finally {
           (saveBtn as HTMLButtonElement).disabled = false;
-        }, 1600);
+          setTimeout(/* Source: src/ui/app.ts:798-801 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => {
+            saveBtn.textContent = "Save sheet";
+          }, 1600);
+        }
       },
     },
     "Save sheet"
@@ -997,7 +1001,7 @@ const ICONS: Record<string, string> = {
         drops.push({
           x: Math.random() * dims.w,
           y: Math.random() * dims.h,
-          radius: (3 + Math.random() * 7) * refScale,
+          radius: 3 + Math.random() * 7,
           water: 0.5 + Math.random(),
           pigment: 0,
           dryness: 0,

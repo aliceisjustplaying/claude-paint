@@ -6,7 +6,7 @@ import "./styles.css";
 import { appBar, LAB_URL } from "./ui/chrome";
 import { mountStudio, type AppApi } from "./ui/app";
 import { el } from "./ui/dom";
-import { initializeCpu } from "./engine/cpu-simulation";
+import { initializeGpu } from "./engine/gpu-simulation";
 
 declare global {
   interface Window {
@@ -37,7 +37,7 @@ declare global {
       "Live"
     ),
     el("span", { class: "exp-rule", "aria-hidden": "true" }),
-    el("span", { class: "label exp-stack" }, "Curtis et al. 1997 · Kubelka-Munk · WebGL2 · Client-side only")
+    el("span", { class: "label exp-stack" }, "Curtis et al. 1997 · Kubelka-Munk · Rust / WebGPU · Client-side only")
   );
 
   return el(
@@ -141,15 +141,15 @@ const phoneShell = window.matchMedia("(max-width: 720px)").matches;
 if (!phoneShell) root.append(experimentHead());
 
 try {
-  await initializeCpu();
-  window.__wash = mountStudio(root);
+  await initializeGpu();
+  window.__wash = await mountStudio(root);
 } catch (err) {
   root.append(
     el(
       "div",
       { class: "container gl-error" },
       el("h2", {}, "This browser can't run the simulation"),
-      el("p", {}, `The simulator needs WebGL2 with float render targets. (${err instanceof Error ? err.message : String(err)})`)
+      el("p", {}, `The simulator needs WebGPU. (${err instanceof Error ? err.message : String(err)})`)
     )
   );
 }

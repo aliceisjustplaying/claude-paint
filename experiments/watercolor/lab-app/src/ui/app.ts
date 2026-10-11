@@ -13,8 +13,7 @@ import { mixWell, wellName, type WellEntry } from "../paint/mix";
 import { PAPERS, type PaperKind } from "../engine/paper";
 import { composite, layerRT, linearToSrgbByte, PAPER_REFLECTANCE, type Vec3 } from "../paint/km";
 import { XRAY_FIELDS, type XrayField } from "../engine/simulation";
-import { createBlindSimulation } from "../engine/blind-simulation";
-import type { SheetSimulation } from "../engine/cpu-simulation";
+import { GpuSimulation, type SheetSimulation } from "../engine/gpu-simulation";
 import { loadSheet, saveSheet } from "../data/store";
 import { fitDried } from "../data/resample";
 import { confirmButton, el } from "./dom";
@@ -30,7 +29,7 @@ export const SIM_H = 704;
   const m = /[?&]sim=(\d+)x(\d+)/.exec(location.search);
   if (m) return { w: Math.min(2048, Number(m[1])), h: Math.min(2048, Number(m[2])) };
   const portrait = window.matchMedia("(max-width: 720px)").matches;
-  return portrait ? { w: SIM_H / 8, h: SIM_W / 8 } : { w: SIM_W / 8, h: SIM_H / 8 };
+  return portrait ? { w: SIM_H, h: SIM_W } : { w: SIM_W, h: SIM_H };
 }
 
 export interface AppApi {
@@ -96,7 +95,7 @@ const ICONS: Record<string, string> = {
   };
 }
 
-/* Source: src/ui/app.ts:94-1046 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ export function mountStudio(host: HTMLElement): AppApi {
+/* Source: src/ui/app.ts:94-1046 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ export async function mountStudio(host: HTMLElement): Promise<AppApi> {
   const dims = simDims();
   const portrait = dims.h > dims.w;
   // The phone shell: sheet first, a paint strip in view beneath it, the bench
@@ -122,8 +121,7 @@ const ICONS: Record<string, string> = {
   let stroke: StrokeState | null = null;
   let strokeMoved = false;
 
-  const comparison = createBlindSimulation(canvas, dims.w, dims.h);
-  const sim = comparison.sim;
+  const sim = await GpuSimulation.create(canvas, dims.w, dims.h);
   const scripted = /[?&](sim|seed)=/.test(location.search);
   const seedMatch = /[?&]seed=(\d+)/.exec(location.search);
   if (seedMatch) {
@@ -166,8 +164,8 @@ const ICONS: Record<string, string> = {
     window.clearTimeout(hintTimer);
     hintTimer = window.setTimeout(/* Source: src/ui/app.ts:161-161 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => hint.classList.remove("is-visible"), 3200);
   };
-  const checkLiftTarget = /* Source: src/ui/app.ts:163-167 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ (x: number, y: number) => {
-    const probe = sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5) * refScale);
+  const checkLiftTarget = /* Source: src/ui/app.ts:163-167 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ async (x: number, y: number) => {
+    const probe = await sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5) * refScale);
     const cured = probe.dried > 0.02 && probe.workable < 0.004 && probe.wet < 0.02;
     if (cured) showHint("That paint has dried and is cured. Lift works on damp washes. Wet it first, or paint over it.");
   };
@@ -783,7 +781,7 @@ const ICONS: Record<string, string> = {
         saveBtn.textContent = "Drying…";
         (saveBtn as HTMLButtonElement).disabled = true;
         sim.stepMany(500, 28);
-        const dried = sim.serializeDried();
+        const dried = await sim.serializeDried();
         if (dried) {
           try {
             await saveSheet({
@@ -878,24 +876,6 @@ const ICONS: Record<string, string> = {
       : [pigmentsBox, brushesBox, paperBox, xrayBox])
   );
 
-  const engineButtons = (["A", "B"] as const).map((label) => {
-    const button = el("button", { class: `btn${label === "A" ? " is-active" : ""}`, type: "button", "aria-pressed": label === "A" ? "true" : "false", onclick: () => {
-      comparison.select(label);
-      stroke = null;
-      for (const other of engineButtons) {
-        const selected = other === button;
-        other.classList.toggle("is-active", selected);
-        other.setAttribute("aria-pressed", String(selected));
-      }
-    } }, `Engine ${label}`);
-    return button;
-  });
-  const comparisonBar = el("div", { class: "comparison-bar" },
-    el("div", { class: "engine-buttons", role: "group", "aria-label": "Blind engine comparison" }, ...engineButtons,
-      el("button", { class: "btn", type: "button", onclick: () => comparison.reveal() }, "Reveal")),
-    el("p", {}, "Switching engines clears the sheet. Paper, brush, paint and display settings stay the same."),
-    el("p", {}, "Salt is unavailable in both options because its grain patterns cannot be matched reliably."),
-    el("p", {}, `Both engines use a ${dims.w} × ${dims.h} simulation grid on the same size sheet. The grid is reduced for interactive CPU speed; paper grain and fine edges may look coarser. Each frame runs the original three substeps, so the simulation clock slows when frame rate drops. Speed and stroke lag may still identify an engine. Reveal prints the mapping only in the console.`));
   const easel = el("div", { class: "easel" }, canvas, ring, hint, phone ? null : focusBtn);
 
   // ---- the thumb bar (phone) ------------------------------------------------
@@ -934,13 +914,13 @@ const ICONS: Record<string, string> = {
 
   if (phone) {
     document.body.classList.add("is-phone");
-    host.append(el("div", { class: "studio container" }, comparisonBar, easel, paintStrip, bench));
+    host.append(el("div", { class: "studio container" }, easel, paintStrip, bench));
     document.body.append(sheetBar!);
     // The strip is only now in the DOM: run the sync once more so the
     // starting pigment's ringed chip lands in view.
     requestAnimationFrame(/* Source: src/ui/app.ts:917-917 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => syncStrip());
   } else {
-    host.append(el("div", { class: "studio container" }, comparisonBar, easel, actions, bench, focusBar));
+    host.append(el("div", { class: "studio container" }, easel, actions, bench, focusBar));
   }
 
   // ---- sheet sizing -------------------------------------------------------

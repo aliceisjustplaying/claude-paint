@@ -84,6 +84,12 @@ The named stage files are fixed-step samples, not a claim that their wetness
 classifications have been verified. If statistics do not support the requested
 names, present them as Stage 1–4 until the hardware reference is measured.
 
+Set `LAB_GPU=1` for `capture-native.mjs` to use the shared wgpu backend and GPU
+display shader. `lab-parity --gpu-checkpoint OUTPUT.json` runs one substep on
+the existing 16×12 wet-transport input and compares all fields against the CPU
+fallback with the existing component tolerance. The GPU capture omits the
+extra CPU advection diagnostic and reads fields only at the four stages.
+
 The native runner also saves live pigment totals at every stage and a cloned
 one-pass advection diagnostic; that extra probe never advances the captured
 simulation. Dried pigment folds into optical reflectance, so the live pigment

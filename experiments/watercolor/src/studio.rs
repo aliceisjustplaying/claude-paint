@@ -556,7 +556,7 @@ fn lab_stroke(
         if wanted_pigment > 0.0 {
             stamp.pigment *= pigment / wanted_pigment;
         }
-        lab.simulation.splat(
+        lab.splat(
             &[stamp],
             if total_pigment > 0.0 && !scrub {
                 Some(&mix)
@@ -565,7 +565,7 @@ fn lab_stroke(
             },
         );
         if scrub {
-            lab.simulation.add_scrub(&[stamp]);
+            lab.add_scrub(&[stamp]);
         }
         inventory.water = (inventory.water - water).max(0.0);
         let remaining = inventory.pigment.iter().sum::<f64>();
@@ -836,7 +836,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                     return Err(error("drop is outside paper"));
                 }
                 stamp.water = water / (0.055 * weight * cell_mm.powi(2));
-                lab.simulation.splat(&[stamp], None);
+                lab.splat(&[stamp], None);
                 lab.water_released_mm3 += water;
                 c.state.water_supplied += water;
                 return Ok(());

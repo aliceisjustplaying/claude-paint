@@ -115,7 +115,14 @@ pub struct Probe {
 
 // src/engine/gl.ts:97-109,168-173: RGBA16F upload/write conversion at a19bfa2a026856a98ceb400a8eec41f091f04a11.
 pub fn quantize(v: Pixel) -> Pixel {
-    v.map(|x| f16::from_f32(x).to_f32())
+    v.map(|x| {
+        let h = f16::from_f32(x);
+        if h.is_finite() && h.to_f32().abs() > x.abs() {
+            f16::from_bits(h.to_bits() - 1).to_f32()
+        } else {
+            h.to_f32()
+        }
+    })
 }
 // src/engine/shaders.ts:81-84,188-191 at a19bfa2a026856a98ceb400a8eec41f091f04a11: GLSL mix.
 fn mix(a: f32, b: f32, t: f32) -> f32 {

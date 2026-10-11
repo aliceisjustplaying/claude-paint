@@ -2,11 +2,40 @@
 // Source pin: a19bfa2a026856a98ceb400a8eec41f091f04a11. See ../THIRD_PARTY_NOTICES.md.
 use serde::{Deserialize, Serialize};
 use watercolor_lab_core::brush::Stamp;
+use watercolor_lab_core::{gpu::GpuSimulation, pigments::Pigment};
 use watercolor_lab_core::{km, simulation::Simulation};
+
+#[derive(Default)]
+pub struct GpuCache {
+    gpu: Option<GpuSimulation>,
+    attempted: bool,
+}
+
+impl Clone for GpuCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for GpuCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("GpuCache")
+            .field(&self.gpu.as_ref().map(|g| &g.adapter_info))
+            .finish()
+    }
+}
+
+impl PartialEq for GpuCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LabSheet {
     pub simulation: Simulation,
+    #[serde(skip)]
+    pub gpu: GpuCache,
     pub quarter_steps: u8,
     pub water_released_mm3: f64,
     pub pigment_released: f64,
@@ -16,6 +45,7 @@ impl LabSheet {
     pub fn new(simulation: Simulation) -> Self {
         Self {
             simulation,
+            gpu: GpuCache::default(),
             quarter_steps: 0,
             water_released_mm3: 0.0,
             pigment_released: 0.0,
@@ -24,8 +54,53 @@ impl LabSheet {
 
     pub fn advance_tick(&mut self) {
         let steps = self.quarter_steps as usize + 45;
-        self.simulation.step_many(steps / 4, 1.0);
+        self.ensure_gpu();
+        if let Some(gpu) = &mut self.gpu.gpu {
+            gpu.params = self.simulation.params;
+            gpu.step_many(steps / 4, 1.0);
+            pollster::block_on(gpu.download(&mut self.simulation))
+                .expect("Watercolor Lab GPU readback failed");
+        } else {
+            self.simulation.step_many(steps / 4, 1.0);
+        }
         self.quarter_steps = (steps % 4) as u8;
+    }
+
+    fn ensure_gpu(&mut self) {
+        if self.gpu.attempted {
+            return;
+        }
+        self.gpu.attempted = true;
+        self.gpu.gpu = pollster::block_on(GpuSimulation::from_state(&self.simulation)).ok();
+    }
+
+    pub fn splat(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>) {
+        self.ensure_gpu();
+        if let Some(gpu) = &mut self.gpu.gpu {
+            gpu.splat(stamps, pigment);
+            for (field, target) in [
+                (0, &mut self.simulation.flow.read),
+                (2, &mut self.simulation.sus_k.read),
+                (3, &mut self.simulation.sus_s.read),
+                (4, &mut self.simulation.sus_p.read),
+            ] {
+                *target = pollster::block_on(gpu.read_field(field))
+                    .expect("Watercolor Lab GPU splat readback failed");
+            }
+        } else {
+            self.simulation.splat(stamps, pigment);
+        }
+    }
+
+    pub fn add_scrub(&mut self, stamps: &[Stamp]) {
+        self.ensure_gpu();
+        if let Some(gpu) = &mut self.gpu.gpu {
+            gpu.add_scrub(stamps);
+            self.simulation.cap.read = pollster::block_on(gpu.read_field(7))
+                .expect("Watercolor Lab GPU scrub readback failed");
+        } else {
+            self.simulation.add_scrub(stamps);
+        }
     }
 
     pub fn validate(&self, width: usize, height: usize) -> Result<(), String> {

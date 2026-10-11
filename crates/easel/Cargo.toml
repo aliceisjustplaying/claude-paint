@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [features]
+brush-sim-5 = ["brush-sim-4", "paint/brush-sim-5"]
 brush-sim-4 = ["brush-sim-3", "paint/brush-sim-4"]
 brush-sim-3 = ["brush-sim-2", "paint/brush-sim-3"]
 brush-sim-2 = ["brush-sim-1", "paint/brush-sim-2"]

@@ -222,6 +222,11 @@ pub(crate) fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
 }
 
 impl Canvas {
+    #[cfg(feature = "brush-sim-5")]
+    pub fn wet_surface_um(&self) -> Vec<f32> {
+        self.wet_surface()
+    }
+
     /// Millimeters per pixel.
     pub fn px_mm(&self) -> f32 {
         self.mm_per_unit / self.f.scale

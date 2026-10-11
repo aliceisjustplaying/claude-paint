@@ -94,7 +94,9 @@ pub use shape::Shape;
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 pub const ENGINE: u32 = 5;
 
-#[cfg(feature = "brush-sim-4")]
+#[cfg(feature = "brush-sim-5")]
+pub const SUPPORTED_ENGINE: u32 = 20;
+#[cfg(all(feature = "brush-sim-4", not(feature = "brush-sim-5")))]
 pub const SUPPORTED_ENGINE: u32 = 17;
 #[cfg(all(feature = "brush-sim-3", not(feature = "brush-sim-4")))]
 pub const SUPPORTED_ENGINE: u32 = 14;

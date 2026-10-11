@@ -16,6 +16,9 @@
 //! (length-prefixed; the caller's key=value lines), then the canvas. If you
 //! add state to `Canvas` or `Wet`, add it here and bump `MAGIC`.
 //!
+//! The reader also accepts version 7 (`PAINTCK7`), the engine-1 layout before
+//! edition numbers: it ends after the hand-time ledger, without an engine word.
+//! New engine-1 writes remain version 8; no historical bytes are rewritten on read.
 //! The format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
 //! (below); files of any other version are refused (re-run to checkpoint
@@ -62,6 +65,7 @@ use crate::wet::LAT;
 use std::io::{self, Read, Write};
 
 const MAGIC: &[u8; 8] = b"PAINTCK8";
+const MAGIC7: &[u8; 8] = b"PAINTCK7";
 /// Engine 3, with the thinner's section (`crate::thinner`).
 const MAGIC9: &[u8; 8] = b"PAINTCK9";
 /// A raw canvas: version 9, then its soak section (`crate::soak`).
@@ -175,13 +179,14 @@ pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
 }
 
-/// The format version (8, 9 or 10) and the header. An engine-3 canvas in a
+/// The format version (7–12) and the header. An engine-3 canvas in a
 /// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
 /// does) is refused here, before anything else is read.
 fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
     let mut m = [0u8; 8];
     r.read_exact(&mut m)?;
     let version = match &m {
+        m if m == MAGIC7 => 7,
         m if m == MAGIC => 8,
         m if m == MAGIC9 => 9,
         m if m == MAGIC10 => 10,
@@ -196,6 +201,9 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
     let mut h = vec![0u8; n];
     r.read_exact(&mut h)?;
     let head = String::from_utf8(h).map_err(|_| bad("checkpoint header is not UTF-8"))?;
+    if version == 7 && head.lines().filter_map(|l| l.strip_prefix("engine=")).any(|v| v.trim() != "1") {
+        return Err(bad("PAINTCK7 is an engine-1 checkpoint"));
+    }
     if version == 8 && head.lines().filter_map(|l| l.strip_prefix("engine=")).any(|v| v.trim().parse::<u32>().is_ok_and(|e| e >= 3)) {
         return Err(bad(OLD_ENGINE3));
     }
@@ -450,9 +458,13 @@ impl Canvas {
             *v = get_u64(r)?;
         }
         c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
-        c.engine = match get_u64(r)? {
-            v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
-            _ => return Err(bad("checkpoint engine version is invalid")),
+        c.engine = if version == 7 {
+            1
+        } else {
+            match get_u64(r)? {
+                v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+                _ => return Err(bad("checkpoint engine version is invalid")),
+            }
         };
         if version >= 11 {
             if c.engine < 4 {
@@ -495,6 +507,9 @@ impl Canvas {
             if r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
+        }
+        if version == 7 && r.read(&mut [0u8; 1])? != 0 {
+            return Err(bad("version-7 checkpoint has trailing data"));
         }
         Ok((c, header))
     }

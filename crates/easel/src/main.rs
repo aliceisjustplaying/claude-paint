@@ -32,6 +32,10 @@ mod frames;
 mod legacy;
 mod look;
 mod save;
+#[cfg(feature = "state-store")]
+mod painting_store;
+#[cfg(all(feature = "replay", feature = "render-snapshot"))]
+mod optical;
 mod palette_look;
 mod session;
 #[cfg(feature = "replay")]
@@ -107,13 +111,13 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
       [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
                       finish a closed session's save (out/easel/<name>/live.ckpt) without a replay
-  easel render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief|museum] [--look-version 1|2] [--look] [--log painting.lua]
+  easel render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|normal|gallery|relief|museum|museum-flat|museum-surface] [--look-version 1|2] [--light az,el] [--look] [--log painting.lua]
                       render saved state without replay or aging (default gallery; --look uses look sizing)
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
 
@@ -133,7 +137,7 @@ fn main() -> ExitCode {
         }
     };
     let Some(cmd) = args.first().cloned() else {
-        println!("{USAGE}");
+        print_usage();
         return ExitCode::SUCCESS;
     };
     let rest = args[1..].to_vec();
@@ -144,6 +148,14 @@ fn main() -> ExitCode {
         "run" => run(&rest),
         #[cfg(feature = "replay")]
         "render-checkpoint" => render_checkpoint(&rest),
+        #[cfg(all(feature = "replay", feature = "state-store"))]
+        "render-state" => render_state(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "snapshot-state" => optical::export(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "render-snapshot" => optical::render(&rest),
+        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+        "snapshot-companions" => optical::companions(&rest),
         #[cfg(all(feature = "replay", feature = "finish"))]
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
@@ -154,7 +166,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "help" | "-h" | "--help" => {
-            println!("{USAGE}");
+            print_usage();
             Ok(())
         }
         "do" | "look" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
@@ -171,6 +183,14 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn print_usage() {
+    println!("{USAGE}");
+    #[cfg(all(feature = "replay", feature = "state-store"))]
+    println!("\n  run … --state-store DIR [--state-budget-mib N]   publish each successful chunk\n  render-state DIR out.png [--mode color|gallery|relief] [--look]   open the committed revision\n  EASEL_STATE_SESSION=<name> opts that live painting into per-chunk state publication");
+    #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+    println!("\n  snapshot-state DIR out.view   export compact optics of the committed revision\n  render-snapshot out.view out.png [--mode color|gallery|relief] [--light az,el,strength] [--crop x0,y0,x1,y1]\n  snapshot-companions out.view CACHE [--gallery-light az,el,strength] [--relief-light az,el,strength] [--crop x0,y0,x1,y1] [--cache-budget-mib N]");
 }
 
 /// The session a command is for: `-s <name>` (taken out of `args`), else
@@ -571,6 +591,10 @@ fn open(args: &[String]) -> Result<(), String> {
             return Ok(());
         }
         if log.contains("easel: fatal") {
+            #[cfg(feature = "state-store")]
+            if !started && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
+                continue;
+            }
             return Err(log);
         }
         if last_progress.elapsed() > Duration::from_secs(1800) {
@@ -636,6 +660,10 @@ struct Server {
     /// canvas, with its own clock: time spent or waited there doesn't pass for the painting.
     /// None until first used.
     scratch: Option<Box<Server>>,
+    #[cfg(feature = "state-store")]
+    committed: Option<painting_store::PaintingStore>,
+    #[cfg(feature = "state-store")]
+    state_failed: bool,
 }
 
 /// The scratch canvas's session beside the session `name`.
@@ -712,6 +740,11 @@ fn serve(args: &[String]) -> Result<(), String> {
         };
         let _ = conn.write_all(reply.as_bytes());
         eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
+        #[cfg(feature = "state-store")]
+        if srv.state_failed {
+            let _ = std::fs::remove_file(&sock);
+            return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
+        }
         if cmd == "close" && r.is_ok() {
             #[cfg(feature = "replay")]
             if let Some(j) = checking.take() {
@@ -828,6 +861,15 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
 /// The session's committed record: the log as the session last wrote it.
 fn witness_path(name: &str) -> PathBuf {
     session_dir(name).join("committed.lua")
+}
+
+#[cfg(feature = "state-store")]
+fn export_journal(path: &Path, source: &str) -> Result<(), String> {
+    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    file.write_all(source.as_bytes()).and_then(|_| file.sync_all()).map_err(|e| e.to_string())?;
+    std::fs::File::open(dir).and_then(|f| f.sync_all()).map_err(|e| e.to_string())
 }
 
 /// Put a session's log aside as `<name>-N.lua` (the first N free) and drop its committed
@@ -962,6 +1004,11 @@ impl Server {
     }
 
     fn validate(&self) -> Result<(), String> {
+        #[cfg(feature = "state-store")]
+        if let Some(store) = &self.committed {
+            if self.state_failed { return Err("session integrity: state publication requires a restart".into()); }
+            store.validate_source(self.written.as_deref().ok_or("session integrity: uninitialized log")?).map_err(|e| format!("state integrity: {e}"))?;
+        }
         validate_log(&self.name, self.written.as_deref().ok_or("session integrity: uninitialized log")?)
     }
 
@@ -973,6 +1020,23 @@ impl Server {
     /// takes the painting's), else the configured box and the name's width.
     fn resume_as(name: String, like: Option<&Session>) -> Result<Self, String> {
         let lp = log_path(&name);
+        #[cfg(feature = "state-store")]
+        let committed = if like.is_none() && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
+            let budget = painting_store::PaintingStore::budget(std::env::var("EASEL_STATE_DISK_MIB").ok().as_deref()).map_err(|e| e.to_string())?;
+            Some(painting_store::PaintingStore::open(session_dir(&name).join("state"), budget, painting_store::PaintingStore::runtime_identity().map_err(|e| e.to_string())?).map_err(|e| format!("state store: {e}"))?)
+        } else { None };
+        #[cfg(feature = "state-store")]
+        if let Some(source) = committed.as_ref().map(|s| s.source()).transpose().map_err(|e| e.to_string())?.flatten() {
+            for path in [&lp, &witness_path(&name)] {
+                match std::fs::read(path) {
+                    Ok(bytes) if !source.as_bytes().starts_with(&bytes) => return Err(format!("state integrity: {} is not an export of the accepted source", path.display())),
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.to_string()),
+                }
+                export_journal(path, &source)?;
+            }
+        }
         let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
         if let Some(t) = &text {
             validate_log(&name, t)?;
@@ -983,8 +1047,13 @@ impl Server {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
             _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
         };
+        #[cfg(feature = "state-store")]
+        let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None };
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None,
+            #[cfg(feature = "state-store")] committed,
+            #[cfg(feature = "state-store")] state_failed: false,
+        };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1002,6 +1071,8 @@ impl Server {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
             }
             println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
+            #[cfg(feature = "state-store")]
+            if let Some(store) = &mut srv.committed { store.publish(&srv.s, &text).map_err(|e| format!("state integrity: {e}"))?; }
         } else {
             srv.save_log()?;
         }
@@ -1013,6 +1084,22 @@ impl Server {
     fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
         let text = self.s.program(&self.name);
+        #[cfg(feature = "state-store")]
+        if self.committed.is_some() {
+            if self.written.is_some() { self.validate()?; }
+            if let Err(e) = self.committed.as_mut().unwrap().publish(&self.s, &text) {
+                self.state_failed = true;
+                return Err(format!("state publication failed: {e}; reopen and inspect the accepted chunk count before retrying"));
+            }
+            self.written = Some(text.clone());
+            for path in [p, self.witness()] {
+                if let Err(e) = export_journal(&path, &text) {
+                    self.state_failed = true;
+                    eprintln!("state store: chunk is committed but journal export needs recovery: {e}");
+                }
+            }
+            return Ok(String::new());
+        }
         let previous = self.written.as_deref().unwrap_or("");
         if self.written.is_some() {
             self.validate()?;
@@ -1366,8 +1453,22 @@ impl Server {
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
                 let (path, light) = save_args(args)?;
                 let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
+                #[cfg(feature = "state-store")]
+                if let Some(store) = &self.committed {
+                    store.protect_output(&p).map_err(|e| e.to_string())?;
+                    if same_file(&log_path(&self.name), &p)? || same_file(&self.witness(), &p)? {
+                        return Err("save output must differ from the painting's journal exports".into());
+                    }
+                }
                 let c = self.s.canvas().ok_or("no canvas yet")?;
                 let version = look::version_of(&flag(args, "--look-version").unwrap_or_else(|| "1".into()))?;
+                #[cfg(feature = "state-store")]
+                if self.committed.is_some() {
+                    painting_store::atomic_output(&p, |part| deliver_lit_version(&c, part, light, version))?;
+                } else {
+                    deliver_lit_version(&c, &p, light, version)?;
+                }
+                #[cfg(not(feature = "state-store"))]
                 deliver_lit_version(&c, &p, light, version)?;
                 Ok(format!("{}\n", p.display()))
             }
@@ -1464,9 +1565,9 @@ fn deliver_seen(c: &Canvas, out: &Path, px: &[paint::Rgb]) -> Result<(), String>
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look-version 1|2] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--light az,el | --gallery] [--look-version 1|2] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
-#[cfg(feature = "replay")]
+#[cfg(any(feature = "replay", feature = "state-store"))]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
     let mut pending: std::collections::VecDeque<_> = absolute.components().map(|c| c.as_os_str().to_os_string()).collect();
@@ -1498,7 +1599,7 @@ fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     Ok(resolved)
 }
 
-#[cfg(feature = "replay")]
+#[cfg(any(feature = "replay", feature = "state-store"))]
 fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     use std::os::unix::fs::MetadataExt;
     let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
@@ -1521,7 +1622,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--look-version" if i + 1 < args.len() => i += 2,
+            #[cfg(feature = "state-store")]
+            "--state-store" | "--state-budget-mib" if i + 1 < args.len() => i += 2,
+            "--out" | "--checkpoint" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--look-version" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1582,6 +1685,33 @@ fn run(args: &[String]) -> Result<(), String> {
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
+    #[cfg(feature = "state-store")]
+    let mut store = match flag(args, "--state-store") {
+        Some(dir) => {
+            let path = PathBuf::from(dir);
+            let resolved = normalized_path(&path).map_err(|e| e.to_string())?;
+            let mut outputs = vec![PathBuf::from(file), out.clone()];
+            for option in ["--state-digest", "--dump-surface", "--checkpoint", "--checkpoint-out"] {
+                if let Some(p) = flag(args, option) { outputs.push(PathBuf::from(p)); }
+            }
+            if args.iter().any(|a| a == "--look") { outputs.push(out.with_extension("look.png")); }
+            for p in outputs {
+                if normalized_path(&p).map_err(|e| e.to_string())?.starts_with(&resolved) { return Err("source and outputs must be outside the painting store".into()); }
+            }
+            for option in ["--dump-state", "--frames-dir"] {
+                if let Some(p) = flag(args, option) {
+                    let p = normalized_path(Path::new(&p)).map_err(|e| e.to_string())?;
+                    if p.starts_with(&resolved) || resolved.starts_with(&p) { return Err(format!("{option} must be separate from the painting store")); }
+                }
+            }
+            let budget = painting_store::PaintingStore::budget(flag(args, "--state-budget-mib").as_deref()).map_err(|e| e.to_string())?;
+            let s = painting_store::PaintingStore::open(path, budget, painting_store::PaintingStore::runtime_identity().map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            if s.current.is_some() { return Err("run --state-store needs an empty store; render-state opens its committed revision without replay".into()); }
+            Some(s)
+        }
+        None if flag(args, "--state-budget-mib").is_some() => return Err("--state-budget-mib needs --state-store".into()),
+        None => None,
+    };
     // the box the log was painted from, whatever this easel's own box is
     let tubes = session::box_for(Some(&text)).map_err(|e| format!("{file}: {e}"))?;
     // hand-time frames (frames.rs): only read the canvas, so the replay is
@@ -1604,6 +1734,8 @@ fn run(args: &[String]) -> Result<(), String> {
     let t0 = Instant::now();
     for (i, c) in chunks.iter().enumerate() {
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
+        #[cfg(feature = "state-store")]
+        if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
         if let Some(f) = digests.as_mut() {
@@ -1668,7 +1800,7 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief|museum|museum-flat|museum-surface] [--look-version 1|2] [--light az,el] [--look] [--log painting.lua]";
+const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|normal|gallery|relief|museum|museum-flat|museum-surface] [--look-version 1|2] [--light az,el] [--look] [--log painting.lua]";
 
 #[cfg(feature = "replay")]
 fn render_checkpoint(args: &[String]) -> Result<(), String> {
@@ -1723,6 +1855,30 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(all(feature = "replay", feature = "state-store"))]
+fn render_state(args: &[String]) -> Result<(), String> {
+    let Some(dir) = args.first().filter(|s| !s.starts_with('-')) else { return Err("render-state <store directory> <out.png> [--mode color|gallery|relief] [--look]".into()) };
+    let Some(out) = args.get(1).filter(|s| !s.starts_with('-')) else { return Err("render-state needs an output PNG".into()) };
+    let resolved = normalized_path(Path::new(dir)).map_err(|e| e.to_string())?;
+    if normalized_path(Path::new(out)).map_err(|e| e.to_string())?.starts_with(resolved) { return Err("render-state output must be outside the store".into()); }
+    let revision = painting_store::ReadRevision::open(PathBuf::from(dir)).map_err(|e| format!("state integrity: {e}"))?;
+    revision.protect_output(Path::new(out)).map_err(|e| e.to_string())?;
+    for pair in args[2..].windows(2) {
+        if pair[0] == "--log" && same_file(Path::new(&pair[1]), Path::new(out))? {
+            return Err("render-state output must differ from the source log".into());
+        }
+    }
+    let checkpoint = revision.checkpoint().map_err(|e| e.to_string())?;
+    let mut render = vec![checkpoint.to_string_lossy().into_owned()];
+    render.extend_from_slice(&args[1..]);
+    painting_store::atomic_output(Path::new(out), |part| {
+        render[1] = part.to_string_lossy().into_owned();
+        render_checkpoint(&render)
+    })?;
+    eprintln!("committed revision {} ({} source bytes)", revision.id, revision.source.len());
+    Ok(())
+}
+
 #[cfg(all(feature = "replay", feature = "finish"))]
 const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief] [--gallery | --light az,el] [--look-version 1|2]
        finish --print-chunk [--coats C] [--no-varnish] [--no-cracks] [--relief]";
@@ -1770,9 +1926,6 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     if !number {
         return Err(format!("--coats takes a number, not '{coats}'"));
     }
-    if !(varnish || cracks || relief) {
-        return Err("nothing to do".into());
-    }
     let chunk = finish::chunk(&coats, varnish, cracks, relief);
     if print_chunk {
         if !files.is_empty() {
@@ -1793,11 +1946,15 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     }
     let restored = t0.elapsed().as_secs_f64();
     let mut s = r.session;
-    let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
-    print!("{}", ran.out);
+    let mut finish_secs = 0.0;
+    if !chunk.is_empty() {
+        let ran = s.run(&chunk).map_err(|e| format!("the finishing chunk failed:\n{e}"))?;
+        print!("{}", ran.out);
+        finish_secs = ran.secs;
+    }
     let c = s.canvas().ok_or("the save holds no canvas")?;
     deliver_lit_version(&c, Path::new(out), light, version)?;
-    eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, ran.secs, t0.elapsed().as_secs_f64());
+    eprintln!("wrote {out} (restored {} chunks in {restored:.1}s, finished in {:.1}s, total {:.1}s)", r.chunks, finish_secs, t0.elapsed().as_secs_f64());
     Ok(())
 }
 

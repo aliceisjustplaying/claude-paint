@@ -65,6 +65,14 @@ fn header(s: &Session, program: &str) -> String {
     h
 }
 
+#[cfg(feature = "state-store")]
+pub fn write_to(s: &Session, program: &str, writer: &mut impl Write) -> std::io::Result<bool> {
+    let st = s.st.borrow();
+    let Some(c) = st.canvas.as_ref() else { return Ok(false) };
+    c.write_state(writer, &header(s, program))?;
+    Ok(true)
+}
+
 /// Write the session's save to `path` (through a temporary file, renamed into place). No
 /// canvas yet: nothing is written and an old save there is removed.
 pub fn write(s: &Session, program: &str, path: &std::path::Path) -> Result<bool, String> {

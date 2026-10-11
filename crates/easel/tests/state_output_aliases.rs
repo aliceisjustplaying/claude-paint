@@ -3,6 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+const CANVAS: &str = r#"canvas{size=100, aspect=1.25, linen=15, seed=7, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
+
 struct Temp(PathBuf);
 
 impl Temp {
@@ -41,7 +43,7 @@ fn store_files(dir: &Path) -> Vec<PathBuf> {
 fn render_state_refuses_every_store_inode_alias_in_native_and_bounded_modes() {
     let temp = Temp::new("render");
     let source = temp.0.join("painting.lua");
-    std::fs::write(&source, "--@ engine 5\n--@ chunk 1\ncanvas{size=100, aspect=1.25}\n").unwrap();
+    std::fs::write(&source, format!("--@ engine 5\n--@ chunk 1\n{CANVAS}\n")).unwrap();
     let dir = temp.0.join("state");
     let png = temp.0.join("initial.png");
     success(temp.command(&["run", source.to_str().unwrap(), "--width", "32", "--state-store", dir.to_str().unwrap(), "--out", png.to_str().unwrap()]));
@@ -69,7 +71,7 @@ fn render_state_refuses_every_store_inode_alias_in_native_and_bounded_modes() {
 fn live_save_refuses_store_inode_aliases_and_reopen_keeps_the_accepted_root() {
     let temp = Temp::new("live");
     success(temp.command(&["open", "sketch-output"]));
-    success(temp.command(&["-s", "sketch-output", "do", "canvas{size=100, aspect=1.25}"]));
+    success(temp.command(&["-s", "sketch-output", "do", CANVAS]));
     let dir = temp.0.join("out/easel/sketch-output/state");
     let pointer = std::fs::read(dir.join("CURRENT")).unwrap();
     for path in store_files(&dir) {

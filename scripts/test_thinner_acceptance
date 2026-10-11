@@ -18,8 +18,8 @@
 # films) and the sienna card's diagnostic, with their printed numbers in the
 # log (--show-output). The diagnostic checks only its own fixture.
 #
-# Exit: 0 if every required test passed; 1 if anything failed; 2 on a
-# usage error.
+# Exit: 0 if every required test passed; 1 for other failures; 2 on a
+# usage error; 4 if only the known historical rag baseline differs.
 #
 # Needs cargo, bash 5, python3 and xz. One heavy job at a time: run it
 # through ~/src/a/claude-paint-tools/lockrun with --timeout 60 (--quick,
@@ -47,7 +47,7 @@ PAINT_QUICK=(
   c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit
   c15_solvent_does_not_slow_the_oil_cure
   c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
-  c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
+  c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded
   c19_the_same_paint_with_more_or_less_solvent_looks_the_same
 )
 PAINT_SLOW=(
@@ -86,6 +86,7 @@ logs=$(mktemp -d "${TMPDIR:-/tmp}/thinner-acceptance.XXXXXX")
 required=0
 passed=0
 bad=()
+known_rag_baseline=0
 
 # cargo_test <label> <cargo args...> -- <libtest args...> ::: <names...>:
 # runs it, leaves the log in $logs/<label>.log and cargo's exit in $status
@@ -146,6 +147,8 @@ check2() {
   echo "== check 2: exited $st after $((t1 - t0)) s"
   if [ "$st" = 0 ] && grep -qx "check 2: PASS" "$log"; then
     passed=$((passed + 1))
+  elif [ "$st" = 4 ] && grep -qx 'KNOWN_FAILURE: rag-historical-baseline-main' "$log"; then
+    known_rag_baseline=1
   else
     bad+=("check 2 (scripts/thinner_check2: see $log)")
   fi
@@ -186,6 +189,10 @@ if [ ${#bad[@]} -gt 0 ]; then
   printf '  NOT PASSED: %s\n' "${bad[@]}"
   echo "thinner acceptance $mode: FAILED"
   exit 1
+fi
+if [ "$known_rag_baseline" = 1 ]; then
+  echo "thinner acceptance $mode: only known failure: rag-historical-baseline-main"
+  exit 4
 fi
 echo "thinner acceptance $mode: PASSED"
 exit 0

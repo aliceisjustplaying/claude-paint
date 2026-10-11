@@ -15,6 +15,7 @@
 # Prints "ok N - ..." or "not ok N - ..." per check and a count; exits 1 on
 # any failure. Everything is removed afterward.
 set -u
+export SCRIPTS_TEST_TIMEOUT_SCALE=1
 S=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/safeguards-test.XXXXXX")
 trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
@@ -104,6 +105,20 @@ print(json.dumps(r, indent=1))' "$1" "$tree" "${3:-pass}" >"$T/forged.json"
   g notes --ref=test-receipts add -f -F "$T/forged.json" "$1" 2>/dev/null
 }
 
+validate_receipt() {
+  receipt "$1" | python3 -c '
+import importlib.machinery, importlib.util, json, sys
+spec = importlib.util.spec_from_loader("mc", importlib.machinery.SourceFileLoader("mc", sys.argv[1] + "/merge_candidate"))
+mc = importlib.util.module_from_spec(spec); spec.loader.exec_module(mc)
+r = json.load(sys.stdin)
+p = mc.receipt_problems(sys.argv[2], sys.argv[3], mc.tree_of(sys.argv[2], sys.argv[3]), r)
+print("\n".join(p))
+sys.exit(bool(p))' "$S" "$DEV" "$1"
+}
+
+OUT=$(python3 "$S/tests/test_timeout_scale.py" 2>&1); RC=$?
+check "shared timeout and receipt scale unit tests pass" rc 0
+
 # ---------------------------------------------------------------- dummy repos
 SEED=$T/seed
 git init -q -b main "$SEED"
@@ -146,6 +161,14 @@ for line in open(lst):
 full = list(steps)
 s = dict(mode="all", phase=ph, verdict="pass", verdict_text="PASS", list=lst, list_sha256=sha(lst),
          runner_sha256=sha(os.path.abspath(__file__)), wall_seconds=0.3, steps=steps)
+if mode.startswith("scaled"):
+    scale = float(os.environ["SCRIPTS_TEST_TIMEOUT_SCALE"])
+    s["timeout_scale"] = scale
+    for step in steps: step["limit"] *= scale
+    if mode == "scaled_forged": s["timeout_scale"] = scale + 1
+    if mode == "scaled_invalid": s["timeout_scale"] = float("nan")
+    if mode == "scaled_missing": del s["timeout_scale"]
+    if mode == "scaled_budget": steps[0]["limit"] += 1
 u = steps[1]
 rc = 0
 mine = lambda: [x for x in s["steps"] if (x["kind"] == "build") == (ph == "build")]
@@ -172,7 +195,7 @@ if mode == "limit": u["limit"] = 999.0
 if mode == "least": u["least"] = 1
 if mode == "least0": steps[2]["least"] = 0
 if mode == "group": steps[2]["group"] = None
-if mode in ("known", "known_unlisted", "known_exit"):
+if mode in ("known", "known_unlisted", "known_exit", "scaled_known"):
     # check 13 (b)'s way: exit 3, NOT ALL GREEN; listed (known), unlisted, or another exit
     steps[2].update(exit=5 if mode == "known_exit" else 3, ok=False, known_failure=True,
                     why="known pre-existing failure: %s" % (steps[2]["known"] or {}).get("text"))
@@ -424,6 +447,37 @@ all_receipts() {
 }
 check "the $(set -- P timeout timeout_check $MODES_FAIL $MODES_BIND $MODES_CO $MODES_PH badfield stuck unfinished slow forge known known_exit G2 LC LU FL N PL; echo $#) concurrent runs each kept their own receipt note (writes serialized, read back)" all_receipts
 
+CS=$(mkc "$M" fake_mode=scaled)
+SCRIPTS_TEST_TIMEOUT_SCALE=4 tc "$CS"
+check "scaled candidate: trusted scale 4, 2400-second phases and scaled step budgets with the raw manifest unchanged" \
+  eval 'rc 0 && verdict_is $CS pass && rtrue $CS "r[\"timeout_scale\"]==4 and r[\"phase_limit_s\"]==2400 and all(e[\"limit\"]==2400 and e[\"summary\"][\"timeout_scale\"]==4 for e in r[\"phases\"]) and [s[\"limit\"] for s in r[\"manifest\"][\"steps\"]]==[600,60,30] and [s[\"limit\"] for s in r[\"phases\"][1][\"summary\"][\"steps\"]]==[240,120]" && cleaned'
+SCRIPTS_TEST_TIMEOUT_SCALE=4 tc "$CS" --timeout 100
+check "scaled candidate: an explicit timeout is raw seconds, not multiplied" \
+  eval 'rc 0 && rtrue $CS "r[\"phase_limit_s\"]==100 and all(e[\"limit\"]==100 for e in r[\"phases\"])" && cleaned'
+check "scaled candidate: receipt validation accepts the recorded scale on another controller host without publishing" validate_receipt "$CS"
+for mode in scaled_forged scaled_invalid scaled_missing scaled_budget; do
+  C=$(mkc "$M" fake_mode="$mode")
+  SCRIPTS_TEST_TIMEOUT_SCALE=4 tc "$C"
+  check "scaled candidate rejects $mode summary before running the check phase" \
+    eval 'rc 1 && verdict_is $C fail && [ "$(phases_ran $C)" = build ] && cleaned'
+done
+CSK=$(mkc "$M" fake_mode=scaled_known "$LIST=$LIST_KNOWN")
+SCRIPTS_TEST_TIMEOUT_SCALE=4 tc "$CSK"
+check "scaled candidate: the listed pre-existing failure stays known_failure and NOT ALL GREEN" \
+  eval 'rc 4 && verdict_is $CSK known_failure && rtrue $CSK "r[\"timeout_scale\"]==4" && has "VERDICT: NOT ALL GREEN" && cleaned'
+for scale in nan inf 0 17 true; do
+  C=$(mkc "$M" invalid_scale="$scale")
+  SCRIPTS_TEST_TIMEOUT_SCALE=$scale tc "$C"
+  check "candidate refuses invalid timeout scale $scale without a receipt or checkout" \
+    eval 'rc 2 && has "SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number" && ! receipt $C >/dev/null && nodir && cleaned'
+done
+for limit in nan inf 2401; do
+  C=$(mkc "$M" invalid_limit="$limit")
+  SCRIPTS_TEST_TIMEOUT_SCALE=4 tc "$C" --timeout "$limit"
+  check "scaled candidate refuses invalid or over-bound phase timeout $limit" \
+    eval 'rc 2 && has "limit is over 0 and at most 2400 s" && ! receipt $C >/dev/null && nodir && cleaned'
+done
+
 # ---------------------------------------------------------------- test_candidate refusals
 refused() { # COMMIT WANT DESCRIPTION [ARGS]
   local c=$1 want=$2 d=$3; shift 3
@@ -570,6 +624,34 @@ check "merge: failed-test receipt refused" eval 'rc 1 && has "verdict is '"'"'fa
 mc "$C_known"
 check "merge: a known_failure receipt refused: NOT ALL GREEN, not mergeable" \
   eval 'rc 1 && has "NOT ALL GREEN: known pre-existing failure (check 13 (b) awaits the decision): not mergeable"'
+mc "$CSK"
+check "merge: a scaled known_failure receipt remains NOT ALL GREEN and not mergeable" \
+  eval 'rc 1 && has "NOT ALL GREEN" && has "not mergeable"'
+FS=$(g commit-tree "$(g rev-parse "$CS^{tree}")" -p "$M" -m "scaled tamper fixture")
+for edit in \
+  'r["timeout_scale"]=True' \
+  'r["timeout_scale"]=float("nan")' \
+  'r["timeout_scale"]=17' \
+  'r["timeout_scale"]=8' \
+  'del r["timeout_scale"]' \
+  'r["phases"][1]["summary"]["timeout_scale"]=8' \
+  'r["phases"][1]["summary"]["timeout_scale"]=True' \
+  'r["phases"][1]["summary"]["timeout_scale"]=float("nan")' \
+  'del r["phases"][1]["summary"]["timeout_scale"]' \
+  'r["phases"][1]["summary"]["steps"][0]["limit"]=241' \
+  'r["phases"][1]["limit"]=2401' \
+  'r["phases"][1]["limit"]=float("inf")' \
+  'r["phase_limit_s"]=True' \
+  'r["phase_limit_s"]=float("nan")' \
+  'del r["phase_limit_s"]' \
+  'r["phase_limit_s"]=2401'; do
+  forge "$FS" "$CS" "$edit"
+  mc "$FS"
+  check "merge: scaled receipt tampering refused: $edit" eval 'rc 1 && has "REFUSED"'
+done
+LEG=$(g commit-tree "$(g rev-parse "$P^{tree}")" -p "$M" -m "legacy scale fixture")
+forge "$LEG" "$P" 'r.pop("timeout_scale", None); [e["summary"].pop("timeout_scale", None) for e in r["phases"]]'
+check "legacy receipt and summaries missing scale still validate at 1 without publishing" validate_receipt "$LEG"
 mc "$C_mutate"
 check "merge: the receipt of a run that edited a tracked file refused (verdict and evidence)" \
   eval 'rc 1 && has "verdict is '"'"'fail'"'"'" && has "checkout evidence: tracked files or the index changed after the test"'

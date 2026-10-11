@@ -143,7 +143,7 @@ OPENING = {
         "and the notes in your studio; don't use reference images, image models or\n"
         "pictures of his work."),
     "hopper": (
-        "Compose and paint one original scene of American city life in the manner\n"
+        "Compose and paint one original night scene of American city life in the manner\n"
         "of Edward Hopper, at the easel, a simulator of oil paint on linen. The\n"
         "subject, setting and composition are yours to invent. Work from knowledge\n"
         "and the notes in your studio; don't use reference images, image models or\n"

@@ -1,0 +1,373 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp==1.30.0"]
+# ///
+
+import ast
+import base64
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import sys
+import tempfile
+import unittest
+from functools import wraps
+from importlib.machinery import SourceFileLoader
+from importlib.util import module_from_spec, spec_from_loader
+from unittest.mock import patch
+from io import StringIO
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+SERVER = Path(__file__).with_name("server.py")
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII="
+FAKE = '''#!{python}
+import base64, json, os, sys
+from pathlib import Path
+root = Path(__file__).resolve().parent.parent
+args = sys.argv[1:]
+with (root / "calls.jsonl").open("a") as f:
+    f.write(json.dumps({{"args": args, "env": dict(os.environ)}}) + "\\n")
+opened = root / "opened"
+command = args[0]
+if command == "open":
+    if (root / "open-fails").exists():
+        print("easel startup failed")
+        sys.exit(1)
+    opened.touch()
+    print("open")
+elif not opened.exists():
+    print("no painting open: easel open")
+    sys.exit(1)
+elif command == "status":
+    print("2 chunks · 2400px · test canvas")
+elif command == "do":
+    text = sys.stdin.read()
+    if text == "fail":
+        print('runtime error: [string "chunk 3"]:1: nope')
+        sys.exit(1)
+    print("day 1, 00:00\\nok · chunk 3 (0.01 s to compute)")
+elif command == "look":
+    if "--mode" in args and args[args.index("--mode") + 1] == "bad":
+        print("look: --mode is invalid")
+        sys.exit(1)
+    count = 3 if "--survey" in args else 1
+    for i in range(count):
+        path = root / "out/easel/painting" / ("look-%04d.png" % i)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(base64.b64decode("{png}"))
+        for name in (".gallery", ".relief"):
+            companion = path.parent / name / path.name
+            companion.parent.mkdir(exist_ok=True)
+            companion.write_bytes(path.read_bytes())
+        print(str(path.relative_to(root)) + " (1x1, 0.01s)")
+elif command == "note":
+    text = sys.stdin.read()
+    path = root / "notes/journal.md"
+    with path.open("a") as f:
+        f.write("day 1, 00:00\\n" + text + "\\n")
+    print("noted")
+elif command == "log":
+    override = root / "log-output.txt"
+    print(override.read_text() if override.exists() else "--@ chunk 1\\ncanvas{{}}\\n--@ chunk 2\\nwait(1)")
+'''
+
+
+def connected(test):
+    @wraps(test)
+    async def run(self):
+        env = dict(os.environ, EASEL_ROOT=str(self.studio), EASEL_SESSION="other", EASEL_BOX="other", PAINTER_MAX_IMAGES="2", PAINTER_MAX_IMAGE_MB="12", RAYON_NUM_THREADS="2")
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER)], env=env)
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as self.session:
+                self.initialized = await self.session.initialize()
+                await test(self)
+    return run
+
+
+class ProtocolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="emcp-")
+        self.studio = Path(self.temp.name)
+        (self.studio / "bin").mkdir()
+        (self.studio / "notes").mkdir()
+        (self.studio / "notes/journal.md").touch()
+        binary = self.studio / "bin/easel"
+        binary.write_text(FAKE.format(python=sys.executable, png=PNG))
+        binary.chmod(0o755)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    async def test_opt_in_recording_preserves_stdio_tools_and_results(self):
+        studio = self.studio / "paint-studio-abcd"
+        studio.mkdir()
+        for name in ("bin", "notes"):
+            (self.studio / name).rename(studio / name)
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(studio), "--sessions-root", str(self.studio / "sessions")])
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                listed = await session.list_tools()
+                self.assertEqual([tool.model_dump(exclude_none=True) for tool in listed.tools], json.loads(SERVER.with_name("tools.json").read_text()))
+                result = await session.call_tool("paint", {"lua": "canvas{}"})
+                self.assertFalse(result.isError)
+                failed = await session.call_tool("paint", {"lua": "fail"})
+                self.assertTrue(failed.isError)
+                look = await session.call_tool("look", {})
+                self.assertEqual(look.content[1].type, "image")
+        events = [json.loads(line) for line in (studio / "out/easel/mcp/session.jsonl").read_text().splitlines()]
+        results = [e["message"] for e in events if e.get("message", {}).get("role") == "toolResult"]
+        self.assertEqual(len(results), 3)
+        self.assertEqual([r["isError"] for r in results], [False, True, False])
+        self.assertEqual(results[2]["content"][1]["data"], look.content[1].data)
+        self.assertEqual(len(list((self.studio / "sessions").glob("*/*.jsonl"))), 1)
+
+    @connected
+    async def test_initialize_and_tool_wording(self):
+        self.assertEqual(self.initialized.serverInfo.name, "easel")
+        listed = await self.session.list_tools()
+        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log"])
+        source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
+        for tool in listed.tools:
+            block = source.split(f'name: "{tool.name}"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
+            description = "".join(ast.literal_eval(s) for s in re.findall(r'"(?:\\.|[^"\\])*"', block))
+            self.assertEqual(tool.description, description)
+        paint = listed.tools[0].inputSchema
+        self.assertEqual(paint["required"], ["lua"])
+        self.assertEqual(set(paint["properties"]), {"lua", "scratch", "new_scratch"})
+
+    @connected
+    async def test_paint_and_bare_environment(self):
+        reply = await self.session.call_tool("paint", {"lua": "print('hello')", "scratch": True, "new_scratch": True})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[0].text, "[scratch canvas]\nday 1, 00:00\nok")
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([call["args"] for call in calls], [["status"], ["open"], ["do", "-", "--scratch", "--new"]])
+        self.assertEqual(calls[-1]["env"]["RAYON_NUM_THREADS"], "2")
+        self.assertNotIn("EASEL_ROOT", calls[-1]["env"])
+        self.assertNotIn("EASEL_SESSION", calls[-1]["env"])
+        self.assertNotIn("EASEL_BOX", calls[-1]["env"])
+
+    @connected
+    async def test_look_inline_and_companions(self):
+        reply = await self.session.call_tool("look", {"mode": "gallery", "grid": 25.123456789, "size": 100.0})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[1].type, "image")
+        self.assertEqual(reply.content[1].mimeType, "image/png")
+        self.assertEqual(base64.b64decode(reply.content[1].data), base64.b64decode(PNG))
+        caption = reply.content[0].text
+        self.assertRegex(caption, r"out/easel/painting/[0-9a-f-]+\.png \(1x1\)")
+        path = self.studio / caption.split(" (", 1)[0]
+        self.assertTrue(path.is_file())
+        for folder in (".gallery", ".relief"):
+            self.assertTrue((path.parent / folder / path.name).is_file())
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1]["args"], ["look", "--mode", "gallery", "--size", "100", "--grid", "25.123456789"])
+
+    @connected
+    async def test_survey_budget_and_remaining_tiles(self):
+        reply = await self.session.call_tool("look", {"survey": True, "mode": "gallery"})
+        self.assertEqual(len(reply.content), 3)
+        self.assertIn("Partial survey: showing tiles 1–2 of 3", reply.content[0].text)
+        self.assertEqual(len(list((self.studio / "out/easel/painting").glob("*.png"))), 3)
+
+    @connected
+    async def test_easel_errors_without_wrapper(self):
+        reply = await self.session.call_tool("paint", {"lua": "fail"})
+        self.assertTrue(reply.isError)
+        self.assertEqual(reply.content[0].text, 'runtime error: [string "chunk"]:1: nope')
+        reply = await self.session.call_tool("look", {"mode": "bad"})
+        self.assertTrue(reply.isError)
+        self.assertEqual(reply.content[0].text, "look: mode is invalid")
+
+    @connected
+    async def test_invalid_combinations_and_compare_confinement(self):
+        for name, arguments, error in (
+            ("paint", {"lua": "", "new_scratch": True}, "paint: new_scratch goes with scratch: true"),
+            ("look", {"palette": True, "size": 0}, "look: palette takes no other option"),
+            ("look", {"survey": True, "compare": "a.png"}, "look: survey and compare are two looks; ask for one"),
+            ("look", {"compare": "../outside.png"}, "look: compare is the path of an earlier look in this studio"),
+        ):
+            reply = await self.session.call_tool(name, arguments)
+            self.assertTrue(reply.isError)
+            self.assertEqual(reply.content[0].text, error)
+        (self.studio / "escape.png").symlink_to(self.studio.parent / "outside.png")
+        reply = await self.session.call_tool("look", {"compare": "escape.png"})
+        self.assertTrue(reply.isError)
+        self.assertFalse((self.studio / "calls.jsonl").exists())
+
+    @connected
+    async def test_compare_file_url_rules(self):
+        for path, expected in (
+            ("file://other-machine/tmp/a.png", f'File URL host must be "localhost" or empty on {sys.platform}'),
+            ("file://localhost:80/tmp/a.png", "Invalid URL"),
+            (f"file://localhost:{self.studio}/look.png", "Invalid URL"),
+            ("file://localhost", "look: compare is the path of an earlier look in this studio"),
+            ("file:///tmp/a%2fb.png", "File URL path must not include encoded / characters"),
+            ("file:///tmp/%zz.png", "URI malformed"),
+            ("file:///tmp/%ff.png", "URI malformed"),
+        ):
+            reply = await self.session.call_tool("look", {"compare": path})
+            self.assertTrue(reply.isError)
+            self.assertEqual(reply.content[0].text, expected)
+        self.assertFalse((self.studio / "calls.jsonl").exists())
+        reply = await self.session.call_tool("look", {"compare": "~root/previous.png"})
+        self.assertFalse(reply.isError)
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1]["args"], ["look", "--compare", str(self.studio.resolve() / "~root/previous.png")])
+
+    @connected
+    async def test_log_tail_counts_utf16_units(self):
+        text = "--@ chunk 1\n" + "print('😀')\n" * 4200 + "x"
+        (self.studio / "log-output.txt").write_text(text)
+        reply = await self.session.call_tool("log", {})
+        self.assertFalse(reply.isError)
+        expected = "(the first 411 characters are left out; read paintings/lua/painting.lua for all of it)\n('😀')\n" + "print('😀')\n" * 4166 + "x"
+        self.assertEqual(reply.content[0].text, expected)
+
+    @connected
+    async def test_log_tail_keeps_transport_valid_at_surrogate_boundary(self):
+        (self.studio / "log-output.txt").write_text("😀" * 25_000 + "x")
+        reply = await self.session.call_tool("log", {})
+        self.assertFalse(reply.isError)
+        self.assertTrue(reply.content[0].text.startswith("(the first 1 characters are left out; read paintings/lua/painting.lua for all of it)\n�😀"))
+
+    @connected
+    async def test_note_revision_status_and_log(self):
+        await self.session.call_tool("note", {"text": "a passage"})
+        reply = await self.session.call_tool("note", {"text": "a new passage", "replaces": "a passage"})
+        self.assertFalse(reply.isError)
+        self.assertIn("a new passage", (self.studio / "notes/journal.md").read_text())
+        revision = json.loads((self.studio / "out/easel/journal-revisions.jsonl").read_text())
+        self.assertEqual(revision["replaced"], "a passage")
+        reply = await self.session.call_tool("status", {"scratch": True})
+        self.assertEqual(reply.content[0].text, "[scratch canvas]\ntest canvas")
+        reply = await self.session.call_tool("log", {"scratch": True})
+        self.assertEqual(reply.content[0].text, "[scratch canvas]\n--@ chunk\ncanvas{}\n--@ chunk\nwait(1)")
+
+    @connected
+    async def test_open_failure_does_not_retry(self):
+        (self.studio / "open-fails").touch()
+        reply = await self.session.call_tool("status", {})
+        self.assertTrue(reply.isError)
+        self.assertEqual(reply.content[0].text, "easel startup failed")
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([call["args"] for call in calls], [["status"], ["open"]])
+
+
+class PreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="emcp-prep-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.repo = self.root / "repo"
+        runtime = self.repo / "harness/easel_mcp"
+        runtime.mkdir(parents=True)
+        for name in ("server.py", "tools.json"):
+            shutil.copy2(SERVER.with_name(name), runtime / name)
+        (self.repo / "scripts").mkdir()
+        script = SERVER.parent.parent.parent / "scripts/prepare_capy_studio"
+        loader = SourceFileLoader("prepare_capy_studio", str(script))
+        self.prepare = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(self.prepare)
+        self.prepare.__file__ = str(self.repo / "scripts/prepare_capy_studio")
+        self.dest = self.root / "studio with spaces"
+        self.brief = self.root / "BRIEF.md"
+        self.original = "# Paint a picture\n\nAn approved opening.\n- The folder /old/studio: this brief, your notes and the easel.\n\nnotes/easel_guide.md; notes/studio_notes.md\n"
+        self.brief.write_text(self.original)
+        self.notes = self.root / "studio_notes.md"
+        self.notes.write_text("Approved observations.\n")
+        self.args = ["prepare_capy_studio", "hopper", str(self.dest), "--brief", str(self.brief), "--studio-notes", str(self.notes)]
+
+    def export(self, command, **options):
+        self.assertEqual(command[:2], [str(self.repo / "scripts/export_r16_studio"), "hopper"])
+        self.assertEqual(options["env"]["R16_BRANCH"], "HEAD")
+        self.assertTrue(Path(options["env"]["TMPDIR"]).is_dir())
+        (self.dest / "bin").mkdir(parents=True)
+        (self.dest / "notes").mkdir()
+        (self.dest / "notes/easel_guide.md").write_text("guide")
+
+    def test_export_registration_and_brief_copy(self):
+        output = StringIO()
+        with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), patch.object(sys, "stdout", output):
+            self.prepare.main()
+        registration = json.loads(output.getvalue())
+        self.assertEqual(registration["command"], "/bin/uv")
+        self.assertEqual(registration["cwd"], str(self.dest))
+        self.assertEqual(registration["env"], {})
+        self.assertEqual(registration["args"], ["run", "--no-project", "--script", str(self.dest / "bin/mcp/server.py"), "--studio", str(self.dest)])
+        self.assertEqual((self.dest / "BRIEF.md").read_text(), self.original.replace("/old/studio", str(self.dest)))
+        self.assertEqual((self.dest / "notes/studio_notes.md").read_bytes(), self.notes.read_bytes())
+        self.assertEqual((self.dest / "bin/mcp/server.py").read_bytes(), SERVER.read_bytes())
+
+    def test_non_house_brief_fails_before_export(self):
+        self.brief.write_text("not a house brief")
+        with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run") as export, patch.object(sys, "stderr", StringIO()), self.assertRaises(SystemExit):
+            self.prepare.main()
+        export.assert_not_called()
+
+    def test_optional_recording_registration(self):
+        shutil.copy2(SERVER.with_name("remote.py"), self.repo / "harness/easel_mcp/remote.py")
+        output = StringIO()
+        sessions = self.root / "sessions"
+        with patch.object(sys, "argv", self.args + ["--sessions-root", str(sessions)]), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), patch.object(sys, "stdout", output):
+            self.prepare.main()
+        registration = json.loads(output.getvalue())
+        self.assertEqual(registration["args"][-2:], ["--sessions-root", str(sessions)])
+        self.assertEqual((self.dest / "bin/mcp/remote.py").read_bytes(), SERVER.with_name("remote.py").read_bytes())
+
+    def test_missing_reading_is_rejected(self):
+        self.brief.write_text(self.original + "notes/missing.md\n")
+        with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), patch.object(sys, "stderr", StringIO()), self.assertRaises(SystemExit):
+            self.prepare.main()
+        self.assertFalse((self.dest / "BRIEF.md").exists())
+
+
+@unittest.skipUnless(os.environ.get("EASEL_MCP_STUDIO"), "set EASEL_MCP_STUDIO to an exported painter studio")
+class RealEaselTests(unittest.IsolatedAsyncioTestCase):
+    async def test_paint_look_and_rollback(self):
+        with tempfile.TemporaryDirectory(prefix="emcp-real-") as temp:
+            studio = Path(temp)
+            shutil.copytree(Path(os.environ["EASEL_MCP_STUDIO"]) / "bin", studio / "bin")
+            (studio / "notes").mkdir()
+            params = StdioServerParameters(command=shutil.which("uv"), args=["run", "--no-project", "--script", str(studio / "bin/mcp/server.py"), "--studio", str(studio)], cwd=str(studio), env=dict(os.environ, RAYON_NUM_THREADS="2"))
+            try:
+                async with stdio_client(params) as (read, write):
+                    async with ClientSession(read, write) as client:
+                        await client.initialize()
+                        reply = await client.call_tool("paint", {"lua": 'local t=tubes(); canvas{size=100,aspect=1.25,linen=15,ground={{pile={{t[1],1}},um=80,apply="knife"}}}'})
+                        self.assertFalse(reply.isError, reply)
+                        reply = await client.call_tool("paint", {"lua": 'local t=tubes(); b=brush("round",4); b:load(pile{{t[#t],1}},0.8); b:stroke({{200,300},{800,320}})'})
+                        self.assertFalse(reply.isError, reply)
+                        reply = await client.call_tool("paint", {"lua": "print(wait(5))"})
+                        self.assertFalse(reply.isError, reply)
+                        look = await client.call_tool("look", {"size": 320})
+                        self.assertFalse(look.isError, look)
+                        image = base64.b64decode(look.content[1].data)
+                        self.assertTrue(image.startswith(b"\x89PNG\r\n\x1a\n"))
+                        before = (studio / "paintings/lua/painting.lua").read_bytes()
+                        error = await client.call_tool("paint", {"lua": 'b:stroke({{100,100},{200,200}}); error("MCP rollback proof")'})
+                        self.assertTrue(error.isError)
+                        self.assertIn("MCP rollback proof", error.content[0].text)
+                        self.assertNotIn('chunk 4', error.content[0].text)
+                        self.assertEqual((studio / "paintings/lua/painting.lua").read_bytes(), before)
+                        after = await client.call_tool("look", {"size": 320})
+                        self.assertEqual(base64.b64decode(after.content[1].data), image)
+                        output = os.environ.get("EASEL_MCP_PROOF")
+                        if output:
+                            Path(output).mkdir(parents=True, exist_ok=True)
+                            (Path(output) / "look.png").write_bytes(image)
+                            (Path(output) / "caption.txt").write_text(look.content[0].text + "\n")
+                            (Path(output) / "painting.lua").write_bytes(before)
+                            (Path(output) / "error.txt").write_text(error.content[0].text + "\n")
+            finally:
+                import subprocess
+                subprocess.run([str(studio / "bin/easel"), "close"], cwd=studio, capture_output=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

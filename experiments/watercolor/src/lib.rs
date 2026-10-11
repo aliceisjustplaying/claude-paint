@@ -231,6 +231,8 @@ pub struct Balance {
 struct Scratch {
     head: Vec<f64>,
     faces: Vec<(usize, usize, bool)>,
+    surface_faces: Vec<(usize, usize, bool)>,
+    surface_active: Vec<bool>,
     transfers: Vec<(usize, usize, f64, usize, bool, f64)>,
     old_front: Vec<bool>,
     outgoing: Vec<f64>,
@@ -248,6 +250,8 @@ impl Scratch {
         Self {
             head: vec![0.0; n],
             faces: Vec::new(),
+            surface_faces: Vec::new(),
+            surface_active: vec![false; n],
             transfers: Vec::new(),
             old_front: vec![false; n],
             outgoing: vec![0.0; n],
@@ -596,6 +600,8 @@ impl Watercolor {
         let Scratch {
             head,
             faces,
+            surface_faces,
+            surface_active,
             transfers,
             old_front,
             outgoing,
@@ -609,9 +615,25 @@ impl Watercolor {
         } = scratch;
         self.faces(faces);
         if surface {
+            surface_faces.clear();
+            surface_active.fill(false);
+            for &(i, j, horizontal) in faces.iter() {
+                if self.water[i] > 0.0 || self.water[j] > 0.0 {
+                    surface_faces.push((i, j, horizontal));
+                    surface_active[i] = true;
+                    surface_active[j] = true;
+                } else if horizontal {
+                    self.flux_x[i] = 0.0;
+                } else {
+                    self.flux_y[i] = 0.0;
+                }
+            }
             old_front.clone_from(&self.wet_front);
             let reach = (0.15 / self.cell_mm).round().max(1.0) as isize;
             for (i, head) in head.iter_mut().enumerate() {
+                if !surface_active[i] {
+                    continue;
+                }
                 let x = (i % self.width) as isize;
                 let y = (i / self.width) as isize;
                 let mut neighbor_wet = 1.0_f64;
@@ -632,7 +654,7 @@ impl Watercolor {
                     - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
             }
             transfers.clear();
-            for &(i, j, horizontal) in faces.iter() {
+            for &(i, j, horizontal) in surface_faces.iter() {
                 if self.capillary[j] / self.paper.capacity[j] > 0.001
                     && old_front[i]
                     && self.water[i] > 0.22
@@ -719,6 +741,9 @@ impl Watercolor {
                 }
             }
             for i in 0..n {
+                if !surface_active[i] {
+                    continue;
+                }
                 self.water[i] = (self.water[i] + delta[i]).max(0.0);
                 for (p, delta) in pigment_delta[i].iter().enumerate() {
                     self.suspended[i][p] = (self.suspended[i][p] + delta).max(0.0);
@@ -727,7 +752,7 @@ impl Watercolor {
             for (p, properties) in PALETTE.iter().enumerate() {
                 moves.clear();
                 out.fill(0.0);
-                for &(i, j, _) in faces.iter() {
+                for &(i, j, _) in surface_faces.iter() {
                     if self.water[i] < 1e-7 || self.water[j] < 1e-7 {
                         continue;
                     }
@@ -762,6 +787,9 @@ impl Watercolor {
                     }
                 }
                 for (i, d) in change.iter().enumerate() {
+                    if !surface_active[i] {
+                        continue;
+                    }
                     self.suspended[i][p] = (self.suspended[i][p] + d).max(0.0);
                 }
             }

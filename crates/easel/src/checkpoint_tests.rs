@@ -107,7 +107,7 @@ fn display_export_versions_are_honored_by_live_save() {
     let name = format!("gloss-save-test-{}", std::process::id());
     let like = Session::replay(64).unwrap();
     let mut server = Server::resume_as(name.clone(), Some(&like)).unwrap();
-    server.serve_cmd("do", &[], "canvas{size=300, aspect=1.25, linen=15, seed=2}").unwrap();
+    server.serve_cmd("do", &[], &program(paint::ENGINE)).unwrap();
     let before = state_digest_line(&server.s, 1, 0.0);
     for (label, version) in [("default", None), ("legacy", Some("1")), ("gloss", Some("2"))] {
         let out = temp.file(&format!("{label}.png"));
@@ -133,7 +133,7 @@ fn display_export_versions_pin_finishing_and_select_optional_gallery_light() {
     let temp = Temp::new("finish-versions");
     let source = temp.file("painting.lua");
     let state = temp.file("painting.ckpt");
-    std::fs::write(&source, "--@ engine 5\n--@ chunk 1\ncanvas{size=300, aspect=1.25, linen=15, seed=2}\n").unwrap();
+    std::fs::write(&source, program(paint::ENGINE)).unwrap();
     run(&[source, "--width".into(), "64".into(), "--out".into(), temp.file("color.png"), "--checkpoint-out".into(), state.clone()]).unwrap();
     let source_bytes = std::fs::read(&state).unwrap();
     for lit in [false, true] {

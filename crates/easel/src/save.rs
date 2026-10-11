@@ -65,6 +65,14 @@ fn header(s: &Session, program: &str) -> String {
     h
 }
 
+#[cfg(feature = "state-store")]
+pub fn write_to(s: &Session, program: &str, writer: &mut impl Write) -> std::io::Result<bool> {
+    let st = s.st.borrow();
+    let Some(c) = st.canvas.as_ref() else { return Ok(false) };
+    c.write_state(writer, &header(s, program))?;
+    Ok(true)
+}
+
 /// Write the session's save to `path` (through a temporary file, renamed into place). No
 /// canvas yet: nothing is written and an old save there is removed.
 pub fn write(s: &Session, program: &str, path: &std::path::Path) -> Result<bool, String> {
@@ -73,16 +81,38 @@ pub fn write(s: &Session, program: &str, path: &std::path::Path) -> Result<bool,
         let _ = std::fs::remove_file(path);
         return Ok(false);
     };
-    let part = path.with_extension("ckpt.part");
-    let f = std::fs::File::create(&part).map_err(|e| format!("{}: {e}", part.display()))?;
-    let mut w = std::io::BufWriter::with_capacity(1 << 20, f);
-    let head = header(s, program);
-    c.write_state(&mut w, &head)
-        .and_then(|_| w.flush())
-        .and_then(|_| w.get_ref().sync_all())
-        .map_err(|e| format!("{}: {e}", part.display()))?;
-    drop(w);
-    std::fs::rename(&part, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+    let filename = path.file_name().ok_or_else(|| format!("{}: save needs a filename", path.display()))?;
+    let mut opened = None;
+    for _ in 0..128 {
+        let serial = NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut name = std::ffi::OsString::from(".");
+        name.push(filename);
+        name.push(format!(".{}.{serial}.part", std::process::id()));
+        let part = dir.join(name);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&part) {
+            Ok(f) => {
+                opened = Some((part, f));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("{}: {e}", part.display())),
+        }
+    }
+    let (part, f) = opened.ok_or_else(|| format!("{}: couldn't create an exclusive save temporary file", path.display()))?;
+    let result = (|| {
+        let mut w = std::io::BufWriter::with_capacity(1 << 20, f);
+        c.write_state(&mut w, &header(s, program))?;
+        w.flush()?;
+        w.get_ref().sync_all()?;
+        drop(w);
+        std::fs::rename(&part, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    result.map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(true)
 }
 
@@ -119,8 +149,17 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     use crate::session::{BOX_MARK, ENGINE_MARK};
     use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut r = std::io::BufReader::with_capacity(1 << 20, f);
+    let input: Box<dyn std::io::Read> = if path.extension().is_some_and(|e| e == "zst") {
+        Box::new(zstd::stream::read::Decoder::new(f).map_err(|e| format!("{}: {e}", path.display()))?)
+    } else {
+        Box::new(f)
+    };
+    let mut r = std::io::BufReader::with_capacity(1 << 20, input);
     let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut extra = [0];
+    if std::io::Read::read(&mut r, &mut extra).map_err(|e| format!("{}: {e}", path.display()))? != 0 {
+        return Err(format!("{}: trailing data after the canvas", path.display()));
+    }
     let mut lines = head.lines();
     if lines.next() != Some(MAGIC) {
         return Err(format!("{}: not an easel save (its header doesn't start {MAGIC:?})", path.display()));

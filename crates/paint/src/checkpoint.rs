@@ -477,7 +477,7 @@ impl Canvas {
         }
         c.tally = crate::tally::Tally::from_words(words).ok_or_else(|| bad("checkpoint hand-time ledger is invalid"))?;
         c.engine = match get_u64(r)? {
-            v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+            v if (1..=crate::SUPPORTED_ENGINE as u64).contains(&v) => v as u32,
             _ => return Err(bad("checkpoint engine version is invalid")),
         };
         if version >= 11 {

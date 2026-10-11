@@ -5,6 +5,8 @@ edition = "2024"
 
 [features]
 experimental-panel = []
+brush-sim-2 = ["brush-sim-1"]
+brush-sim-1 = []
 # `tally::hand_hook`: a callback after each slice of hand time goes on the
 # clock (easel's replay build uses it for hand-time frames). Off by default,
 # so the painter build has no hook at all.

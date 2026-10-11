@@ -32,6 +32,8 @@ mod frames;
 mod legacy;
 mod look;
 mod save;
+#[cfg(feature = "state-store")]
+mod painting_store;
 mod palette_look;
 mod session;
 #[cfg(feature = "replay")]
@@ -144,6 +146,8 @@ fn main() -> ExitCode {
         "run" => run(&rest),
         #[cfg(feature = "replay")]
         "render-checkpoint" => render_checkpoint(&rest),
+        #[cfg(all(feature = "replay", feature = "state-store"))]
+        "render-state" => render_state(&rest),
         #[cfg(all(feature = "replay", feature = "finish"))]
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
@@ -637,6 +641,10 @@ struct Server {
     /// canvas, with its own clock: time spent or waited there doesn't pass for the painting.
     /// None until first used.
     scratch: Option<Box<Server>>,
+    #[cfg(feature = "state-store")]
+    committed: Option<painting_store::PaintingStore>,
+    #[cfg(feature = "state-store")]
+    state_failed: bool,
 }
 
 /// The scratch canvas's session beside the session `name`.
@@ -713,6 +721,11 @@ fn serve(args: &[String]) -> Result<(), String> {
         };
         let _ = conn.write_all(reply.as_bytes());
         eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
+        #[cfg(feature = "state-store")]
+        if srv.state_failed {
+            let _ = std::fs::remove_file(&sock);
+            return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
+        }
         if cmd == "close" && r.is_ok() {
             #[cfg(feature = "replay")]
             if let Some(j) = checking.take() {
@@ -963,6 +976,11 @@ impl Server {
     }
 
     fn validate(&self) -> Result<(), String> {
+        #[cfg(feature = "state-store")]
+        if let Some(store) = &self.committed {
+            if self.state_failed { return Err("session integrity: state publication requires a restart".into()); }
+            store.validate_source(self.written.as_deref().ok_or("session integrity: uninitialized log")?).map_err(|e| format!("state integrity: {e}"))?;
+        }
         validate_log(&self.name, self.written.as_deref().ok_or("session integrity: uninitialized log")?)
     }
 
@@ -974,6 +992,23 @@ impl Server {
     /// takes the painting's), else the configured box and the name's width.
     fn resume_as(name: String, like: Option<&Session>) -> Result<Self, String> {
         let lp = log_path(&name);
+        #[cfg(feature = "state-store")]
+        let committed = if like.is_none() && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
+            let budget = painting_store::PaintingStore::budget(std::env::var("EASEL_STATE_DISK_MIB").ok().as_deref()).map_err(|e| e.to_string())?;
+            Some(painting_store::PaintingStore::open(session_dir(&name).join("state"), budget, painting_store::PaintingStore::runtime_identity().map_err(|e| e.to_string())?).map_err(|e| format!("state store: {e}"))?)
+        } else { None };
+        #[cfg(feature = "state-store")]
+        if let Some(source) = committed.as_ref().map(|s| s.source()).transpose().map_err(|e| e.to_string())?.flatten() {
+            for path in [&lp, &witness_path(&name)] {
+                match std::fs::read(path) {
+                    Ok(bytes) if !source.as_bytes().starts_with(&bytes) => return Err(format!("state integrity: {} is not an export of the accepted source", path.display())),
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.to_string()),
+                }
+                export_journal(path, &source)?;
+            }
+        }
         let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
         if let Some(t) = &text {
             validate_log(&name, t)?;
@@ -984,8 +1019,13 @@ impl Server {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
             _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
         };
+        #[cfg(feature = "state-store")]
+        let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None };
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None,
+            #[cfg(feature = "state-store")] committed,
+            #[cfg(feature = "state-store")] state_failed: false,
+        };
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1003,6 +1043,8 @@ impl Server {
                 return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
             }
             println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
+            #[cfg(feature = "state-store")]
+            if let Some(store) = &mut srv.committed { store.publish(&srv.s, &text).map_err(|e| format!("state integrity: {e}"))?; }
         } else {
             srv.save_log()?;
         }
@@ -1014,6 +1056,22 @@ impl Server {
     fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
         let text = self.s.program(&self.name);
+        #[cfg(feature = "state-store")]
+        if self.committed.is_some() {
+            if self.written.is_some() { self.validate()?; }
+            if let Err(e) = self.committed.as_mut().unwrap().publish(&self.s, &text) {
+                self.state_failed = true;
+                return Err(format!("state publication failed: {e}; reopen and inspect the accepted chunk count before retrying"));
+            }
+            self.written = Some(text.clone());
+            for path in [p, self.witness()] {
+                if let Err(e) = export_journal(&path, &text) {
+                    self.state_failed = true;
+                    eprintln!("state store: chunk is committed but journal export needs recovery: {e}");
+                }
+            }
+            return Ok(String::new());
+        }
         let previous = self.written.as_deref().unwrap_or("");
         if self.written.is_some() {
             self.validate()?;
@@ -1370,6 +1428,8 @@ impl Server {
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
                 let (path, light) = save_args(args)?;
                 let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
+                #[cfg(feature = "state-store")]
+                if let Some(store) = &self.committed { store.protect_output(&p).map_err(|e| e.to_string())?; }
                 let c = self.s.canvas().ok_or("no canvas yet")?;
                 deliver_lit(&c, &p, light)?;
                 Ok(format!("{}\n", p.display()))
@@ -1455,7 +1515,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 #[cfg(feature = "replay")]
 const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
-#[cfg(feature = "replay")]
+#[cfg(any(feature = "replay", feature = "state-store"))]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
     let mut pending: std::collections::VecDeque<_> = absolute.components().map(|c| c.as_os_str().to_os_string()).collect();

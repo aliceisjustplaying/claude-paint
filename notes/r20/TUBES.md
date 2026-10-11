@@ -405,6 +405,26 @@ in this core-and-early-study box; manganese violet has no current tube, and
 a mixed blue/lake violet remains the declared approximation in the method
 note. No other box or tube values change.
 
+## Cézanne (2026-10-10)
+
+The `cezanne` box (`box-cezanne`, export profile `cezanne`) follows
+`notes/research/cezanne_materials.md` §3 [BUT; NG; AIC22]. Its exact eleven
+tubes are lead white, chrome yellow, vermilion, rose madder, yellow ochre,
+red earth, bone black, cobalt blue, ultramarine blue, viridian and emerald
+green. All records and pigment values come unchanged from the catalog.
+
+This is a practical cross-period oil-study selection, not an exhaustive
+palette for every painting. Rose madder is the existing red-lake proxy;
+yellow ochre represents yellow iron oxide, and bone black represents the
+documented carbon/bone blacks without claiming a precise grade in each oil.
+Ultramarine blue is the catalog's synthetic ultramarine. Emerald green and
+viridian remain distinct. Later cobalt prominence does not establish a
+first-use date; late chrome-yellow evidence does not support a universal
+cutoff. The separate watercolour findings are not treated as oil evidence.
+The researcher's source handoff is preserved as `notes/research/cezanne_materials_full.md`
+for reference only. It names another painter and lists his subject range, so studios never receive it.
+No other box, tube values or engine behavior changes.
+
 ## Ordering
 
 A box's tubes are listed roughly by hue (whites, yellows, oranges and

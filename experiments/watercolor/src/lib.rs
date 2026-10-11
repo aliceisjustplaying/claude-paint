@@ -244,6 +244,7 @@ struct Scratch {
     change: Vec<f64>,
     cap_in: Vec<f64>,
     edge_water: Vec<f64>,
+    wet_edge: Vec<f64>,
 }
 
 impl Scratch {
@@ -270,6 +271,7 @@ impl Scratch {
             change: vec![0.0; n],
             cap_in: vec![0.0; n],
             edge_water: vec![0.0; n],
+            wet_edge: vec![0.0; n],
         }
     }
 }
@@ -621,6 +623,7 @@ impl Watercolor {
             change,
             cap_in,
             edge_water,
+            wet_edge,
         } = scratch;
         self.faces(faces);
         if surface {
@@ -645,36 +648,39 @@ impl Watercolor {
                 }
                 let x = (i % self.width) as isize;
                 let y = (i / self.width) as isize;
-                let mut neighbor_wet = 1.0_f64;
+                let mut edge = 0.0;
                 for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
                     let xx = x + dx;
                     let yy = y + dy;
                     if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
                         let j = yy as usize * self.width + xx as usize;
-                        neighbor_wet = neighbor_wet.min(self.active.coverage[j]);
+                        let open = if old_front[j] {
+                            1.0
+                        } else {
+                            (self.capillary[j] / self.paper.capacity[j] / 0.35).clamp(0.0, 1.0)
+                        };
+                        edge += 0.25 * (1.0 - open);
                     }
                 }
-                let pin = if old_front[i] {
-                    1.0 - neighbor_wet
-                } else {
-                    0.0
-                };
+                wet_edge[i] = if old_front[i] { edge } else { 0.0 };
+                let saturation = self.capillary[i] / self.paper.capacity[i];
+                let pin = wet_edge[i] * (1.0 - saturation).powi(2) * (0.35 + self.paper.sizing[i]);
                 *head = self.water[i] + 0.025 * wet_height[i]
-                    - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
+                    - 0.20 * pin * 0.02 / (self.water[i] + 0.02);
             }
             transfers.clear();
             for &(i, j, horizontal) in surface_faces.iter() {
-                if self.capillary[j] / self.paper.capacity[j] > 0.001
-                    && old_front[i]
-                    && self.water[i] > 0.22
-                {
-                    self.wet_front[j] = true;
-                }
-                if self.capillary[i] / self.paper.capacity[i] > 0.001
-                    && old_front[j]
-                    && self.water[j] > 0.22
-                {
-                    self.wet_front[i] = true;
+                for (from, to) in [(i, j), (j, i)] {
+                    if old_front[from] && !old_front[to] {
+                        let saturation = self.capillary[to] / self.paper.capacity[to];
+                        let threshold =
+                            (0.075 + 0.10 * self.paper.sizing[to] + 0.04 * (wet_height[to] - 0.5))
+                                * (1.0 - saturation).powi(3)
+                                + 0.012;
+                        if self.water[from] > threshold {
+                            self.wet_front[to] = true;
+                        }
+                    }
                 }
                 let previous = if horizontal {
                     self.flux_x[i]
@@ -767,10 +773,18 @@ impl Watercolor {
                     }
                     let ci = self.suspended[i][p] / self.water[i];
                     let cj = self.suspended[j][p] / self.water[j];
+                    let contrast = (ci - cj).abs() / (ci + cj + 1e-6);
+                    let interior = (1.0 - wet_edge[i].max(wet_edge[j]) * 4.0).max(0.0);
+                    let mixing = 3.0
+                        * contrast.powi(2)
+                        * interior
+                        * (1.0 - 0.5 * (self.paper.sizing[i] + self.paper.sizing[j]));
                     let diff = dt
                         * (CELL_MM / self.cell_mm).powi(2)
                         * self.water[i].min(self.water[j])
-                        * (0.18 + 0.45 * (1.0 - properties.granulation))
+                        * (0.18
+                            + 0.45 * (1.0 - properties.granulation)
+                            + mixing * (1.0 - properties.granulation * 0.7))
                         * (ci - cj);
                     let (from, to, m) = if diff >= 0.0 {
                         (i, j, diff)
@@ -859,7 +873,8 @@ impl Watercolor {
                 } else {
                     let j = ny as usize * self.width + nx as usize;
                     edge += if !old_front[j] {
-                        0.25
+                        0.25 * (1.0 - self.capillary[j] / self.paper.capacity[j] / 0.35)
+                            .clamp(0.0, 1.0)
                     } else {
                         0.25 * (1.0 - edge_water[j] / edge_water[i].max(1e-30)).clamp(0.0, 1.0)
                     };
@@ -868,7 +883,7 @@ impl Watercolor {
             let evap = (dt
                 * 0.0035
                 * (0.75 + 0.5 * self.paper.sizing[i])
-                * (1.0 + edge * 16.0 * (self.water[i] / 0.004).clamp(0.0, 1.0)))
+                * (1.0 + edge * 4.0 * (self.water[i] / 0.004).clamp(0.0, 1.0)))
             .min(self.water[i]);
             self.water[i] -= evap;
             let cap_evap = (dt

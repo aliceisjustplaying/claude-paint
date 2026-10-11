@@ -36,9 +36,29 @@ def tool_words(text):
 def studio_path(studio, value):
     value = re.sub(r"[\u00a0\u2000-\u200a\u202f\u205f\u3000]", " ", value)
     value = value.removeprefix("@")
-    if value.startswith("file://"):
-        value = unquote(urlparse(value).path)
-    path = (studio / Path(value).expanduser()).resolve()
+    if value == "~":
+        value = str(Path.home())
+    elif value.startswith("~/"):
+        value = str(Path.home() / value[2:])
+    elif value.startswith("file://"):
+        try:
+            url = urlparse(value)
+            if url.username is not None or url.password is not None or url.port is not None:
+                raise ValueError("Invalid URL")
+            host = url.hostname
+        except ValueError:
+            raise ValueError("Invalid URL") from None
+        if host not in (None, "localhost"):
+            raise ValueError(f'File URL host must be "localhost" or empty on {sys.platform}')
+        if re.search(r"%2f", url.path, re.IGNORECASE):
+            raise ValueError("File URL path must not include encoded / characters")
+        if re.search(r"%(?![\da-fA-F]{2})", url.path):
+            raise ValueError("URI malformed")
+        try:
+            value = unquote(url.path, errors="strict")
+        except UnicodeDecodeError:
+            raise ValueError("URI malformed") from None
+    path = (studio / value).resolve()
     if not path.is_relative_to(studio):
         return None
     return path
@@ -242,9 +262,10 @@ class Easel:
             said = tag + re.sub(r"^\d+px · ", "", re.sub(r"^\d+ chunks? · ", "", said))
         elif name == "log":
             said = re.sub(r"^--@ chunk \d+[ \t]*$", "--@ chunk", await self.at(["log", *on]), flags=re.MULTILINE)
-            if len(said) > 50_000:
+            units = said.encode("utf-16-le", errors="surrogatepass")
+            if len(units) > 100_000:
                 whole = "paintings/lua/scratch.lua" if scratch else "paintings/lua/painting.lua"
-                said = f"(the first {len(said) - 50_000} characters are left out; read {whole} for all of it)\n" + said[-50_000:]
+                said = f"(the first {len(units) // 2 - 50_000} characters are left out; read {whole} for all of it)\n" + units[-100_000:].decode("utf-16-le", errors="replace")
             said = tag + said
         else:
             raise ValueError(f"Unknown tool: {name}")

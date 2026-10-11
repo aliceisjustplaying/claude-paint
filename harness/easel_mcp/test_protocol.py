@@ -71,7 +71,8 @@ elif command == "note":
         f.write("day 1, 00:00\\n" + text + "\\n")
     print("noted")
 elif command == "log":
-    print("--@ chunk 1\\ncanvas{{}}\\n--@ chunk 2\\nwait(1)")
+    override = root / "log-output.txt"
+    print(override.read_text() if override.exists() else "--@ chunk 1\\ncanvas{{}}\\n--@ chunk 2\\nwait(1)")
 '''
 
 
@@ -176,6 +177,40 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((self.studio / "calls.jsonl").exists())
 
     @connected
+    async def test_compare_file_url_rules(self):
+        for path, expected in (
+            ("file://other-machine/tmp/a.png", f'File URL host must be "localhost" or empty on {sys.platform}'),
+            ("file://localhost:80/tmp/a.png", "Invalid URL"),
+            ("file:///tmp/a%2fb.png", "File URL path must not include encoded / characters"),
+            ("file:///tmp/%zz.png", "URI malformed"),
+            ("file:///tmp/%ff.png", "URI malformed"),
+        ):
+            reply = await self.session.call_tool("look", {"compare": path})
+            self.assertTrue(reply.isError)
+            self.assertEqual(reply.content[0].text, expected)
+        self.assertFalse((self.studio / "calls.jsonl").exists())
+        reply = await self.session.call_tool("look", {"compare": "~root/previous.png"})
+        self.assertFalse(reply.isError)
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1]["args"], ["look", "--compare", str(self.studio.resolve() / "~root/previous.png")])
+
+    @connected
+    async def test_log_tail_counts_utf16_units(self):
+        text = "--@ chunk 1\n" + "print('😀')\n" * 4200 + "x"
+        (self.studio / "log-output.txt").write_text(text)
+        reply = await self.session.call_tool("log", {})
+        self.assertFalse(reply.isError)
+        expected = "(the first 411 characters are left out; read paintings/lua/painting.lua for all of it)\n('😀')\n" + "print('😀')\n" * 4166 + "x"
+        self.assertEqual(reply.content[0].text, expected)
+
+    @connected
+    async def test_log_tail_keeps_transport_valid_at_surrogate_boundary(self):
+        (self.studio / "log-output.txt").write_text("😀" * 25_000 + "x")
+        reply = await self.session.call_tool("log", {})
+        self.assertFalse(reply.isError)
+        self.assertTrue(reply.content[0].text.startswith("(the first 1 characters are left out; read paintings/lua/painting.lua for all of it)\n�😀"))
+
+    @connected
     async def test_note_revision_status_and_log(self):
         await self.session.call_tool("note", {"text": "a passage"})
         reply = await self.session.call_tool("note", {"text": "a new passage", "replaces": "a passage"})
@@ -202,7 +237,7 @@ class PreparationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="emcp-prep-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.repo = self.root / "repo"
         runtime = self.repo / "harness/easel_mcp"
         runtime.mkdir(parents=True)

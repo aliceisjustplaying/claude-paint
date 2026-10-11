@@ -156,3 +156,11 @@ fn look_without_arguments_uses_color_and_keeps_material_unchanged() {
     );
     fs::remove_dir_all(p).unwrap();
 }
+
+#[test]
+fn balance_distinguishes_peak_depth_from_surface_volume() {
+    let p = root();
+    let state = studio::run(&p, "paper{size=3,aspect=1}; b=brush{name='b'}; b:load{water=1}; b:wash{x=0.3,y=0.3,width=2,height=2}; local q=balance(); assert(math.abs(q.max_surface_depth_mm-0.12)<1e-12); assert(math.abs(q.surface_water_mm3-0.48)<1e-10); assert(clock()==0)").unwrap();
+    state.check_balance().unwrap();
+    fs::remove_dir_all(p).unwrap();
+}

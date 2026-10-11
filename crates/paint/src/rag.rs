@@ -39,6 +39,9 @@ use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::tally::{Tally, pace as hand};
 
+#[path = "rag_transport.rs"]
+pub mod transport;
+
 /// Hand time of a rag. [E]: estimates.
 pub mod pace {
     /// How fast a pad pressed into wet paint is dragged (mm/s): slower than
@@ -237,7 +240,7 @@ struct Seg {
 /// 1 dipped well, as of `wet_at`; refolding preserves this dampness, and
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Rag {
     pub width: f32,
     pub load: f32,
@@ -256,12 +259,24 @@ pub struct Rag {
     /// wipe or blot to the next until it soaks in; a refold turns out a
     /// face without any.
     pub mobile: Mobile,
+    pub transport: Option<transport::Cloth>,
+}
+
+impl std::fmt::Debug for Rag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("Rag");
+        d.field("width", &self.width).field("load", &self.load).field("soaked", &self.soaked).field("damp", &self.damp).field("wet_at", &self.wet_at).field("fold", &self.fold).field("seed", &self.seed).field("solvent_mm3", &self.solvent_mm3).field("mobile", &self.mobile);
+        if let Some(cloth) = &self.transport {
+            d.field("transport", cloth);
+        }
+        d.finish()
+    }
 }
 
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default() }
+        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default(), transport: None }
     }
 
     /// Turn a cleaner face outward, retaining the cloth's dampness.
@@ -269,6 +284,10 @@ impl Rag {
     /// soaked through the whole cloth so far (`soaked`) leaves it. Counts
     /// the hand time in `t`.
     pub fn refold(&mut self, t: &mut Tally) {
+        if self.transport.is_some() {
+            self.transport_refold(t);
+            return;
+        }
         self.fold = self.fold.wrapping_add(1);
         self.load = self.soaked.clamp(0.0, 1.0);
         // (what was wet at the old face's surface is folded inside, in
@@ -283,6 +302,10 @@ impl Rag {
     /// until the spirits evaporate (`evaporate`). Counts
     /// the hand time in `t`.
     pub fn dip(&mut self, amount: f32, now_min: f64, t: &mut Tally) {
+        if self.transport.is_some() {
+            self.transport_dip(amount, now_min, t);
+            return;
+        }
         self.evaporate(now_min + pace::DIP / 60.0);
         self.damp = self.damp.max(amount.clamp(0.0, 1.0));
         t.secs += pace::DIP;
@@ -291,6 +314,11 @@ impl Rag {
     /// The spirits in the face in use evaporated up to `now_min` minutes of
     /// painting time (`Canvas::now_min`): `DAMP_HALF_MIN`.
     pub fn evaporate(&mut self, now_min: f64) {
+        if let Some(cloth) = &mut self.transport {
+            cloth.sync(now_min, cloth.at_hand_secs);
+            self.transport_summary();
+            return;
+        }
         let dt = now_min - self.wet_at;
         if dt > 0.0 && self.damp > 0.0 {
             self.damp = (self.damp as f64 * (-dt * std::f64::consts::LN_2 / DAMP_HALF_MIN).exp()) as f32;
@@ -744,6 +772,9 @@ impl Canvas {
         if pts.is_empty() {
             return 0.0;
         }
+        if rag.transport.is_some() {
+            self.check_rag_transport(rag, pts, pressure);
+        }
         let pr = |t: f32| -> f32 {
             match pressure.len() {
                 0 => 0.5,
@@ -892,6 +923,9 @@ impl Canvas {
         let touch = Touch { secs: sl * mmu / pace::RAG_MM_S as f32, slip_mm: sl * mmu };
         // the face's mobile paint from before, soaked in the meantime
         let mut pool = self.rag_pool(rag, (len * mmu) as f64 / pace::RAG_MM_S);
+        if let Some(cloth) = &mut rag.transport {
+            cloth.sync(self.now_min() - (len * mmu) as f64 / pace::RAG_MM_S / 60.0 * if cloth.hand_time { 1.0 } else { 0.0 }, self.tally.secs - (len * mmu) as f64 / pace::RAG_MM_S);
+        }
         let mut total = 0.0;
         let mut first = 0usize;
         let mut pieces: Vec<Seg> = Vec::with_capacity(4);
@@ -939,11 +973,20 @@ impl Canvas {
                 bbox = (bbox.0.min(q.a.0.min(ex) - r - 1.0), bbox.1.min(q.a.1.min(ey) - r - 1.0), bbox.2.max(q.a.0.max(ex) + r + 1.0), bbox.3.max(q.a.1.max(ey) + r + 1.0));
             }
             let pc = &pieces;
-            total += self.rag_contact(rag, bbox, p, touch, Some(&mut pool), |x, y| pad3(pc, x, y, r, len, p, mmu, cs));
+            if rag.transport.is_some() {
+                let center = pieces.iter().fold((0.0, 0.0), |(x, y), q| (x + (q.a.0 + 0.5 * q.t.0 * q.l) * q.l / sl, y + (q.a.1 + 0.5 * q.t.1 * q.l) * q.l / sl));
+                total += self.rag_transport_contact(rag, bbox, p, touch, center, cs, |x, y| pad3(pc, x, y, r, len, p, mmu, cs));
+            } else {
+                total += self.rag_contact(rag, bbox, p, touch, Some(&mut pool), |x, y| pad3(pc, x, y, r, len, p, mmu, cs));
+            }
         }
         // what is still at the cloth's surface goes with the face as the
         // pad lifts off (it is in `load` already)
-        self.rag_keep(rag, &pool);
+        if rag.transport.is_some() {
+            rag.transport_summary();
+        } else {
+            self.rag_keep(rag, &pool);
+        }
         total
     }
 
@@ -951,6 +994,9 @@ impl Canvas {
     /// patch of contact about the pad's width. Counts the hand time; returns
     /// the volume lifted (mm³).
     pub fn rag_blot(&mut self, rag: &mut Rag, x: f32, y: f32, pressure: f32, seed: u64) -> f64 {
+        if rag.transport.is_some() {
+            self.check_rag_transport(rag, &[(x, y)], &[pressure]);
+        }
         self.tally.rag_blot();
         let cs = rag.cloth_seed(seed);
         let mmu = self.mm_per_unit;
@@ -965,7 +1011,7 @@ impl Canvas {
         // is pressed, and what it lifts joins it
         let dwell = if e3 { touch.secs / pace::BLOT_PRESS as f32 } else { 1.0 };
         let mut pool = if e3 { Some(self.rag_pool(rag, pace::BLOT_PRESS)) } else { None };
-        let got = self.rag_contact(rag, bbox, pressure, touch, pool.as_mut(), |px, py| {
+        let expo = |px: f32, py: f32| {
             let (qx, qy) = (px - x, py - y);
             let d = (qx * qx + qy * qy).sqrt();
             // an irregular outline: the bunch is lumpier than a disc
@@ -979,8 +1025,16 @@ impl Canvas {
             // crumpled: creases both ways
             let c = if e3 { cloth3(u * mmu, v * mmu * (SHIFT_MM / CREASE_MM), cs, pressure) } else { cloth(u * mmu, v * mmu * (SHIFT_MM / CREASE_MM), cs) };
             (BLOT * dwell * (1.0 - smoothstep(0.5 * r, r, d)), c, 0.0, 1.0)
-        });
-        if let Some(pl) = &pool {
+        };
+        let got = if let Some(cloth) = &mut rag.transport {
+            cloth.sync(self.now_min() - pace::BLOT_PRESS / 60.0 * if cloth.hand_time { 1.0 } else { 0.0 }, self.tally.secs - pace::BLOT_PRESS);
+            self.rag_transport_contact(rag, bbox, pressure, touch, (x, y), cs, expo)
+        } else {
+            self.rag_contact(rag, bbox, pressure, touch, pool.as_mut(), expo)
+        };
+        if rag.transport.is_some() {
+            rag.transport_summary();
+        } else if let Some(pl) = &pool {
             self.rag_keep(rag, pl);
         }
         got

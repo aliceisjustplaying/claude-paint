@@ -7,7 +7,7 @@ contemporary testimony and which from later interpretation.*
 
 ## Summary
 
-Cézanne builds solidity from relationships between coloured marks.
+Cézanne builds solidity from relationships between colored marks.
 Parallel, often diagonal strokes are most characteristic of the late 1870s
 and 1880s; stroke direction and layering vary across his career. Thin
 opaque paint, translucent drawing, occasional thicker patches, visible
@@ -61,7 +61,7 @@ blue contours whose openings connect planes [NA, figs.9–13]. This is later
 evidence of the same variation.
 
 **Interpretation.** A patch states a plane: several related marks set its
-colour and tilt, and the next patch states the next plane. Marks can leave
+color and tilt, and the next patch states the next plane. Marks can leave
 out detail and cross surface contours; their shared rhythm also holds the
 picture's surface together. One hatch angle across the whole picture loses
 the varied handling documented above.
@@ -69,20 +69,20 @@ the varied handling documented above.
 ## 2. Modulation, passage and reserves
 
 **Scholarly interpretation supported by examination.** Reissner contrasts
-modelling by blended light/dark tones with modulation through complementary
+modeling by blended light/dark tones with modulation through complementary
 contrasts and warm/cool relationships. Juxtaposed blue and yellow strokes
 in *Avenue at Chantilly* (1888) are her example. Solidity remains the goal,
 and values, white, black and some blending stay in use [NG, pp.23–25].
-Butler records blended sequences of colour in Philadelphia's 63-116-4
+Butler records blended sequences of color in Philadelphia's 63-116-4
 (1898–1900) [BUT].
 
 Art Institute examination of *The Basket of Apples* (c.1893) finds solid opaque
 green, orange, yellow and red marks building volume. An apparently white
-passage is pale pink, yellow, blue, green and grey, with mixtures including
+passage is pale pink, yellow, blue, green and gray, with mixtures including
 lead white, emerald green, viridian, Prussian blue and ultramarine [AIC22].
 
 **Passage is selective continuity across a boundary.** The Art Institute
-catalogue describes colour slipping over an edge and white passing over a
+catalog describes color slipping over an edge and white passing over a
 pink stripe in *The Basket of Apples*. Forms and spaces can share a plane
 while some contours stay intact. The c.1885 examination's intermittent
 reserve along a boundary is another way of keeping a contour open
@@ -96,7 +96,7 @@ may also remain visible [NG, pp.14–20]. Butler describes white priming
 contributing to luminosity and working as a highlight [BUT].
 
 **Unfinished passages in his own words.** In his 23 October 1905 letter
-Cézanne says colour sensations prevent him from covering the canvas and
+Cézanne says color sensations prevent him from covering the canvas and
 delimiting objects at delicate points of contact; he calls the picture
 incomplete and rejects enclosing everything with a black line [LETTER, inscription; paraphrase of French].
 So some reserves came out of difficulty during the work. Reissner also
@@ -108,11 +108,11 @@ signature or a bare patch alone says little about finish [NG, pp.19–21].
 | Period / evidence | What the evidence shows |
 |---|---|
 | 1860s, early work | Thick, often knife-applied paint and dark tonal contrasts are documented historically [MET]; the examined *Stove in the Studio* includes red earth, carbon black and Prussian blue [NG, Pigments]. The early palette is known only in part. |
-| 1870s transition and 1877–83 Philadelphia landscapes | Butler links the 1870s transition years with clearer, lighter colour and smaller patches. Lead white, vermilion, emerald green and artificial ultramarine dominate her sampled mature oils; red lake, yellow iron oxide, viridian and carbon black are frequent secondary components. Chrome yellow can be abundant in particular early works [BUT]. |
+| 1870s transition and 1877–83 Philadelphia landscapes | Butler links the 1870s transition years with clearer, lighter color and smaller patches. Lead white, vermilion, emerald green and artificial ultramarine dominate her sampled mature oils; red lake, yellow iron oxide, viridian and carbon black are frequent secondary components. Chrome yellow can be abundant in particular early works [BUT]. |
 | 1880s–early 1890s | The same base persists; actual mixtures vary. NG4136 has a yellow lake as well as ochres, vermilion, ultramarine and greens [NG]. The 2008 technical study dates that picture c.1890–92, revising the older 1985 bulletin's attribution. |
 | Later oils, 1890s–1906 | Cobalt becomes prominent in Butler's later sample and is the only blue identified in her two examined paintings of 1902–06. Earlier cobalt is recorded too: Reissner notes sketchbook listings in 1875–78 (medium unspecified), and increasing outdoor use after 1886. AIC finds both cobalt and ultramarine in *The Vase of Tulips* (c.1890) [BUT; NG, pp.9–10; AIC22]. |
 | Late chrome yellow | Chrome yellow disappears in Butler's last-decade sample, but the National Gallery finds it in *Bathers*, and Bernard's 1905 palette testimony lists it. So whether he stopped using chrome yellow in the 1890s is uncertain [BUT; NG, pp.9–10]. |
-| Late watercolours, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These are watercolour findings, separate from the oils [WATER]. |
+| Late watercolors, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These are watercolor findings, separate from the oils [WATER]. |
 
 **Names matter.** *Vert Véronèse* is emerald green (copper aceto-arsenite);
 *vert émeraude* is viridian (hydrated chromium oxide) in the cited French
@@ -145,11 +145,11 @@ qualifications above.
 **Support and ground.** Standard commercial stretched canvases were common.
 The National Gallery grounds are chiefly a single lead-white-rich layer,
 slightly warmed with yellow ochre, with identified extenders including chalk,
-quartz and barium sulphate. *Avenue at Chantilly* has a grey ground;
+quartz and barium sulfate. *Avenue at Chantilly* has a gray ground;
 *Bathers* and *Old Woman with a Rosary* have white over chalk. Ground binder
 analyses include partially heat-bodied linseed oil. Commercial preparation
 is generally more likely than priming by Cézanne himself [NG, pp.7–9].
-Philadelphia examples include white and grey grounds; grounds vary from
+Philadelphia examples include white and gray grounds; grounds vary from
 painting to painting [BUT, Pigments / primings].
 
 **Thin paint is usually opaque.** Reissner says his oil paint is generally
@@ -185,7 +185,7 @@ application. The original finish is known only case by case
 ## 5. Order, time and revision
 
 1. **Light initial placement.** Some pictures have graphite drawing.
-   The National Gallery study identifies dilute blue or blue-grey painted
+   The National Gallery study identifies dilute blue or blue-gray painted
    drawing with uneven blue/green washes, keeping the ground luminous.
    These washes are partial and uneven, short of a full grisaille or one
    even first coat [NG, pp.12–15]. AIC identifies dilute blue placement
@@ -214,19 +214,19 @@ application. The original finish is known only case by case
    though it can't show that every unfinished-looking region was left so
    on purpose [NG; LETTER].
 
-## 6. Construction: planes, colour and space
+## 6. Construction: planes, color and space
 
 This section is about how a picture is built. Each part gives the
 historical evidence, then an **Easel translation**: an optional way to get
 a similar effect with the easel's tools, inferred from that evidence. Tool
-behaviour is in `notes/easel_guide.md`, especially “Tubes and piles,”
+behavior is in `notes/easel_guide.md`, especially “Tubes and piles,”
 “Brushes and strokes,” “Covering an area” and “Masks and geometry.”
 
-**Planes and colour modulation.** Reissner describes complementary
+**Planes and color modulation.** Reissner describes complementary
 contrasts and warm/cool juxtapositions creating form and space, with
-blended light/dark modelling and linear perspective playing a smaller
+blended light/dark modeling and linear perspective playing a smaller
 part. Solidity is still the aim [NG, pp.23–25].
-Warm colours tend to advance and cool
+Warm colors tend to advance and cool
 ones to recede, relative to each other, as a museum interpretation
 illustrates; value, saturation, adjacency and overlap affect depth too
 [QAG-C]. **Easel translation:** the `cezanne` tubes give related warm/cool
@@ -235,24 +235,24 @@ visible; `work`'s `piles` weights vary the mixture within a passage. Judge
 the depth from a laid trial.
 
 **Compressed depth and tilted planes.** The c.1885 Chicago
-technical report describes evenly intense colour compressing space and
-horizontal bands appearing stacked. Its catalogue explains compression
+technical report describes evenly intense color compressing space and
+horizontal bands appearing stacked. Its catalog explains compression
 between near and far through the relation of viewing distance and position.
-A later catalogue case describes a high viewpoint making a plane rise and
-press forward [AIC4, Technical Summary, para.31; catalogue, para.15; AIC10, Distortion, para.7].
+A later catalog case describes a high viewpoint making a plane rise and
+press forward [AIC4, Technical Summary, para.31; catalog, para.15; AIC10, Distortion, para.7].
 These describe effects in particular pictures. **Easel translation:**
 freely drawn `poly` masks and `b:stroke` paths set each plane's tilt,
 overlap and spacing directly, with no shared vanishing point; similar
-colour intensity near and far is one option. `world{}` perspective is
+color intensity near and far is one option. `world{}` perspective is
 optional. You choose the viewpoint and arrangement.
 
 **Volumes and facets.** The museum's mid-1880s analysis describes geometric
 rhythms and volumetric pattern; another museum label describes architectonic
 and organic forms animated by warm/cool shifts [MET; BKM]. This supports
-thinking in substantial volumes divided into smaller colour planes.
+thinking in substantial volumes divided into smaller color planes.
 **Easel translation:** draw the large mass and its plane divisions
 separately with `poly` or brush paths, then tell adjacent facets apart by
-colour and mark direction. `form{}` can give a volume guide; the colour of
+color and mark direction. `form{}` can give a volume guide; the color of
 each facet is yours to set.
 
 **Constructive direction binds adjacent planes.** Butler documents patches
@@ -260,7 +260,7 @@ of parallel, often diagonal strokes in the late 1870s, with adjacent patch
 edges brushed together wet-in-wet. Reissner identifies the late 1870s and
 1880s as the period when this unifying stroke approached systematic use,
 and stresses the exceptions [BUT, Technique; NG, pp.21–23]. Inferred from
-this: related directions across neighbouring planes connect them, and local
+this: related directions across neighboring planes connect them, and local
 changes of direction show their different tilts. **Easel translation:**
 `brush{kind="flat", width=..., point=0}` with `b:stroke`, or `work` with
 `tool`, `length`, `angle` and `dips`, lays grouped directional marks.
@@ -279,7 +279,7 @@ translation:** `canvas{ground=...}` sets the primed surface. `coverage`,
 unpainted region keeps its ground; lifting wet paint can leave a stain, and
 ground under set paint stays covered.
 
-**Multiple viewpoints.** A later catalogue distinguishes implied changes
+**Multiple viewpoints.** A later catalog distinguishes implied changes
 of viewpoint from literal movement while painting; perceptual scanning and
 design-based interpretations can both explain incompatible alignments.
 Technical examination finds some disjunctions already in the underdrawing
@@ -297,22 +297,22 @@ very open and densely built passages, with low impasto locally; the
 1885–86 label links warm/cool modulation and exposed preparation, and
 the Met describes volumetric geometric rhythms [BUT, Technique; AIC4, Technical Summary; BKM; MET].
 **Synthesis, inferred from these examples alone:** the examined mid-1880s
-pictures show colour-built solidity, compressed plane relationships and
+pictures show color-built solidity, compressed plane relationships and
 varied coverage, with form still solid. They hold together as a manner of
 their own, apart from the later dissolution of form. **Easel translation:** vary
 `load`, `coverage`, paint dilution and direction from passage to passage.
 
-### Colour, planes and open coverage
+### Color, planes and open coverage
 
-These tools build a picture from colour and separately drawn planes,
+These tools build a picture from color and separately drawn planes,
 alongside the lit-volume and perspective scaffolds in the guide. The
 subject, canvas and arrangement are yours:
 
 | Idea | Tools and parameters |
 |---|---|
-| Colour-built space | Related warm/cool `pile{}` mixtures; separate `b:stroke` marks, or `work` with weighted `piles`. Relative warmth can advance and coolness recede; check the effect with a laid trial. |
-| Compressed depth and tilted planes | Separately drawn `poly` masks and stroke paths; adjust spacing, tilt, overlap and relative colour intensity. A `world{}` projection is optional. |
-| Volumes and facets | Plane divisions drawn with `poly` or brush paths, related through colour; `form{}` is optional, as a volume guide. |
+| Color-built space | Related warm/cool `pile{}` mixtures; separate `b:stroke` marks, or `work` with weighted `piles`. Relative warmth can advance and coolness recede; check the effect with a laid trial. |
+| Compressed depth and tilted planes | Separately drawn `poly` masks and stroke paths; adjust spacing, tilt, overlap and relative color intensity. A `world{}` projection is optional. |
+| Volumes and facets | Plane divisions drawn with `poly` or brush paths, related through color; `form{}` is optional, as a volume guide. |
 | Constructive direction | Blunt `brush{kind="flat", point=0, width=...}` with `b:stroke`; or `work` with `tool`, `length`, `angle`, `dips`. The `hatch` hand's default brush is a round. |
 | Reserves | Prepared `canvas{ground=...}`; `work`'s `coverage`, `load`, `hug=false`, `fill=false`. An untouched area keeps its preparation; a wet lift may leave a stain. |
 | Multiple viewpoints | Separately drawn plane masks and paths can each take their own orientation; `look` checks how they relate across the whole picture. |
@@ -340,7 +340,7 @@ first-use or cutoff dates (§3). The mapping uses the oil evidence only.
   https://www.nationalgallery.org.uk/media/15526/reissner2008.pdf
 - **[BUT]** Marigene H. Butler, “An Investigation of the Materials and
   Technique Used by Paul Cézanne,” paper presented at the American Institute
-  for Conservation meeting, 1984; author-authorised republication by McCrone.
+  for Conservation meeting, 1984; author-authorized republication by McCrone.
   Ten Philadelphia oils, 1877–1906; microscopy, cross-sections, IR and X-ray
   examination. HTML section titles cited because it is unpaginated:
   https://www.mccrone.com/mm/investigate-materials-techniques-cezanne/
@@ -350,14 +350,14 @@ first-use or cutoff dates (§3). The mapping uses the oil evidence only.
   https://www.artic.edu/articles/991/cezanne-s-still-lifes-under-the-microscope
 - **[AIC10]** “Cat.10 The Basket of Apples, c.1893,” *Cezanne Paintings and
   Watercolors at the Art Institute of Chicago*, edited by Gloria Groom and
-  Kim Muir. Online scholarly catalogue, especially “Distortion,” paragraphs
+  Kim Muir. Online scholarly catalog, especially “Distortion,” paragraphs
   3–7 and figs.10.4–10.8 (accessed October 2026):
   https://www.artic.edu/digital-publications/47/cezanne-paintings-and-watercolors-at-the-art-institute-of-chicago/351/cat-10-the-basket-of-apples-c-1893
-- **[AIC4]** Paul Smith (catalogue), Kim Muir and Giovanni Verri (technical
+- **[AIC4]** Paul Smith (catalog), Kim Muir and Giovanni Verri (technical
   report), “Cat.4 The Bay of Marseille, Seen from L'Estaque, c.1885,”
   *Cezanne Paintings and Watercolors at the Art Institute of Chicago*,
-  edited by Gloria Groom and Kim Muir. Online scholarly catalogue, especially
-  catalogue para.15, Technical Summary para.31 and Paint Layer paras.49–50
+  edited by Gloria Groom and Kim Muir. Online scholarly catalog, especially
+  catalog para.15, Technical Summary para.31 and Paint Layer paras.49–50
   (accessed 10 October 2026):
   https://www.artic.edu/digital-publications/47/cezanne-paintings-and-watercolors-at-the-art-institute-of-chicago/345/cat-4-the-bay-of-marseille-seen-from-lestaque-c-1885
 - **[BKM]** Brooklyn Museum, object label for *The Village of Gardanne
@@ -371,7 +371,7 @@ first-use or cutoff dates (§3). The mapping uses the oil evidence only.
   supports a relative warm/cool spatial effect, not an invariant rule
   (accessed 10 October 2026):
   https://metgoma.art/tours/colour-and-pigment/still-life-with-apple-and-pear
-- **[NA]** Aimee Marcereau DeGalan (catalogue entry) and Diana M. Jaskierny
+- **[NA]** Aimee Marcereau DeGalan (catalog entry) and Diana M. Jaskierny
   (technical entry), “Mont Sainte-Victoire Seen from Les Lauves, 1904–05,”
   *French Paintings and Pastels, 1600–1945: The Collections of the
   Nelson-Atkins Museum of Art*, ed. Marcereau DeGalan (2022), especially
@@ -391,7 +391,7 @@ first-use or cutoff dates (§3). The mapping uses the oil evidence only.
 - **[WATER]** Abed Haddad, Laura Neufeld and Ana Martins, “Realizing
   sensations: analyzing Paul Cezanne's watercolors and assessing their light
   sensitivity with microfade testing,” *Heritage Science* 11 (2023).
-  Separate evidence for watercolour, not oil-film behaviour:
+  Separate evidence for watercolor, not oil-film behavior:
   https://www.nature.com/articles/s40494-023-00879-7
 - **[MET]** James Voorhies, “Paul Cézanne (1839–1906),” Metropolitan Museum
   of Art, Heilbrunn Timeline of Art History (October 2004). Curatorial

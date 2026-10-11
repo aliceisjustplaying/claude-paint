@@ -78,13 +78,13 @@ Why this exists: Alice's verdict on *Evening at a Mountain Lake* was "not very
 Caspar" (notes/round6/alice_review.md). The materials report
 (notes/research/friedrich_materials.md) covers canvas, ground, pigments and layers.
 This section covers the rest: composition, light, sky and water, what he left out,
-mood and how imitations go wrong. It comes from written sources only (catalogue
+mood and how imitations go wrong. It comes from written sources only (catalog
 essays and entries, a technical study, contemporaries' letters, Friedrich's own
 notes as quoted in print). No images were viewed. Source keys are listed at the
 end of this section. Keys marked *(secondary)* are encyclopedia or quotation
 digests that summarize the scholarship (Börsch-Supan, Busch, Hofmann, Sumowski);
 use them as pointers, not as final authorities. Koerner, Busch, Grave and the
-Börsch-Supan/Jähnig catalogue raisonné were not accessible in full (the archive.org
+Börsch-Supan/Jähnig catalog raisonné were not accessible in full (the archive.org
 copies are lending-only), so they appear only as others cite them.
 
 A painter's one-page version is `notes/briefs/friedrich_painter.md`.
@@ -118,12 +118,12 @@ A painter's one-page version is `notes/briefs/friedrich_painter.md`.
   lucid geometric order, both explicit and implicit, reigns" [RV Rosenblum, p.9].
   Even when figures stand off-center, "we nevertheless intuit a secret axis of purest
   symmetry toward which they, and everything around them, will eventually gravitate"
-  [same page]. The catalogue calls it his "secret love of symmetry": in *The Dreamer*
+  [same page]. The catalog calls it his "secret love of symmetry": in *The Dreamer*
   the window opening sits exactly at the center [RV p.78].
 - *Abbey in the Oakwood* is described as axially symmetric: the central vertical
   passes exactly through the apex of the ruin's window, and the choir wall is flanked
   by four oaks on each side [WP-de Abtei, "Struktur und Ästhetik"]. The Madrid
-  catalogue calls it "a solemn symmetry that gives the composition harmony", which
+  catalog calls it "a solemn symmetry that gives the composition harmony", which
   "imposes itself despite unsettling motifs such as the shapes of the oak branches,
   which break and twitch to their tips" (my translation) [MAD cat.29, p.129]. So
   **symmetry holds the whole, and irregularity lives inside the parts.**
@@ -262,7 +262,7 @@ eye" (his notes of c.1830) [WP-en CDF; WQ; secondary].
 - **Skies built in bands and wedges, and worked hardest.** An oil study of 1824 shows
   "a formation of cloud and light [that] cuts diagonally across the whole surface,
   like a wedge. Below it narrower bands of cloud, parallel to the horizon" and the
-  catalogue calls it a scheme "that appears in later works" [MAD cat.74, p.219; my
+  catalog calls it a scheme "that appears in later works" [MAD cat.74, p.219; my
   translation]. "Skies always demanded his most intense concentration" [MW essay,
   p.19]. He refused Goethe's 1816 request to illustrate Howard's cloud types: "the
   reducing of clouds to a rigid meteorological classification was tantamount to an
@@ -455,11 +455,11 @@ Read from notes/paint1/evening_lake.md and the two critiques, not from the pictu
 
 ### Sources (round 7 section)
 - **[MW]** Rewald, S. (ed.), *Caspar David Friedrich: Moonwatchers*, Metropolitan
-  Museum of Art 2001; essays by Rewald (pp.9–21) and Monrad (pp.23–29), catalogue
+  Museum of Art 2001; essays by Rewald (pp.9–21) and Monrad (pp.23–29), catalog
   entries by Rewald. Full text: https://archive.org/details/CasparDavidFriedrichMoonwatchers
   (the Met PDF, https://resources.metmuseum.org/resources/metpublications/pdf/Caspar_David_Friedrich_Moonwatchers.pdf,
   has no text layer). Essay pages are from the djvu text's page markers and may be off
-  by one; catalogue numbers are exact. This is [MET] in the materials report, whose
+  by one; catalog numbers are exact. This is [MET] in the materials report, whose
   "p.35" is a PDF page.
 - **[RV]** Rewald, S. (ed.), *The Romantic Vision of Caspar David Friedrich: Paintings
   and Drawings from the U.S.S.R.*, Metropolitan Museum of Art and Art Institute of

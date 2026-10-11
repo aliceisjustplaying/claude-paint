@@ -10,7 +10,7 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
   blotting with paper towels or sponges, layering once dry, and tilting or
   rotating the canvas to steer the flow [3].
 - Thinned oil on raw canvas leaves "residual, halo-like marks of oil" around the
-  colour: in 1963 she started working with acrylic, which "didn't leave" them [4]
+  color: in 1963 she started working with acrylic, which "didn't leave" them [4]
   (the source gives no reason for the change).
   "The sinking of oil into unprimed canvas can lead to ... darkening, and halos of
   oil staining where raw canvas is exposed" [5]. Oil "will crawl to the back of the
@@ -48,7 +48,7 @@ Sources are listed at the end; [n] marks them. "Estimate" marks numbers not take
 - Particles in liquid draining into a porous substrate are filtered by the pores;
   draining plus evaporation with a pinned edge give a ring deposit (coffee stain)
   at the edge; too-large pores let particles travel with the liquid instead [13].
-  Watercolour drops on dry paper form ring stains "regardless of the nature of the
+  Watercolor drops on dry paper form ring stains "regardless of the nature of the
   pigment" [14].
 
 ## Optics

@@ -13,7 +13,7 @@ positions are in canvas units (the canvas is 1000 units wide).
 3. Light paint laid at light pressure over a wet dark catches only the high
    points of the knife-textured ground. The dark stays in the hollows as a
    net of fine dark lines that looks like cracking.
-4. Bristles plough paint off the tops of the weave, so a lay-in can keep
+4. Bristles plow paint off the tops of the weave, so a lay-in can keep
    small specks of bare ground. A denser pass covers them.
 
 ## Paint in thin films

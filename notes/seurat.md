@@ -72,9 +72,9 @@ For a first late coastal study, select from lead white, cobalt blue, ultramarine
 blue, viridian, emerald green, chrome/cadmium yellows, vermilion and one red lake.
 Do not feel obliged to use all of them. Add zinc or strontium yellow only if the
 selected study warrants it and the box contains it. `rose madder`
-is the box's practical tube proxy for historical lakes, not an exact analysed batch.
+is the box's practical tube proxy for historical lakes, not an exact analyzed batch.
 Keep earths/black available for an early-study route rather than claiming Seurat
-never used them. The current catalogue lacks manganese violet; mix a blue/lake
+never used them. The current catalog lacks manganese violet; mix a blue/lake
 violet as a declared approximation if that particular late border needs it.
 
 Knife a small working set of piles, examine the palette, paint trials, then

@@ -82,19 +82,46 @@ original diagnostic completed in 12.55 seconds; it did not rerun full drying.
 The original full-size software mark was stopped at 300.2 seconds before its
 second stage completed. Its pre-fix DOM screenshot is not comparison evidence.
 The corrected runner disables RAF physics and exports an explicit 1056×704
-canvas bitmap, excluding DOM borders and overlays. Hardware-original captures
-and the other six native marks are coordinated by the parent.
+canvas bitmap, excluding DOM borders and overlays. The Captain supplied the
+corrected hardware-original captures, and the parent completed the native set.
 
-The authoritative native dry-stroke run completed in 186.958 seconds. All four
-PNGs were checked at exactly 1056×704. Stage 2 still has source sheen on 91.962%
-of its painted footprint, so it cannot be asserted to be satin without the
-hardware reference. Stage 3 has zero surface water and 99.605% damp footprint;
-stage 4 has 100% cured footprint and max flow.a 0.00133324. Neutral Stage 1–4
-labels remain honest when a wetness name is unverified.
+All seven native runs and the corrected Apple Metal original runs are complete.
+Every PNG is exactly 1056×704. Timings include setup, capture rendering and
+statistics; the native run also includes a cloned one-pass diagnostic.
+
+| Mark | Original M1 Metal (s) | Native Linux CPU (s) |
+|---|---:|---:|
+| dry-stroke | 2.855 | 186.958 |
+| damp-stroke | 3.205 | 255.696 |
+| shiny-stroke | 2.613 | 190.641 |
+| wet-touch | 2.569 | 193.580 |
+| second-shiny | 2.596 | 197.393 |
+| second-damp | 3.056 | 249.311 |
+| flat-rows | 2.685 | 196.780 |
+
+The dry-stroke second sample still has water above the source sheen threshold
+on about 92% of its footprint in both engines. Several third samples also
+retain standing water. The intended damp-stroke third sample differs notably:
+4.53% of the original footprint exceeds that threshold versus 26.33% of the
+port's. Short isolated parity therefore does not prove identical long-run
+wetness. No single cause is asserted without further evidence.
+
+The comparison uses neutral Stage 1–4 labels. Prewet conditions were not
+instrumented before color application, the touching-color recipe overlaps
+brush footprints and the row-laid wash's one depleting charge creates bands.
+These are recipe limitations, not verified satin/damp/uniform-wash fixtures.
+All final samples are 100% cured by the source condition. No solver tuning or
+additional matched round was used to hide the limitations.
 
 The full native dry sequence ends with live pigment 2.55180365. That is not
 the full material inventory: dry-fold converts pigment into the dried optical
 reflectance field. No dry-fold inventory claim is inferred from that number.
+
+Before dry-fold, that normal native mark's live pigment is 22,136.12263 at
+sample 2 and 39,973.88976 at sample 3: gains of 83.346% and 231.090% from the
+just-laid 12,073.41230. These accumulated measurements are native-only; the
+original was measured for the next single advection pass, not inferred from
+the final optical image.
 
 See `README.md` for exact commands. Raw artifacts: `original-parity.json`,
 `parity.json`, `normal-original-drift.json`, `parity-summary.md` and

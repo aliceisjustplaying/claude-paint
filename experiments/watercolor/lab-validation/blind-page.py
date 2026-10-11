@@ -24,9 +24,9 @@ else:
 
 parts = ["""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Watercolor comparison</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:1160px;margin:24px auto;padding:0 16px;background:#f6f4ef;color:#222}h1{font-size:24px}h2{font-size:19px;border-top:1px solid #ccc;padding-top:20px}section{margin-top:32px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0}figcaption{font-weight:650}img{width:100%;display:block;border:1px solid #ddd}.pending{aspect-ratio:3/2;display:grid;place-items:center;background:#eee;border:1px solid #ddd;color:#666}.question{background:white;border:1px solid #ddd;padding:14px;margin-top:14px}.question p{margin:5px 0}label{margin-right:12px}textarea{width:100%;box-sizing:border-box;min-height:72px;font:inherit;margin-top:10px}button{font:inherit;padding:10px 16px}#copy{position:sticky;bottom:12px;margin:24px 0}#feedback{display:none;min-height:200px}.warning{background:#fff4d6;padding:12px}@media(max-width:600px){.pair{grid-template-columns:1fr}}</style></head><body>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:1160px;margin:24px auto;padding:0 16px;background:#f6f4ef;color:#222}h1{font-size:24px}h2{font-size:19px;border-top:1px solid #ccc;padding-top:20px}section{margin-top:32px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0}figcaption{font-weight:650}img{width:100%;display:block;border:1px solid #ddd}.pending{aspect-ratio:3/2;display:grid;place-items:center;background:#eee;border:1px solid #ddd;color:#666}.question{background:white;border:1px solid #ddd;padding:14px;margin-top:14px}.question p{margin:5px 0}label{margin-right:12px}textarea{width:100%;box-sizing:border-box;min-height:72px;font:inherit;margin-top:10px}button{font:inherit;padding:10px 16px}#copy{margin:24px 0}#feedback{display:none;min-height:200px}.warning{background:#fff4d6;padding:12px}@media(max-width:600px){.pair{grid-template-columns:1fr}}</style></head><body>
 <h1>Watercolor comparison</h1><p>Look at each pair as the paint changes. A and B are shuffled for each mark, so the same letter does not always mean the same version. Both images use the same view. Tell us which feels more like real watercolor and what you notice.</p>
-<p>What can still give it away: one version may look a little darker or spread a little farther. Small grain patterns and tiny edge details may differ. The paint may reach a different degree of dryness at the same moment. Some middle samples still look shiny, so the stages are numbered instead of named.</p>
+<p>What can still give it away: one version may look a little darker or spread a little farther. Small grain patterns and tiny edge details may differ. The paint may reach a different degree of dryness at the same moment. Some middle samples still carry water, so the stages are numbered instead of named.</p>
 """]
 complete = True
 for number, mark in enumerate(recipe["marks"], 1):
@@ -62,7 +62,7 @@ for number, mark in enumerate(recipe["marks"], 1):
     parts.append(f'<textarea name="{number}-notes" aria-label="Notes for mark {number}" placeholder="Notes: what looks right or wrong"{disabled}></textarea></div></section>')
 if not complete:
     parts.insert(1, '<p class="warning">This comparison is not ready. Please wait until all images appear before judging.</p>')
-parts.append("""<button id="copy">Copy my feedback</button><textarea id="feedback" aria-label="Feedback to copy"></textarea>
+parts.append(r"""<button id="copy">Copy my feedback</button><textarea id="feedback" aria-label="Feedback to copy"></textarea>
 <script>
 const storage='watercolor-pairs-feedback';
 const fields=[...document.querySelectorAll('input,textarea[name]')];

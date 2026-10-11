@@ -98,6 +98,7 @@ pub struct Simulation {
     pub paper: Vec<Pixel>,
     pub paper_kind: PaperKind,
     pub paper_seed: u32,
+    pub raster_subpixel_bits: u8,
     pub fast_dry_steps: i32,
     pub forever_wet: bool,
     pub frame_accumulator: f64,
@@ -126,7 +127,7 @@ fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
-// src/engine/gl.ts:97-104: LINEAR and CLAMP_TO_EDGE, texel centers at (i+0.5)/size.
+// src/engine/gl.ts:97-104 at a19bfa2a026856a98ceb400a8eec41f091f04a11: LINEAR and CLAMP_TO_EDGE.
 pub fn sample(data: &[Pixel], w: usize, h: usize, u: f32, v: f32) -> Pixel {
     let x = (u * w as f32 - 0.5).clamp(0.0, (w - 1) as f32);
     let y = (v * h as f32 - 0.5).clamp(0.0, (h - 1) as f32);
@@ -142,7 +143,7 @@ pub fn sample(data: &[Pixel], w: usize, h: usize, u: f32, v: f32) -> Pixel {
         )
     })
 }
-// src/engine/shaders.ts:47,95-101: cell-offset samples with clamp-to-edge.
+// src/engine/shaders.ts:47,95-101 at a19bfa2a026856a98ceb400a8eec41f091f04a11: cell-center samples.
 fn cell(data: &[Pixel], w: usize, h: usize, x: usize, y: usize, dx: isize, dy: isize) -> Pixel {
     data[(y as isize + dy).clamp(0, h as isize - 1) as usize * w
         + (x as isize + dx).clamp(0, w as isize - 1) as usize]
@@ -170,6 +171,7 @@ impl Simulation {
             paper: vec![[0.0; 4]; n],
             paper_kind,
             paper_seed: seed,
+            raster_subpixel_bits: 4,
             fast_dry_steps: 0,
             forever_wet: false,
             frame_accumulator: 0.0,
@@ -660,11 +662,12 @@ impl Simulation {
                 0.0
             };
             let dryness = stamp.dryness as f32;
-            let (x0, x1, y0, y1) = self.stamp_bounds(cx, cy, radius);
+            let quad = self.stamp_quad(cx, cy, radius);
+            let (x0, x1, y0, y1) = self.stamp_bounds(quad);
             for y in y0..y1 {
                 for x in x0..x1 {
-                    let lx = (x as f32 + 0.5 - cx) / radius;
-                    let ly = (y as f32 + 0.5 - cy) / radius;
+                    let lx = (x as f32 + 0.5 - quad[0]) * (2.0 / (quad[2] - quad[0])) - 1.0;
+                    let ly = (y as f32 + 0.5 - quad[1]) * (2.0 / (quad[3] - quad[1])) - 1.0;
                     let r = (lx * lx + ly * ly).sqrt();
                     if r > 1.0 {
                         continue;
@@ -714,12 +717,18 @@ impl Simulation {
         }
     }
     // src/engine/shaders.ts:455-471 at a19bfa2a026856a98ceb400a8eec41f091f04a11: rasterized quad footprint.
-    fn stamp_bounds(&self, cx: f32, cy: f32, r: f32) -> (usize, usize, usize, usize) {
-        let x0 = (cx - r - 0.5).ceil().clamp(0.0, self.width as f32) as usize;
-        let x1 = (cx + r - 0.5).ceil().clamp(0.0, self.width as f32) as usize;
-        let y0 = (cy - r - 0.5).ceil().clamp(0.0, self.height as f32) as usize;
-        let y1 = (cy + r - 0.5).ceil().clamp(0.0, self.height as f32) as usize;
+    pub fn stamp_bounds(&self, quad: [f32; 4]) -> (usize, usize, usize, usize) {
+        let x0 = (quad[0] - 0.5).ceil().clamp(0.0, self.width as f32) as usize;
+        let x1 = (quad[2] - 0.5).ceil().clamp(0.0, self.width as f32) as usize;
+        let y0 = (quad[1] - 0.5).ceil().clamp(0.0, self.height as f32) as usize;
+        let y1 = (quad[3] - 0.5).ceil().clamp(0.0, self.height as f32) as usize;
         (x0, x1, y0, y1)
+    }
+    // src/engine/shaders.ts:455-471 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
+    // Rasterization snaps vertices before interpolation; the adapter supplies GL.SUBPIXEL_BITS.
+    pub fn stamp_quad(&self, cx: f32, cy: f32, radius: f32) -> [f32; 4] {
+        let scale = 2.0_f32.powi(self.raster_subpixel_bits as i32);
+        [cx - radius, cy - radius, cx + radius, cy + radius].map(|v| (v * scale).round() / scale)
     }
     // src/engine/simulation.ts:316-354 at a19bfa2a026856a98ceb400a8eec41f091f04a11, JS RNG and stamp upload boundary.
     pub fn add_salt(&mut self, x: f64, y: f64, radius: f64, seed: u32) {
@@ -744,14 +753,15 @@ impl Simulation {
     }
     // src/engine/shaders.ts:520-551 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
     pub fn salt(&mut self, cx: f32, cy: f32, radius: f32, amount: f32, seed: f32) {
-        let (x0, x1, y0, y1) = self.stamp_bounds(cx, cy, radius);
+        let quad = self.stamp_quad(cx, cy, radius);
+        let (x0, x1, y0, y1) = self.stamp_bounds(quad);
         let angle = seed * 2.39996;
         let wick = [angle.cos(), angle.sin()];
         for y in y0..y1 {
             for x in x0..x1 {
                 let local = [
-                    (x as f32 + 0.5 - cx) / radius,
-                    (y as f32 + 0.5 - cy) / radius,
+                    (x as f32 + 0.5 - quad[0]) * (2.0 / (quad[2] - quad[0])) - 1.0,
+                    (y as f32 + 0.5 - quad[1]) * (2.0 / (quad[3] - quad[1])) - 1.0,
                 ];
                 let dot = local[0] * wick[0] + local[1] * wick[1];
                 let stretch = 0.3 + 0.35 * salt_hash(7.0, seed);
@@ -791,11 +801,12 @@ impl Simulation {
     }
     // src/engine/shaders.ts:557-569 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
     pub fn lift_pass(&mut self, cx: f32, cy: f32, radius: f32, amount: f32) {
-        let (x0, x1, y0, y1) = self.stamp_bounds(cx, cy, radius);
+        let quad = self.stamp_quad(cx, cy, radius);
+        let (x0, x1, y0, y1) = self.stamp_bounds(quad);
         for y in y0..y1 {
             for x in x0..x1 {
-                let lx = (x as f32 + 0.5 - cx) / radius;
-                let ly = (y as f32 + 0.5 - cy) / radius;
+                let lx = (x as f32 + 0.5 - quad[0]) * (2.0 / (quad[2] - quad[0])) - 1.0;
+                let ly = (y as f32 + 0.5 - quad[1]) * (2.0 / (quad[3] - quad[1])) - 1.0;
                 let r = (lx * lx + ly * ly).sqrt();
                 if r > 1.0 {
                     continue;

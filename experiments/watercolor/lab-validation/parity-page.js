@@ -69,7 +69,7 @@ window.runParity = () => {
     base.dep_s[i] = [c * 0.044, c * 0.05, c * 0.056, c * 0.07];
     base.cap[i] = [inside ? 0.08 + ((x + y) % 3) * 0.025 : 0, inside && x === 8 ? 0.03 : 0, inside && y === 6 ? 0.02 : 0, 0];
   }
-  const result = { upstreamCommit: "a19bfa2a026856a98ceb400a8eec41f091f04a11", width, height, renderer, format: "RGBA16F", filtering: "LINEAR", wrap: "CLAMP_TO_EDGE", orientation: "GL-bottom-up", cases: [] };
+  const result = { upstreamCommit: "a19bfa2a026856a98ceb400a8eec41f091f04a11", width, height, renderer, subpixelBits: gl.getParameter(gl.SUBPIXEL_BITS), format: "RGBA16F", filtering: "LINEAR", wrap: "CLAMP_TO_EDGE", orientation: "GL-bottom-up", cases: [] };
   for (const name of ["wet-transport", "dry-fold", "closed-system", "brush-input"]) {
     sim.params = { ...DEFAULT_PARAMS };
     const input = structuredClone(name === "brush-input" ? blank : base);
@@ -84,9 +84,10 @@ window.runParity = () => {
     const captures = [];
     const original = sim.runPass;
     sim.runPass = function(program, outputs, textures, uniforms) {
+      const input = capture(this);
       original.call(this, program, outputs, textures, uniforms);
       const [, pass, names] = passes.find(([key]) => this[key] === program);
-      captures.push({ pass, fields: capture(this, Object.fromEntries(names.map((key, i) => [key, outputs[i]]))) });
+      captures.push({ pass, input, fields: capture(this, Object.fromEntries(names.map((key, i) => [key, outputs[i]]))) });
     };
     let operations = Array.from({ length: name === "dry-fold" ? 1 : 3 }, () => ({ kind: "substep", evap_mul: name === "closed-system" ? 0 : 1 }));
     if (name === "brush-input") {
@@ -106,10 +107,11 @@ window.runParity = () => {
     for (const op of operations) {
       if (op.kind === "substep") sim.substep(op.evap_mul);
       else {
+        const input = capture(sim);
         if (op.kind === "splat") sim.splat(op.stamps, op.pigment);
         else if (op.kind === "salt") sim.addSalt(op.x, op.y, op.radius, op.seed);
         else if (op.kind === "scrub") sim.addScrub(op.stamps);
-        captures.push({ pass: op.kind, fields: capture(sim) });
+        captures.push({ pass: op.kind, input, fields: capture(sim) });
       }
     }
     sim.runPass = original;

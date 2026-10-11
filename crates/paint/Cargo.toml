@@ -39,3 +39,7 @@ tiny-skia = "0.12"
 [[example]]
 name = "panel_probe"
 required-features = ["experimental-panel"]
+
+[[example]]
+name = "panel_layers"
+required-features = ["experimental-panel"]

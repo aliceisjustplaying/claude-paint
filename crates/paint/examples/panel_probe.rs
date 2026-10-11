@@ -163,6 +163,11 @@ fn main() {
         .expect("panel_probe <output-directory>");
     let dir = Path::new(&arg);
     std::fs::create_dir_all(dir).unwrap();
+    let oak = if std::env::args().nth(2).as_deref() == Some("rays") {
+        Topography::QuarterSawnOakRays
+    } else {
+        Topography::QuarterSawnOak
+    };
     let white = Panel::chalk(23).color();
     let style = Style {
         width_mm: 120.0,
@@ -190,7 +195,7 @@ fn main() {
                 960,
                 1.0 / 0.9,
                 Panel {
-                    topography: Topography::QuarterSawnOak,
+                    topography: oak,
                     ..Panel::chalk(23)
                 },
             ),
@@ -202,7 +207,7 @@ fn main() {
                 1.0 / 0.9,
                 Panel {
                     ground: PanelGround::OilPrimed,
-                    topography: Topography::QuarterSawnOak,
+                    topography: oak,
                     seed: 23,
                 },
             ),

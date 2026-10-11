@@ -26,6 +26,7 @@ test("budget reserves full worst-case input/output and refuses oversized payload
 		cost: { input: 0.75, output: 3.75, cacheWrite: 0, cacheRead: 0.075 } }), 0.0825);
 	assert.equal(withinContext({ text: "x".repeat(1000) }, 100), false);
 	assert.equal(withinContext({ type: "image_url", image_url: "tiny" }, 100), false);
+	assert.equal(withinContext({ type: "image_url", image_url: { url: "data:image/png;base64," + "a".repeat(500000) } }, 100000), true);
 });
 
 async function fixture(run: (hooks: any, ctx: any, root: string) => any) {

@@ -10,7 +10,9 @@ use std::{
     rc::Rc,
 };
 use watercolor_lab_core::{
-    brush as lab_brush, paper::PaperKind, pigments::pigment_by_id, simulation::Simulation,
+    brush as lab_brush,
+    paper::PaperKind,
+    pigments::{pigment_by_id, pigments},
 };
 
 type Result<T> = mlua::Result<T>;
@@ -52,6 +54,8 @@ pub struct Brush {
     pub width: f64,
     pub water: f64,
     pub pigment: [f64; PIGMENTS],
+    #[serde(default)]
+    pub lab_pigments: BTreeMap<String, f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -90,10 +94,13 @@ impl Session {
         if let Some(canvas) = &state.canvas {
             if canvas.glazes.len() > 12
                 || canvas.tick > 1_000_000_000_000
-                || canvas
-                    .width
-                    .checked_mul(canvas.height)
-                    .is_none_or(|n| n > 1_500_000)
+                || canvas.width.checked_mul(canvas.height).is_none_or(|n| {
+                    n > if canvas.schema == 5 {
+                        2400 * 1600
+                    } else {
+                        1_500_000
+                    }
+                })
             {
                 return Err(error("checkpoint exceeds experimental layer/clock limits"));
             }
@@ -102,10 +109,19 @@ impl Session {
         for (name, brush) in &state.brushes {
             basename(name)?;
             if !brush.width.is_finite()
-                || !(0.1..=20.0).contains(&brush.width)
+                || !(0.1..=if state.canvas.as_ref().is_some_and(|s| s.schema == 5) {
+                    2400.0
+                } else {
+                    20.0
+                })
+                    .contains(&brush.width)
                 || !brush.water.is_finite()
                 || brush.water < 0.0
                 || brush.pigment.iter().any(|v| !v.is_finite() || *v < 0.0)
+                || brush
+                    .lab_pigments
+                    .iter()
+                    .any(|(id, v)| pigment_by_id(id).is_none() || !v.is_finite() || *v < 0.0)
             {
                 return Err(error("invalid brush checkpoint"));
             }
@@ -144,7 +160,7 @@ impl Session {
                 + self
                     .brushes
                     .values()
-                    .map(|b| b.pigment.iter().sum::<f64>())
+                    .map(|b| b.pigment.iter().chain(b.lab_pigments.values()).sum::<f64>())
                     .sum::<f64>();
             if (water - self.water_supplied).abs() > 1e-8 * self.water_supplied.max(1.0)
                 || (pigment - self.pigment_supplied.iter().sum::<f64>()).abs()
@@ -316,7 +332,11 @@ fn stroke_mask(canvas: &Watercolor, path: &[[f64; 2]], width: f64) -> Vec<(usize
 }
 
 fn rectangle(canvas: &Watercolor, t: &Table) -> Result<Vec<(usize, f64, [f64; 2])>> {
-    let cell_mm = canvas.cell_mm;
+    let cell_mm = if canvas.schema == 5 {
+        1.0
+    } else {
+        canvas.cell_mm
+    };
     let x0 = number(t, "x", 0.0)?;
     let y0 = number(t, "y", 0.0)?;
     let w = number(t, "width", canvas.width as f64 * cell_mm)?;
@@ -435,7 +455,12 @@ fn lab_stroke(
         .windows(2)
         .map(|p| (p[1][0] - p[0][0]).hypot(p[1][1] - p[0][1]))
         .sum();
-    let duration = number(attrs, "duration", (length / 40.0).max(0.0625))?;
+    let cells = ctx.canvas()?.schema == 5;
+    let duration = number(
+        attrs,
+        "duration",
+        (length / if cells { 800.0 } else { 40.0 }).max(0.0625),
+    )?;
     if !(0.0..=600.0).contains(&duration) || (length > 0.0 && duration == 0.0) {
         return Err(error(
             "a moving stroke needs a positive duration up to 600 seconds",
@@ -470,7 +495,8 @@ fn lab_stroke(
         positions.push((xy[i], p, t));
     }
     let mut inventory = ctx.state.brushes[name].clone();
-    let cell = ctx.canvas()?.cell_mm;
+    let area = ctx.canvas()?.cell_mm.powi(2);
+    let cell = if cells { 1.0 } else { ctx.canvas()?.cell_mm };
     let tool = lab_brush::tool(if scrub {
         lab_brush::ToolId::Lift
     } else {
@@ -490,20 +516,33 @@ fn lab_stroke(
     let dry = attrs
         .get::<Option<bool>>("dry")?
         .unwrap_or(inventory.water < 0.001);
-    let total_pigment = inventory.pigment.iter().sum::<f64>();
+    let total_pigment = inventory
+        .pigment
+        .iter()
+        .chain(inventory.lab_pigments.values())
+        .sum::<f64>();
     let mut mix = pigment_by_id("french-ultramarine").unwrap();
     mix.k = [0.0; 3];
     mix.s = [0.0; 3];
     mix.density = 0.0;
     mix.granulation = 0.0;
     mix.staining = 0.0;
-    for (i, id) in ["french-ultramarine", "phthalo-blue", "burnt-sienna"]
-        .iter()
-        .enumerate()
-    {
+    let components: Vec<_> = if cells {
+        inventory
+            .lab_pigments
+            .iter()
+            .map(|(id, mass)| (id.as_str(), *mass))
+            .collect()
+    } else {
+        ["french-ultramarine", "phthalo-blue", "burnt-sienna"]
+            .into_iter()
+            .zip(inventory.pigment)
+            .collect()
+    };
+    for (id, mass) in components {
         let pigment =
             pigment_by_id(id).ok_or_else(|| error(format!("missing ported pigment {id}")))?;
-        let fraction = (inventory.pigment[i] / total_pigment.max(1e-30)) as f32;
+        let fraction = (mass / total_pigment.max(1e-30)) as f32;
         for c in 0..3 {
             mix.k[c] += pigment.k[c] * fraction;
             mix.s[c] += pigment.s[c] * fraction;
@@ -546,10 +585,16 @@ fn lab_stroke(
                     * ((stamp.y * cell - ymin) / (ymax - ymin).max(1e-30)).clamp(0.0, 1.0));
         let lab = ctx.canvas()?.lab.as_mut().unwrap();
         let (ww, pw) = lab.stamp_weights(&stamp);
-        let wanted_water = stamp.water * 0.055 * ww * cell.powi(2);
-        let wanted_pigment = stamp.pigment * 0.13 * pw * cell.powi(2);
+        let wanted_water = stamp.water * 0.055 * ww * area;
+        let wanted_pigment = stamp.pigment * 0.13 * pw * area;
         let water = wanted_water.min(inventory.water);
-        let pigment = wanted_pigment.min(inventory.pigment.iter().sum::<f64>());
+        let pigment = wanted_pigment.min(
+            inventory
+                .pigment
+                .iter()
+                .chain(inventory.lab_pigments.values())
+                .sum::<f64>(),
+        );
         if wanted_water > 0.0 {
             stamp.water *= water / wanted_water;
         }
@@ -568,8 +613,16 @@ fn lab_stroke(
             lab.add_scrub(&[stamp]);
         }
         inventory.water = (inventory.water - water).max(0.0);
-        let remaining = inventory.pigment.iter().sum::<f64>();
-        for p in &mut inventory.pigment {
+        let remaining = inventory
+            .pigment
+            .iter()
+            .chain(inventory.lab_pigments.values())
+            .sum::<f64>();
+        for p in inventory
+            .pigment
+            .iter_mut()
+            .chain(inventory.lab_pigments.values_mut())
+        {
             *p *= (1.0 - pigment / remaining.max(1e-30)).max(0.0);
         }
         lab.water_released_mm3 += water;
@@ -592,40 +645,61 @@ impl UserData for Handle {
             let c = this.ctx.borrow();
             let b = &c.state.brushes[&this.name];
             let t = lua.create_table()?;
-            t.set("width_mm", b.width)?;
-            t.set("water_mm3", b.water)?;
+            let cells = c.state.canvas.as_ref().is_some_and(|s| s.schema == 5);
+            t.set(if cells { "width" } else { "width_mm" }, b.width)?;
+            t.set(if cells { "water" } else { "water_mm3" }, b.water)?;
             let pigments = lua.create_table()?;
-            for (p, name) in ["ultramarine", "phthalo", "earth"].iter().enumerate() {
-                pigments.set(*name, b.pigment[p])?;
+            if cells {
+                for (id, mass) in &b.lab_pigments {
+                    pigments.set(id.as_str(), *mass)?;
+                }
+            } else {
+                for (p, name) in ["ultramarine", "phthalo", "earth"].iter().enumerate() {
+                    pigments.set(*name, b.pigment[p])?;
+                }
             }
             t.set("pigments", pigments)?;
             Ok(t)
         });
         methods.add_method("load", |_, this, t: Table| {
+            let mut ctx = this.ctx.borrow_mut();
+            let cells = ctx.canvas()?.schema == 5;
             let water = number(&t, "water", 0.0)?;
             if !(0.0..=100.0).contains(&water) {
                 return Err(error("water load must be 0..100 mm3"));
             }
             let mut pigment_load = [0.0; PIGMENTS];
+            let mut lab_load = BTreeMap::new();
             if let Some(colors) = t.get::<Option<Table>>("pigments")? {
                 for pair in colors.pairs::<String, f64>() {
                     let (name, mass) = pair?;
                     if !mass.is_finite() || !(0.0..=10.0).contains(&mass) {
                         return Err(error("pigment load must be 0..10"));
                     }
-                    pigment_load[pigment(&name)?] = mass;
+                    if cells {
+                        if pigment_by_id(&name).is_none() {
+                            return Err(error("unknown library pigment id; call palette()"));
+                        }
+                        lab_load.insert(name, mass);
+                    } else {
+                        pigment_load[pigment(&name)?] = mass;
+                    }
                 }
             }
-            let mut ctx = this.ctx.borrow_mut();
             let brush = ctx.state.brushes.get_mut(&this.name).unwrap();
             brush.water += water;
             for (p, mass) in pigment_load.iter().enumerate() {
                 brush.pigment[p] += mass;
             }
+            let lab_mass = lab_load.values().sum::<f64>();
+            for (id, mass) in lab_load {
+                *brush.lab_pigments.entry(id).or_default() += mass;
+            }
             ctx.state.water_supplied += water;
             for (p, mass) in pigment_load.iter().enumerate() {
                 ctx.state.pigment_supplied[p] += mass;
             }
+            ctx.state.pigment_supplied[0] += lab_mass;
             Ok(())
         });
         methods.add_method(
@@ -720,6 +794,35 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             if c.state.canvas.is_some() {
                 return Err(error("paper already exists; resume with a new chunk"));
             }
+            let kind = t
+                .get::<Option<String>>("kind")?
+                .unwrap_or("cold-press".into());
+            let solver = t.get::<Option<String>>("solver")?.unwrap_or("lab".into());
+            let seed = t.get::<Option<u32>>("seed")?.unwrap_or(71);
+            if solver == "lab" {
+                if t.contains_key("size")? || t.contains_key("aspect")? || t.contains_key("cell")? {
+                    return Err(error("Lab paper uses width and height in cells"));
+                }
+                let kind = match kind.as_str() {
+                    "cold-press" => PaperKind::ColdPress,
+                    "hot-press" => PaperKind::HotPress,
+                    "rough" => PaperKind::Rough,
+                    _ => return Err(error("paper kind must be cold-press, hot-press or rough")),
+                };
+                c.state.canvas = Some(
+                    Watercolor::new_lab(
+                        t.get::<Option<usize>>("width")?.unwrap_or(1056),
+                        t.get::<Option<usize>>("height")?.unwrap_or(704),
+                        seed,
+                        kind,
+                    )
+                    .map_err(error)?,
+                );
+                return Ok(());
+            }
+            if solver != "current" {
+                return Err(error("solver must be current or lab"));
+            }
             let size = number(&t, "size", 36.0)?;
             let aspect = number(&t, "aspect", 1.5)?;
             let cell_mm = number(&t, "cell", 0.05)?;
@@ -729,39 +832,12 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             if !(2.0..=60.0).contains(&size) || !(0.5..=3.0).contains(&aspect) {
                 return Err(error("paper size must be 2..60 mm, aspect 0.5..3"));
             }
-            let kind = t
-                .get::<Option<String>>("kind")?
-                .unwrap_or("cold-press".into());
-            let solver = t
-                .get::<Option<String>>("solver")?
-                .unwrap_or("current".into());
-            if solver != "current" && solver != "lab" {
-                return Err(error("solver must be current or lab"));
-            }
             let w = (size / cell_mm).round() as usize;
             let h = (w as f64 / aspect).round() as usize;
             if w * h > 1_500_000 {
                 return Err(error("experimental paper exceeds 1500000 cells"));
             }
-            let seed = t.get::<Option<u64>>("seed")?.unwrap_or(71);
-            let mut paper = Watercolor::new_at(w, h, seed, cell_mm);
-            if solver == "lab" {
-                let kind = match kind.as_str() {
-                    "cold-press" => PaperKind::ColdPress,
-                    "hot-press" => PaperKind::HotPress,
-                    "rough" => PaperKind::Rough,
-                    _ => return Err(error("invalid lab paper kind")),
-                };
-                paper.schema = 4;
-                paper.lab = Some(crate::lab_adapter::LabSheet::new(Simulation::new(
-                    w,
-                    h,
-                    kind,
-                    seed as u32,
-                )));
-                c.state.canvas = Some(paper);
-                return Ok(());
-            }
+            let mut paper = Watercolor::new_at(w, h, seed as u64, cell_mm);
             match kind.as_str() {
                 "cold-press" => {}
                 "hot-press" => {
@@ -791,9 +867,16 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                     }
                 }
             } else {
-                let width = number(&t, "width", 1.0)?;
-                if !(0.1..=20.0).contains(&width) {
-                    return Err(error("brush width must be 0.1..20 mm"));
+                let cells = c.canvas()?.schema == 5;
+                let width = number(&t, "width", if cells { 24.0 } else { 1.0 })?;
+                if !(if cells { 1.0 } else { 0.1 }..=if cells { 2400.0 } else { 20.0 })
+                    .contains(&width)
+                {
+                    return Err(error(if cells {
+                        "brush width must be 1..2400 cells"
+                    } else {
+                        "brush width must be 0.1..20 mm"
+                    }));
                 }
                 c.state.brushes.insert(
                     name.clone(),
@@ -801,6 +884,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                         width,
                         water: 0.0,
                         pigment: [0.0; PIGMENTS],
+                        lab_pigments: BTreeMap::new(),
                     },
                 );
             }
@@ -815,13 +899,22 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let x = number(&t, "x", 0.0)?;
             let y = number(&t, "y", 0.0)?;
             let water = number(&t, "water", 1.0)?;
-            let radius = number(&t, "radius", 0.75)?;
-            if !(0.0..=100.0).contains(&water) || !(0.1..=10.0).contains(&radius) {
-                return Err(error("drop needs nonnegative water and radius 0.1..10 mm"));
-            }
             let mut c = c.borrow_mut();
             let canvas = c.canvas()?;
-            let cell_mm = canvas.cell_mm;
+            let cells = canvas.schema == 5;
+            let radius = number(&t, "radius", if cells { 12.0 } else { 0.75 })?;
+            if !(0.0..=100.0).contains(&water)
+                || !(if cells { 1.0 } else { 0.1 }..=if cells { 1200.0 } else { 10.0 })
+                    .contains(&radius)
+            {
+                return Err(error(if cells {
+                    "drop water must be 0..100 and radius 1..1200 cells"
+                } else {
+                    "drop needs nonnegative water and radius 0.1..10 mm"
+                }));
+            }
+            let cell_mm = if cells { 1.0 } else { canvas.cell_mm };
+            let area = canvas.cell_mm.powi(2);
             if let Some(lab) = &mut canvas.lab {
                 let mut stamp = lab_brush::Stamp {
                     x: x / cell_mm,
@@ -835,7 +928,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 if weight == 0.0 {
                     return Err(error("drop is outside paper"));
                 }
-                stamp.water = water / (0.055 * weight * cell_mm.powi(2));
+                stamp.water = water / (0.055 * weight * area);
                 lab.splat(&[stamp], None);
                 lab.water_released_mm3 += water;
                 c.state.water_supplied += water;
@@ -1037,7 +1130,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             Ok(s.tick as f64 * TICK_NS as f64 / 1e9 + s.residual_ns as f64 / 1e9)
         })?,
     )?;
-    let c = ctx;
+    let c = ctx.clone();
     globals.set(
         "balance",
         lua.create_function(move |lua, ()| {
@@ -1056,6 +1149,8 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                     t.set("live_pigment",lab.simulation.sus_k.read.iter().chain(&lab.simulation.dep_k.read).map(|v|v[3] as f64).sum::<f64>()*s.cell_mm.powi(2))?;
                     t.set("max_surface_depth_mm",lab.simulation.flow.read.iter().map(|v|v[2] as f64).fold(0.0_f64,f64::max))?;
                     t.set("dry",lab.is_dry())?;
+                    t.set("max_surface_water", lab.simulation.flow.read.iter().map(|v| v[2] as f64).fold(0.0_f64, f64::max))?;
+                    t.set("max_wetness", lab.simulation.flow.read.iter().map(|v| v[3] as f64).fold(0.0_f64, f64::max))?;
                     t.set("inventory_note","Reference advection and half-float rounding can change mass. Dried pigment is stored as reflectance, so per-pigment conservation cannot be recovered.")?;
                     return Ok(t);
                 }
@@ -1077,8 +1172,18 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
     )?;
     globals.set(
         "palette",
-        lua.create_function(|lua, ()| {
-            lua.create_sequence_from(["ultramarine", "phthalo", "earth"])
+        lua.create_function(move |lua, ()| {
+            if ctx
+                .borrow()
+                .state
+                .canvas
+                .as_ref()
+                .is_none_or(|s| s.schema == 5)
+            {
+                lua.create_sequence_from(pigments().into_iter().map(|p| p.id))
+            } else {
+                lua.create_sequence_from(["ultramarine", "phthalo", "earth"])
+            }
         })?,
     )?;
     Ok(())
@@ -1160,7 +1265,12 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
         .open(&lock)
         .map_err(error)?;
     let _guard = Lock(lock);
-    let state = load(root)?;
+    let mut state = load(root)?;
+    if let Some(canvas) = &mut state.canvas {
+        if canvas.schema == 5 {
+            canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;
+        }
+    }
     if state.applied_sources.iter().any(|s| s == source) {
         return Err(error(
             "this exact chunk already ran; submit a new continuation chunk",

@@ -2956,7 +2956,7 @@ const FLEX_MM: f32 = 4.0;
 /// bead of paint it carries (coats × units², as a bristle's load). It lays
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
 /// ridges and a bead where it lifts, and scrapes wet paint off.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Knife {
     pub width: f32,
     vol: f32,
@@ -2964,7 +2964,24 @@ pub struct Knife {
     lat: Latent,
     hide: Prop,
     cure: f32,
+    #[cfg(feature = "knife-1")]
+    flex: Option<f32>,
 }
+
+impl std::fmt::Debug for Knife {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("Knife");
+        d.field("width", &self.width).field("vol", &self.vol).field("solvent", &self.solvent)
+            .field("lat", &self.lat).field("hide", &self.hide).field("cure", &self.cure);
+        #[cfg(feature = "knife-1")]
+        if let Some(flex) = self.flex { d.field("knife_1_flex", &flex); }
+        d.finish()
+    }
+}
+
+#[cfg(feature = "knife-1")]
+#[path = "knife1.rs"]
+mod knife1;
 
 impl Knife {
     /// Bound the work before resampling a knife path (pixel-space samples).
@@ -2982,7 +2999,10 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0,
+            #[cfg(feature = "knife-1")]
+            flex: None,
+        }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -3036,6 +3056,11 @@ impl Canvas {
     /// top, or over dry impasto paint on its peaks only. When the blade
     /// lifts, the share `lift` of the bead stays where it last was.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
+        #[cfg(feature = "knife-1")]
+        if k.is_experimental() {
+            self.knife_1(k, pts, pressure, angle, lay, lift, if lay { 20.0 } else { 70.0 });
+            return;
+        }
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;

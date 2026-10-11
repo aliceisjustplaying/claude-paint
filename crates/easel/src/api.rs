@@ -426,8 +426,18 @@ impl UserData for KnifeU {
                     return err(format!("k:{name}: needs points"));
                 }
                 let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                #[cfg(feature = "knife-1")]
+                let mut tilt = if lay { 20.0 } else { 70.0 };
                 if let Some(o) = &o {
-                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    let keys = &["pressure", "angle", "lift"][..];
+                    #[cfg(feature = "knife-1")]
+                    let keys = if k.k.borrow().is_experimental() { &["pressure", "angle", "lift", "tilt"][..] } else { keys };
+                    check_keys(o, keys, &format!("k:{name}"))?;
+                    #[cfg(feature = "knife-1")]
+                    if let Some(t) = num(o, "tilt")? {
+                        if !(0.0..=90.0).contains(&t) { return err(format!("k:{name}: tilt is degrees above the canvas, 0 to 90")); }
+                        tilt = t;
+                    }
                     if let Some(p) = pair(o, "pressure")? {
                         pressure = p;
                     }
@@ -443,7 +453,14 @@ impl UserData for KnifeU {
                 let scale = k.st.borrow().width as f32 / 1000.0;
                 if let Err(e) = paint::Knife::check_path(&pts, scale) { return err(format!("k:{name}: {e}")); }
                 time::verb(&k.st, Verb::Marks, |s| {
-                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                    let mut blade = k.k.borrow_mut();
+                    #[cfg(feature = "knife-1")]
+                    if blade.is_experimental() {
+                        c.knife_1(&mut blade, &pts, pressure, angle, lay, lift, tilt);
+                        return Ok(());
+                    }
+                    c.knife(&mut blade, &pts, pressure, angle, lay, lift);
                     Ok(())
                 })
             });
@@ -2087,9 +2104,25 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     if st.borrow().tubes.engine >= 4 {
         let st1 = st.clone();
         g.set("knife", lua.create_function(move |_, o: Option<Table>| {
+            #[cfg(feature = "knife-1")]
+            let mut flex = None;
             let width = match &o {
                 Some(o) => {
-                    check_keys(o, &["width"], "knife")?;
+                    #[cfg(not(feature = "knife-1"))]
+                    let keys = &["width"][..];
+                    #[cfg(feature = "knife-1")]
+                    let keys = &["width", "model", "flex"][..];
+                    check_keys(o, keys, "knife")?;
+                    #[cfg(feature = "knife-1")]
+                    {
+                        let model: Option<String> = o.get("model")?;
+                        if let Some(model) = model {
+                            if model != "knife-1" { return err("knife: experimental model is \"knife-1\""); }
+                            let f = num(o, "flex")?.unwrap_or(0.65);
+                            if !(0.0..=1.0).contains(&f) { return err("knife: flex is the blade's compliance, 0 to 1"); }
+                            flex = Some(f);
+                        } else if num(o, "flex")?.is_some() { return err("knife: flex needs model=\"knife-1\""); }
+                    }
                     num(o, "width")?.unwrap_or(20.0)
                 }
                 None => 20.0,
@@ -2097,7 +2130,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(2.0..=200.0).contains(&width) {
                 return err("knife{width=}: the blade's length in units, 2 to 200");
             }
-            let k = Rc::new(RefCell::new(paint::Knife::new(width)));
+            let blade = paint::Knife::new(width);
+            #[cfg(feature = "knife-1")]
+            let blade = if let Some(f) = flex { blade.experimental(f) } else { blade };
+            let k = Rc::new(RefCell::new(blade));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             Ok(KnifeU { k, st: st1.clone() })
         })?)?;

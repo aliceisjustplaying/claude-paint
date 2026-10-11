@@ -1,4 +1,4 @@
-paper{kind="cold-press",size=60,aspect=1.5,cell=0.05,seed=71}
+paper{solver="current",kind="cold-press",size=60,aspect=1.5,cell=0.05,seed=71}
 sky=brush{name="sky",width=10}
 sky:load{water=90,pigments={ultramarine=1.8}}
 sky:load{water=90,pigments={ultramarine=1.8}}

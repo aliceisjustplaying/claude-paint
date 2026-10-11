@@ -1,4 +1,4 @@
-paper{kind="cold-press",size=16,aspect=2/3,cell=0.05,seed=71}
+paper{solver="current",kind="cold-press",size=16,aspect=2/3,cell=0.05,seed=71}
 local samples={
     {"phthalo",0.0012},
     {"ultramarine",0.0007},

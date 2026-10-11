@@ -130,6 +130,8 @@ class Easel:
         return proc.returncode, out.decode(errors="replace")
 
     async def ensure_open(self, deadline):
+        if (self.studio / "bin/watercolor-studio").is_file():
+            return False
         opened = rebuilding = False
         completed, total = -1, None
         progress_deadline = deadline
@@ -278,6 +280,21 @@ class Easel:
         return [types.TextContent(type="text", text=said)]
 
 
+def tool_definitions(studio):
+    definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
+    if (studio / "bin/watercolor-studio").is_file():
+        for definition in definitions:
+            if definition["name"] == "paint":
+                definition["description"] = "Run a Lua chunk on watercolor paper (notes/watercolor_easel_guide.md). Successful chunks keep the paper, named brushes and clock for the next chunk. A failed chunk keeps the committed state."
+            elif definition["name"] == "look":
+                definition["description"] = "Look at watercolor paper. The painter sees Color by default; mode can be color, gallery or relief. Gallery uses 115/55/1 light and Relief uses 135/25/1. size sets the long side in pixels, 16..2400. crop is x0,y0,x1,y1 in integer cells and stays at 1:1. Display-only Gallery and Relief companions accompany a Color look."
+                definition["inputSchema"]["properties"] = {key: value for key, value in definition["inputSchema"]["properties"].items() if key in ("scratch", "crop", "mode", "size")}
+            for key in ("scratch", "new_scratch"):
+                if key in definition["inputSchema"]["properties"]:
+                    definition["inputSchema"]["properties"][key]["description"] = "true: use separate scratch paper, with the painting's size, kind and seed, its own brushes, clock and log" if key == "scratch" else "with scratch: true, keep the old scratch sheet's log and checkpoint and start a fresh sheet before this chunk"
+    return definitions
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--studio", default=os.environ.get("EASEL_ROOT"))
@@ -291,17 +308,7 @@ async def main():
         from remote import RemoteStudio
         recorded = RemoteStudio(easel.studio, args.sessions_root, response_wait=24 * 60 * 60, easel=easel)
     server = Server("easel")
-    definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
-    if (easel.studio / "bin/watercolor-studio").is_file():
-        for definition in definitions:
-            if definition["name"] == "paint":
-                definition["description"] = "Run a Lua chunk on watercolor paper (notes/watercolor_easel_guide.md). Successful chunks keep the paper, named brushes and clock for the next chunk. A failed chunk keeps the committed state."
-            elif definition["name"] == "look":
-                definition["description"] = "Look at watercolor paper. The painter sees Color by default; mode can be color, gallery or relief. Gallery uses 115/55/1 light and Relief uses 135/25/1. size sets the long side in pixels, 16..2400. crop is x0,y0,x1,y1 in integer cells and stays at 1:1. Display-only Gallery and Relief companions accompany a Color look."
-                definition["inputSchema"]["properties"] = {key: value for key, value in definition["inputSchema"]["properties"].items() if key in ("scratch", "crop", "mode", "size")}
-            for key in ("scratch", "new_scratch"):
-                if key in definition["inputSchema"]["properties"]:
-                    definition["inputSchema"]["properties"][key]["description"] = "true: use separate scratch paper, with the painting's size, kind and seed, its own brushes, clock and log" if key == "scratch" else "with scratch: true, keep the old scratch sheet's log and checkpoint and start a fresh sheet before this chunk"
+    definitions = tool_definitions(easel.studio)
 
     @server.list_tools()
     async def list_tools():

@@ -19,9 +19,9 @@ fn root() -> PathBuf {
 fn explicit_box_and_duplicate_chunks_fail_closed() {
     let p = root();
     fs::write(p.join("box"), "oil\n").unwrap();
-    assert!(studio::run(&p, "paper{size=3}").is_err());
+    assert!(studio::run(&p, "paper{solver='current',size=3}").is_err());
     fs::write(p.join("box"), "watercolor\n").unwrap();
-    let code = "paper{size=3,aspect=1.5}";
+    let code = "paper{solver='current',size=3,aspect=1.5}";
     studio::run(&p, code).unwrap();
     let before = fs::read(p.join("checkpoint.json")).unwrap();
     assert!(studio::run(&p, code).is_err());
@@ -33,7 +33,7 @@ fn explicit_box_and_duplicate_chunks_fail_closed() {
 fn resume_keeps_named_loads_clock_material_and_images_exact() {
     let a = root();
     let b = root();
-    let start="paper{size=4,aspect=1.5}; b=brush{name='b',width=0.6}; b:load{water=2,pigments={ultramarine=0.01,earth=0.005}}; b:stroke{{0.4,1},{3.6,1.8}}; wait(0.123456789)";
+    let start="paper{solver='current',size=4,aspect=1.5}; b=brush{name='b',width=0.6}; b:load{water=2,pigments={ultramarine=0.01,earth=0.005}}; b:stroke{{0.4,1},{3.6,1.8}}; wait(0.123456789)";
     studio::run(&a, start).unwrap();
     studio::run(&b, start).unwrap();
     let bytes = fs::read(a.join("checkpoint.json")).unwrap();
@@ -59,7 +59,7 @@ fn failed_chunk_rolls_back_state_outputs_and_named_saves() {
     let p = root();
     studio::run(
         &p,
-        "paper{size=3}; b=brush{name='b'}; b:load{water=1,pigments={phthalo=0.01}}",
+        "paper{solver='current',size=3}; b=brush{name='b'}; b:load{water=1,pigments={phthalo=0.01}}",
     )
     .unwrap();
     let before = fs::read(p.join("checkpoint.json")).unwrap();
@@ -73,7 +73,7 @@ fn failed_chunk_rolls_back_state_outputs_and_named_saves() {
 #[test]
 fn lift_blot_dry_contact_and_frame_hooks_conserve_whole_studio() {
     let p = root();
-    let s=studio::run(&p,"paper{size=4,kind='hot-press'}; b=brush{name='b',width=0.6}; b:load{water=2,pigments={earth=0.04,ultramarine=0.01}}; b:wash{x=0.2,y=0.2,width=3.5,height=2}; frames{every=0.0625,width=64}; wait(0.25); frames(false); blot{x=0.2,y=0.2,width=1,height=1}; d=brush{name='d',width=0.4}; d:load{water=0.1}; d:lift{{1,1},{3,1}}; t=brush{name='t',width=0.3}; t:load{pigments={earth=0.01}}; t:stroke({{0.5,2},{3,2}},{dry=true}); assert(balance().conserved)").unwrap();
+    let s=studio::run(&p,"paper{solver='current',size=4,kind='hot-press'}; b=brush{name='b',width=0.6}; b:load{water=2,pigments={earth=0.04,ultramarine=0.01}}; b:wash{x=0.2,y=0.2,width=3.5,height=2}; frames{every=0.0625,width=64}; wait(0.25); frames(false); blot{x=0.2,y=0.2,width=1,height=1}; d=brush{name='d',width=0.4}; d:load{water=0.1}; d:lift{{1,1},{3,1}}; t=brush{name='t',width=0.3}; t:load{pigments={earth=0.01}}; t:stroke({{0.5,2},{3,2}},{dry=true}); assert(balance().conserved)").unwrap();
     s.check_balance().unwrap();
     assert!(s.blotted_water > 0.0);
     assert!(s.brushes["d"].pigment.iter().sum::<f64>() > 0.0);
@@ -127,7 +127,7 @@ fn directional_contact_extends_along_the_stroke_from_a_tooth_peak() {
 #[test]
 fn named_checkpoint_can_resume_and_a_loop_is_bounded() {
     let p = root();
-    studio::run(&p,"paper{size=3}; b=brush{name='b'}; b:load{water=1,pigments={earth=0.01}}; wait(0.123456789); save('before.json')").unwrap();
+    studio::run(&p,"paper{solver='current',size=3}; b=brush{name='b'}; b:load{water=1,pigments={earth=0.01}}; wait(0.123456789); save('before.json')").unwrap();
     let saved = studio::Session::decode(&fs::read(p.join("before.json")).unwrap()).unwrap();
     studio::run(&p, "wait(2)").unwrap();
     studio::restore(&p, "before.json").unwrap();
@@ -141,7 +141,7 @@ fn named_checkpoint_can_resume_and_a_loop_is_bounded() {
 #[test]
 fn look_without_arguments_uses_color_and_keeps_material_unchanged() {
     let p = root();
-    let state = studio::run(&p, "paper{size=3}; look()").unwrap();
+    let state = studio::run(&p, "paper{solver='current',size=3}; look()").unwrap();
     studio::render(
         state.canvas.as_ref().unwrap(),
         &p.join("expected.png"),
@@ -160,7 +160,7 @@ fn look_without_arguments_uses_color_and_keeps_material_unchanged() {
 #[test]
 fn balance_distinguishes_peak_depth_from_surface_volume() {
     let p = root();
-    let state = studio::run(&p, "paper{size=3,aspect=1}; b=brush{name='b'}; b:load{water=1}; b:wash{x=0.3,y=0.3,width=2,height=2}; local q=balance(); assert(math.abs(q.max_surface_depth_mm-0.12)<1e-12); assert(math.abs(q.surface_water_mm3-0.48)<1e-10); assert(clock()==0)").unwrap();
+    let state = studio::run(&p, "paper{solver='current',size=3,aspect=1}; b=brush{name='b'}; b:load{water=1}; b:wash{x=0.3,y=0.3,width=2,height=2}; local q=balance(); assert(math.abs(q.max_surface_depth_mm-0.12)<1e-12); assert(math.abs(q.surface_water_mm3-0.48)<1e-10); assert(clock()==0)").unwrap();
     state.check_balance().unwrap();
     fs::remove_dir_all(p).unwrap();
 }

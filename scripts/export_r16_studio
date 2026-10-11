@@ -120,7 +120,7 @@ if [ "$profile" = watercolor ]; then
   git -C "$repo" show "$branch:experiments/watercolor/THIRD_PARTY_NOTICES.md" > "$dest/bin/THIRD_PARTY_NOTICES.md"
   git -C "$repo" show "$branch:notes/watercolor_easel_guide.md" > "$dest/notes/watercolor_easel_guide.md"
   cp "$dest/notes/watercolor_easel_guide.md" "$dest/notes/easel_guide.md"
-  for file in server.py tools.json remote.py; do
+  for file in server.py tools.json remote.py http_server.py; do
     git -C "$repo" show "$branch:harness/easel_mcp/$file" > "$dest/bin/mcp/$file"
   done
   : > "$dest/notes/journal.md"

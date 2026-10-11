@@ -1,4 +1,4 @@
-paper{kind="cold-press", size=36, aspect=1.5, seed=71}
+paper{solver="current", kind="cold-press", size=36, aspect=1.5, seed=71}
 sky=brush{name="sky", width=6}
 sky:load{water=65, pigments={ultramarine=1.3}}
 sky:wash{x=0, y=0, width=36, height=14, grade=0.15}

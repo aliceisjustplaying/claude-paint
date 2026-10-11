@@ -77,6 +77,15 @@ fn main() {
                 (c.tick as f64 * TICK_NS as f64 + c.residual_ns as f64) / 1e9
             })
         };
+        let stamp = |state: &studio::Session| {
+            let seconds = clock(state) as u64 + 9 * 3600;
+            format!(
+                "day {}, {:02}:{:02}",
+                seconds / 86400 + 1,
+                seconds / 3600 % 24,
+                seconds / 60 % 60
+            )
+        };
         match args[2].as_str() {
             "restore" if args.len() == 5 => studio::restore(root, &args[4])?,
             "init" if args.len() == 4 => {
@@ -116,7 +125,11 @@ fn main() {
                         lab.simulation.width, lab.simulation.height
                     );
                 }
-                println!("painting time: {:.4}s\nok", clock(&state));
+                println!(
+                    "{}\npainting time: {:.4}s\nok",
+                    stamp(&state),
+                    clock(&state)
+                );
             }
             "render" if args.len() >= 5 => {
                 let state = studio::load(&work)?;
@@ -125,7 +138,11 @@ fn main() {
                     .as_ref()
                     .ok_or_else(|| mlua::Error::external("no paper state"))?;
                 let mut mode = "gallery";
-                let mut width = canvas.width as u32;
+                let mut width = if canvas.schema == 5 {
+                    canvas.width as u32
+                } else {
+                    1200
+                };
                 let mut crop = None;
                 let options: Vec<_> = args[5..]
                     .iter()
@@ -215,7 +232,7 @@ fn main() {
                 } else {
                     println!("watercolor: no paper yet");
                 }
-                println!("painting time: {:.4}s", clock(&state));
+                println!("{}\npainting time: {:.4}s", stamp(&state), clock(&state));
             }
             "log" => println!("{}", studio::load(&work)?.applied_sources.join("\n\n")),
             "note" if args.len() == 5 && args[4] == "-" => {
@@ -232,8 +249,8 @@ fn main() {
                     .map_err(mlua::Error::external)?;
                 writeln!(
                     journal,
-                    "- {:.4}s: {}",
-                    clock(&state),
+                    "- {}: {}",
+                    stamp(&state),
                     text.trim().replace('\n', "\n  ")
                 )
                 .map_err(mlua::Error::external)?;

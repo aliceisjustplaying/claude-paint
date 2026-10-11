@@ -38,7 +38,7 @@ def main():
         parser.error("the approved brief names missing notes: " + ", ".join(sorted(set(missing))))
     (dest / "BRIEF.md").write_bytes(brief.encode())
     runtime = dest / "bin/mcp"
-    runtime.mkdir()
+    runtime.mkdir(exist_ok=True)
     for name in ("server.py", "tools.json", *(["remote.py"] if args.sessions_root else [])):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     registration = {

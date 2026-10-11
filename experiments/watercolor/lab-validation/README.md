@@ -50,7 +50,7 @@ passes are reported separately, not disguised as an overall green result.
 
 `marks.json` is the single input for both capture runners. It pins a 1056×704
 cold-press sheet, seed 71, French ultramarine PB29 and burnt sienna PR101. Paths
-use the upstream brush's finite reservoir, pressure 0.55 and two physics
+use the upstream brush's depleting reservoir with its 0.15 floor, pressure 0.55 and two physics
 substeps per path segment. Stage programs are applied to one continuing
 simulation, never four independent replays. Both views use the source render
 with backlight off and X-ray off.

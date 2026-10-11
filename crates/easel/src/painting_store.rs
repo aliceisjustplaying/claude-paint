@@ -52,6 +52,7 @@ pub struct PaintingStore {
     poisoned: bool,
 }
 
+#[cfg(any(feature = "replay", test))]
 pub struct ReadRevision {
     dir: PathBuf,
     _gate: File,
@@ -280,6 +281,8 @@ impl PaintingStore {
 
     pub fn open(dir: PathBuf, budget: u64, runtime: String) -> io::Result<Self> {
         if !valid_id(&runtime) { return Err(invalid("runtime identity isn't SHA-256")); }
+        let dir = crate::normalized_path(&dir)?;
+        let existing = dir.ancestors().find(|p| p.exists()).ok_or_else(|| invalid("store has no existing ancestor"))?.to_path_buf();
         std::fs::create_dir_all(&dir)?;
         for name in ["objects", "revisions"] {
             let path = dir.join(name);
@@ -291,7 +294,10 @@ impl PaintingStore {
         let gate = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(dir.join("readers.lock"))?;
         gate.lock()?;
         sync_dir(&dir)?;
-        if let Some(parent) = dir.parent() { sync_dir(parent)?; }
+        for ancestor in dir.ancestors() {
+            sync_dir(ancestor)?;
+            if ancestor == existing { break }
+        }
         let current = root(&dir)?.map(|id| manifest(&dir, &id).map(|m| (id, m))).transpose()?;
         if let Some((_, m)) = &current {
             verify_revision(&dir, m)?;
@@ -466,6 +472,7 @@ impl PaintingStore {
     }
 }
 
+#[cfg(any(feature = "replay", test))]
 impl ReadRevision {
     pub fn open(dir: PathBuf) -> io::Result<Self> {
         let gate = File::open(dir.join("readers.lock"))?;
@@ -480,3 +487,7 @@ impl ReadRevision {
         self.manifest.checkpoint.as_ref().map(|c| object_path(&self.dir, &c.id)).ok_or_else(|| invalid("committed revision has no canvas yet"))
     }
 }
+
+#[cfg(test)]
+#[path = "painting_store_tests.rs"]
+mod tests;

@@ -18,6 +18,41 @@ does; this says how to use them. What you paint is yours to choose.
   a crop with `grid: 10`) to read positions off a look before you aim a mask
   at something you saw.
 
+## Before another pass: a decision checklist
+
+1. **Check the paint state.** Use `drying(x, y)` along the next pass and
+   at its edges: `"open"` blends and lifts; `"setting"` is stiff and barely
+   blends; `"tacky"` has set and grabs the brush; `"dry"` is touch-dry.
+   The call reads the top film, or the layer exposed in a gap. It cannot
+   detect a wet core under a dry skin. Work open paint for fusion; wait
+   for paint to set for separate strokes. If tacky paint breaks the
+   stroke, wait longer. See the guide's [Time](easel_guide.md#time).
+2. **Diagnose a failed deposit in a detail crop.** Check the load, the
+   paint the brush passed through and the layer beneath.
+   - Gaps between marks: try shorter strokes and more frequent reloads
+     if the brush runs dry. Check brush contact and coverage if gaps
+     remain; extra coverage can add dabs and relief.
+   - A continuous thin film showing the undercolour: test less thinning,
+     a fuller deposit or a mixture with stronger hiding. Evidence for
+     these fixes is limited; compare them on scratch.
+   - A mixture changed by paint carried on the brush: use a fresh brush.
+     If open underpaint caused pickup, wait for it to set when you need
+     separate colour. Check the pile itself before changing its recipe.
+3. **Prepare a transition.** Mix a few in-between tones, lay them and
+   look. Blend while the paint is workable, keeping preserved marks
+   outside the mask. Look after each pass and follow the stop signs in
+   [Blending](#blending). In dry paint, build the transition with new paint.
+4. **Choose a repair.** If further handling keeps mixing an unsuccessful
+   wet deposit, scrape or lift it before restating it. A knife scrapes
+   down to set paint; a rag lifts and smears wet paint and leaves a trace.
+   Inspect the residue before repainting. Set paint stays. See
+   [The knife](#the-knife) and [The rag](#the-rag) for handling and limits.
+5. **Test a doubtful change.** Use the scratch procedure in
+   [Plan before you paint](#plan-before-you-paint), matching the underpaint
+   and checking its drying state. Change one condition, compare and carry
+   the successful handling over. Leave the passage alone if another pass
+   has no clear benefit.
+
 ## Ground
 
 - An **oil ground** (the default) absorbs nothing: paint stays open and

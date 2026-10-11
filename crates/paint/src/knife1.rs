@@ -10,162 +10,6 @@ pub(super) struct Face {
     cure: f32,
 }
 
-#[cfg(all(test, feature = "knife-3"))]
-mod round_three_tests {
-    use super::*;
-
-    #[test]
-    fn knife_3_fluid_veil_is_exactly_the_round_two_path() {
-        let initial = Canvas::new(320, 2.0, crate::hex("#35556a"))
-            .with_size_mm(300.0)
-            .with_engine(5)
-            .with_linen(crate::Linen::fine(41));
-        let mark = |third| {
-            let mut c = initial.clone();
-            let mut k = Knife::new(110.0);
-            k = if third {
-                k.experimental_3(0.65)
-            } else {
-                k.experimental_2(0.65)
-            };
-            k.load(
-                Paint::new(crate::hex("#baa452"), 0.25, 0.1).with_thinner(0.35),
-                0.15,
-            );
-            c.knife_1(
-                &mut k,
-                &[(170.0, 250.0), (650.0, 250.0)],
-                (0.75, 0.82),
-                None,
-                true,
-                0.0,
-                10.0,
-            );
-            (
-                c.state_fields()
-                    .into_iter()
-                    .map(|f| f.values.le_bytes())
-                    .collect::<Vec<_>>(),
-                k.paint_volume(),
-                k.solvent_volume(),
-            )
-        };
-        assert_eq!(mark(false), mark(true));
-    }
-
-    #[test]
-    fn knife_3_contact_variation_conserves_faces_and_protects_set_layers_across_scales() {
-        for (seed, width, pressure, tilt, flex) in [
-            (7, 35.0, (0.0, 0.3), 10.0, 0.0),
-            (23, 110.0, (0.35, 0.6), 20.0, 0.65),
-            (41, 190.0, (0.8, 1.0), 45.0, 1.0),
-            (59, 75.0, (f32::MAX, -f32::MAX), 80.0, 0.65),
-        ] {
-            let mut c = Canvas::new(320, 2.0, crate::hex("#d6cebb"))
-                .with_size_mm(300.0)
-                .with_engine(5)
-                .with_linen(crate::Linen::fine(seed));
-            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
-            let mut k = Knife::new(width).experimental_3(flex);
-            k.load(Paint::body(crate::hex("#b3673e")).with_thinner(0.2), 0.8);
-            let before = (
-                c.wet_total() + k.paint_volume(),
-                c.solvent_total() + k.solvent_volume(),
-            );
-            for (points, lay, tilt) in [
-                (vec![(-30.0, 250.0), (1030.0, 250.0)], true, tilt),
-                (vec![(190.0, 250.0), (790.0, 250.0)], false, 75.0),
-                (vec![(190.0, 380.0), (790.0, 380.0)], true, 20.0),
-            ] {
-                c.knife_1(&mut k, &points, pressure, None, lay, 0.25, tilt);
-                for (after, before) in [
-                    (c.wet_total() + k.paint_volume(), before.0),
-                    (c.solvent_total() + k.solvent_volume(), before.1),
-                ] {
-                    assert!(
-                        (after - before).abs() < before.abs().max(1.0) * 3e-6,
-                        "{after} != {before}"
-                    );
-                }
-                assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
-                assert!(
-                    c.wet
-                        .vol
-                        .iter()
-                        .chain(c.wet.solv.iter())
-                        .all(|v| v.is_finite() && *v >= -1e-5)
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn knife_3_scrape_contacts_a_footprint_over_set_tooth_without_a_pixel_grid() {
-        let mark = |third| {
-            let mut c = Canvas::new(640, 2.0, crate::hex("#35556a"))
-                .with_size_mm(300.0)
-                .with_engine(5);
-            let s = c.f.scale;
-            let orange = Paint::body(crate::hex("#b3673e"));
-            for y in 0..c.f.h {
-                for x in 0..c.f.w {
-                    c.height[y * c.f.w + x] = if (x / 2 + y / 2) % 2 == 0 {
-                        220.0
-                    } else {
-                        340.0
-                    };
-                }
-            }
-            let sf = c.surf();
-            for y in (200.0 * s) as usize..(300.0 * s) as usize {
-                for x in (150.0 * s) as usize..(800.0 * s) as usize {
-                    unsafe {
-                        sf.add(y * sf.w + x, 4.0, &orange.latent(), orange.prop(), 0.0);
-                    }
-                }
-            }
-            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
-            let before = c.wet_total();
-            let mut k = Knife::new(110.0);
-            k = if third {
-                k.experimental_3(0.65)
-            } else {
-                k.experimental_2(0.65)
-            };
-            c.knife_1(
-                &mut k,
-                &[(190.0, 250.0), (790.0, 250.0)],
-                (1.0, 1.0),
-                None,
-                false,
-                0.0,
-                75.0,
-            );
-            assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
-            assert!((c.wet_total() + k.paint_volume() - before).abs() < before * 3e-6);
-            let mut jumps = 0.0;
-            for y in (230.0 * s) as usize..(270.0 * s) as usize {
-                for x in (300.0 * s) as usize..(700.0 * s) as usize {
-                    let i = y * c.f.w + x;
-                    jumps += (c.wet.vol[i] - c.wet.vol[i + 1]).abs() as f64
-                        + (c.wet.vol[i] - c.wet.vol[i + c.f.w]).abs() as f64;
-                }
-            }
-            jumps
-        };
-        let previous = mark(false);
-        let current = mark(true);
-        assert!(
-            previous > 100.0,
-            "the old pixel cutoff must be exercised: {previous}"
-        );
-        assert!(
-            current < previous * 0.35,
-            "knife-2={previous}, knife-3={current}"
-        );
-    }
-}
-
 #[cfg(feature = "knife-2")]
 impl Face {
     fn bind(&self, k: &mut Knife) -> (f64, f64) {
@@ -420,7 +264,7 @@ impl Canvas {
             let pr =
                 (pressure.0 + (pressure.1 - pressure.0) * step as f32 / n as f32).clamp(0.0, 1.0);
             let pr = if third && (body_pass || !lay) {
-                (pr + 0.09
+                (pr + 0.25
                     * flex
                     * (crate::surface::vnoise(d * mm_px * 0.065, 7.0, seed ^ 0xF1E7) - 0.5))
                     .clamp(0.0, 1.0)
@@ -490,7 +334,7 @@ impl Canvas {
                             d * mm_px * 0.035,
                             seed ^ 0xD2A6,
                         ) - 0.5;
-                        (pr + flex * pr.sqrt() * (0.24 * bend + 0.055 * drag)).clamp(0.0, 1.0)
+                        (pr + flex * pr.sqrt() * (0.75 * bend + 0.18 * drag)).clamp(0.0, 1.0)
                     } else {
                         pr
                     }
@@ -664,19 +508,19 @@ impl Canvas {
                         let phi = (blade_solvent / liquid) as f32;
                         let paint = give * (1.0 - phi);
                         let solvent = give * phi;
-                        let side = if body_pass && u.abs() > 0.7 {
+                        let lip_wander = if third {
+                            0.6 * crate::surface::vnoise(
+                                d * mm_px * 0.12,
+                                u.signum() + 4.0,
+                                seed ^ 0x11F3,
+                            )
+                        } else {
+                            0.0
+                        };
+                        let side_start = if third { 0.6 } else { 0.7 };
+                        let side = if body_pass && u.abs() > side_start {
                             let offset = if third {
-                                u.signum()
-                                    * (half
-                                        + (0.5
-                                            + 0.6
-                                                * crate::surface::vnoise(
-                                                    d * mm_px * 0.12,
-                                                    u.signum() + 4.0,
-                                                    seed ^ 0x11F3,
-                                                ))
-                                            / mm_px)
-                                    - u * half
+                                u.signum() * (half + (0.5 + lip_wander) / mm_px) - u * half
                             } else {
                                 u.signum() * (half * 1.03 + 0.3 * noise / mm_px) - u * half
                             };
@@ -695,17 +539,7 @@ impl Canvas {
                         };
                         let side_inner = if side.is_some() {
                             let offset = if third {
-                                u.signum()
-                                    * (half
-                                        + (-0.9
-                                            + 0.6
-                                                * crate::surface::vnoise(
-                                                    d * mm_px * 0.12,
-                                                    u.signum() + 4.0,
-                                                    seed ^ 0x11F3,
-                                                ))
-                                            / mm_px)
-                                    - u * half
+                                u.signum() * (half + (-0.9 + lip_wander) / mm_px) - u * half
                             } else {
                                 u.signum() * (half * 1.03 + (0.3 * noise - 0.55) / mm_px) - u * half
                             };
@@ -714,24 +548,15 @@ impl Canvas {
                             None
                         };
                         let side_middle = if third && side.is_some() {
-                            let offset = u.signum()
-                                * (half
-                                    + (0.05
-                                        + 0.6
-                                            * crate::surface::vnoise(
-                                                d * mm_px * 0.12,
-                                                u.signum() + 4.0,
-                                                seed ^ 0x11F3,
-                                            ))
-                                        / mm_px)
-                                - u * half;
+                            let offset =
+                                u.signum() * (half + (0.05 + lip_wander) / mm_px) - u * half;
                             pix(x + e.0 * offset, y + e.1 * offset)
                         } else {
                             None
                         };
                         let share = if side.is_some() {
-                            ((u.abs() - 0.7) / 0.3).clamp(0.0, 1.0)
-                                * if third { 0.85 } else { 0.7 }
+                            ((u.abs() - side_start) / (1.0 - side_start)).clamp(0.0, 1.0)
+                                * if third { 0.9 } else { 0.7 }
                                 * (0.35 + 0.65 * side_noise)
                         } else {
                             0.0
@@ -1527,5 +1352,203 @@ mod round_two_tests {
             crate::state_dump::Values::F32(v) => v.iter().all(|v| v.is_finite()),
             _ => true,
         }));
+    }
+}
+
+#[cfg(all(test, feature = "knife-3"))]
+mod round_three_tests {
+    use super::*;
+
+    #[test]
+    fn knife_3_compliant_pressure_breaks_a_flat_slab_into_coherent_thickness_changes() {
+        let mark = |flex| {
+            let mut c = Canvas::new(640, 2.0, crate::hex("#d6cebb"))
+                .with_size_mm(300.0)
+                .with_engine(5);
+            let mut k = Knife::new(110.0).experimental_3(flex);
+            k.load(Paint::body(crate::hex("#b3673e")), 0.9);
+            c.knife_1(
+                &mut k,
+                &[(190.0, 250.0), (650.0, 250.0)],
+                (0.45, 0.45),
+                None,
+                true,
+                0.0,
+                15.0,
+            );
+            let s = c.f.scale;
+            let mut samples = Vec::new();
+            for y in (220.0 * s) as usize..(280.0 * s) as usize {
+                for x in (300.0 * s) as usize..(550.0 * s) as usize {
+                    samples.push(c.wet.vol[y * c.f.w + x] as f64);
+                }
+            }
+            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+            let deviation = (samples.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
+                / samples.len() as f64)
+                .sqrt();
+            deviation / mean
+        };
+        let rigid = mark(0.0);
+        let compliant = mark(0.65);
+        assert!(
+            compliant > rigid * 1.3,
+            "rigid={rigid}, compliant={compliant}"
+        );
+        assert!(
+            compliant < 0.6,
+            "the body retains coherent flats: {compliant}"
+        );
+    }
+
+    #[test]
+    fn knife_3_fluid_veil_is_exactly_the_round_two_path() {
+        let initial = Canvas::new(320, 2.0, crate::hex("#35556a"))
+            .with_size_mm(300.0)
+            .with_engine(5)
+            .with_linen(crate::Linen::fine(41));
+        let mark = |third| {
+            let mut c = initial.clone();
+            let mut k = Knife::new(110.0);
+            k = if third {
+                k.experimental_3(0.65)
+            } else {
+                k.experimental_2(0.65)
+            };
+            k.load(
+                Paint::new(crate::hex("#baa452"), 0.25, 0.1).with_thinner(0.35),
+                0.15,
+            );
+            c.knife_1(
+                &mut k,
+                &[(170.0, 250.0), (650.0, 250.0)],
+                (0.75, 0.82),
+                None,
+                true,
+                0.0,
+                10.0,
+            );
+            (
+                c.state_fields()
+                    .into_iter()
+                    .map(|f| f.values.le_bytes())
+                    .collect::<Vec<_>>(),
+                k.paint_volume(),
+                k.solvent_volume(),
+            )
+        };
+        assert_eq!(mark(false), mark(true));
+    }
+
+    #[test]
+    fn knife_3_contact_variation_conserves_faces_and_protects_set_layers_across_scales() {
+        for (seed, width, pressure, tilt, flex) in [
+            (7, 35.0, (0.0, 0.3), 10.0, 0.0),
+            (23, 110.0, (0.35, 0.6), 20.0, 0.65),
+            (41, 190.0, (0.8, 1.0), 45.0, 1.0),
+            (59, 75.0, (f32::MAX, -f32::MAX), 80.0, 0.65),
+        ] {
+            let mut c = Canvas::new(320, 2.0, crate::hex("#d6cebb"))
+                .with_size_mm(300.0)
+                .with_engine(5)
+                .with_linen(crate::Linen::fine(seed));
+            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+            let mut k = Knife::new(width).experimental_3(flex);
+            k.load(Paint::body(crate::hex("#b3673e")).with_thinner(0.2), 0.8);
+            let before = (
+                c.wet_total() + k.paint_volume(),
+                c.solvent_total() + k.solvent_volume(),
+            );
+            for (points, lay, tilt) in [
+                (vec![(-30.0, 250.0), (1030.0, 250.0)], true, tilt),
+                (vec![(190.0, 250.0), (790.0, 250.0)], false, 75.0),
+                (vec![(190.0, 380.0), (790.0, 380.0)], true, 20.0),
+            ] {
+                c.knife_1(&mut k, &points, pressure, None, lay, 0.25, tilt);
+                for (after, before) in [
+                    (c.wet_total() + k.paint_volume(), before.0),
+                    (c.solvent_total() + k.solvent_volume(), before.1),
+                ] {
+                    assert!(
+                        (after - before).abs() < before.abs().max(1.0) * 3e-6,
+                        "{after} != {before}"
+                    );
+                }
+                assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+                assert!(
+                    c.wet
+                        .vol
+                        .iter()
+                        .chain(c.wet.solv.iter())
+                        .all(|v| v.is_finite() && *v >= -1e-5)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn knife_3_scrape_contacts_a_footprint_over_set_tooth_without_a_pixel_grid() {
+        let mark = |third| {
+            let mut c = Canvas::new(640, 2.0, crate::hex("#35556a"))
+                .with_size_mm(300.0)
+                .with_engine(5);
+            let s = c.f.scale;
+            let orange = Paint::body(crate::hex("#b3673e"));
+            for y in 0..c.f.h {
+                for x in 0..c.f.w {
+                    c.height[y * c.f.w + x] = if (x / 2 + y / 2) % 2 == 0 {
+                        220.0
+                    } else {
+                        340.0
+                    };
+                }
+            }
+            let sf = c.surf();
+            for y in (200.0 * s) as usize..(300.0 * s) as usize {
+                for x in (150.0 * s) as usize..(800.0 * s) as usize {
+                    unsafe {
+                        sf.add(y * sf.w + x, 4.0, &orange.latent(), orange.prop(), 0.0);
+                    }
+                }
+            }
+            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+            let before = c.wet_total();
+            let mut k = Knife::new(110.0);
+            k = if third {
+                k.experimental_3(0.65)
+            } else {
+                k.experimental_2(0.65)
+            };
+            c.knife_1(
+                &mut k,
+                &[(190.0, 250.0), (790.0, 250.0)],
+                (1.0, 1.0),
+                None,
+                false,
+                0.0,
+                75.0,
+            );
+            assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+            assert!((c.wet_total() + k.paint_volume() - before).abs() < before * 3e-6);
+            let mut jumps = 0.0;
+            for y in (230.0 * s) as usize..(270.0 * s) as usize {
+                for x in (300.0 * s) as usize..(700.0 * s) as usize {
+                    let i = y * c.f.w + x;
+                    jumps += (c.wet.vol[i] - c.wet.vol[i + 1]).abs() as f64
+                        + (c.wet.vol[i] - c.wet.vol[i + c.f.w]).abs() as f64;
+                }
+            }
+            jumps
+        };
+        let previous = mark(false);
+        let current = mark(true);
+        assert!(
+            previous > 100.0,
+            "the old pixel cutoff must be exercised: {previous}"
+        );
+        assert!(
+            current < previous * 0.35,
+            "knife-2={previous}, knife-3={current}"
+        );
     }
 }

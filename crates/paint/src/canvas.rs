@@ -12,6 +12,22 @@ pub(crate) const OIL_GROUND_GLOSS: f32 = 0.5;
 /// n ≈ 1.5: about 4%). A glossy surface sends it away from the viewer; a
 /// matte one scatters it back, a veil of white over the colors (engine 4).
 pub(crate) const SURFACE_REFLECTANCE: f32 = 0.04;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LookVersion {
+    Legacy,
+    #[default]
+    Gloss,
+}
+
+fn surface_sheen(n: [f32; 3], half: [f32; 3], gloss: f32, wet: f32) -> (f32, f32) {
+    let polished = crate::smoothstep(0.25, 0.95, gloss);
+    let exponent = crate::lerp(128.0, 512.0, polished);
+    let ndh = (n[0] * half[0] + n[1] * half[1] + n[2] * half[2]).clamp(0.0, 1.0);
+    let fresnel = SURFACE_REFLECTANCE + (1.0 - SURFACE_REFLECTANCE) * (1.0 - n[2]).powi(5);
+    let reflection = fresnel * polished * crate::lerp(0.5, 1.0, wet);
+    (reflection, reflection * ndh.powf(exponent))
+}
 /// The oil a fresh absorbent (chalk and glue) ground can draw out of the
 /// paint laid on it, coats per unit of `absorbent` (about 15 µm of oil).
 pub(crate) const ABSORB_COATS: f32 = 0.6;
@@ -550,12 +566,19 @@ impl Canvas {
     /// more of the room's light fills the shadows (a raking lamp in a dim
     /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        self.seen_lit_version(azimuth, elevation, strength, LookVersion::Legacy)
+    }
+
+    pub fn seen_lit_version(&self, azimuth: f32, elevation: f32, strength: f32, version: LookVersion) -> Vec<Rgb> {
         use rayon::prelude::*;
         // the room's light that fills the shadows: little where one low lamp
         // rakes across the picture in a dim room, much under a gallery's high
         // light, where walls and ceiling light the picture too
         let ambient = crate::lerp(0.3, 0.55, crate::smoothstep(10.0, 55.0, elevation));
-        let base = self.seen();
+        let base = match version {
+            LookVersion::Legacy => self.seen(),
+            LookVersion::Gloss => (0..self.px.len()).into_par_iter().map(|i| self.look_px(i)).collect(),
+        };
         let (w, h) = (self.f.w, self.f.h);
         let um_px = self.px_mm() * 1000.0;
         // the surface: dry height plus the wet film where paint is wet
@@ -621,16 +644,30 @@ impl Canvas {
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                let (reflection, spec) = match version {
+                    LookVersion::Legacy => (0.0, (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit),
+                    LookVersion::Gloss => {
+                        let (gloss, wet) = self.display_gloss(i);
+                        let (reflection, sheen) = surface_sheen(n, hv, gloss, wet);
+                        (reflection * strength.clamp(0.0, 1.0), sheen * lit * strength.clamp(0.0, 1.0))
+                    }
+                };
                 let p = base[i];
-                [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
+                p.map(|v| (v * shade * (1.0 - reflection) + spec).max(0.0))
             })
             .collect()
     }
 
     pub fn seen_museum(&self, contrast: f32) -> Vec<Rgb> {
+        self.seen_museum_version(contrast, LookVersion::Legacy)
+    }
+
+    pub fn seen_museum_version(&self, contrast: f32, version: LookVersion) -> Vec<Rgb> {
         let contrast = if contrast.is_finite() { contrast.clamp(0.0, 1.0) } else { 0.0 };
-        let base = self.seen();
+        let base = match version {
+            LookVersion::Legacy => self.seen(),
+            LookVersion::Gloss => (0..self.px.len()).into_par_iter().map(|i| self.look_px(i)).collect(),
+        };
         if contrast == 0.0 {
             return base;
         }
@@ -644,6 +681,7 @@ impl Canvas {
             ([el.cos() * az.cos(), -el.cos() * az.sin(), el.sin()], weight)
         }).collect();
         let flat: f32 = lights.iter().map(|(l, weight)| l[2] * weight).sum();
+        let weight_sum: f32 = lights.iter().map(|(_, weight)| weight).sum();
         let k = 0.5 / (self.px_mm() * 1000.0);
         base.into_par_iter().enumerate().map(|(i, p)| {
             let (x, y) = (i % w, i / w);
@@ -653,10 +691,34 @@ impl Canvas {
             let soft = 1.0 / (1.0 + (dx * dx + dy * dy).sqrt() / 1.2);
             let (dx, dy) = (dx * soft, dy * soft);
             let m = (dx * dx + dy * dy + 1.0).sqrt();
+            let n = [-dx / m, -dy / m, 1.0 / m];
             let diffuse: f32 = lights.iter().map(|(l, weight)| ((-dx * l[0] - dy * l[1] + l[2]) / m).max(0.0) * weight).sum();
             let shade = 1.0 + contrast * (diffuse / flat - 1.0);
-            p.map(|v| (v * shade).max(0.0))
+            let (reflection, spec) = match version {
+                LookVersion::Legacy => (0.0, 0.0),
+                LookVersion::Gloss => {
+                    let (gloss, wet) = self.display_gloss(i);
+                    let mut reflection = 0.0;
+                    let mut spec = 0.0;
+                    for (l, weight) in &lights {
+                        let hm = (l[0] * l[0] + l[1] * l[1] + (l[2] + 1.0).powi(2)).sqrt();
+                        let half = [l[0] / hm, l[1] / hm, (l[2] + 1.0) / hm];
+                        let (r, s) = surface_sheen(n, half, gloss, wet);
+                        reflection += r * weight;
+                        spec += s * weight;
+                    }
+                    (contrast * reflection / weight_sum, contrast * spec / weight_sum)
+                }
+            };
+            p.map(|v| (v * shade * (1.0 - reflection) + spec).max(0.0))
         }).collect()
+    }
+
+    fn display_gloss(&self, i: usize) -> (f32, f32) {
+        let volume = self.wet.vol[i];
+        let cover = crate::wet::bead_cover(self.wet.cover[i], volume, self.px_mm() * 1000.0);
+        let wet = if cover > 0.0 { cover * crate::smoothstep(0.0, 0.1, volume / cover) } else { 0.0 };
+        (crate::lerp(self.gloss[i].clamp(0.0, 1.0), 1.0, wet), wet)
     }
 
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in
@@ -840,6 +902,60 @@ mod tests {
 #[cfg(test)]
 mod review_lighting_tests {
     use super::*;
+
+    #[test]
+    fn gloss_light_preserves_flat_matte_darks_and_concentrates_sheen() {
+        let mut c = Canvas::new_window(32, 1.0, [0.02, 0.015, 0.01], None);
+        c.gloss.fill(0.05);
+        assert_eq!(c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss), c.px);
+        assert_eq!(c.seen_museum_version(0.32, LookVersion::Gloss), c.px);
+        let angle = 17.5f32.to_radians();
+        let half = [angle.sin(), 0.0, angle.cos()];
+        let (loss, matte) = surface_sheen(half, half, 0.05, 0.0);
+        assert_eq!((loss, matte), (0.0, 0.0));
+        let (_, glossy) = surface_sheen(half, half, 1.0, 0.0);
+        let (_, wet) = surface_sheen(half, half, 1.0, 1.0);
+        let (_, flat) = surface_sheen([0.0, 0.0, 1.0], half, 1.0, 1.0);
+        assert!(glossy > 0.019 && wet > glossy * 1.99);
+        assert!(flat < 1e-10, "flat glossy dark gets {flat}");
+        let (_, off_axis) = surface_sheen([-half[0], 0.0, half[2]], half, 1.0, 1.0);
+        assert!(off_axis < flat);
+    }
+
+    #[test]
+    fn gloss_light_reads_partial_wet_coverage_and_never_changes_color_or_state() {
+        let mut c = Canvas::new_window(32, 1.0, [0.02, 0.015, 0.01], None);
+        c.gloss.fill(0.05);
+        c.wet.vol[0] = 0.025;
+        c.wet.cover[0] = 0.25;
+        c.wet.vol[1] = 0.1;
+        c.wet.cover[1] = 1.0;
+        assert_eq!(c.display_gloss(2), (0.05, 0.0));
+        assert!((c.display_gloss(0).1 - 0.25).abs() < 1e-6);
+        assert_eq!(c.display_gloss(1), (1.0, 1.0));
+        for y in 0..32 {
+            for x in 0..32 {
+                c.height[y * 32 + x] = 100.0 * (x as f32 * 0.3).sin();
+            }
+        }
+        let color = c.seen();
+        let mut before = Vec::new();
+        c.write_state(&mut before, "gloss").unwrap();
+        for version in [LookVersion::Legacy, LookVersion::Gloss] {
+            for (az, el) in [(115.0, 55.0), (135.0, 25.0)] {
+                assert!(c.seen_lit_version(az, el, 1.0, version).iter().flatten().all(|v| v.is_finite()));
+            }
+            for contrast in [0.08, 0.18, 0.32] {
+                assert!(c.seen_museum_version(contrast, version).iter().flatten().all(|v| v.is_finite()));
+            }
+        }
+        assert_eq!(c.seen(), color);
+        let mut after = Vec::new();
+        c.write_state(&mut after, "gloss").unwrap();
+        assert_eq!(before, after);
+        assert_eq!(c.seen_lit(115.0, 55.0, 1.0), c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Legacy));
+        assert_eq!(c.seen_museum(0.18), c.seen_museum_version(0.18, LookVersion::Legacy));
+    }
 
     #[test]
     fn museum_is_diffuse_color_preserving_and_read_only() {

@@ -25,11 +25,12 @@ pub struct View {
     /// in degrees, see `Canvas::seen_lit`.
     pub light: Option<(f32, f32)>,
     pub museum: Option<f32>,
+    pub look_version: paint::LookVersion,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery,museum,museum-flat,museum-surface --light azimuth,elevation --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery,museum,museum-flat,museum-surface --look-version 1|2 --light azimuth,elevation --grid [step] --size N | --palette";
 
 pub const MUSEUM_FLAT: f32 = 0.08;
 pub const MUSEUM: f32 = 0.18;
@@ -49,8 +50,8 @@ impl View {
 
     pub fn seen(&self, c: &Canvas) -> Vec<Rgb> {
         match (self.museum, self.light) {
-            (Some(contrast), _) => c.seen_museum(contrast),
-            (_, Some((az, el))) => c.seen_lit(az, el, 1.0),
+            (Some(contrast), _) => c.seen_museum_version(contrast, self.look_version),
+            (_, Some((az, el))) => c.seen_lit_version(az, el, 1.0, self.look_version),
             _ => c.seen(),
         }
     }
@@ -111,6 +112,13 @@ impl View {
                     }
                 }
                 "--palette" => v.palette = true,
+                "--look-version" => {
+                    v.look_version = match next()?.as_str() {
+                        "1" | "legacy" => paint::LookVersion::Legacy,
+                        "2" | "gloss" => paint::LookVersion::Gloss,
+                        _ => return Err("--look-version: 1 (legacy) or 2 (gloss)".into()),
+                    };
+                }
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
             i += 1;

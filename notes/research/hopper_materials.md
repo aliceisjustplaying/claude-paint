@@ -6,7 +6,7 @@ are listed at the end. "Uncertain" marks claims that are unverified,
 disputed or taken from a single object. The evidence comes mainly from
 his record books, a 1959 interview, his wife's diary
 as quoted by a biographer and the technical notes of a few museum
-catalogues. Much of the record-book evidence and the biographical
+catalogs. Much of the record-book evidence and the biographical
 evidence was read through search excerpts. The two 1939 museum technical
 accounts were also read through search excerpts; the preparatory-drawing
 and 1935 conservation reports were read through search summaries. The
@@ -174,7 +174,7 @@ survey of his oils was found; the Huntington's analyses of the 1935 canvas are a
 - **A fugitive yellow.** On one canvas of 1939 a green passage has turned
   blue where it was exposed to light. Paint under the frame rabbet keeps
   the original green. The cause is probably a fugitive yellow in the
-  mixture [NGA-E]. *Inference by the cataloguers; the yellow was not
+  mixture [NGA-E]. *Inference by the catalogers; the yellow was not
   identified. Read through search excerpts.*
 
 ## 5. Media and varnish
@@ -391,11 +391,11 @@ burnt sienna → burnt sienna. Burnt sienna rests on an uncertain reading
 - **[LED]** Lyons, D. et al., *Edward Hopper: Paintings & Ledger Book Drawings* (Munich: Schirmer/Mosel, 2012), which prints record-book entries and an introduction. Read through Internet Archive full-text search excerpts. Record-book volume and page are given where the excerpt showed them. Dates are those in the entries. https://archive.org/details/edwardhopperpain0000hopp
 - **[LEV]** Levin, G., *Edward Hopper: An Intimate Biography* (New York: Knopf, 1995; Univ. of California Press printing 1998). Quotes his wife's diaries, his letters and record-book entries. Read through Internet Archive full-text search excerpts; page numbers not recovered. https://archive.org/details/edwardhopperinti0000levi_g3z5
 - **[CGA]** Cash, S. (ed.), *Corcoran Gallery of Art: American Paintings to 1945* (Washington, DC, 2011), entry p.247 and note 2 p.249, which quotes a full record-book entry of 1939 (Book II p.33). Full text read. https://archive.org/details/corcoran-american-art
-- **[NGA-E]** National Gallery of Art, *American Paintings, 1900–1945* (online systematic catalogue), technical summary for an oil of 1939, John Hay Whitney Collection (object 61252). Read through search excerpts; the page was behind a bot check. https://www.nga.gov/collection/art-object-page.61252.html ; catalogue: https://www.nga.gov/research/publications/american-paintings-1900-1945
-- **[NGA-G]** The same catalogue, technical summary for an oil of 1939, Corcoran Collection 2014.79.23 (object 131206). Read through search excerpts. https://www.nga.gov/collection/art-object-page.131206.html
+- **[NGA-E]** National Gallery of Art, *American Paintings, 1900–1945* (online systematic catalog), technical summary for an oil of 1939, John Hay Whitney Collection (object 61252). Read through search excerpts; the page was behind a bot check. https://www.nga.gov/collection/art-object-page.61252.html ; catalog: https://www.nga.gov/research/publications/american-paintings-1900-1945
+- **[NGA-G]** The same catalog, technical summary for an oil of 1939, Corcoran Collection 2014.79.23 (object 131206). Read through search excerpts. https://www.nga.gov/collection/art-object-page.131206.html
 - **[HUNT]** The Huntington (San Marino, Calif.), *Verso*, 16 January 2024: interview with paintings conservator C. M. O'Connell on the treatment of an oil of 1935 (object 5156). Read through a search summary. Blog index: https://www.huntington.org/verso ; object record: https://emuseum.huntington.org/objects/5156
 - **[YALE]** Yale University Art Gallery, press release on the acquisition of preparatory drawings, May 2009. Read through a search summary. https://artgallery.yale.edu/sites/default/files/pr/pdf/hopperdrawingsmay2009.pdf
-- **[IMA]** Warkel, H. G., Indianapolis Museum of Art exhibition catalogue (2009), ISBN 978-0-936260-84-6, on an oil of 1943. The X-ray findings were read through an encyclopedia summary, not in the catalogue. *Uncertain.*
+- **[IMA]** Warkel, H. G., Indianapolis Museum of Art exhibition catalog (2009), ISBN 978-0-936260-84-6, on an oil of 1943. The X-ray findings were read through an encyclopedia summary, not in the catalog. *Uncertain.*
 - **[WAPI]** Whitney Museum of American Art, collection records for Hopper's paintings (medium, date, dimensions), retrieved through the museum's public API. https://whitney.org/api/artworks?q[display_artist_text_eq]=Edward%20Hopper&q[classification_eq]=Paintings . The ledger volumes themselves: https://whitney.org/collection/works/11015
 - **[AP1]** Feller, R. L. (ed.), *Artists' Pigments* vol. 1 (1986): cadmium names p.67; zinc white films p.175. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol1.pdf
 - **[AP2]** Roy, A. (ed.), *Artists' Pigments* vol. 2 (1993): "Permanent blue" as a synonym of synthetic ultramarine, p.55. https://www.nga.gov/sites/default/files/migrate_images/content/dam/ngaweb/research/publications/pdfs/artists-pigments-vol2.pdf
@@ -407,4 +407,4 @@ burnt sienna → burnt sienna. Burnt sienna rests on an uncertain reading
 - **[AIC-IMAGE]** Art Institute of Chicago, museum reproduction, accession 1942.51, archived 2007–08 exhibition site. Viewed at 250 × 137 pixels; used only for broad hue/value observations, not surface examination or color measurement. Full source reference is in the researcher dossier; no visual asset is supplied to the painter.
 - **[YUAG-NIGHT]** Yale University Art Gallery, accession 1961.18.30, oil of 1945; museum account of warm electric illumination and repeated nighttime observation. Directly read; full source reference is in the researcher dossier.
 - **[DARK]** Comey, Janet L., *Edward Hopper Hours of Darkness*, *Antiques & Fine Art*, 2007, republished by Incollect, 22 May 2007. Directly read, including notes; descriptions of light are curatorial interpretation, not technical analysis. https://www.incollect.com/articles/edward-hopper-hours-of-darkness_1
-- **[LEV-1980]** Levin, Gail, *Edward Hopper: The Art and the Artist* (New York: W. W. Norton in association with the Whitney Museum of American Art, 1980), p.50 (repeat nighttime observation), pp.59–60 (lighting statement). Read in the digitized catalogue text. https://archive.org/details/edwardhopperarta00levi
+- **[LEV-1980]** Levin, Gail, *Edward Hopper: The Art and the Artist* (New York: W. W. Norton in association with the Whitney Museum of American Art, 1980), p.50 (repeat nighttime observation), pp.59–60 (lighting statement). Read in the digitized catalog text. https://archive.org/details/edwardhopperarta00levi

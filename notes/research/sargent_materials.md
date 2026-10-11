@@ -91,7 +91,7 @@ margin*: the canvas folded over the side of the stretcher.
   visible through thin paint, including after reworking [APOLLO
   "Conclusion", "Application of Paint"].
 <!-- research: - **Thickness.** No micron values for any ground found (searched 2026-09-29; the likeliest
-  source is Hellen and Townsend 2016 in the catalogue raisonné vol. 9, not accessible). -->
+  source is Hellen and Townsend 2016 in the catalog raisonné vol. 9, not accessible). -->
 
 ## 3. Drawing and lay-in
 

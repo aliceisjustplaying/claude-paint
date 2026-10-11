@@ -261,11 +261,15 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## The rag
 
-- **It lifts wet paint down to the first set layer.** Before a wipe, check
-  `drying(x, y)` in the paint and at a nearby gap. It reads the top wet
-  film; at a gap, it reports `"tacky"` or `"dry"` for the set layer.
-  A tacky set layer under a thin wet film can grab the brush while
-  `drying(x, y)` says `"open"`.
+- **It lifts wet paint down to the first set layer.** Earlier passes that
+  haven't set are part of the same wet film, so a firm lift can take them
+  too, down to set paint or the ground. Before a wipe, check
+  `drying(x, y)` in the paint: `"open"` paint lifts, `"setting"` paint
+  comes away slowly, and `"tacky"` or `"dry"` paint has set and stays.
+  A wipe usually leaves a thin wet tint, and `drying(x, y)` reads that
+  tint as `"open"`. If the set layer under it is still tacky, it grabs the
+  brush when you repaint. Check it at a nearby gap in the paint, where
+  `drying(x, y)` reads the set layer.
 - **Dip it for a lift.** A dry rag mostly moves paint and leaves its color
   in the weave: useful for wiping lights out of a wet glaze or lay-in. To
   take a passage off, dip well (`r:dip(0.9)`), press firmly, give it two or

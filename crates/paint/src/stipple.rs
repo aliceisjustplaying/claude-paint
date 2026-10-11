@@ -446,6 +446,8 @@ impl Canvas {
         let pass = crate::sched::Pass { grid: (tw, th), order: crate::sched::TileOrder::Default(order), rects, secs: tile_secs, ids, slice: self.hand_slice_secs() };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+            #[cfg(feature = "brush-sim-1")]
+            { held = held.with_engine(surf.engine); }
             let mut scratch = Vec::new();
             let mut b: Bounds = None;
             for (k, p) in plans[ti].iter().enumerate() {

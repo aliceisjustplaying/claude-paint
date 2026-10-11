@@ -1450,6 +1450,13 @@ impl Server {
                 #[cfg(feature = "state-store")]
                 if let Some(store) = &self.committed { store.protect_output(&p).map_err(|e| e.to_string())?; }
                 let c = self.s.canvas().ok_or("no canvas yet")?;
+                #[cfg(feature = "state-store")]
+                if self.committed.is_some() {
+                    painting_store::atomic_output(&p, |part| deliver_lit(&c, part, light))?;
+                } else {
+                    deliver_lit(&c, &p, light)?;
+                }
+                #[cfg(not(feature = "state-store"))]
                 deliver_lit(&c, &p, light)?;
                 Ok(format!("{}\n", p.display()))
             }
@@ -1819,10 +1826,14 @@ fn render_state(args: &[String]) -> Result<(), String> {
     let resolved = normalized_path(Path::new(dir)).map_err(|e| e.to_string())?;
     if normalized_path(Path::new(out)).map_err(|e| e.to_string())?.starts_with(resolved) { return Err("render-state output must be outside the store".into()); }
     let revision = painting_store::ReadRevision::open(PathBuf::from(dir)).map_err(|e| format!("state integrity: {e}"))?;
+    revision.protect_output(Path::new(out)).map_err(|e| e.to_string())?;
     let checkpoint = revision.checkpoint().map_err(|e| e.to_string())?;
     let mut render = vec![checkpoint.to_string_lossy().into_owned()];
     render.extend_from_slice(&args[1..]);
-    render_checkpoint(&render)?;
+    painting_store::atomic_output(Path::new(out), |part| {
+        render[1] = part.to_string_lossy().into_owned();
+        render_checkpoint(&render)
+    })?;
     eprintln!("committed revision {} ({} source bytes)", revision.id, revision.source.len());
     Ok(())
 }

@@ -1,4 +1,22 @@
 use super::*;
+
+#[test]
+fn atomic_output_replaces_a_link_instead_of_modifying_its_inode_and_cleans_failed_staging() {
+    let temp = Temp::new();
+    let protected = temp.0.join("protected");
+    let out = temp.0.join("alias.png");
+    std::fs::write(&protected, b"accepted root").unwrap();
+    std::fs::hard_link(&protected, &out).unwrap();
+    atomic_output(&out, |part| std::fs::write(part, b"PNG replacement").map_err(|e| e.to_string())).unwrap();
+    assert_eq!(std::fs::read(&protected).unwrap(), b"accepted root");
+    assert_eq!(std::fs::read(&out).unwrap(), b"PNG replacement");
+    assert!(atomic_output(&out, |part| {
+        std::fs::write(part, b"partial").unwrap();
+        Err("render failed".into())
+    }).is_err());
+    assert_eq!(std::fs::read(&out).unwrap(), b"PNG replacement");
+    assert!(!std::fs::read_dir(&temp.0).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().starts_with(".pending-")));
+}
 use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Child, Command, ExitStatus, Stdio};

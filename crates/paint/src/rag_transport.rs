@@ -477,11 +477,16 @@ impl Canvas {
             let solvent = self.wet.solv[c.i] / COAT_UM;
             let phi = solvent / (solvent + v);
             let stiff = self.wet.hide[c.i][1].clamp(0.0, 1.0);
+            let shear = (touch.slip_mm / (0.25 * cloth.width_mm)).clamp(0.0, 1.0);
+            let drive = p * c.press * (1.0 + 0.3 * shear);
+            let yield_drive = 0.12 + 0.55 * stiff * (1.0 - phi).powi(2);
+            let unyielded = (-(drive / yield_drive).powi(4)).exp();
             let fl = if timed {
                 reach_fluid(self.wet.clock.px[c.i].cure)
             } else {
                 1.0
-            } / (1.0 + 10.0 * stiff.powi(2) * (1.0 - phi).powi(3) / (0.1 + p * c.press));
+            } / (1.0
+                + 10.0 * stiff.powi(2) * (1.0 - phi).powi(3) * unyielded / (0.1 + drive));
             let j = (c.i / f.w - by0) * bw + (c.i % f.w - bx0);
             let reach = SAG_UM * (0.25 + 1.5 * p * c.press) * (1.0 + 0.5 * phi);
             let near = ((surf[j] - peaks[j] + reach) / COAT_UM / (1.0 + solvent / v)).clamp(0.0, v);
@@ -745,6 +750,34 @@ mod tests {
             lifts[0] > 3.0 * lifts[1] && lifts[2] > 3.0 * lifts[1],
             "{lifts:?}"
         );
+    }
+
+    #[test]
+    fn firm_sliding_contact_yields_fresh_paste_and_retains_useful_carry() {
+        let base = canvas(0.7, 0.0);
+        let mut old = base.clone();
+        let mut legacy = Rag::new(126.0, 7);
+        let baseline = old.rag_wipe(&mut legacy, &[(150.0, 500.0), (850.0, 500.0)], &[0.6], 41);
+        let mut lifts = Vec::new();
+        for pressure in [0.25, 0.6] {
+            let mut c = base.clone();
+            let mut r = Rag::new(126.0, 7).with_transport(&c);
+            let initial = inventory(&c, &r);
+            let lifted = c.rag_wipe(&mut r, &[(150.0, 500.0), (850.0, 500.0)], &[pressure], 41);
+            close(initial, inventory(&c, &r));
+            lifts.push(lifted);
+            if pressure == 0.6 {
+                assert!(
+                    lifted >= 0.4 * baseline,
+                    "{lifted} versus legacy {baseline}"
+                );
+                let before = c.wet_total();
+                c.rag_wipe(&mut r, &[(650.0, 700.0), (850.0, 700.0)], &[0.4], 41);
+                assert!(c.wet_total() > before);
+                close(initial, inventory(&c, &r));
+            }
+        }
+        assert!(lifts[1] > 2.0 * lifts[0], "{lifts:?}");
     }
 
     #[test]

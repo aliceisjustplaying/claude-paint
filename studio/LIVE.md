@@ -95,6 +95,12 @@ NODE_PATH=/path/to/playwright/node_modules node studio/test_live.cjs
 Playwright and Chrome must be installed. The test proves two live Gallery
 light snapshots without page reload, failed-chunk rollback, journal updates,
 hashed image URLs, replay selection, stream layout and no API requests. It
+watches the old canvas through snapshot-fetch failure and a 200-second
+image-only outage advanced with the browser's test clock, then recovers
+without a manifest change. A delayed old source response cannot replace
+newer code. The normal local viewer keeps its bounded image retries; hosted
+views restart retries after a five-second pause while that picture is still
+wanted. The test
 writes two viewer frames, a stream frame and JSON receipts into the proof
 directory. It closes its painter session and stops its HTTP server/uploader.
 

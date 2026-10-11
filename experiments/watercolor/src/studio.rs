@@ -461,7 +461,7 @@ fn lab_stroke(
             || (i == 0 && t != 0.0)
             || positions
                 .last()
-                .is_some_and(|v: &([f64; 2], f64, f64)| t < v.2)
+                .is_some_and(|v: &([f64; 2], f64, f64)| t < v.2 || (xy[i] != v.0 && t == v.2))
         {
             return Err(error(
                 "stroke points are {x,y,pressure,time_seconds}; times start at zero and increase",

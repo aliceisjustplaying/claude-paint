@@ -82,7 +82,7 @@ the validated timeout scale. The default is 600 times that scale.
       git push origin refs/notes/test-receipts
 
 Exit: 0 pass, 1 fail, 2 refused before testing (no receipt written), 3
-unfinished (timeout, cancelled, lock busy), 4 known_failure (NOT ALL GREEN: a
+unfinished (timeout, canceled, lock busy), 4 known_failure (NOT ALL GREEN: a
 listed pre-existing failure and nothing else wrong; not mergeable).
 """
 

@@ -181,6 +181,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         for path, expected in (
             ("file://other-machine/tmp/a.png", f'File URL host must be "localhost" or empty on {sys.platform}'),
             ("file://localhost:80/tmp/a.png", "Invalid URL"),
+            (f"file://localhost:{self.studio}/look.png", "Invalid URL"),
+            ("file://localhost", "look: compare is the path of an earlier look in this studio"),
             ("file:///tmp/a%2fb.png", "File URL path must not include encoded / characters"),
             ("file:///tmp/%zz.png", "URI malformed"),
             ("file:///tmp/%ff.png", "URI malformed"),

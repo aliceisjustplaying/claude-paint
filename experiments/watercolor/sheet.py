@@ -21,7 +21,7 @@ cases = [
 ]
 sheet = Image.new("RGB", (1152, 2840), "#f4f1e9")
 draw = ImageDraw.Draw(sheet)
-draw.text((24, 18), "WATERCOLOR 2 / correlated material pilot", font=title, fill="#20251e")
+draw.text((24, 18), "WATERCOLOR 3 / native paper and fronts", font=title, fill="#20251e")
 draw.text((24, 57), "Diffuse gallery-like light", font=small, fill="#50554b")
 draw.text((590, 57), "Raking light / paper relief", font=small, fill="#50554b")
 for row, (name, label) in enumerate(cases):
@@ -58,7 +58,7 @@ if frames:
                    duration=120, loop=0, optimize=False, disposal=2)
 
 rows = list(csv.DictReader((root / "conservation.csv").open()))
-report = ["# Conservation", "", "Water is in pixel-mm (multiply by 0.01 mm² for mm³). Pigment is arbitrary areal mass times pixels, not calibrated grams.",
+report = ["# Conservation", "", "Water is in pixel-mm (multiply by 0.0025 mm² for mm³). Pigment is arbitrary areal mass times pixels, not calibrated grams.",
           "", "Water columns: surface, capillary, no bound channel. Pigment columns: suspended, deposited, bound. Boundary outflow is zero.", "",
           "| Probe | Constituent | Input | Surface / suspended | Pore / deposited | Bound | Evaporated | Lifted | Error |",
           "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
@@ -71,15 +71,15 @@ if len(sys.argv) > 2:
     prior = Path(sys.argv[2])
     comparison = Image.new("RGB", (1152, 2840), "#f4f1e9")
     d = ImageDraw.Draw(comparison)
-    d.text((24, 18), "ROUND 1 / ROUND 2 / diffuse gallery-like light", font=title, fill="#20251e")
-    d.text((24, 57), "Round 1", font=font, fill="#50554b")
-    d.text((590, 57), "Round 2", font=font, fill="#50554b")
+    d.text((24, 18), "ROUND 2 / ROUND 3 / diffuse gallery-like light", font=title, fill="#20251e")
+    d.text((24, 57), "Round 2", font=font, fill="#50554b")
+    d.text((590, 57), "Round 3", font=font, fill="#50554b")
     for row, (name, label) in enumerate(cases):
         top = 91 + row * 391
         d.text((24, top), label, font=font, fill="#20251e")
         for column, directory in enumerate([prior, root]):
             image = Image.open(directory / f"{name}-gallery.png")
-            mode = Image.Resampling.NEAREST if column == 0 else Image.Resampling.LANCZOS
+            mode = Image.Resampling.LANCZOS
             comparison.paste(image.resize((540, 336), mode), (24 + column * 566, top + 32))
-    comparison.save(root / "round-1-vs-2.png")
+    comparison.save(root / "round-2-vs-3.png")
 print("Probe sheet, bloom strip, slow GIF and conservation table written")

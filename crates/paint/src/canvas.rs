@@ -628,6 +628,11 @@ impl Canvas {
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
                 let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                #[cfg(feature = "experimental-panel")]
+                let spec = if self.panel.is_some() {
+                    let gloss = self.gloss[i].clamp(0.0, 1.0);
+                    (0.045 * gloss * gloss * ndh.powf(10.0) + 0.10 * wet * ndh.powf(40.0)) * lit
+                } else { spec };
                 let p = base[i];
                 [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
             })

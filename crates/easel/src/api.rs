@@ -1792,8 +1792,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     };
                     let topography = match o.get::<Option<String>>("topography")?.as_deref() {
                         None | Some("smooth") => Topography::Smooth,
-                        Some("oak") => Topography::QuarterSawnOak,
-                        _ => return err("experimental canvas: panel topography must be smooth or oak"),
+                        Some("oak") => Topography::QuarterSawnOakRays,
+                        Some("oak-1") => Topography::QuarterSawnOak,
+                        _ => return err("experimental canvas: panel topography must be smooth, oak or oak-1"),
                     };
                     Some(Panel { ground, topography, seed })
                 } else { None };

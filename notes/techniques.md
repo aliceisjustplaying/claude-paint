@@ -18,6 +18,43 @@ does; this says how to use them. What you paint is yours to choose.
   a crop with `grid: 10`) to read positions off a look before you aim a mask
   at something you saw.
 
+## Before another pass: a decision checklist
+
+1. **Check the paint state.** Use `drying(x, y)` along the next pass and
+   at its edges: `"open"` blends and lifts; `"setting"` is stiff and barely
+   blends; `"tacky"` has set and grabs the brush; `"dry"` is touch-dry.
+   The call reads the top film. Where no wet paint lies, as in a gap
+   between strokes, it reads the set layer beneath. A set layer under wet
+   paint can still be tacky and grab the brush, so read a nearby gap too.
+   Lay into open paint when you want strokes to fuse; wait for it to set
+   when you want them separate. If tacky paint breaks the stroke, wait
+   longer. See the guide's [Time](easel_guide.md#time).
+2. **Diagnose a failed deposit in a detail crop.** Check the load, the
+   paint the brush passed through and the layer beneath.
+   - Gaps between marks: if the brush runs dry, use shorter strokes and
+     reload more often. If gaps remain, check brush contact and coverage;
+     extra coverage can add dabs and relief.
+   - A continuous thin film showing the undercolour: test less thinning,
+     a fuller deposit or a mixture with stronger hiding. Evidence for
+     these fixes is limited, so compare them on the scratch canvas first.
+   - A mixture changed by paint carried on the brush: use a fresh brush.
+     If open underpaint caused the pickup and you want separate colour,
+     wait for it to set. Check the pile itself before changing its recipe.
+3. **Prepare a transition.** Mix a few in-between tones, lay them and
+   look. Blend while the paint is open, as [Blending](#blending) describes,
+   and stop at the signs listed there. In dry paint, build the transition
+   with new paint.
+4. **Choose a repair.** If further handling keeps mixing an unsuccessful
+   wet deposit, scrape or lift it before restating it. The knife scrapes
+   wet paint down to set paint; the rag lifts and smears it and leaves a
+   trace. Inspect what remains before repainting. See
+   [The knife](#the-knife) and [The rag](#the-rag) for handling and limits.
+5. **Test a doubtful change.** Use the scratch procedure in
+   [Plan before you paint](#plan-before-you-paint), matching the underpaint
+   and its drying state. Change one condition, compare the results and
+   carry the handling that worked over to the painting. Leave the passage
+   alone if another pass has no clear benefit.
+
 ## Ground
 
 - An **oil ground** (the default) absorbs nothing: paint stays open and
@@ -224,9 +261,16 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## The rag
 
-- **It lifts wet paint down to the first set layer.** Before a wipe, check
-  `drying(x, y)` under the paint as well as in it: where the layer beneath
-  is still open, the rag takes that too, to the ground.
+- **It lifts wet paint down to the first set layer.** Earlier passes that
+  haven't set are part of the same wet film, so a firm lift can take them
+  too, down to set paint or the ground. Before a wipe, check
+  `drying(x, y)` in the paint: `"open"` paint lifts, `"setting"` paint
+  comes away slowly, and `"tacky"` or `"dry"` paint has set and stays.
+  A wipe usually leaves a thin wet tint, and `drying(x, y)` reads that
+  tint as `"open"` or `"setting"`. If the tint is `"setting"`, or the set
+  layer under it is still tacky, it grabs the brush when you repaint.
+  Check it at a nearby gap in the paint, where `drying(x, y)` reads the
+  set layer.
 - **Dip it for a lift.** A dry rag mostly moves paint and leaves its color
   in the weave: useful for wiping lights out of a wet glaze or lay-in. To
   take a passage off, dip well (`r:dip(0.9)`), press firmly, give it two or

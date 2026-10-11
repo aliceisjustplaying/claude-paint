@@ -1438,7 +1438,7 @@ fn deliver(c: &Canvas, out: &Path) -> Result<(), String> {
 /// (`Canvas::seen_lit`), or not lit (None: color only).
 fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), String> {
     let px = match light {
-        Some((az, el)) => c.seen_lit(az, el, 1.0),
+        Some((az, el)) => c.seen_lit_version(az, el, 1.0, paint::LookVersion::Gloss),
         None => c.seen(),
     };
     deliver_seen(c, out, &px)
@@ -1500,6 +1500,13 @@ fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
 
 #[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
+    if args.iter().any(|a| a == "--checkpoint") {
+        if args.iter().any(|a| a == "--checkpoint-out") {
+            return Err("use only one of --checkpoint and --checkpoint-out".into());
+        }
+        let normalized: Vec<_> = args.iter().map(|a| if a == "--checkpoint" { "--checkpoint-out".into() } else { a.clone() }).collect();
+        return run(&normalized);
+    }
     let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
     let mut i = 1;
     while i < args.len() {
@@ -1650,19 +1657,22 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 #[cfg(feature = "replay")]
-const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]";
+const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief|museum|museum-flat|museum-surface] [--look-version 1|2] [--light az,el] [--look] [--log painting.lua]";
 
 #[cfg(feature = "replay")]
 fn render_checkpoint(args: &[String]) -> Result<(), String> {
     let (mut files, mut mode, mut log, mut bounded) = (Vec::new(), "gallery".to_string(), None::<String>, false);
+    let mut view_args = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--mode" | "--log" if i + 1 < args.len() => {
+            "--mode" | "--log" | "--look-version" | "--light" if i + 1 < args.len() => {
                 if args[i] == "--mode" {
                     mode = args[i + 1].clone();
-                } else {
+                } else if args[i] == "--log" {
                     log = Some(args[i + 1].clone());
+                } else {
+                    view_args.extend_from_slice(&args[i..i + 2]);
                 }
                 i += 1;
             }
@@ -1679,12 +1689,11 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
     if let Some(l) = &log && same_file(Path::new(l), Path::new(out))? {
         return Err("render-checkpoint output must differ from the save and source log".into());
     }
-    let light = match mode.as_str() {
-        "color" | "normal" => None,
-        "gallery" => Some(GALLERY_LIGHT),
-        "relief" => Some(look::DISPLAY_PRESETS[1].light),
-        o => return Err(format!("--mode {o}: color, gallery, relief")),
-    };
+    view_args.extend(["--mode".into(), if mode == "color" { "normal".into() } else { mode.clone() }]);
+    let view = look::View::parse(&view_args)?;
+    if view.value || view.squint || view.mirror || view.palette {
+        return Err("render-checkpoint accepts color and display light modes only".into());
+    }
     let t0 = Instant::now();
     let r = save::read(Path::new(checkpoint))?;
     if let Some(l) = log {
@@ -1695,9 +1704,9 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
     }
     let c = r.session.canvas().ok_or("the save holds no canvas")?;
     if bounded {
-        look::look(&c, &look::View { light, ..look::View::default() }, Path::new(out))?;
+        look::look(&c, &view, Path::new(out))?;
     } else {
-        deliver_lit(&c, Path::new(out), light)?;
+        deliver_seen(&c, Path::new(out), &view.seen(&c))?;
     }
     eprintln!("wrote {out} ({} saved chunks, {mode}, no replay, {:.2}s)", r.chunks, t0.elapsed().as_secs_f64());
     Ok(())

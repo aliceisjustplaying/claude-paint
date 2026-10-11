@@ -144,7 +144,7 @@ impl Recorder {
     fn try_write(&mut self, c: &Canvas, ticks: usize, kind: Kind) -> Result<(), String> {
         let f = c.window();
         let px = match self.light {
-            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            Some((az, el)) => c.seen_lit_version(az, el, 1.0, paint::LookVersion::Gloss),
             None => c.seen(),
         };
         let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();

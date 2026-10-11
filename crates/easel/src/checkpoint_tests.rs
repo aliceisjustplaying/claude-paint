@@ -34,6 +34,41 @@ wait(30)
 }
 
 #[test]
+fn checkpoint_display_versions_keep_color_and_legacy_lighting_exact() {
+    let temp = Temp::new("look-versions");
+    let text = program(paint::ENGINE);
+    let mut s = Session::replay_with(64, session::box_for(Some(&text)).unwrap()).unwrap();
+    for chunk in parse_program(&text) {
+        s.run(&chunk).unwrap();
+    }
+    let checkpoint = temp.file("saved.ckpt");
+    save::write(&s, &text, Path::new(&checkpoint)).unwrap();
+    let before = std::fs::read(&checkpoint).unwrap();
+    let color1 = temp.file("color1.png");
+    let color2 = temp.file("color2.png");
+    for (version, out) in [("1", &color1), ("2", &color2)] {
+        render_checkpoint(&[checkpoint.clone(), out.clone(), "--mode".into(), "color".into(), "--look-version".into(), version.into()]).unwrap();
+    }
+    assert_eq!(std::fs::read(color1).unwrap(), std::fs::read(color2).unwrap());
+    let c = s.canvas().unwrap();
+    for mode in ["gallery", "relief", "museum-flat", "museum", "museum-surface"] {
+        let out = temp.file("legacy.png");
+        render_checkpoint(&[checkpoint.clone(), out.clone(), "--mode".into(), mode.into(), "--look-version".into(), "1".into()]).unwrap();
+        let view = look::View::parse(&["--mode".into(), mode.into()]).unwrap();
+        let pixels = match (view.museum, view.light) {
+            (Some(contrast), _) => c.seen_museum(contrast),
+            (_, Some((az, el))) => c.seen_lit(az, el, 1.0),
+            _ => unreachable!(),
+        };
+        let expected = temp.file("expected.png");
+        deliver_seen(&c, Path::new(&expected), &pixels).unwrap();
+        assert_eq!(std::fs::read(out).unwrap(), std::fs::read(expected).unwrap(), "legacy {mode}");
+    }
+    assert_eq!(std::fs::read(checkpoint).unwrap(), before);
+    assert!(look::View::parse(&["--look-version".into(), "3".into()]).is_err());
+}
+
+#[test]
 fn checkpoint_render_matches_native_color_and_look_companions_for_every_engine() {
     let temp = Temp::new("parity");
     for engine in 1..=paint::ENGINE {

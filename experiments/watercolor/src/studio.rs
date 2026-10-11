@@ -235,6 +235,21 @@ pub fn render(
             "render width must be 16..2400"
         }));
     }
+    let height =
+        ((width as f64 * canvas.height as f64 / canvas.width as f64).round() as u32).max(1);
+    render_size(canvas, path, mode, [width, height], crop)
+}
+
+pub fn render_size(
+    canvas: &Watercolor,
+    path: &Path,
+    mode: &str,
+    [width, height]: [u32; 2],
+    crop: Option<[u32; 4]>,
+) -> Result<()> {
+    if !(1..=2400).contains(&width) || height == 0 {
+        return Err(error("render size needs width 1..2400 and positive height"));
+    }
     let rgb = match mode {
         "color" => canvas.rgb_color(),
         "gallery" => canvas.rgb_lit(115.0, 55.0, 1.0),
@@ -243,8 +258,6 @@ pub fn render(
     };
     let original =
         image::RgbImage::from_raw(canvas.width as u32, canvas.height as u32, rgb).unwrap();
-    let height =
-        ((width as f64 * canvas.height as f64 / canvas.width as f64).round() as u32).max(1);
     let image = if width == original.width() && height == original.height() {
         original
     } else {

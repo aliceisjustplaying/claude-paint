@@ -138,10 +138,15 @@ fn main() {
                     .as_ref()
                     .ok_or_else(|| mlua::Error::external("no paper state"))?;
                 let mut mode = "gallery";
-                let mut width = if canvas.schema == 5 {
-                    canvas.width as u32
+                let mut size = if canvas.schema == 5 {
+                    [canvas.width as u32, canvas.height as u32]
                 } else {
-                    1200
+                    [
+                        1200,
+                        (1200.0 * canvas.height as f64 / canvas.width as f64)
+                            .round()
+                            .max(1.0) as u32,
+                    ]
                 };
                 let mut crop = None;
                 let options: Vec<_> = args[5..]
@@ -155,16 +160,18 @@ fn main() {
                     match option[0].as_str() {
                         "--mode" => mode = option[1],
                         "--size" => {
-                            let size: u32 = option[1].parse().map_err(mlua::Error::external)?;
-                            if !(16..=2400).contains(&size) {
+                            let long_side: u32 =
+                                option[1].parse().map_err(mlua::Error::external)?;
+                            if !(16..=2400).contains(&long_side) {
                                 return Err(mlua::Error::external(
                                     "look size must be 16..2400 pixels",
                                 ));
                             }
-                            width = (size as f64 * canvas.width as f64
-                                / canvas.width.max(canvas.height) as f64)
-                                .round()
-                                .max(16.0) as u32;
+                            let scale = long_side as f64 / canvas.width.max(canvas.height) as f64;
+                            size = [
+                                (canvas.width as f64 * scale).round().max(1.0) as u32,
+                                (canvas.height as f64 * scale).round().max(1.0) as u32,
+                            ];
                         }
                         "--crop" => {
                             let values: Vec<u32> = option[1]
@@ -191,7 +198,7 @@ fn main() {
                     }
                 }
                 if crop.is_some() {
-                    width = canvas.width as u32;
+                    size = [canvas.width as u32, canvas.height as u32];
                 }
                 let path = PathBuf::from(&args[4]);
                 let path = if path.is_absolute() {
@@ -199,16 +206,16 @@ fn main() {
                 } else {
                     root.join(path)
                 };
-                studio::render(canvas, &path, mode, width, crop)?;
+                studio::render_size(canvas, &path, mode, size, crop)?;
                 if mode == "color" {
                     for light in ["gallery", "relief"] {
                         let directory = path.parent().unwrap().join(format!(".{light}"));
                         fs::create_dir_all(&directory).map_err(mlua::Error::external)?;
-                        studio::render(
+                        studio::render_size(
                             canvas,
                             &directory.join(path.file_name().unwrap()),
                             light,
-                            width,
+                            size,
                             crop,
                         )?;
                     }
@@ -219,7 +226,12 @@ fn main() {
                 let mut state = studio::load(&work)?;
                 if let Some(canvas) = &mut state.canvas {
                     let adapter = if let Some(lab) = &mut canvas.lab {
-                        lab.require_gpu().map_err(mlua::Error::external)?
+                        if canvas.schema == 5 {
+                            lab.require_gpu().map_err(mlua::Error::external)?
+                        } else {
+                            lab.require_gpu()
+                                .unwrap_or_else(|_| "Lab CPU fallback".into())
+                        }
                     } else {
                         "legacy CPU".into()
                     };

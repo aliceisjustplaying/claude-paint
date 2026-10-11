@@ -1,41 +1,55 @@
-# Watercolor 1: offline material pilot
+# Watercolor 2: explicit experimental studio
 
-This standalone crate is outside the main Cargo workspace. No feature, painter API, oil solver or saved-painting format imports it. Run it explicitly:
+This crate lives outside the main workspace. The oil executable, solver, boxes and checkpoint formats do not import it. It builds a separate `watercolor-studio` binary that requires both `--box watercolor` and a studio whose `box` file says `watercolor`. This is an empirical Curtis-inspired pilot, not a production watercolor edition.
 
 ```sh
-CARGO_TARGET_DIR="$HOME/.capy/work/wc-pilot-target" cargo test --manifest-path experiments/watercolor/Cargo.toml
-CARGO_TARGET_DIR="$HOME/.capy/work/wc-pilot-target" cargo run --release --manifest-path experiments/watercolor/Cargo.toml --bin watercolor-probes -- "$HOME/.capy/work/watercolor-1/renders"
-python3 experiments/watercolor/sheet.py "$HOME/.capy/work/watercolor-1/renders"
+export CARGO_TARGET_DIR="$HOME/.capy/work/wc2-target"
+cargo test --locked --manifest-path experiments/watercolor/Cargo.toml
+cargo build --release --locked --manifest-path experiments/watercolor/Cargo.toml
+"$CARGO_TARGET_DIR/release/watercolor-studio" --box watercolor init "$HOME/.capy/work/watercolor-demo"
+"$CARGO_TARGET_DIR/release/watercolor-studio" --box watercolor run "$HOME/.capy/work/watercolor-demo" experiments/watercolor/demo/smoke-start.lua
+"$CARGO_TARGET_DIR/release/watercolor-studio" --box watercolor run "$HOME/.capy/work/watercolor-demo" experiments/watercolor/demo/smoke-finish.lua
 ```
 
-The sheet assembler requires Pillow and DejaVu Sans. The Rust harness writes PPM, conservation CSV and 129 intermediate bloom frames. The Python assembler emits PNG sheets, a Markdown conservation table and a slow GIF. The GIF maps each 1/16 physical second to 120 ms of presentation time (1.92 times slower, using GIF's 10 ms time quantum). Changing that duration changes no material state. This is an empirical Curtis et al. 1997-inspired model, not a replication of their full shallow-water solver or a calibrated pigment catalog.
+The two smoke chunks demonstrate saved continuation through the public Lua API. Their scene is an engine demo for people reviewing the implementation. Painter notes are a separate draft in the Captain's drive and require approval before use.
 
-## State and units
+## Developer API inventory
 
-At the fixed prototype grid spacing of 0.2 mm, surface water and capillary occupancy are depths in mm. Totals in the CSV are pixel-mm; multiply by 0.04 mm² to get mm³. Pigment amounts are arbitrary areal mass units, with independent identity for an ultramarine-like, phthalo-like and earth pigment. They are not calibrated grams. The three coupled reservoirs are flowing water with suspended pigment, deposited/bound pigment and pore water. Capacity, sizing and height are static support channels. Pore saturation is occupancy divided by capacity, never oil uptake.
+- `paper{kind="cold-press"|"hot-press", size=WIDTH_MM, aspect=WIDTH_OVER_HEIGHT, seed=N}` initializes once. The prototype accepts widths of 2–60 mm, aspects of 0.5–3 and at most 500,000 simulation cells.
+- `brush{name=NAME, width=MM}` creates a named brush; the same name retrieves its saved width and load. Changing its width requires a new name. `b:status()` reports water, pigment and width.
+- `b:load{water=MM3, pigments={ultramarine=MASS, phthalo=MASS, earth=MASS}}` adds to the brush. There are three real pigment identities; no aliases pretend to be additional pigments. Water uses mm³ (µL); pigment uses arbitrary integrated areal mass units.
+- `b:stroke({{X_MM,Y_MM},...},{dry=BOOL,pressure=0_TO_1,grade=0_TO_1})` uses rounded segments and subcell area coverage. `b:wash{x=MM,y=MM,width=MM,height=MM,grade=0_TO_1}` fills a rectangle; grade is the bottom/top pigment ratio. Wet deposition draws from the finite brush inventory. Dry contact catches tooth through a tangential footprint.
+- `drop{x=MM,y=MM,water=MM3,radius=MM}` adds a peaked Gaussian clean-water deposit. `b:lift(PATH)` supplies damp-brush water, lifts loose pigment and retains the lifted water/pigment in that brush. `blot{RECTANGLE_FIELDS}` transfers removed material to a separately counted blot sink.
+- `wait(SECONDS)` advances 0–600 seconds per call. Stroke/wash actions themselves take no hand time. `clock()` includes the pending nanosecond residual. `balance()` checks the whole studio inventory and reports surface/pore water and the dry guard. `glaze()` archives a dry optical stratum and refuses wet state.
+- `look{mode="color"|"gallery"|"relief",path=NAME_PNG,width=PIXELS,crop={X,Y,W,H}}` writes a PNG. Painter-facing `look` defaults to Color. Gallery uses 115°/55°/1 and Relief uses 135°/25°/1 in the watercolor paper-light projector. A crop is in output pixels and is saved without further resizing.
+- `frames{every=SECONDS,width=PIXELS,prefix=NAME}` emits Gallery frames while waiting. Intervals must be multiples of 0.0625 s, with at most 1,024 frames per chunk. `frames(false)` disables it. Filenames contain absolute physics tick numbers; presentation settings are re-enabled explicitly in a new chunk.
+- `save("NAME.json")` stages a named material/tool snapshot at that point. Successful chunks automatically publish `checkpoint.json`. `watercolor-studio --box watercolor restore DIR NAME.json` restores a named snapshot; `render DIR OUTPUT.png` renders the current checkpoint in Gallery at 1200 px.
 
-`fiber_paper.rs` and its small RNG are copied from `capy/pr13-paper-ref`, commit `454446b8`, with unused oil uptake and compression fields removed. Fiber laying, flocculation, felt imprint, grammage and micro-roughness are preserved. The pilot chooses 300 g/m² cotton-like cold-press paper, a 0.85 mm felt cell and 32 µm felt depth. Its normalized tooth is a nonlinear projection of the source height; the pressure head uses 12 µm of that projected relief. Sizing varies coherently from 0.3 to 0.88. Clump affinity varies spatially and multiplies low-tooth settling; there is no explicit particle aggregation process yet.
+Every run starts a fresh Lua VM. It restores paper, all material reservoirs/glazes, the clock/residual, the ledger and named brush inventories. It does **not** restore arbitrary Lua locals, closures, coroutines or `math.random` continuation. A continuation chunk redeclares its Lua handles by name and executes new work. Exact repeated source chunks are refused. Failed Lua chunks leave the committed checkpoint, named saves and output images unchanged; staged output is removed. There is one writer lock per studio. After a forcibly killed process, inspect any remaining lock/pending files before removing them.
 
-## Deterministic clock
+The VM exposes math, table, string and UTF-8 libraries with a 128 MB Lua allocation limit and about two million interpreted instructions. File loading, OS, package and debug libraries are absent. Native simulation buffers have the separate paper-cell limit. Native waits can be CPU-heavy; use a bounded background job for longer runs. The runner is intended for trusted private studios, not hostile checkpoint uploads or a public service.
 
-One physics tick is exactly 62,500,000 ns (1/16 s). `wait_ns` accumulates a persisted integer residual and runs only complete ticks. `wait_seconds` rounds its argument once to the nearest ns. Split waits equal one long wait bit-for-bit in the same build/target when their rounded ns totals agree and no intervention occurs between them. This includes full serialized state, both image projections and save/resume across a fractional tick. There is no claim of bit equality across compilers or CPU targets.
+## Medium and optics
 
-`wait_ns_observed` emits immutable states on an absolute tick cadence. The tick number supplies the frame timestamp; the residual at each observed tick is zero. An observer cannot choose substeps or mutate the solver. Splitting an observed wait, including save/resume, produces the same frame states and final state. Requested presentation intervals below 1/16 s must repeat or interpolate images; they cannot manufacture finer physics. Observer callbacks are synchronous and should not panic.
+Schema 2 uses a fixed 0.1 mm grid. The standard probe harness simulates 360×224 cells over the same physical sheet as round 1's 180×112 grid. Water depths are mm; multiply summed pixel-mm by 0.01 mm² for mm³. Pigment channels store areal mass density. The studio accounts for canvas inventory, unused/dirty brushes, evaporation and the blot sink in physical area-integrated units.
 
-## Canonical phases
+Paper retains pr13's fiber/floc/felt geometry at commit `454446b8`. Two physical-scale correlations form the tooth, correlated grammage supplies pore capacity and smoothly varying sizing supplies permeability. The old independent Gamma pore scatter is not used as visible pigment clumping. Clump affinity varies coherently over 0.65 mm. Surface head and optical normals share a 25 µm projection of normalized tooth.
 
-1. Snapshot the wet front. Update damped oriented face flux from depth/height differences. Surface pinning releases only above 0.22 mm with a neighboring pore saturation above 0.001. This is an empirical contact-line rule.
-2. Budget each donor's combined water outflow. Transfer water and donor-concentration suspended pigments simultaneously. Diffuse each pigment using a separate donor budget.
-3. Diffuse pore water with donor and receiver capacity limits. Pore transport does not move pigment in this prototype.
-4. Take up surface water into remaining pore capacity. Evaporate surface water with an enhanced exposed-edge sink and capillary water with a saturation-dependent sink. Every lost amount enters the ledger.
-5. Adsorb pigment with low-tooth/granulation/clump affinity. Bind only up to the pigment's staining fraction of local settled mass. Desorb loose active pigment under wet water. Rewet archived loose pigment through a separate explicit release law. Bound pigment stays in its stratum unless lifted.
+One public tick is exactly 62,500,000 ns. A wet tick has four deterministic 1/64-second transport/reaction substeps; pore-only evolution uses one bounded tick. Fully dry unobserved waits fast-forward the same clock. Integer residuals are persisted. Wait partitions with equal rounded ns totals, no intervention and the same build/target produce bit-identical material state and projections. Absolute-tick frame sampling cannot choose solver steps. Lua source history may differ between equivalent chunk partitions; it is bookkeeping, not material state.
 
-There is one active wet glaze and an ordered set of dry glazes. `finish_glaze` refuses wet state. Damp lifting requires water, removes suspension and loose deposit and removes much less bound staining pigment. Removed water and each pigment go to brush sinks. All exchanges retain pigment identity. Closed boundaries have zero outflow; the only material sinks are named evaporation and lifting. The tests exercise positivity, capacity, conservation, extreme face flux, edge accumulation, pore fronts, dry contact, staining, optical order and clock/resume/frame equality.
+Face flow includes thin-film mobility, viscous damping and sizing-dependent permeability. Water and pigment transfers retain donor limits; pore transfers also retain capacity limits. Fine-film suspension is deposited before numerically negligible water becomes a point carrier. Staining affinity adsorbs smooth pigments early; granulating pigments remain mobile and settle preferentially into correlated valleys. A finite binding fraction preserves lifting differences. Speed-dependent rewetting releases loose pigment under a clean-water backrun. Evaporation/lifting remain explicit sinks or typed transfers to tools.
 
-## Optical projection and limits
+Each glaze keeps its coverage and per-pigment deposited/bound amounts. Coverage reconstructs subcell painted area optically with finite-thickness Kubelka–Munk composition over the visible paper. It does not erase pigment inventory. Rendering uses the same saved final state for Color, Gallery, Relief and crops. The presentation renderer reconstructs larger images from the simulation grid; a 1200 px export is not 1200 simulation cells. Wet gloss, calibrated spectra and cross-grid/time convergence remain unverified.
 
-Per-pigment three-channel absorption/scattering coefficients compose each stratum with the finite-thickness Kubelka–Munk R/T formula over paper. The renderer applies ordered layer composition, not RGB alpha mixing. Suspension is projected as part of the active glaze. Wet refractive/gloss effects and spectral calibration are absent. The diffuse and raking views are standalone diagnostic lights, not the oil renderer's `seen_lit` gallery implementation.
+Pin the runner commit/build used for a painting when resuming it. These JSON snapshots validate channel shapes, finiteness and balances but have no production integrity/tile-store/runtime-registry guarantees. The oil CPSTATE1 path stays independent.
 
-The pilot's dense f64 grids and full JSON snapshots prioritize transparent conservation and deterministic testing. Snapshots validate channel dimensions, positivity, capacity and schema 1, but are not integrity-checked production checkpoints and have no untrusted-input allocation budget. Donor limits guarantee numerical nonnegativity, not timestep/grid convergence. Constants are tuned only at this fixed grid; there is no adaptive stability claim. Surface tension, explicit flocculation, individual fibers carrying pigment, binder/surfactant chemistry, brush mechanics and calibrated rewetting remain round-2 work.
+## Probe harness
 
-Reference: Curtis, Anderson, Seims, Fleischer and Salesin, *Computer-Generated Watercolor*, SIGGRAPH 1997, §§3–5, DOI 10.1145/258734.258896.
+```sh
+"$CARGO_TARGET_DIR/release/watercolor-probes" "$HOME/.capy/work/watercolor-2/probes"
+python3 experiments/watercolor/sheet.py "$HOME/.capy/work/watercolor-2/probes" "$HOME/.capy/drive/captain-stillwet/renders/watercolor-1"
+```
+
+An optional final argument selects `flat`, `bloom`, `graded`, `granulation`, `dry-brush`, `glaze` or `lifting` for targeted iteration. The full assembler requires Pillow and DejaVu Sans. It produces the seven-probe pair sheet, a round comparison, conservation tables and the bloom strip/GIF. The GIF holds each 1/16 physical second for 120 ms (1.92× slower, respecting GIF's 10 ms time quantum). It is a diagnostic loop, not a website clip.
+
+Reference: Curtis et al., *Computer-Generated Watercolor*, SIGGRAPH 1997, §§3–5, DOI 10.1145/258734.258896.

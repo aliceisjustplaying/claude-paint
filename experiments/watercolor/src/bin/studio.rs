@@ -9,6 +9,7 @@ fn main() {
         }
         let root = Path::new(&args[3]);
         match args[2].as_str() {
+            "restore" if args.len() == 5 => studio::restore(root, &args[4])?,
             "init" if args.len() == 4 => studio::init(root)?,
             "run" if args.len() == 5 => {
                 let source = fs::read_to_string(&args[4]).map_err(mlua::Error::external)?;

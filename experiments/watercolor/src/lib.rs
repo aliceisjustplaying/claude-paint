@@ -345,6 +345,15 @@ impl Watercolor {
         let steps = total / TICK_NS;
         let residual = total % TICK_NS;
         self.residual_ns = 0;
+        if every_ticks == 0
+            && self.water.iter().all(|v| *v == 0.0)
+            && self.capillary.iter().all(|v| *v == 0.0)
+            && self.suspended.iter().flatten().all(|v| *v == 0.0)
+        {
+            self.tick = self.tick.checked_add(steps).expect("clock overflow");
+            self.residual_ns = residual;
+            return;
+        }
         for _ in 0..steps {
             self.step();
             if every_ticks > 0 && self.tick.is_multiple_of(every_ticks) {
@@ -535,7 +544,7 @@ impl Watercolor {
                 self.suspended[i][p] = (self.suspended[i][p] + delta).max(0.0);
             }
         }
-        for p in 0..PIGMENTS {
+        for (p, properties) in PALETTE.iter().enumerate() {
             let mut moves = Vec::new();
             let mut out = vec![0.0; n];
             for &(i, j, _) in &faces {
@@ -543,7 +552,7 @@ impl Watercolor {
                     continue;
                 }
                 let diff = dt
-                    * (0.18 + 0.45 * (1.0 - PALETTE[p].granulation))
+                    * (0.18 + 0.45 * (1.0 - properties.granulation))
                     * self.water[i].min(self.water[j])
                     * (self.suspended[i][p] / self.water[i] - self.suspended[j][p] / self.water[j]);
                 let (from, to, m) = if diff >= 0.0 {
@@ -643,8 +652,9 @@ impl Watercolor {
                     continue;
                 }
                 let valley = (1.0 - self.paper.height[i]).powi(2) * 4.0 * self.paper.clump[i];
-                let rate =
-                    pigment.settling * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet));
+                let rate = pigment.settling
+                    * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet))
+                    + 1.8 * pigment.staining.powi(3);
                 let adsorbed = if self.water[i] < 0.0002 {
                     self.suspended[i][p]
                 } else {

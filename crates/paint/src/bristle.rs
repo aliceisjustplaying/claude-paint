@@ -412,6 +412,14 @@ impl std::fmt::Debug for Held {
 }
 
 impl Held {
+    pub(crate) fn material(&self, mm_per_unit: f32) -> crate::rag::transport::Material {
+        let unit = (mm_per_unit as f64).powi(2) * COAT_UM as f64 / 1000.0;
+        let mut total = crate::rag::transport::Material::default();
+        for b in &self.bristles {
+            total.add(crate::rag::transport::Material::picked(b.vol as f64 * unit, b.solvent as f64 * unit, b.lat, b.hide, b.cure));
+        }
+        total
+    }
     pub fn new(tool: Tool, seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         let n = tool.bristles.max(1);
@@ -718,6 +726,7 @@ impl Gesture {
 /// of the canvas can run in parallel (see `Canvas::work`).
 #[derive(Clone, Copy)]
 pub(crate) struct Surf {
+    pub(crate) layers: Option<crate::working_layer::BrushLayers>,
     /// The buffers' pixels: a window (origin `ox`, `oy`, size `w` × `h`) of
     /// the whole `fw` × `fh` canvas. Brush geometry works in whole-canvas
     /// pixels; only buffer indices are translated.
@@ -807,7 +816,7 @@ impl Surf {
             if self.cure_now && !self.dry.is_null() {
                 // (a film too thin for `wait` to count is bare: no cure)
                 let p = &mut *self.dry.add(i);
-                p.cure = if t < 1e-5 { 0.0 } else { p.cure + (cure - p.cure) * a };
+                p.cure = if t < 1e-5 && self.layers.is_none() { 0.0 } else { p.cure + (cure - p.cure) * a };
             }
             *vol = t;
             // engine 4: an absorbent ground under the film draws oil out of
@@ -838,7 +847,7 @@ impl Surf {
         unsafe {
             let vol = &mut *self.vol.add(i);
             *vol -= v;
-            if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
+            if self.cure_now && *vol < 1e-5 && !self.dry.is_null() && (self.layers.is_none() || *vol <= 0.0) {
                 (*self.dry.add(i)).cure = 0.0;
             }
         }
@@ -874,6 +883,7 @@ impl Canvas {
             self.base = Some((self.surf_gen, base));
         }
         Surf {
+            layers: None,
             w: self.f.w,
             h: self.f.h,
             ox: self.f.x0,
@@ -1256,7 +1266,7 @@ pub(crate) unsafe fn drag_on(
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
-            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, p, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
         feed(&mut held.bristles, feed_k);
@@ -1392,6 +1402,7 @@ unsafe fn exchange(
     b: (f32, f32),
     rb: f32,
     reach: f32,
+    pressure: f32,
     full: f32,
     dep: Option<f32>,
     excl: f32,
@@ -1519,7 +1530,8 @@ unsafe fn exchange(
                 }
                 sum_cov += cov;
                 let i = (y - oy) * bw_buf + x - ox;
-                let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
+                let support = if let Some(layers) = sf.layers { *sf.vol.add(i) + layers.coats(i) } else { *sf.vol.add(i) };
+                let surf = (*sf.base.add(i) + 0.35 * support).min(1.5);
                 // soft hair bends down into the valleys of the weave; stiff hog
                 // bristles ride on the peaks
                 let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
@@ -1537,6 +1549,22 @@ unsafe fn exchange(
                 };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
+                if wt > 0.0 {
+                    if let Some(layers) = sf.layers {
+                        let hair = if fine { rb } else { (tool.hair_radius() * s).min(rb) };
+                        let material = layers.open(i, pressure, (wt * hair / rb * (seg / (2.0 * rb)).min(1.0)) as f64);
+                        if material.paint_mm3 > 0.0 {
+                            let unit = layers.area * COAT_UM as f64 / 1000.0;
+                            let mut total = crate::rag::transport::Material::picked(*sf.vol.add(i) as f64 * unit, *sf.solv.add(i) as f64 * layers.area / 1000.0, *sf.lat.add(i), *sf.hide.add(i), (*sf.dry.add(i)).cure);
+                            total.add(material);
+                            *sf.lat.add(i) = total.latent_moment.map(|m| (m / total.paint_mm3) as f32);
+                            *sf.hide.add(i) = total.property_moment.map(|m| (m / total.paint_mm3) as f32);
+                            (*sf.dry.add(i)).cure = (total.cure_moment / total.paint_mm3) as f32;
+                            *sf.vol.add(i) = (total.paint_mm3 / unit) as f32;
+                            *sf.solv.add(i) = (total.solvent_mm3 * 1000.0 / layers.area) as f32;
+                        }
+                    }
+                }
                 if !sf.dry.is_null() {
                     let p = *sf.dry.add(i);
                     sum_tack += wt * crate::drying::feel(*sf.vol.add(i), p.cure, p.sub).1;
@@ -2006,7 +2034,7 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, pk, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
             b.prev[0] = Some(cur);
         }
     }

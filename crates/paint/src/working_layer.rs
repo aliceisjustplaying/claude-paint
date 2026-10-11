@@ -5,7 +5,7 @@ use crate::{
         Rag,
         transport::{Material, SolventLedger},
     },
-    wet::{LAT, over_share},
+    wet::over_share,
 };
 
 pub const MAX_BURIED_LAYERS: usize = 4;
@@ -64,8 +64,6 @@ impl Canvas {
                 self.wet.solv[i] = 0.0;
             }
             self.wet.vol[i] = 0.0;
-            self.wet.lat[i] = [0.0; LAT];
-            self.wet.hide[i] = [0.0, 0.5, 1.0, 0.0, 1.0];
             self.wet.cover[i] = 1.0;
             self.wet.stroke[i] = 0;
             self.wet.touched[i] = 0;
@@ -312,7 +310,9 @@ impl WorkingSurface {
                 image.wet.solv[i] += (material.solvent_mm3 * 1000.0 / area) as f32;
             }
             let coats = self.canvas.wet.vol[i];
-            if coats > 0.0 {
+            if stack.is_empty() {
+                colors[i] = self.canvas.look_px(i);
+            } else if coats > 0.0 {
                 let color = mixbox::latent_to_linear_float_rgb(&self.canvas.wet.lat[i]);
                 colors[i] = over_share(
                     Pigment::masstone(color, self.canvas.wet.hide[i][0]),
@@ -415,6 +415,44 @@ mod tests {
         assert_eq!(before.1, w.seen_lit(115.0, 55.0, 1.0));
         close(before.2, w.inventory());
         assert!(w.buried_paint_mm3() > 0.0 && w.working_paint_mm3() == 0.0);
+    }
+
+    #[test]
+    fn splitting_identical_paint_does_not_change_its_optics() {
+        let mut w = WorkingSurface::new(base()).unwrap();
+        let before = w.seen();
+        w.canvas.begin_working_pass();
+        for i in 0..w.canvas.wet.vol.len() {
+            let m = w.canvas.wet.working_layers.as_mut().unwrap().buried[i][0].take(0.5);
+            w.canvas.wet.vol[i] = 0.4;
+            w.canvas.wet.lat[i] = m.latent_moment.map(|x| (x / m.paint_mm3) as f32);
+            w.canvas.wet.hide[i] = m.property_moment.map(|x| (x / m.paint_mm3) as f32);
+            w.canvas.wet.clock.px[i].cure = (m.cure_moment / m.paint_mm3) as f32;
+        }
+        for (a, b) in before.into_iter().zip(w.seen()) {
+            for (x, y) in a.into_iter().zip(b) {
+                assert!((x - y).abs() < 2e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn a_single_light_pass_over_a_dried_picture_matches_the_normal_brush() {
+        let mut c = base();
+        c.wet.touch(0, 0, 96, 96);
+        c.dry();
+        let mut w = WorkingSurface::new(c.clone()).unwrap();
+        let mut b = Held::new(Tool::hog_flat(100.0), 71).with_engine(5);
+        b.load(Paint::body([0.85, 0.76, 0.58]).with_stiff(0.7), 0.7);
+        let mut normal = b.clone();
+        let g = Gesture::line((150.0, 500.0), (850.0, 500.0))
+            .pressure(0.2, 0.2)
+            .shake(0.0);
+        c.drag(&mut normal, &g, None);
+        w.lay_drag(&mut b, &g, None).unwrap();
+        assert_eq!(c.seen(), w.seen());
+        assert_eq!(c.seen_lit(115.0, 55.0, 1.0), w.seen_lit(115.0, 55.0, 1.0));
+        assert_eq!(c.pixels(), w.protected_pixels());
     }
 
     #[test]

@@ -12,9 +12,11 @@ from PIL import Image, ImageDraw, ImageFont
 def main():
     parser = argparse.ArgumentParser(description="Compare the two final knife_demo states.")
     parser.add_argument("directory", type=Path)
-    parser.add_argument("--reference", choices=["baseline", "knife-2"], default="baseline")
+    parser.add_argument("--reference", choices=["baseline", "knife-2", "knife-3"], default="baseline")
     args = parser.parse_args()
     model = "knife-3" if (args.directory / "knife-3-gallery.png").exists() else "knife-2"
+    if (args.directory / "knife-4-gallery.png").exists():
+        model = "knife-4"
     models = [args.reference, model]
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 19)
     for view in ["gallery", "color"]:

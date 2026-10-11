@@ -12,6 +12,40 @@ pub(super) struct Face {
 
 #[cfg(feature = "knife-2")]
 impl Face {
+    #[cfg(feature = "knife-4")]
+    fn smear(&mut self, other: &mut Self, share: f64) {
+        let a = self.clone();
+        let b = other.clone();
+        self.paint = a.paint * (1.0 - share) + b.paint * share;
+        other.paint = b.paint * (1.0 - share) + a.paint * share;
+        self.solvent = a.solvent * (1.0 - share) + b.solvent * share;
+        other.solvent = b.solvent * (1.0 - share) + a.solvent * share;
+        for (face, retained, incoming) in [(self, &a, &b), (other, &b, &a)] {
+            if face.paint > 1e-12 {
+                let f = (incoming.paint * share / face.paint) as f32;
+                for (v, (a, b)) in face
+                    .lat
+                    .iter_mut()
+                    .zip(retained.lat.iter().zip(incoming.lat.iter()))
+                {
+                    *v = *a * (1.0 - f) + *b * f;
+                }
+                for (v, (a, b)) in face
+                    .hide
+                    .iter_mut()
+                    .zip(retained.hide.iter().zip(incoming.hide.iter()))
+                {
+                    *v = *a * (1.0 - f) + *b * f;
+                }
+                face.cure = mix_cure(
+                    retained.cure,
+                    (retained.paint * (1.0 - share)) as f32,
+                    incoming.cure,
+                    (incoming.paint * share) as f32,
+                );
+            }
+        }
+    }
     fn bind(&self, k: &mut Knife) -> (f64, f64) {
         k.vol = self.paint as f32;
         k.solvent = self.solvent as f32;
@@ -31,6 +65,12 @@ impl Face {
 }
 
 impl Knife {
+    #[cfg(feature = "knife-4")]
+    pub fn experimental_4(mut self, flex: f32) -> Self {
+        self = self.experimental_3(flex);
+        self.fourth = self.flex.is_some();
+        self
+    }
     #[cfg(feature = "knife-3")]
     pub fn experimental_3(mut self, flex: f32) -> Self {
         self = self.experimental_2(flex);
@@ -46,6 +86,10 @@ impl Knife {
     pub fn experimental(mut self, flex: f32) -> Self {
         if flex.is_finite() && (0.0..=1.0).contains(&flex) {
             self.flex = Some(flex);
+            #[cfg(feature = "knife-4")]
+            {
+                self.fourth = false;
+            }
             #[cfg(feature = "knife-3")]
             {
                 self.third = false;
@@ -177,6 +221,10 @@ impl Canvas {
         let third = false;
         #[cfg(feature = "knife-3")]
         let third = k.third;
+        #[cfg(not(feature = "knife-4"))]
+        let fourth = false;
+        #[cfg(feature = "knife-4")]
+        let fourth = k.fourth;
         let pressure = if second {
             (pressure.0.clamp(0.0, 1.0), pressure.1.clamp(0.0, 1.0))
         } else {
@@ -252,6 +300,20 @@ impl Canvas {
                 last.1
             };
             let e = angle.map_or((-dir.1, dir.0), |a| (a.cos(), a.sin()));
+            let (c, e) = if fourth && !lay {
+                let wobble = (crate::surface::vnoise(d * mm_px * 0.08, 3.0, seed ^ 0x404B) - 0.5)
+                    * 1.5
+                    / mm_px;
+                let turn =
+                    (crate::surface::vnoise(d * mm_px * 0.06, 7.0, seed ^ 0xA464) - 0.5) * 0.10;
+                let (sin, cos) = turn.sin_cos();
+                (
+                    (c.0 - dir.1 * wobble, c.1 + dir.0 * wobble),
+                    (e.0 * cos - e.1 * sin, e.0 * sin + e.1 * cos),
+                )
+            } else {
+                (c, e)
+            };
             let face = if -e.1 * dir.0 + e.0 * dir.1 > 0.0 {
                 (e.1, -e.0)
             } else {
@@ -279,7 +341,36 @@ impl Canvas {
             } else {
                 0.0
             };
+            let scrape_contact: Vec<_> = (0..=nx)
+                .map(|q| {
+                    if fourth && !lay {
+                        let u = -1.0 + 2.0 * q as f32 / nx as f32;
+                        let transverse = u * half * mm_px;
+                        let entry = (1.5
+                            + 6.0 * crate::surface::vnoise(transverse * 0.18, 4.0, seed ^ 0xE474))
+                            / mm_px;
+                        let exit = (1.5
+                            + 8.0 * crate::surface::vnoise(transverse * 0.15, 9.0, seed ^ 0xE417))
+                            / mm_px;
+                        let edge = 0.82
+                            + 0.18
+                                * crate::surface::vnoise(
+                                    d * mm_px * 0.16,
+                                    u.signum() + 3.0,
+                                    seed ^ 0x7044,
+                                );
+                        smoothstep(entry, entry + 4.0 / mm_px, d)
+                            * smoothstep(exit, exit + 5.0 / mm_px, total - d)
+                            * (1.0 - smoothstep(edge - 0.055, edge, u.abs()))
+                    } else {
+                        1.0
+                    }
+                })
+                .collect();
             for q in 0..=nx {
+                if scrape_contact[q] < 0.04 {
+                    continue;
+                }
                 let u = -1.0 + 2.0 * q as f32 / nx as f32;
                 let drift = 0.7 * crate::surface::vnoise(u * 3.0, d * mm_px * 0.6, seed) - 0.35;
                 let parting = depth
@@ -334,8 +425,21 @@ impl Canvas {
                             d * mm_px * 0.035,
                             seed ^ 0xD2A6,
                         ) - 0.5;
-                        (pr + flex * pr.sqrt() * (0.75 * bend + 0.5 * smoothstep(0.05, 0.25, drag)))
-                            .clamp(0.0, 1.0)
+                        let variation = if fourth && body_pass {
+                            let nick = smoothstep(
+                                0.64,
+                                0.82,
+                                crate::surface::vnoise(
+                                    transverse * 0.22,
+                                    d * mm_px * 0.22,
+                                    seed ^ 0x41C4,
+                                ),
+                            );
+                            0.4 * bend + 0.42 * smoothstep(0.05, 0.25, drag) * nick
+                        } else {
+                            0.75 * bend + 0.5 * smoothstep(0.05, 0.25, drag)
+                        };
+                        (pr + flex * pr.sqrt() * variation).clamp(0.0, 1.0) * scrape_contact[q]
                     } else {
                         pr
                     }
@@ -616,6 +720,29 @@ impl Canvas {
                     y as usize + 1,
                 );
             }
+            #[cfg(feature = "knife-4")]
+            if fourth && body_pass {
+                if let Some(faces) = &mut faces {
+                    for j in 0..7 {
+                        let mobile = crate::drying::fluid(faces[j].cure)
+                            .min(crate::drying::fluid(faces[j + 1].cure));
+                        let share = (advance * mm_px / 2.0
+                            * 0.08
+                            * pr
+                            * mobile
+                            * (0.2
+                                + 0.8
+                                    * crate::surface::vnoise(
+                                        d * mm_px * 0.13,
+                                        j as f32,
+                                        seed ^ 0x54EA,
+                                    )))
+                        .clamp(0.0, 0.08) as f64;
+                        let (left, right) = faces.split_at_mut(j + 1);
+                        left[j].smear(&mut right[0], share);
+                    }
+                }
+            }
         }
         #[cfg(feature = "knife-2")]
         if let Some(owned) = faces.take() {
@@ -742,6 +869,131 @@ impl Canvas {
             self.wet
                 .touch(x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy);
         }
+    }
+}
+
+#[cfg(all(test, feature = "knife-4"))]
+mod round_four_tests {
+    use super::*;
+
+    #[test]
+    fn knife_4_neighbor_smear_exchanges_material_without_creating_inventory() {
+        let yellow = Paint::body(crate::hex("#d8b757"));
+        let blue = Paint::body(crate::hex("#35556a"));
+        let mut a = Face {
+            paint: 12.0,
+            solvent: 2.0,
+            lat: yellow.latent(),
+            hide: yellow.prop(),
+            cure: 0.0,
+        };
+        let mut b = Face {
+            paint: 4.0,
+            solvent: 3.0,
+            lat: blue.latent(),
+            hide: blue.prop(),
+            cure: 0.2,
+        };
+        a.smear(&mut b, 0.08);
+        assert!((a.paint + b.paint - 16.0).abs() < 1e-12);
+        assert!((a.solvent + b.solvent - 5.0).abs() < 1e-12);
+        assert_ne!(a.lat, yellow.latent());
+        assert_ne!(b.lat, blue.latent());
+        assert!(a.cure >= 0.0 && a.cure < 0.2 && b.cure > 0.0 && b.cure <= 0.2);
+    }
+
+    #[test]
+    fn knife_4_scrape_tapers_at_irregular_ends_and_conserves_dirty_continuation() {
+        let mut c = Canvas::new(640, 2.0, crate::hex("#35556a"))
+            .with_size_mm(300.0)
+            .with_engine(5);
+        let orange = Paint::body(crate::hex("#b3673e"));
+        let sf = c.surf();
+        for i in 0..sf.w * sf.h {
+            unsafe {
+                sf.add(i, 4.0, &orange.latent(), orange.prop(), 0.0);
+            }
+        }
+        let before = (c.wet_total(), c.solvent_total());
+        let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+        let mut k = Knife::new(110.0).experimental_4(0.65);
+        c.knife_1(
+            &mut k,
+            &[(190.0, 250.0), (790.0, 250.0)],
+            (1.0, 1.0),
+            None,
+            false,
+            0.0,
+            75.0,
+        );
+        let s = c.f.scale;
+        let mut starts = Vec::new();
+        let mut ends = Vec::new();
+        for y in (220.0 * s) as usize..(280.0 * s) as usize {
+            let xs: Vec<_> = ((180.0 * s) as usize..(810.0 * s) as usize)
+                .filter(|&x| c.wet.vol[y * c.f.w + x] < 3.7)
+                .collect();
+            if let (Some(first), Some(last)) = (xs.first(), xs.last()) {
+                starts.push(*first);
+                ends.push(*last);
+            }
+        }
+        assert!(starts.len() > 15);
+        assert!(starts.iter().max().unwrap() - starts.iter().min().unwrap() >= 3);
+        assert!(ends.iter().max().unwrap() - ends.iter().min().unwrap() >= 3);
+        assert!(c.wet.vol.iter().all(|v| v.is_finite() && *v >= 0.0));
+        assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+        c.knife_1(
+            &mut k,
+            &[(190.0, 380.0), (790.0, 380.0)],
+            (0.45, 0.6),
+            None,
+            true,
+            0.2,
+            20.0,
+        );
+        assert!((c.wet_total() + k.paint_volume() - before.0).abs() < before.0 * 3e-6);
+        assert!(
+            (c.solvent_total() + k.solvent_volume() - before.1).abs() < before.1.max(1.0) * 3e-6
+        );
+        assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+    }
+
+    #[test]
+    fn knife_4_fresh_fluid_veil_retains_the_previous_material_path() {
+        let mark = |fourth| {
+            let mut c = Canvas::new(320, 2.0, crate::hex("#35556a"))
+                .with_size_mm(300.0)
+                .with_engine(5);
+            let mut k = Knife::new(110.0);
+            k = if fourth {
+                k.experimental_4(0.65)
+            } else {
+                k.experimental_3(0.65)
+            };
+            k.load(
+                Paint::new(crate::hex("#baa452"), 0.25, 0.1).with_thinner(0.35),
+                0.15,
+            );
+            c.knife_1(
+                &mut k,
+                &[(170.0, 250.0), (650.0, 250.0)],
+                (0.75, 0.82),
+                None,
+                true,
+                0.0,
+                10.0,
+            );
+            (
+                c.state_fields()
+                    .into_iter()
+                    .map(|f| f.values.le_bytes())
+                    .collect::<Vec<_>>(),
+                k.paint_volume(),
+                k.solvent_volume(),
+            )
+        };
+        assert_eq!(mark(false), mark(true));
     }
 }
 

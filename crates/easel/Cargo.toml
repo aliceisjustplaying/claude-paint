@@ -8,6 +8,7 @@ publish = false
 knife-1 = ["paint/knife-1"]
 knife-2 = ["knife-1", "paint/knife-2"]
 knife-3 = ["knife-2", "paint/knife-3"]
+knife-4 = ["knife-3", "paint/knife-4"]
 default = ["replay", "finish"]
 # The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
 # `easel run` (with --dump-surface) and `hash-probe`. Without it (the

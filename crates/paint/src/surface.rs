@@ -278,6 +278,10 @@ impl Canvas {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }
         let Bands { r1, .. } = Bands::at(self.px_mm());
+        #[cfg(feature = "brush-sim-5")]
+        let r1 = if (18..=20).contains(&self.engine) {
+            self.linen.map_or(r1, |linen| r1.max(((10.0 / linen.warp_per_cm).max(10.0 / linen.weft_per_cm) / self.px_mm()).ceil() as usize))
+        } else { r1 };
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
         (0..w * h)
             .into_par_iter()
@@ -559,6 +563,34 @@ mod tests {
 
     fn total(v: &[f32]) -> f64 {
         v.iter().map(|&x| x as f64).sum()
+    }
+
+    #[test]
+    #[cfg(feature = "brush-sim-5")]
+    fn body_paint_bridges_the_plain_weave_repeat_without_changing_material_or_color() {
+        let mut c = Canvas::new(240, 1.5, hex("#343941")).with_size_mm(32.0).with_engine(18);
+        c.linen = Some(Linen { warp_per_cm: 16.0, weft_per_cm: 16.0, ..Linen::fine(1906) });
+        let px = c.px_mm();
+        for y in 0..c.f.h {
+            for x in 0..c.f.w {
+                c.height[y * c.f.w + x] = 180.0 + 35.0 * (std::f32::consts::TAU * x as f32 * px / 0.625).sin() + 30.0 * (std::f32::consts::TAU * y as f32 * px / 0.625).sin();
+            }
+        }
+        let rms = |values: &[f32]| {
+            let values: Vec<f64> = (20..140).flat_map(|y| (20..220).map(move |x| values[y * 240 + x] as f64)).collect();
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64).sqrt()
+        };
+        assert_eq!(c.wet_surface(), c.height);
+        c.wet.vol.fill(0.2);
+        assert!(rms(&c.wet_surface()) > 0.7 * rms(&c.height));
+        c.wet.vol.fill(16.0);
+        let before = (c.material_total(), c.solvent_total(), c.seen(), c.wet.vol.clone());
+        let old = c.clone().with_engine(15).wet_surface();
+        let top = c.wet_surface();
+        assert!(rms(&top) < 0.3 * rms(&old), "new {} old {}", rms(&top), rms(&old));
+        assert_eq!(before, (c.material_total(), c.solvent_total(), c.seen(), c.wet.vol.clone()));
+        assert_eq!(c.clone().with_engine(15).seen(), c.seen());
     }
 
     /// The exact global correction stops each pixel at its bound (the peak

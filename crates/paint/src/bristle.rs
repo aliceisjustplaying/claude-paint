@@ -654,6 +654,8 @@ impl Held {
                 let center = -1.0 + 2.0 * (rank + 0.5 + jitter) / count + moving;
                 (0.82 * cohesion * (center - br.rx) + 0.18 * target).clamp(-0.22, 0.22)
             } else { target };
+            #[cfg(feature = "brush-sim-5")]
+            let target = if sim.model.detail > 0.0 { target * (1.0 - 0.6 * sim.sharp(br)) } else { target };
             self.bundle_offsets[i] = (old[i] + (target - old[i]) * rate).clamp(-ROOT_MAX - br.rx, ROOT_MAX - br.rx);
         }
         let parity = (sim.distance_mm / 1.3).floor() as usize % 2;
@@ -716,33 +718,40 @@ struct BrushSim {
     next: bool,
     bundles: bool,
     level: f32,
+    detail: f32,
 }
 
 #[cfg(feature = "brush-sim-1")]
 impl BrushSim {
     fn for_engine(engine: u32) -> Option<Self> {
         match engine {
-            6 => Some(Self { release: 0.85, entropy: 1.0, next: false, bundles: false, level: 0.0 }),
-            7 => Some(Self { release: 1.05, entropy: 1.0, next: false, bundles: false, level: 0.0 }),
-            8 => Some(Self { release: 0.95, entropy: 2.8, next: false, bundles: false, level: 0.0 }),
+            6 => Some(Self { release: 0.85, entropy: 1.0, next: false, bundles: false, level: 0.0, detail: 0.0 }),
+            7 => Some(Self { release: 1.05, entropy: 1.0, next: false, bundles: false, level: 0.0, detail: 0.0 }),
+            8 => Some(Self { release: 0.95, entropy: 2.8, next: false, bundles: false, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            9 => Some(Self { release: 1.05, entropy: 2.2, next: true, bundles: false, level: 0.0 }),
+            9 => Some(Self { release: 1.05, entropy: 2.2, next: true, bundles: false, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            10 => Some(Self { release: 1.2, entropy: 2.8, next: true, bundles: false, level: 0.0 }),
+            10 => Some(Self { release: 1.2, entropy: 2.8, next: true, bundles: false, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-2")]
-            11 => Some(Self { release: 1.25, entropy: 4.0, next: true, bundles: false, level: 0.0 }),
+            11 => Some(Self { release: 1.25, entropy: 4.0, next: true, bundles: false, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            12 => Some(Self { release: 1.05, entropy: 2.7, next: true, bundles: true, level: 0.0 }),
+            12 => Some(Self { release: 1.05, entropy: 2.7, next: true, bundles: true, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            13 => Some(Self { release: 1.2, entropy: 3.4, next: true, bundles: true, level: 0.0 }),
+            13 => Some(Self { release: 1.2, entropy: 3.4, next: true, bundles: true, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-3")]
-            14 => Some(Self { release: 1.05, entropy: 4.6, next: true, bundles: true, level: 0.0 }),
+            14 => Some(Self { release: 1.05, entropy: 4.6, next: true, bundles: true, level: 0.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-4")]
-            15 => Some(Self { release: 1.05, entropy: 3.0, next: true, bundles: true, level: 0.65 }),
+            15 => Some(Self { release: 1.05, entropy: 3.0, next: true, bundles: true, level: 0.65, detail: 0.0 }),
             #[cfg(feature = "brush-sim-4")]
-            16 => Some(Self { release: 1.15, entropy: 3.6, next: true, bundles: true, level: 1.0 }),
+            16 => Some(Self { release: 1.15, entropy: 3.6, next: true, bundles: true, level: 1.0, detail: 0.0 }),
             #[cfg(feature = "brush-sim-4")]
-            17 => Some(Self { release: 1.05, entropy: 4.8, next: true, bundles: true, level: 1.25 }),
+            17 => Some(Self { release: 1.05, entropy: 4.8, next: true, bundles: true, level: 1.25, detail: 0.0 }),
+            #[cfg(feature = "brush-sim-5")]
+            18 => Some(Self { release: 1.05, entropy: 3.4, next: true, bundles: true, level: 0.65, detail: 0.75 }),
+            #[cfg(feature = "brush-sim-5")]
+            19 => Some(Self { release: 1.1, entropy: 4.0, next: true, bundles: true, level: 0.7, detail: 1.0 }),
+            #[cfg(feature = "brush-sim-5")]
+            20 => Some(Self { release: 1.05, entropy: 5.2, next: true, bundles: true, level: 0.65, detail: 1.35 }),
             _ => None,
         }
     }
@@ -757,10 +766,21 @@ struct SimContact {
     seed: u64,
     #[cfg(feature = "brush-sim-3")]
     offset: f32,
+    #[cfg(feature = "brush-sim-5")]
+    lip: f32,
 }
 
 #[cfg(feature = "brush-sim-1")]
 impl SimContact {
+    #[cfg(feature = "brush-sim-5")]
+    fn sharp(self, br: &Bristle) -> f32 {
+        if self.model.detail <= 0.0 { return 0.0; }
+        let member = crate::smoothstep(0.83, 0.98, crate::rng::hash2(0, 59, br.seed));
+        let length = 2.5 + 2.0 * crate::rng::hash2(0, 71, br.seed);
+        let burst = crate::smoothstep(0.2, 0.75, wander(self.distance_mm / length, br.seed ^ 0x9D3));
+        (self.model.detail * member * burst).min(1.0)
+    }
+
     fn at(self, rx: f32, width: f32) -> (f32, f32) {
         #[cfg(feature = "brush-sim-3")]
         let rx = if self.model.bundles { rx + self.offset } else { rx };
@@ -849,7 +869,7 @@ mod bundle_tests {
         for (i, b) in h.bristles.iter_mut().enumerate() { b.cure = (i % 17) as f32 / 25.0; }
         let before = moments(&h);
         for i in 0..160 {
-            h.evolve_bundles(SimContact { model: BrushSim::for_engine(13).unwrap(), mm_per_unit: 0.16, distance_mm: i as f32 * 0.25, seed: 73, offset: 0.0 }, 0.85, 0.25);
+            h.evolve_bundles(SimContact { model: BrushSim::for_engine(13).unwrap(), mm_per_unit: 0.16, distance_mm: i as f32 * 0.25, seed: 73, offset: 0.0, #[cfg(feature = "brush-sim-5")] lip: 0.0 }, 0.85, 0.25);
         }
         for (i, (a, b)) in before.iter().zip(moments(&h)).enumerate() {
             assert!((a - b).abs() < 1e-5 * a.abs().max(1.0), "moment {i}: {a} {b}");
@@ -864,7 +884,7 @@ mod bundle_tests {
         let mut h = Held::new(Tool::hog_flat(85.0), 73).with_engine(13);
         h.bundle_offsets.fill(0.1);
         let model = BrushSim::for_engine(13).unwrap();
-        h.evolve_bundles(SimContact { model, mm_per_unit: 0.16, distance_mm: 12.0, seed: 73, offset: 0.0 }, 0.9, 0.25);
+        h.evolve_bundles(SimContact { model, mm_per_unit: 0.16, distance_mm: 12.0, seed: 73, offset: 0.0, #[cfg(feature = "brush-sim-5")] lip: 0.0 }, 0.9, 0.25);
         assert_eq!(h.carried(), (0.0, 0.0));
         assert!(h.bundle_offsets.iter().all(|x| *x < 0.1 && *x > 0.0));
     }
@@ -939,6 +959,74 @@ mod leveling_tests {
         let variation = |c: &Canvas| c.wet.vol.iter().map(|v| (*v as f64 - 1.75).powi(2)).sum::<f64>();
         assert!(variation(&overlap) < variation(&own));
         assert!(variation(&own) > 0.0);
+    }
+}
+
+#[cfg(all(test, feature = "brush-sim-5"))]
+mod detail_tests {
+    use super::*;
+
+    #[test]
+    fn crisp_hair_contacts_are_sparse_travel_correlated_and_absent_from_old_models() {
+        let h = Held::new(Tool::hog_flat(85.0), 73);
+        for engine in [18, 19, 20] {
+            let mut active = 0;
+            let mut count = 0;
+            for step in 0..320 {
+                let sim = SimContact { model: BrushSim::for_engine(engine).unwrap(), mm_per_unit: 0.16, distance_mm: step as f32 * 0.25, seed: 73, offset: 0.0, lip: 0.0 };
+                for hair in &h.bristles {
+                    let sharp = sim.sharp(hair);
+                    assert!((0.0..=1.0).contains(&sharp));
+                    active += usize::from(sharp > 0.01);
+                    count += 1;
+                    let next = SimContact { distance_mm: sim.distance_mm + 0.01, ..sim }.sharp(hair);
+                    assert!((next - sharp).abs() < 0.03);
+                }
+            }
+            let fraction = active as f64 / count as f64;
+            assert!((0.005..0.12).contains(&fraction), "{engine}: {fraction}");
+        }
+        let old = SimContact { model: BrushSim::for_engine(15).unwrap(), mm_per_unit: 0.16, distance_mm: 17.0, seed: 73, offset: 0.0, lip: 1.0 };
+        assert!(h.bristles.iter().all(|hair| old.sharp(hair) == 0.0));
+    }
+
+    #[test]
+    fn lifting_releases_a_finite_bead_and_accounts_for_the_remaining_reservoir() {
+        let draw = |lip| {
+            let mut c = Canvas::new(64, 2.0, crate::hex("#343941")).with_engine(19);
+            let mut h = Held::new(Tool::hog_flat(85.0), 73).with_engine(19);
+            h.load(Paint::body(crate::hex("#be5e32")).with_stiff(0.9), 0.8);
+            let input = h.carried().0;
+            let full = h.full();
+            let mut sf = c.surf();
+            sf.sim.as_mut().unwrap().lip = lip;
+            let mut scratch = Vec::new();
+            let mut bounds = None;
+            unsafe { exchange(sf, &mut h.bristles[0], &h.tool, (15.0, 16.0), (16.25, 16.0), 2.0, 0.8, full, None, 1.0, None, 1, &mut scratch, &mut bounds, (0, 0, 64, 32)); }
+            let deposited = c.material_total();
+            assert!((deposited + h.carried().0 - input).abs() < input * 2e-6);
+            assert!(h.carried().0 >= 0.0);
+            deposited
+        };
+        assert!(draw(1.0) > 1.5 * draw(0.0));
+    }
+
+    #[test]
+    fn wet_overlaps_partly_level_ridges_while_current_stroke_relief_survives() {
+        let mut overlap = Canvas::new(8, 1.0, crate::hex("#343941")).with_engine(19);
+        for (i, v) in overlap.wet.vol.iter_mut().enumerate() { *v = if i % 2 == 0 { 3.0 } else { 0.5 }; }
+        let mut own = overlap.clone();
+        own.wet.stroke.fill(1);
+        let initial = overlap.material_total();
+        unsafe {
+            overlap.surf().level_contact(&[1.0; 64], (0, 0, 8, 8), 1, 0.7);
+            own.surf().level_contact(&[1.0; 64], (0, 0, 8, 8), 1, 0.7);
+        }
+        let variation = |c: &Canvas| c.wet.vol.iter().map(|v| (*v as f64 - 1.75).powi(2)).sum::<f64>();
+        assert!(variation(&overlap) < variation(&own));
+        assert!(variation(&overlap) > 0.0);
+        assert!((overlap.material_total() - initial).abs() < initial * 2e-6);
+        assert!((own.material_total() - initial).abs() < initial * 2e-6);
     }
 }
 
@@ -1291,7 +1379,7 @@ impl Canvas {
             #[cfg(feature = "brush-sim-1")]
             engine: self.engine,
             #[cfg(feature = "brush-sim-1")]
-            sim: BrushSim::for_engine(self.engine).map(|model| SimContact { model, mm_per_unit: self.mm_per_unit, distance_mm: 0.0, seed: 0, #[cfg(feature = "brush-sim-3")] offset: 0.0 }),
+            sim: BrushSim::for_engine(self.engine).map(|model| SimContact { model, mm_per_unit: self.mm_per_unit, distance_mm: 0.0, seed: 0, #[cfg(feature = "brush-sim-3")] offset: 0.0, #[cfg(feature = "brush-sim-5")] lip: 0.0 }),
             w: self.f.w,
             h: self.f.h,
             ox: self.f.x0,
@@ -1488,7 +1576,7 @@ pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32,
 }
 
 pub(crate) fn footprint_for_engine(engine: u32, tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
-    let broad = cfg!(feature = "brush-sim-4") && (15..=17).contains(&engine);
+    let broad = (cfg!(feature = "brush-sim-4") && (15..=17).contains(&engine)) || (cfg!(feature = "brush-sim-5") && (18..=20).contains(&engine));
     footprint_checked(tool, pts, shake, scale, w, h, broad).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
 }
 
@@ -1632,6 +1720,10 @@ pub(crate) unsafe fn drag_on(
         let p = sf.sim.filter(|sim| sim.model.next).map_or(p, |sim| {
             (p * (1.0 + g.shake * 0.045 * sim.model.entropy * wander(sim.distance_mm / 7.7, sim.seed ^ 0x812))).clamp(0.0, 1.0)
         });
+        #[cfg(feature = "brush-sim-5")]
+        if let Some(sim) = &mut sf.sim && sim.model.detail > 0.0 {
+            sim.lip = if g.release > 0.0 { smoothstep(1.0 - g.release, 1.0, u) * (1.0 - p) } else { 0.0 };
+        }
         #[cfg(feature = "brush-sim-3")]
         if let Some(sim) = sf.sim && sim.model.bundles { held.evolve_bundles(sim, p, step / s * sim.mm_per_unit); }
         let theta = match g.orient {
@@ -1719,7 +1811,10 @@ pub(crate) unsafe fn drag_on(
             let rk = sf.sim.filter(|sim| sim.model.level > 0.0).map_or(rk, |sim| {
                 let wet = smoothstep(0.04, 0.65, (b.vol + b.solvent) / full);
                 let (group, _) = sim.at(b.rx, tool.width);
-                (rk * (1.0 + wet * (1.8 + 0.7 * group).max(0.6))).min(half_max.max(rb))
+                let bridge = wet * (1.8 + 0.7 * group).max(0.6);
+                #[cfg(feature = "brush-sim-5")]
+                let bridge = if sim.model.detail > 0.0 { bridge * (1.0 - sim.sharp(b)) } else { bridge };
+                (rk * (1.0 + bridge)).min(half_max.max(rb))
             });
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
             #[cfg(feature = "brush-sim-3")]
@@ -2061,6 +2156,8 @@ unsafe fn exchange(
         if let Some(sim) = sf.sim && sim.model.level > 0.0 {
             let (group, _) = sim.at(br.rx, tool.width);
             let strength = sim.model.level * (0.2 + 0.8 * wet) * (0.65 + 0.35 * group) * (seg / rb.max(0.1)).min(1.0);
+            #[cfg(feature = "brush-sim-5")]
+            let strength = if sim.model.detail > 0.0 { strength * (1.0 - 0.75 * sim.sharp(br)) * (1.0 - 0.65 * sim.lip) } else { strength };
             sf.level_contact(wts, (x0, y0, x1, y1), id, strength);
         }
         // a tacky surface grabs: it pulls paint off the bristle faster, in
@@ -2118,6 +2215,8 @@ unsafe fn exchange(
         let dep_total = if let Some(sim) = sf.sim {
             (dep_total * sim.release(br, tool)).min(liquid * 0.95)
         } else { dep_total };
+        #[cfg(feature = "brush-sim-5")]
+        let dep_total = sf.sim.filter(|sim| sim.model.detail > 0.0).map_or(dep_total, |sim| (dep_total * (1.0 + 2.0 * sim.model.detail * sim.lip)).min(liquid * 0.95));
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         #[cfg(feature = "brush-sim-1")]
@@ -2148,6 +2247,12 @@ unsafe fn exchange(
         // (see `touch_rb`): its contact is its track.
         let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
         let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
+        #[cfg(feature = "brush-sim-5")]
+        let push_k = sf.sim.filter(|sim| sim.model.detail > 0.0).map_or(push_k, |sim| {
+            let edge = smoothstep(0.5, 0.95, (br.rx + sim.offset).abs());
+            let irregular = 0.65 + 0.35 * wander(sim.distance_mm / 2.7, br.seed ^ 0x2D7);
+            (push_k * (0.6 + sim.model.detail * edge * irregular * (rb / hair.max(1e-6)).min(3.5) + sim.model.detail * sim.lip)).min(0.65)
+        });
         // (engine 4: each hair still moves only its own share of paint, but a
         // clump of hairs in stiff paint throws it aside the clump's width,
         // up to a few pixels: walls along the stroke's edges, a bead ahead)
@@ -2257,8 +2362,11 @@ unsafe fn exchange(
                     if m > 1e-6 {
                         let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
                         let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
-                        let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
-                        let ty = py + (ny * side * 0.75 + my * 0.45) * off;
+                        let (sideward, ahead) = (0.75, 0.45);
+                        #[cfg(feature = "brush-sim-5")]
+                        let (sideward, ahead) = sf.sim.filter(|sim| sim.model.detail > 0.0).map_or((sideward, ahead), |sim| (sideward * (1.0 - 0.75 * sim.lip), ahead + sim.lip));
+                        let tx = px + (nx * side * sideward + mx * ahead) * off;
+                        let ty = py + (ny * side * sideward + my * ahead) * off;
                         // where the paint goes: the pixel under the target,
                         // or for a moving hair, shared
                         // bilinearly by the four pixels around it (a hair

@@ -870,6 +870,78 @@ mod bundle_tests {
     }
 }
 
+#[cfg(all(test, feature = "brush-sim-4"))]
+mod leveling_tests {
+    use super::*;
+
+    fn canvas() -> Canvas {
+        let mut c = Canvas::new(8, 1.0, crate::hex("#bcb3a2")).with_engine(16);
+        c.wet.ensure_solvent();
+        c.wet.clock.px = vec![crate::drying::Px { cure: 0.0, lev: 0.0, seen: 0.0, sub: 0.0, srate: 0.0, th: 0.0 }; 64];
+        for i in 0..64 {
+            c.wet.vol[i] = if i % 2 == 0 { 3.0 } else { 0.5 };
+            c.wet.solv[i] = c.wet.vol[i] * 12.0;
+            c.wet.lat[i] = [i as f32 / 64.0; LAT];
+            c.wet.hide[i] = [0.3, 0.5, 0.7, 0.0, 0.8];
+            c.wet.clock.px[i].cure = i as f32 / 300.0;
+        }
+        c
+    }
+
+    fn moments(c: &Canvas) -> Vec<f64> {
+        let mut values = vec![0.0; LAT + 8];
+        for i in 0..64 {
+            let v = c.wet.vol[i] as f64;
+            values[0] += v;
+            values[1] += c.wet.solv[i] as f64;
+            values[2] += c.wet.clock.px[i].cure as f64 * v;
+            for k in 0..LAT { values[3 + k] += c.wet.lat[i][k] as f64 * v; }
+            for k in 0..5 { values[3 + LAT + k] += c.wet.hide[i][k] as f64 * v; }
+        }
+        values
+    }
+
+    #[test]
+    fn wet_leveling_preserves_paint_solvent_pigment_properties_and_cure() {
+        let mut c = canvas();
+        let before = moments(&c);
+        let weights = vec![1.0; 64];
+        for _ in 0..12 { unsafe { c.surf().level_contact(&weights, (0, 0, 8, 8), 1, 0.7); } }
+        for (i, (a, b)) in before.iter().zip(moments(&c)).enumerate() {
+            assert!((a - b).abs() < 2e-6 * a.abs().max(1.0), "moment {i}: {a} {b}");
+        }
+        assert!(c.wet.vol.iter().all(|v| *v > 0.0 && *v < 3.0));
+        assert!(c.wet.solv.iter().all(|v| *v >= 0.0));
+    }
+
+    #[test]
+    fn leveling_respects_zero_contact_and_dry_paint() {
+        for dry in [false, true] {
+            let mut c = canvas();
+            if dry { for p in &mut c.wet.clock.px { p.cure = 1.0; } }
+            let before = moments(&c);
+            let volumes = c.wet.vol.clone();
+            unsafe { c.surf().level_contact(&vec![if dry { 1.0 } else { 0.0 }; 64], (0, 0, 8, 8), 1, 0.7); }
+            assert_eq!(volumes, c.wet.vol);
+            assert_eq!(before, moments(&c));
+        }
+    }
+
+    #[test]
+    fn overlapping_wet_ridges_level_more_than_the_current_stroke() {
+        let mut overlap = canvas();
+        let mut own = canvas();
+        own.wet.stroke.fill(1);
+        unsafe {
+            overlap.surf().level_contact(&vec![1.0; 64], (0, 0, 8, 8), 1, 0.7);
+            own.surf().level_contact(&vec![1.0; 64], (0, 0, 8, 8), 1, 0.7);
+        }
+        let variation = |c: &Canvas| c.wet.vol.iter().map(|v| (*v as f64 - 1.75).powi(2)).sum::<f64>();
+        assert!(variation(&overlap) < variation(&own));
+        assert!(variation(&own) > 0.0);
+    }
+}
+
 /// Which of a brush's bristles a dip reaches, and how much each takes up
 /// (see `Held::load_part`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1062,6 +1134,53 @@ fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 }
 
 impl Surf {
+    #[cfg(feature = "brush-sim-4")]
+    unsafe fn level_contact(&self, weights: &[f32], rect: Rect, id: u32, strength: f32) {
+        unsafe {
+            let (x0, y0, x1, y1) = rect;
+            let width = x1 - x0;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let a = (y - self.oy) * self.w + x - self.ox;
+                    let wa = weights[(y - y0) * width + x - x0];
+                    if wa <= 0.0 { continue; }
+                    for (nx, ny) in [(x + 1, y), (x, y + 1)] {
+                        if nx >= x1 || ny >= y1 { continue; }
+                        let wb = weights[(ny - y0) * width + nx - x0];
+                        if wb <= 0.0 { continue; }
+                        let b = (ny - self.oy) * self.w + nx - self.ox;
+                        let (source, target) = if *self.vol.add(a) > *self.vol.add(b) { (a, b) } else { (b, a) };
+                        let volume = *self.vol.add(source);
+                        if volume <= 1e-6 { continue; }
+                        let fluid = if self.dry.is_null() { 1.0 } else { crate::drying::fluid((*self.dry.add(source)).cure) };
+                        let overlap = if *self.stroke.add(source) != id || *self.stroke.add(target) != id { 1.0 } else { 0.25 };
+                        let amount = 0.5 * (volume - *self.vol.add(target)) * (strength * wa.min(wb) * fluid * overlap).clamp(0.0, 0.7);
+                        if amount <= 0.0 { continue; }
+                        let old = *self.vol.add(target);
+                        let share = amount / (old + amount);
+                        let source_lat = *self.lat.add(source);
+                        let source_hide = *self.hide.add(source);
+                        for (a, b) in (*self.lat.add(target)).iter_mut().zip(source_lat) { *a += (b - *a) * share; }
+                        for (a, b) in (*self.hide.add(target)).iter_mut().zip(source_hide) { *a += (b - *a) * share; }
+                        if !self.dry.is_null() {
+                            let cure = (*self.dry.add(source)).cure;
+                            let target_cure = &mut (*self.dry.add(target)).cure;
+                            *target_cure += (cure - *target_cure) * share;
+                        }
+                        if !self.solv.is_null() {
+                            let solvent = *self.solv.add(source) * amount / volume;
+                            *self.solv.add(source) -= solvent;
+                            *self.solv.add(target) += solvent;
+                        }
+                        *self.cover.add(target) = (*self.cover.add(target)).max(*self.cover.add(source) * amount / volume);
+                        *self.vol.add(source) -= amount;
+                        *self.vol.add(target) += amount;
+                    }
+                }
+            }
+        }
+    }
+
     /// Lay `v` coats of paint of cure `cure` (0: fresh) at pixel `i`: it
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
@@ -1387,6 +1506,8 @@ fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w:
     let root = (ROOT_MAX + 0.12 * tool.ragged.abs()) * std::f32::consts::SQRT_2 * half;
     let bend = tool.length * s * LEN_MAX + root * tool.splay.abs() * 0.3;
     let rb = (tool.hair_radius() * s).max(0.55);
+    #[cfg(feature = "brush-sim-4")]
+    let rb = rb * 3.5;
     // exchange rect: capsule ± (rb + 1); plough target ≤ off from a pixel in
     // it, off = rb + 1; bounds padding off + 2; plus rounding
     // a pointed tool's hairs lay tracks up to the tool's half-width wide
@@ -1585,6 +1706,12 @@ pub(crate) unsafe fn drag_on(
             // of the step it came down in (its neighbors' tracks tile with it)
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
+            #[cfg(feature = "brush-sim-4")]
+            let rk = sf.sim.filter(|sim| sim.model.level > 0.0).map_or(rk, |sim| {
+                let wet = smoothstep(0.04, 0.65, (b.vol + b.solvent) / full);
+                let (group, _) = sim.at(b.rx, tool.width);
+                (rk * (1.0 + wet * (1.8 + 0.7 * group).max(0.6))).min(half_max.max(rb))
+            });
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
             #[cfg(feature = "brush-sim-3")]
             let sf = {
@@ -1916,6 +2043,12 @@ unsafe fn exchange(
         }
         if sum_w <= 1e-6 {
             return;
+        }
+        #[cfg(feature = "brush-sim-4")]
+        if let Some(sim) = sf.sim && sim.model.level > 0.0 {
+            let (group, _) = sim.at(br.rx, tool.width);
+            let strength = sim.model.level * (0.2 + 0.8 * wet) * (0.65 + 0.35 * group) * (seg / rb.max(0.1)).min(1.0);
+            sf.level_contact(wts, (x0, y0, x1, y1), id, strength);
         }
         // a tacky surface grabs: it pulls paint off the bristle faster, in
         // patches as the bristle sticks and slips

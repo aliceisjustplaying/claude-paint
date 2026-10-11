@@ -15,6 +15,7 @@
 # Prints "ok N - ..." or "not ok N - ..." per check and a count; exits 1 on
 # any failure. Everything is removed afterward.
 set -u
+export SCRIPTS_TEST_TIMEOUT_SCALE=1
 S=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "${TMPDIR:-/tmp}/safeguards-test.XXXXXX")
 trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT

@@ -47,7 +47,7 @@ PAINT_QUICK=(
   c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit
   c15_solvent_does_not_slow_the_oil_cure
   c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio
-  c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
+  c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded
   c19_the_same_paint_with_more_or_less_solvent_looks_the_same
 )
 PAINT_SLOW=(

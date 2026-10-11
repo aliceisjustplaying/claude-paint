@@ -3,6 +3,26 @@
 use paint::{Canvas, Gesture, Handling, Held, Linen, Mask, Paint, Stipple, Tool, Touch, hex};
 
 #[test]
+fn lifted_forward_paint_is_inside_the_dirty_region_and_sets_with_the_stroke() {
+    for width in [210.0, 400.0, 620.0] {
+        for seed in [17, 73, 211] {
+            let mut c = Canvas::new(1000, 2.0, hex("#343941")).with_size_mm(160.0).with_engine(19);
+            let mut h = Held::new(Tool::hog_flat(width), seed).with_engine(19);
+            h.load(Paint::body(hex("#be5e32")).with_stiff(0.9), 1.0);
+            c.drag(&mut h, &Gesture::line((500.0, 250.0), (500.5, 250.0)).pressure(0.85, 0.8), None);
+            assert!(c.wet_total() > 0.0);
+            c.dry();
+            let frame = c.frame();
+            for y in 0..frame.h {
+                for x in 0..frame.w {
+                    assert!(c.wet_um(frame.ux(x), frame.uy(y)) < 1e-3, "width {width}, seed {seed}, pixel {x},{y} remained wet");
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn sparse_hairs_and_edge_pileup_conserve_finite_material_at_edges_and_turns() {
     for engine in [18, 19, 20] {
         for tool in [Tool::hog_flat(85.0), Tool::filbert(30.0), Tool::badger(85.0), Tool::rigger(12.0)] {

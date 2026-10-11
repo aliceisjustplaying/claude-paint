@@ -1012,6 +1012,33 @@ mod detail_tests {
     }
 
     #[test]
+    fn the_dirty_box_covers_forward_transport_beyond_the_old_padding() {
+        let mut c = Canvas::new(1000, 2.0, crate::hex("#343941")).with_engine(19);
+        c.wet.vol.fill(3.0);
+        let tool = Tool { pickup: 0.0, push: 1.0, ..Tool::hog_flat(300.0) };
+        let mut h = Held::new(tool, 73).with_engine(19);
+        h.bristles[0].rx = 0.0;
+        let full = h.full();
+        let before = c.wet.vol.clone();
+        let mut sf = c.surf();
+        sf.sim.as_mut().unwrap().lip = 1.0;
+        let mut scratch = Vec::new();
+        let mut bounds = None;
+        unsafe { exchange(sf, &mut h.bristles[0], &h.tool, (450.0, 250.0), (460.0, 250.0), 12.0, 0.8, full, None, 1.0, None, 1, &mut scratch, &mut bounds, (0, 0, 1000, 500)); }
+        let (x0, y0, x1, y1) = bounds.unwrap();
+        let old_pad = (2.0 * h.tool.hair_radius() + 2.0) as usize;
+        let old_x1 = 473 + old_pad;
+        let mut beyond_old = false;
+        for (i, (a, b)) in before.iter().zip(&c.wet.vol).enumerate() {
+            if a == b { continue; }
+            let (x, y) = (i % 1000, i / 1000);
+            assert!(x0 <= x && x < x1 && y0 <= y && y < y1, "changed pixel {x},{y} outside {bounds:?}");
+            beyond_old |= x >= old_x1;
+        }
+        assert!(beyond_old);
+    }
+
+    #[test]
     fn wet_overlaps_partly_level_ridges_while_current_stroke_relief_survives() {
         let mut overlap = Canvas::new(8, 1.0, crate::hex("#343941")).with_engine(19);
         for (i, v) in overlap.wet.vol.iter_mut().enumerate() { *v = if i % 2 == 0 { 3.0 } else { 0.5 }; }
@@ -1577,11 +1604,12 @@ pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32,
 
 pub(crate) fn footprint_for_engine(engine: u32, tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
     let broad = (cfg!(feature = "brush-sim-4") && (15..=17).contains(&engine)) || (cfg!(feature = "brush-sim-5") && (18..=20).contains(&engine));
-    footprint_checked(tool, pts, shake, scale, w, h, broad).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
+    let detailed = cfg!(feature = "brush-sim-5") && (18..=20).contains(&engine);
+    footprint_checked(tool, pts, shake, scale, w, h, broad, detailed).unwrap_or_else(|| panic!("non-finite brush footprint (gesture or tool parameters)"))
 }
 
 /// `footprint`, or None if it isn't finite.
-fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize, broad: bool) -> Option<Option<Rect>> {
+fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize, broad: bool, detailed: bool) -> Option<Option<Rect>> {
     if pts.is_empty() {
         return Some(None);
     }
@@ -1606,7 +1634,7 @@ fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w:
     // a pointed tool's hairs lay tracks up to the tool's half-width wide
     // (a wet tuft bridging between its hairs, see `drag_on`), ploughing up
     // to twice that away
-    let bridge = if tool.point > 0.0 { 3.0 * half } else { 0.0 };
+    let bridge = if tool.point > 0.0 { (if detailed { 4.0 } else { 3.0 }) * half } else { 0.0 };
     let pad = shake_px + root + bend * 0.6 + (rb + 1.0) + 2.0 * (rb + 1.0) + bridge + 4.0;
     if !pad.is_finite() || !x0.is_finite() || !x1.is_finite() || !y0.is_finite() || !y1.is_finite() {
         return None;
@@ -1666,7 +1694,11 @@ pub(crate) unsafe fn drag_on(
     let broad = false;
     #[cfg(feature = "brush-sim-4")]
     let broad = sf.sim.is_some_and(|sim| sim.model.level > 0.0);
-    let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh, broad));
+    #[cfg(not(feature = "brush-sim-5"))]
+    let detailed = false;
+    #[cfg(feature = "brush-sim-5")]
+    let detailed = sf.sim.is_some_and(|sim| sim.model.detail > 0.0);
+    let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh, broad, detailed));
 
     for b in &mut held.bristles {
         b.prev = [None, None];
@@ -1814,7 +1846,13 @@ pub(crate) unsafe fn drag_on(
                 let bridge = wet * (1.8 + 0.7 * group).max(0.6);
                 #[cfg(feature = "brush-sim-5")]
                 let bridge = if sim.model.detail > 0.0 { bridge * (1.0 - sim.sharp(b)) } else { bridge };
-                (rk * (1.0 + bridge)).min(half_max.max(rb))
+                let broad = (rk * (1.0 + bridge)).min(half_max.max(rb));
+                #[cfg(feature = "brush-sim-5")]
+                let broad = if sim.model.detail > 0.0 {
+                    let radius = (0.08 * s / sim.mm_per_unit).max(0.55).min(rk);
+                    broad + (radius - broad) * sim.sharp(b)
+                } else { broad };
+                broad
             });
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
             #[cfg(feature = "brush-sim-3")]
@@ -2216,7 +2254,11 @@ unsafe fn exchange(
             (dep_total * sim.release(br, tool)).min(liquid * 0.95)
         } else { dep_total };
         #[cfg(feature = "brush-sim-5")]
-        let dep_total = sf.sim.filter(|sim| sim.model.detail > 0.0).map_or(dep_total, |sim| (dep_total * (1.0 + 2.0 * sim.model.detail * sim.lip)).min(liquid * 0.95));
+        let dep_total = sf.sim.filter(|sim| sim.model.detail > 0.0).map_or(dep_total, |sim| {
+            let parcel = (tool.hair_radius() * s).max(0.55);
+            let share = 1.0 - sim.sharp(br) * (1.0 - (rb / parcel).min(1.0));
+            (dep_total * share * (1.0 + 2.0 * sim.model.detail * sim.lip)).min(liquid * 0.95)
+        });
         // a capsule cut by the window edge lays only the window's share there
         let share = if windowed { sum_cov / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         #[cfg(feature = "brush-sim-1")]
@@ -2468,6 +2510,8 @@ unsafe fn exchange(
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
         let pad = (off + 2.0) as usize;
+        #[cfg(feature = "brush-sim-5")]
+        let pad = if sf.sim.is_some_and(|sim| sim.model.detail > 0.0) { (1.5 * off + 2.0).ceil() as usize } else { pad };
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }
 }

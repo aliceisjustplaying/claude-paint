@@ -43,7 +43,7 @@ def studio_path(studio, value):
     elif value.startswith("file://"):
         try:
             url = urlparse(value)
-            if url.username is not None or url.password is not None or url.port is not None:
+            if url.username is not None or url.password is not None or url.port is not None or url.netloc.endswith(":"):
                 raise ValueError("Invalid URL")
             host = url.hostname
         except ValueError:
@@ -55,7 +55,7 @@ def studio_path(studio, value):
         if re.search(r"%(?![\da-fA-F]{2})", url.path):
             raise ValueError("URI malformed")
         try:
-            value = unquote(url.path, errors="strict")
+            value = unquote(url.path or "/", errors="strict")
         except UnicodeDecodeError:
             raise ValueError("URI malformed") from None
     path = (studio / value).resolve()

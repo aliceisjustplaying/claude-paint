@@ -65,13 +65,13 @@ impl Panel {
                 let wander = 0.9 * (vnoise(x / 24.0, y / 15.0, s ^ 0x396) - 0.5)
                     + 0.25 * (vnoise(x / 9.0, y / 6.0, s ^ 0x397) - 0.5);
                 let along = x + wander;
-                let growth = (if gallery { 10.0 } else { 8.0 })
+                let growth = (if gallery { 12.0 } else { 8.0 })
                     * (crate::smoothstep(
                         if gallery { 0.46 } else { 0.42 },
                         if gallery { 0.61 } else { 0.67 },
                         vnoise(along / 1.4, y / 95.0, s ^ 0x398),
                     ) - 0.5);
-                let fine = (if gallery { 8.0 } else { 3.0 })
+                let fine = (if gallery { 12.0 } else { 3.0 })
                     * (vnoise(along / 0.21, y / 60.0, s ^ 0x399) - 0.5);
                 let ray = crate::smoothstep(
                     0.57,
@@ -80,7 +80,7 @@ impl Panel {
                 );
                 let broken = crate::smoothstep(0.32, 0.7, vnoise(x / 22.0, y / 19.0, s ^ 0x39b));
                 let uneven = 0.65 + 0.7 * vnoise(x / 14.0, y / 23.0, s ^ 0x39c);
-                uneven * (growth + fine) + 2.8 * ray * broken
+                uneven * (growth + fine) + (if gallery { 4.2 } else { 2.8 }) * ray * broken
             }
         };
         self.ground_um() + tooth + grain
@@ -517,7 +517,9 @@ mod tests {
                 / lit.len() as f64)
                 .sqrt()
         };
-        assert!(rms(&new) > 1.5 * rms(&old));
+        let (old_rms, new_rms) = (rms(&old), rms(&new));
+        eprintln!("Gallery grain RMS: round 2 {old_rms}, round 3 {new_rms}");
+        assert!(new_rms > 1.5 * old_rms);
         assert!(new.linen.is_none());
         let state = bytes(&new);
         let (restored, _) = Canvas::read_state(&mut state.as_slice()).unwrap();

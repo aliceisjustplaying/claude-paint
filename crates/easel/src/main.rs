@@ -1448,7 +1448,12 @@ impl Server {
                 let (path, light) = save_args(args)?;
                 let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
                 #[cfg(feature = "state-store")]
-                if let Some(store) = &self.committed { store.protect_output(&p).map_err(|e| e.to_string())?; }
+                if let Some(store) = &self.committed {
+                    store.protect_output(&p).map_err(|e| e.to_string())?;
+                    if same_file(&log_path(&self.name), &p)? || same_file(&self.witness(), &p)? {
+                        return Err("save output must differ from the painting's journal exports".into());
+                    }
+                }
                 let c = self.s.canvas().ok_or("no canvas yet")?;
                 #[cfg(feature = "state-store")]
                 if self.committed.is_some() {
@@ -1573,7 +1578,7 @@ fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     Ok(resolved)
 }
 
-#[cfg(feature = "replay")]
+#[cfg(any(feature = "replay", feature = "state-store"))]
 fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     use std::os::unix::fs::MetadataExt;
     let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
@@ -1827,6 +1832,11 @@ fn render_state(args: &[String]) -> Result<(), String> {
     if normalized_path(Path::new(out)).map_err(|e| e.to_string())?.starts_with(resolved) { return Err("render-state output must be outside the store".into()); }
     let revision = painting_store::ReadRevision::open(PathBuf::from(dir)).map_err(|e| format!("state integrity: {e}"))?;
     revision.protect_output(Path::new(out)).map_err(|e| e.to_string())?;
+    for pair in args[2..].windows(2) {
+        if pair[0] == "--log" && same_file(Path::new(&pair[1]), Path::new(out))? {
+            return Err("render-state output must differ from the source log".into());
+        }
+    }
     let checkpoint = revision.checkpoint().map_err(|e| e.to_string())?;
     let mut render = vec![checkpoint.to_string_lossy().into_owned()];
     render.extend_from_slice(&args[1..]);

@@ -18,6 +18,8 @@
 mod api;
 mod board;
 mod check;
+#[cfg(all(test, feature = "replay"))]
+mod checkpoint_tests;
 mod depth;
 mod draw_edges;
 mod draw_outline;
@@ -105,13 +107,14 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+      [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
-  easel render-checkpoint <save.ckpt> <out.png> [--mode normal,gallery,relief,museum,museum-flat,museum-surface]
-                      render a native-size view from the saved canvas
   easel finish <save> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
                       finish a closed session's save (out/easel/<name>/live.ckpt) without a replay
+  easel render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]
+                      render saved state without replay or aging (default gallery; --look uses look sizing)
   easel tubes [--markdown]   the tubes in the box a new painting takes (--markdown: as a table)
 
   A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,
@@ -1451,20 +1454,48 @@ fn deliver_seen(c: &Canvas, out: &Path, px: &[paint::Rgb]) -> Result<(), String>
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--checkpoint final.ckpt] [--light az,el | --gallery] [--look] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
-fn render_checkpoint(args: &[String]) -> Result<(), String> {
-    if args.len() < 2 || args[..2].iter().any(|a| a.starts_with('-')) {
-        return Err("render-checkpoint <save.ckpt> <out.png> [--mode normal,gallery,relief,museum,museum-flat,museum-surface] [--light az,el]".into());
+fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
+    let absolute = std::path::absolute(path)?;
+    let mut pending: std::collections::VecDeque<_> = absolute.components().map(|c| c.as_os_str().to_os_string()).collect();
+    let mut resolved = PathBuf::new();
+    let mut links = 0;
+    while let Some(part) = pending.pop_front() {
+        if part == "/" {
+            resolved = PathBuf::from("/");
+        } else if part == ".." {
+            resolved.pop();
+        } else if part != "." {
+            resolved.push(part);
+            match std::fs::read_link(&resolved) {
+                Ok(target) => {
+                    links += 1;
+                    if links > 40 {
+                        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "too many symbolic links in output path"));
+                    }
+                    resolved.pop();
+                    for component in target.components().rev() {
+                        pending.push_front(component.as_os_str().to_os_string());
+                    }
+                }
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput) => {}
+                Err(e) => return Err(e),
+            }
+        }
     }
-    let view = look::View::parse(&args[2..])?;
-    if view.crop.is_some() || view.size.is_some() || view.value || view.squint || view.mirror || view.grid.is_some() || view.palette {
-        return Err("render-checkpoint writes a native-size color or lit view; use only --mode or --light".into());
-    }
-    let mut reader = std::io::BufReader::new(std::fs::File::open(&args[0]).map_err(|e| format!("{}: {e}", args[0]))?);
-    let (canvas, _) = Canvas::read_state(&mut reader).map_err(|e| format!("{}: {e}", args[0]))?;
-    deliver_seen(&canvas, Path::new(&args[1]), &view.seen(&canvas))
+    Ok(resolved)
+}
+
+#[cfg(feature = "replay")]
+fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
+    use std::os::unix::fs::MetadataExt;
+    let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
+    Ok(resolve(a)? == resolve(b)? || match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => (a.dev(), a.ino()) == (b.dev(), b.ino()),
+        _ => false,
+    })
 }
 
 #[cfg(feature = "replay")]
@@ -1473,7 +1504,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--out" | "--checkpoint" | "--dump-surface" | "--dump-state" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
@@ -1488,6 +1519,47 @@ fn run(args: &[String]) -> Result<(), String> {
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
+    if let Some(p) = flag(args, "--checkpoint-out") {
+        let path = Path::new(&p);
+        let mut outputs = vec![out.clone()];
+        for flag_name in ["--state-digest", "--dump-surface"] {
+            if let Some(p) = flag(args, flag_name) {
+                outputs.push(PathBuf::from(p));
+            }
+        }
+        if args.iter().any(|a| a == "--look") {
+            outputs.push(out.with_extension("look.png"));
+        }
+        if same_file(path, Path::new(file))? {
+            return Err("--checkpoint-out must differ from the source and every output".into());
+        }
+        for output in outputs {
+            if same_file(path, &output)? {
+                return Err("--checkpoint-out must differ from the source and every output".into());
+            }
+        }
+        for flag_name in ["--dump-state", "--frames-dir"] {
+            if let Some(d) = flag(args, flag_name) {
+                let dir = Path::new(&d);
+                let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
+                if resolve(path)?.starts_with(resolve(dir)?) {
+                    return Err(format!("--checkpoint-out must be outside {flag_name}"));
+                }
+                match std::fs::read_dir(dir) {
+                    Ok(entries) => {
+                        for entry in entries {
+                            let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
+                            if same_file(path, &entry.path())? {
+                                return Err(format!("--checkpoint-out must not alias an output in {flag_name}"));
+                            }
+                        }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(format!("{}: {e}", dir.display())),
+                }
+            }
+        }
+    }
     let chunks = parse_program(&text);
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
@@ -1531,13 +1603,6 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(d) = flag(args, "--dump-state") {
         state_dump::write_save(&s, &text, Path::new(&d))?;
     }
-    if let Some(p) = flag(args, "--checkpoint") {
-        let path = Path::new(&p);
-        if let Some(parent) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-        }
-        save::write(&s, &text, path)?;
-    }
     let c = s.canvas().ok_or("the program never made a canvas")?.clone();
     if frames {
         frames::finish(&c);
@@ -1570,6 +1635,71 @@ fn run(args: &[String]) -> Result<(), String> {
         let (w, h) = look::look(&c, &look::View::default(), &jpg)?;
         println!("{} ({w}x{h})", jpg.display());
     }
+    drop(c);
+    if let Some(p) = flag(args, "--checkpoint-out") {
+        let path = Path::new(&p);
+        if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+        }
+        if !save::write(&s, &text, path)? {
+            return Err("the program never made a canvas".into());
+        }
+        eprintln!("checkpoint → {p} (finishable, not a resumable Lua session)");
+    }
+    Ok(())
+}
+
+#[cfg(feature = "replay")]
+const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]";
+
+#[cfg(feature = "replay")]
+fn render_checkpoint(args: &[String]) -> Result<(), String> {
+    let (mut files, mut mode, mut log, mut bounded) = (Vec::new(), "gallery".to_string(), None::<String>, false);
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--mode" | "--log" if i + 1 < args.len() => {
+                if args[i] == "--mode" {
+                    mode = args[i + 1].clone();
+                } else {
+                    log = Some(args[i + 1].clone());
+                }
+                i += 1;
+            }
+            "--look" => bounded = true,
+            a if !a.starts_with('-') => files.push(a.to_string()),
+            o => return Err(format!("render-checkpoint: unknown argument {o:?}\n{RENDER_CHECKPOINT_USAGE}")),
+        }
+        i += 1;
+    }
+    let [checkpoint, out] = files.as_slice() else { return Err(RENDER_CHECKPOINT_USAGE.into()) };
+    if same_file(Path::new(checkpoint), Path::new(out))? {
+        return Err("render-checkpoint output must differ from the save and source log".into());
+    }
+    if let Some(l) = &log && same_file(Path::new(l), Path::new(out))? {
+        return Err("render-checkpoint output must differ from the save and source log".into());
+    }
+    let light = match mode.as_str() {
+        "color" | "normal" => None,
+        "gallery" => Some(GALLERY_LIGHT),
+        "relief" => Some(look::DISPLAY_PRESETS[1].light),
+        o => return Err(format!("--mode {o}: color, gallery, relief")),
+    };
+    let t0 = Instant::now();
+    let r = save::read(Path::new(checkpoint))?;
+    if let Some(l) = log {
+        let text = std::fs::read_to_string(&l).map_err(|e| format!("{l}: {e}"))?;
+        if save::fnv1a(text.as_bytes()) != r.log_fnv || parse_program(&text).len() != r.chunks {
+            return Err(format!("{checkpoint} is not a save of {l} (chunk count or text differs)"));
+        }
+    }
+    let c = r.session.canvas().ok_or("the save holds no canvas")?;
+    if bounded {
+        look::look(&c, &look::View { light, ..look::View::default() }, Path::new(out))?;
+    } else {
+        deliver_lit(&c, Path::new(out), light)?;
+    }
+    eprintln!("wrote {out} ({} saved chunks, {mode}, no replay, {:.2}s)", r.chunks, t0.elapsed().as_secs_f64());
     Ok(())
 }
 

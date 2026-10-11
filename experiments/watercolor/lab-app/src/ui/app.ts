@@ -167,7 +167,7 @@ const ICONS: Record<string, string> = {
     hintTimer = window.setTimeout(/* Source: src/ui/app.ts:161-161 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => hint.classList.remove("is-visible"), 3200);
   };
   const checkLiftTarget = /* Source: src/ui/app.ts:163-167 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ (x: number, y: number) => {
-    const probe = sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5));
+    const probe = sim.probe(x, y, Math.min(12, brushRadius(TOOLS.lift, size) * 0.5) * refScale);
     const cured = probe.dried > 0.02 && probe.workable < 0.004 && probe.wet < 0.02;
     if (cured) showHint("That paint has dried and is cured. Lift works on damp washes. Wet it first, or paint over it.");
   };

@@ -230,6 +230,7 @@ pub struct Balance {
 }
 
 struct Scratch {
+    head: Vec<f64>,
     faces: Vec<(usize, usize, bool)>,
     transfers: Vec<(usize, usize, f64, usize, bool, f64)>,
     old_front: Vec<bool>,
@@ -246,6 +247,7 @@ struct Scratch {
 impl Scratch {
     fn new(n: usize) -> Self {
         Self {
+            head: vec![0.0; n],
             faces: Vec::new(),
             transfers: Vec::new(),
             old_front: vec![false; n],
@@ -571,6 +573,7 @@ impl Watercolor {
     fn solve_substep(&mut self, dt: f64, scratch: &mut Scratch) {
         let n = self.water.len();
         let Scratch {
+            head,
             faces,
             transfers,
             old_front,
@@ -585,6 +588,27 @@ impl Watercolor {
         } = scratch;
         self.faces(faces);
         old_front.clone_from(&self.wet_front);
+        let reach = (0.15 / self.cell_mm).round().max(1.0) as isize;
+        for (i, head) in head.iter_mut().enumerate() {
+            let x = (i % self.width) as isize;
+            let y = (i / self.width) as isize;
+            let mut neighbor_coverage = 1.0_f64;
+            for (dx, dy) in [(-reach, 0), (reach, 0), (0, -reach), (0, reach)] {
+                let xx = x + dx;
+                let yy = y + dy;
+                if xx >= 0 && yy >= 0 && xx < self.width as isize && yy < self.height as isize {
+                    neighbor_coverage = neighbor_coverage
+                        .min(self.active.coverage[yy as usize * self.width + xx as usize]);
+                }
+            }
+            let pin = if old_front[i] {
+                1.0 - neighbor_coverage
+            } else {
+                0.0
+            };
+            *head = self.water[i] + 0.025 * self.paper.height[i]
+                - 0.06 * pin * 0.02 / (self.water[i] + 0.02);
+        }
         transfers.clear();
         for &(i, j, horizontal) in faces.iter() {
             if self.capillary[j] / self.paper.capacity[j] > 0.001
@@ -604,8 +628,8 @@ impl Watercolor {
             } else {
                 self.flux_y[i]
             };
-            let head_i = self.water[i] + 0.025 * self.paper.height[i];
-            let head_j = self.water[j] + 0.025 * self.paper.height[j];
+            let head_i = head[i];
+            let head_j = head[j];
             let depth = (self.water[i] + self.water[j]) * 0.5;
             let flux = if old_front[i] && old_front[j] {
                 let mobility = (depth / 0.008).clamp(0.0, 1.0).powi(2);

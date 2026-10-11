@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Finish a painter's painting after the session: from the save file its
 # session wrote when it closed (<studio>/out/easel/<name>/live.ckpt; `easel
-# finish`, seconds), or, with no save, by replaying its log; let it dry
-# right through, then varnish it and crack it. Painters don't finish their
-# own pictures (the painter build has no varnish{}, cracks{} or relief()),
+# finish`, seconds), or, with no save, by replaying its log. The Friedrich
+# studio gets varnish and cracks; every other studio keeps its final state.
+# The log's box records the artist profile selected by export_r16_studio.
+# Painters don't finish their own pictures (the painter build has no
+# varnish{}, cracks{} or relief()),
 # so that varnishing can't become their way of ending.
 #
 #   scripts/finish_painting <studio>/paintings/lua/painting.lua <out.png> [options]
 #
-# options:
+# options (Friedrich only):
 #   --coats C     varnish coats (default 0.4, the easel's default)
 #   --no-varnish  skip the varnish
 #   --no-cracks   skip the cracks
 #   --relief      also light the surface's relief (the easel's default strength)
 #
 # Writes <out.png> (2400 px, like `easel save`) and, beside it, <out>.lua:
-# the painter's log with the finishing chunk appended, which `easel run`
+# the painter's log, with a finishing chunk only for Friedrich, which `easel run`
 # replays to the same picture. Uses the replay build (default features:
 # `replay` and `finish`), built from this checkout. A save that isn't of
 # this log (another chunk count or text) is passed over for the replay.
@@ -26,7 +28,7 @@ set -euo pipefail
 # the caller's environment (EASEL_BOX) would only make the easel refuse the log
 unset EASEL_BOX
 
-usage() { sed -n '7,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { echo "usage: $0 <painting.lua> <out.png> [--coats C] [--no-varnish] [--no-cracks] [--relief]" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 log=$1; out=$2; shift 2
 coats=0.4; varnish=1; cracks=1; relief=0
@@ -41,7 +43,15 @@ while [ $# -gt 0 ]; do
 done
 [[ $coats =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || { echo "--coats takes a number, not '$coats'" >&2; exit 2; }
 [ -f "$log" ] || { echo "no log at $log" >&2; exit 1; }
-[ $((varnish + cracks + relief)) -gt 0 ] || { echo "nothing to do" >&2; exit 1; }
+box=$(awk '/^[[:space:]]*--@ chunk/ { exit }
+  /^[[:space:]]*--@ box / {
+    sub(/^[[:space:]]*--@ box[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit
+  }' "$log")
+if [ "$box" != friedrich ]; then
+  varnish=0
+  cracks=0
+  relief=0
+fi
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 # the replay build, in the target directory cargo builds into (CARGO_TARGET_DIR too)
@@ -63,7 +73,7 @@ if [ "$finished" -ef "$log" ]; then
   echo "finish_painting: $finished is the log itself; write the PNG under another name or folder" >&2
   exit 1
 fi
-{ cat "$log"; printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished.part"
+{ cat "$log"; [ -z "$finishing" ] || printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished.part"
 mv "$finished.part" "$finished"
 
 # the save the painter's session wrote when it closed: <studio>/out/easel/<name>/live.ckpt
@@ -71,7 +81,7 @@ name=$(basename "$log" .lua)
 save=$(cd "$(dirname "$log")/../.." && pwd)/out/easel/$name/live.ckpt
 if [ -f "$save" ]; then
   if "$easel" finish "$save" "$out" --log "$log" "${opts[@]}"; then
-    if command -v zstd >/dev/null; then zstd -q -T0 --rm -f "$save"; else gzip -1 -f "$save"; fi
+    if command -v zstd >/dev/null; then zstd -q -T2 --rm -f "$save"; else gzip -1 -f "$save"; fi
     echo "finished from the save: $out (log: $finished; save compressed)"
     exit 0
   fi

@@ -21,6 +21,8 @@ easel finish live.ckpt final.png --gallery --look-version 2
 
 `finish --relief` remains the historical destructive finishing operation. Its equations and output are unchanged; `--look-version` selects only the optional display illumination added by `--gallery` or `--light`. For display-only Relief without finishing or aging, use `render-checkpoint --mode relief --look-version 2`.
 
+Material-backed `render-state` and atomic committed-store `save` exports also preserve explicit look selection. Compact stage-4 snapshots retain their existing legacy renderer and cache identity. Their format does not store local gloss, so `render-snapshot` and `snapshot-companions` cannot select look 2; use the material-backed checkpoint/store routes for that view. This change does not reinterpret existing optical snapshots or expand their format.
+
 ## Optical approximation
 
 The old display began with Color's 4% × (1 − gloss) white veil and added an exponent-40 highlight independent of local dry gloss. Look 2 retains Color as its calibrated diffuse baseline and replaces only the added highlight with a directional, neutral dielectric sheen. A flat matte surface matches Color exactly. Removing Color's entire haze was tested and rejected: it exposed the underlying pigment chroma and collapsed the value difference between matte grounds and fresh paint. Recalibrating that empirical material term requires a separate Color/material version and measured controls.

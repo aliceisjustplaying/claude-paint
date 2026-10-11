@@ -47,7 +47,7 @@ stay frozen [4][S]. For thixotropic paint, τ_y(t) recovers after brushing, so l
 | 500 Pa | ~15–30 µm | effectively frozen |
 | 3000 Pa | ~90–200 µm | frozen |
 
-The ranges come from comparing the thin-film form with a deep-layer form, a_c ≈ τ_yλ²/(4π²σ), derived for h ≳ λ/2π, where the lubrication assumption fails [E]. **Inferred for this case:** at the example's λ = 0.3 mm and h = 100 µm, the estimated arrest amplitude rises from about 0.5–1 µm at 15 Pa to about 3–6 µm at 100 Pa. Retained relief depends on wavelength, thickness, initial amplitude and recovering rheology, so no single yield stress marks where striations become visible. The Newtonian glaze example predicts rapid leveling of fine striations; which marks stay visible takes more than these calculations to decide.
+The ranges come from comparing the thin-film form with a deep-layer form, a_c ≈ τ_yλ²/(4π²σ), derived for h ≳ λ/2π, where the lubrication assumption fails [E]. **Inferred for this case:** at the example's λ = 0.3 mm and h = 100 µm, the estimated arrest amplitude rises from about 0.5–1 µm at 15 Pa to about 3–6 µm at 100 Pa. Retained relief depends on wavelength, thickness, initial amplitude and recovering rheology, so no single yield stress marks where striations become visible. The Newtonian glaze example predicts that fine striations level quickly. Which marks stay visible also depends on conditions these calculations leave out.
 
 ## 2. Brush marks
 

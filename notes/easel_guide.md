@@ -722,9 +722,9 @@ with `scratch: true`; without it they work on the painting.
 
 ## Colour, planes and open coverage
 
-These tools build a picture from colour and separately drawn planes, as
-well as from the lit-volume and perspective scaffolds above. They are means
-only; the subject, canvas and arrangement are yours:
+These tools build a picture from colour and separately drawn planes,
+alongside the lit-volume and perspective scaffolds above. The subject,
+canvas and arrangement are yours:
 
 | Idea | Tools and parameters |
 |---|---|

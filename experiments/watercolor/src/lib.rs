@@ -574,7 +574,15 @@ impl Watercolor {
         let surface = wet || self.suspended.iter().flatten().any(|v| *v > 0.0);
         let active = surface || pore;
         if active {
-            let substeps = if wet { 4 } else { 1 };
+            let substeps = if wet {
+                let depth = self.water.iter().copied().fold(0.0_f64, f64::max);
+                let stiffness = 780.0 * (CELL_MM / self.cell_mm).powi(2) * (depth * 2.2).max(0.7);
+                ((DT * stiffness.sqrt() / 0.55).ceil() as usize)
+                    .max(4)
+                    .next_power_of_two()
+            } else {
+                1
+            };
             for _ in 0..substeps {
                 self.solve_substep(DT / substeps as f64, scratch, surface);
             }

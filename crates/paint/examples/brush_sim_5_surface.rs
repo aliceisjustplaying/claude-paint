@@ -1,10 +1,11 @@
 #[cfg(feature = "brush-sim-5")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use paint::{Canvas, color::luminance};
+    use paint::{Canvas, color::{luminance, linear_to_srgb}};
     use std::{fs, io::BufReader};
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() != 2 { return Err("brush_sim_5_surface <final canvas> <output.csv>".into()); }
-    let (c, _) = Canvas::read_state(&mut BufReader::new(fs::File::open(&args[0])?))?;
+    if !(2..=3).contains(&args.len()) { return Err("brush_sim_5_surface <final canvas> <output.csv> [geometry-only engine]".into()); }
+    let (mut c, _) = Canvas::read_state(&mut BufReader::new(fs::File::open(&args[0])?))?;
+    if let Some(engine) = args.get(2) { c = c.with_engine(engine.parse()?); }
     let f = c.window();
     let top = c.wet_surface_um();
     let color = c.seen();
@@ -17,6 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     fs::write(&args[1], csv)?;
+    if args.len() == 3 {
+        let data = gallery.iter().flat_map(|pixel| pixel.map(|v| (linear_to_srgb(v.clamp(0.0, 1.0)) * 255.0).round() as u8)).collect();
+        image::RgbImage::from_raw(f.w as u32, f.h as u32, data).unwrap().save(std::path::Path::new(&args[1]).with_extension("png"))?;
+    }
     Ok(())
 }
 

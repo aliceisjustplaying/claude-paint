@@ -8,12 +8,12 @@ const evidence = process.env.GALLERY_SCREENSHOTS;
 const renderRoot = process.env.GALLERY_RENDERS;
 const scratchRoot = process.env.GALLERY_SCRATCH;
 const tiny = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6XioAAAAASUVORK5CYII=', 'base64');
-const image = (light, i, p) => scratchRoot && (i === 2 || p === 'agedScratch' && [1, 5].includes(i)) ? fs.readFileSync(path.join(scratchRoot, light === 'color' ? '' : '.' + light, i === 2 ? 'look-0001.png' : 'look-0002.png')) : renderRoot ? fs.readFileSync(path.join(renderRoot, `${light === 'relief' ? 'B-relief' : light === 'gallery' ? 'B' : 'A'}-${i === 1 ? 'houses' : 'full'}.png`)) : tiny;
+const image = (light, i, p) => scratchRoot && (i === 2 || p === 'agedScratch' && [1, 5].includes(i)) ? fs.readFileSync(path.join(scratchRoot, light === 'color' ? '' : '.' + light, i === 2 ? 'look-0001.png' : 'look-0002.png')) : renderRoot ? fs.readFileSync(path.join(renderRoot, `${light === 'relief' ? 'B-relief' : light === 'gallery' ? 'B' : light === 'museum' ? 'M' : 'A'}-${i === 1 ? 'houses' : 'full'}.png`)) : tiny;
 const stamp = new Date().toISOString();
 const e = (kind, fields = {}) => ({ ts:stamp, kind, ...fields });
 const whole = [e('start', { cwd:'/fixture' }), e('paint', { code:'canvas{}', out:'day 1, 09:00' }), e('look', { text:'' }),
-  e('image', { img:0, look:'', gallery:true, relief:true }), e('think', { text:'I look again at the color and the marks.' }),
-  e('look', { text:'crop 390,390,810,555' }), e('image', { img:1, look:'crop 390,390,810,555', gallery:true, relief:true })];
+  e('image', { img:0, look:'', gallery:true, relief:true, museum:true }), e('think', { text:'I look again at the color and the marks.' }),
+  e('look', { text:'crop 390,390,810,555' }), e('image', { img:1, look:'crop 390,390,810,555', gallery:true, relief:true, museum:true })];
 const fixtures = {
   normal:whole,
   scratch:[...whole.slice(0, 4), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
@@ -23,6 +23,8 @@ const fixtures = {
   broken:[...whole.slice(0, 3), e('image', { img:3, look:'', gallery:true, relief:true })],
   galleryOnly:[...whole.slice(0, 3), e('image', { img:0, look:'', gallery:true })],
   reliefOnly:[...whole.slice(0, 3), e('image', { img:0, look:'', relief:true })],
+  museumOnly:[...whole.slice(0, 3), e('image', { img:0, look:'', museum:true })],
+  brokenMuseum:[...whole.slice(0, 3), e('image', { img:3, look:'', museum:true })],
   analytical:[...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })],
   flaggedAnalytical:[...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value', gallery:true, relief:true })],
   agedScratch:[e('start', { cwd:'/fixture' }), e('look', { text:'' }),
@@ -48,9 +50,9 @@ const server = http.createServer((req, res) => {
   else if (u.pathname === '/api/events' || u.pathname.endsWith('/events.json')) {
     const all = fixtures[p] || whole;
     body = JSON.stringify({ epoch:0, sittings:1, events:all.slice(+(u.searchParams.get('since') || 0)), updates:[], nupdates:0, total:all.length });
-  } else if (u.pathname === '/img' || /\/(?:img|gallery|relief)\/\d+\.png$/.test(u.pathname)) {
+  } else if (u.pathname === '/img' || /\/(?:img|gallery|relief|museum)\/\d+\.png$/.test(u.pathname)) {
     const i = +(u.searchParams.get('i') || path.basename(u.pathname).split('.')[0]);
-    const light = ['gallery', 'relief'].find(light => u.searchParams.has(light) || u.pathname.includes('/' + light + '/')) || 'color';
+    const light = ['gallery', 'relief', 'museum'].find(light => u.searchParams.has(light) || u.pathname.includes('/' + light + '/')) || 'color';
     if (light !== 'color' && i === 3) { res.writeHead(404); return res.end(); }
     body = image(light, i, p); type = 'image/png';
   } else if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { body = ''; type = 'text/plain'; }
@@ -65,7 +67,7 @@ async function ready(page, which, light) {
   light = light === true ? 'gallery' : light === false ? 'color' : light;
   await page.waitForFunction(({ which, light }) => {
     const im = document.getElementById(which);
-    const u = new URL(im.src, location.href), shown = ['gallery', 'relief'].find(light => u.searchParams.get(light) === '1' || u.pathname.includes('/' + light + '/')) || 'color';
+    const u = new URL(im.src, location.href), shown = ['gallery', 'relief', 'museum'].find(light => u.searchParams.get(light) === '1' || u.pathname.includes('/' + light + '/')) || 'color';
     return im.complete && im.naturalWidth > 0 && shown === light;
   }, { which, light }).catch(async error => {
     console.error(await page.evaluate(() => ({ src:document.getElementById('img').src, cap:document.getElementById('cap').textContent, events:typeof events === 'undefined' ? null : events, query:location.search })));
@@ -90,7 +92,7 @@ async function ready(page, which, light) {
         for (const p of ['normal', 'scratch']) { await page.goto(url(p) + '&before=1'); await ready(page, 'img', false); await shot(`before-${stream ? 'stream' : 'normal'}-${p}`); }
       }
       await page.goto(url('normal')); await ready(page, 'img', true); await ready(page, 'img2', true);
-      assert.deepEqual(await page.locator('#lighting button').allTextContents(), ['Color', 'Gallery light', 'Relief']);
+      assert.deepEqual(await page.locator('#lighting button').allTextContents(), ['Color', 'Gallery light', 'Relief', 'Museum photo']);
       assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
       assert.match(await page.locator('#cap').textContent(), /Gallery light/);
       assert.match(await page.locator('#cap2').textContent(), /Gallery light/);
@@ -103,6 +105,26 @@ async function ready(page, which, light) {
       await page.reload(); await ready(page, 'img', 'relief'); await ready(page, 'img2', 'relief');
       assert.equal(await page.locator('#relief').getAttribute('aria-pressed'), 'true');
       await page.locator('#img2').click(); await ready(page, 'zimg', 'relief'); await page.locator('#zoom').click();
+      assert.deepEqual(await page.locator('#lighting button').allTextContents(), ['Color', 'Gallery light', 'Relief', 'Museum photo']);
+      await page.locator('#museum').click(); await ready(page, 'img', 'museum'); await ready(page, 'img2', 'museum');
+      assert.match(await page.locator('#cap').textContent(), /Museum photo$/);
+      await shot(`after-${stream ? 'stream' : 'normal'}-museum`);
+      await page.reload(); await ready(page, 'img', 'museum'); await ready(page, 'img2', 'museum');
+      assert.equal(await page.locator('#museum').getAttribute('aria-pressed'), 'true');
+      await page.locator('#img2').click(); await ready(page, 'zimg', 'museum'); await page.locator('#zoom').click();
+      await page.goto(url('fallback')); await ready(page, 'img', false);
+      assert.match(await page.locator('#cap').textContent(), /Color · museum photo unavailable$/);
+      await page.goto(url('brokenMuseum')); await ready(page, 'img', false);
+      await page.waitForFunction(() => document.getElementById('cap').textContent.includes('museum photo unavailable'));
+      await page.goto(url('museumOnly')); await ready(page, 'img', 'museum');
+      await page.locator('#gallery').click(); await ready(page, 'img', false);
+      assert.match(await page.locator('#cap').textContent(), /Color · gallery light unavailable$/);
+      await page.locator('#museum').click(); await ready(page, 'img', 'museum');
+      fixtures.museumAnalytical = [...whole.slice(0, 4), e('look', { text:'mode museum,value' }), e('image', { img:1, look:'mode museum,value', museum:true })];
+      await page.goto(url('museumAnalytical')); await ready(page, 'img', 'museum'); await ready(page, 'img2', false);
+      assert.match(await page.locator('#cap2').textContent(), /^Value check/);
+      assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
+      await page.goto(url('normal')); await ready(page, 'img', 'museum'); await ready(page, 'img2', 'museum');
       await page.locator('#color').click(); await ready(page, 'img', false); await ready(page, 'img2', false);
       assert.match(await page.locator('#cap').textContent(), /Color/);
       await shot(`after-${stream ? 'stream' : 'normal'}-color`);
@@ -226,6 +248,6 @@ async function ready(page, which, light) {
       await context.close();
     }
     assert.deepEqual(errors, []);
-    console.log('PASS gallery default, Color/Gallery/Relief selection and persistence, normal/stream/static, scratch, close-up/zoom, independent missing/broken fallbacks, combined analytical modes, deferred loads and toggles');
+    console.log('PASS gallery default, Color/Gallery/Relief/Museum selection and persistence, normal/stream/static, scratch, close-up/zoom, independent missing/broken fallbacks, combined analytical modes, deferred loads and toggles');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; server.close(); });

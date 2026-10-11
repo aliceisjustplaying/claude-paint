@@ -195,6 +195,9 @@ fn protect_output(dir: &Path, path: &Path) -> io::Result<()> {
 }
 
 pub fn atomic_output(path: &Path, render: impl FnOnce(&Path) -> Result<(), String>) -> Result<(), String> {
+    if image::ImageFormat::from_path(path).map_err(|e| e.to_string())? != image::ImageFormat::Png {
+        return Err("committed-state output must be a PNG".into());
+    }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;

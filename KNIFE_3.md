@@ -6,6 +6,8 @@ The crossed-slab defect came from scrape-back using raw per-pixel set height, ev
 
 The eight local paint/thinner faces from knife-2 remain authoritative, including their latent mixtures, properties and cure. Clone rollback and debug digests retain the selected third model and face inventory. No painter controls are added. Fresh fluid veils retain the earlier pooled path.
 
+Body contact uses a slow along-pass pressure drift plus a broad transverse bend and a smaller drag component. Their amplitude follows compliance and applied pressure, and their wavelengths use physical millimeters. Local pressure changes both the support following and the material gap, so it changes actual wet thickness. Scraping uses a laterally warped, slowly wandering edge relief to leave unequal-width remnants. Side flow is distributed across three positions over a wider asymmetric lip; the terminal peel has a wider thickness profile. These remain transfers from the finite face inventories, without adding height or image noise.
+
 ## Reproduce
 
 ```sh

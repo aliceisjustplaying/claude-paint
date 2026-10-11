@@ -17,6 +17,7 @@ replay = ["paint/hand-hook", "all-boxes", "dep:rayon", "dep:zstd"]
 # so finishing can't become the painter's way of ending.
 finish = []
 state-store = ["dep:sha2", "dep:serde", "dep:serde_json", "dep:zstd"]
+render-snapshot = ["state-store", "paint/render-snapshot"]
 # The boxes besides the default tube box (paint's `box-*` features): the
 # replay build has them all, so it replays any log; a painter's build is
 # built with its studio's only (scripts/export_r16_studio), so nothing in it

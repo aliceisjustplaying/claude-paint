@@ -26,6 +26,8 @@ pub mod scene;
 pub mod palette;
 pub mod pigment;
 pub mod rng;
+#[cfg(feature = "render-snapshot")]
+pub mod render_snapshot;
 mod sched;
 pub mod shape;
 pub mod soak;

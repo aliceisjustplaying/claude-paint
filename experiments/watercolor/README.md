@@ -1,5 +1,30 @@
 # Watercolor 5: matched wash-cleanup swatches
 
+## Watercolor Lab port
+
+The accepted solver is still the default. Select the pinned Watercolor Lab solver when creating a new sheet:
+
+```lua
+paper{solver="lab",kind="cold-press",size=52.8,aspect=1.5,cell=0.05,seed=71}
+local b=brush{name="round",width=2}
+b:load{water=2,pigments={ultramarine=0.1,earth=0.02}}
+b:stroke({{8,12,0.2,0},{20,13,0.8,0.3},{40,12,0.4,0.8}},{duration=0.8})
+```
+
+The added point fields are pressure and elapsed stroke time in seconds. They are optional; pressure defaults to the stroke's `pressure` option and timing defaults to 40 mm/s. A moving Lab stroke requires positive time. Width follows pressure, stamps follow Watercolor Lab's distance-carry resampler and water/pigment release stops when the named brush's finite inventory runs out. The reference brush's 0.15 reservoir floor remains inside the port; the finite inventory cap is outside it. Lab washes use moving rows. Existing strokes with the default solver retain their accepted behavior.
+
+`lab-core/` is a mechanical Rust port of Watercolor Lab at `a19bfa2a026856a98ceb400a8eec41f091f04a11`. Its passes use reference cell units, f32 shader arithmetic, LINEAR sampling, CLAMP_TO_EDGE boundaries and RGBA16F storage/blend quantization. Raster vertex precision is an adapter input: native software reference runs use four subpixel bits; the browser reads its GL backend's value. Paper and brush generation preserve the original JavaScript double precision before texture/attribute uploads. All 36 pigments and the MIT notice are included.
+
+The native map is 0.05 mm/cell, so the reference 1056×704 grid represents 52.8×35.2 mm. One unit of standing-water depth maps to 1 mm only at the adapter boundary. Lua time maps to 180 reference substeps per second (three steps per 60 Hz frame). This is an explicit playback map, not a new physical time constant inside the core. The existing 0.0625-second clock, pending residual, saved state, named brushes, checkpoint restore, frame hook and Color/Gallery/Relief exports remain. Legacy sheets remain schema 3; Lab sheets are schema 4 so older runners refuse them instead of silently losing the port's texture state. Native views use the existing studio light presets over the port's KM color; comparisons and the app use the unchanged reference display.
+
+Lab's `ultramarine`, `phthalo` and `earth` API inventories use the library's French ultramarine, phthalo blue and burnt sienna. The browser exposes all library pans. Lab glazes fold into the reference's single dried-reflectance layer automatically; `glaze()` checks the reference dry condition. Lab lifting uses the reference scrub field. `blot{}` has no reference counterpart and returns an explicit unsupported-operation error for Lab sheets. The current solver's blot and glaze stack are unchanged.
+
+The reference does not conserve pigment during semi-Lagrangian sampling. Its dried reflectance also cannot recover per-pigment mass. `balance()` for Lab sheets therefore reports `conserved=false`, current water/live pigment and finite brush-release inventory; it does not pretend the reference satisfies the current solver's strict conservation invariant. Checkpoint validation still rejects malformed textures, parameters and brush-release ledgers. The existing solver keeps its strict conservation checks.
+
+The browser fork and local build instructions are in `lab-app/README.md`. It keeps the pinned UI, with a blind Engine A/B switch that clears paint while retaining sheet settings. Salt is hidden in both options: its amplified sine hash is backend-sensitive and fails the reference numeric tolerance even though the formula is unchanged. No salt workaround is applied to the core.
+
+The per-pass readPixels comparison and matched capture commands are in `lab-validation/`. The only new numeric verification is that required parity/conservation diagnostic. No new unit tests are added. The original full-resolution capture exceeded the five-minute software-GPU limit; use hardware Chrome for the complete comparison. See the task report for numeric differences, timing, the app's lower-resolution setting and visual limitations.
+
 This crate lives outside the main workspace. The oil executable, solver, boxes and checkpoint formats do not import it. It builds a separate `watercolor-studio` binary that requires both `--box watercolor` and a studio whose `box` file says `watercolor`. This is an empirical Curtis-inspired pilot, not a production watercolor edition.
 
 ```sh

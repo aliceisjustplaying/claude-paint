@@ -54,7 +54,7 @@ declare global {
       el(
         "p",
         { class: "t-lede" },
-        "Real watercolor, simulated: water flows across the sheet, pigment rides it and settles, and the paper decides the rest. Thirty-six real pigments, wet-on-wet blooms, granulation, backruns and salt, all running locally in your browser."
+        "Real watercolor, simulated: water flows across the sheet, pigment rides it and settles, and the paper decides the rest. Thirty-six real pigments, wet-on-wet blooms, granulation and backruns, all running locally in your browser."
       )
     )
   );
@@ -68,7 +68,7 @@ const BENCH_NOTES: { k: string; v: (string | HTMLElement)[] }[] = [
   {
     k: "Wet the sheet first",
     v: [
-      "Water before paint gives soft blooms; paint onto dry paper for hard edges. Sprinkle salt into a damp wash and let it dry. Backlight shows what the light survives." +
+      "Water before paint gives soft blooms; paint onto dry paper for hard edges. Backlight shows what the light survives." +
         (window.matchMedia("(max-width: 720px)").matches
           ? ""
           : " Focus (the button on the desk, or F) gives you the sheet alone, as big as the window."),

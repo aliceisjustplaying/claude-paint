@@ -228,7 +228,7 @@ const ICONS: Record<string, string> = {
       }
       return;
     }
-    stroke = beginStroke(TOOLS[tool], size, water, load, at.x, at.y, (e.pointerId + 1) * 7919);
+    stroke = beginStroke(TOOLS[tool], size, water, load, at.x, at.y, (e.pointerId + 1) * 7919, refScale);
     strokeMoved = false;
     if (tool === "lift") checkLiftTarget(at.x, at.y);
   });
@@ -542,7 +542,7 @@ const ICONS: Record<string, string> = {
         ctx2d.fill();
       }
     }
-    const share = Math.round(((radiusSim * 2) / dims.w) * 100);
+    const share = Math.round(((radiusSim * refScale * 2) / dims.w) * 100);
     const what = isSalt ? "salt throw" : brushPigment && pigmentAmt > 0 ? "one dab" : "clean water";
     previewLine.textContent = `${what} · ${share}% of the sheet's width`;
   };
@@ -558,7 +558,7 @@ const ICONS: Record<string, string> = {
     const host = easel.getBoundingClientRect();
     const scale = rect.width / dims.w;
     const radiusSim = tool === "salt" ? 46 : brushRadius(TOOLS[tool as ToolId], size);
-    const px = radiusSim * scale;
+    const px = radiusSim * refScale * scale;
     ring.style.width = `${px * 2}px`;
     ring.style.height = `${px * 2}px`;
     ring.style.transform = `translate(${e.clientX - host.left - px}px, ${e.clientY - host.top - px}px)`;
@@ -643,7 +643,7 @@ const ICONS: Record<string, string> = {
     renderPreview();
   };
   const toolRow = el("div", { class: "tool-row", role: "toolbar", "aria-label": "Brushes" });
-  const toolIds: Array<ToolId | "salt"> = ["round", "mop", "rigger", "drybrush", "spatter", "water", "lift", "salt"];
+  const toolIds: Array<ToolId | "salt"> = ["round", "mop", "rigger", "drybrush", "spatter", "water", "lift"];
   for (const id of toolIds) {
     const label = id === "salt" ? "Salt" : TOOLS[id as ToolId].name;
     const btn = iconButton(id, label, /* Source: src/ui/app.ts:643-643 at a19bfa2a026856a98ceb400a8eec41f091f04a11. */ () => selectTool(id));
@@ -894,6 +894,7 @@ const ICONS: Record<string, string> = {
     el("div", { class: "engine-buttons", role: "group", "aria-label": "Blind engine comparison" }, ...engineButtons,
       el("button", { class: "btn", type: "button", onclick: () => comparison.reveal() }, "Reveal")),
     el("p", {}, "Switching engines clears the sheet. Paper, brush, paint and display settings stay the same."),
+    el("p", {}, "Salt is unavailable in both options because its grain patterns cannot be matched reliably."),
     el("p", {}, `Both engines use a ${dims.w} × ${dims.h} simulation grid on the same size sheet. The grid is reduced for interactive CPU speed; paper grain and fine edges may look coarser. Each frame runs the original three substeps, so the simulation clock slows when frame rate drops. Speed and stroke lag may still identify an engine. Reveal prints the mapping only in the console.`));
   const easel = el("div", { class: "easel" }, canvas, ring, hint, phone ? null : focusBtn);
 
@@ -1016,7 +1017,7 @@ const ICONS: Record<string, string> = {
         drops.push({
           x: Math.random() * dims.w,
           y: Math.random() * dims.h,
-          radius: 3 + Math.random() * 7,
+          radius: (3 + Math.random() * 7) * refScale,
           water: 0.5 + Math.random(),
           pigment: 0,
           dryness: 0,

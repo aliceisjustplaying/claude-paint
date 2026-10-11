@@ -21,9 +21,10 @@ const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM 
 try {
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  const data = await page.evaluate(() => window.runParity());
-  const out = resolve(process.argv[2] ?? `${process.env.HOME}/.capy/work/watercolor-lab-port/captures/original-parity.json`);
+  const normal = process.argv[2] === "--normal-drift";
+  const data = await page.evaluate((normal) => normal ? window.runNormalDrift() : window.runParity(), normal);
+  const out = resolve(process.argv[normal ? 3 : 2] ?? `${process.env.HOME}/.capy/work/watercolor-lab-port/captures/${normal ? "normal-original-drift" : "original-parity"}.json`);
   await mkdir(resolve(out, ".."), { recursive: true });
   await writeFile(out, JSON.stringify(data));
-  console.log(JSON.stringify({ out, renderer: data.renderer, cases: data.cases.map((c) => ({ name: c.name, passes: c.captures.length })) }));
+  console.log(JSON.stringify(normal ? { out, ...data } : { out, renderer: data.renderer, cases: data.cases.map((c) => ({ name: c.name, passes: c.captures.length })) }));
 } finally { await browser.close(); server.close(); }

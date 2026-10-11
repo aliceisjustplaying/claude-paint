@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 mod fiber_paper;
+mod lab_adapter;
 mod rng;
 pub mod studio;
-mod lab_adapter;
 
 pub const TICK_NS: u64 = 62_500_000;
 pub const DT: f64 = 0.0625;
@@ -511,7 +511,7 @@ impl Watercolor {
             .width
             .checked_mul(state.height)
             .ok_or("grid overflow")?;
-        if state.schema != 3
+        if !matches!((state.schema, state.lab.is_some()), (3, false) | (4, true))
             || !state.cell_mm.is_finite()
             || !(0.025..=0.1).contains(&state.cell_mm)
             || state.width < 2
@@ -974,7 +974,11 @@ impl Watercolor {
 
     pub fn finish_glaze(&mut self) -> Result<(), &'static str> {
         if let Some(lab) = &self.lab {
-            return if lab.is_dry() { Ok(()) } else { Err("glaze is still wet") };
+            return if lab.is_dry() {
+                Ok(())
+            } else {
+                Err("glaze is still wet")
+            };
         }
         if self.water.iter().chain(&self.capillary).any(|v| *v > 1e-10)
             || self.suspended.iter().flatten().any(|v| *v > 1e-10)
@@ -1062,7 +1066,10 @@ impl Watercolor {
         assert!(azimuth.is_finite() && elevation.is_finite() && (1.0..=90.0).contains(&elevation));
         assert!(intensity.is_finite() && intensity >= 0.0);
         if let Some(lab) = &self.lab {
-            return lab.project(self.cell_mm, Some((azimuth.to_radians(), elevation.to_radians(), intensity)));
+            return lab.project(
+                self.cell_mm,
+                Some((azimuth.to_radians(), elevation.to_radians(), intensity)),
+            );
         }
         self.project(Some((
             azimuth.to_radians(),

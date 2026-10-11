@@ -22,7 +22,11 @@ fn main() {
                     "watercolor: tick {}, {} named brushes; {}",
                     canvas.tick,
                     state.brushes.len(),
-                    if canvas.lab.is_some() { "reference inventory diagnostics" } else { "conserved" }
+                    if canvas.lab.is_some() {
+                        "reference inventory diagnostics"
+                    } else {
+                        "conserved"
+                    }
                 );
             }
             "render" if args.len() == 5 => {

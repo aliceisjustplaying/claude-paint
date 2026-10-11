@@ -4,6 +4,7 @@
 import { Simulation, DEFAULT_PARAMS } from "./original/src/engine/simulation.ts";
 import { beginStroke, strokeTo, TOOLS } from "./original/src/paint/brush.ts";
 import { PIGMENT_BY_ID } from "./original/src/paint/pigments.ts";
+import MARKS from "./marks.json";
 
 const fields = { flow: "flow", flux: "flux", sus_k: "susK", sus_s: "susS", sus_p: "susP", dep_k: "depK", dep_s: "depS", cap: "cap", dried: "dried", blur_w: "blurW", paper: "paper" };
 const passes = [
@@ -116,7 +117,56 @@ window.runParity = () => {
     }
     sim.runPass = original;
     const params = Object.fromEntries(Object.entries(sim.params).map(([key, value]) => [key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`), value]));
-    result.cases.push({ name, params, initial, operations, captures, final: capture(sim) });
+    const final = capture(sim);
+    const renders = [];
+    for (const [backlight, xray] of [[0, 0], [1, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) {
+      sim.render(backlight, xray);
+      const pixels = new Uint8Array(width * height * 4);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      if (gl.getError() !== gl.NO_ERROR) throw new Error("render readPixels failed");
+      const rgba = Array.from({ length: pixels.length }, (_, i) => {
+        const row = Math.floor(i / (width * 4)), column = i % (width * 4);
+        return pixels[(height - row - 1) * width * 4 + column];
+      });
+      renders.push({ backlight, xray, rgba });
+    }
+    result.cases.push({ name, params, initial, operations, captures, final, renders });
   }
   return result;
+};
+
+// Normal-size mark input: scripts/scenes.mjs:56–72, src/ui/app.ts:1028–1037 at pinned commit.
+window.runNormalDrift = () => {
+  const sim = new Simulation(document.querySelector("canvas"), MARKS.width, MARKS.height);
+  sim.setPaper("cold-press", true, MARKS.seed);
+  let tool = TOOLS.round, size = 0.42, water = 0.55, load = 0.65, pigment = PIGMENT_BY_ID.get("french-ultramarine");
+  const start = performance.now();
+  const mark = MARKS.marks.find((m) => m.name === "dry-stroke");
+  for (const [kind, a, b] of mark.program) {
+    if (kind === "paper") sim.setPaper(a, true, MARKS.seed);
+    else if (kind === "tool") tool = TOOLS[a];
+    else if (kind === "size") size = a;
+    else if (kind === "water") water = a;
+    else if (kind === "load") load = a;
+    else if (kind === "pig") pigment = PIGMENT_BY_ID.get(a);
+    else if (kind === "path") {
+      const brush = beginStroke(tool, size, water, load, a[0].x, a[0].y, 12345, 1);
+      for (const point of a.slice(1)) {
+        sim.splat(strokeTo(brush, point.x, point.y, 0.55), tool.pigment > 0 ? pigment : null);
+        sim.stepMany(b ?? 1);
+      }
+    }
+  }
+  const mass = (suspended, deposited) => read(sim, suspended).reduce((sum, p) => sum + p[3], 0) + read(sim, deposited).reduce((sum, p) => sum + p[3], 0);
+  const before = mass(sim.susK.read, sim.depK.read);
+  let advection;
+  const original = sim.runPass;
+  sim.runPass = function(program, outputs, textures, uniforms) {
+    if (program === this.progMove) advection = { before: mass(this.susK.read, this.depK.read) };
+    original.call(this, program, outputs, textures, uniforms);
+    if (program === this.progMove) advection.after = mass(outputs[0], this.depK.read);
+  };
+  sim.substep(1);
+  sim.ctx.gl.bindFramebuffer(sim.ctx.gl.FRAMEBUFFER, null);
+  return { mark: mark.name, width: MARKS.width, height: MARKS.height, seed: MARKS.seed, elapsed_ms: performance.now() - start, just_laid_live_pigment: before, first_advection: { ...advection, delta: advection.after - advection.before, percent: 100 * (advection.after - advection.before) / advection.before }, source: "src/engine/shaders.ts:192–194, texture(uSusK,at) is semi-Lagrangian gathering without donor normalization", normal_size_original_completed_only_one_diagnostic_substep: true };
 };

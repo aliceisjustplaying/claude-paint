@@ -27,6 +27,7 @@ const page = await browser.newPage({ viewport: { width: 1680, height: 1150 }, de
 page.setDefaultTimeout(300000);
 page.setDefaultNavigationTimeout(300000);
 const timings = [];
+let deadline;
 
 // Source: scripts/scenes.mjs:56–72 and scripts/shoot.mjs:64–75 at the pinned commit.
 const run = (program) => {
@@ -46,6 +47,7 @@ const run = (program) => {
 try {
   for (const mark of marks.marks.filter((m) => wanted.length === 0 || wanted.includes(m.name))) {
     const start = performance.now();
+    deadline = setTimeout(() => { void browser.close().catch(() => {}); }, 300000);
     await page.goto(`http://127.0.0.1:${server.address().port}/?sim=${marks.width}x${marks.height}&seed=${marks.seed}`);
     await page.waitForFunction(() => Boolean(window.__wash));
     await page.evaluate(() => { window.__wash.sim.update = () => {}; });
@@ -93,5 +95,6 @@ try {
     timings.push({ mark: mark.name, elapsedMs, stages });
     await writeFile(join(out, `${mark.name}-timing.json`), JSON.stringify({ mark: mark.name, elapsedMs, stages, complete: true }, null, 2));
     await writeFile(join(out, "timings.json"), JSON.stringify({ width: marks.width, height: marks.height, seed: marks.seed, stagesAreFixedStepSamples: true, timings }, null, 2));
+    clearTimeout(deadline);
   }
-} finally { await browser.close(); server.close(); }
+} finally { clearTimeout(deadline); await browser.close(); server.close(); }

@@ -3,6 +3,27 @@
 use paint::{Canvas, Gesture, Handling, Held, Linen, Mask, Paint, Stipple, Tool, Touch, hex};
 
 #[test]
+fn a_loaded_broad_stroke_can_reach_baseline_volume_without_discarding_reservoir_paint() {
+    let draw = |engine, dips| {
+        let mut c = Canvas::new(320, 2.0, hex("#bcb3a2")).with_size_mm(160.0).with_engine(engine);
+        let mut h = Held::new(Tool::hog_flat(120.0), 73).with_engine(engine);
+        for _ in 0..dips { h.load(Paint::body(hex("#202936")).with_stiff(0.92), 1.0); }
+        let input = h.carried().0;
+        c.drag(&mut h, &Gesture::line((80.0, 250.0), (920.0, 250.0)).pressure(0.85, 0.8), None);
+        let deposited = c.material_total();
+        assert!((deposited + h.carried().0 - input).abs() < input * 0.002);
+        deposited
+    };
+    let baseline = draw(5, 1);
+    for engine in [15, 16, 17] {
+        let light = draw(engine, 1);
+        let loaded = draw(engine, 8);
+        assert!(loaded >= baseline, "{engine}: {loaded} below baseline {baseline}");
+        assert!(loaded > light * 1.5, "{engine}: loaded {loaded}, light {light}");
+    }
+}
+
+#[test]
 fn broadened_contacts_conserve_paint_and_solvent_at_edges_and_turns() {
     for engine in [15, 16, 17] {
         for tool in [Tool::hog_flat(85.0), Tool::filbert(30.0), Tool::badger(85.0), Tool::rigger(12.0)] {

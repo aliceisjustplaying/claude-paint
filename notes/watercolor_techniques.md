@@ -44,8 +44,8 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   the last ones land. Give a stroke that should stay wet along its length a
   short duration.
 - **Reading the stage.** `balance()` returns `max_surface_water`,
-  `max_wetness` and `dry`. Standing water above 0.002 is the wet, shiny
-  stage; 0.002 or less with wetness left is damp; `dry` is true when wetness
+  `max_wetness` and `dry`. Standing water above 0.002 means some of the
+  sheet is still wet; 0.002 or less with wetness left is damp; `dry` is true when wetness
   is below 0.02 everywhere. These are maxima over the whole sheet, so any
   wet passage elsewhere sets them. To time one passage, lay it alone on the
   scratch paper and step the clock:
@@ -65,8 +65,8 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 - `b = brush{name="<name>", width=<cells>}` makes a round brush; the same name
   later returns it with its remaining load. A new name is a clean brush.
 - `b:load{water=<µL>, pigments={["<pigment>"]=<mass>}}` adds to the load.
-  More water to the same pigment gives a paler, more fluid load; more pigment
-  a stronger one. `b:status()` shows what is left. The brush runs dry, and a
+  The brush releases water and pigment from what it holds, and `b:status()`
+  shows what is left. The brush runs dry, and a
   stroke or wash can end before its path does.
 - `b:stroke(path, {pressure=..., duration=...})`. Each point can carry its own
   pressure and time, `{x, y, pressure, t}`. Pressure widens or narrows the
@@ -122,29 +122,29 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 ## Lifting
 
 - `b:lift(path)` lays water from the brush along the path and loosens
-  pigment that has settled but not dried. Load the brush with water first;
-  an empty brush has nothing to lift with. Its scrub effect fades within a
-  fraction of a second of painter clock.
+  pigment that has settled but not dried. The lift loosens pigment only
+  where there is water on the paper, so load the brush with water and it
+  brings its own. Its scrub effect fades within a fraction of a second of
+  painter clock.
 - Staining pigment resists the lift and gives up only part of its deposit;
   non-staining pigment lifts nearly clean.
 - **Lifted pigment stays on the sheet.** The brush does not take it up, and
   there is no blotting (`blot` is unavailable), so loosened pigment moves
   with the water and settles again nearby.
 - **Dry paint cannot be lifted.** Once a cell is dry its paint is part of the
-  paper. Check `balance()` before a lift, and lift while the area is still
-  damp.
+  paper. Lift before the area dries.
 
 ## Glazing
 
 - Wait until `balance().dry` is true (or `glaze()` succeeds; it refuses while
-  the sheet is wet). A stroke over dry paint then lays a new transparent
+  the sheet is wet). A stroke over dry paint then lays a new
   layer whose color combines with what is under it.
 - Dried paint here does not redissolve: water and new paint over it leave it
   as it is, so a glaze never stirs the layer beneath. Real paint can
   redissolve and tint the new layer (the physics note's staining section).
 - Opaque pigments hide the paper and lighten what they cover; transparent
-  ones let what is under them show through. Try a glaze over the same underlayer on the scratch
-  paper first.
+  ones let what is under them show through. Try a glaze over the same
+  underlayer on the scratch paper first.
 
 ## Dry brush
 

@@ -84,7 +84,7 @@ Any staining paint can redissolve when wetted again and tint the next layer [13]
 
 ## 7. Transparency and glazing
 
-**Transparency.** In watercolor, light passes mostly between pigment particles: a sparse layer of small particles covers less of the paper. Very little light passes through the particles themselves [16][V]. Refractive index sets how strongly a pigment scatters light, and gum arabic (about **1.47**) sits close to many pigments, which cuts the white scatter at their surfaces [16][V]:
+**Transparency.** In watercolor, light passes mostly between pigment particles: a sparse layer of small particles covers less of the paper. Very little light passes through the particles themselves [16][V]. How much light a pigment scatters depends on the ratio between its refractive index and that of the medium around it. Gum arabic (about **1.47**) is close to some pigments and to the clear substrates that many organic pigments are bound to, which cuts the white scatter at their surfaces. A refractive index above about 1.5 counts as relatively hiding [16][V]:
 
 | Pigment | Refractive index |
 |---|---|
@@ -104,7 +104,7 @@ A nearly dry brush, drawn at a low angle, leaves paint only on the raised parts 
 
 ## 9. Salt
 
-Salt sprinkled into a wet wash absorbs water and leaves the pigment to settle around it. Fine table salt gives small speckles; larger rock salt pulls in more paint and gives bigger star-shaped marks. The salt is brushed off once the paint is dry [14][V].
+Salt sprinkled into a wet wash absorbs water and leaves the pigment to settle into the paper. Fine table salt gives small speckles; larger rock salt pulls in more paint and gives bigger star-shaped marks. The salt is brushed off once the paint is dry [14][V].
 
 ## Sources
 1. American Institute for Conservation, Book and Paper Group Wiki, "BPG Sizing and Resizing." https://conservation-wiki.com/wiki/BPG_Sizing_and_Resizing

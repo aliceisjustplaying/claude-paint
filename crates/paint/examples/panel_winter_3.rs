@@ -31,11 +31,15 @@ fn main() {
     let factor = if let Some(s) = args.get(3) {
         s.parse().unwrap()
     } else {
-        let target = scene("chalk", 360, 5, 1.0).1;
-        let (mut lo, mut hi) = (0.65, 1.3);
-        for _ in 0..10 {
+        let target = scene("chalk", width, 5, 1.0).1;
+        let (mut lo, mut hi) = (0.65, 2.0);
+        assert!(
+            scene("chalk", width, 10, hi).1 >= target,
+            "body2 load calibration cannot bracket the baseline inventory"
+        );
+        for _ in 0..12 {
             let mid = (lo + hi) * 0.5;
-            if scene("chalk", 360, 10, mid).1 < target {
+            if scene("chalk", width, 10, mid).1 < target {
                 lo = mid;
             } else {
                 hi = mid;

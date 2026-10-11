@@ -101,7 +101,6 @@ pub struct Simulation {
     pub raster_subpixel_bits: u8,
     pub fast_dry_steps: i32,
     pub forever_wet: bool,
-    pub frame_accumulator: f64,
     pub undo_ring: Vec<Vec<Vec<Pixel>>>,
     pub undo_live: Vec<usize>,
     pub undo_cursor: usize,
@@ -174,7 +173,6 @@ impl Simulation {
             raster_subpixel_bits: 4,
             fast_dry_steps: 0,
             forever_wet: false,
-            frame_accumulator: 0.0,
             undo_ring: Vec::new(),
             undo_live: Vec::new(),
             undo_cursor: 0,
@@ -232,14 +230,6 @@ impl Simulation {
         }
         if self.fast_dry_steps > 0 {
             self.fast_dry_steps -= steps as i32;
-        }
-    }
-    // Host clock adapter only: src/engine/simulation.ts:400-407 is frame-based at a19bfa2a026856a98ceb400a8eec41f091f04a11.
-    pub fn step(&mut self, dt_seconds: f64) {
-        self.frame_accumulator += dt_seconds * 60.0;
-        while self.frame_accumulator >= 1.0 {
-            self.update();
-            self.frame_accumulator -= 1.0;
         }
     }
     // src/engine/simulation.ts:408-410 at a19bfa2a026856a98ceb400a8eec41f091f04a11.

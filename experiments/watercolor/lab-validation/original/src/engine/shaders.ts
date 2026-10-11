@@ -1,6 +1,6 @@
 // MIT License, Copyright (c) 2026 Ryan McCarty.
 // Pinned Watercolor Lab source: a19bfa2a026856a98ceb400a8eec41f091f04a11.
-// Full license: ../../../THIRD_PARTY_NOTICES.md.
+// Full license: experiments/watercolor/THIRD_PARTY_NOTICES.md.
 /**
  * Every simulation pass, as GLSL.
  *

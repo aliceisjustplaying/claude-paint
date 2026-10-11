@@ -71,6 +71,9 @@ pub fn export(args: &[String]) -> Result<(), String> {
         if args.len() != 2 { return Err(invalid("snapshot-state <store directory> <out.view>")); }
         let dir = Path::new(&args[0]);
         let out = Path::new(&args[1]);
+        if out.extension().is_none_or(|extension| extension != "view") {
+            return Err(invalid("snapshot output must have the .view extension"));
+        }
         if crate::normalized_path(out)?.starts_with(crate::normalized_path(dir)?) {
             return Err(invalid("snapshot output must be outside the committed store"));
         }
@@ -78,6 +81,14 @@ pub fn export(args: &[String]) -> Result<(), String> {
         revision.protect_output(out)?;
         let checkpoint = revision.checkpoint()?;
         if crate::same_file(&checkpoint, out).map_err(invalid)? { return Err(invalid("snapshot must not replace its material input")); }
+        match File::open(out) {
+            Ok(file) => {
+                RenderSnapshot::read(&mut BufReader::with_capacity(65536, file))
+                    .map_err(|e| invalid(format!("snapshot output already exists and is not a verified snapshot; refusing to replace journal exports or unrelated files: {e}")))?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
         let restored = crate::save::read(&checkpoint).map_err(invalid)?;
         let canvas = restored.session.canvas().ok_or_else(|| invalid("committed revision has no canvas"))?;
         let snapshot = RenderSnapshot::capture(&canvas, id(&revision.id)?, runtime()?)?;

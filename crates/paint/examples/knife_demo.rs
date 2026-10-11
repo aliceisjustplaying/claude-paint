@@ -21,23 +21,27 @@ mod demo {
         lay: bool,
     }
 
-    fn apply(c: &mut Canvas, second: bool, p: Pass) {
+    fn apply(c: &mut Canvas, model: u8, p: Pass) {
         let mut k = Knife::new(p.width);
-        if second {
+        if model == 2 {
             k = k.experimental_2(0.65);
         }
+        #[cfg(feature = "knife-3")]
+        if model == 3 {
+            k = k.experimental_3(0.65);
+        }
         k.load(p.paint, p.amount);
-        if second {
+        if model != 0 {
             c.knife_1(&mut k, p.points, p.pressure, p.angle, p.lay, p.lift, p.tilt);
         } else {
             c.knife(&mut k, p.points, p.pressure, p.angle, p.lay, p.lift);
         }
     }
 
-    fn study(mut c: Canvas, second: bool) -> Canvas {
+    fn study(mut c: Canvas, model: u8) -> Canvas {
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 200.0,
                 paint: Paint::body(hex("#35556a")),
@@ -53,7 +57,7 @@ mod demo {
         c.dry();
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 170.0,
                 paint: Paint::body(hex("#b3673e")),
@@ -68,7 +72,7 @@ mod demo {
         );
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 60.0,
                 paint: Paint::body(hex("#b3673e")),
@@ -84,7 +88,7 @@ mod demo {
         c.dry();
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 180.0,
                 paint: Paint::new(hex("#baa452"), 0.25, 0.1).with_thinner(0.35),
@@ -99,7 +103,7 @@ mod demo {
         );
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 130.0,
                 paint: Paint::body(hex("#a28f70")),
@@ -114,7 +118,7 @@ mod demo {
         );
         apply(
             &mut c,
-            second,
+            model,
             Pass {
                 width: 65.0,
                 paint: Paint::body(hex("#39534f")),
@@ -155,8 +159,12 @@ mod demo {
             .with_engine(5)
             .with_linen(Linen::fine(41));
         initial.prime(hex("#dfd3ba"), 0.9, 90.0, 0.6, 0.25, 44);
-        for (name, second) in [("baseline", false), ("knife-2", true)] {
-            let c = study(initial.clone(), second);
+        #[cfg(not(feature = "knife-3"))]
+        let models = &[("baseline", 0), ("knife-2", 2)][..];
+        #[cfg(feature = "knife-3")]
+        let models = &[("baseline", 0), ("knife-2", 2), ("knife-3", 3)][..];
+        for &(name, model) in models {
+            let c = study(initial.clone(), model);
             save(&output.join(format!("{name}-color.png")), &c, c.seen())?;
             save(
                 &output.join(format!("{name}-gallery.png")),

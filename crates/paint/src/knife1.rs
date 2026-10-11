@@ -10,6 +10,55 @@ pub(super) struct Face {
     cure: f32,
 }
 
+#[cfg(all(test, feature = "knife-3"))]
+mod round_three_tests {
+    use super::*;
+
+    #[test]
+    fn knife_3_scrape_contacts_a_footprint_over_set_tooth_without_a_pixel_grid() {
+        let mark = |third| {
+            let mut c = Canvas::new(640, 2.0, crate::hex("#35556a"))
+                .with_size_mm(300.0)
+                .with_engine(5);
+            let s = c.f.scale;
+            let orange = Paint::body(crate::hex("#b3673e"));
+            for y in 0..c.f.h {
+                for x in 0..c.f.w {
+                    c.height[y * c.f.w + x] = if (x / 2 + y / 2) % 2 == 0 { 220.0 } else { 340.0 };
+                }
+            }
+            let sf = c.surf();
+            for y in (200.0 * s) as usize..(300.0 * s) as usize {
+                for x in (150.0 * s) as usize..(800.0 * s) as usize {
+                    unsafe {
+                        sf.add(y * sf.w + x, 4.0, &orange.latent(), orange.prop(), 0.0);
+                    }
+                }
+            }
+            let dry = (c.px.clone(), c.height.clone(), c.film.clone());
+            let before = c.wet_total();
+            let mut k = Knife::new(110.0);
+            k = if third { k.experimental_3(0.65) } else { k.experimental_2(0.65) };
+            c.knife_1(&mut k, &[(190.0, 250.0), (790.0, 250.0)], (1.0, 1.0), None, false, 0.0, 75.0);
+            assert_eq!(dry, (c.px.clone(), c.height.clone(), c.film.clone()));
+            assert!((c.wet_total() + k.paint_volume() - before).abs() < before * 3e-6);
+            let mut jumps = 0.0;
+            for y in (230.0 * s) as usize..(270.0 * s) as usize {
+                for x in (300.0 * s) as usize..(700.0 * s) as usize {
+                    let i = y * c.f.w + x;
+                    jumps += (c.wet.vol[i] - c.wet.vol[i + 1]).abs() as f64
+                        + (c.wet.vol[i] - c.wet.vol[i + c.f.w]).abs() as f64;
+                }
+            }
+            jumps
+        };
+        let previous = mark(false);
+        let current = mark(true);
+        assert!(previous > 100.0, "the old pixel cutoff must be exercised: {previous}");
+        assert!(current < previous * 0.35, "knife-2={previous}, knife-3={current}");
+    }
+}
+
 #[cfg(feature = "knife-2")]
 impl Face {
     fn bind(&self, k: &mut Knife) -> (f64, f64) {
@@ -31,6 +80,12 @@ impl Face {
 }
 
 impl Knife {
+    #[cfg(feature = "knife-3")]
+    pub fn experimental_3(mut self, flex: f32) -> Self {
+        self = self.experimental_2(flex);
+        self.third = self.flex.is_some();
+        self
+    }
     #[cfg(feature = "knife-2")]
     pub fn experimental_2(mut self, flex: f32) -> Self {
         self = self.experimental(flex);
@@ -40,6 +95,8 @@ impl Knife {
     pub fn experimental(mut self, flex: f32) -> Self {
         if flex.is_finite() && (0.0..=1.0).contains(&flex) {
             self.flex = Some(flex);
+            #[cfg(feature = "knife-3")]
+            { self.third = false; }
             #[cfg(feature = "knife-2")]
             {
                 self.second = false;
@@ -163,6 +220,10 @@ impl Canvas {
         let second = false;
         #[cfg(feature = "knife-2")]
         let second = k.second;
+        #[cfg(not(feature = "knife-3"))]
+        let third = false;
+        #[cfg(feature = "knife-3")]
+        let third = k.third;
         let pressure = if second {
             (pressure.0.clamp(0.0, 1.0), pressure.1.clamp(0.0, 1.0))
         } else {
@@ -173,7 +234,7 @@ impl Canvas {
             k.faces = Some(k.make_faces());
         }
         let body_pass = second && lay && k.hide[1] > 0.35 && tilt < 65.0;
-        let bed = if body_pass {
+        let bed = if body_pass || third && !lay {
             Some(crate::surface::box_blur(
                 &self.height,
                 self.f.w,

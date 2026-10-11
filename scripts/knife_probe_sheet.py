@@ -30,7 +30,9 @@ def main():
     models = ["baseline", "knife-1"]
     if (args.directory / "slab-knife-2-gallery.png").exists():
         models.append("knife-2")
-    round_number = 2 if len(models) == 3 else 1
+    if (args.directory / "slab-knife-3-gallery.png").exists():
+        models.append("knife-3")
+    round_number = len(models) - 1
     for view, label in [("color", "Color"), ("gallery", "Gallery 115 / 55 / 1"), ("relief", "Relief 135 / 25 / 1")]:
         sheet = Image.new("RGB", (len(models) * (width + 16) + 16, 100 + len(probes) * (height + 40)), "#202020")
         draw = ImageDraw.Draw(sheet)

@@ -2021,6 +2021,21 @@ mod tests {
         }
     }
 
+    #[test]
+    #[cfg(all(tube_box, feature = "knife-3"))]
+    fn knife_3_model_and_local_inventory_survive_chunk_rollback() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=75, model="knife-3", flex=0.65}; p = pile{{"yellow ochre",1}}
+            k:load(p,0.7); k:lay({{150,250},{750,250}}, {pressure={0.4,0.7}, tilt=20, lift=0.3})"#).unwrap();
+        let before = bits(&s);
+        let blade = format!("{:?}", s.st.borrow_mut().live_knives()[0].borrow());
+        assert!(blade.contains("knife_3_flex"));
+        assert!(s.run("k:scrape({{200,250},{650,250}}, {tilt=75}); k:lay({{200,450},{650,450}}); error('stop')").is_err());
+        assert_eq!(before, bits(&s));
+        assert_eq!(blade, format!("{:?}", s.st.borrow_mut().live_knives()[0].borrow()));
+    }
+
     /// A double-loaded, streaky pass paints something else than the plain
     /// pass, and the same again in a second session; a part-loaded brush too.
     #[test]

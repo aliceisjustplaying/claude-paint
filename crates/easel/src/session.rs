@@ -73,6 +73,8 @@ struct Snap {
     knives: Vec<(Rc<RefCell<paint::Knife>>, paint::Knife)>,
     /// The rags in the hand, as the brushes.
     rags: Vec<(Rc<RefCell<paint::rag::Rag>>, paint::rag::Rag)>,
+    #[cfg(feature = "brush-sim-1")]
+    brush_sim_counters: Option<(u64, u64, u64)>,
 }
 
 pub struct Session {
@@ -227,7 +229,10 @@ impl Session {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags,
+            #[cfg(feature = "brush-sim-1")]
+            brush_sim_counters: (s.tubes.engine > paint::ENGINE).then(|| (s.chunk, s.calls, s.rng.state())),
+        })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -256,6 +261,12 @@ impl Session {
         s.hand = snap.hand.clone();
         s.board = snap.board.clone();
         s.view = snap.view.clone();
+        #[cfg(feature = "brush-sim-1")]
+        if let Some((chunk, calls, rng)) = snap.brush_sim_counters {
+            s.chunk = chunk;
+            s.calls = calls;
+            s.rng = paint::rng::Rng::from_state(rng);
+        }
         Ok(mismatches)
     }
 
@@ -975,10 +986,13 @@ fn brush_sim_engine(choice: &str) -> Result<u32, String> {
         return Err("brush simulation requires a build with --features brush-sim-1".into());
     }
     match choice {
+        "lean2" if cfg!(feature = "brush-sim-2") => Ok(9),
+        "body2" if cfg!(feature = "brush-sim-2") => Ok(10),
+        "wild2" if cfg!(feature = "brush-sim-2") => Ok(11),
         "lean" => Ok(6),
         "body" => Ok(7),
         "wild" => Ok(8),
-        _ => Err("EASEL_BRUSH_SIM must be off, lean, body or wild".into()),
+        _ => Err("EASEL_BRUSH_SIM must be off, lean, body, wild, lean2, body2 or wild2 (iteration 2 requires --features brush-sim-2)".into()),
     }
 }
 
@@ -1006,6 +1020,19 @@ mod brush_sim_tests {
         assert_eq!(paint::ENGINE, 5);
         assert_eq!(logged_engine("--@ engine 5\n"), Ok(5));
         assert_eq!(logged_engine("canvas{}\n"), Ok(1));
+    }
+
+    #[test]
+    fn iteration_two_selection_is_explicit_and_feature_gated() {
+        for (choice, engine) in [("lean2", 9), ("body2", 10), ("wild2", 11)] {
+            if cfg!(feature = "brush-sim-2") {
+                assert_eq!(brush_sim_engine(choice), Ok(engine));
+                assert_eq!(logged_engine(&format!("--@ engine {engine}\n")), Ok(engine));
+            } else {
+                assert!(brush_sim_engine(choice).is_err());
+                assert!(logged_engine(&format!("--@ engine {engine}\n")).is_err());
+            }
+        }
     }
 }
 
@@ -1393,6 +1420,20 @@ mod tests {
     #[cfg(all(feature = "brush-sim-1", tube_box))]
     fn brush_sim_rollback_and_replay_preserve_dip_entropy() {
         for engine in [6, 7, 8] {
+            let mut s = with_engine(engine);
+            s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
+            let before = state(&s);
+            assert!(s.run(r#"b:load(p,0.6); b:stroke({{100,240},{900,260}}); error("stop")"#).unwrap_err().contains("stop"));
+            assert_eq!(state(&s), before);
+            s.run(r#"b:load(p,0.3); b:stroke({{100,240},{900,260}})"#).unwrap();
+            assert_eq!(state(&s), state(&replayed(&s)));
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "brush-sim-2", tube_box))]
+    fn brush_sim_two_rollback_and_replay_preserve_dip_entropy() {
+        for engine in [9, 10, 11] {
             let mut s = with_engine(engine);
             s.run(r#"canvas{size=160, aspect=2, linen=16, seed=73, ground={{pile={{"lead white",3}}, um=100, apply="knife"}}}; p=pile{{"lead white",3},{"yellow ochre",1}}; b=brush("flat",85); b:load(p,0.8)"#).unwrap();
             let before = state(&s);

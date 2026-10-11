@@ -45,7 +45,7 @@ Pin the runner commit/build used for a painting when resuming it. These JSON sna
 
 ## Native-resolution demo
 
-Run `demo/native-start.lua` then `demo/native-finish.lua` in a fresh explicit watercolor studio. These are the same logical engine study scaled to a real 60×40 mm, 1200×800-cell sheet. Their 1200×800 Gallery/Color finals and detail crops are 1:1 simulation pixels. Intermediate frame-hook exports are 480×320 diagnostic views. Assemble the bloom strip/slow loop with `python3 experiments/watercolor/demo/morning_sheet.py DIR native-`.
+Run `demo/native-start.lua` then `demo/native-finish.lua` in a fresh explicit watercolor studio. These scale the engine study to a real 60×40 mm, 1200×800-cell sheet, with the clean-water drop moved farther inside the wash to expose its whole rim. Their 1200×800 Gallery/Color finals and detail crops are 1:1 simulation pixels. Intermediate frame-hook exports are 480×320 diagnostic views. Assemble the bloom strip/slow loop with `python3 experiments/watercolor/demo/morning_sheet.py DIR native-`.
 
 State writes stream through a buffered writer and continuation validates the decoded state without making a second JSON/state copy. Snapshots remain dense JSON and can exceed 200 MB at native resolution; keep them in private scratch, never in Capy Drive. Each successful chunk writes one automatic checkpoint. The native demo does not create duplicate named checkpoints.
 

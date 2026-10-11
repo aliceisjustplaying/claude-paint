@@ -67,7 +67,19 @@ while IFS=$'\t' read -r name dir exe; do
 done <"$work/bins"
 if [ "$failed_bins" = 'paint-lib:101 ' ]; then
   failures=$(grep -hE '^test .* \.\.\. FAILED$' "$work"/*.out | sed 's/^test //; s/ \.\.\. FAILED$//' || true)
-  if [ "$failures" = 'rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground' ] && grep -Eq '^test result: FAILED\. [0-9]+ passed; 1 failed;' "$work/paint-lib.out"; then
+  known_lift=$(python3 - "$work/paint-lib.out" <<'PY'
+import math, re, sys
+text = open(sys.argv[1]).read()
+matches = re.findall(r"spirits lift nearly all the film: \(([^)]+)\)", text)
+expected = (0.9744877972682747, 0.8993446338235231, 0.9429845345729168)
+try:
+    values = tuple(float(x.strip()) for x in matches[0].split(",")) if len(matches) == 1 else ()
+except ValueError:
+    values = ()
+print("yes" if len(values) == 3 and all(math.isfinite(x) and abs(x - y) <= 1e-5 for x, y in zip(values, expected)) else "no")
+PY
+)
+  if [ "$failures" = 'rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground' ] && [ "$known_lift" = yes ] && grep -Eq '^test result: FAILED\. [0-9]+ passed; 1 failed;' "$work/paint-lib.out"; then
     echo 'cargo_tests: only known failure: solvent-rag hollow-film lift on main'
     exit 4
   fi

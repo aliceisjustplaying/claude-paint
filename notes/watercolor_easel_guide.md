@@ -77,9 +77,18 @@ the next 0.0625-second tick. Each tick advances 11 or 12 Lab substeps,
 averaging 180 per painter-clock second. Looking and wall-clock time between
 calls do not advance the material.
 
+On the default paper, the Mac GPU smoke stroke became damp after about
+1 second of additional `wait` and dry after about 2.5 seconds. Samples were
+0.25 seconds apart. This used a 150-cell round stroke, width 42, default
+pressure 0.35, 10 microliters of water and 10 mass units of French Ultramarine.
+The brush still had pigment at the end of the stroke.
+For a stroke like that, work wet-into-wet during roughly the first second
+of additional painter-clock time. Earlier contacts in the stroke have
+already begun drying while later contacts are being laid.
+
 Drying depends on the amount of water, the paper and the surrounding wet
-area. The measured wet-to-damp-to-dry timing for this draft will be filled
-in from the Mac GPU smoke run before review.
+area. A wetter area can stay workable longer. Wall-clock time between
+calls leaves the sheet as it was at the end of the last call.
 
 `balance()` reports `dry`, `max_surface_water` and `max_wetness`, along with
 water and brush-release inventory diagnostics. Standing surface water at or

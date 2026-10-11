@@ -140,6 +140,9 @@ pub fn render(args: &[String]) -> Result<(), String> {
         if args.len() < 2 { return Err(invalid("render-snapshot <snapshot.view> <out.png> [--mode color|gallery|relief] [--light az,el,strength] [--crop x0,y0,x1,y1]")); }
         let input = Path::new(&args[0]);
         let out = Path::new(&args[1]);
+        if image::ImageFormat::from_path(out).map_err(|e| invalid(e.to_string()))? != image::ImageFormat::Png {
+            return Err(invalid("snapshot output must be a PNG"));
+        }
         if crate::same_file(input, out).map_err(invalid)? { return Err(invalid("snapshot output must differ from its input")); }
         let mut mode = "gallery";
         let mut custom = None;

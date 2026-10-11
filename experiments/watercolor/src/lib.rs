@@ -133,7 +133,7 @@ impl Paper {
             &raw,
             width,
             height,
-            (0.18 / cell_mm).round().max(1.0) as usize,
+            (0.08 / cell_mm).round().max(1.0) as usize,
         );
         let broad = correlate(
             &raw,
@@ -152,8 +152,7 @@ impl Paper {
             for x in 0..width {
                 let i = y * width + x;
                 let (x, y) = (x as f64, y as f64);
-                let h =
-                    (0.5 + 0.48 * ((0.7 * fine[i] + 0.3 * broad[i]) / 32.0).tanh()).clamp(0.0, 1.0);
+                let h = (0.5 + 0.36 * ((fine[i] - broad[i]) / 24.0).tanh()).clamp(0.0, 1.0);
                 paper.height.push(h);
                 paper.sizing.push(
                     0.3 + 0.58 * smooth(seed.wrapping_add(3), x * cell_mm / 1.8, y * cell_mm / 1.8),
@@ -397,10 +396,23 @@ impl Watercolor {
         let y = (cell / self.width) as f64 * self.cell_mm;
         let along = (direction[0] * x + direction[1] * y) / norm;
         let across = (-direction[1] * x + direction[0] * y) / norm;
-        let wander = 0.024 * (smooth(731, along / 1.5, across / 0.6) - 0.5);
-        let filament =
-            ((std::f64::consts::TAU * (across + wander) / 0.14).cos() * 0.5 + 0.5).powi(4);
-        contact *= 0.04 + 0.96 * filament;
+        let mut filament = 0.0_f64;
+        for sample in 0..4 {
+            let cross = across + ((sample as f64 + 0.5) / 4.0 - 0.5) * self.cell_mm;
+            let track = (cross / 0.14).floor() as i64;
+            let mut hit = 0.0_f64;
+            for strand in track - 1..=track + 1 {
+                let wander = 0.036 * (smooth(731 ^ strand as u64, along / 1.5, 0.0) - 0.5);
+                let center =
+                    (strand as f64 + 0.5) * 0.14 + 0.06 * (noise(732, strand, 0) - 0.5) + wander;
+                let radius = 0.03 + 0.02 * noise(733, strand, 0);
+                let t = (1.0 - (cross - center).abs() / radius).clamp(0.0, 1.0);
+                let load = 0.35 + 0.65 * smooth(734 ^ strand as u64, along / 2.5, 0.0);
+                hit = hit.max(t * t * (3.0 - 2.0 * t) * load);
+            }
+            filament += hit * 0.25;
+        }
+        contact *= filament;
         self.active.coverage[cell] = self.active.coverage[cell].max(contact);
         for (p, amount) in load.iter().enumerate() {
             let m = amount * contact;

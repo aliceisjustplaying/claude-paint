@@ -144,8 +144,9 @@ fn c07_two_overlapping_thinned_passes_leave_more_paint_than_one() {
 #[test]
 #[ignore = "slow"]
 fn c08_more_thinner_never_hides_the_card_more() {
+    let mut fixture = card_canvas(480);
     for load in [0.3f32, 0.6] {
-        let r: Vec<Cell> = (0..10).map(|k| card(480, RAW_SIENNA, &[(load, k as f32 / 10.0)]).remove(0)).collect();
+        let r = fixture.fixture_cases(0..10, |s, k| card_on(s, RAW_SIENNA, &[(load, k as f32 / 10.0)]).remove(0));
         let kept: Vec<f32> = r.iter().map(|c| c.kept).collect();
         println!("load {load}: kept {kept:?}");
         for c in &r {
@@ -156,6 +157,26 @@ fn c08_more_thinner_never_hides_the_card_more() {
             assert!(kept[k] >= kept[k - 1] - 0.005, "load {load}: thinner {} shows {} of the card, thinner {} {}", r[k - 1].thinner, kept[k - 1], r[k].thinner, kept[k]);
         }
         assert!(kept[9] > kept[0], "load {load}: thinner 0.9 shows more of the card than none");
+    }
+}
+
+#[test]
+fn reused_card_fixture_matches_fresh_sessions() {
+    let mut fixture = card_canvas(160);
+    let initial = session_save(&fixture, &fixture.program("fixture"));
+    let cases = [(0.3, 0.0), (0.6, 0.5), (0.3, 0.9), (0.6, 0.0)];
+    let reused = fixture.fixture_cases(cases, |s, cell| {
+        let measured = card_on(s, RAW_SIENNA, &[cell]);
+        (measured, session_save(s, &s.program("fixture")))
+    });
+    assert_eq!(initial, session_save(&fixture, &fixture.program("fixture")));
+    for (cell, got) in cases.into_iter().zip(reused) {
+        let mut fresh = inness(160);
+        run(&mut fresh, CARD_CANVAS);
+        run(&mut fresh, &card_bands());
+        let measured = card_on(&mut fresh, RAW_SIENNA, &[cell]);
+        assert_eq!(got.0, measured);
+        assert_eq!(got.1, session_save(&fresh, &fresh.program("fixture")));
     }
 }
 

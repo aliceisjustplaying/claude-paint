@@ -12,8 +12,8 @@ knifed together from named tubes.
 
 ```sh
 cargo build --release -p easel        # the easel: target/release/easel
-scripts/test                          # the fast checks (about a minute once built)
-scripts/test --all                    # every required check (notes/speed/SKIPPED.md: what neither runs)
+scripts/test-changed                  # targeted checks after each fix round
+scripts/test --all                    # the full gate on the final head
 ```
 
 - `notes/easel_guide.md`: how to paint at the easel.
@@ -26,6 +26,10 @@ scripts/test --all                    # every required check (notes/speed/SKIPPE
 - `THIRD_PARTY_NOTICES.md`: licenses of the code this builds on.
 
 ## For developers
+
+- [Test tiers](notes/testing.md): changed-path selection, the shared gate build
+  profile and the full check inventory. `scripts/test` still runs the general
+  fast Rust and baseline checks when a broader iteration check is useful.
 
 - Finished paintings, videos, prompts and painter notes are indexed in
   [the painting collection](archive/collection/README.md). Raw sessions and

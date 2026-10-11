@@ -209,6 +209,37 @@ impl Session {
         self.replay = on;
     }
 
+    #[cfg(test)]
+    pub fn fixture_cases<I, T>(&mut self, cases: impl IntoIterator<Item = I>, mut run_case: impl FnMut(&mut Self, I) -> T) -> Vec<T> {
+        let snap = self.snap().unwrap();
+        let log_len = self.log.len();
+        let globals = self.globals.clone();
+        let (chunk, calls) = {
+            let st = self.st.borrow();
+            (st.chunk, st.calls)
+        };
+        let results = cases.into_iter().map(|case| {
+            assert_eq!(self.restore(&snap).unwrap(), 0);
+            self.log.truncate(log_len);
+            self.globals = globals.clone();
+            {
+                let mut st = self.st.borrow_mut();
+                st.chunk = chunk;
+                st.calls = calls;
+            }
+            run_case(self, case)
+        }).collect();
+        assert_eq!(self.restore(&snap).unwrap(), 0);
+        self.log.truncate(log_len);
+        self.globals = globals;
+        {
+            let mut st = self.st.borrow_mut();
+            st.chunk = chunk;
+            st.calls = calls;
+        }
+        results
+    }
+
     fn snap(&mut self) -> mlua::Result<Snap> {
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();

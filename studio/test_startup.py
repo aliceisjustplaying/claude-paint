@@ -83,18 +83,25 @@ def site(exported):
             responses.append((self.path, code))
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(exported)))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}", requests, responses
     server.shutdown()
     server.server_close()
 
 
-@pytest.fixture
-def browser():
+@pytest.fixture(scope="module")
+def browser_process():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         yield browser
         browser.close()
+
+
+@pytest.fixture
+def browser(browser_process):
+    yield browser_process
+    for context in browser_process.contexts:
+        context.close()
 
 
 @pytest.mark.parametrize("path,painter,title,model,width,height", [

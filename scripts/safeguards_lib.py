@@ -35,7 +35,7 @@ APPROVAL_FORMAT = "claude-paint golden approval v1"
 HEX_ID = re.compile(r"[0-9a-f]{7,64}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 REGULAR_MODES = ("100644", "100755")
-STEP_KINDS = ("build", "cargo", "pytest", "script")
+STEP_KINDS = ("build", "cargo", "pytest", "node", "script")
 # what a summary step must repeat from its list line, exactly
 STEP_KEYS = ("name", "kind", "command", "limit", "least", "group", "known")
 # The privacy hooks' protected text, stored encoded like scripts/pre-commit-anonymity.

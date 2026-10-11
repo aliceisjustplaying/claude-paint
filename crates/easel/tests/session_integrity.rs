@@ -6,7 +6,9 @@ use std::{
     process::{Command, Output},
 };
 fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("il-{}", std::process::id()))
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("il-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir.canonicalize().unwrap()
 }
 fn cmd(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", root()).env("EASEL_SESSION", "s").output().unwrap()

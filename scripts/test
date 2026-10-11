@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The test commands.
 
-    scripts/test                      the fast checks (about a minute once built)
+    scripts/test                      the general iteration checks
     scripts/test --all                every required check: the fast ones, the slow
                                       tests by exact name, the scripts' tests, the
                                       painter builds and the Python tests
@@ -39,6 +39,7 @@ cores busy). Kinds:
     build   a build; it has no tests (its time is reported as build time)
     cargo   `cargo test ...`: counts from the "test result:" lines
     pytest  counts from pytest's last line
+    node    counts from node --test's final TAP totals
     script  counts the output lines that match the regex
 
 A list must hold at least one step that isn't a build, and every such step a
@@ -73,7 +74,7 @@ stops only the group).
 
 Cargo's target directory is resolved once (`cargo metadata`: CARGO_TARGET_DIR
 and Cargo configuration) and exported as CARGO_TARGET_DIR to every step, so
-the steps that run `$CARGO_TARGET_DIR/release/easel` run the build just made.
+the steps that run `$CARGO_TARGET_DIR/gate/easel` run the build just made.
 
 Exit: 0 pass; 1 fail; 3 unfinished (a step timed out, or a partial run); 4 a
 known failure and nothing else wrong; 124 a phase's lockrun timed out; 130
@@ -118,7 +119,9 @@ def sha256(path):
 
 def read_list(path):
     steps = []
-    for n, line in enumerate(open(path), 1):
+    with open(path) as file:
+        lines = file.readlines()
+    for n, line in enumerate(lines, 1):
         if not line.strip() or line.startswith("#"):
             continue
         f = line.rstrip("\n").split("\t")
@@ -135,7 +138,7 @@ def read_list(path):
                 raise SystemExit("scripts/test: %s line %d: a known failure is an exit code, a regex and a text" % (path, n))
             if kind == "build" or known["exit"] == 0 or not f[9].strip():
                 raise SystemExit("scripts/test: %s line %d: a known failure needs a test step, a nonzero exit and a text" % (path, n))
-        if kind not in ("build", "cargo", "pytest", "script"):
+        if kind not in ("build", "cargo", "pytest", "node", "script"):
             raise SystemExit("scripts/test: %s line %d: unknown kind %r" % (path, n, kind))
         try:
             limit, least = float(limit), int(least)
@@ -179,6 +182,13 @@ def count(step, out):
         get = lambda w: sum(int(x) for x in re.findall(r"(\d+) %s" % w, line))
         p, f, e, s = get("passed"), get("failed"), get("errors?"), get("skipped")
         return p + f + e, p, f + e, s
+    if step["kind"] == "node":
+        def total(name):
+            matches = re.findall(r"^# %s (\d+)$" % name, out, re.M)
+            return int(matches[-1]) if matches else 0
+        passed, failed, skipped = total("pass"), total("fail"), total("skipped")
+        cancelled = total("cancelled")
+        return passed + failed + cancelled, passed, failed + cancelled, skipped
     if step["kind"] == "script":
         n = len(re.findall(step["regex"], out, re.M))
         return n, n, 0, 0
@@ -317,15 +327,25 @@ def start_step(job, step, index, logdir, env):
     token = "%s.%d" % (job.run, index)
     ids = [x for x in env.get(MARK, "").split(":") if x] + [job.run, token]
     # no new session: the step stays in this job's process group
-    p = subprocess.Popen(["bash", "-c", step["command"]], cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
+    timing = os.path.join(scratch, "command.time")
+    command = ["bash", "-c", step["command"]]
+    if os.path.isfile("/usr/bin/time"):
+        command = ["/usr/bin/time", "-p", "-o", timing, *command]
+    p = subprocess.Popen(command, cwd=REPO, stdout=lf, stderr=subprocess.STDOUT,
                          stdin=subprocess.DEVNULL, env=dict(env, TMPDIR=scratch, **{MARK: ":".join(ids)}))
     return {"step": step, "p": p, "lf": lf, "log": log, "t0": time.monotonic(), "timed_out": False,
-            "scratch": scratch, "seen": {p.pid}, "token": token}
+            "scratch": scratch, "timing": timing, "seen": {p.pid}, "token": token}
 
 
 def finish_step(r):
     step, p = r["step"], r["p"]
     r["lf"].close()
+    cpu = {}
+    try:
+        with open(r["timing"]) as file:
+            cpu = {name: float(value) for name, value in re.findall(r"^(user|sys) ([0-9.]+)$", file.read(), re.M)}
+    except (OSError, ValueError):
+        pass
     shutil.rmtree(r["scratch"], ignore_errors=True)
     secs = r.get("t1", time.monotonic()) - r["t0"]
     log = r["log"]
@@ -348,6 +368,7 @@ def finish_step(r):
     return {"name": step["name"], "kind": step["kind"], "command": step["command"], "limit": step["limit"],
             "least": step["least"], "group": step["group"], "exit": code, "seconds": round(secs, 2),
             "tests_run": run if step["kind"] != "build" else None,
+            "cpu_user_seconds": cpu.get("user"), "cpu_system_seconds": cpu.get("sys"),
             "passed": passed, "failed": failed, "ignored": ignored, "timed_out": timed_out, "ok": ok,
             "known_failure": known_failure, "known": kn, "why": why, "log": log, "log_sha256": sha256(log)}
 
@@ -478,6 +499,9 @@ def main():
     # no __pycache__ beside the Python a step imports (the thinner's check 2 imports the
     # baseline's tools, whose package check counts every file there)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["CLAUDE_PAINT_TEST_PROFILE"] = "gate"
+    for name in ("CARGO_BUILD_JOBS", "RAYON_NUM_THREADS", "RUST_TEST_THREADS"):
+        env.setdefault(name, "2")
     target = target_dir()
     if target:
         env["CARGO_TARGET_DIR"] = target

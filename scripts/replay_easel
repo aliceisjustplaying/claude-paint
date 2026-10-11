@@ -11,11 +11,13 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo"
+profile=${CLAUDE_PAINT_TEST_PROFILE:-release}
+case "$profile" in release|gate) ;; *) echo "replay_easel: profile must be release or gate" >&2; exit 2 ;; esac
 case ${1:-} in
-  "") cargo build --release -q -p easel >&2 ;;
+  "") cargo build --profile "$profile" -q -p easel >&2 ;;
   --no-build) ;;
   *) echo "usage: $0 [--no-build]" >&2; exit 2 ;;
 esac
 target=$(cargo metadata --format-version 1 --no-deps | perl -MJSON::PP -0777 -ne 'print decode_json($_)->{target_directory}')
 [ -n "$target" ] || { echo "replay_easel: cargo metadata names no target directory" >&2; exit 1; }
-echo "$target/release/easel"
+echo "$target/$profile/easel"

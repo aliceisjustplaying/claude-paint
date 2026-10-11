@@ -4,12 +4,12 @@
 # each binary kept whole. Prints each binary's output and its "test result:"
 # line as cargo does; exits nonzero if a binary fails or none ran.
 #
-#   scripts/tests/cargo_tests.sh [-j N] [-- <test binary args>]
+#   scripts/tests/cargo_tests.sh [-j N] [--package paint|easel] [-- <test binary args>]
 #
 # `cargo test --workspace` runs the binaries one after another and the
 # doctests (all four are ignored) after them; this runs the same tests
 # (`--lib --bins --tests`: no doctests) in about half the time. -j: binaries
-# at once (default 4); each still runs its tests on all cores.
+# at once (CARGO_BUILD_JOBS, default 2); RUST_TEST_THREADS controls each binary.
 #
 # Not run here: the thinner's acceptance tests (the test binaries
 # thinner_physics and thinner_pigments, and the easel binary's
@@ -18,14 +18,22 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"
-jobs=4
-[ "${1:-}" = -j ] && { jobs=$2; shift 2; }
+jobs=${CARGO_BUILD_JOBS:-2}
+package=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -j) jobs=$2; shift 2 ;;
+    --package) package=$2; shift 2 ;;
+    *) break ;;
+  esac
+done
+case "$package" in ""|paint|easel) ;; *) echo "cargo_tests: package must be paint or easel" >&2; exit 2 ;; esac
 [ "${1:-}" = -- ] && shift
 work=$(mktemp -d "${TMPDIR:-/tmp}/cargo-tests.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-cargo test --workspace --lib --bins --tests --no-run --message-format=json 2>"$work/build.err" >"$work/build.json" || { cat "$work/build.err" >&2; exit 1; }
+cargo test --profile "${CLAUDE_PAINT_TEST_PROFILE:-test}" --workspace --lib --bins --tests --no-run --message-format=json 2>"$work/build.err" >"$work/build.json" || { cat "$work/build.err" >&2; exit 1; }
 # name, crate dir, executable; the slowest binaries first (notes/speed/timing)
-python3 - "$work/build.json" >"$work/bins" <<'EOF'
+python3 - "$work/build.json" "$package" >"$work/bins" <<'EOF'
 import json, os, sys
 order = ["paint/lib", "easel/bin", "session_integrity", "smoke", "determinism", "delivery", "ground_grain", "boxes"]
 bins = []
@@ -35,6 +43,8 @@ for line in open(sys.argv[1]):
     except ValueError:
         continue
     if m.get("reason") == "compiler-artifact" and m.get("executable") and m["profile"]["test"]:
+        if sys.argv[2] and os.path.basename(os.path.dirname(m["manifest_path"])) != sys.argv[2]:
+            continue
         t = m["target"]
         key = t["name"] + "/" + t["kind"][0] if t["kind"][0] in ("lib", "bin") else t["name"]
         bins.append((order.index(key) if key in order else len(order), key, os.path.dirname(m["manifest_path"]), m["executable"]))

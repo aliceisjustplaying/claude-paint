@@ -5,6 +5,7 @@ members = ["crates/paint", "crates/easel"]
 [profile.dev]
 incremental = true
 codegen-units = 256
+debug = "line-tables-only"
 
 [profile.release]
 opt-level = 3
@@ -21,6 +22,7 @@ codegen-units = 1
 opt-level = 2
 incremental = true
 codegen-units = 256
+debug = "line-tables-only"
 debug-assertions = true
 overflow-checks = true
 
@@ -31,3 +33,9 @@ overflow-checks = true
 inherits = "release"
 incremental = true
 codegen-units = 256
+
+[profile.gate]
+inherits = "release"
+codegen-units = 256
+debug-assertions = true
+overflow-checks = true

@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Run the iteration tier for committed, working-tree and untracked changes."""
+
+import argparse
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+import tempfile
+
+REPO = Path(__file__).resolve().parents[1]
+FULL = REPO / "notes/speed/test_lists/all.tsv"
+BUILDS = {
+    "cargo-test": {"build-test-binaries"},
+    "cargo-easel": {"build-test-binaries"},
+    "old-logs": {"build-gate-easel"},
+    "baseline-state": {"build-gate-easel"},
+    "thinner-quick": {"build-gate-easel", "build-test-binaries"},
+    "node-harness": {"painter-build-inness"},
+}
+STUDIO = {"studio-viewer", "studio-startup", "studio-gallery", "studio-replay"}
+ENGINE = {"cargo-test"}
+
+
+def changed_paths(base):
+    commands = [
+        ["diff", "--name-only", "-z", f"{base}...HEAD"],
+        ["diff", "--name-only", "-z", "HEAD"],
+        ["ls-files", "--others", "--exclude-standard", "-z"],
+    ]
+    paths = set()
+    for args in commands:
+        out = subprocess.check_output(["git", "-C", str(REPO), *args])
+        paths.update(os.fsdecode(p) for p in out.split(b"\0") if p)
+    return sorted(paths)
+
+
+def select(paths):
+    names, rust = set(), set()
+    for path in paths:
+        parts = Path(path).parts
+        if path in {"Cargo.toml", "Cargo.lock", ".cargo/config.toml"} or path.endswith("/Cargo.toml"):
+            return None, set()
+        if path.startswith("crates/"):
+            if len(parts) >= 4 and parts[2] == "tests":
+                if "thinner" in parts[3]:
+                    names.add("thinner-quick")
+                elif parts[3].endswith(".rs"):
+                    rust.add((parts[1], Path(parts[3]).stem))
+                elif "old_logs" in parts:
+                    names.add("old-logs")
+                else:
+                    names.update(ENGINE)
+            else:
+                names.update({"cargo-easel"} if parts[1] == "easel" else ENGINE)
+                if "thinner" in path or "solvent" in path:
+                    names.add("thinner-quick")
+                if any(word in path for word in ("palette", "build.rs", "boxes", "tubes")):
+                    names.update({"box-features", "box-tubes", "painter-build-inness"})
+        elif path.startswith("studio/"):
+            names.update(STUDIO)
+        elif path.startswith("harness/painter/"):
+            names.add("node-harness")
+        elif path.startswith("notes/round24/runner/"):
+            names.update({"runner-round24", "reader-scope"})
+        elif path.startswith("notes/thinner/baseline/"):
+            names.update({"baseline-package", "baseline-state", "thinner-quick", "state-compare"})
+        elif path == "notes/research/hopper_materials.md":
+            names.add("script-python")
+        elif path == "notes/golden_paths.txt":
+            names.add("safeguards")
+        elif path.startswith("scripts/"):
+            leaf = Path(path).name
+            stem = leaf.removesuffix(".sh").replace("_", "-")
+            if leaf in {"test", "test-changed", "test_changed.py", "test_runner.sh"}:
+                names.update({"test-runner", "test-changed"})
+            elif "thinner" in leaf:
+                names.update({"thinner-quick", "thinner-runner", "thinner-dump-fields", "script-python"})
+            elif leaf in {"archive_upload.py", "archive_sources.py", "test_archive_upload.py", "strip_sources", "test_strip_sources.py"}:
+                names.add("script-python")
+            elif leaf in {"lockrun", "lockrun.sh"}:
+                names.update({"lockrun", "test-runner"})
+            elif leaf in {"check_painting", "finish_painting", "replay_easel", "replay_clip", "replay_pace.py"}:
+                names.update({"replay-env", "check-live", "replay-clip"})
+            elif leaf in {"safeguards_lib.py", "merge_candidate", "test_candidate", "golden_approve", "safeguards.sh"}:
+                names.add("safeguards")
+            elif leaf in {"check_box_tubes", "box_tubes.sh"}:
+                names.add("box-tubes")
+            elif leaf in {"check_studio_names", "studio_names.sh"}:
+                names.add("studio-names")
+            elif stem in {"peek", "old-logs", "baseline-state", "replay-env", "check-live", "replay-clip", "box-features"}:
+                names.add(stem)
+            elif leaf in {"compare_images.py", "image_tolerance.py"}:
+                names.add("image-tolerance")
+            elif leaf == "cargo_tests.sh":
+                names.add("cargo-test")
+            else:
+                return None, set()
+        elif path.startswith("notes/speed/test_lists/") or path.startswith(".github/"):
+            return None, set()
+        elif path.endswith((".md", ".txt")) or path.startswith(("research/", "paintings/", "archive/collection/")):
+            continue
+        else:
+            return None, set()
+    for name in list(names):
+        names.update(BUILDS.get(name, set()))
+    if "cargo-test" in names:
+        names.discard("cargo-easel")
+    return names, rust
+
+
+def plan(paths):
+    names, rust = select(paths)
+    lines = [line.split("\t") for line in FULL.read_text().splitlines() if line and not line.startswith("#")]
+    quick = [line.split("\t") for line in (FULL.parent / "fast.tsv").read_text().splitlines() if line.startswith("script\tthinner-quick\t")]
+    if names is None:
+        final_only = {"slow-tests-by-name", "slow-thin-blend", "thinner-all"}
+        return [line[:6] for line in lines + quick if line[1] not in final_only], True
+    cargo = next(line for line in lines if line[1] == "cargo-test")
+    easel = [*cargo[:6]]
+    easel[1], easel[3], easel[5] = "cargo-easel", "1", "scripts/tests/cargo_tests.sh --package easel"
+    available = {line[1] for line in lines + quick + [easel]}
+    missing = names - available
+    if missing:
+        raise ValueError("test tier names missing from gate: " + ", ".join(sorted(missing)))
+    selected = [line[:6] for line in lines + quick + [easel] if line[1] in names]
+    if rust:
+        commands = [shlex.join(["cargo", "test", "--profile", "gate", "-p", package, "--test", target, "--no-run"]) for package, target in sorted(rust)]
+        selected.insert(0, ["build", "build-targeted-binaries", "600", "0", "-", " && ".join(commands)])
+    for package, target in sorted(rust):
+        command = shlex.join(["cargo", "test", "--profile", "gate", "-p", package, "--test", target])
+        selected.append(["cargo", f"{package}-{target}", "180", "1", "-", command])
+    return selected, False
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--base", default="origin/main")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--summary")
+    ap.add_argument("--logs")
+    ap.add_argument("paths", nargs="*", help="explicit changed paths; otherwise query Git")
+    args = ap.parse_args()
+    try:
+        paths = args.paths or changed_paths(args.base)
+        steps, broad = plan(paths)
+    except (subprocess.CalledProcessError, ValueError) as error:
+        ap.exit(2, f"test-changed: {error}\n")
+    print("test-changed: " + ("broad iteration tier for unknown or cross-cutting paths (not a final gate receipt)" if broad else "iteration tier (not a final gate receipt)"), flush=True)
+    print("changed paths: " + ", ".join(paths), flush=True)
+    for step in steps:
+        print(f"  {step[1]}: {step[5]}", flush=True)
+    if args.dry_run or not steps:
+        return 0
+    command = [str(REPO / "scripts/test")]
+    for option in ("summary", "logs"):
+        if getattr(args, option):
+            command.extend(["--" + option, getattr(args, option)])
+    with tempfile.TemporaryDirectory(prefix="test-changed-") as directory:
+        path = Path(directory) / "targeted.tsv"
+        path.write_text("\n".join("\t".join(step) for step in steps) + "\n")
+        return subprocess.call([*command, "--list", str(path)], cwd=REPO)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

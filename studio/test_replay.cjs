@@ -298,7 +298,7 @@ async function pollUpdate(v, i, replacement) {
     assert.equal(await typing.page.locator('.th.last script').count(), 0);
     report.checks.push('every typewriter prefix preserves markdown'); await typing.page.close();
     assert.deepEqual(report.pageErrors, []);
-    fs.writeFileSync(path.join(root, 'replay-verification.json'), JSON.stringify(report, null, 2) + '\n');
+    fs.writeFileSync(process.env.STUDIO_REPLAY_REPORT || path.join(root, 'replay-verification.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

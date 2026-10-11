@@ -140,7 +140,7 @@ wait(60 * 24 * 60)
 }
 
 /// One strip of the card, measured.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     pub load: f32,
     pub thinner: f32,
@@ -174,9 +174,17 @@ pub struct Cell {
 /// the evaporation time of the thickest paint on the card (whole minutes,
 /// plus one), and measure each strip.
 pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
-    let mut s = inness(width);
+    card_on(&mut card_canvas(width), parts, cells)
+}
+
+pub fn card_canvas(width: usize) -> Session {
+    let mut s = Session::replay_with(width, Palette::named_box("inness").unwrap()).unwrap();
     run(&mut s, CARD_CANVAS);
     run(&mut s, &card_bands());
+    s
+}
+
+pub fn card_on(s: &mut Session, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
     let n = cells.len();
     let col = 1000.0 / n as f32;
     let sw = col * 0.78;
@@ -200,7 +208,7 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
         let th = if t > 0.0 { format!(", thinner={t}") } else { String::new() };
         chunk += &format!("work(rect({x0}, 0, {}, {}), {{hand=\"body\", pile=pile{{{parts}{th}}}, load={load}, clip=true, seed={}}})\n", x1 - x0, 3.0 * BAND, 11 + c);
     }
-    run(&mut s, &chunk);
+    run(s, &chunk);
     let tau_now = |s: &Session| -> f64 {
         let cv = s.canvas().unwrap();
         let top = (0..n).map(|c| max_in(&cv, strip(c), |cv, x, y| cv.wet_um(x, y))).fold(0.0, f32::max);
@@ -210,7 +218,7 @@ pub fn card(width: usize, parts: &str, cells: &[(f32, f32)]) -> Vec<Cell> {
     let tau_after = tau_now(&s);
     let canvas_after = s.canvas().unwrap().solvent_total();
     let waited = (10.0 * tau_after).ceil() + 1.0;
-    run(&mut s, &format!("wait({waited})"));
+    run(s, &format!("wait({waited})"));
     let tau_at = tau_now(&s);
     (0..n)
         .map(|c| {

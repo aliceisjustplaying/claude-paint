@@ -34,8 +34,8 @@ fn wash(
                         py,
                         center.0,
                         center.1,
-                        radius.0 + tooth * 0.9,
-                        radius.1 + tooth * 0.9,
+                        radius.0 + tooth * 2.2,
+                        radius.1 + tooth * 2.2,
                     ));
                 }
             }

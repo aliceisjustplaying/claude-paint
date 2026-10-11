@@ -50,3 +50,36 @@ fn invalid_cell_size_is_rejected_by_checkpoint_validation() {
     s.cell_mm = 0.0;
     assert!(Watercolor::restore(&s.snapshot()).is_err());
 }
+
+#[test]
+fn a_fine_grid_keeps_a_conservative_dark_drying_rim() {
+    let mut s = Watercolor::new_at(96, 64, 7, 0.05);
+    s.paper.height.fill(0.5);
+    s.paper.sizing.fill(0.65);
+    s.paper.capacity.fill(0.22);
+    s.paper.clump.fill(1.0);
+    for y in 8..56 {
+        for x in 8..88 {
+            s.add(y * 96 + x, 0.15, [0.004, 0.0, 0.0]);
+        }
+    }
+    s.wait_seconds(170.0);
+    let (mut rim, mut center, mut nr, mut nc) = (0.0, 0.0, 0.0, 0.0);
+    for y in 8..56 {
+        for x in 8..88 {
+            let i = y * 96 + x;
+            let mass = s.active.deposited[i][0] + s.active.bound[i][0];
+            if !(11..85).contains(&x) || !(11..53).contains(&y) {
+                rim += mass;
+                nr += 1.0;
+            } else if (32..64).contains(&x) && (24..40).contains(&y) {
+                center += mass;
+                nc += 1.0;
+            }
+        }
+    }
+    let ratio = (rim / nr) / (center / nc);
+    assert!(ratio > 1.25, "rim/center {ratio}");
+    assert!(s.balance().pigment_error[0].abs() < 1e-10);
+    assert!(s.balance().water_error.abs() < 1e-7);
+}

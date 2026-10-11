@@ -34,16 +34,17 @@ for row, (name, label) in enumerate(cases):
         sheet.paste(image, (24 + column * 566, top + 32))
 sheet.save(root / "probe-sheet.png")
 
-strip = Image.new("RGB", (1376, 330), "#f4f1e9")
+strip = Image.new("RGB", (1376, 420), "#f4f1e9")
 d = ImageDraw.Draw(strip)
-d.text((18, 10), "BLOOM / physical seconds after a fresh-water drop", font=title, fill="#20251e")
+d.text((18, 10), "BLOOM / detail / physical seconds after a fresh-water drop", font=title, fill="#20251e")
 for i, time in enumerate([0, 0.25, 0.5, 1, 2, 4, 8]):
     x = 18 + i * 193
     d.text((x, 53), f"{time:g} s", font=font, fill="#20251e")
     for row, view in enumerate(["gallery", "raking"]):
         image = Image.open(root / f"bloom-{i}-{view}.ppm")
         image.save(root / f"bloom-{i}-{view}.png")
-        strip.paste(image, (x, 81 + row * 119))
+        image = image.crop((72, 32, 132, 84)).resize((180, 156), Image.Resampling.NEAREST)
+        strip.paste(image, (x, 81 + row * 165))
 strip.save(root / "bloom-strip.png")
 
 frames = []

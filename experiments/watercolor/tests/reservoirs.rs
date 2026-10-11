@@ -165,14 +165,14 @@ fn granulating_pigment_prefers_low_tooth() {
             let h = s.paper.height[i];
             if h < 0.4 {
                 nl += 1.0;
-                for p in 0..PIGMENTS {
-                    low[p] += s.active.deposited[i][p] + s.active.bound[i][p];
+                for (p, value) in low.iter_mut().enumerate() {
+                    *value += s.active.deposited[i][p] + s.active.bound[i][p];
                 }
             }
             if h > 0.6 {
                 nh += 1.0;
-                for p in 0..PIGMENTS {
-                    high[p] += s.active.deposited[i][p] + s.active.bound[i][p];
+                for (p, value) in high.iter_mut().enumerate() {
+                    *value += s.active.deposited[i][p] + s.active.bound[i][p];
                 }
             }
         }

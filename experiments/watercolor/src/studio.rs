@@ -2,7 +2,7 @@ use crate::{Watercolor, CELL_MM, PIGMENTS, TICK_NS};
 use mlua::{Lua, LuaOptions, StdLib, Table, UserData, UserDataMethods, Value};
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
@@ -102,6 +102,15 @@ impl Session {
     }
 
     pub fn check_balance(&self) -> Result<()> {
+        if !self.blotted_water.is_finite()
+            || self.blotted_water < 0.0
+            || self
+                .blotted_pigment
+                .iter()
+                .any(|v| !v.is_finite() || *v < 0.0)
+        {
+            return Err(error("invalid blot inventory"));
+        }
         let area = CELL_MM * CELL_MM;
         let Some(canvas) = &self.canvas else {
             return Ok(());
@@ -145,6 +154,7 @@ struct Context {
     state: Session,
     stage: PathBuf,
     frames: Option<Frames>,
+    rendered_frames: u64,
 }
 impl Context {
     fn canvas(&mut self) -> Result<&mut Watercolor> {
@@ -361,6 +371,19 @@ struct Handle {
 }
 impl UserData for Handle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("status", |lua, this, ()| {
+            let c = this.ctx.borrow();
+            let b = &c.state.brushes[&this.name];
+            let t = lua.create_table()?;
+            t.set("width_mm", b.width)?;
+            t.set("water_mm3", b.water)?;
+            let pigments = lua.create_table()?;
+            for (p, name) in ["ultramarine", "phthalo", "earth"].iter().enumerate() {
+                pigments.set(*name, b.pigment[p])?;
+            }
+            t.set("pigments", pigments)?;
+            Ok(t)
+        });
         methods.add_method("load", |_, this, t: Table| {
             let water = number(&t, "water", 0.0)?;
             if !(0.0..=100.0).contains(&water) {
@@ -426,8 +449,8 @@ impl UserData for Handle {
                 let before_p = canvas.ledger.pigment_lifted;
                 canvas.lift(i, coverage * 0.95);
                 brush.water += (canvas.ledger.water_lifted - before_w) * area;
-                for p in 0..PIGMENTS {
-                    brush.pigment[p] += (canvas.ledger.pigment_lifted[p] - before_p[p]) * area;
+                for (p, before) in before_p.iter().enumerate() {
+                    brush.pigment[p] += (canvas.ledger.pigment_lifted[p] - before) * area;
                 }
             }
             ctx.state.brushes.insert(this.name.clone(), brush);
@@ -481,7 +504,15 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             basename(&name)?;
             let owner = c.clone();
             let mut c = c.borrow_mut();
-            if !c.state.brushes.contains_key(&name) {
+            if let Some(existing) = c.state.brushes.get(&name) {
+                if let Some(width) = t.get::<Option<f64>>("width")? {
+                    if !width.is_finite() || (width - existing.width).abs() > 1e-12 {
+                        return Err(error(
+                            "an existing named brush keeps its width; choose a new name",
+                        ));
+                    }
+                }
+            } else {
                 let width = number(&t, "width", 1.0)?;
                 if !(0.1..=20.0).contains(&width) {
                     return Err(error("brush width must be 0.1..20 mm"));
@@ -548,7 +579,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 return Err(error("frames expects a table or false"));
             };
             let ns = (number(&t, "every", 0.25)? * 1e9).round();
-            if ns < TICK_NS as f64 || ns > 60e9 || (ns as u64) % TICK_NS != 0 {
+            if ns < TICK_NS as f64 || ns > 60e9 || !(ns as u64).is_multiple_of(TICK_NS) {
                 return Err(error(
                     "frame interval must be a positive multiple of 0.0625 seconds",
                 ));
@@ -577,8 +608,17 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let mut c = c.borrow_mut();
             let frames = c.frames.clone();
             let stage = c.stage.clone();
-            let canvas = c.canvas()?;
             let ns = (seconds * 1e9).round() as u64;
+            if let Some(f) = &frames {
+                let s = c.canvas()?;
+                let end = s.tick + (s.residual_ns + ns) / TICK_NS;
+                let count = end / f.cadence - s.tick / f.cadence;
+                if c.rendered_frames + count > 1024 {
+                    return Err(error("frame hook exceeds 1024 frames per chunk"));
+                }
+                c.rendered_frames += count;
+            }
+            let canvas = c.canvas()?;
             if let Some(f) = frames {
                 let mut failure = None;
                 canvas.wait_ns_observed(ns, f.cadence, |s| {
@@ -621,7 +661,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 canvas.lift(i, coverage);
             }
             let water = (canvas.ledger.water_lifted - before_w) * CELL_MM * CELL_MM;
-            let pigments = std::array::from_fn(|p| {
+            let pigments: [f64; PIGMENTS] = std::array::from_fn(|p| {
                 (canvas.ledger.pigment_lifted[p] - before_p[p]) * CELL_MM * CELL_MM
             });
             c.state.blotted_water += water;
@@ -643,7 +683,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             if !name.ends_with(".png") {
                 return Err(error("look filename must end .png"));
             }
-            let mode = t.get::<Option<String>>("mode")?.unwrap_or("gallery".into());
+            let mode = t.get::<Option<String>>("mode")?.unwrap_or("color".into());
             let width = t.get::<Option<u32>>("width")?.unwrap_or(1200);
             let crop = if let Some(r) = t.get::<Option<Table>>("crop")? {
                 Some([r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?])
@@ -695,6 +735,16 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let t = lua.create_table()?;
             t.set("water_supplied_mm3", c.state.water_supplied)?;
             t.set("conserved", true)?;
+            if let Some(s) = &c.state.canvas {
+                let b = s.balance();
+                t.set("surface_water_mm3", b.surface_water * CELL_MM * CELL_MM)?;
+                t.set("pore_water_mm3", b.capillary_water * CELL_MM * CELL_MM)?;
+                t.set(
+                    "dry",
+                    s.water.iter().chain(&s.capillary).all(|v| *v <= 1e-10)
+                        && s.suspended.iter().flatten().all(|v| *v <= 1e-10),
+                )?;
+            }
             Ok(t)
         })?,
     )?;
@@ -733,6 +783,42 @@ pub fn load(root: &Path) -> Result<Session> {
     }
 }
 
+pub fn restore(root: &Path, name: &str) -> Result<()> {
+    basename(name)?;
+    if !name.ends_with(".json") {
+        return Err(error("checkpoint filename must end .json"));
+    }
+    let lock = root.join(".writer-lock");
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock)
+        .map_err(error)?;
+    let _guard = Lock(lock);
+    load(root)?;
+    let state = Session::decode(&fs::read(root.join(name)).map_err(error)?)?;
+    let temp = root.join(format!(".restore-{}", std::process::id()));
+    if temp.exists() {
+        return Err(error(
+            "an interrupted restore file exists; inspect it before retrying",
+        ));
+    }
+    let result = (|| {
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(error)?;
+        file.write_all(&serde_json::to_vec(&state).map_err(error)?)
+            .map_err(error)?;
+        file.sync_all().map_err(error)?;
+        fs::rename(&temp, root.join("checkpoint.json")).map_err(error)
+    })();
+    let _ = fs::remove_file(temp);
+    result
+}
+
 pub fn run(root: &Path, source: &str) -> Result<Session> {
     let lock = root.join(".writer-lock");
     fs::OpenOptions::new()
@@ -758,6 +844,7 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
         state,
         stage: stage.clone(),
         frames: None,
+        rendered_frames: 0,
     }));
     let result = (|| {
         let lua = Lua::new_with(
@@ -765,6 +852,19 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
             LuaOptions::default(),
         )?;
         lua.set_memory_limit(128 * 1024 * 1024)?;
+        lua.globals().set("dofile", Value::Nil)?;
+        lua.globals().set("loadfile", Value::Nil)?;
+        let budget = Cell::new(0u32);
+        lua.set_hook(
+            mlua::HookTriggers::new().every_nth_instruction(10_000),
+            move |_, _| {
+                budget.set(budget.get() + 1);
+                if budget.get() > 200 {
+                    return Err(error("Lua instruction budget exceeded"));
+                }
+                Ok(mlua::VmState::Continue)
+            },
+        )?;
         install(&lua, ctx.clone())?;
         lua.load(source).set_name("watercolor chunk").exec()?;
         let mut c = ctx.borrow_mut();

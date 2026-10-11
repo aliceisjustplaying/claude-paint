@@ -123,3 +123,17 @@ fn directional_contact_extends_along_the_stroke_from_a_tooth_peak() {
     assert!(row > column * 3);
     assert!(s.balance().pigment_error[0].abs() < 1e-12);
 }
+
+#[test]
+fn named_checkpoint_can_resume_and_a_loop_is_bounded() {
+    let p = root();
+    studio::run(&p,"paper{size=3}; b=brush{name='b'}; b:load{water=1,pigments={earth=0.01}}; wait(0.123456789); save('before.json')").unwrap();
+    let saved = studio::Session::decode(&fs::read(p.join("before.json")).unwrap()).unwrap();
+    studio::run(&p, "wait(2)").unwrap();
+    studio::restore(&p, "before.json").unwrap();
+    assert_eq!(saved, studio::load(&p).unwrap());
+    let bytes = fs::read(p.join("checkpoint.json")).unwrap();
+    assert!(studio::run(&p, "while true do end").is_err());
+    assert_eq!(bytes, fs::read(p.join("checkpoint.json")).unwrap());
+    fs::remove_dir_all(p).unwrap();
+}

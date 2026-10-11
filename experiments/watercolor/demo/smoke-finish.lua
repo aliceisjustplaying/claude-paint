@@ -3,7 +3,7 @@ assert(clock()>300)
 glaze()
 field=brush{name="field-glaze",width=12}
 field:load{water=30,pigments={earth=0.5,phthalo=0.05}}
-field:wash{x=0,y=13,width=36,height=11,grade=0.8}
+field:stroke({{-2,19},{8,17.8},{18,18.7},{28,18},{38,19}},{grade=0.8})
 blot{x=23,y=15,width=4,height=1}
 wait(300)
 foreground=brush{name="foreground",width=2.2}

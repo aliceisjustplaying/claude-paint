@@ -7,6 +7,7 @@ import difflib
 import hashlib
 import html
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -15,6 +16,7 @@ import signal
 import subprocess
 import threading
 import uuid
+from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -58,6 +60,23 @@ def verify_brief(studio):
     if actual != expected:
         raise ValueError("Brief mismatch:\n" + diff)
     return diff
+
+
+def validate_model(model):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", model["id"]):
+        raise ValueError("Model ID must be a safe folder name")
+    for key in ("contextWindow", "maxTokens"):
+        if type(model[key]) is not int or model[key] < 1:
+            raise ValueError(f"{key} must be a positive integer")
+    for value in [model["dollar_cap"], *(model["cost"][key] for key in ("input", "output", "cacheRead", "cacheWrite"))]:
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            raise ValueError("Dollar cap and rates must be finite nonnegative numbers")
+    if model.get("key_env") and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", model["key_env"]):
+        raise ValueError("Credential must be an environment-variable name")
+    if model.get("base_url"):
+        url = urlsplit(model["base_url"])
+        if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError("Provider endpoint must be public HTTPS without credentials or query")
 
 
 def classify(text):
@@ -251,6 +270,13 @@ def main():
     config = json.loads(args.config.read_text())
     models = [{**config["defaults"], **config["routes"][m["route"]], **m} for m in config["models"]]
     selected = [next(m for m in models if m["id"] == key) for key in args.models.split(",")]
+    if len({m["id"] for m in selected}) != len(selected):
+        parser.error("Select each model once")
+    for model in selected:
+        try:
+            validate_model(model)
+        except ValueError as error:
+            parser.error(str(error))
     paid = any(m["route"] != "mock" for m in selected)
     if paid and not args.prepare and not args.allow_paid:
         parser.error("Live routes require --allow-paid; no provider was called")
@@ -279,7 +305,7 @@ def main():
     for path in sorted((REPO / "harness/painter").glob("*")):
         if path.suffix in (".ts", ".md"):
             manifest[str(path.relative_to(REPO))] = digest(path.read_bytes())
-    for name in ("extension.ts", "routes.ts", "policy.ts", "package-lock.json"):
+    for name in ("bench.py", "extension.ts", "routes.ts", "policy.ts", "package-lock.json"):
         manifest["harness/subject-bench/" + name] = digest((HERE / name).read_bytes())
     prompt_hash = digest(json.dumps(manifest, sort_keys=True).encode())
     (args.output / "prompt-manifest.json").write_text(json.dumps(manifest, indent=2))

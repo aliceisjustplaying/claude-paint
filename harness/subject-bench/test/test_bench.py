@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,6 +10,14 @@ spec.loader.exec_module(bench)
 
 
 class BenchTests(unittest.TestCase):
+    def test_invalid_budget_cannot_disable_guard(self):
+        config = json.loads((Path(__file__).parents[1] / "models.json").read_text())
+        model = {**config["defaults"], **config["routes"]["mock"], **config["models"][0]}
+        bench.validate_model(model)
+        for bad in (None, -1, float("nan"), "0.75"):
+            with self.assertRaises(ValueError):
+                bench.validate_model({**model, "dollar_cap": bad})
+
     def test_exact_brief_and_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             studio = Path(directory)

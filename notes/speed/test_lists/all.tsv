@@ -23,6 +23,7 @@ cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo
 script	thinner-all	300	1	^thinner acceptance --all: \d+ of \d+ required tests passed	THINNER_RAG_STUDY_DIR="$TMPDIR" scripts/test_thinner_acceptance --all	s
 script	lockrun	60	17	^ok \d+ -	scripts/tests/lockrun.sh
 script	replay-env	60	1	^replay_env: check_painting, finish_painting and replay_clip replayed	scripts/tests/replay_env.sh
+script	finish-policy	60	5	^finish_policy: .* passed	bash scripts/tests/finish_policy.sh
 script	check-live	60	1	^check_live: check_painting passed	scripts/tests/check_live.sh
 script	box-features	600	14	^box_features: .*: (\d+ passed|refused)$	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/bf" BOX_FEATURES_PROFILE=dev scripts/tests/box_features.sh	w
 cargo	smoke-replay-without-finish	300	1	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/ro" cargo test -p easel --no-default-features --features replay --test smoke	w
@@ -34,3 +35,5 @@ script	replay-clip	60	1	^replay_clip test: 	scripts/tests/replay_clip.sh	w
 script	box-tubes	60	1	^box_tubes: \d+ fixture easels checked	scripts/tests/box_tubes.sh	w
 script	studio-names	60	1	^studio_names: all fixture studios	scripts/tests/studio_names.sh	w
 script	peek	60	1	^peek: whole PNG	sh scripts/tests/peek.sh	w
+script	easel-mcp	60	14	^test_.* \.\.\. ok$	uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v	w
+script	easel-mcp-remote	60	16	^(test_.* \.\.\. ok|ok)$	uv run --no-project --script harness/easel_mcp/test_remote.py -v	w

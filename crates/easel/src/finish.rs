@@ -49,6 +49,9 @@ fn needs_dry(st: &S, what: &str) -> Result<()> {
 /// a number), crack and light the relief, each if asked. Byte for byte the chunk the script
 /// wrote before it asked the easel for it.
 pub fn chunk(coats: &str, varnish: bool, cracks: bool, relief: bool) -> String {
+    if !(varnish || cracks || relief) {
+        return String::new();
+    }
     let mut s = String::from(
         "-- finishing, applied after the session by scripts/finish_painting
 local function when_dry(f)
@@ -147,6 +150,11 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::session::Session;
+
+    #[test]
+    fn plain_finish_has_no_chunk() {
+        assert_eq!(super::chunk("0.4", false, false, false), "");
+    }
 
     // Finishing verbs brush over the whole picture, so every film must be
     // touch-dry first, however small the wet part; after a long wait they run.

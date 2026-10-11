@@ -1,10 +1,11 @@
-use crate::{Watercolor, CELL_MM, PIGMENTS, TICK_NS};
+use crate::{Watercolor, PIGMENTS, TICK_NS};
 use mlua::{Lua, LuaOptions, StdLib, Table, UserData, UserDataMethods, Value};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
     fs,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -79,15 +80,21 @@ impl Default for Session {
 
 impl Session {
     pub fn decode(bytes: &[u8]) -> Result<Self> {
-        let mut state: Self = serde_json::from_slice(bytes).map_err(error)?;
+        let state: Self = serde_json::from_slice(bytes).map_err(error)?;
         if state.format != "experimental-watercolor-studio-1" {
             return Err(error("unsupported studio checkpoint"));
         }
         if let Some(canvas) = &state.canvas {
-            if canvas.glazes.len() > 12 || canvas.tick > 1_000_000_000_000 {
+            if canvas.glazes.len() > 12
+                || canvas.tick > 1_000_000_000_000
+                || canvas
+                    .width
+                    .checked_mul(canvas.height)
+                    .is_none_or(|n| n > 1_500_000)
+            {
                 return Err(error("checkpoint exceeds experimental layer/clock limits"));
             }
-            state.canvas = Some(Watercolor::restore(&canvas.snapshot()).map_err(error)?);
+            canvas.validate().map_err(error)?;
         }
         for (name, brush) in &state.brushes {
             basename(name)?;
@@ -114,10 +121,10 @@ impl Session {
         {
             return Err(error("invalid blot inventory"));
         }
-        let area = CELL_MM * CELL_MM;
         let Some(canvas) = &self.canvas else {
             return Ok(());
         };
+        let area = canvas.cell_mm * canvas.cell_mm;
         let b = canvas.balance();
         let water = (b.surface_water + b.capillary_water + canvas.ledger.water_evaporated) * area
             + self.brushes.values().map(|b| b.water).sum::<f64>()
@@ -188,12 +195,16 @@ pub fn render(
         image::RgbImage::from_raw(canvas.width as u32, canvas.height as u32, rgb).unwrap();
     let height =
         ((width as f64 * canvas.height as f64 / canvas.width as f64).round() as u32).max(1);
-    let image = image::imageops::resize(
-        &original,
-        width,
-        height,
-        image::imageops::FilterType::Lanczos3,
-    );
+    let image = if width == original.width() && height == original.height() {
+        original
+    } else {
+        image::imageops::resize(
+            &original,
+            width,
+            height,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
     let image = if let Some([x, y, w, h]) = crop {
         if w == 0
             || h == 0
@@ -226,15 +237,16 @@ fn points(t: &Table) -> Result<Vec<[f64; 2]>> {
 }
 
 fn stroke_mask(canvas: &Watercolor, path: &[[f64; 2]], width: f64) -> Vec<(usize, f64, [f64; 2])> {
+    let cell_mm = canvas.cell_mm;
     let mut mask = Vec::new();
     let min_x = path.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min) - width;
     let max_x = path.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max) + width;
     let min_y = path.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min) - width;
     let max_y = path.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max) + width;
-    let x0 = (min_x / CELL_MM).floor().max(0.0) as usize;
-    let x1 = ((max_x / CELL_MM).ceil().max(0.0) as usize).min(canvas.width);
-    let y0 = (min_y / CELL_MM).floor().max(0.0) as usize;
-    let y1 = ((max_y / CELL_MM).ceil().max(0.0) as usize).min(canvas.height);
+    let x0 = (min_x / cell_mm).floor().max(0.0) as usize;
+    let x1 = ((max_x / cell_mm).ceil().max(0.0) as usize).min(canvas.width);
+    let y0 = (min_y / cell_mm).floor().max(0.0) as usize;
+    let y1 = ((max_y / cell_mm).ceil().max(0.0) as usize).min(canvas.height);
     for y in y0..y1 {
         for x in x0..x1 {
             let mut hits = 0;
@@ -242,8 +254,8 @@ fn stroke_mask(canvas: &Watercolor, path: &[[f64; 2]], width: f64) -> Vec<(usize
             for sy in 0..4 {
                 for sx in 0..4 {
                     let p = [
-                        (x as f64 + (sx as f64 + 0.5) / 4.0) * CELL_MM,
-                        (y as f64 + (sy as f64 + 0.5) / 4.0) * CELL_MM,
+                        (x as f64 + (sx as f64 + 0.5) / 4.0) * cell_mm,
+                        (y as f64 + (sy as f64 + 0.5) / 4.0) * cell_mm,
                     ];
                     let mut distance = (p[0] - path[0][0]).hypot(p[1] - path[0][1]);
                     for pair in path.windows(2) {
@@ -273,24 +285,25 @@ fn stroke_mask(canvas: &Watercolor, path: &[[f64; 2]], width: f64) -> Vec<(usize
 }
 
 fn rectangle(canvas: &Watercolor, t: &Table) -> Result<Vec<(usize, f64, [f64; 2])>> {
+    let cell_mm = canvas.cell_mm;
     let x0 = number(t, "x", 0.0)?;
     let y0 = number(t, "y", 0.0)?;
-    let w = number(t, "width", canvas.width as f64 * CELL_MM)?;
-    let h = number(t, "height", canvas.height as f64 * CELL_MM)?;
+    let w = number(t, "width", canvas.width as f64 * cell_mm)?;
+    let h = number(t, "height", canvas.height as f64 * cell_mm)?;
     if w <= 0.0 || h <= 0.0 {
         return Err(error("rectangle width and height must be positive"));
     }
     let mut mask = Vec::new();
     for y in 0..canvas.height {
         for x in 0..canvas.width {
-            let dx = (((x + 1) as f64 * CELL_MM).min(x0 + w) - (x as f64 * CELL_MM).max(x0))
-                .clamp(0.0, CELL_MM);
-            let dy = (((y + 1) as f64 * CELL_MM).min(y0 + h) - (y as f64 * CELL_MM).max(y0))
-                .clamp(0.0, CELL_MM);
+            let dx = (((x + 1) as f64 * cell_mm).min(x0 + w) - (x as f64 * cell_mm).max(x0))
+                .clamp(0.0, cell_mm);
+            let dy = (((y + 1) as f64 * cell_mm).min(y0 + h) - (y as f64 * cell_mm).max(y0))
+                .clamp(0.0, cell_mm);
             if dx * dy > 0.0 {
                 mask.push((
                     y * canvas.width + x,
-                    dx * dy / (CELL_MM * CELL_MM),
+                    dx * dy / (cell_mm * cell_mm),
                     [1.0, 0.0],
                 ));
             }
@@ -305,7 +318,7 @@ fn deposit(
     mask: &[(usize, f64, [f64; 2])],
     attrs: &Table,
 ) -> Result<()> {
-    let area = CELL_MM * CELL_MM;
+    let area = ctx.canvas()?.cell_mm.powi(2);
     let mut brush = ctx
         .state
         .brushes
@@ -438,7 +451,7 @@ impl UserData for Handle {
             let mut ctx = this.ctx.borrow_mut();
             let mut brush = ctx.state.brushes[&this.name].clone();
             let mask = stroke_mask(ctx.canvas()?, &points, brush.width);
-            let area = CELL_MM * CELL_MM;
+            let area = ctx.canvas()?.cell_mm.powi(2);
             let sum: f64 = mask.iter().map(|m| m.1).sum();
             if sum == 0.0 {
                 return Ok(());
@@ -474,19 +487,23 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             }
             let size = number(&t, "size", 36.0)?;
             let aspect = number(&t, "aspect", 1.5)?;
+            let cell_mm = number(&t, "cell", 0.05)?;
+            if !(0.025..=0.1).contains(&cell_mm) {
+                return Err(error("paper cell must be 0.025..0.1 mm"));
+            }
             if !(2.0..=60.0).contains(&size) || !(0.5..=3.0).contains(&aspect) {
                 return Err(error("paper size must be 2..60 mm, aspect 0.5..3"));
             }
             let kind = t
                 .get::<Option<String>>("kind")?
                 .unwrap_or("cold-press".into());
-            let w = (size / CELL_MM).round() as usize;
+            let w = (size / cell_mm).round() as usize;
             let h = (w as f64 / aspect).round() as usize;
-            if w * h > 500_000 {
-                return Err(error("experimental paper exceeds 500000 cells"));
+            if w * h > 1_500_000 {
+                return Err(error("experimental paper exceeds 1500000 cells"));
             }
             let seed = t.get::<Option<u64>>("seed")?.unwrap_or(71);
-            let mut paper = Watercolor::new(w, h, seed);
+            let mut paper = Watercolor::new_at(w, h, seed, cell_mm);
             match kind.as_str() {
                 "cold-press" => {}
                 "hot-press" => {
@@ -546,12 +563,13 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             }
             let mut c = c.borrow_mut();
             let canvas = c.canvas()?;
+            let cell_mm = canvas.cell_mm;
             let mut mask = Vec::new();
             let mut sum = 0.0;
             for yy in 0..canvas.height {
                 for xx in 0..canvas.width {
-                    let d = ((xx as f64 + 0.5) * CELL_MM - x).powi(2)
-                        + ((yy as f64 + 0.5) * CELL_MM - y).powi(2);
+                    let d = ((xx as f64 + 0.5) * cell_mm - x).powi(2)
+                        + ((yy as f64 + 0.5) * cell_mm - y).powi(2);
                     let weight = (-d / (2.0 * radius * radius)).exp();
                     if weight > 0.0001 {
                         mask.push((yy * canvas.width + xx, weight));
@@ -563,7 +581,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 return Err(error("drop is outside paper"));
             }
             for (i, w) in mask {
-                canvas.add(i, water * w / sum / (CELL_MM * CELL_MM), [0.0; PIGMENTS]);
+                canvas.add(i, water * w / sum / (cell_mm * cell_mm), [0.0; PIGMENTS]);
             }
             c.state.water_supplied += water;
             Ok(())
@@ -672,10 +690,10 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             for (i, coverage, _) in mask {
                 canvas.lift(i, coverage);
             }
-            let water = (canvas.ledger.water_lifted - before_w) * CELL_MM * CELL_MM;
-            let pigments: [f64; PIGMENTS] = std::array::from_fn(|p| {
-                (canvas.ledger.pigment_lifted[p] - before_p[p]) * CELL_MM * CELL_MM
-            });
+            let area = canvas.cell_mm.powi(2);
+            let water = (canvas.ledger.water_lifted - before_w) * area;
+            let pigments: [f64; PIGMENTS] =
+                std::array::from_fn(|p| (canvas.ledger.pigment_lifted[p] - before_p[p]) * area);
             c.state.blotted_water += water;
             for (p, mass) in pigments.iter().enumerate() {
                 c.state.blotted_pigment[p] += mass;
@@ -724,11 +742,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             }
             let c = c.borrow();
             c.state.check_balance()?;
-            fs::write(
-                c.stage.join(&name),
-                serde_json::to_vec(&c.state).map_err(error)?,
-            )
-            .map_err(error)?;
+            write_state(&c.stage.join(&name), &c.state)?;
             Ok(name)
         })?,
     )?;
@@ -752,8 +766,8 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             t.set("conserved", true)?;
             if let Some(s) = &c.state.canvas {
                 let b = s.balance();
-                t.set("surface_water_mm3", b.surface_water * CELL_MM * CELL_MM)?;
-                t.set("pore_water_mm3", b.capillary_water * CELL_MM * CELL_MM)?;
+                t.set("surface_water_mm3", b.surface_water * s.cell_mm.powi(2))?;
+                t.set("pore_water_mm3", b.capillary_water * s.cell_mm.powi(2))?;
                 t.set(
                     "dry",
                     s.water.iter().chain(&s.capillary).all(|v| *v <= 1e-10)
@@ -777,6 +791,12 @@ impl Drop for Lock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
     }
+}
+
+fn write_state(path: &Path, state: &Session) -> Result<()> {
+    let mut writer = BufWriter::new(fs::File::create(path).map_err(error)?);
+    serde_json::to_writer(&mut writer, state).map_err(error)?;
+    writer.flush().map_err(error)
 }
 
 pub fn init(root: &Path) -> Result<()> {
@@ -819,15 +839,15 @@ pub fn restore(root: &Path, name: &str) -> Result<()> {
         ));
     }
     let result = (|| {
-        use std::io::Write;
-        let mut file = fs::OpenOptions::new()
+        let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temp)
             .map_err(error)?;
-        file.write_all(&serde_json::to_vec(&state).map_err(error)?)
-            .map_err(error)?;
-        file.sync_all().map_err(error)?;
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &state).map_err(error)?;
+        writer.flush().map_err(error)?;
+        writer.get_ref().sync_all().map_err(error)?;
         fs::rename(&temp, root.join("checkpoint.json")).map_err(error)
     })();
     let _ = fs::remove_file(temp);
@@ -888,11 +908,7 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
         }
         c.state.check_balance()?;
         c.state.applied_sources.push(source.to_owned());
-        fs::write(
-            stage.join("checkpoint.json"),
-            serde_json::to_vec(&c.state).map_err(error)?,
-        )
-        .map_err(error)?;
+        write_state(&stage.join("checkpoint.json"), &c.state)?;
         for entry in fs::read_dir(&stage).map_err(error)? {
             let entry = entry.map_err(error)?;
             if entry.file_name() != "checkpoint.json" {
@@ -900,8 +916,14 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
             }
         }
         fs::rename(stage.join("checkpoint.json"), root.join("checkpoint.json")).map_err(error)?;
-        Ok(c.state.clone())
+        Ok(())
     })();
     let _ = fs::remove_dir_all(stage);
-    result
+    result.map(|()| {
+        Rc::try_unwrap(ctx)
+            .ok()
+            .expect("context still held")
+            .into_inner()
+            .state
+    })
 }

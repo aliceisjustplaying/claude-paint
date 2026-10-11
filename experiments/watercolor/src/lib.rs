@@ -108,6 +108,10 @@ fn correlate(values: &[f64], width: usize, height: usize, radius: usize) -> Vec<
 
 impl Paper {
     pub fn cold_press(width: usize, height: usize, seed: u64) -> Self {
+        Self::cold_press_at(width, height, seed, CELL_MM)
+    }
+
+    pub fn cold_press_at(width: usize, height: usize, seed: u64, cell_mm: f64) -> Self {
         let mut paper = Self {
             height: Vec::new(),
             sizing: Vec::new(),
@@ -123,12 +127,27 @@ impl Paper {
             }),
             ..fiber_paper::Paper::drawing(seed)
         };
-        let sheet = fiber_paper::lay(&support, 0, 0, width, height, CELL_MM as f32);
+        let sheet = fiber_paper::lay(&support, 0, 0, width, height, cell_mm as f32);
         let raw: Vec<_> = sheet.height.iter().map(|v| *v as f64).collect();
-        let fine = correlate(&raw, width, height, 2);
-        let broad = correlate(&raw, width, height, 5);
+        let fine = correlate(
+            &raw,
+            width,
+            height,
+            (0.12 / cell_mm).round().max(1.0) as usize,
+        );
+        let broad = correlate(
+            &raw,
+            width,
+            height,
+            (0.4 / cell_mm).round().max(1.0) as usize,
+        );
         let gram: Vec<_> = sheet.grammage.iter().map(|v| *v as f64).collect();
-        let gram = correlate(&gram, width, height, 3);
+        let gram = correlate(
+            &gram,
+            width,
+            height,
+            (0.3 / cell_mm).round().max(1.0) as usize,
+        );
         for y in 0..height {
             for x in 0..width {
                 let i = y * width + x;
@@ -137,7 +156,7 @@ impl Paper {
                     (0.5 + 0.48 * ((0.7 * fine[i] + 0.3 * broad[i]) / 20.0).tanh()).clamp(0.0, 1.0);
                 paper.height.push(h);
                 paper.sizing.push(
-                    0.3 + 0.58 * smooth(seed.wrapping_add(3), x * CELL_MM / 1.8, y * CELL_MM / 1.8),
+                    0.3 + 0.58 * smooth(seed.wrapping_add(3), x * cell_mm / 1.8, y * cell_mm / 1.8),
                 );
                 paper.capacity.push(
                     (support.caliper_um() as f64 * support.porosity as f64 / 1000.0
@@ -145,8 +164,7 @@ impl Paper {
                         .clamp(0.1, 0.4),
                 );
                 paper.clump.push(
-                    0.65 + 0.7
-                        * smooth(seed.wrapping_add(4), x * CELL_MM / 0.65, y * CELL_MM / 0.65),
+                    0.65 + 0.7 * smooth(seed.wrapping_add(4), x * cell_mm / 0.3, y * cell_mm / 0.3),
                 );
             }
         }
@@ -183,6 +201,7 @@ pub struct Ledger {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Watercolor {
     pub schema: u32,
+    pub cell_mm: f64,
     pub width: usize,
     pub height: usize,
     pub paper: Paper,
@@ -212,13 +231,19 @@ pub struct Balance {
 
 impl Watercolor {
     pub fn new(width: usize, height: usize, seed: u64) -> Self {
+        Self::new_at(width, height, seed, CELL_MM)
+    }
+
+    pub fn new_at(width: usize, height: usize, seed: u64, cell_mm: f64) -> Self {
         assert!(width > 1 && height > 1);
+        assert!(cell_mm.is_finite() && (0.025..=0.1).contains(&cell_mm));
         let n = width * height;
         Self {
-            schema: 2,
+            schema: 3,
+            cell_mm,
             width,
             height,
-            paper: Paper::cold_press(width, height, seed),
+            paper: Paper::cold_press_at(width, height, seed, cell_mm),
             water: vec![0.0; n],
             capillary: vec![0.0; n],
             suspended: vec![[0.0; PIGMENTS]; n],
@@ -297,7 +322,7 @@ impl Watercolor {
         let mut contact = 0.0;
         let mut weight = 0.0;
         for step in 0..9 {
-            let distance = step as f64 * 0.075 / CELL_MM;
+            let distance = step as f64 * 0.075 / self.cell_mm;
             let x = (cell % self.width) as f64 - direction[0] / norm * distance;
             let y = (cell / self.width) as f64 - direction[1] / norm * distance;
             let x = x.clamp(0.0, (self.width - 1) as f64);
@@ -312,7 +337,7 @@ impl Watercolor {
                     tooth += self.paper.height[yy * self.width + xx] * wx * wy;
                 }
             }
-            let reach = (0.6 / CELL_MM).round() as isize;
+            let reach = (0.6 / self.cell_mm).round() as isize;
             let mut datum = 0.0;
             for (dx, dy) in [
                 (-reach, -reach),
@@ -329,7 +354,7 @@ impl Watercolor {
                 datum += self.paper.height[yy * self.width + xx] / 8.0;
             }
             let t = ((tooth - datum - (0.035 - pressure * 0.06)) / 0.10).clamp(0.0, 1.0);
-            let w = (-distance * CELL_MM / 0.25).exp();
+            let w = (-distance * self.cell_mm / 0.25).exp();
             contact += t * t * (3.0 - 2.0 * t) * w;
             weight += w;
         }
@@ -370,8 +395,14 @@ impl Watercolor {
             self.residual_ns = residual;
             return;
         }
-        for _ in 0..steps {
-            self.step();
+        for done in 0..steps {
+            if !self.step() && every_ticks == 0 {
+                self.tick = self
+                    .tick
+                    .checked_add(steps - done - 1)
+                    .expect("clock overflow");
+                break;
+            }
             if every_ticks > 0 && self.tick.is_multiple_of(every_ticks) {
                 observer(self);
             }
@@ -385,11 +416,19 @@ impl Watercolor {
 
     pub fn restore(bytes: &[u8]) -> Result<Self, String> {
         let state: Self = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+        state.validate()?;
+        Ok(state)
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        let state = self;
         let n = state
             .width
             .checked_mul(state.height)
             .ok_or("grid overflow")?;
-        if state.schema != 2
+        if state.schema != 3
+            || !state.cell_mm.is_finite()
+            || !(0.025..=0.1).contains(&state.cell_mm)
             || state.width < 2
             || state.height < 2
             || state.residual_ns >= TICK_NS
@@ -453,35 +492,40 @@ impl Watercolor {
         {
             return Err("invalid watercolor state".into());
         }
-        Ok(state)
+        Ok(())
     }
 
     fn faces(&self) -> Vec<(usize, usize, bool)> {
-        let mut faces = Vec::with_capacity(self.width * self.height * 2);
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let i = y * self.width + x;
-                if x + 1 < self.width {
-                    faces.push((i, i + 1, true));
+        let mut faces = Vec::new();
+        for i in 0..self.water.len() {
+            for (j, horizontal) in [(i + 1, true), (i + self.width, false)] {
+                if (horizontal && i % self.width + 1 == self.width) || j >= self.water.len() {
+                    continue;
                 }
-                if y + 1 < self.height {
-                    faces.push((i, i + self.width, false));
+                if self.water[i] != 0.0
+                    || self.water[j] != 0.0
+                    || self.capillary[i] != 0.0
+                    || self.capillary[j] != 0.0
+                {
+                    faces.push((i, j, horizontal));
                 }
             }
         }
         faces
     }
 
-    fn step(&mut self) {
+    fn step(&mut self) -> bool {
         let wet = self.water.iter().any(|v| *v > 0.0);
         let pore = self.capillary.iter().any(|v| *v > 0.0);
-        if wet || pore || self.suspended.iter().flatten().any(|v| *v > 0.0) {
+        let active = wet || pore || self.suspended.iter().flatten().any(|v| *v > 0.0);
+        if active {
             let substeps = if wet { 4 } else { 1 };
             for _ in 0..substeps {
                 self.solve_substep(DT / substeps as f64);
             }
         }
         self.tick += 1;
+        active
     }
 
     fn solve_substep(&mut self, dt: f64) {
@@ -521,7 +565,12 @@ impl Watercolor {
                     * pore.clamp(0.6, 1.4))
                 .clamp(0.12, 2.2);
                 (-14.0 * dt).exp() * mobility * previous
-                    + dt * 390.0 * depth * mobility * permeability * (head_i - head_j)
+                    + dt * 390.0
+                        * (CELL_MM / self.cell_mm).powi(2)
+                        * depth
+                        * mobility
+                        * permeability
+                        * (head_i - head_j)
             } else {
                 0.0
             };
@@ -530,9 +579,9 @@ impl Watercolor {
             } else {
                 self.flux_y[i] = flux;
             }
-            if flux >= 0.0 {
+            if flux > 0.0 {
                 transfers.push((i, j, flux * dt, i, horizontal, 1.0));
-            } else {
+            } else if flux < 0.0 {
                 transfers.push((j, i, -flux * dt, i, horizontal, -1.0));
             }
         }
@@ -575,6 +624,7 @@ impl Watercolor {
                 }
                 let diff = dt
                     * (0.18 + 0.45 * (1.0 - properties.granulation))
+                    * (CELL_MM / self.cell_mm).powi(2)
                     * self.water[i].min(self.water[j])
                     * (self.suspended[i][p] / self.water[i] - self.suspended[j][p] / self.water[j]);
                 let (from, to, m) = if diff >= 0.0 {
@@ -582,8 +632,10 @@ impl Watercolor {
                 } else {
                     (j, i, -diff)
                 };
-                out[from] += m;
-                moves.push((from, to, m));
+                if m != 0.0 {
+                    out[from] += m;
+                    moves.push((from, to, m));
+                }
             }
             let mut change = vec![0.0; n];
             for (i, j, requested) in moves {
@@ -605,12 +657,15 @@ impl Watercolor {
         for &(i, j, _) in &faces {
             let d = dt
                 * 0.14
+                * (CELL_MM / self.cell_mm).powi(2)
                 * (self.capillary[i] / self.paper.capacity[i]
                     - self.capillary[j] / self.paper.capacity[j]);
             let (a, b, m) = if d >= 0.0 { (i, j, d) } else { (j, i, -d) };
-            cap_out[a] += m;
-            cap_in[b] += m;
-            cap_moves.push((a, b, m));
+            if m != 0.0 {
+                cap_out[a] += m;
+                cap_in[b] += m;
+                cap_moves.push((a, b, m));
+            }
         }
         for (i, j, m) in cap_moves {
             let limit = (self.capillary[i] / cap_out[i].max(1e-30))
@@ -625,6 +680,13 @@ impl Watercolor {
         }
         let edge_water = self.water.clone();
         for i in 0..n {
+            if self.water[i] == 0.0
+                && self.capillary[i] == 0.0
+                && self.suspended[i] == [0.0; PIGMENTS]
+            {
+                self.wet_front[i] = false;
+                continue;
+            }
             let saturation = self.capillary[i] / self.paper.capacity[i];
             let uptake = (dt * 0.016 * (1.0 - self.paper.sizing[i]) * (1.0 - saturation))
                 .min(self.water[i])
@@ -839,8 +901,8 @@ impl Watercolor {
             let dx = self.paper.height[right] - self.paper.height[left];
             let dy = self.paper.height[down] - self.paper.height[up];
             let shade = if let Some((azimuth, elevation, intensity)) = light {
-                let nx = -0.025 * dx / (2.0 * CELL_MM);
-                let ny = -0.025 * dy / (2.0 * CELL_MM);
+                let nx = -0.025 * dx / (2.0 * self.cell_mm);
+                let ny = -0.025 * dy / (2.0 * self.cell_mm);
                 let dot = (nx * azimuth.cos() * elevation.cos()
                     + ny * azimuth.sin() * elevation.cos()
                     + elevation.sin())

@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 VARIANTS = ["baseline", "body2", "lean3", "body3", "wild3"]
-SCENES = ["crossing", "spent", "dark", "wet", "thin-dark", "impasto-light", "lit-window"]
+SCENES = ["crossing", "spent", "dark", "wet", "thin-dark", "thin-loaded-dark", "loaded-light", "impasto-light", "lit-window"]
 LABELS = {"baseline": "Baseline / engine 5", "body2": "Body2 / engine 10", "lean3": "Lean3 / engine 12", "body3": "Body3 / engine 13", "wild3": "Wild3 / engine 14"}
 FONT_PATH = next((p for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/System/Library/Fonts/Helvetica.ttc"] if Path(p).exists()), None)
 FONT = ImageFont.truetype(FONT_PATH, 17) if FONT_PATH else ImageFont.load_default()
@@ -76,14 +76,14 @@ def fixtures(root):
     draw = ImageDraw.Draw(sheet)
     draw.text((16, 10), "Brush simulation 3 | native 1:1 crops | Gallery 115 / 55 / 1 beside Color", font=FONT, fill=INK)
     draw.text((16, 36), "Matched TOTAL final canvas net paint; factors and achieved errors retained." if matched else "Equal requested loads, identical gestures and seeds; actual input and residuals retained.", font=SMALL, fill=INK)
-    crops = {"crossing": (180, 80, 500, 260), "lit-window": (160, 60, 480, 240), "impasto-light": (160, 80, 480, 260)}
+    crops = {"crossing": (180, 80, 500, 260), "lit-window": (160, 60, 480, 240), "loaded-light": (160, 80, 480, 260), "impasto-light": (160, 80, 480, 260)}
     for column, variant in enumerate(primary):
         x = 16 + column * 664
         draw.text((x, 64), LABELS[variant], font=FONT, fill=INK)
         draw.text((x, 88), "Gallery light                                           Color", font=SMALL, fill=INK)
         for i, scene in enumerate(scenes):
             y = 112 + i * 218
-            roi = "light_core" if scene in ["lit-window", "impasto-light"] else "core"
+            roi = "light_core" if scene in ["lit-window", "loaded-light", "impasto-light"] else "core"
             value = next(r for r in values if r["scene"] == scene and r["variant"] == variant and r["view"] == "color" and r["roi"] == roi)
             draw.text((x, y), f"{scene} | Color Y50 {float(value['y_median']):.3f} | wet {float(value['wet_mean_um']):.1f} um | grad {float(value['gradient_mean_y_per_px']):.3f}", font=SMALL, fill=INK)
             for k, view in enumerate(["gallery", "color"]):

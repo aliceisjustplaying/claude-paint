@@ -55,6 +55,16 @@ Round 4 adds only `balance().max_surface_depth_mm` to the Lua result table; exis
 
 ## Probe harness
 
+### Round-5 matched swatches
+
+`demo/round5-swatches.lua` makes one 16×24 mm sheet at 0.05 mm per cell (320×480), seed 71. Its six rows are staining phthalo, pale ultramarine, dense ultramarine, earth, a wet color join and unchanged dry contact. Run this exact source once with a runner built from `d5c6a41` and once with the round-5 runner in separate fresh studios. Both Color and Gallery exports come from each run's final state. No simulation is rerun for a view or crop.
+
+```sh
+python3 experiments/watercolor/demo/round5_sheet.py CURRENT_STUDIO FIXED_STUDIO OUTPUT_DIR
+```
+
+The assembler produces a labeled two-column Gallery sheet, its Color version and six pixel-exact 1:1 Gallery row crops. It requires Pillow and DejaVu Sans. There are no Lua API or schema changes in round 5. Pin the runner when continuing a studio: old snapshots remain readable, but a new physics build changes their future trajectory.
+
 ```sh
 "$CARGO_TARGET_DIR/release/watercolor-probes" "$HOME/.capy/work/watercolor-3/probes"
 python3 experiments/watercolor/sheet.py "$HOME/.capy/work/watercolor-3/probes" "$HOME/.capy/drive/captain-stillwet/renders/watercolor-2"

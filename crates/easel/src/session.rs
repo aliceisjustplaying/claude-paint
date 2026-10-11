@@ -1974,6 +1974,32 @@ mod tests {
         s.run("assert(k:fullness() == full0)").unwrap();
     }
 
+    #[test]
+    #[cfg(all(tube_box, feature = "knife-1"))]
+    fn knife_1_options_and_dirty_reservoir_roll_back_with_a_failed_chunk() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(r#"k = knife{width=30, model="knife-1", flex=0.65}; p = pile{{"bone black", 1}}
+            k:load(p, 0.5); full0 = k:fullness()"#).unwrap();
+        let before = bits(&s);
+        let blade = format!("{:?}", s.st.borrow_mut().live_knives()[0].borrow());
+        for call in [
+            "k:lay({{200,300},{600,300}}, {tilt=91})",
+            "k:scrape({{200,300},{600,300}}, {tilt=0/0})",
+            "knife{model='knife-1', flex=math.huge}",
+            "knife{flex=0.5}",
+            "knife{model='unknown'}",
+            "k:lay({{200,300},{600,300}}, {tilt=30}); error('stop')",
+        ] {
+            assert!(s.run(call).is_err(), "{call}");
+            assert_eq!(before, bits(&s), "{call}");
+            assert_eq!(blade, format!("{:?}", s.st.borrow_mut().live_knives()[0].borrow()), "{call}");
+        }
+        s.run(r#"k:lay({{200,300},{600,300}}, {tilt=20, pressure={0.3,0.7}})
+            assert(k:fullness() < full0); k:wipe(); k:scrape({{200,300},{600,300}}, {tilt=75})
+            assert(k:fullness() > 0)"#).unwrap();
+    }
+
     /// A double-loaded, streaky pass paints something else than the plain
     /// pass, and the same again in a second session; a part-loaded brush too.
     #[test]

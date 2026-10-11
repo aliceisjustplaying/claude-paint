@@ -25,11 +25,12 @@ pub struct View {
     /// in degrees, see `Canvas::seen_lit`.
     pub light: Option<(f32, f32)>,
     pub museum: Option<f32>,
+    pub look_version: paint::LookVersion,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery,museum,museum-flat,museum-surface --light azimuth,elevation --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery,museum,museum-flat,museum-surface --look-version 1|2 --light azimuth,elevation --grid [step] --size N | --palette";
 
 pub const MUSEUM_FLAT: f32 = 0.08;
 pub const MUSEUM: f32 = 0.18;
@@ -37,6 +38,14 @@ pub const MUSEUM_SURFACE: f32 = 0.32;
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
+
+pub fn version_of(label: &str) -> Result<paint::LookVersion, String> {
+    match label {
+        "1" | "legacy" => Ok(paint::LookVersion::Legacy),
+        "2" | "gloss" => Ok(paint::LookVersion::Gloss),
+        _ => Err("--look-version: 1 (legacy) or 2 (gloss)".into()),
+    }
+}
 
 fn is_num(s: Option<&String>) -> bool {
     s.is_some_and(|s| s.parse::<f32>().is_ok())
@@ -49,8 +58,8 @@ impl View {
 
     pub fn seen(&self, c: &Canvas) -> Vec<Rgb> {
         match (self.museum, self.light) {
-            (Some(contrast), _) => c.seen_museum(contrast),
-            (_, Some((az, el))) => c.seen_lit(az, el, 1.0),
+            (Some(contrast), _) => c.seen_museum_version(contrast, self.look_version),
+            (_, Some((az, el))) => c.seen_lit_version(az, el, 1.0, self.look_version),
             _ => c.seen(),
         }
     }
@@ -111,6 +120,9 @@ impl View {
                     }
                 }
                 "--palette" => v.palette = true,
+                "--look-version" => {
+                    v.look_version = version_of(&next()?)?;
+                }
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
             i += 1;
@@ -388,7 +400,7 @@ pub const DISPLAY_PRESETS: [DisplayPreset; 3] = [
 
 impl View {
     const fn display(light: Option<(f32, f32)>, museum: Option<f32>) -> Self {
-        Self { light, museum, crop: None, value: false, squint: false, mirror: false, size: None, grid: None, palette: false }
+        Self { light, museum, look_version: paint::LookVersion::Legacy, crop: None, value: false, squint: false, mirror: false, size: None, grid: None, palette: false }
     }
 }
 
@@ -397,20 +409,27 @@ pub fn companions(c: &Canvas, views: &[(View, PathBuf)]) {
         return;
     }
     for preset in DISPLAY_PRESETS {
-        let seen = preset.view.seen(c);
-        for (v, out) in views.iter().filter(|(v, _)| v.display_eligible()) {
-            let result = (|| -> Result<(), String> {
-                let mut lit = v.clone();
-                lit.light = preset.view.light;
-                lit.museum = preset.view.museum;
-                let (_, _, png) = render_seen(c, &lit, Some(&seen))?;
-                let dir = out.parent().unwrap_or_else(|| Path::new("")).join(preset.folder);
-                let name = out.file_name().ok_or("display companion needs a PNG filename")?;
-                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-                std::fs::write(dir.join(name), png).map_err(|e| e.to_string())
-            })();
-            if let Err(e) = result {
-                eprintln!("warning: couldn't save {} companion for {}: {e}", preset.name, out.display());
+        for version in [paint::LookVersion::Legacy, paint::LookVersion::Gloss] {
+            if !views.iter().any(|(v, _)| v.display_eligible() && v.look_version == version) {
+                continue;
+            }
+            let mut lighting = preset.view.clone();
+            lighting.look_version = version;
+            let seen = lighting.seen(c);
+            for (v, out) in views.iter().filter(|(v, _)| v.display_eligible() && v.look_version == version) {
+                let result = (|| -> Result<(), String> {
+                    let mut lit = v.clone();
+                    lit.light = preset.view.light;
+                    lit.museum = preset.view.museum;
+                    let (_, _, png) = render_seen(c, &lit, Some(&seen))?;
+                    let dir = out.parent().unwrap_or_else(|| Path::new("")).join(preset.folder);
+                    let name = out.file_name().ok_or("display companion needs a PNG filename")?;
+                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    std::fs::write(dir.join(name), png).map_err(|e| e.to_string())
+                })();
+                if let Err(e) = result {
+                    eprintln!("warning: couldn't save {} companion for {}: {e}", preset.name, out.display());
+                }
             }
         }
     }
@@ -694,6 +713,23 @@ mod tests {
 
     fn out_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test")
+    }
+
+    #[test]
+    fn display_companions_honor_the_requested_look_version() {
+        let c = Canvas::new_window(32, 1.0, [0.02, 0.015, 0.01], None);
+        let dir = out_dir().join(format!("look-versions-{}", std::process::id()));
+        let views: Vec<_> = [paint::LookVersion::Legacy, paint::LookVersion::Gloss].into_iter().enumerate().map(|(i, version)| {
+            (View { look_version: version, ..View::default() }, dir.join(format!("{i}.png")))
+        }).collect();
+        companions(&c, &views);
+        for (view, path) in views {
+            for preset in DISPLAY_PRESETS {
+                let lit = View { look_version: view.look_version, ..preset.view };
+                assert_eq!(std::fs::read(dir.join(preset.folder).join(path.file_name().unwrap())).unwrap(), render(&c, &lit).unwrap().2);
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

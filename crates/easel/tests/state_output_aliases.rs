@@ -31,6 +31,49 @@ impl Drop for Temp {
 
 fn success(output: Output) { assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr)); }
 
+#[test]
+fn committed_material_exports_preserve_explicit_lighting_versions() {
+    let temp = Temp::new("look-versions");
+    let source = temp.0.join("sketch-output.lua");
+    std::fs::write(&source, "--@ engine 5\n--@ chunk 1\ncanvas{size=100, aspect=1.25, linen=15, seed=7, ground={{pile={{\"bone black\",1}}, um=120, apply=\"knife\"}}}\n").unwrap();
+    let store = temp.0.join("out/easel/sketch-output/state");
+    let direct = temp.0.join("direct.png");
+    let checkpoint = temp.0.join("saved.ckpt");
+    success(temp.command(&["run", source.to_str().unwrap(), "--width", "32", "--out", direct.to_str().unwrap(), "--state-store", store.to_str().unwrap(), "--gallery", "--look-version", "2", "--checkpoint", checkpoint.to_str().unwrap()]));
+    let pointer = std::fs::read(store.join("CURRENT")).unwrap();
+    let mut legacy = Vec::new();
+    for version in ["1", "2"] {
+        let output = temp.0.join(format!("state-{version}.png"));
+        let native = temp.0.join(format!("checkpoint-{version}.png"));
+        success(temp.command(&["render-state", store.to_str().unwrap(), output.to_str().unwrap(), "--mode", "gallery", "--look-version", version]));
+        success(temp.command(&["render-checkpoint", checkpoint.to_str().unwrap(), native.to_str().unwrap(), "--mode", "gallery", "--look-version", version]));
+        assert_eq!(std::fs::read(&output).unwrap(), std::fs::read(&native).unwrap());
+        if version == "1" {
+            legacy = std::fs::read(output).unwrap();
+        } else {
+            assert_eq!(std::fs::read(output).unwrap(), std::fs::read(&direct).unwrap());
+            assert_ne!(legacy, std::fs::read(&direct).unwrap());
+        }
+    }
+    success(temp.command(&["open", "sketch-output"]));
+    for version in ["1", "2"] {
+        let output = temp.0.join(format!("live-{version}.png"));
+        success(temp.command(&["-s", "sketch-output", "save", output.to_str().unwrap(), "--gallery", "--look-version", version]));
+        assert_eq!(std::fs::read(output).unwrap(), if version == "1" { legacy.clone() } else { std::fs::read(&direct).unwrap() });
+    }
+    assert_eq!(std::fs::read(store.join("CURRENT")).unwrap(), pointer);
+    success(temp.command(&["-s", "sketch-output", "close"]));
+    #[cfg(feature = "render-snapshot")]
+    {
+        let snapshot = temp.0.join("saved.view");
+        let output = temp.0.join("snapshot.png");
+        success(temp.command(&["snapshot-state", store.to_str().unwrap(), snapshot.to_str().unwrap()]));
+        success(temp.command(&["render-snapshot", snapshot.to_str().unwrap(), output.to_str().unwrap()]));
+        assert_eq!(std::fs::read(&output).unwrap(), legacy);
+        assert!(!temp.command(&["render-snapshot", snapshot.to_str().unwrap(), output.to_str().unwrap(), "--look-version", "2"]).status.success());
+    }
+}
+
 fn store_files(dir: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for directory in [dir.to_path_buf(), dir.join("objects"), dir.join("revisions")] {

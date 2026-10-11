@@ -15,7 +15,11 @@ export function reserve(model: any): number {
 }
 
 export function withinContext(payload: unknown, tokens: number): boolean {
-	const serialized = JSON.stringify(payload);
+	const serialized = JSON.stringify(payload, function (key, value) {
+		if (key === "url" && typeof value === "string" && value.startsWith("data:image/")) return "";
+		if (key === "data" && typeof value === "string" && this.type === "base64" && this.media_type?.startsWith("image/")) return "";
+		return value;
+	});
 	const images = (serialized.match(/"(?:type|mime_type|mimeType)"\s*:\s*"(?:image|image_url|input_image|image\/[^" ]+)"/g) ?? []).length;
 	return Buffer.byteLength(serialized, "utf8") + images * 65536 <= tokens;
 }

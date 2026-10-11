@@ -8,7 +8,7 @@ CARGO_TARGET_DIR="$HOME/.capy/work/wc-pilot-target" cargo run --release --manife
 python3 experiments/watercolor/sheet.py "$HOME/.capy/work/watercolor-1/renders"
 ```
 
-The sheet assembler requires Pillow and DejaVu Sans. The Rust harness writes PPM, conservation CSV and 129 intermediate bloom frames. The Python assembler emits PNG sheets, a Markdown conservation table and a slow GIF. The GIF maps each 1/16 physical second to 1/8 presentation second. Changing that duration changes no material state. This is an empirical Curtis et al. 1997-inspired model, not a replication of their full shallow-water solver or a calibrated pigment catalog.
+The sheet assembler requires Pillow and DejaVu Sans. The Rust harness writes PPM, conservation CSV and 129 intermediate bloom frames. The Python assembler emits PNG sheets, a Markdown conservation table and a slow GIF. The GIF maps each 1/16 physical second to 120 ms of presentation time (1.92 times slower, using GIF's 10 ms time quantum). Changing that duration changes no material state. This is an empirical Curtis et al. 1997-inspired model, not a replication of their full shallow-water solver or a calibrated pigment catalog.
 
 ## State and units
 

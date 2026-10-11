@@ -54,7 +54,7 @@ for path in sorted((root / "slow-bloom").glob("*-gallery.ppm")):
     frames.append(image)
 if frames:
     frames[0].save(root / "bloom-slow.gif", save_all=True, append_images=frames[1:],
-                   duration=125, loop=0, optimize=False, disposal=2)
+                   duration=120, loop=0, optimize=False, disposal=2)
 
 rows = list(csv.DictReader((root / "conservation.csv").open()))
 report = ["# Conservation", "", "Water is in pixel-mm (multiply by 0.04 mm² for mm³). Pigment is arbitrary areal mass times pixels, not calibrated grams.",

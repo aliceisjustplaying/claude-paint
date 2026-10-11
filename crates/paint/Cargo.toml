@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+experimental-panel = []
 # `tally::hand_hook`: a callback after each slice of hand time goes on the
 # clock (easel's replay build uses it for hand-time frames). Off by default,
 # so the painter build has no hook at all.
@@ -34,3 +35,7 @@ mixbox = "2"
 noise = "0.9"
 rayon = "1"
 tiny-skia = "0.12"
+
+[[example]]
+name = "panel_probe"
+required-features = ["experimental-panel"]

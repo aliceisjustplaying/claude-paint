@@ -40,6 +40,8 @@ pub mod style;
 pub mod hand;
 pub mod outline;
 pub mod surface;
+#[cfg(feature = "experimental-panel")]
+pub mod panel;
 pub mod thinner;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};

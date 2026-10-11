@@ -212,6 +212,8 @@ pub struct Canvas {
     /// `Cracks::aged` fits its craquelure to).
     pub(crate) ground_um: f32,
     pub(crate) linen: Option<Linen>,
+    #[cfg(feature = "experimental-panel")]
+    pub(crate) panel: Option<Box<crate::panel::State>>,
     /// Physical size: millimeters per unit (the canvas is 1000 units wide).
     pub(crate) mm_per_unit: f32,
     /// Wet paint on top of the dry picture.
@@ -271,6 +273,8 @@ impl Canvas {
             absorb_any: false,
             ground_um: 0.0,
             linen: None,
+            #[cfg(feature = "experimental-panel")]
+            panel: None,
             mm_per_unit: 0.7,
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
@@ -302,6 +306,8 @@ impl Canvas {
 
     /// Use a woven linen support.
     pub fn with_linen(mut self, l: Linen) -> Self {
+        #[cfg(feature = "experimental-panel")]
+        { self.panel = None; }
         self.linen = Some(l);
         self.build_support();
         self

@@ -70,6 +70,8 @@ const MAGIC10: &[u8; 8] = b"PAINTC10";
 const MAGIC11: &[u8; 8] = b"PAINTC11";
 /// Engine 4 materials followed by the raw canvas's soak section.
 const MAGIC12: &[u8; 8] = b"PAINTC12";
+#[cfg(feature = "experimental-panel")]
+const MAGIC_PANEL: &[u8; 8] = b"PAINTP01";
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
@@ -187,6 +189,8 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC10 => 10,
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
+        #[cfg(feature = "experimental-panel")]
+        m if m == MAGIC_PANEL => 101,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -210,6 +214,16 @@ impl Canvas {
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
         }
+        #[cfg(feature = "experimental-panel")]
+        if let Some(s) = &self.panel {
+            if self.engine < 4 || self.soak.is_some() || self.linen.is_some() || s.oil_absorbed.len() != self.height.len() {
+                return Err(bad("checkpoint panel is incompatible with engine, linen or fabric"));
+            }
+            let cap = s.descriptor.oil_capacity_coats();
+            if !s.oil_absorbed.iter().zip(&self.absorb).all(|(&a, &r)| a.is_finite() && r.is_finite() && a >= 0.0 && r >= 0.0 && a + r <= cap + 1e-5) {
+                return Err(bad("checkpoint panel oil inventory is invalid"));
+            }
+        }
         let version = match (self.engine, self.soak.is_some()) {
             (3, true) => 10,
             (3, false) => 9,
@@ -217,7 +231,11 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
+        #[cfg(feature = "experimental-panel")]
+        let version = if self.panel.is_some() { 101 } else { version };
         w.write_all(match version {
+            #[cfg(feature = "experimental-panel")]
+            101 => MAGIC_PANEL,
             12 => MAGIC12,
             11 => MAGIC11,
             10 => MAGIC10,
@@ -321,6 +339,14 @@ impl Canvas {
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
             write_soak(w, s)?;
+        }
+        #[cfg(feature = "experimental-panel")]
+        if let Some(s) = &self.panel {
+            use crate::panel::{Ground, Topography};
+            put_u64(w, match s.descriptor.topography { Topography::Smooth => 0, Topography::QuarterSawnOak => 1 })?;
+            put_u64(w, match s.descriptor.ground { Ground::ChalkGlue => 0, Ground::OilPrimed => 1 })?;
+            put_u64(w, s.descriptor.seed)?;
+            put_all(w, s.oil_absorbed.iter().copied())?;
         }
         Ok(())
     }
@@ -494,6 +520,25 @@ impl Canvas {
             c.soak = Some(Box::new(read_soak(r, n)?));
             if r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
+            }
+        }
+        #[cfg(feature = "experimental-panel")]
+        if version == 101 {
+            use crate::panel::{Ground, Panel, State, Topography};
+            if c.linen.is_some() {
+                return Err(bad("checkpoint panel cannot have linen"));
+            }
+            let topography = match get_u64(r)? { 0 => Topography::Smooth, 1 => Topography::QuarterSawnOak, _ => return Err(bad("checkpoint panel topography is invalid")) };
+            let ground = match get_u64(r)? { 0 => Ground::ChalkGlue, 1 => Ground::OilPrimed, _ => return Err(bad("checkpoint panel ground is invalid")) };
+            let descriptor = Panel { topography, ground, seed: get_u64(r)? };
+            let oil_absorbed = get_all(r, n)?;
+            let cap = descriptor.oil_capacity_coats();
+            if !oil_absorbed.iter().zip(&c.absorb).all(|(&a, &r)| a.is_finite() && a >= 0.0 && a + r <= cap + 1e-5) {
+                return Err(bad("checkpoint panel oil inventory is invalid"));
+            }
+            c.panel = Some(Box::new(State { descriptor, oil_absorbed }));
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint panel has trailing data"));
             }
         }
         Ok((c, header))

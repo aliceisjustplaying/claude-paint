@@ -230,6 +230,11 @@ impl Canvas {
     /// Lay the bare support: woven linen height in µm, averaged over each
     /// pixel's footprint so threads finer than a pixel don't alias.
     pub(crate) fn build_support(&mut self) {
+        #[cfg(feature = "experimental-panel")]
+        if self.panel.is_some() {
+            self.build_panel();
+            return;
+        }
         let Some(l) = self.linen else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);

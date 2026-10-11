@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [features]
+experimental-panel = ["paint/experimental-panel"]
 default = ["replay", "finish"]
 # The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
 # `easel run` (with --dump-surface) and `hash-probe`. Without it (the

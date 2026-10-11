@@ -1731,7 +1731,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
-                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "ground", "seed"] }, "canvas")?;
+                #[cfg(not(feature = "experimental-panel"))]
+                let keys: &[&str] = if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "ground", "seed"] };
+                #[cfg(feature = "experimental-panel")]
+                let keys: &[&str] = if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw", "support", "topography"] } else { &["size", "aspect", "linen", "ground", "seed", "support", "topography"] };
+                check_keys(&o, keys, "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");
                 }
@@ -1743,21 +1747,63 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(0.2..=5.0).contains(&aspect) {
                     return err("canvas: aspect is width / height, between 0.2 and 5");
                 }
-                let (warp, weft) = pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}})\n{CANVAS_HELP}")))?;
+                #[cfg(not(feature = "experimental-panel"))]
+                let panel = false;
+                #[cfg(feature = "experimental-panel")]
+                let panel = match o.get::<Option<String>>("support")?.as_deref() {
+                    None | Some("linen") => false,
+                    Some("panel") => true,
+                    _ => return err("experimental canvas: support must be linen or panel"),
+                };
+                #[cfg(feature = "experimental-panel")]
+                if panel && (!matches!(o.get::<Value>("linen")?, Value::Nil) || !matches!(o.get::<Value>("raw")?, Value::Nil)) {
+                    return err("experimental canvas: panel cannot also have linen or raw fabric");
+                }
+                #[cfg(feature = "experimental-panel")]
+                if !panel && !matches!(o.get::<Value>("topography")?, Value::Nil) {
+                    return err("experimental canvas: topography requires support=panel");
+                }
+                let (warp, weft) = if panel { (15.0, 13.0) } else {
+                    pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}})\n{CANVAS_HELP}")))?
+                };
                 if !((4.0..=60.0).contains(&warp) && (4.0..=60.0).contains(&weft)) {
                     return err("canvas: linen threads per cm, 4 to 60");
                 }
                 let tubes = st.borrow().tubes.clone();
                 // a raw canvas: no ground, the bare cloth
                 let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
-                let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
+                let ground = if panel || fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
                 let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
                 if let Some(f) = &fabric {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
+                #[cfg(feature = "experimental-panel")]
+                let descriptor = if panel {
+                    use paint::panel::{Ground, Panel, Topography};
+                    if tubes.engine < 4 {
+                        return err("experimental canvas: panel requires engine 4 or later");
+                    }
+                    let ground = match o.get::<Option<String>>("ground")?.as_deref() {
+                        None | Some("chalk") => Ground::ChalkGlue,
+                        Some("oil") => Ground::OilPrimed,
+                        _ => return err("experimental canvas: panel ground must be chalk or oil"),
+                    };
+                    let topography = match o.get::<Option<String>>("topography")?.as_deref() {
+                        None | Some("smooth") => Topography::Smooth,
+                        Some("oak") => Topography::QuarterSawnOak,
+                        _ => return err("experimental canvas: panel topography must be smooth or oak"),
+                    };
+                    Some(Panel { ground, topography, seed })
+                } else { None };
+                #[cfg(not(feature = "experimental-panel"))]
                 let mut c = sty.prepare(width, aspect, seed);
+                #[cfg(feature = "experimental-panel")]
+                let mut c = match descriptor {
+                    Some(p) => sty.prepare_panel(width, aspect, p),
+                    None => sty.prepare(width, aspect, seed),
+                };
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }
@@ -1778,6 +1824,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                         None => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)),
                         Some(f) => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, raw={:?}, seed={seed}", fmt_num(mm), f.name),
                     });
+                    #[cfg(feature = "experimental-panel")]
+                    if let Some(p) = descriptor {
+                        s.setup = Some(format!("size={}, aspect={aspect}, support=panel, ground={:?}, topography={:?}, seed={seed}", fmt_num(mm), p.ground, p.topography));
+                    }
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)

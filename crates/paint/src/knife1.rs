@@ -334,7 +334,8 @@ impl Canvas {
                             d * mm_px * 0.035,
                             seed ^ 0xD2A6,
                         ) - 0.5;
-                        (pr + flex * pr.sqrt() * (0.75 * bend + 0.18 * drag)).clamp(0.0, 1.0)
+                        (pr + flex * pr.sqrt() * (0.75 * bend + 0.5 * smoothstep(0.05, 0.25, drag)))
+                            .clamp(0.0, 1.0)
                     } else {
                         pr
                     }

@@ -38,6 +38,13 @@ scripts/test --all                    # every required check (notes/speed/SKIPPE
   `R16_BRANCH=round-20 scripts/export_r16_studio <profile> <dest>`. Runners run
   from a copy in `~/tmp/gallery-fcf9c110/rN/`, with their run data in `run/`
   there (`run/studios.json` maps lanes to the studios, `~/src/a/paint-studio-<hex>`).
+- The shared runner finish step is `scripts/finish_painting`. The lane's artist
+  profile selects its studio box in `scripts/export_r16_studio`, and the session
+  records that box in the Lua log's `--@ box` header. Only `friedrich` gets
+  automatic varnish and cracks. Other finished logs are byte-identical copies
+  of the painter's log, with no extra drying or finishing chunk. Historical
+  runner copies and round tags retain their original behavior; new rounds must
+  point `FINISH` at a checkout containing this policy.
 - The studio viewer (`studio/studio.py`) shows painters at work, live or
   replayed, from their pi session logs. Two run under launchd, a tailnet one
   and a public one behind the Tailscale Funnel (`notes/launchd/README.md`);

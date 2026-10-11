@@ -89,6 +89,7 @@ async function fileReady(file) {
     await page.clock.fastForward(6000);
     await page.clock.resume();
     await ready(2);
+    await page.waitForFunction(() => [...document.querySelectorAll('#strip img')].every(im => im.complete && im.naturalWidth > 0));
     assert.equal(await page.evaluate(() => liveRevision), outageRevision);
     const second = await page.locator('#img').getAttribute('src');
     assert.notEqual(second, first);
@@ -115,7 +116,7 @@ async function fileReady(file) {
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(out, 'done'), 'done');
     assert.equal(await exited, 0, log);
-    fs.writeFileSync(path.join(out, 'browser-receipt.json'), JSON.stringify({ followed_without_reload:true, gallery_default:true, immutable_image_urls:true, interrupted_fetch_retains_previous_view:true, retry_recovers:true, image_only_outage_simulated_ms:200000, image_recovery_without_manifest_change:true, stale_source_response_rejected:true, replay_works:true, stream_works:true, api_requests:0, browser_errors:errors, manifest_requests:requests.filter(u => u.endsWith('/manifest.json')).length, screenshots:['phase1-gallery.png','phase2-gallery.png','stream-gallery.png'] }, null, 2));
+    fs.writeFileSync(path.join(out, 'browser-receipt.json'), JSON.stringify({ followed_without_reload:true, gallery_default:true, immutable_image_urls:true, interrupted_fetch_retains_previous_view:true, retry_recovers:true, image_only_outage_simulated_ms:200000, image_recovery_without_manifest_change:true, thumbnail_recovery:true, stale_source_response_rejected:true, replay_works:true, stream_works:true, api_requests:0, browser_errors:errors, manifest_requests:requests.filter(u => u.endsWith('/manifest.json')).length, screenshots:['phase1-gallery.png','phase2-gallery.png','stream-gallery.png'] }, null, 2));
     console.log('live studio: real cloud easel followed two hosted Gallery light snapshots without reload');
   } finally {
     if (browser) await browser.close();

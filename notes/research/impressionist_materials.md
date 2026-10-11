@@ -124,7 +124,7 @@ lake, yellow lake and vine black are estimates.
 - **[TB28]** Roy, A., "Monet's Palette in the Twentieth Century: Water-Lilies and Irises", *National Gallery Technical Bulletin* 28 (2007). The passage on the medium (p.61) read. https://www.nationalgallery.org.uk/upload/pdf/roy2007.pdf
 - **[BUT]** Butler, M. H., on the materials of ten Cézannes of 1877–1906, AIC preprints (1984). Read through secondary summaries.
 - **[OTE]** Otero, V. et al., on barium, zinc and strontium yellows, *Heritage Science* 5:46 (2017).
-- **[NEW]** Newfields (Indianapolis Museum of Art), catalogue of its Pissarro paintings.
+- **[NEW]** Newfields (Indianapolis Museum of Art), catalog of its Pissarro paintings.
 - **[KEE]** Keegan, K., on Renoir, AIC (2015). Read through secondary summaries.
 - **[POZ]** Pozzi, F. et al., on red lakes in French paint of the late 19th century, *Journal of Raman Spectroscopy* (2014).
 - **[MM22] Unverified.** The research pass recorded a 2022 paper in *Microscopy and Microanalysis* on a Monet of 1887–89 but no authors, title or locator. Findings marked [MM22, unverified] have not been verified and should not be treated as established analysis.

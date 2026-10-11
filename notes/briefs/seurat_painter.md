@@ -47,7 +47,7 @@ Don't copy a known picture: find your own subject and give it his order.
    is easel craft, not a claimed timetable from Seurat.
 
 7. **Look from near and far.** At a distance the colors integrate; close up the
-   paint stays divided. Tiny complementary touches can become grey rather than
+   paint stays divided. Tiny complementary touches can become gray rather than
    brighter [NG24 p.29]. Test sizes and densities over your intended underlayer
    on scratch before committing. Don't blend the final surface merely to make
    a crop smooth.

@@ -30,7 +30,7 @@ findings into one palette used unchanged throughout his career.
   touches, not miniature fully dotted paintings [NG24 Table 1, pp.19–20, 27–28].
 - **Finished supports.** The examined exhibition pictures use plain-weave linen
   (the identification of the fine cloth in *Gravelines* is qualified in the
-  table). *Bathers* has a commercially applied greyish-white lead-white/carbon-
+  table). *Bathers* has a commercially applied grayish-white lead-white/carbon-
   black ground. Other grounds include white lead paint, chalk and double
   preparations. All analytically examined grounds in this survey are oil-bound
   [NG24 Table 1, pp.18–19]. A pure white ground is not a universal early rule.
@@ -69,7 +69,7 @@ ban on mixing paint or tinting it with white [NG24 pp.22–23, 30–31].
 
 ## 3. Oil and surface
 
-Lead white was usually in poppy oil in the analysed samples; red lakes and
+Lead white was usually in poppy oil in the analyzed samples; red lakes and
 vermilion predominantly in linseed; blues sometimes in poppy; greens/yellows
 usually in linseed. Some later paints contain heat-bodied oil, chiefly linseed.
 The suggestion that its handling suited pointillism is the authors'
@@ -127,7 +127,7 @@ The term *divisionism* concerns the division of color into separate touches;
   density, not a recovered formula from Seurat.
 - **No monotonic “later = smaller” rule.** The small 1888 *Poseuses* version is
   broader/looser than the large 1886–88 version. Signac criticized the latter's
-  tiny background dots for making it grey [NG24 p.29].
+  tiny background dots for making it gray [NG24 p.29].
 - **Absolute dimensions are uncertain here.** The sources read do not give a
   representative measured distribution of dot diameters, nearest-neighbor
   distances or dots/cm². Magnified details have stated magnifications but are
@@ -158,7 +158,7 @@ color become particularly important [NG24 pp.30–31].
 **Optical mixing is not emitted-light mixing.** Adjacent touches remain actual
 pigmented paint. At a distance their reflected colors integrate, while
 simultaneous contrast can intensify their appearance where they remain resolved.
-Very small complementary dots can also average toward grey; the technical
+Very small complementary dots can also average toward gray; the technical
 authors explicitly note the difference between the theory's promise and the
 paintings' effect [NG24 pp.13–15, 29–30]. Do not simulate this by RGB gradients
 or promise that blue and yellow dots necessarily become a brilliant green.
@@ -198,7 +198,7 @@ cobalt blue → cobalt blue; synthetic French ultramarine → ultramarine blue;
 viridian → viridian; emerald green → emerald green.
 
 The earth and black choices support early studies, not a prescription for
-late work. The lakes use one practical proxy rather than an exact analysed
+late work. The lakes use one practical proxy rather than an exact analyzed
 batch. The work-specific Gravelines exceptions are outside this box's
 core-and-early-study remit; the method note declares mixed violet as an
 approximation where needed. See `notes/r20/TUBES.md` for the box decision.

@@ -49,6 +49,10 @@ and arguments. `look` returns PNG image content inline with its caption.
 `wait(minutes)` remains Lua inside `paint`. See
 [the adapter README](harness/easel_mcp/README.md) for configuration and tests.
 
+For a Capy painter whose easel and stream stay on the Mac, use the
+[authenticated remote adapter](harness/easel_mcp/REMOTE.md). Its HTTP tools
+write the existing studio viewer's event format and support durable call retries.
+
 ## For developers
 
 - Finished paintings, videos, prompts and painter notes are indexed in

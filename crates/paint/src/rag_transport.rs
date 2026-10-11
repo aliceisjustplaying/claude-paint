@@ -76,7 +76,13 @@ impl Material {
         out
     }
 
-    pub(crate) fn picked(paint_mm3: f64, solvent_mm3: f64, lat: Latent, prop: Prop, cure: f32) -> Self {
+    pub(crate) fn picked(
+        paint_mm3: f64,
+        solvent_mm3: f64,
+        lat: Latent,
+        prop: Prop,
+        cure: f32,
+    ) -> Self {
         Self {
             paint_mm3,
             solvent_mm3,
@@ -333,6 +339,7 @@ struct Contact {
     exposure: f64,
     rim: f64,
     press: f32,
+    area_weight: f64,
 }
 
 impl Canvas {
@@ -391,48 +398,58 @@ impl Canvas {
         let mut weights = [0.0; CELLS];
         let mut smear_weights = [0.0; CELLS];
         let mut contacts = Vec::new();
+        let samples = (px_mm / 0.4).ceil().clamp(1.0, 4.0) as usize;
+        let area_weight = 1.0 / (samples * samples) as f64;
         for y in y0..y1 {
             for x in x0..x1 {
-                let (ux, uy) = (f.ux(x), f.uy(y));
-                let (pad, c, rim, press) = expo(ux, uy);
-                if pad <= 0.0 {
-                    continue;
+                for sy in 0..samples {
+                    for sx in 0..samples {
+                        let (ux, uy) = (
+                            f.ux(x) + ((sx as f32 + 0.5) / samples as f32 - 0.5) / f.scale,
+                            f.uy(y) + ((sy as f32 + 0.5) / samples as f32 - 0.5) / f.scale,
+                        );
+                        let (pad, c, rim, press) = expo(ux, uy);
+                        if pad <= 0.0 {
+                            continue;
+                        }
+                        let (u, v) = (
+                            (ux - center.0) * self.mm_per_unit,
+                            (uy - center.1) * self.mm_per_unit,
+                        );
+                        let detail = vn(
+                            u / 1.3,
+                            v / 2.1 + face.work_secs as f32 * 0.025 * p,
+                            seed ^ 0xA6F1,
+                        );
+                        let contact = (c * (0.55 + 0.45 * detail)
+                            + 0.12 * p * (1.0 - (-face.work_secs as f32 / 4.0).exp()) * detail)
+                            .clamp(0.0, 1.0);
+                        let exposure = (pad * contact) as f64 * area_weight;
+                        if exposure <= 0.0 {
+                            continue;
+                        }
+                        let col = (((u / cloth.width_mm + 0.5) * GRID as f32).floor() as i32)
+                            .clamp(0, GRID as i32 - 1) as usize;
+                        let row = (((v / cloth.width_mm + 0.5) * GRID as f32).floor() as i32)
+                            .clamp(0, GRID as i32 - 1) as usize;
+                        let cell = row * GRID + col;
+                        let rim = if touch.slip_mm > 0.0 {
+                            0.15 + 0.85 * rim as f64
+                        } else {
+                            1.0
+                        };
+                        weights[cell] += exposure;
+                        smear_weights[cell] += exposure * rim;
+                        contacts.push(Contact {
+                            i: y * f.w + x,
+                            cell,
+                            exposure,
+                            rim,
+                            press,
+                            area_weight,
+                        });
+                    }
                 }
-                let (u, v) = (
-                    (ux - center.0) * self.mm_per_unit,
-                    (uy - center.1) * self.mm_per_unit,
-                );
-                let detail = vn(
-                    u / 1.3,
-                    v / 2.1 + face.work_secs as f32 * 0.025 * p,
-                    seed ^ 0xA6F1,
-                );
-                let contact = (c * (0.55 + 0.45 * detail)
-                    + 0.12 * p * (1.0 - (-face.work_secs as f32 / 4.0).exp()) * detail)
-                    .clamp(0.0, 1.0);
-                let exposure = (pad * contact) as f64;
-                if exposure <= 0.0 {
-                    continue;
-                }
-                let col = (((u / cloth.width_mm + 0.5) * GRID as f32).floor() as i32)
-                    .clamp(0, GRID as i32 - 1) as usize;
-                let row = (((v / cloth.width_mm + 0.5) * GRID as f32).floor() as i32)
-                    .clamp(0, GRID as i32 - 1) as usize;
-                let cell = row * GRID + col;
-                let rim = if touch.slip_mm > 0.0 {
-                    0.15 + 0.85 * rim as f64
-                } else {
-                    1.0
-                };
-                weights[cell] += exposure;
-                smear_weights[cell] += exposure * rim;
-                contacts.push(Contact {
-                    i: y * f.w + x,
-                    cell,
-                    exposure,
-                    rim,
-                    press,
-                });
             }
         }
         self.wet.ensure_solvent();
@@ -471,7 +488,14 @@ impl Canvas {
         for c in &contacts {
             let solvent = released[c.cell] * c.exposure / weights[c.cell];
             self.wet.solv[c.i] += (solvent * 1000.0 / area) as f32;
-            self.open_working_layer(c.i, p * c.press, c.exposure, touch.secs, touch.slip_mm, cloth.width_mm);
+            self.open_working_layer(
+                c.i,
+                p * c.press,
+                c.exposure,
+                touch.secs,
+                touch.slip_mm,
+                cloth.width_mm,
+            );
         }
         let rb = ((BRIDGE_MM / px_mm).round() as usize).max(1);
         let (bx0, by0, bx1, by1) = (
@@ -485,7 +509,10 @@ impl Canvas {
             .flat_map(|y| (bx0..bx1).map(move |x| (y, x)))
             .map(|(y, x)| {
                 let i = y * f.w + x;
-                self.height[i] + self.wet.vol[i].max(0.0) * COAT_UM + self.wet.solv[i] + self.buried_height_um(i)
+                self.height[i]
+                    + self.wet.vol[i].max(0.0) * COAT_UM
+                    + self.wet.solv[i]
+                    + self.buried_height_um(i)
             })
             .collect();
         let peaks = local_max(&surf, bw, by1 - by0, rb);
@@ -521,11 +548,13 @@ impl Canvas {
                 * fl as f64
                 * thirst
                 * (1.0 + 2.0 * phi as f64);
-            let take = (avail as f64 * (1.0 - (-rate * c.exposure).exp()) * v as f64
-                / (v as f64
-                    + SLOW_COATS as f64 * (2.0 - near as f64 / v as f64)
-                        / (1.0 + 2.0 * phi as f64)))
-                .min(v as f64);
+            let take =
+                (avail as f64 * (1.0 - (-rate * c.exposure / c.area_weight).exp()) * v as f64
+                    / (v as f64
+                        + SLOW_COATS as f64 * (2.0 - near as f64 / v as f64)
+                            / (1.0 + 2.0 * phi as f64))
+                    * c.area_weight)
+                    .min(v as f64 * c.area_weight);
             wanted[c.cell] += take * unit;
             asks.push((c.i, c.cell, take));
         }
@@ -561,9 +590,11 @@ impl Canvas {
             }
             let sat =
                 ((face.cells[c.cell].solvent() + got[c.cell].solvent_mm3) / cap).clamp(0.0, 1.0);
-            let fraction = 1.0
-                - (-(LIFT as f64) * (0.7 + 0.6 * p as f64) * c.exposure * (1.0 - sat.powi(2)))
-                    .exp();
+            let fraction = (1.0
+                - (-(LIFT as f64) * (0.7 + 0.6 * p as f64) * c.exposure / c.area_weight
+                    * (1.0 - sat.powi(2)))
+                .exp())
+                * c.area_weight;
             let ask = solvent * fraction;
             solvent_wanted[c.cell] += ask;
             solvent_asks.push((c.i, c.cell, ask));
@@ -1020,5 +1051,32 @@ mod tests {
         );
         assert_eq!(protected.0, c.pixels());
         assert_eq!(protected.1, c.surface_um());
+    }
+
+    #[test]
+    fn footprint_sampling_keeps_uniform_physical_wipes_close_across_pixel_pitches() {
+        for pad in [126.0, 400.0] {
+            let mut lifts = Vec::new();
+            for width in [64, 96, 192, 384] {
+                let mut c = Canvas::new(width, 1.0, [0.5, 0.4, 0.3])
+                    .with_engine(5)
+                    .with_size_mm(100.0);
+                c.wet.ensure_solvent();
+                c.wet.vol.fill(0.8);
+                c.wet
+                    .lat
+                    .fill(mixbox::linear_float_rgb_to_latent(&[0.2, 0.15, 0.1]));
+                c.wet.hide.fill([0.8, 0.7, 1.0, 0.0, 1.0]);
+                let mut r = Rag::new(pad, 7).with_transport(&c);
+                let initial = inventory(&c, &r);
+                let net = c.rag_wipe(&mut r, &[(250.0, 500.0), (750.0, 500.0)], &[0.6], 41);
+                close(initial, inventory(&c, &r));
+                println!("footprint,pad={pad},width={width},net_mm3={net:.9}");
+                lifts.push(net);
+            }
+            let low = lifts.iter().copied().fold(f64::INFINITY, f64::min);
+            let high = lifts.iter().copied().fold(0.0, f64::max);
+            assert!((high - low) / high < 0.15, "pad {pad}: {lifts:?}");
+        }
     }
 }

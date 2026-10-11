@@ -56,10 +56,10 @@ fn row(csv: &mut String, name: &str, s: &Watercolor) {
         s.ledger.water_lifted,
         b.water_error
     ));
-    for p in 0..PIGMENTS {
+    for (p, pigment) in PALETTE.iter().enumerate() {
         csv.push_str(&format!(
             "{name},{},{:.12},{:.12},{:.12},{:.12},0,{:.12},{:.3e}\n",
-            PALETTE[p].name,
+            pigment.name,
             s.ledger.pigment_added[p],
             b.suspended[p],
             b.deposited[p],

@@ -242,7 +242,7 @@ impl Watercolor {
         self.residual_ns = 0;
         for _ in 0..steps {
             self.step();
-            if every_ticks > 0 && self.tick % every_ticks == 0 {
+            if every_ticks > 0 && self.tick.is_multiple_of(every_ticks) {
                 observer(self);
             }
         }
@@ -375,31 +375,36 @@ impl Watercolor {
                 self.flux_y[i] = flux;
             }
             if flux >= 0.0 {
-                transfers.push((i, j, flux * DT));
+                transfers.push((i, j, flux * DT, i, horizontal, 1.0));
             } else {
-                transfers.push((j, i, -flux * DT));
+                transfers.push((j, i, -flux * DT, i, horizontal, -1.0));
             }
         }
         let mut outgoing = vec![0.0; n];
-        for &(i, _, amount) in &transfers {
+        for &(i, _, amount, _, _, _) in &transfers {
             outgoing[i] += amount;
         }
         let mut delta = vec![0.0; n];
         let mut pigment_delta = vec![[0.0; PIGMENTS]; n];
-        for &(i, j, requested) in &transfers {
+        for &(i, j, requested, face, horizontal, sign) in &transfers {
             let amount = requested * (self.water[i] / outgoing[i].max(1e-30)).min(1.0);
+            if horizontal {
+                self.flux_x[face] = sign * amount / DT;
+            } else {
+                self.flux_y[face] = sign * amount / DT;
+            }
             delta[i] -= amount;
             delta[j] += amount;
-            for p in 0..PIGMENTS {
-                let moved = self.suspended[i][p] * amount / self.water[i].max(1e-30);
+            for (p, mass) in self.suspended[i].iter().enumerate() {
+                let moved = mass * amount / self.water[i].max(1e-30);
                 pigment_delta[i][p] -= moved;
                 pigment_delta[j][p] += moved;
             }
         }
         for i in 0..n {
             self.water[i] = (self.water[i] + delta[i]).max(0.0);
-            for p in 0..PIGMENTS {
-                self.suspended[i][p] = (self.suspended[i][p] + pigment_delta[i][p]).max(0.0);
+            for (p, delta) in pigment_delta[i].iter().enumerate() {
+                self.suspended[i][p] = (self.suspended[i][p] + delta).max(0.0);
             }
         }
         for p in 0..PIGMENTS {

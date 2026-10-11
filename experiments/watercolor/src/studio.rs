@@ -770,6 +770,10 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 t.set("surface_water_mm3", b.surface_water * s.cell_mm.powi(2))?;
                 t.set("pore_water_mm3", b.capillary_water * s.cell_mm.powi(2))?;
                 t.set(
+                    "max_surface_depth_mm",
+                    s.water.iter().copied().fold(0.0_f64, f64::max),
+                )?;
+                t.set(
                     "dry",
                     s.water.iter().chain(&s.capillary).all(|v| *v <= 1e-10)
                         && s.suspended.iter().flatten().all(|v| *v <= 1e-10),

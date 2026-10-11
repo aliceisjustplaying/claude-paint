@@ -12,6 +12,7 @@ export default function routes(pi: ExtensionAPI) {
 			contextWindow: model.contextWindow, maxTokens: model.maxTokens, cost: model.cost }]
 	});
 	if (model.route === "openrouter") pi.on("before_provider_request", event => ({
-		...event.payload as object, provider: { max_price: { prompt: model.cost.input, completion: model.cost.output } }
+		...event.payload as object, provider: { allow_fallbacks: false, require_parameters: true,
+			max_price: { prompt: model.cost.input, completion: model.cost.output } }
 	}));
 }

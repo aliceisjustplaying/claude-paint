@@ -131,3 +131,117 @@ byte. `MANIFEST.md` lists the commands and binary hashes.
   (`sed 's/ secs=[^ ]*//'`).
 - Release profile only (`codegen-units = 1`, not incremental). The iter
   profile can move the last digits.
+
+## Linux state comparison
+
+`scripts/tests/baseline_state.sh` keeps the exact comparison on macOS and
+other unmeasured hosts. Linux x86_64 opts into `state_compare.py
+--linux-tolerance`. The two hash-only Rust tests (the threshold plough and
+the engine-2 drying sheet) also select exact Linux x86_64 fixtures; all
+other targets retain their original exact fixtures. Only macOS arm64 and
+Ubuntu x86_64 with Rust 1.97.1 have been measured.
+
+The numeric limits below were measured against all 27 stored chunks using
+the release easel at `908d0db`, the committed lockfile and Rust 1.97.1 on
+Ubuntu 24.04 x86_64. They are absolute limits, with no relative allowance
+that grows with a field's magnitude. Unlisted floats, every integer,
+dtype, shape, missing value, enum, signed zero and nonfinite bit change
+remain exact. Added state still must satisfy `--added-zero` without any
+tolerance. Debug float limits apply only to the named bristle properties,
+not to integer tokens or other Debug state. The comparer prints the
+maximum allowed and observed absolute error for each bounded field,
+including on failure.
+
+The small-error measurements used to set the bounds include all five
+non-rag scenes and rag chunks 1–3 (before the first wipe). Rag's later
+semantic differences are measured separately below and are rejected.
+
+| Field | Largest small error observed | Absolute limit | Units |
+|---|---:|---:|---|
+| `color` | 4.27663326e-6 | 5e-6 | linear RGB channel (0–1) |
+| `height` | 1.220703125e-4 | 1.3e-4 | µm |
+| `film` | 5.24520874e-6 | 6e-6 | coats |
+| `wet.vol`, `clock.seen` | 7.15255737e-6 | 8e-6 | coats |
+| `wet.floor` | 7.39097595e-6 | 8e-6 | coats |
+| `wet.lat` | 1.49011612e-7 | 1.6e-7 | pigment latent coordinate |
+| `wet.hide` | 4.76837158e-7 | 5e-7 | scattering, stiffness or relative drying rate |
+| `clock.cure` | 3.72529030e-7 | 4e-7 | oxidation progress (1 = touch-dry) |
+| `clock.lev` | 6.103515625e-5 | 7e-5 | seconds |
+| `clock.th` | 5.72204590e-6 | 6e-6 | coats |
+| `clock.sub` | 1.52587891e-5 | 1.6e-5 | set-film oxidation progress |
+| `clock.srate` | 2.09547579e-9 | 2.2e-9 | oxidation progress per minute |
+| bristle `vol` | 1.00000000e-3 | 1.1e-3 | coats × canvas-unit² |
+| bristle `rx` | 6.0e-8 | 6.1e-8 | normalized root offset |
+| bristle `ry` | 2.0e-8 | 2.1e-8 | normalized root offset |
+| bristle `thresh` | 3.0e-8 | 3.1e-8 | pressure (0–1) |
+| bristle `bend` | 1.0e-7 | 1.1e-7 | canvas units |
+| bristle `lat` | 1.0e-7 | 1.1e-7 | pigment latent coordinate |
+| bristle `hide` | 3.0e-7 | 3.1e-7 | paint property |
+| bristle `cure` | 6.0e-12 | 6.1e-12 | oxidation progress |
+
+A coat is 25 µm, so the largest allowed wet-volume/floor error is
+0.0002 µm of paint, and the height allowance is 0.00013 µm. At these
+scenes' 0.2 mm per canvas unit, the bristle-volume allowance of 1.1e-3
+coats × canvas-unit² is 1.1e-6 mm³. The leveling allowance is 70
+microseconds. These limits admit the
+measured rounding without admitting meaningful changes in film,
+drying time or pigment mix.
+
+Full-scene maximum absolute differences (including rag's failures):
+
+| Scene | Chunks | Color | Height (µm) | Film (coats) | Wet volume (coats) | PNG changed pixels / 8192 | PNG max channel delta |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| body | 2 | 1.78813934e-7 | 9.15527344e-5 | 3.09944153e-6 | 3.57627869e-7 | 1 | 1/255 |
+| overlap | 3 | 1.78813934e-7 | 9.15527344e-5 | 3.09944153e-6 | 2.95042992e-6 | 1 | 1/255 |
+| pickup | 4 | 1.78813934e-7 | 9.15527344e-5 | 3.09944153e-6 | 1.90734863e-6 | 1 | 1/255 |
+| rag | 8 | 1.78813934e-6 | 1.220703125e-4 | 5.24520874e-6 | 7.03836143 | 707 | 109/255 |
+| stroke | 3 | 1.78813934e-7 | 9.15527344e-5 | 3.09944153e-6 | 1.74343586e-6 | 1 | 1/255 |
+| wait | 7 | 4.27663326e-6 | 1.220703125e-4 | 4.76837158e-6 | 3.09944153e-6 | 1 | 1/255 |
+
+Five scenes pass the numeric limits. Rag fails at chunk 4, the first dry
+wipe: `wet.vol[1310]` is 0.9863235950469971 in the baseline and
+3.949877977371216 on Linux, while `rags[0].load` changes from 0.78475475
+to 0.5218438. All binary integer fields and existing Debug integers/enums
+still match. An independent macOS arm64 replay of the same main code
+also gives load 0.5218438 and wet volume 3.9498796463012695 at that index,
+confirming a shared historical-baseline mismatch. Current `rag.rs` has
+engine-3 cloth, smear and wipe branches
+absent from af49348, and the new nonzero mobile rag state also fails
+`--added-zero`. The 707 changed pixels and 109/255 channel difference
+are material; neither the numeric limits nor a platform golden accepts
+them. This is tracked explicitly as a known historical failure, without
+changing physics or re-recording the stored baseline.
+
+`baseline_state.sh` checks all six scenes even after a failure and prints
+the full mismatch. It exits 4 with the single marker
+`KNOWN_FAILURE: rag-historical-baseline-main` only when the other five
+scenes pass both their state and image criteria and the rag matches
+`scripts/known_rag_baseline.py`'s diagnostic signature. Any other failure
+exits 1. This is a known failure, never a baseline pass.
+
+The shared diagnostic interface is:
+
+```sh
+python3 scripts/known_rag_baseline.py <rag-dump-directory> --image-report <compare_images-stdout-file>
+```
+
+Exit 0 means the known diagnostic matches; 1 means a different/unrelated
+failure and 2 means malformed input. The helper emits no known marker.
+It checks eight scalars across the dry wipe (chunk 4), damp wipe (chunk
+6) and refold/brush operation (chunk 8), with narrow rounding bands. All
+pre-wipe chunks and unaffected state fields still use the ordinary exact
+or Linux-bounded comparison. Only the identified wet-array, carried-rag
+paint and final-brush mismatch categories may differ; dtype/shape,
+integers, nonfinite changes and nonzero added solvent are rejected.
+The image report must be the measured Linux and macOS result (707/8192
+changed pixels, max 109/255), including the cross-platform or byte-exact
+provenance prefix when present. State-only callers may omit
+`--image-report`; historical image checks must supply it.
+
+Targeted checks:
+
+```sh
+python3 scripts/tests/baseline_state_compare_test.py
+python3 scripts/tests/known_rag_baseline_test.py
+python3 notes/thinner/baseline/tools/test_state_compare.py
+```

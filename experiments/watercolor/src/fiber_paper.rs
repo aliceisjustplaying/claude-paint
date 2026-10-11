@@ -159,7 +159,6 @@ const CELL_MM: f32 = 4.0;
 /// the micro-roughness µ (µm) per pixel, and the grammage (g/m²).
 pub struct Sheet {
     pub height: Vec<f32>,
-    pub micro: Vec<f32>,
     pub grammage: Vec<f32>,
 }
 
@@ -334,45 +333,15 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
             }
         });
     }
-    // the pores between the fibre tops (Dodson 2001; notes/research/
-    // paper_mechanics_and_transport.md §2): many layers deep, a surface
-    // pore's mean height is t·ε/(1−ε) at the local porosity, its spread about
-    // its mean (near exponential, as measured). Pressing makes the denser
-    // spots denser: the solid share follows the fibre count to the power
-    // 1 − press. A pixel holds only a few dozen pores, so its mean scatters:
-    // Gamma(k)/k, k = n/4.93 for the n = x²·τ²/π surface pores of a pixel x
-    // mm across, τ = ln(1/ε)/ω at the local porosity ε and fibre width ω
-    // (the research's §4: k ≈ 2–12 at 0.25–0.3 mm), so a finer render's
-    // pixels scatter more, as they hold fewer pores.
-    let micro: Vec<f32> = (0..n)
-        .map(|i| {
-            let solid = ((1.0 - p.porosity) * (gram[i] / beta).max(0.05).powf(1.0 - p.press))
-                .clamp(0.05, 0.95);
-            let mean = p.thick_um * (1.0 - solid) / solid;
-            let (x, y) = ((x0 + i % w) as u64, (y0 + i / w) as u64);
-            let mut r = Rng::new(
-                p.seed
-                    ^ 0x5EED_9031
-                    ^ x.wrapping_mul(0x9E37_79B9_7F4A_7C15)
-                    ^ y.wrapping_mul(0xC2B2_AE3D_27D4_EB4F),
-            );
-            let tau = (1.0 / (1.0 - solid)).ln() / (p.fibre_um * 1e-3);
-            let pores = px_mm * px_mm * tau * tau / std::f32::consts::PI;
-            // (at least one pore's worth)
-            let k = (pores / 4.93).max(1.0);
-            let g = gamma(&mut r, k) / k;
-            mean * g
-        })
-        .collect();
     Sheet {
         height,
-        micro,
         grammage: gram,
     }
 }
 
 /// A draw of Gamma(k, 1), k ≥ 1, in constant time: Marsaglia and Tsang's
 /// squeeze (ACM TOMS 26, 2000), its normal from Box–Muller.
+#[cfg(test)]
 fn gamma(r: &mut Rng, k: f32) -> f32 {
     let d = k - 1.0 / 3.0;
     let c = 1.0 / (9.0 * d).sqrt();

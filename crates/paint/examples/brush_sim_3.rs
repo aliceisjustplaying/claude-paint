@@ -493,7 +493,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(dir)?;
     fs::write(
         dir.join("scope.txt"),
-        "Native 640x320, physical 160x80 mm. Gallery 115/55/1 and Color read the SAME final wet Canvas. No image filters. Matching scope: total final canvas material_total minus its primed initial material_total, including the common baseline-prepared wet wall. This conserved paint quantity has units coats*square canvas units (a volume proxy, not density-weighted physical mass). No per-pixel or per-stroke matching. Calibration scales only variant loads; factors above one use multiple finite dips <=1 before each mark. Each retained brush contributes its paint AND solvent residual, including the clean blender after pickup. No wait/drying is called. Height includes dry surface, wet paint and solvent; wet thickness is paint alone. Linear Y and native one-pixel forward gradient statistics include background pixels inside explicitly recorded ROIs. The lit-window edge profile is analysis only: for each native pixel column x in [220,390), arithmetic means over rows y in [105,190) record Color/Gallery linear Y, wet paint, solvent and total height; exported PNGs are untouched. Matching tolerance and monotonicity are empirical; achieved error is reported, never hidden.\n",
+        "Native 640x320, physical 160x80 mm. Gallery 115/55/1 and Color read the SAME final wet Canvas. No image filters. Matching scope: total final canvas material_total minus its primed initial material_total, including the common baseline-prepared wet wall. This conserved paint quantity has units coats*square canvas units (a volume proxy, not density-weighted physical mass). No per-pixel or per-stroke matching. Targets are baseline equal-input deposition except lit-window: its target is the lowest equal-input deposition across all five presets, because the experimental footprint cannot reach the original baseline volume even at eightfold loading. That scene calibrates baseline too; the wall preparation remains unchanged. Calibration scales only variant loads; factors above one use multiple finite dips <=1 before each mark. Each retained brush contributes its paint AND solvent residual, including the clean blender after pickup. No wait/drying is called. Height includes dry surface, wet paint and solvent; wet thickness is paint alone. Linear Y and native one-pixel forward gradient statistics include background pixels inside explicitly recorded ROIs. The lit-window edge profile is analysis only: for each native pixel column x in [220,390), arithmetic means over rows y in [105,190) record Color/Gallery linear Y, wet paint, solvent and total height; exported PNGs are untouched. Matching tolerance and monotonicity are empirical; achieved error is reported, never hidden.\n",
     )?;
     let mut metrics = String::from(
         "scene,variant,round,mode,load_factor,calibration_probes,target_net_paint,match_error_pct,requested_load,initial_paint,final_paint,net_paint,input_paint,residual_paint,paint_ledger_error,initial_solvent,final_solvent,net_solvent,input_solvent,residual_solvent,solvent_ledger_error,preparation_input_paint,preparation_input_solvent,time_s,wet_mean_um,wet_p95_um,wet_max_um,height_mean_um,height_p95_um,height_max_um\n",
@@ -507,9 +507,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "scene,variant,x_px,x_units,strip_y0_px,strip_y1_px,color_y_mean,gallery_y_mean,wet_paint_mean_um,solvent_mean_um,total_height_mean_um\n",
     );
     for name in names {
-        let target = scene(name, 5, 1.0).net_paint;
+        let reference = scene(name, 5, 1.0).net_paint;
+        let target = if matched && name == "lit-window" {
+            VARIANTS.iter().map(|(engine, _)| scene(name, *engine, 1.0).net_paint).fold(reference, f64::min)
+        } else {
+            reference
+        };
         for (engine, variant) in &variants {
-            let (factor, probes) = if matched && *engine != 5 {
+            let (factor, probes) = if matched && (*engine != 5 || target != reference) {
                 calibrate(name, *engine, target, steps)?
             } else {
                 (1.0, 0)

@@ -49,6 +49,17 @@ for profile in "${profiles[@]}"; do
   shown=$(table_of "$dest/notes/easel_guide.md")
   printed=$(cd / && env -u EASEL_BOX "$dest/bin/easel" tubes --markdown)
   [ "$shown" = "$printed" ] || { echo "$profile: the guide's table isn't the easel's box" >&2; exit 1; }
+  case $profile in
+    cezanne) techniques=notes/cezanne_techniques.md; physics=notes/research/cezanne_oil_paint_physics.md ;;
+    *) techniques=notes/techniques.md; physics=notes/research/oil_paint_physics.md ;;
+  esac
+  if git -C "$repo" cat-file -e "$R16_BRANCH:$techniques" 2>/dev/null; then
+    git -C "$repo" show "$R16_BRANCH:$techniques" | cmp -s - "$dest/notes/techniques.md" || { echo "$profile: the techniques aren't the profile's committed copy" >&2; exit 1; }
+  fi
+  git -C "$repo" show "$R16_BRANCH:$physics" > "$work/$profile.physics.md"
+  "$repo/scripts/strip_sources" "$work/$profile.physics.md"
+  cmp -s "$work/$profile.physics.md" "$dest/notes/research/oil_paint_physics.md" || { echo "$profile: the physics note isn't the profile's stripped committed copy" >&2; exit 1; }
+  [ ! -e "$dest/notes/cezanne_techniques.md" ] && [ ! -e "$dest/notes/research/cezanne_oil_paint_physics.md" ] || { echo "$profile: private source filenames leaked into the studio" >&2; exit 1; }
   echo "$profile: ok (${box:-default box}, $(($(wc -l <<<"$printed") - 2)) tubes)"
 done
 echo "export_profiles: every profile exported and checked in $work"

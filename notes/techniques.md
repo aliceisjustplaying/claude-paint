@@ -84,33 +84,37 @@ does; this says how to use them. What you paint is yours to choose.
 - **Values.** Check `mode: "value,squint"`: do the large lights, middles
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
-- **Light relationships.** Relate the light and shadow of each passage to
-  the effect you want. A uniform band or a firm boundary can be deliberate;
-  judge it in context.
-- **Forms meet through relationships.** Overlap, colour and edge handling
-  separate or connect adjacent planes; a mask's edge by itself sets no
-  spatial relationship.
+- **A passage of ambient light has a gradient.** Where the picture
+  includes a broad passage that gives the surrounding light, it is warmer
+  and lighter toward the light, and it explains every light and shadow it
+  falls on. One flat tone there looks dead, and a ruler-straight distant
+  boundary to it looks too hard: lose it in places.
+- **Forms meet each other physically.** Where two surfaces meet there is an
+  edge, a turn or a shadow that belongs to both. A boundary drawn as a
+  mask's edge and nothing else flattens the space.
 - **Composition**: judge how the masses work together for the effect you
-  chose. Where the emphasis sits, central or off-centre, is yours to
-  choose.
+  chose. Where the emphasis sits is yours to choose.
 
 ## Marks
 
 - **A hierarchy of marks.** A few large decisive strokes (`b:gesture`), many
   middle ones, some small accents. One stroke size and one shape over a whole
   area reads as texture.
-- **Mark scale and distance.** `scale_at` can shrink marks through a
-  passage, which can suggest recession; marks of similar scale throughout
-  can compress depth.
-  Either is a choice.
-- **Mark direction and form.** Direction can turn with a plane, or bind
-  neighbouring planes through a shared rhythm. Decide by the whole picture.
-- **Light and texture.** Quiet passages and active marks read differently
-  as light. Compare them before extending either.
+- **Marks get smaller with distance.** In a receding passage, give the pass
+  a `scale_at` that shrinks toward the far end, so the brushwork itself
+  recedes.
+- **Marks follow the form.** Strokes that wander in every direction read as
+  noise.
+- **Light is soft and quiet.** Glare, and passages lit through openings,
+  have soft edges and little texture. Busy, outlined strokes, or strokes circling a center
+  inside the light, turn the light into an object.
+- **Glitter** on a level reflecting surface is small, sharp and dense far
+  off, breaking into scattered flecks near you; big uniform dabs read as
+  beads. Tie it to its light source.
 
 ## Spatter
 
-- **Flicked paint makes scattered marks.**
+- **Flicked paint gives a natural scatter.**
   `b:spatter{at={x, y}, toward={dx, dy}}` throws droplets whose sizes,
   spacing and colors vary by themselves: aim the flick and let the droplets
   fall.
@@ -122,17 +126,16 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Forms and shadows
 
-- **A form can read as one mass.** Relate its parts through colour and
-  overlap so they hold together. `form{}` gives a lit-volume guide; colour
-  modulation is another way to build solidity, with or without its
-  lighting.
-- **Shadows take colour from surrounding light.** Separate passes with
-  different `pile=` values can vary a shadow's colour. Judge its value and
-  temperature against the passages around it; one violet for every shadow
-  is the usual trap.
-- **Distance and colour.** Lightening and cooling can suggest recession;
-  similar intensity in near and far planes can compress depth. Choose what the
-  painting needs.
+- **A form is one mass.** Build a rounded form as one shape whose parts
+  flow into each other, modeled from light to shadow. `form{}` and its
+  solids give a single lit volume to paint by.
+- **Shadows take color from around them**: with warm light reflected up
+  near its base and cooler light from above, a shadow is warmer near its
+  base and cooler above. Grade it in separate passes with
+  different `pile=` values (one flat violet is the usual trap), and keep it
+  a different value and temperature from the object casting it.
+- **Distance lightens and cools**: far forms are paler and bluer than near
+  ones, and closer to each other in tone.
 
 ## The palette
 
@@ -250,9 +253,8 @@ does; this says how to use them. What you paint is yours to choose.
   Keep what later chunks need as globals: paths, recipes, protection masks.
   Before redrawing something by eye, look for its saved path. Keep big
   temporary masks local (memory).
-- **Small forms** drawn as a neat diagram of separate parts can read as
-  icons. A few thick, irregular touches of two or three colors read as the
-  thing.
+- **Small things** drawn as a neat diagram of their parts read as icons. A
+  few thick, irregular touches of two or three colors read as the thing.
 - **Taking paint off**: wet paint comes off with the rag (below) or the
   knife, down to the first set layer. Set paint stays: paint over it or
   glaze it. Either way it costs only painted time.

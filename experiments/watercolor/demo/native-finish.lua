@@ -1,4 +1,5 @@
 sky=brush{name="sky"}
+wait(300)
 assert(clock()>300)
 glaze()
 field=brush{name="field-glaze",width=20}

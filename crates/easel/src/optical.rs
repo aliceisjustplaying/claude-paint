@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -213,7 +213,8 @@ fn generation(dir: &Path, name: &str) -> io::Result<Generation> {
     id(&value.config.snapshot)?;
     id(&value.config.revision)?;
     id(&value.config.runtime)?;
-    if value.config.schema != 1 || value.config.renderer != RENDERER || value.config.encoder != "image-png-0.25" {
+    if value.config.schema != 1 || value.config.renderer.is_empty() || value.config.renderer.len() > 64 || !value.config.renderer.is_ascii()
+        || value.config.encoder.is_empty() || value.config.encoder.len() > 64 || !value.config.encoder.is_ascii() {
         return Err(invalid("unsupported optical cache metadata"));
     }
     let r = value.config.crop;

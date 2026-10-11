@@ -1,4 +1,5 @@
 use super::*;
+use std::path::PathBuf;
 
 struct Temp(PathBuf);
 
@@ -129,6 +130,56 @@ fn corrupted_cache_and_renderer_mismatch_never_return_stale_companions() {
     let output = temp.0.join("no.png");
     assert!(render(&arguments(&view, &output, &[])).unwrap_err().contains("renderer binary differs"));
     assert!(!output.exists());
+}
+
+#[test]
+fn renderer_binary_and_edition_invalidate_otherwise_identical_cached_views() {
+    let temp = Temp::new("renderer-key");
+    let (view, _) = temp.snapshot([7; 32]);
+    let cache = temp.0.join("cache");
+    let args = arguments(&view, &cache, &[]);
+    companions(&args).unwrap();
+    for field in ["runtime", "renderer", "encoder"] {
+        let root = current(&cache).unwrap().unwrap();
+        let mut old = generation(&cache, &root).unwrap();
+        old.parent = None;
+        match field {
+            "runtime" => old.config.runtime = hex(&[0; 32]),
+            "renderer" => old.config.renderer = "legacy-look-0".into(),
+            _ => old.config.encoder = "image-png-0.24".into(),
+        }
+        let bytes = serde_json::to_vec(&old).unwrap();
+        let old_id = hex(&Sha256::digest(&bytes));
+        atomic(&cache.join(format!("{old_id}.json")), 16384, |w| w.write_all(&bytes)).unwrap();
+        atomic(&cache.join("CURRENT"), 65, |w| writeln!(w, "{old_id}")).unwrap();
+        generation(&cache, &old_id).unwrap();
+        companions(&args).unwrap();
+        let new_id = current(&cache).unwrap().unwrap();
+        assert_ne!(new_id, old_id, "{field}");
+        let new = generation(&cache, &new_id).unwrap();
+        assert_eq!(new.config.runtime, hex(&runtime().unwrap()));
+        assert_eq!(new.config.renderer, RENDERER);
+        assert_eq!(new.config.encoder, "image-png-0.25");
+    }
+}
+
+#[test]
+fn cache_writer_ownership_and_lost_pointer_protect_retained_images() {
+    let temp = Temp::new("cache-ownership");
+    let (view, _) = temp.snapshot([8; 32]);
+    let cache = temp.0.join("cache");
+    let args = arguments(&view, &cache, &[]);
+    companions(&args).unwrap();
+    let pointer = std::fs::read(cache.join("CURRENT")).unwrap();
+    let lock = File::open(cache.join("writer.lock")).unwrap();
+    lock.lock().unwrap();
+    assert!(companions(&args).unwrap_err().contains("another companion writer"));
+    assert_eq!(std::fs::read(cache.join("CURRENT")).unwrap(), pointer);
+    drop(lock);
+    let files: Vec<_> = std::fs::read_dir(&cache).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|s| s == "png")).collect();
+    std::fs::remove_file(cache.join("CURRENT")).unwrap();
+    assert!(companions(&args).unwrap_err().contains("lost its root"));
+    assert!(files.iter().all(|p| p.exists()));
 }
 
 #[test]

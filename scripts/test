@@ -97,7 +97,6 @@ import argparse
 import datetime
 import hashlib
 import json
-import math
 import os
 import re
 import shutil
@@ -108,29 +107,18 @@ import tempfile
 import time
 import uuid
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safeguards_lib import PHASE_LIMIT, Refuse, timeout_scale
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = {"fast": "notes/speed/test_lists/fast.tsv", "all": "notes/speed/test_lists/all.tsv"}
 # the plan's limit for builds and final batches; scripts/tests/test_runner.sh may lower it
-BASE_OUTER_LIMIT = 600.0
-
-
-def timeout_scale():
-    value = os.environ.get("SCRIPTS_TEST_TIMEOUT_SCALE")
-    if value is None:
-        if not sys.platform.startswith("linux"):
-            return 1.0
-        cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
-        return max(1.0, 16.0 / max(1, cores))
-    try:
-        scale = float(value)
-    except ValueError:
-        scale = 0.0
-    if not math.isfinite(scale) or not 1.0 <= scale <= 16.0:
-        raise SystemExit("scripts/test: SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number from 1 to 16")
-    return scale
-
-
-TIMEOUT_SCALE = timeout_scale()
+BASE_OUTER_LIMIT = PHASE_LIMIT
+try:
+    TIMEOUT_SCALE = timeout_scale()
+except Refuse as error:
+    raise SystemExit(f"scripts/test: {error}")
 OUTER_LIMIT = BASE_OUTER_LIMIT * TIMEOUT_SCALE
 
 

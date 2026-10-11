@@ -6,6 +6,8 @@ Loaded roots converge toward 3–5 irregular moving groups. Paint bridges a load
 
 Within actual positive contact weights, neighboring wet pixels conservatively exchange paint from the thicker film into the thinner film. The transfer carries latent pigment, material properties, cure and proportional solvent. It does not reapply absorption or evaporation. Mobility vanishes at gel cure, respects zero mask/fence contact and is stronger for paint from an earlier stroke than the current stroke. No image filter, display contrast change, palette change, state schema change or rag change is included. This is a local quasistatic proxy, not a solved capillary fluid model. It has a native-pixel discretization and needs broader scale/resolution validation before adoption.
 
+The initial broad-contact WIP exposed an inherited fixed per-stroke ceiling: several grouped hairs competed for the same pixel's allowance, rejecting additional paint into their finite reservoirs. Iteration 4 now scales that unthinned ceiling with a hair's available load above its nominal full load. Depleted hairs retain the old bound. Thinned paint retains its existing solvent-dependent ceiling, and engines 1–14 keep their old equations. The loaded-volume contract checks that eight finite dips can exceed baseline's one-dip deposition while preserving the input-plus-residual paint ledger.
+
 | Preset | Engine | Release | Entropy | Leveling |
 |---|---:|---:|---:|---:|
 | lean4 | 15 | 1.05 | 3.0 | 0.65 |

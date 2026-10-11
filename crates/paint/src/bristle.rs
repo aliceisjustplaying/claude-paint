@@ -1981,6 +1981,10 @@ unsafe fn exchange(
         let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
         #[cfg(feature = "brush-sim-1")]
         let cap = if sf.sim.is_some() { cap.min((tool.lay * 350.0).clamp(240.0, 700.0) / COAT_UM) } else { cap };
+        #[cfg(feature = "brush-sim-4")]
+        let cap = if sf.sim.is_some_and(|sim| sim.model.level > 0.0) && phi <= 0.0 {
+            cap * (liquid / full).max(1.0)
+        } else { cap };
         #[cfg(feature = "brush-sim-1")]
         let capped = capped || sf.sim.is_some();
         let wet = smoothstep(0.1, 0.8, liquid / full);

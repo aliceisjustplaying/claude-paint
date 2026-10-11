@@ -17,6 +17,10 @@ Two phases. The build steps run first, as one lockrun job of 600 s, then the
 other steps as a second job of 600 s (the plan: builds and final check
 batches, ten minutes each); the second runs only if every build passed. One
 summary covers both, with each phase's limit, exit, verdict and time.
+On Linux these budgets and each step's limit scale by max(1, 16 / available
+CPUs), giving 4-vCPU VMs four times the base budget and 8-vCPU VMs twice.
+macOS keeps the base limits. SCRIPTS_TEST_TIMEOUT_SCALE (1 to 16) overrides
+the scale on either platform; summaries record it. Every limit stays finite.
 test_candidate runs the two phases itself (`--phase build`, `--phase check`)
 under its pinned lockrun.
 
@@ -82,6 +86,7 @@ cancelled.
 The summary (--summary) is JSON: mode, phase, verdict ("pass", "fail",
 "unfinished" or "known_failure") and verdict_text, phases (when both ran), list (the list file, relative to the repository), list_sha256,
 runner_sha256 (this file), target_dir, commit, whether the worktree was dirty,
+timeout_scale,
 wall seconds, the steps' build and test seconds (summed: grouped steps
 overlap), and per step: name, kind, command, limit, least, group, exit,
 seconds, tests_run, passed, failed, ignored, timed_out, ok, known_failure, known, why, log
@@ -92,6 +97,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -105,7 +111,27 @@ import uuid
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = {"fast": "notes/speed/test_lists/fast.tsv", "all": "notes/speed/test_lists/all.tsv"}
 # the plan's limit for builds and final batches; scripts/tests/test_runner.sh may lower it
-OUTER_LIMIT = 600.0
+BASE_OUTER_LIMIT = 600.0
+
+
+def timeout_scale():
+    value = os.environ.get("SCRIPTS_TEST_TIMEOUT_SCALE")
+    if value is None:
+        if not sys.platform.startswith("linux"):
+            return 1.0
+        cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+        return max(1.0, 16.0 / max(1, cores))
+    try:
+        scale = float(value)
+    except ValueError:
+        scale = 0.0
+    if not math.isfinite(scale) or not 1.0 <= scale <= 16.0:
+        raise SystemExit("scripts/test: SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number from 1 to 16")
+    return scale
+
+
+TIMEOUT_SCALE = timeout_scale()
+OUTER_LIMIT = BASE_OUTER_LIMIT * TIMEOUT_SCALE
 
 
 def git(*args):
@@ -141,13 +167,13 @@ def read_list(path):
             limit, least = float(limit), int(least)
         except ValueError:
             raise SystemExit("scripts/test: %s line %d: the limit and the minimum are numbers" % (path, n))
-        if not 0 < limit <= OUTER_LIMIT:
-            raise SystemExit("scripts/test: %s line %d: a step's limit is over 0 and at most %g s" % (path, n, OUTER_LIMIT))
+        if not 0 < limit <= BASE_OUTER_LIMIT:
+            raise SystemExit("scripts/test: %s line %d: a step's limit is over 0 and at most %g s" % (path, n, BASE_OUTER_LIMIT))
         if kind != "build" and least < 1:
             raise SystemExit("scripts/test: %s line %d: step %s must run at least one test" % (path, n, name))
         if kind == "script" and regex == "-":
             raise SystemExit("scripts/test: %s line %d: a script step needs a regex to count its tests" % (path, n))
-        steps.append({"kind": kind, "name": name, "limit": limit, "least": least,
+        steps.append({"kind": kind, "name": name, "limit": limit * TIMEOUT_SCALE, "least": least,
                       "regex": None if regex == "-" else regex, "command": cmd, "group": group, "known": known})
     if not any(s["kind"] != "build" for s in steps):
         raise SystemExit("scripts/test: %s lists no test step (only builds, or nothing)" % path)
@@ -527,6 +553,7 @@ def main():
     tests = sum(r["seconds"] for r in results if r["kind"] != "build")
     summary = {
         "mode": mode, "phase": a.phase, "verdict": verdict, "verdict_text": verdict_text(verdict, results),
+        "timeout_scale": TIMEOUT_SCALE,
         "list": os.path.relpath(listfile, REPO),
         "list_sha256": sha256(listfile), "runner_sha256": sha256(os.path.abspath(__file__)),
         "target_dir": target, "only": a.only, "commit": git("rev-parse", "HEAD"),
@@ -634,6 +661,7 @@ def run_both(a, mode, listfile, steps):
     base = parts[0] if parts else {}
     summary = {
         "mode": mode, "phase": "both", "verdict": verdict, "verdict_text": verdict_text(verdict, results),
+        "timeout_scale": TIMEOUT_SCALE,
         "list": os.path.relpath(listfile, REPO), "list_sha256": sha256(listfile),
         "runner_sha256": sha256(os.path.abspath(__file__)), "target_dir": base.get("target_dir"), "only": a.only,
         "commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain")),

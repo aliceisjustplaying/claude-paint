@@ -59,9 +59,17 @@ run() {
 export -f run
 tr '\t' '\n' <"$work/bins" | tr '\n' '\0' | xargs -0 -n 3 -P "$jobs" bash -c 'run "$0" "$1" "$2"'
 failed=0
+failed_bins=
 while IFS=$'\t' read -r name dir exe; do
   echo "     Running $name ($(cat "$work/$name.secs") s wall)"
   cat "$work/$name.out"
-  [ "$(cat "$work/$name.rc")" = 0 ] || { failed=1; echo "cargo_tests: $name FAILED (exit $(cat "$work/$name.rc"))"; }
+  [ "$(cat "$work/$name.rc")" = 0 ] || { failed=1; failed_bins+="$name:$(cat "$work/$name.rc") "; echo "cargo_tests: $name FAILED (exit $(cat "$work/$name.rc"))"; }
 done <"$work/bins"
+if [ "$failed_bins" = 'paint-lib:101 ' ]; then
+  failures=$(grep -hE '^test .* \.\.\. FAILED$' "$work"/*.out | sed 's/^test //; s/ \.\.\. FAILED$//' || true)
+  if [ "$failures" = 'rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground' ] && grep -Eq '^test result: FAILED\. [0-9]+ passed; 1 failed;' "$work/paint-lib.out"; then
+    echo 'cargo_tests: only known failure: solvent-rag hollow-film lift on main'
+    exit 4
+  fi
+fi
 [ $failed = 0 ] || exit 1

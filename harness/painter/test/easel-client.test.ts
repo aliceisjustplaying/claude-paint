@@ -6,6 +6,25 @@ import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
+function fixtureEasel(studio: string, binary: string, marker = process.env.CLAUDE_PAINT_TEST_RUN) {
+	const executable = join(studio, "bin", "easel-real");
+	copyFileSync(binary, executable);
+	const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+	writeFileSync(join(studio, "bin", "easel"), "#!/bin/sh\n" + (marker === undefined ? "" : `export CLAUDE_PAINT_TEST_RUN=${quote(marker)}\n`) + `exec ${quote(executable)} "$@"\n`, { mode: 0o755 });
+}
+
+test("scratch easels retain their test ownership through the restricted client environment", async () => {
+	const studio = mkdtempSync(join(tmpdir(), "studio-marker-"));
+	mkdirSync(join(studio, "bin"));
+	const binary = join(studio, "fixture");
+	writeFileSync(binary, '#!/bin/sh\nprintf "%s\\n" "$CLAUDE_PAINT_TEST_RUN"\n', { mode: 0o755 });
+	const marker = "fixture-owner 'quoted' :step";
+	fixtureEasel(studio, binary, marker);
+	const result = await easel(studio, ["status"]);
+	assert.equal(result.code, 0);
+	assert.equal(result.out, marker + "\n");
+});
+
 test("read opens only studio files, however the path is spelled", () => {
 	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
 	const real = join(top, "studio");
@@ -93,7 +112,7 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
 	mkdirSync(join(studio, "notes"));
-	copyFileSync(bin!, join(studio, "bin", "easel"));
+	fixtureEasel(studio, bin!);
 	try {
 		// no session yet: the first call opens one
 		const ok = await atEasel(studio, ["do", "-"], 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}\nprint("hi")');

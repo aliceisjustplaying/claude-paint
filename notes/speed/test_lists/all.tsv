@@ -33,7 +33,7 @@ script	replay-clip	60	1	^replay_clip test: 	scripts/tests/replay_clip.sh	w
 script	box-tubes	60	1	^box_tubes: \d+ fixture easels checked	scripts/tests/box_tubes.sh	w
 script	studio-names	60	1	^studio_names: all fixture studios	scripts/tests/studio_names.sh	w
 script	peek	60	1	^peek: whole PNG	sh scripts/tests/peek.sh	w
-node	node-harness	120	56	-	EASEL_BIN="$CARGO_TARGET_DIR/p/gate/easel" node --test --test-reporter=tap --test-concurrency=2 harness/painter/test/*.test.ts	w
+node	node-harness	120	57	-	EASEL_BIN="$CARGO_TARGET_DIR/p/gate/easel" node --test --test-reporter=tap --test-concurrency=2 harness/painter/test/*.test.ts	w
 pytest	studio-startup	120	11	-	cd studio && PYTHONDONTWRITEBYTECODE=1 uv run --no-project --with pytest --with pillow --with playwright python -m pytest -q -p no:cacheprovider -rs test_startup.py	w
 script	studio-gallery	120	1	^PASS gallery	node studio/test_gallery.cjs	w
 script	studio-replay	120	1	^\{"checks":	STUDIO_REPLAY_REPORT="$TMPDIR/replay-verification.json" node studio/test_replay.cjs	w
@@ -42,4 +42,4 @@ script	state-compare	60	16	^ok  	python3 notes/thinner/baseline/tools/test_state
 node	reader-scope	60	5	-	node --test --test-reporter=tap notes/round24/runner/reader-scope.test.ts	w
 script	thinner-runner	60	19	^ok:	scripts/tests/thinner_acceptance_runner.sh	w
 script	thinner-dump-fields	60	6	^ok:	python3 scripts/tests/thinner_dump_fields_test.py	w
-pytest	test-changed	60	24	-	uv run --no-project --with pytest python -m pytest -q -p no:cacheprovider scripts/tests/test_changed.py	w
+pytest	test-changed	60	26	-	uv run --no-project --with pytest python -m pytest -q -p no:cacheprovider scripts/tests/test_changed.py	w

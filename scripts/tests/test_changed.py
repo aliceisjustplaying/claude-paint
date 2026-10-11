@@ -37,6 +37,17 @@ class ChangedTests(unittest.TestCase):
         self.assertNotIn("cargo-test", {step[1] for step in steps})
         self.assertIn("--package easel", steps[-1][5])
 
+    def test_session_changes_run_fixture_equivalence(self):
+        steps, full = runner.plan(["crates/easel/src/session.rs"])
+        self.assertFalse(full)
+        self.assertTrue({"cargo-easel", "thinner-quick"} <= {step[1] for step in steps})
+
+    def test_cleanup_targets_marked_servers_outside_the_group(self):
+        job = gate.Job.__new__(gate.Job)
+        job.run, job.pgid, job.owns_group, job.keep = "run", 100, False, set()
+        with patch.object(gate, "table", return_value={201: (1, 201, False), 202: (1, 202, False)}), patch.object(gate, "marks", return_value={201: (["run", "step"], ["easel", "serve"])}):
+            self.assertEqual(job.targets("step", {201, 202}), {201})
+
     def test_rust_integration_selects_its_binary(self):
         names, targets = runner.select(["crates/easel/tests/determinism.rs"])
         self.assertEqual(names, set())

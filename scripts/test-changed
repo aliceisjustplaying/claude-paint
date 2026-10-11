@@ -54,7 +54,7 @@ def select(paths):
                     names.update(ENGINE)
             else:
                 names.update({"cargo-easel"} if parts[1] == "easel" else ENGINE)
-                if "thinner" in path or "solvent" in path:
+                if "thinner" in path or "solvent" in path or path == "crates/easel/src/session.rs":
                     names.add("thinner-quick")
                 if any(word in path for word in ("palette", "build.rs", "boxes", "tubes")):
                     names.update({"box-features", "box-tubes", "painter-build-inness"})

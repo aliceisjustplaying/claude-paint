@@ -43,15 +43,15 @@ problem, not a missing pigment implementation.
 | Historical problem | Existing primitive and painter decision |
 |---|---|
 | A luminous commercial ground, visible between marks [NG; BUT] | `canvas{ground=...}` with lead-white-rich preparation, optionally a small ochre addition. Its thickness and texture are a study choice, not a universal historical recipe. Reserve the dry primed surface by not painting it; do not use `raw` to imitate exposed white priming. |
-| Light searching placement, uneven blue/green wash [NG; AIC22] | Optional `pencil("H")` with `:sketch`, or a small round carrying a dilute blue/grey pile, `turps=` or `thinner=`, and `:stroke`. Place a few structural relationships; keep the wash discontinuous. No obligatory complete sepia underpainting. |
+| Light searching placement, uneven blue/green wash [NG; AIC22] | Optional `pencil("H")` with `:sketch`, or a small round carrying a dilute blue/gray pile, `turps=` or `thinner=`, and `:stroke`. Place a few structural relationships; keep the wash discontinuous. No obligatory complete sepia underpainting. |
 | Parallel patches with differentiated direction [BUT; NG; NA] | A flat or filbert brush, `b:load`, several short `b:stroke` marks, then another local pile. For a selected passage, `work(m,{hand="hatch",tool="filbert 8",length={...},angle=...,pile=p,fill=false})` is available. Defaults are starting points, not Cézanne's hand. Set lengths/widths to the physical canvas and inspect the scratch result. |
-| A loaded brush that gives successive unequal strokes [BUT] | Keep the same brush and load across marks; it depletes and picks up wet colour. Pressure, attack/lift `ramps` and orientation change the footprint. Choose where the patch stops; don't reload every stroke or add noise to a perfect grid. |
+| A loaded brush that gives successive unequal strokes [BUT] | Keep the same brush and load across marks; it depletes and picks up wet color. Pressure, attack/lift `ramps` and orientation change the footprint. Choose where the patch stops; don't reload every stroke or add noise to a perfect grid. |
 | Modulation instead of a monochrome light model [NG; AIC22] | Mix a handful of adjacent warm/cool piles with `pile`, `mix` and `p:add`; inspect with `look` on the palette. Put separate marks beside one another. Values still matter, but no per-pixel shading function supplies the answer. A `form{}` scaffold is optional knowledge, never a field to trace or fill. |
-| Limited wet-in-wet contact [BUT] | Put neighbouring strokes into paint still `"open"` under `drying(x,y)`. Pickup supplies the physical mixing. Keep most marks differentiated; a broad `blend` campaign would defeat the structure. |
-| Transparent overlaps and thin opaque patches [NG] | `turps` leaves a lean thin film; `thinner` supplies solvent that evaporates over painting time. `medium` is added oil, increases fluidity/transparency and slows drying. Use a small brush or shorten `work`'s `hand="glaze"` length for a local overlap: the default glaze spans 120–300 units. A glaze hand is brush handling, not a guarantee of transparent colour. |
+| Limited wet-in-wet contact [BUT] | Put neighboring strokes into paint still `"open"` under `drying(x,y)`. Pickup supplies the physical mixing. Keep most marks differentiated; a broad `blend` campaign would defeat the structure. |
+| Transparent overlaps and thin opaque patches [NG] | `turps` leaves a lean thin film; `thinner` supplies solvent that evaporates over painting time. `medium` is added oil, increases fluidity/transparency and slows drying. Use a small brush or shorten `work`'s `hand="glaze"` length for a local overlap: the default glaze spans 120–300 units. A glaze hand is brush handling, not a guarantee of transparent color. |
 | A projecting light or unfinished edge held in reserve [NG; LETTER] | Leave exposed ground or an earlier wash. `work` defaults to `fill=false`; use `hug=false` where useful, or stop individual strokes short. Don't manufacture a white-hole pattern after covering everything. |
-| Passage across an object/background junction [AIC10; NA] | Paint the two sides in dialogue, allowing a few strokes to cross or share a colour. Normal strokes need no hard clip; `work` can overrun its mask. Use the existing `lose(m,{pile=p,where=...})` selectively, not a global edge filter. Lost contact can be a gap, a shared tone or overpaint, not necessarily blur. |
-| Late blue searching contours [NG; NA] | A small round or rigger and `:stroke`, interrupting rather than enclosing every form. Revisit drawing while revising colour. Do not use a uniform black outline as the whole solution. |
+| Passage across an object/background junction [AIC10; NA] | Paint the two sides in dialogue, allowing a few strokes to cross or share a color. Normal strokes need no hard clip; `work` can overrun its mask. Use the existing `lose(m,{pile=p,where=...})` selectively, not a global edge filter. Lost contact can be a gap, a shared tone or overpaint, not necessarily blur. |
+| Late blue searching contours [NG; NA] | A small round or rigger and `:stroke`, interrupting rather than enclosing every form. Revisit drawing while revising color. Do not use a uniform black outline as the whole solution. |
 | Returning after set paint [NG; NA] | End a chosen sitting, `wait(minutes)` and check `drying` in the actual passage. For example, `wait(3*24*60)` advances three simulated days, but is not proof that a slow lake is dry. Wait longer if it isn't. No time passes merely while the agent thinks. |
 | Local revisions, not a complete repaint [NG; AIC22] | Overpaint a changed relationship and leave some earlier marks exposed. The rag and knife already exist for correction; no historical claim here requires scraping as a routine Cézanne step. There is no undo. |
 
@@ -69,14 +69,14 @@ press/hold/lift with optional drift; `brush("stippler",width)` and
 `stipple(m,{pile=...,width=...,coverage=...})` exist. A touch can make an
 isolated accent or link a small gap. Most constructive marks need an actual
 drag, not a screen of dots. `notes/stipple.md` contains older Rust-side
-colour-aiming examples; use the present Lua pile API, not target-colour
+color-aiming examples; use the present Lua pile API, not target-color
 functions or its automatic field construction.
 
 ## A campaign, not a complete algorithm
 
-1. Read the brief. Choose the picture's own spatial and colour relations;
+1. Read the brief. Choose the picture's own spatial and color relations;
    lightly place them and keep the ground available.
-2. Mix a few piles. Test neighbouring warm/cool patches over the same
+2. Mix a few piles. Test neighboring warm/cool patches over the same
    preparation on scratch, including one wet edge and one dry overlap.
 3. Work one local relationship, then answer it elsewhere in the picture,
    so near and far passages develop together. The exact historical order
@@ -97,7 +97,7 @@ full image and independently chosen crops, no painter self-verdict.
 There is **no demonstrated blocking gap in stroke construction, modulation,
 passage, reserve or multi-session overpainting**. The following are fidelity
 limits, not requests to break the feature freeze. Their visual impact is a
-research judgement; no Cézanne rendering has been tested in this task.
+research judgment; no Cézanne rendering has been tested in this task.
 
 1. **Historical paint formulation and calibration — moderate, uncertain
    impact.** Tubes implement pigment identities but the guide calls their
@@ -107,18 +107,18 @@ research judgement; no Cézanne rendering has been tested in this task.
    opacity, body and matte appearance. `medium`, `blot`, solvent and ground
    absorption offer handling choices, not an exact substitute for the sampled
    formulations. This is the largest remaining oil-material fidelity gap,
-   not evidence that the existing colours cannot work.
+   not evidence that the existing colors cannot work.
 2. **Specific oil/resin preparations — low to moderate, uncertain impact.**
    Named linseed/poppy/walnut oils exist, but do not expose the identified
    degree of heat-bodying or a separate resin-bearing Haarlem siccative.
    That preparation was ordered, not detected; requiring it before painting
    would overstate the evidence. Use existing oil/solvent handling and actual
    state checks rather than pretending to reconstruct its drying exactly.
-3. **True watercolour-on-paper behaviour — low for this oil study, high
-   for a literal late watercolour.** The documented watercolour process
-   needs a water-based binder, paper and drying wash behaviour. The current
+3. **True watercolor-on-paper behavior — low for this oil study, high
+   for a literal late watercolor.** The documented watercolor process
+   needs a water-based binder, paper and drying wash behavior. The current
    guide supplies an oil easel, not that medium. Thin oil can approximate
-   some translucent patch relationships but is not watercolour. This is no
+   some translucent patch relationships but is not watercolor. This is no
    reason to make all late oils transparent: the technical studies warn
    against that equivalence.
 

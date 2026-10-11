@@ -81,7 +81,7 @@ the steps that run `$CARGO_TARGET_DIR/release/easel` run the build just made.
 
 Exit: 0 pass; 1 fail; 3 unfinished (a step timed out, or a partial run); 4 a
 known failure and nothing else wrong; 124 a phase's lockrun timed out; 130
-cancelled.
+canceled.
 
 The summary (--summary) is JSON: mode, phase, verdict ("pass", "fail",
 "unfinished" or "known_failure") and verdict_text, phases (when both ran), list (the list file, relative to the repository), list_sha256,

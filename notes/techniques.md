@@ -34,11 +34,11 @@ does; this says how to use them. What you paint is yours to choose.
    - Gaps between marks: if the brush runs dry, use shorter strokes and
      reload more often. If gaps remain, check brush contact and coverage;
      extra coverage can add dabs and relief.
-   - A continuous thin film showing the undercolour: test less thinning,
+   - A continuous thin film showing the undercolor: test less thinning,
      a fuller deposit or a mixture with stronger hiding. Evidence for
      these fixes is limited, so compare them on the scratch canvas first.
    - A mixture changed by paint carried on the brush: use a fresh brush.
-     If open underpaint caused the pickup and you want separate colour,
+     If open underpaint caused the pickup and you want separate color,
      wait for it to set. Check the pile itself before changing its recipe.
 3. **Prepare a transition.** Mix a few in-between tones, lay them and
    look. Blend while the paint is open, as [Blending](#blending) describes,
@@ -87,11 +87,11 @@ does; this says how to use them. What you paint is yours to choose.
 - **Light relationships.** Relate the light and shadow of each passage to
   the effect you want. A uniform band or a firm boundary can serve the
   picture; judge it against the whole.
-- **Forms meet through relationships.** Overlap, colour and edge handling
+- **Forms meet through relationships.** Overlap, color and edge handling
   separate or connect adjacent planes. A boundary that is only a mask's
   edge leaves their spatial relationship unstated.
 - **Composition**: judge how the masses work together for the effect you
-  chose. Where the emphasis sits, central or off-centre, is yours to
+  chose. Where the emphasis sits, central or off-center, is yours to
   choose.
 
 ## Marks
@@ -103,11 +103,11 @@ does; this says how to use them. What you paint is yours to choose.
   (`scale_at`) can suggest recession; marks of similar scale throughout
   can compress depth.
 - **Mark direction and form.** Direction can turn with a plane or bind
-  neighbouring planes through a shared rhythm. Strokes that wander in
+  neighboring planes through a shared rhythm. Strokes that wander in
   every direction read as noise.
 - **Light and texture.** Bright light reads as light with soft edges and
   little texture. Busy or outlined strokes inside it, or strokes circling
-  a centre, turn it into an object.
+  a center, turn it into an object.
 
 ## Spatter
 
@@ -123,23 +123,23 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Forms and shadows
 
-- **A form can read as one mass.** Relate its parts through colour and
+- **A form can read as one mass.** Relate its parts through color and
   overlap so they hold together. `form{}` gives a lit-volume guide, and
-  colour modulation builds solidity with or without that lighting.
-- **Shadows take colour from surrounding light.** With warm light reflected
+  color modulation builds solidity with or without that lighting.
+- **Shadows take color from surrounding light.** With warm light reflected
   up near its base and cooler light from above, a shadow is warmer near its
   base and cooler above. Grade it in separate passes with different `pile=`
   values, and judge its value and temperature against the object casting
   it and the passages around it. One violet for every shadow is the usual
   trap.
-- **Distance and colour.** Distance lightens and cools: far forms are paler
+- **Distance and color.** Distance lightens and cools: far forms are paler
   and bluer than near ones and closer to each other in tone. Similar
   intensity in near and far planes can compress depth.
 
 ## The palette
 
 - **Look at the board before the canvas.** `look --palette` shows each heap
-  thick and thinned over black: a chalky mix, a violet "grey", a glaze that
+  thick and thinned over black: a chalky mix, a violet "gray", a glaze that
   stains or one that hides show there, before they cost a passage.
 - **Steer a mix by eye**: `p:add{}` a touch at a time, looking between
   additions.

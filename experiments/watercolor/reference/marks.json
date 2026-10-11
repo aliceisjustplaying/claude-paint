@@ -1,0 +1,13 @@
+{
+  "paper": {"width_mm": 19.2, "height_mm": 12.8, "seed": 71, "ours_cell_mm": 0.05, "wet_edge_cell_mm": 0.2},
+  "brush": {"width_mm": 2.4, "water_film_mm": 0.12, "ours_areal_pigment": 0.0015, "wet_edge_strength": 0.015, "segments": 24, "frames_per_segment": 2},
+  "cases": [
+    {"id":"dry", "title":"Loaded stroke on dry paper", "kind":"stroke", "paper_stage":"dry"},
+    {"id":"damp", "title":"Same stroke on damp paper", "kind":"stroke", "paper_stage":"damp"},
+    {"id":"wet", "title":"Same stroke on shiny-wet paper", "kind":"stroke", "paper_stage":"shiny"},
+    {"id":"touch", "title":"Two colors touching without intentional overlap", "kind":"touch", "paper_stage":"shiny"},
+    {"id":"overlap-wet", "title":"Controlled overlap: second color into shiny wet", "kind":"overlap", "second_stage":"shiny", "group":"overlap"},
+    {"id":"overlap-damp", "title":"Controlled overlap: second color into damp", "kind":"overlap", "second_stage":"damp", "group":"overlap"},
+    {"id":"wash", "title":"Flat wash laid in moving rows", "kind":"wash", "paper_stage":"dry"}
+  ]
+}

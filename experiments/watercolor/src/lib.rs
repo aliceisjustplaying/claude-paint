@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 mod fiber_paper;
 mod rng;
+pub mod studio;
 
 pub const TICK_NS: u64 = 62_500_000;
 pub const DT: f64 = 0.0625;
@@ -155,6 +156,7 @@ impl Paper {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Glaze {
+    pub coverage: Vec<f64>,
     pub deposited: Vec<[f64; PIGMENTS]>,
     pub bound: Vec<[f64; PIGMENTS]>,
 }
@@ -162,6 +164,7 @@ pub struct Glaze {
 impl Glaze {
     fn empty(n: usize) -> Self {
         Self {
+            coverage: vec![0.0; n],
             deposited: vec![[0.0; PIGMENTS]; n],
             bound: vec![[0.0; PIGMENTS]; n],
         }
@@ -237,8 +240,29 @@ impl Watercolor {
     }
 
     pub fn add(&mut self, cell: usize, water: f64, pigment: [f64; PIGMENTS]) {
+        self.add_covered(
+            cell,
+            water,
+            pigment,
+            if water > 0.0 || pigment.iter().any(|v| *v > 0.0) {
+                1.0
+            } else {
+                0.0
+            },
+        );
+    }
+
+    pub fn add_covered(
+        &mut self,
+        cell: usize,
+        water: f64,
+        pigment: [f64; PIGMENTS],
+        coverage: f64,
+    ) {
         assert!(water.is_finite() && water >= 0.0);
         assert!(pigment.iter().all(|v| v.is_finite() && *v >= 0.0));
+        assert!(coverage.is_finite() && (0.0..=1.0).contains(&coverage));
+        self.active.coverage[cell] = self.active.coverage[cell].max(coverage);
         self.water[cell] += water;
         self.wet_front[cell] |= water > 0.0;
         self.ledger.water_added += water;
@@ -250,7 +274,51 @@ impl Watercolor {
 
     pub fn dry_contact(&mut self, cell: usize, load: [f64; PIGMENTS], pressure: f64) {
         let contact = ((self.paper.height[cell] - (0.67 - pressure * 0.25)) * 12.0).clamp(0.0, 1.0);
+        self.active.coverage[cell] = self.active.coverage[cell].max(contact);
         assert!(load.iter().all(|v| v.is_finite() && *v >= 0.0));
+        for (p, amount) in load.iter().enumerate() {
+            let m = amount * contact;
+            self.active.deposited[cell][p] += m;
+            self.ledger.pigment_added[p] += m;
+        }
+    }
+
+    pub fn dry_contact_directional(
+        &mut self,
+        cell: usize,
+        load: [f64; PIGMENTS],
+        pressure: f64,
+        direction: [f64; 2],
+    ) {
+        assert!(load.iter().all(|v| v.is_finite() && *v >= 0.0));
+        assert!(pressure.is_finite() && (0.0..=1.0).contains(&pressure));
+        let norm = direction[0].hypot(direction[1]);
+        assert!(norm.is_finite() && norm > 0.0);
+        let mut contact = 0.0;
+        let mut weight = 0.0;
+        for step in 0..9 {
+            let distance = step as f64 * 0.075 / CELL_MM;
+            let x = (cell % self.width) as f64 - direction[0] / norm * distance;
+            let y = (cell / self.width) as f64 - direction[1] / norm * distance;
+            let x = x.clamp(0.0, (self.width - 1) as f64);
+            let y = y.clamp(0.0, (self.height - 1) as f64);
+            let ix = x.floor() as usize;
+            let iy = y.floor() as usize;
+            let fx = x - ix as f64;
+            let fy = y - iy as f64;
+            let mut tooth = 0.0;
+            for (yy, wy) in [(iy, 1.0 - fy), ((iy + 1).min(self.height - 1), fy)] {
+                for (xx, wx) in [(ix, 1.0 - fx), ((ix + 1).min(self.width - 1), fx)] {
+                    tooth += self.paper.height[yy * self.width + xx] * wx * wy;
+                }
+            }
+            let t = ((tooth - (0.62 - pressure * 0.25)) / 0.13).clamp(0.0, 1.0);
+            let w = (-distance * CELL_MM / 0.25).exp();
+            contact += t * t * (3.0 - 2.0 * t) * w;
+            weight += w;
+        }
+        contact /= weight;
+        self.active.coverage[cell] = self.active.coverage[cell].max(contact);
         for (p, amount) in load.iter().enumerate() {
             let m = amount * contact;
             self.active.deposited[cell][p] += m;
@@ -317,7 +385,11 @@ impl Watercolor {
             || std::iter::once(&state.active)
                 .chain(state.glazes.iter())
                 .any(|g| {
-                    g.deposited.len() != n
+                    g.coverage.len() != n
+                        || g.coverage
+                            .iter()
+                            .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+                        || g.deposited.len() != n
                         || g.bound.len() != n
                         || g.deposited
                             .iter()
@@ -376,6 +448,18 @@ impl Watercolor {
     }
 
     fn step(&mut self) {
+        let wet = self.water.iter().any(|v| *v > 0.0);
+        let pore = self.capillary.iter().any(|v| *v > 0.0);
+        if wet || pore || self.suspended.iter().flatten().any(|v| *v > 0.0) {
+            let substeps = if wet { 4 } else { 1 };
+            for _ in 0..substeps {
+                self.solve_substep(DT / substeps as f64);
+            }
+        }
+        self.tick += 1;
+    }
+
+    fn solve_substep(&mut self, dt: f64) {
         let n = self.water.len();
         let faces = self.faces();
         let old_front = self.wet_front.clone();
@@ -398,13 +482,15 @@ impl Watercolor {
             } else {
                 self.flux_y[i]
             };
-            let head_i = self.water[i] + 0.004 * self.paper.height[i];
-            let head_j = self.water[j] + 0.004 * self.paper.height[j];
+            let head_i = self.water[i] + 0.025 * self.paper.height[i];
+            let head_j = self.water[j] + 0.025 * self.paper.height[j];
             let depth = (self.water[i] + self.water[j]) * 0.5;
             let flux = if old_front[i] && old_front[j] {
-                let mobility = (depth / 0.04).clamp(0.0, 1.0).powi(2);
-                0.4 * mobility * previous
-                    + DT * (260.0 * depth).min(24.0) * mobility * (head_i - head_j)
+                let mobility = (depth / 0.02).clamp(0.0, 1.0).powi(2);
+                let permeability =
+                    0.4 + 0.8 * (1.0 - (self.paper.sizing[i] + self.paper.sizing[j]) * 0.5);
+                (-14.0 * dt).exp() * mobility * previous
+                    + dt * 390.0 * depth * mobility * permeability * (head_i - head_j)
             } else {
                 0.0
             };
@@ -414,9 +500,9 @@ impl Watercolor {
                 self.flux_y[i] = flux;
             }
             if flux >= 0.0 {
-                transfers.push((i, j, flux * DT, i, horizontal, 1.0));
+                transfers.push((i, j, flux * dt, i, horizontal, 1.0));
             } else {
-                transfers.push((j, i, -flux * DT, i, horizontal, -1.0));
+                transfers.push((j, i, -flux * dt, i, horizontal, -1.0));
             }
         }
         let mut outgoing = vec![0.0; n];
@@ -428,9 +514,9 @@ impl Watercolor {
         for &(i, j, requested, face, horizontal, sign) in &transfers {
             let amount = requested * (self.water[i] / outgoing[i].max(1e-30)).min(1.0);
             if horizontal {
-                self.flux_x[face] = sign * amount / DT;
+                self.flux_x[face] = sign * amount / dt;
             } else {
-                self.flux_y[face] = sign * amount / DT;
+                self.flux_y[face] = sign * amount / dt;
             }
             delta[i] -= amount;
             delta[j] += amount;
@@ -438,6 +524,9 @@ impl Watercolor {
                 let moved = mass * amount / self.water[i].max(1e-30);
                 pigment_delta[i][p] -= moved;
                 pigment_delta[j][p] += moved;
+                if moved > 0.0 && self.active.coverage[j] == 0.0 {
+                    self.active.coverage[j] = self.active.coverage[i].max(0.05);
+                }
             }
         }
         for i in 0..n {
@@ -453,7 +542,7 @@ impl Watercolor {
                 if self.water[i] < 1e-7 || self.water[j] < 1e-7 {
                     continue;
                 }
-                let diff = DT
+                let diff = dt
                     * (0.18 + 0.45 * (1.0 - PALETTE[p].granulation))
                     * self.water[i].min(self.water[j])
                     * (self.suspended[i][p] / self.water[i] - self.suspended[j][p] / self.water[j]);
@@ -470,6 +559,9 @@ impl Watercolor {
                 let moved = requested * (self.suspended[i][p] / out[i].max(1e-30)).min(1.0);
                 change[i] -= moved;
                 change[j] += moved;
+                if moved > 0.0 && self.active.coverage[j] == 0.0 {
+                    self.active.coverage[j] = self.active.coverage[i].max(0.05);
+                }
             }
             for (i, d) in change.iter().enumerate() {
                 self.suspended[i][p] = (self.suspended[i][p] + d).max(0.0);
@@ -480,7 +572,7 @@ impl Watercolor {
         let mut cap_out = vec![0.0; n];
         let mut cap_in = vec![0.0; n];
         for &(i, j, _) in &faces {
-            let d = DT
+            let d = dt
                 * 0.14
                 * (self.capillary[i] / self.paper.capacity[i]
                     - self.capillary[j] / self.paper.capacity[j]);
@@ -503,7 +595,7 @@ impl Watercolor {
         let edge_water = self.water.clone();
         for i in 0..n {
             let saturation = self.capillary[i] / self.paper.capacity[i];
-            let uptake = (DT * 0.016 * (1.0 - self.paper.sizing[i]) * (1.0 - saturation))
+            let uptake = (dt * 0.016 * (1.0 - self.paper.sizing[i]) * (1.0 - saturation))
                 .min(self.water[i])
                 .min((self.paper.capacity[i] - self.capillary[i]).max(0.0));
             self.water[i] -= uptake;
@@ -523,10 +615,10 @@ impl Watercolor {
                     }
                 }
             }
-            let evap = (DT * 0.0035 * (0.75 + 0.5 * self.paper.sizing[i]) * (1.0 + edge * 8.0))
+            let evap = (dt * 0.0035 * (0.75 + 0.5 * self.paper.sizing[i]) * (1.0 + edge * 8.0))
                 .min(self.water[i]);
             self.water[i] -= evap;
-            let cap_evap = (DT
+            let cap_evap = (dt
                 * 0.0018
                 * (0.7 + self.paper.sizing[i])
                 * (self.capillary[i] / self.paper.capacity[i]).sqrt())
@@ -534,14 +626,29 @@ impl Watercolor {
             self.capillary[i] -= cap_evap;
             self.ledger.water_evaporated += evap + cap_evap;
             let wet = (self.water[i] / 0.035).clamp(0.0, 1.0);
+            let mut speed = self.flux_x[i].abs() + self.flux_y[i].abs();
+            if x > 0 {
+                speed += self.flux_x[i - 1].abs();
+            }
+            if y > 0 {
+                speed += self.flux_y[i - self.width].abs();
+            }
+            let speed = (speed / self.water[i].max(0.01)).min(8.0);
             for (p, pigment) in PALETTE.iter().enumerate() {
+                let room = (pigment.staining
+                    * (self.active.deposited[i][p] + self.active.bound[i][p])
+                    - self.active.bound[i][p])
+                    .max(0.0);
+                if self.suspended[i][p] == 0.0 && wet == 0.0 && room == 0.0 {
+                    continue;
+                }
                 let valley = (1.0 - self.paper.height[i]).powi(2) * 4.0 * self.paper.clump[i];
                 let rate =
                     pigment.settling * (0.22 + pigment.granulation * valley + 1.4 * (1.0 - wet));
                 let adsorbed = if self.water[i] < 0.0002 {
                     self.suspended[i][p]
                 } else {
-                    self.suspended[i][p] * (1.0 - (-rate * DT).exp())
+                    self.suspended[i][p] * (1.0 - (-rate * dt).exp())
                 };
                 self.suspended[i][p] -= adsorbed;
                 self.active.deposited[i][p] += adsorbed;
@@ -551,7 +658,7 @@ impl Watercolor {
                     .max(0.0);
                 let bind = (self.active.deposited[i][p]
                     * (1.0
-                        - (-DT
+                        - (-dt
                             * pigment.staining
                             * 0.8
                             * (0.3 + 1.0 - wet)
@@ -561,12 +668,12 @@ impl Watercolor {
                 self.active.deposited[i][p] -= bind;
                 self.active.bound[i][p] += bind;
                 let released = self.active.deposited[i][p]
-                    * (1.0 - (-DT * 0.035 * wet * (1.0 - pigment.staining)).exp());
+                    * (1.0 - (-dt * (0.035 + 0.3 * speed) * wet * (1.0 - pigment.staining)).exp());
                 self.active.deposited[i][p] -= released;
                 self.suspended[i][p] += released;
                 for glaze in &mut self.glazes {
                     let rewet = glaze.deposited[i][p]
-                        * (1.0 - (-DT * 0.11 * wet * (1.0 - pigment.staining)).exp());
+                        * (1.0 - (-dt * 0.11 * wet * (1.0 - pigment.staining)).exp());
                     glaze.deposited[i][p] -= rewet;
                     self.suspended[i][p] += rewet;
                 }
@@ -575,7 +682,6 @@ impl Watercolor {
                 self.wet_front[i] = false;
             }
         }
-        self.tick += 1;
     }
 
     pub fn finish_glaze(&mut self) -> Result<(), &'static str> {
@@ -647,17 +753,51 @@ impl Watercolor {
     }
 
     pub fn rgb(&self, raking: bool) -> Vec<u8> {
+        if raking {
+            self.rgb_lit(135.0, 25.0, 1.0)
+        } else {
+            self.rgb_lit(115.0, 55.0, 1.0)
+        }
+    }
+
+    pub fn rgb_color(&self) -> Vec<u8> {
+        self.project(None)
+    }
+
+    pub fn rgb_lit(&self, azimuth: f64, elevation: f64, intensity: f64) -> Vec<u8> {
+        assert!(azimuth.is_finite() && elevation.is_finite() && (1.0..=90.0).contains(&elevation));
+        assert!(intensity.is_finite() && intensity >= 0.0);
+        self.project(Some((
+            azimuth.to_radians(),
+            elevation.to_radians(),
+            intensity,
+        )))
+    }
+
+    fn project(&self, light: Option<(f64, f64, f64)>) -> Vec<u8> {
         let mut image = Vec::with_capacity(self.water.len() * 3);
         for i in 0..self.water.len() {
             let mut reflectance = [0.92, 0.90, 0.85];
             for glaze in &self.glazes {
                 let mass = std::array::from_fn(|p| glaze.deposited[i][p] + glaze.bound[i][p]);
-                reflectance = compose_km(reflectance, mass);
+                let coverage = glaze.coverage[i];
+                if coverage > 0.0 {
+                    let covered = compose_km(reflectance, mass.map(|v| v / coverage));
+                    reflectance = std::array::from_fn(|c| {
+                        reflectance[c] * (1.0 - coverage) + covered[c] * coverage
+                    });
+                }
             }
             let mass = std::array::from_fn(|p| {
                 self.active.deposited[i][p] + self.active.bound[i][p] + self.suspended[i][p]
             });
-            reflectance = compose_km(reflectance, mass);
+            let coverage = self.active.coverage[i];
+            if coverage > 0.0 {
+                let covered = compose_km(reflectance, mass.map(|v| v / coverage));
+                reflectance = std::array::from_fn(|c| {
+                    reflectance[c] * (1.0 - coverage) + covered[c] * coverage
+                });
+            }
             let x = i % self.width;
             let y = i / self.width;
             let left = y * self.width + x.saturating_sub(1);
@@ -666,10 +806,16 @@ impl Watercolor {
             let down = (y + 1).min(self.height - 1) * self.width + x;
             let dx = self.paper.height[right] - self.paper.height[left];
             let dy = self.paper.height[down] - self.paper.height[up];
-            let shade = if raking {
-                (0.97 + 0.18 * (dx - dy)).clamp(0.87, 1.06)
+            let shade = if let Some((azimuth, elevation, intensity)) = light {
+                let nx = -0.025 * dx / (2.0 * CELL_MM);
+                let ny = -0.025 * dy / (2.0 * CELL_MM);
+                let dot = (nx * azimuth.cos() * elevation.cos()
+                    + ny * azimuth.sin() * elevation.cos()
+                    + elevation.sin())
+                    / (1.0 + nx * nx + ny * ny).sqrt();
+                intensity * (0.45 + 0.55 * dot.max(0.0) / elevation.sin())
             } else {
-                (0.996 + 0.025 * (dx - dy)).clamp(0.98, 1.01)
+                1.0
             };
             for c in reflectance {
                 let linear = (c * shade).clamp(0.0, 1.0);

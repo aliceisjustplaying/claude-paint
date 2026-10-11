@@ -38,10 +38,11 @@ fn wash(
                 } else {
                     1.0
                 };
-                s.add(
+                s.add_covered(
                     y * W + x,
                     water * coverage,
                     pigment.map(|v| v * factor * coverage),
+                    coverage,
                 );
             }
         }
@@ -128,14 +129,16 @@ fn main() {
             false,
         );
         s.wait_seconds(8.0);
-        wash(
-            &mut s,
-            (102.0, 58.0),
-            (10.0, 9.0),
-            0.25,
-            [0.0; PIGMENTS],
-            false,
-        );
+        for y in 0..H {
+            for x in 0..W {
+                let dx = (x as f64 / SCALE as f64 - 102.0) * 0.2;
+                let dy = (y as f64 / SCALE as f64 - 58.0) * 0.2;
+                let water = 0.95 * (-(dx * dx + dy * dy) / (2.0 * 0.75_f64.powi(2))).exp();
+                if water > 0.0001 {
+                    s.add(y * W + x, water, [0.0; PIGMENTS]);
+                }
+            }
+        }
         let mut movie = s.clone();
         let frames = out.join("slow-bloom");
         fs::create_dir_all(&frames).unwrap();
@@ -206,10 +209,11 @@ fn main() {
                 let edge = ((py - center).abs() / 18.0).clamp(0.0, 1.0);
                 let release = 0.65 + 0.35 * (px / 17.0 + py / 7.0).sin();
                 if edge < 0.94 {
-                    s.dry_contact(
+                    s.dry_contact_directional(
                         y * W + x,
                         [0.0, 0.0, 0.032 * release * (1.0 - edge * edge)],
                         0.24,
+                        [1.0, 8.0 / 41.0 * (px / 41.0).cos()],
                     );
                 }
             }

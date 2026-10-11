@@ -1,0 +1,260 @@
+{
+  "currency": "USD",
+  "rates_checked_date": "2026-10-10",
+  "measured": {
+    "painting": "r31-smoke / Grainstack, Evening",
+    "model": "claude-opus-5-5",
+    "provider": "anthropic",
+    "reasoning": "high",
+    "successful_main_chunks": 2,
+    "requests": 5,
+    "cutoff_original_line": 27,
+    "actual_logged_tokens": {
+      "input_tokens": 12,
+      "output_tokens": 2458,
+      "cache_read_tokens": 81697,
+      "cache_write_5m_tokens": 30812,
+      "cache_write_1h_tokens": 0,
+      "reasoning_tokens": 1197
+    },
+    "public_api_equivalent_usd": 0.2196074,
+    "request_usage": [
+      {
+        "line": 8,
+        "input_tokens": 4,
+        "output_tokens": 206,
+        "cache_read_tokens": 0,
+        "cache_write_5m_tokens": 2500,
+        "cache_write_1h_tokens": 0,
+        "reasoning_tokens": 13,
+        "cost_usd": 0.016636
+      },
+      {
+        "line": 13,
+        "input_tokens": 2,
+        "output_tokens": 120,
+        "cache_read_tokens": 2500,
+        "cache_write_5m_tokens": 20516,
+        "cache_write_1h_tokens": 0,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.105488
+      },
+      {
+        "line": 18,
+        "input_tokens": 2,
+        "output_tokens": 729,
+        "cache_read_tokens": 23016,
+        "cache_write_5m_tokens": 3374,
+        "cache_write_1h_tokens": 0,
+        "reasoning_tokens": 628,
+        "cost_usd": 0.0360612
+      },
+      {
+        "line": 22,
+        "input_tokens": 2,
+        "output_tokens": 661,
+        "cache_read_tokens": 26390,
+        "cache_write_5m_tokens": 3401,
+        "cache_write_1h_tokens": 0,
+        "reasoning_tokens": 502,
+        "cost_usd": 0.035511
+      },
+      {
+        "line": 26,
+        "input_tokens": 2,
+        "output_tokens": 742,
+        "cache_read_tokens": 29791,
+        "cache_write_5m_tokens": 1021,
+        "cache_write_1h_tokens": 0,
+        "reasoning_tokens": 54,
+        "cost_usd": 0.0259112
+      }
+    ],
+    "call_result_lines": [
+      [
+        22,
+        23
+      ],
+      [
+        26,
+        27
+      ]
+    ],
+    "setup_only": true,
+    "pending_generated_tool": "look",
+    "source": "/home/user/.capy/drive/captain-stillwet/handoffs/subject-bench/r31-opening-usage.jsonl",
+    "ledger_source_path": "/Users/sarah/.pi/agent/sessions/--Users-sarah-src-a-paint-studio-c8bb05--/2026-10-05T22-55-00-677Z_01a10e47-1044-70fc-a6cf-9d3e5cac13d4.jsonl",
+    "verification": "All token fields rechecked against ledger. Lua matched committed main chunks 1 and 2 before backing replacement; archive not required for this reconstruction."
+  },
+  "scenarios": [
+    {
+      "label": "Claude Haiku 5.5 CPA",
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5",
+      "cached_same_workload_usd": 0.00589867,
+      "uncached_same_workload_usd": 0.0124811,
+      "assumed_input_tokens": 12,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 30812,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "Claude Sonnet 5.5 CPA",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "cached_same_workload_usd": 0.1098037,
+      "uncached_same_workload_usd": 0.249622,
+      "assumed_input_tokens": 12,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 30812,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "Claude Opus 5.5 CPA",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5",
+      "cached_same_workload_usd": 0.2196074,
+      "uncached_same_workload_usd": 0.499244,
+      "assumed_input_tokens": 12,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 30812,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "GPT 6.1 Sol Codex",
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "cached_same_workload_usd": 0.0943977,
+      "uncached_same_workload_usd": 0.249622,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "GPT 6 Luna Codex",
+      "provider": "openai-codex",
+      "model": "gpt-6-luna",
+      "cached_same_workload_usd": 0.00512837,
+      "uncached_same_workload_usd": 0.0124811,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "Kimi K3 Go",
+      "provider": "opencode-go",
+      "model": "kimi-k3",
+      "cached_same_workload_usd": 0.1538511,
+      "uncached_same_workload_usd": 0.374433,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "DeepSeek V4.1 Flash Go",
+      "provider": "opencode-go",
+      "model": "deepseek-v4.1-flash",
+      "cached_same_workload_usd": 0.012686982,
+      "uncached_same_workload_usd": 0.0367059,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "GLM 5.3 Flash Go",
+      "provider": "opencode-go",
+      "model": "glm-5.3-flash",
+      "cached_same_workload_usd": 0.00830351,
+      "uncached_same_workload_usd": 0.01810715,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "MiMo V2.6 Pro Go",
+      "provider": "opencode-go",
+      "model": "mimo-v2.6-pro",
+      "cached_same_workload_usd": 0.0158410092,
+      "uncached_same_workload_usd": 0.051085095,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    },
+    {
+      "label": "Gemini 3.8 Flash OpenRouter",
+      "provider": "openrouter",
+      "model": "google/gemini-3.8-flash",
+      "cached_same_workload_usd": 0.038462775,
+      "uncached_same_workload_usd": 0.09360825,
+      "assumed_input_tokens": 30824,
+      "assumed_cache_read_tokens": 81697,
+      "assumed_cache_write_5m_tokens": 0,
+      "assumed_cache_write_1h_tokens": 0,
+      "assumed_output_tokens": 2458,
+      "assumed_reasoning_subset_tokens": 1197,
+      "uncached_scenario_input_tokens": 112521,
+      "status": "Measured Opus workload repriced; target model behavior and tokenization not measured"
+    }
+  ],
+  "rate_file": "rates.csv",
+  "method": "Per-request sum of uncached input, output, cache-read and cache-write tokens times their dated rates / 1000000. Reasoning is a subset of output, not added.",
+  "assumptions": "Same five Opus responses, actions and token counts for every target. Cached scenario preserves cache reads and Anthropic writes; writes become ordinary input for non-Anthropic targets. Cold scenario values every prompt token as uncached. Rate tiers are selected per response, not aggregate.",
+  "billing": "Public API-equivalent valuation; not incremental CPA/Codex/Go subscription charges or quota deductions.",
+  "missing": "Actual opening usage for nine other models, subscription billing/quota conversion and cache-storage retention duration.",
+  "provenance": [
+    {
+      "path": "/home/user/.capy/drive/captain-stillwet/handoffs/subject-bench/r31-opening-usage.jsonl",
+      "sha256": "e6e8b9d47a124bf320ca4645b24bf7ccab0f66b9043979e3d49105a4885f93cb"
+    },
+    {
+      "path": "/home/user/.capy/drive/captain-stillwet/handoffs/painting-costs/pricing.csv",
+      "sha256": "c7f7c224b2c5bcdfb9fd4cd007540b61e6dc3a14ef9718c8e0904760afe03f99"
+    },
+    {
+      "path": "/home/user/.capy/drive/captain-stillwet/handoffs/painting-costs/requests.csv",
+      "sha256": "01610b94b9bbc9876982afaa4f005091bf7aa9d1ae905250d6fa3c07b649af1c"
+    }
+  ]
+}

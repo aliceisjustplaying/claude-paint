@@ -12,6 +12,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 
 RECEIPTS_REF = "refs/notes/test-receipts"
 APPROVALS_REF = "refs/notes/golden-approvals"
@@ -44,6 +45,29 @@ _PROTECTED = base64.b64decode("c2FyYWg=").decode()
 
 class Refuse(Exception):
     """A request the tools will not carry out; the message says why."""
+
+
+def validate_timeout_scale(value):
+    if type(value) not in (int, float) or not 1 <= value <= 16 or not math.isfinite(value):
+        raise Refuse("timeout scale %r must be a finite number from 1 through 16" % value)
+    return value
+
+
+def timeout_scale():
+    """Validated override, or an affinity-based Linux scale; other platforms use 1."""
+    override = os.environ.get("SCRIPTS_TEST_TIMEOUT_SCALE")
+    if override is not None:
+        try:
+            return validate_timeout_scale(float(override))
+        except (ValueError, Refuse):
+            raise Refuse("SCRIPTS_TEST_TIMEOUT_SCALE must be a finite number from 1 through 16")
+    if sys.platform != "linux":
+        return 1.0
+    try:
+        cpus = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cpus = os.cpu_count() or 1
+    return max(1.0, 16.0 / max(1, cpus))
 
 
 def now_iso():
@@ -266,7 +290,7 @@ def _num(x):
 
 def _same(key, got, want):
     if key == "limit":
-        return _num(got) and float(got) == want
+        return _num(got) and got == want and math.isfinite(want)
     if key == "least":
         return _int(got) and got == want
     if key == "group":
@@ -284,10 +308,11 @@ def phase_steps(manifest_steps, phase):
     return [m for m in manifest_steps if (m["kind"] == "build") == (phase == "build")]
 
 
-def binding_problems(manifest_steps, steps, other=()):
+def binding_problems(manifest_steps, steps, other=(), scale=1):
     """Why the summary's steps are not exactly the list's steps ([] if they are):
     same steps, same order, same name, kind, command, limit, least, group and known
-    failure. OTHER: the names the list gives the other phase (named as such)."""
+    failure, with limits multiplied by SCALE. OTHER: the names the list gives
+    the other phase (named as such). The manifest itself is never modified."""
     p = []
     got = [s.get("name") if isinstance(s, dict) else None for s in steps]
     want = [m["name"] for m in manifest_steps]
@@ -314,8 +339,9 @@ def binding_problems(manifest_steps, steps, other=()):
         if s is None:
             continue
         for k in STEP_KEYS[1:]:
-            if not _same(k, s.get(k), m[k]):
-                p.append("step %s: the summary's %s is %r, the list's %r" % (m["name"], k, s.get(k), m[k]))
+            expected = m[k] * scale if k == "limit" else m[k]
+            if not _same(k, s.get(k), expected):
+                p.append("step %s: the summary's %s is %r, the list's %r" % (m["name"], k, s.get(k), expected))
     return p
 
 
@@ -333,19 +359,28 @@ def _tests_problems(s, name, least_of):
     return p
 
 
-def phase_problems(summary, manifest, phase):
+def phase_problems(summary, manifest, phase, scale=1):
     """Check one phase's scripts/test summary (`scripts/test --all --phase PHASE`)
     against MANIFEST (manifest_at). Returns (problems, known): PROBLEMS are the
     reasons it is neither a pass nor a listed known failure ([] if it is one);
     KNOWN names the steps that are known failures exactly as the list names them
     (the check phase only: the step's row names a known failure, the step reports
     known_failure true, ok false, not timed out, the listed exit code and at least
-    its minimum of tests). The phase passes if both are empty."""
+    its minimum of tests). Explicit summary scales must match trusted SCALE;
+    legacy summaries without one bind raw limits at 1. The phase passes if both
+    are empty."""
     if phase not in PHASES:
         raise ValueError(phase)
     if not isinstance(summary, dict):
         return ["the summary is missing or not a JSON object"], []
     p, known = [], []
+    try:
+        scale = validate_timeout_scale(scale)
+        summary_scale = validate_timeout_scale(summary.get("timeout_scale", 1))
+    except Refuse as error:
+        return [str(error)], []
+    if "timeout_scale" in summary and summary_scale != scale:
+        p.append("summary timeout scale %r differs from the trusted scale %r" % (summary_scale, scale))
     want = phase_steps(manifest["steps"], phase)
     other = [m["name"] for m in manifest["steps"] if m not in want]
     if summary.get("mode") != "all":
@@ -372,7 +407,7 @@ def phase_problems(summary, manifest, phase):
     if not steps and want:
         p.append("summary has no steps: an empty test selection never passes")
         return p, []
-    p += binding_problems(want, steps, other)
+    p += binding_problems(want, steps, other, summary_scale)
     least_of = {m["name"]: m["least"] for m in manifest["steps"]}
     known_of = {m["name"]: m["known"] for m in manifest["steps"]}
     for i, s in enumerate(steps):

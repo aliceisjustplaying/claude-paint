@@ -1,6 +1,6 @@
 {
   "paper": {"width_mm": 19.2, "height_mm": 12.8, "seed": 71, "ours_cell_mm": 0.05, "wet_edge_cell_mm": 0.2},
-  "brush": {"width_mm": 2.4, "water_film_mm": 0.12, "ours_areal_pigment": 0.0015, "wet_edge_strength": 0.015, "segments": 24, "frames_per_segment": 2},
+  "brush": {"width_mm": 2.4, "water_film_mm": 0.12, "ours_areal_pigment": 0.0015, "wet_edge_strength": 0.2, "wet_edge_water_level": 0.3, "segments": 24, "frames_per_segment": 2},
   "cases": [
     {"id":"dry", "title":"Loaded stroke on dry paper", "kind":"stroke", "paper_stage":"dry"},
     {"id":"damp", "title":"Same stroke on damp paper", "kind":"stroke", "paper_stage":"damp"},

@@ -1456,12 +1456,45 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(feature = "replay")]
-fn same_file(a: &Path, b: &Path) -> bool {
+fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
+    let absolute = std::path::absolute(path)?;
+    let mut pending: std::collections::VecDeque<_> = absolute.components().map(|c| c.as_os_str().to_os_string()).collect();
+    let mut resolved = PathBuf::new();
+    let mut links = 0;
+    while let Some(part) = pending.pop_front() {
+        if part == "/" {
+            resolved = PathBuf::from("/");
+        } else if part == ".." {
+            resolved.pop();
+        } else if part != "." {
+            resolved.push(part);
+            match std::fs::read_link(&resolved) {
+                Ok(target) => {
+                    links += 1;
+                    if links > 40 {
+                        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "too many symbolic links in output path"));
+                    }
+                    resolved.pop();
+                    for component in target.components().rev() {
+                        pending.push_front(component.as_os_str().to_os_string());
+                    }
+                }
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput) => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+#[cfg(feature = "replay")]
+fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     use std::os::unix::fs::MetadataExt;
-    a == b || match (std::fs::metadata(a), std::fs::metadata(b)) {
+    let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
+    Ok(resolve(a)? == resolve(b)? || match (std::fs::metadata(a), std::fs::metadata(b)) {
         (Ok(a), Ok(b)) => (a.dev(), a.ino()) == (b.dev(), b.ino()),
         _ => false,
-    }
+    })
 }
 
 #[cfg(feature = "replay")]
@@ -1487,8 +1520,43 @@ fn run(args: &[String]) -> Result<(), String> {
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
     if let Some(p) = flag(args, "--checkpoint-out") {
         let path = Path::new(&p);
-        if same_file(path, Path::new(file)) || same_file(path, &out) {
-            return Err("--checkpoint-out must differ from the source and PNG output".into());
+        let mut outputs = vec![out.clone()];
+        for flag_name in ["--state-digest", "--dump-surface"] {
+            if let Some(p) = flag(args, flag_name) {
+                outputs.push(PathBuf::from(p));
+            }
+        }
+        if args.iter().any(|a| a == "--look") {
+            outputs.push(out.with_extension("look.png"));
+        }
+        if same_file(path, Path::new(file))? {
+            return Err("--checkpoint-out must differ from the source and every output".into());
+        }
+        for output in outputs {
+            if same_file(path, &output)? {
+                return Err("--checkpoint-out must differ from the source and every output".into());
+            }
+        }
+        for flag_name in ["--dump-state", "--frames-dir"] {
+            if let Some(d) = flag(args, flag_name) {
+                let dir = Path::new(&d);
+                let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
+                if resolve(path)?.starts_with(resolve(dir)?) {
+                    return Err(format!("--checkpoint-out must be outside {flag_name}"));
+                }
+                match std::fs::read_dir(dir) {
+                    Ok(entries) => {
+                        for entry in entries {
+                            let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
+                            if same_file(path, &entry.path())? {
+                                return Err(format!("--checkpoint-out must not alias an output in {flag_name}"));
+                            }
+                        }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(format!("{}: {e}", dir.display())),
+                }
+            }
         }
     }
     let chunks = parse_program(&text);
@@ -1604,7 +1672,10 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
         i += 1;
     }
     let [checkpoint, out] = files.as_slice() else { return Err(RENDER_CHECKPOINT_USAGE.into()) };
-    if same_file(Path::new(checkpoint), Path::new(out)) || log.as_ref().is_some_and(|l| same_file(Path::new(l), Path::new(out))) {
+    if same_file(Path::new(checkpoint), Path::new(out))? {
+        return Err("render-checkpoint output must differ from the save and source log".into());
+    }
+    if let Some(l) = &log && same_file(Path::new(l), Path::new(out))? {
         return Err("render-checkpoint output must differ from the save and source log".into());
     }
     let light = match mode.as_str() {

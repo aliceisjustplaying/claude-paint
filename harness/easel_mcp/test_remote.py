@@ -146,13 +146,70 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(0.01)
             self.assertEqual(len(self.fake.calls), 1)
+            work = self.owner.tasks["drop-1"][1]
             request.cancel()
             await asyncio.gather(request, return_exceptions=True)
         self.fake.gate.set()
+        await work
+        await asyncio.sleep(0)
+        self.assertIn("drop-1", self.owner.completed)
         async with self.client() as client:
             result = await client.call_tool("paint", arguments)
         self.assertEqual(result.content[0].text, "ok")
         self.assertEqual(len(self.fake.calls), 1)
+
+    async def test_completed_task_expires_without_another_request(self):
+        self.owner.completed_ttl = 0.03
+        arguments = {"lua": "slow", "call_id": "expire-1"}
+        async with self.client() as client:
+            pending = await client.call_tool("paint", arguments)
+            self.assertIn("is still running", pending.content[0].text)
+            work = self.owner.tasks["expire-1"][1]
+            self.fake.gate.set()
+            await work
+            await asyncio.sleep(0)
+            self.assertIn("expire-1", self.owner.completed)
+            await asyncio.sleep(0.05)
+            self.assertEqual(self.owner.tasks, {})
+            self.assertEqual(self.owner.completed, {})
+            cached = await client.call_tool("paint", arguments)
+            self.assertEqual(cached.content[0].text, "ok")
+        self.assertEqual(len(self.fake.calls), 1)
+
+    async def test_completed_cache_evicts_oldest_at_count_limit(self):
+        self.owner.max_completed = 2
+        async with self.client() as client:
+            for index in range(3):
+                await client.call_tool("paint", {"lua": "a", "call_id": f"count-{index}"})
+            self.assertEqual(list(self.owner.completed), ["count-1", "count-2"])
+            cached = await client.call_tool("paint", {"lua": "a", "call_id": "count-0"})
+            self.assertEqual(cached.content[0].text, "ok")
+            self.assertEqual(list(self.owner.completed), ["count-1", "count-2"])
+        self.assertEqual(len(self.fake.calls), 3)
+
+    async def test_queue_bound_rejects_new_work_but_allows_retries(self):
+        async with self.client() as client:
+            await client.call_tool("paint", {"lua": "slow", "call_id": "running"})
+            for index in range(self.owner.max_waiting):
+                reply = await client.call_tool("paint", {"lua": f"queued-{index}", "call_id": f"queue-{index}"})
+                self.assertIn("is still running", reply.content[0].text)
+            extra = {"lua": "extra", "call_id": "overflow"}
+            busy = await client.call_tool("paint", extra)
+            self.assertTrue(busy.isError)
+            self.assertEqual(busy.content[0].text, "The easel is busy. Retry this same call with the same call_id later.")
+            self.assertEqual(len(self.owner.tasks), 5)
+            self.assertIsNone(self.owner.db.execute("SELECT request FROM calls WHERE id = 'overflow'").fetchone())
+            retry = await client.call_tool("paint", {"lua": "queued-0", "call_id": "queue-0"})
+            self.assertIn("is still running", retry.content[0].text)
+            self.assertEqual(len(self.owner.tasks), 5)
+            self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow"])
+            work = [task[1] for task in self.owner.tasks.values()]
+            self.fake.gate.set()
+            await asyncio.gather(*work)
+            await asyncio.sleep(0)
+            admitted = await client.call_tool("paint", extra)
+            self.assertEqual(admitted.content[0].text, "ok")
+        self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow", "queued-0", "queued-1", "queued-2", "queued-3", "extra"])
 
     async def test_inline_image_and_verbatim_error(self):
         async with self.client() as client:

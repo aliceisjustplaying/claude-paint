@@ -107,8 +107,10 @@ fn display_export_versions_are_honored_by_live_save() {
     let name = format!("gloss-save-test-{}", std::process::id());
     let like = Session::replay(64).unwrap();
     let mut server = Server::resume_as(name.clone(), Some(&like)).unwrap();
-    server.serve_cmd("do", &[], &program(paint::ENGINE)).unwrap();
-    let before = state_digest_line(&server.s, 1, 0.0);
+    for chunk in parse_program(&program(paint::ENGINE)) {
+        server.serve_cmd("do", &[], &chunk).unwrap();
+    }
+    let before = state_digest_line(&server.s, 2, 0.0);
     for (label, version) in [("default", None), ("legacy", Some("1")), ("gloss", Some("2"))] {
         let out = temp.file(&format!("{label}.png"));
         let mut args = vec![out.clone(), "--gallery".into()];
@@ -122,7 +124,7 @@ fn display_export_versions_are_honored_by_live_save() {
         deliver_seen(&server.s.canvas().unwrap(), Path::new(&expected), &pixels).unwrap();
         assert_eq!(std::fs::read(out).unwrap(), std::fs::read(expected).unwrap());
     }
-    assert_eq!(before, state_digest_line(&server.s, 1, 0.0));
+    assert_eq!(before, state_digest_line(&server.s, 2, 0.0));
     std::fs::remove_file(log_path(&name)).unwrap();
     std::fs::remove_dir_all(session_dir(&name)).unwrap();
 }

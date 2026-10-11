@@ -412,6 +412,9 @@ impl std::fmt::Debug for Held {
 }
 
 impl Held {
+    pub(crate) fn supports_layered_exchange(&self) -> bool {
+        self.shows_solvent && self.bristles.iter().all(|b| b.hide[3] <= 0.0)
+    }
     pub(crate) fn material(&self, mm_per_unit: f32) -> crate::rag::transport::Material {
         let unit = (mm_per_unit as f64).powi(2) * COAT_UM as f64 / 1000.0;
         let mut total = crate::rag::transport::Material::default();

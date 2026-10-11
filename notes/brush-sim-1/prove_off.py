@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 repo = Path(__file__).resolve().parents[2]
+if len(sys.argv) != 6:
+    raise SystemExit("usage: prove_off.py OUTPUT BASELINE_BINARY OFF_BINARY ON_BINARY BASELINE_COMMIT")
 root = Path(sys.argv[1]).resolve()
 binaries = dict(zip(["origin-main", "feature-off", "feature-on-engine5"], map(lambda p: str(Path(p).resolve()), sys.argv[2:5])))
 assert len(binaries) == 3
@@ -24,7 +26,7 @@ cases.append(("engine5-work-brush-rag", source, 640))
 sampler = root / "sampler.lua"
 sampler.write_text("--@ box giverny\n--@ engine 5\n" + "".join(f"--@ chunk {i}\n" + (repo / "paintings/sampler" / name).read_text() + "\n" for i, name in enumerate(["p9_study.lua", "p9_study2.lua", "p9_study3.lua"], 1)))
 cases.append(("engine5-layered-passage", sampler, 640))
-receipt = {"baseline": subprocess.check_output(["git", "rev-parse", "origin/main"], cwd=repo, text=True).strip(), "binaries": {name: hashlib.sha256(Path(p).read_bytes()).hexdigest() for name, p in binaries.items()}, "cases": []}
+receipt = {"baseline": subprocess.check_output(["git", "rev-parse", sys.argv[5]], cwd=repo, text=True).strip(), "binaries": {name: hashlib.sha256(Path(p).read_bytes()).hexdigest() for name, p in binaries.items()}, "cases": []}
 for name, source, width in cases:
     got = {}
     for mode, binary in binaries.items():

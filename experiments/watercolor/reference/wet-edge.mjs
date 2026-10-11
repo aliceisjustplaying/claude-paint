@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(await readFile(`${here}/marks.json`, 'utf8'));
 const output = resolve(process.argv[2]);
+const hardware = process.env.GPU_MODE === 'hardware' || process.platform === 'darwin';
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/chromium',
+  executablePath: process.env.CHROME_PATH ?? (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/local/bin/chromium'),
   headless: true,
-  args: ['--no-sandbox', '--enable-unsafe-webgpu', '--use-angle=swiftshader', '--disable-gpu-watchdog', '--enable-features=Vulkan', '--use-vulkan=swiftshader']
+  args: hardware ? ['--enable-unsafe-webgpu', '--disable-gpu-watchdog'] : ['--no-sandbox', '--enable-unsafe-webgpu', '--use-angle=swiftshader', '--disable-gpu-watchdog', '--enable-features=Vulkan', '--use-vulkan=swiftshader']
 });
 try {
   const page = await browser.newPage({viewport: {width: 1200, height: 800}});
@@ -24,7 +25,8 @@ try {
     const response = await route.fetch();
     const source = await response.text();
     if (!source.includes('const SW = 1024, SH = 768;')) throw new Error('Unrecognized upstream mind dimensions');
-    await route.fulfill({response, body: source.replace('const SW = 1024, SH = 768;', 'const SW = 96, SH = 64;')});
+    if (!source.includes('const W = 1024, a = await sim.read()')) throw new Error('Unrecognized upstream wash dimensions');
+    await route.fulfill({response, body: source.replace('const SW = 1024, SH = 768;', 'const SW = 96, SH = 64;').replace('const W = 1024, a = await sim.read()', 'const W = 96, a = await sim.read()')});
   });
   await page.exposeFunction('__saveLook', async (name, b64) => {
     await writeFile(`${output}/${name}.png`, Buffer.from(b64, 'base64'));
@@ -32,9 +34,13 @@ try {
   await page.goto(process.env.APP_URL ?? 'http://127.0.0.1:8765');
   await page.waitForFunction(() => window.__sim?.open, {timeout: 60000});
   for (const test of manifest.cases) {
+    if (process.env.CASE_IDS && !process.env.CASE_IDS.split(',').includes(test.id)) continue;
     await mkdir(`${output}/${test.id}`, {recursive: true});
     const result = await page.evaluate(async ({test, manifest}) => {
       const S = window.__sim, h = S.headless, V = S.values;
+      for (const name of ['French Ultramarine', 'Transparent Red Oxide']) {
+        if (!h.pigmentNames().includes(name)) throw new Error(`Missing reference pigment: ${name}`);
+      }
       h.begin();
       h.setPaper('coldPress', 71);
       h.setTone('natural');
@@ -98,17 +104,18 @@ try {
       } else if (test.kind === 'touch') {
         await stroke('French Ultramarine', 5.2);
         receipt.before_second = await sense(9.6, 5.2);
-        await stroke('Burnt Sienna', 7.6);
+        await stroke('Transparent Red Oxide', 7.6);
       } else if (test.kind === 'overlap') {
         await stroke('French Ultramarine', 6.4, 2.4, 12);
         if (test.second_stage === 'damp') await waitStage('damp');
         receipt.before_second = await sense();
-        await stroke('Burnt Sienna', 6.4, 7.2, 16.8);
+        await stroke('Transparent Red Oxide', 6.4, 7.2, 16.8);
       } else if (test.kind === 'wash') {
         h.setBrush('French Ultramarine');
         await S.wash([[6, 10], [90, 10], [90, 54], [6, 54]], {kind: 'flat', paper: 'moist', dampen: false, even: true});
         h.begin();
       }
+      if (!(await S.readPigment('French Ultramarine')).some(v => v > 1e-6)) throw new Error(`Tool left no pigment: ${test.id}`);
       receipt.stages = [];
       for (const label of ['laid', 'satin', 'damp', 'dry']) {
         const skipped = label === 'laid' ? 0 : await waitStage(label);

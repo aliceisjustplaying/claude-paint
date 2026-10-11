@@ -591,6 +591,7 @@ function paintedFor(i, t) {
 const sittingAt = i => sitStarts.filter(b => b <= i).length;
 function thumb(e, i, to) {
   const im = document.createElement('img'); im.loading = 'lazy'; im.src = thumbURL(e.img);
+  if (HOSTED) im.onerror = () => setTimeout(() => { if (im.isConnected) im.src = thumbURL(e.img); }, 5000);
   let t = im;  // (a reference picture: the thumbnail in a marked frame)
   if (e.ref) { t = document.createElement('span'); t.className = 'refthumb'; t.appendChild(im); const b = document.createElement('b'); b.textContent = 'REF'; t.appendChild(b); }
   t.dataset.i = i; t.title = hhmm(e.ts) + '  ' + (e.ref ? 'reference picture: ' : '') + fname(e.path);

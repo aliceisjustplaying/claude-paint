@@ -37,7 +37,7 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   about **1 second** of painter-clock `wait` and to dry in about **2.5
   seconds**, sampled every 0.25 seconds. That stroke was a 150-cell round
   stroke on the default paper, width 42, pressure 0.35, loaded with
-  10 microliters of water and 10 mass units of one pigment. A wetter or
+  10 microliters of water and 10 mass units of `french-ultramarine`. A wetter or
   larger area stays workable longer.
 - **The stroke dries as it is laid.** Point times and `duration` are painter
   clock too. In a slow stroke the first contacts have begun drying before
@@ -46,9 +46,11 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 - **Reading the stage.** `balance()` returns `max_surface_water`,
   `max_wetness` and `dry`. Standing water above 0.002 means some of the
   sheet is still wet; 0.002 or less with wetness left is damp; `dry` is true when wetness
-  is below 0.02 everywhere. These are maxima over the whole sheet, so any
+  is below 0.02 everywhere and suspended pigment is at or below 0.0001 per
+  cell everywhere. These are maxima over the whole sheet, so any
   wet passage elsewhere sets them. To time one passage, lay it alone on the
-  scratch paper and step the clock:
+  scratch paper and step the clock. What a chunk prints comes back in the
+  `paint` reply:
 
   ```lua
   for i = 1, 16 do
@@ -76,8 +78,9 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 
 ## Wet-in-wet
 
-- **Wet the area first.** Load a brush with water and no pigment
-  (`b:load{water=<µL>}`) and lay a wash or stroke, or put down clean water with
+- **Wet the area first.** Make a fresh named brush and load it with water
+  only (`w = brush{name="<new name>"}; w:load{water=<µL>}`); a used brush
+  keeps the pigment it still holds. Lay a wash or stroke with it, or put down clean water with
   `drop{x=, y=, water=<µL>, radius=<cells>}`. Then lay the pigment while the
   area is still wet: for a stroke-sized area that is within about a second
   of painter clock, longer for a flooded one.
@@ -116,7 +119,7 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 |---|---|
 | Granulating (0.5 or more) | `yellow-ochre`, `cobalt-violet`, `ultramarine-violet`, `french-ultramarine`, `cobalt-blue`, `cerulean-blue`, `viridian`, `terre-verte`, `raw-sienna`, `burnt-sienna`, `raw-umber`, `burnt-umber`, `indian-red`, `buff-titanium` |
 | Staining (0.65 or more) | `indian-yellow`, `pyrrol-scarlet`, `quinacridone-rose`, `alizarin-crimson`, `quinacridone-burnt-orange`, `dioxazine-violet`, `phthalo-blue`, `prussian-blue`, `indanthrone-blue`, `phthalo-green` |
-| Opaque (scattering 1.2 or more): hides the paper and lightens what it goes over | `cadmium-yellow`, `naples-yellow`, `cadmium-orange`, `cadmium-red`, `cerulean-blue`, `indian-red`, `buff-titanium` |
+| Opaque (scattering 1.2 or more): can cover the color beneath and lighten darker passages, depending on the load | `cadmium-yellow`, `naples-yellow`, `cadmium-orange`, `cadmium-red`, `cerulean-blue`, `indian-red`, `buff-titanium` |
 | Light (density 0.3 or less): stays in the water and travels far in blooms | `hansa-yellow`, `indian-yellow`, `green-gold`, `pyrrol-scarlet`, `quinacridone-rose`, `alizarin-crimson`, `quinacridone-burnt-orange`, `dioxazine-violet`, `phthalo-blue`, `prussian-blue`, `indanthrone-blue`, `phthalo-green`, `sap-green`, `hookers-green`, `neutral-tint` |
 
 ## Lifting
@@ -128,9 +131,10 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   painter clock.
 - Staining pigment resists the lift and gives up only part of its deposit;
   non-staining pigment lifts nearly clean.
-- **Lifted pigment stays on the sheet.** The brush does not take it up, and
-  there is no blotting (`blot` is unavailable), so loosened pigment moves
-  with the water and settles again nearby.
+- **Lifting loosens workable pigment and removes some suspension from the
+  sheet.** Removed pigment is not added to the brush's inventory. Loosened
+  pigment that stays moves with the water and settles again. There is no
+  blotting (`blot` is unavailable).
 - **Dry paint cannot be lifted.** Once a cell is dry its paint is part of the
   paper. Lift before the area dries.
 
@@ -142,8 +146,9 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 - Dried paint here does not redissolve: water and new paint over it leave it
   as it is, so a glaze never stirs the layer beneath. Real paint can
   redissolve and tint the new layer (the physics note's staining section).
-- Opaque pigments hide the paper and lighten what they cover; transparent
-  ones let what is under them show through. Try a glaze over the same
+- Opaque pigments can cover the color beneath and lighten darker passages;
+  how much depends on the load. Transparent ones let what is under them show
+  through. Try a glaze over the same
   underlayer on the scratch paper first.
 
 ## Dry brush

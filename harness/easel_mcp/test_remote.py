@@ -1,0 +1,226 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp==1.30.0", "uvicorn==0.42.0", "pillow>=10"]
+# ///
+
+import asyncio
+import base64
+from contextlib import asynccontextmanager
+import http.server
+import importlib.util
+import json
+from pathlib import Path
+import secrets
+import socket
+import sys
+import tempfile
+import threading
+import unittest
+
+import httpx
+from mcp import ClientSession, types
+from mcp.client.streamable_http import streamable_http_client
+import uvicorn
+
+from http_server import app_for
+from remote import RemoteStudio
+
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII="
+
+
+class FakeEasel:
+    def __init__(self):
+        self.calls = []
+        self.gate = asyncio.Event()
+
+    async def call(self, name, arguments):
+        self.calls.append((name, arguments))
+        if arguments.get("lua") == "slow":
+            await self.gate.wait()
+        if arguments.get("lua") == "bad":
+            raise ValueError("the easel's exact error")
+        if name == "look":
+            return [types.TextContent(type="text", text="out/easel/painting/example.png (1x1)"), types.ImageContent(type="image", mimeType="image/png", data=PNG)]
+        return [types.TextContent(type="text", text="ok")]
+
+
+class RemoteTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="mcp-http-")
+        self.root = Path(self.temp.name).resolve()
+        self.studio_path = self.root / "paint-studio-aabbcc"
+        self.studio_path.mkdir()
+        self.sessions = self.root / "sessions"
+        self.fake = FakeEasel()
+        self.owner = RemoteStudio(self.studio_path, self.sessions, response_wait=0.03, easel=self.fake)
+        self.token = secrets.token_urlsafe(32)
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        self.url = f"http://127.0.0.1:{listener.getsockname()[1]}/mcp"
+        config = uvicorn.Config(app_for(self.owner, self.token), log_level="error", access_log=False)
+        self.http = uvicorn.Server(config)
+        self.serving = asyncio.create_task(self.http.serve(sockets=[listener]))
+        for _ in range(100):
+            if self.http.started:
+                break
+            await asyncio.sleep(0.01)
+        self.assertTrue(self.http.started)
+
+    async def asyncTearDown(self):
+        self.http.should_exit = True
+        await asyncio.wait_for(self.serving, 5)
+        self.temp.cleanup()
+
+    @asynccontextmanager
+    async def client(self):
+        async with httpx.AsyncClient(headers={"Authorization": "Bearer " + self.token}) as http:
+            async with streamable_http_client(self.url, http_client=http) as (read, write, _):
+                async with ClientSession(read, write) as client:
+                    await client.initialize()
+                    yield client
+
+    async def test_bearer_auth_and_host_gate(self):
+        async with httpx.AsyncClient() as http:
+            for headers in ({}, {"Authorization": "Bearer wrong"}):
+                response = await http.post(self.url, json={}, headers=headers)
+                self.assertEqual(response.status_code, 401)
+            response = await http.post(self.url, json={}, headers={"Authorization": "Bearer " + self.token, "Host": "evil.example"})
+            self.assertEqual(response.status_code, 421)
+        self.assertEqual(self.fake.calls, [])
+
+    async def test_tools_require_call_id(self):
+        async with self.client() as client:
+            tools = await client.list_tools()
+            self.assertEqual([tool.name for tool in tools.tools], ["paint", "look", "note", "status", "log"])
+            for tool in tools.tools:
+                self.assertIn("call_id", tool.inputSchema["required"])
+            result = await client.call_tool("paint", {"lua": "a"})
+            self.assertTrue(result.isError)
+        self.assertEqual(self.fake.calls, [])
+
+    async def test_reconnect_returns_cached_result_once(self):
+        arguments = {"lua": "a chunk", "call_id": "paint-1"}
+        async with self.client() as client:
+            first = await client.call_tool("paint", arguments)
+        async with self.client() as client:
+            second = await client.call_tool("paint", arguments)
+            conflict = await client.call_tool("paint", dict(arguments, lua="a different chunk"))
+        self.assertEqual(first.content, second.content)
+        self.assertTrue(conflict.isError)
+        self.assertEqual(len(self.fake.calls), 1)
+        self.assertEqual(len(self.owner.journal.read_text().splitlines()), 4)
+
+    async def test_running_reply_and_same_call_retry(self):
+        arguments = {"lua": "slow", "call_id": "slow-1"}
+        async with self.client() as client:
+            pending = await client.call_tool("paint", arguments)
+            self.assertIn("is still running", pending.content[0].text)
+            again = await client.call_tool("paint", arguments)
+            self.assertIn("is still running", again.content[0].text)
+            self.fake.gate.set()
+            done = await client.call_tool("paint", arguments)
+            self.assertEqual(done.content[0].text, "ok")
+        self.assertEqual(len(self.fake.calls), 1)
+
+    async def test_dropped_client_does_not_cancel_chunk(self):
+        self.owner.response_wait = 1
+        arguments = {"lua": "slow", "call_id": "drop-1"}
+        async with self.client() as client:
+            request = asyncio.create_task(client.call_tool("paint", arguments))
+            for _ in range(100):
+                if self.fake.calls:
+                    break
+                await asyncio.sleep(0.01)
+            self.assertEqual(len(self.fake.calls), 1)
+            request.cancel()
+            await asyncio.gather(request, return_exceptions=True)
+        self.fake.gate.set()
+        async with self.client() as client:
+            result = await client.call_tool("paint", arguments)
+        self.assertEqual(result.content[0].text, "ok")
+        self.assertEqual(len(self.fake.calls), 1)
+
+    async def test_inline_image_and_verbatim_error(self):
+        async with self.client() as client:
+            look = await client.call_tool("look", {"call_id": "look-1"})
+            error = await client.call_tool("paint", {"lua": "bad", "call_id": "error-1"})
+        self.assertEqual(look.content[1].mimeType, "image/png")
+        self.assertEqual(base64.b64decode(look.content[1].data), base64.b64decode(PNG))
+        self.assertTrue(error.isError)
+        self.assertEqual(error.content[0].text, "the easel's exact error")
+
+    async def test_one_adapter_owns_studio(self):
+        with self.assertRaisesRegex(ValueError, "already has a remote MCP writer"):
+            RemoteStudio(self.studio_path, self.sessions, easel=FakeEasel())
+
+    async def test_existing_viewer_sees_http_paint_and_image(self):
+        studio_dir = Path(__file__).resolve().parents[2] / "studio"
+        sys.path.insert(0, str(studio_dir))
+        spec = importlib.util.spec_from_file_location("remote_test_viewer", studio_dir / "studio.py")
+        viewer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(viewer)
+        viewer.SESSIONS = str(self.sessions)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), viewer.H)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_port}"
+        try:
+            async with self.client() as client:
+                await client.call_tool("paint", {"lua": "paint a mark", "call_id": "viewer-paint"})
+                await client.call_tool("look", {"call_id": "viewer-look"})
+            async with httpx.AsyncClient() as viewer_client:
+                sessions = (await viewer_client.get(url + "/api/sessions")).json()
+                self.assertTrue(sessions[0]["painter"])
+                self.assertEqual(sessions[0]["p"], self.studio_path.name)
+                events = (await viewer_client.get(url + "/api/events", params={"p": self.studio_path.name})).json()["events"]
+                self.assertTrue(any(event["kind"] == "paint" and event["code"] == "paint a mark" for event in events))
+                image = next(event for event in events if event["kind"] == "image")
+                response = await viewer_client.get(url + "/img", params={"p": self.studio_path.name, "i": image["img"]})
+                self.assertEqual(response.content, base64.b64decode(PNG))
+        finally:
+            await asyncio.to_thread(server.shutdown)
+            server.server_close()
+            sys.path.remove(str(studio_dir))
+
+
+class RecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_result_survives_adapter_restart(self):
+        with tempfile.TemporaryDirectory(prefix="mcp-recovery-") as temp:
+            root = Path(temp).resolve()
+            path = root / "paint-studio-aabbcc"
+            path.mkdir()
+            first = RemoteStudio(path, root / "sessions", easel=FakeEasel())
+            result = await first.call("paint", {"lua": "a", "call_id": "restart-1"})
+            journal = first.journal.read_bytes()
+            await first.close()
+            fake = FakeEasel()
+            second = RemoteStudio(path, root / "sessions", easel=fake)
+            try:
+                cached = await second.call("paint", {"lua": "a", "call_id": "restart-1"})
+                self.assertEqual(result.content, cached.content)
+                self.assertEqual(fake.calls, [])
+                self.assertEqual(second.journal.read_bytes(), journal)
+            finally:
+                await second.close()
+
+    async def test_interrupted_outcome_fails_closed_after_restart(self):
+        with tempfile.TemporaryDirectory(prefix="mcp-uncertain-") as temp:
+            root = Path(temp).resolve()
+            path = root / "paint-studio-aabbcc"
+            path.mkdir()
+            first = RemoteStudio(path, root / "sessions", response_wait=0.01, easel=FakeEasel())
+            await first.call("paint", {"lua": "slow", "call_id": "uncertain-1"})
+            await first.close()
+            fake = FakeEasel()
+            second = RemoteStudio(path, root / "sessions", easel=fake)
+            try:
+                result = await second.call("paint", {"lua": "slow", "call_id": "uncertain-1"})
+                self.assertTrue(result.isError)
+                self.assertIn("will not run again", result.content[0].text)
+                self.assertEqual(fake.calls, [])
+            finally:
+                await second.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

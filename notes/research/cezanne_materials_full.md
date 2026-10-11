@@ -7,8 +7,8 @@ our easel belong in `notes/cezanne.md`, not in the historical findings.*
 
 ## Summary
 
-Cézanne builds solidity through relationships between colored marks, not a
-smooth monochrome model covered with local color. Parallel, often diagonal
+Cézanne builds solidity through relationships between coloured marks, not a
+smooth monochrome model covered with local colour. Parallel, often diagonal
 strokes are especially characteristic of the late 1870s and 1880s, but neither
 one stroke direction nor one layering scheme defines his whole career. Thin
 opaque paint, translucent drawing, occasional thicker patches, visible earlier
@@ -53,7 +53,7 @@ lines at the mountain perimeter. Their technical entry treats these openings
 as communication between planes [NA, technical entry, figs.9–13].
 
 **Interpretation for painting.** A patch is a local proposition about a plane:
-several related marks establish its color and tilt; the neighboring patch
+several related marks establish its colour and tilt; the neighbouring patch
 changes that proposition. Marks need not mimic every leaf or follow every
 surface contour. Their common rhythm also holds the picture's surface
 together. Equally, a single screen-wide hatch angle loses the differentiated
@@ -62,20 +62,20 @@ handling documented above.
 ## 2. Modulation, passage and reserves
 
 **Scholarly interpretation supported by examination.** Reissner contrasts
-modeling by blended light/dark tones with modulation through complementary
+modelling by blended light/dark tones with modulation through complementary
 contrasts and warm/cool relationships. Blue and yellow strokes in the trunk
 of *Avenue at Chantilly* are her concrete example. Solidity remains the goal;
 this is not a claim that Cézanne eliminated values, white, black or all
-blending [NG, pp.23–25]. Butler even records blended sequences of color in
+blending [NG, pp.23–25]. Butler even records blended sequences of colour in
 the rocks of *Millstone in the Park of the Château Noir* [BUT].
 
 Art Institute examination of *The Basket of Apples* finds solid opaque
 green, orange, yellow and red marks building fruit. Its apparently white
-cloth is pale pink, yellow, blue, green and gray, with mixtures including
+cloth is pale pink, yellow, blue, green and grey, with mixtures including
 lead white, emerald green, viridian, Prussian blue and ultramarine [AIC22].
 
 **Passage is selective continuity across a boundary.** The Art Institute
-catalog describes background color slipping over the plate's edge and
+catalogue describes background colour slipping over the plate's edge and
 white passing over a pink stripe in *The Basket of Apples*. Objects and
 spaces can share a plane without all contours dissolving. The technical
 evidence for broken blue mountain contours gives a complementary case:
@@ -91,7 +91,7 @@ pp.14–20]. Butler describes the use of white priming in distant landscape
 and as a highlight in hair [BUT].
 
 **Primary evidence complicates “intentional unfinishedness.”** In his
-23 October 1905 letter Cézanne says color sensations prevent him from
+23 October 1905 letter Cézanne says colour sensations prevent him from
 covering the canvas and delimiting objects at delicate points of contact;
 he calls the picture incomplete and rejects enclosing everything with a
 black line [LETTER, inscription; paraphrase of French]. Thus not every
@@ -104,11 +104,11 @@ cannot be inferred simply from a signature or a bare patch [NG, pp.19–21].
 | Period / evidence | What can safely be said |
 |---|---|
 | 1860s, early work | Thick, often knife-applied paint and dark tonal contrasts are documented historically [MET]; the examined *Stove in the Studio* includes red earth, carbon black and Prussian blue [NG, Pigments]. This research does not establish an exhaustive early palette. |
-| 1870s transition and 1877–83 Philadelphia landscapes | Butler links the Pissarro years with clearer, lighter color and smaller patches. Lead white, vermilion, emerald green and artificial ultramarine dominate her sampled mature oils; red lake, yellow iron oxide, viridian and carbon black are frequent secondary components. Chrome yellow can be abundant in particular early works [BUT]. |
+| 1870s transition and 1877–83 Philadelphia landscapes | Butler links the Pissarro years with clearer, lighter colour and smaller patches. Lead white, vermilion, emerald green and artificial ultramarine dominate her sampled mature oils; red lake, yellow iron oxide, viridian and carbon black are frequent secondary components. Chrome yellow can be abundant in particular early works [BUT]. |
 | 1880s–early 1890s | The same base persists; actual mixtures vary. *Hillside in Provence* has a yellow lake as well as ochres, vermilion, ultramarine and greens [NG]. Do not date that picture solely from the older 1985 bulletin's attribution: the 2008 technical study dates it c.1890–92. |
 | Later oils, 1890s–1906 | Cobalt becomes prominent in Butler's later sample and is the only blue identified in her two late mountain pictures. This is not evidence that he first used cobalt c.1898: Reissner notes sketchbook listings in 1875–78 (medium unspecified), and increasing outdoor use after 1886. AIC finds both cobalt and ultramarine in the c.1890 *Vase of Tulips* [BUT; NG, pp.9–10; AIC22]. |
 | Late chrome-yellow caution | Chrome yellow disappears in Butler's last-decade sample, but the National Gallery finds it in *Bathers*. Bernard's 1905 palette testimony also lists it. “Cézanne stopped using chrome yellow in the 1890s” is therefore not a secure general rule [BUT; NG, pp.9–10]. |
-| Late watercolors, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These findings must not silently become a late-oil palette [WATER]. |
+| Late watercolours, a different medium | MoMA analysis of three works dated 1895–1906 identifies lead white, bone black, vermilion, yellow ochre, chrome yellow, emerald green, viridian, cobalt blue, synthetic alizarin and carmine lakes. These findings must not silently become a late-oil palette [WATER]. |
 
 **Names matter.** *Vert Véronèse* is emerald green (copper aceto-arsenite);
 *vert émeraude* is viridian (hydrated chromium oxide) in the cited French
@@ -141,11 +141,11 @@ need the qualifications above. The precedent is left unchanged in this task.
 **Support and ground.** Standard commercial stretched canvases were common.
 The National Gallery grounds are chiefly a single lead-white-rich layer,
 slightly warmed with yellow ochre, with identified extenders including chalk,
-quartz and barium sulfate. *Avenue at Chantilly* has a gray ground;
+quartz and barium sulphate. *Avenue at Chantilly* has a grey ground;
 *Bathers* and *Old Woman with a Rosary* have white over chalk. Ground binder
 analyses include partially heat-bodied linseed oil. Commercial preparation
 is generally more likely than priming by Cézanne himself [NG, pp.7–9].
-Philadelphia examples include white and gray grounds; no one ground fits
+Philadelphia examples include white and grey grounds; no one ground fits
 all subjects [BUT, Pigments / primings].
 
 **Thin is not synonymous with transparent.** Reissner says oil paint is
@@ -182,7 +182,7 @@ finish rule [NG, p.23; BUT].
 ## 5. Order, time and revision
 
 1. **Light initial placement.** Some pictures have graphite; others do not.
-   The National Gallery study identifies dilute blue or blue-gray painted
+   The National Gallery study identifies dilute blue or blue-grey painted
    drawing with uneven blue/green washes, keeping the ground luminous.
    These are not a complete grisaille or one uniform first coat [NG,
    pp.12–15]. AIC identifies dilute blue placement in *The Vase of Tulips*
@@ -204,7 +204,7 @@ finish rule [NG, p.23; BUT].
    evidence for prolonged work; extensive reworking is expressly not the
    norm for every Cézanne [NG, pp.20, 29].
 5. **Later drawing can search again.** Blue or dark lines may belong to late
-   stages, not just preliminary outlines. Stop without equalizing coverage:
+   stages, not just preliminary outlines. Stop without equalising coverage:
    evidence allows reserve, revision and unresolved form, but does not prove
    that every unfinished-looking region was deliberately left so [NG;
    LETTER].
@@ -212,7 +212,7 @@ finish rule [NG, p.23; BUT].
 ## 6. Subject range
 
 **Still life.** The Art Institute's examinations of fruit, vessels, cloth
-and tables document color-built volume, tilted tables,
+and tables document colour-built volume, tilted tables,
 misaligned table edges already present in drawing, later revisions and
 passage. A high viewpoint brings the tabletop forward [AIC10; AIC22].
 “Multiple viewpoints” is a useful interpretive description of the resulting
@@ -222,13 +222,13 @@ space, not proof that he followed a mechanical viewpoint-switching protocol.
 of viewpoint, composition and patch structure. The examined late mountain juxtaposes
 an angular pale mountain, cool sky, warm fields and blue-green trees, with
 directional brushwork differing between zones [NA; MET]. Houses, fields and
-trees also participate in those color and spatial relationships.
+trees also participate in those colour and spatial relationships.
 
 **Portraits.** The documentary accounts of long sittings and the examined
-paintings record repeated adjustments of color and form, but do not
+paintings record repeated adjustments of colour and form, but do not
 establish a prescribed number of sittings for a new painting [NG; MET].
 
-**Bathers.** Bodies and trees organize one landscape, often drawing on
+**Bathers.** Bodies and trees organise one landscape, often drawing on
 memory and earlier art rather than a group posed outdoors [MET; NG,
 pp.28–29]. Interdependent anatomy and substantial compositional revision
 are documented features, not grounds for recommending or postponing a subject.
@@ -245,7 +245,7 @@ first, second or later study. The painter chooses its own subject and canvas.
   https://www.nationalgallery.org.uk/media/15526/reissner2008.pdf
 - **[BUT]** Marigene H. Butler, “An Investigation of the Materials and
   Technique Used by Paul Cézanne,” paper presented at the American Institute
-  for Conservation meeting, 1984; author-authorized republication by McCrone.
+  for Conservation meeting, 1984; author-authorised republication by McCrone.
   Ten Philadelphia oils, 1877–1906; microscopy, cross-sections, IR and X-ray
   examination. HTML section titles cited because it is unpaginated:
   https://www.mccrone.com/mm/investigate-materials-techniques-cezanne/
@@ -255,10 +255,10 @@ first, second or later study. The painter chooses its own subject and canvas.
   https://www.artic.edu/articles/991/cezanne-s-still-lifes-under-the-microscope
 - **[AIC10]** “Cat.10 The Basket of Apples, c.1893,” *Cezanne Paintings and
   Watercolors at the Art Institute of Chicago*, edited by Gloria Groom and
-  Kim Muir. Online scholarly catalog, especially “Distortion,” paragraphs
+  Kim Muir. Online scholarly catalogue, especially “Distortion,” paragraphs
   3–7 and figs.10.4–10.8 (accessed October 2026):
   https://www.artic.edu/digital-publications/47/cezanne-paintings-and-watercolors-at-the-art-institute-of-chicago/351/cat-10-the-basket-of-apples-c-1893
-- **[NA]** Aimee Marcereau DeGalan (catalog entry) and Diana M. Jaskierny
+- **[NA]** Aimee Marcereau DeGalan (catalogue entry) and Diana M. Jaskierny
   (technical entry), “Mont Sainte-Victoire Seen from Les Lauves, 1904–05,”
   *French Paintings and Pastels, 1600–1945: The Collections of the
   Nelson-Atkins Museum of Art*, ed. Marcereau DeGalan (2022), especially
@@ -278,7 +278,7 @@ first, second or later study. The painter chooses its own subject and canvas.
 - **[WATER]** Abed Haddad, Laura Neufeld and Ana Martins, “Realizing
   sensations: analyzing Paul Cezanne's watercolors and assessing their light
   sensitivity with microfade testing,” *Heritage Science* 11 (2023).
-  Separate evidence for watercolor, not oil-film behavior:
+  Separate evidence for watercolour, not oil-film behaviour:
   https://www.nature.com/articles/s40494-023-00879-7
 - **[MET]** James Voorhies, “Paul Cézanne (1839–1906),” Metropolitan Museum
   of Art, Heilbrunn Timeline of Art History (October 2004). Curatorial

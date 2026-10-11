@@ -166,7 +166,7 @@ The Solitary Tree's oak is described as a composite of studies made between 1806
 
 - No source gives the number of rods on a willow pollard head or measured rod angles. The same goes for per-species branching angles and the number of branch orders.
 - Pfister and Schneebeli (1999) on snow and board width was read only through secondary summaries [PS99].
-- No technical study describes Friedrich's brushwork for bare twigs. Grummt's catalog raisonné (2011), which would list every willow and tree study, was not accessible; I relied on museum records and the SKD 2024 catalog excerpt.
+- No technical study describes Friedrich's brushwork for bare twigs. Grummt's catalogue raisonné (2011), which would list every willow and tree study, was not accessible; I relied on museum records and the SKD 2024 catalog excerpt.
 - The *Winterlandschaft* (1827, Zittau) pollards rest on one thesis.
 
 ## Sources

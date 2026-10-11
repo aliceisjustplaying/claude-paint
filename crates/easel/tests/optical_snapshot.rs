@@ -29,7 +29,7 @@ fn success(output: Output) -> String {
 fn committed_snapshot_opens_and_makes_all_companions_without_material_or_journal() {
     let temp = Temp::new("standalone");
     let source = temp.path("painting.lua");
-    std::fs::write(&source, "--@ engine 5\n--@ chunk 1\ncanvas{size=1, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\",3},{\"yellow ochre\",1}}, um=120, apply=\"knife\", texture=0.4}}}\n--@ chunk 2\nwait(1)\n").unwrap();
+    std::fs::write(&source, "--@ engine 5\n--@ chunk 1\ncanvas{size=50, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\",3},{\"yellow ochre\",1}}, um=120, apply=\"knife\", texture=0.4}}}\n--@ chunk 2\nwait(1)\n").unwrap();
     let store = temp.path("state");
     let out = temp.path("direct.png");
     success(temp.command(&["run", &source, "--width", "32", "--state-store", &store, "--out", &out]));

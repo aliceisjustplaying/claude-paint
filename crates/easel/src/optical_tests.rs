@@ -195,6 +195,12 @@ fn atomic_output_and_alias_guards_leave_inputs_and_old_outputs_intact() {
     std::fs::write(&output, b"old complete output").unwrap();
     assert!(atomic(&output, 100, |w| { w.write_all(b"partial")?; Err(invalid("failure")) }).is_err());
     assert_eq!(std::fs::read(output).unwrap(), b"old complete output");
+    for filename in ["journal.lua", "old.jpg", "no-extension"] {
+        let path = temp.0.join(filename);
+        std::fs::write(&path, b"preserved").unwrap();
+        assert!(render(&arguments(&view, &path, &[])).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), b"preserved");
+    }
     assert!(!std::fs::read_dir(&temp.0).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().ends_with(".part")));
     assert!(companions(&arguments(&view, &temp.0, &[])).is_err());
 }

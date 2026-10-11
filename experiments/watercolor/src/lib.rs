@@ -660,6 +660,11 @@ impl Watercolor {
                         * (0.3 + 1.4 * (1.0 - tooth))
                         * pore.clamp(0.6, 1.4))
                     .clamp(0.12, 2.2);
+                    let permeability = if depth < 0.06 {
+                        permeability * (-6.0 * (tooth - 0.5) * (1.0 - depth / 0.06)).exp()
+                    } else {
+                        permeability
+                    };
                     let concentration = (self.suspended[i].iter().sum::<f64>()
                         + self.suspended[j].iter().sum::<f64>())
                         / (self.water[i] + self.water[j]).max(0.001);

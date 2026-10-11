@@ -209,7 +209,7 @@ impl Simulation {
             p.write.fill([0.0; 4]);
         }
         let paper = crate::km::PAPER_REFLECTANCE;
-        let clear = quantize([paper[0] as f32, paper[1] as f32, paper[2] as f32, 0.0]);
+        let clear = quantize([paper[0], paper[1], paper[2], 0.0]);
         self.dried.read.fill(clear);
         self.dried.write.fill(clear);
         self.undo_live.clear();
@@ -600,6 +600,7 @@ impl Simulation {
 }
 
 // src/engine/shaders.ts:530-532 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
+#[allow(clippy::excessive_precision)]
 fn salt_hash(x: f32, seed: f32) -> f32 {
     fract((x * 127.1 + seed * 311.7).sin() * 43758.5453)
 }
@@ -742,6 +743,7 @@ impl Simulation {
         }
     }
     // src/engine/shaders.ts:520-551 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
+    #[allow(clippy::approx_constant)]
     pub fn salt(&mut self, cx: f32, cy: f32, radius: f32, amount: f32, seed: f32) {
         let quad = self.stamp_quad(cx, cy, radius);
         let (x0, x1, y0, y1) = self.stamp_bounds(quad);
@@ -960,6 +962,7 @@ impl Simulation {
         out
     }
     // src/engine/shaders.ts:575-665 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
+    #[allow(clippy::needless_range_loop)]
     pub fn render_pass(&self, uv: [f32; 2], frag_coord: [f32; 2], backlight: f32) -> [f32; 3] {
         let at = |data: &[Pixel], u: f32, v: f32| sample(data, self.width, self.height, u, v);
         let f = at(&self.flow.read, uv[0], uv[1]);

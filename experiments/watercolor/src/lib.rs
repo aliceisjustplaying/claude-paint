@@ -458,7 +458,9 @@ impl Watercolor {
         self.residual_ns = 0;
         if self.lab.is_some() {
             for _ in 0..steps {
-                self.lab.as_mut().unwrap().advance_tick();
+                if let Some(lab) = &mut self.lab {
+                    lab.advance_tick();
+                }
                 self.tick += 1;
                 if every_ticks > 0 && self.tick.is_multiple_of(every_ticks) {
                     observer(self);

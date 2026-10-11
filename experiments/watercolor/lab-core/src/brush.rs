@@ -87,6 +87,7 @@ pub fn brush_radius(tool: &ToolSpec, size: f64) -> f64 {
 
 impl Brush {
     /// Source: src/paint/brush.ts:87–98 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin(
         tool: ToolSpec,
         size: f64,

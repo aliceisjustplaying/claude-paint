@@ -152,6 +152,11 @@ notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
 ! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
 [ -z "$materials" ] || notes+=("notes/research/$materials")
 git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"
+if [ "$profile" = cezanne ]; then
+  git -C "$repo" archive --format=tar "$branch" -- notes/cezanne_techniques.md notes/research/cezanne_oil_paint_physics.md | tar -x -C "$dest"
+  mv "$dest/notes/cezanne_techniques.md" "$dest/notes/techniques.md"
+  mv "$dest/notes/research/cezanne_oil_paint_physics.md" "$dest/notes/research/oil_paint_physics.md"
+fi
 git -C "$repo" archive --format=tar "$branch" -- THIRD_PARTY_NOTICES.md | tar -x -C "$dest/bin"
 [ -s "$dest/bin/THIRD_PARTY_NOTICES.md" ] || { echo "no bin/THIRD_PARTY_NOTICES.md in $dest" >&2; exit 1; }
 : > "$dest/notes/journal.md"

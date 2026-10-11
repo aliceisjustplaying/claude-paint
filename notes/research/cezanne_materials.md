@@ -220,8 +220,7 @@ This section is about how a picture is built. Each part gives the
 historical evidence, then an **Easel translation**: an optional way to get
 a similar effect with the easel's tools, inferred from that evidence. Tool
 behaviour is in `notes/easel_guide.md`, especially “Tubes and piles,”
-“Brushes and strokes,” “Covering an area,” “Masks and geometry,” and
-“Colour, planes and open coverage.”
+“Brushes and strokes,” “Covering an area” and “Masks and geometry.”
 
 **Planes and colour modulation.** Reissner describes complementary
 contrasts and warm/cool juxtapositions creating form and space, with
@@ -302,6 +301,21 @@ pictures show colour-built solidity, compressed plane relationships and
 varied coverage, with form still solid. They hold together as a manner of
 their own, apart from the later dissolution of form. **Easel translation:** vary
 `load`, `coverage`, paint dilution and direction from passage to passage.
+
+### Colour, planes and open coverage
+
+These tools build a picture from colour and separately drawn planes,
+alongside the lit-volume and perspective scaffolds in the guide. The
+subject, canvas and arrangement are yours:
+
+| Idea | Tools and parameters |
+|---|---|
+| Colour-built space | Related warm/cool `pile{}` mixtures; separate `b:stroke` marks, or `work` with weighted `piles`. Relative warmth can advance and coolness recede; check the effect with a laid trial. |
+| Compressed depth and tilted planes | Separately drawn `poly` masks and stroke paths; adjust spacing, tilt, overlap and relative colour intensity. A `world{}` projection is optional. |
+| Volumes and facets | Plane divisions drawn with `poly` or brush paths, related through colour; `form{}` is optional, as a volume guide. |
+| Constructive direction | Blunt `brush{kind="flat", point=0, width=...}` with `b:stroke`; or `work` with `tool`, `length`, `angle`, `dips`. The `hatch` hand's default brush is a round. |
+| Reserves | Prepared `canvas{ground=...}`; `work`'s `coverage`, `load`, `hug=false`, `fill=false`. An untouched area keeps its preparation; a wet lift may leave a stain. |
+| Multiple viewpoints | Separately drawn plane masks and paths can each take their own orientation; `look` checks how they relate across the whole picture. |
 
 ## 9. The tubes here
 

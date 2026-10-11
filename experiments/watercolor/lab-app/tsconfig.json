@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // Off deliberately, same reasoning as attention-lab: the simulation and
+    // paper generators are hand-indexed typed-array maths where the loops own
+    // their bounds, and `| undefined` on every element access would bury the
+    // numerics under non-null assertions.
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}

@@ -19,9 +19,10 @@ fn main() {
                     .as_ref()
                     .ok_or_else(|| mlua::Error::external("chunk made no paper"))?;
                 println!(
-                    "watercolor: tick {}, {} named brushes; conserved",
+                    "watercolor: tick {}, {} named brushes; {}",
                     canvas.tick,
-                    state.brushes.len()
+                    state.brushes.len(),
+                    if canvas.lab.is_some() { "reference inventory diagnostics" } else { "conserved" }
                 );
             }
             "render" if args.len() == 5 => {

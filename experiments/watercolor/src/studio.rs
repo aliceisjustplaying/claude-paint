@@ -1,4 +1,5 @@
 use crate::{Watercolor, PIGMENTS, TICK_NS};
+use watercolor_lab_core::{brush as lab_brush, paper::PaperKind, pigments::pigment_by_id, simulation::Simulation};
 use mlua::{Lua, LuaOptions, StdLib, Table, UserData, UserDataMethods, Value};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -124,6 +125,20 @@ impl Session {
         let Some(canvas) = &self.canvas else {
             return Ok(());
         };
+        if let Some(lab) = &canvas.lab {
+            lab.validate(canvas.width, canvas.height).map_err(error)?;
+            if !self.water_supplied.is_finite() || self.water_supplied < 0.0
+                || self.pigment_supplied.iter().any(|v| !v.is_finite() || *v < 0.0) {
+                return Err(error("invalid supplied inventory"));
+            }
+            let water=lab.water_released_mm3+self.brushes.values().map(|b| b.water).sum::<f64>();
+            let pigment=lab.pigment_released+self.brushes.values().map(|b| b.pigment.iter().sum::<f64>()).sum::<f64>();
+            if (water-self.water_supplied).abs()>1e-8*self.water_supplied.max(1.0)
+                || (pigment-self.pigment_supplied.iter().sum::<f64>()).abs()>1e-8*self.pigment_supplied.iter().sum::<f64>().max(1.0) {
+                return Err(error("lab brush-release inventory failed"));
+            }
+            return Ok(());
+        }
         let area = canvas.cell_mm * canvas.cell_mm;
         let b = canvas.balance();
         let water = (b.surface_water + b.capillary_water + canvas.ledger.water_evaporated) * area
@@ -381,6 +396,88 @@ fn deposit(
     Ok(())
 }
 
+fn lab_stroke(ctx: &mut Context, name: &str, path: &Table, attrs: &Table, scrub: bool, wash_grade: f64) -> Result<()> {
+    let xy = points(path)?;
+    let pressure = number(attrs, "pressure", 0.35)?;
+    if !(0.0..=1.0).contains(&pressure) { return Err(error("pressure must be 0..1")); }
+    let grade=number(attrs,"grade",1.0)?;
+    if !(0.0..=1.0).contains(&grade) { return Err(error("grade must be 0..1")); }
+    let ymin=xy.iter().map(|p|p[1]).fold(f64::INFINITY,f64::min);
+    let ymax=xy.iter().map(|p|p[1]).fold(f64::NEG_INFINITY,f64::max);
+    let length: f64 = xy.windows(2).map(|p| (p[1][0]-p[0][0]).hypot(p[1][1]-p[0][1])).sum();
+    let duration = number(attrs, "duration", (length / 40.0).max(0.0625))?;
+    if !(0.0..=600.0).contains(&duration) || (length > 0.0 && duration == 0.0) {
+        return Err(error("a moving stroke needs a positive duration up to 600 seconds"));
+    }
+    let mut positions = Vec::new();
+    let mut traveled = 0.0;
+    for (i, point) in path.sequence_values::<Table>().enumerate() {
+        let point = point?;
+        if i > 0 { traveled += (xy[i][0]-xy[i-1][0]).hypot(xy[i][1]-xy[i-1][1]); }
+        let p = point.get::<Option<f64>>(3)?.unwrap_or(pressure);
+        let t = point.get::<Option<f64>>(4)?.unwrap_or(if length > 0.0 { duration * traveled / length } else { 0.0 });
+        if !p.is_finite() || !(0.0..=1.0).contains(&p) || !t.is_finite() || !(0.0..=600.0).contains(&t)
+            || (i == 0 && t != 0.0) || positions.last().is_some_and(|v: &([f64;2],f64,f64)| t < v.2) {
+            return Err(error("stroke points are {x,y,pressure,time_seconds}; times start at zero and increase"));
+        }
+        positions.push((xy[i],p,t));
+    }
+    let mut inventory = ctx.state.brushes[name].clone();
+    let cell = ctx.canvas()?.cell_mm;
+    let tool = lab_brush::tool(if scrub { lab_brush::ToolId::Lift } else { lab_brush::ToolId::Round });
+    let radius_scale = inventory.width / (2.0 * cell * lab_brush::brush_radius(&tool, 0.5));
+    let mut stroke = lab_brush::Brush::begin(tool, 0.5, 1.0, 1.0, xy[0][0]/cell, xy[0][1]/cell, 1, radius_scale);
+    let dry = attrs.get::<Option<bool>>("dry")?.unwrap_or(inventory.water < 0.001);
+    let total_pigment = inventory.pigment.iter().sum::<f64>();
+    let mut mix = pigment_by_id("french-ultramarine").unwrap();
+    mix.k = [0.0;3]; mix.s = [0.0;3]; mix.density = 0.0; mix.granulation = 0.0; mix.staining = 0.0;
+    for (i,id) in ["french-ultramarine","phthalo-blue","burnt-sienna"].iter().enumerate() {
+        let pigment = pigment_by_id(id).ok_or_else(|| error(format!("missing ported pigment {id}")))?;
+        let fraction = (inventory.pigment[i] / total_pigment.max(1e-30)) as f32;
+        for c in 0..3 { mix.k[c] += pigment.k[c]*fraction; mix.s[c] += pigment.s[c]*fraction; }
+        mix.density += pigment.density*fraction;
+        mix.granulation += pigment.granulation*fraction;
+        mix.staining += pigment.staining*fraction;
+    }
+    let mut schedule = vec![(0.0, stroke.tap_stamp(positions[0].1))];
+    for pair in positions.windows(2) {
+        let stamps = stroke.stroke_to(pair[1].0[0]/cell, pair[1].0[1]/cell, pair[1].1);
+        let distance = (pair[1].0[0]-pair[0].0[0]).hypot(pair[1].0[1]-pair[0].0[1]);
+        for stamp in stamps {
+            let fraction = if distance > 0.0 { (stamp.x*cell-pair[0].0[0]).hypot(stamp.y*cell-pair[0].0[1])/distance } else { 1.0 };
+            schedule.push((pair[0].2+(pair[1].2-pair[0].2)*fraction.clamp(0.0,1.0),stamp));
+        }
+    }
+    let mut elapsed_ns = 0;
+    for (time,mut stamp) in schedule {
+        let target_ns = (time*1e9).round() as u64;
+        ctx.canvas()?.wait_ns(target_ns.saturating_sub(elapsed_ns));
+        elapsed_ns = target_ns;
+        if dry { stamp.water=0.0; stamp.dryness=1.0; }
+        if scrub { stamp.pigment=0.0; }
+        stamp.pigment*=wash_grade*(1.0-(1.0-grade)*((stamp.y*cell-ymin)/(ymax-ymin).max(1e-30)).clamp(0.0,1.0));
+        let lab = ctx.canvas()?.lab.as_mut().unwrap();
+        let (ww,pw) = lab.stamp_weights(&stamp);
+        let wanted_water = stamp.water*0.055*ww*cell.powi(2);
+        let wanted_pigment = stamp.pigment*0.13*pw*cell.powi(2);
+        let water = wanted_water.min(inventory.water);
+        let pigment = wanted_pigment.min(inventory.pigment.iter().sum::<f64>());
+        if wanted_water > 0.0 { stamp.water *= water/wanted_water; }
+        if wanted_pigment > 0.0 { stamp.pigment *= pigment/wanted_pigment; }
+        lab.simulation.splat(&[stamp], if total_pigment > 0.0 && !scrub { Some(&mix) } else { None });
+        if scrub { lab.simulation.add_scrub(&[stamp]); }
+        inventory.water = (inventory.water-water).max(0.0);
+        let remaining = inventory.pigment.iter().sum::<f64>();
+        for p in &mut inventory.pigment { *p *= (1.0-pigment/remaining.max(1e-30)).max(0.0); }
+        lab.water_released_mm3 += water;
+        lab.pigment_released += pigment;
+    }
+    let end_ns = (positions.last().unwrap().2.max(duration)*1e9).round() as u64;
+    ctx.canvas()?.wait_ns(end_ns.saturating_sub(elapsed_ns));
+    ctx.state.brushes.insert(name.to_owned(),inventory);
+    Ok(())
+}
+
 #[derive(Clone)]
 struct Handle {
     ctx: Rc<RefCell<Context>>,
@@ -433,23 +530,42 @@ impl UserData for Handle {
             |lua, this, (path, attrs): (Table, Option<Table>)| {
                 let points = points(&path)?;
                 let mut ctx = this.ctx.borrow_mut();
-                let width = ctx.state.brushes[&this.name].width;
-                let mask = stroke_mask(ctx.canvas()?, &points, width);
                 let attrs = match attrs {
                     Some(t) => t,
                     None => lua.create_table()?,
                 };
+                if ctx.canvas()?.lab.is_some() { return lab_stroke(&mut ctx,&this.name,&path,&attrs,false,1.0); }
+                let width = ctx.state.brushes[&this.name].width;
+                let mask = stroke_mask(ctx.canvas()?, &points, width);
                 deposit(&mut ctx, &this.name, &mask, &attrs)
             },
         );
-        methods.add_method("wash", |_, this, t: Table| {
+        methods.add_method("wash", |lua, this, t: Table| {
             let mut ctx = this.ctx.borrow_mut();
+            if ctx.canvas()?.lab.is_some() {
+                rectangle(ctx.canvas()?, &t)?;
+                let x=number(&t,"x",0.0)?; let y=number(&t,"y",0.0)?;
+                let width=number(&t,"width",1.0)?; let height=number(&t,"height",1.0)?;
+                let brush_width=ctx.state.brushes[&this.name].width;
+                let rows=(height/(brush_width*0.7)).ceil().max(1.0) as usize;
+                let grade=number(&t,"grade",1.0)?;
+                if !(0.0..=1.0).contains(&grade) { return Err(error("grade must be 0..1")); }
+                for row in 0..rows {
+                    let yy=y+(row as f64+0.5)*height/rows as f64;
+                    let path=lua.create_table()?;
+                    path.set(1,lua.create_sequence_from([x,yy])?)?;
+                    path.set(2,lua.create_sequence_from([x+width,yy])?)?;
+                    lab_stroke(&mut ctx,&this.name,&path,&t,false,1.0-(1.0-grade)*row as f64/(rows-1).max(1) as f64)?;
+                }
+                return Ok(());
+            }
             let mask = rectangle(ctx.canvas()?, &t)?;
             deposit(&mut ctx, &this.name, &mask, &t)
         });
-        methods.add_method("lift", |_, this, path: Table| {
+        methods.add_method("lift", |lua, this, path: Table| {
             let points = points(&path)?;
             let mut ctx = this.ctx.borrow_mut();
+            if ctx.canvas()?.lab.is_some() { return lab_stroke(&mut ctx,&this.name,&path,&lua.create_table()?,true,1.0); }
             let mut brush = ctx.state.brushes[&this.name].clone();
             let mask = stroke_mask(ctx.canvas()?, &points, brush.width);
             let area = ctx.canvas()?.cell_mm.powi(2);
@@ -498,6 +614,8 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let kind = t
                 .get::<Option<String>>("kind")?
                 .unwrap_or("cold-press".into());
+            let solver=t.get::<Option<String>>("solver")?.unwrap_or("current".into());
+            if solver != "current" && solver != "lab" { return Err(error("solver must be current or lab")); }
             let w = (size / cell_mm).round() as usize;
             let h = (w as f64 / aspect).round() as usize;
             if w * h > 1_500_000 {
@@ -505,6 +623,12 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             }
             let seed = t.get::<Option<u64>>("seed")?.unwrap_or(71);
             let mut paper = Watercolor::new_at(w, h, seed, cell_mm);
+            if solver == "lab" {
+                let kind = match kind.as_str() { "cold-press"=>PaperKind::ColdPress,"hot-press"=>PaperKind::HotPress,"rough"=>PaperKind::Rough,_=>return Err(error("invalid lab paper kind")) };
+                paper.lab=Some(crate::lab_adapter::LabSheet::new(Simulation::new(w,h,kind,seed as u32)));
+                c.state.canvas=Some(paper);
+                return Ok(());
+            }
             match kind.as_str() {
                 "cold-press" => {}
                 "hot-press" => {
@@ -565,6 +689,16 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let mut c = c.borrow_mut();
             let canvas = c.canvas()?;
             let cell_mm = canvas.cell_mm;
+            if let Some(lab)=&mut canvas.lab {
+                let mut stamp=lab_brush::Stamp{x:x/cell_mm,y:y/cell_mm,radius:radius/cell_mm,water:1.0,pigment:0.0,dryness:0.0};
+                let (weight,_) = lab.stamp_weights(&stamp);
+                if weight == 0.0 { return Err(error("drop is outside paper")); }
+                stamp.water=water/(0.055*weight*cell_mm.powi(2));
+                lab.simulation.splat(&[stamp],None);
+                lab.water_released_mm3+=water;
+                c.state.water_supplied+=water;
+                return Ok(());
+            }
             let mut mask = Vec::new();
             let mut sum = 0.0;
             for yy in 0..canvas.height {
@@ -684,6 +818,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
         "blot",
         lua.create_function(move |_, t: Table| {
             let mut c = c.borrow_mut();
+            if c.canvas()?.lab.is_some() { return Err(error("blot is unavailable for solver lab; use the lift brush")); }
             let mask = rectangle(c.canvas()?, &t)?;
             let canvas = c.canvas()?;
             let before_w = canvas.ledger.water_lifted;
@@ -764,8 +899,20 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             c.state.check_balance()?;
             let t = lua.create_table()?;
             t.set("water_supplied_mm3", c.state.water_supplied)?;
-            t.set("conserved", true)?;
+            t.set("conserved", c.state.canvas.as_ref().is_none_or(|s| s.lab.is_none()))?;
             if let Some(s) = &c.state.canvas {
+                if let Some(lab)=&s.lab {
+                    t.set("solver","lab")?;
+                    t.set("surface_water_mm3",lab.surface_water(s.cell_mm))?;
+                    t.set("pore_water_mm3",lab.pore_water(s.cell_mm))?;
+                    t.set("water_released_mm3",lab.water_released_mm3)?;
+                    t.set("pigment_released",lab.pigment_released)?;
+                    t.set("live_pigment",lab.simulation.sus_k.read.iter().chain(&lab.simulation.dep_k.read).map(|v|v[3] as f64).sum::<f64>()*s.cell_mm.powi(2))?;
+                    t.set("max_surface_depth_mm",lab.simulation.flow.read.iter().map(|v|v[2] as f64).fold(0.0_f64,f64::max))?;
+                    t.set("dry",lab.is_dry())?;
+                    t.set("inventory_note","Reference advection and half-float rounding can change mass. Dried pigment is stored as reflectance, so per-pigment conservation cannot be recovered.")?;
+                    return Ok(t);
+                }
                 let b = s.balance();
                 t.set("surface_water_mm3", b.surface_water * s.cell_mm.powi(2))?;
                 t.set("pore_water_mm3", b.capillary_water * s.cell_mm.powi(2))?;

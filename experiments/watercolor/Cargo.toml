@@ -5,6 +5,8 @@ edition = "2021"
 publish = false
 
 [workspace]
+members = ["lab-core", "lab-wasm"]
+resolver = "2"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -12,6 +14,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 rayon = "1"
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+watercolor-lab-core = { path = "lab-core" }
 
 [profile.test]
 opt-level = 2

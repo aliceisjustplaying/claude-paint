@@ -6,6 +6,7 @@ use rayon::prelude::*;
 pub enum Topography {
     Smooth,
     QuarterSawnOak,
+    QuarterSawnOakRays,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +59,23 @@ impl Panel {
                 let uneven = 0.6 + 0.8 * vnoise(x / 12.0, y / 16.0, s ^ 0x395);
                 uneven * (oak + ridge)
             }
+            Topography::QuarterSawnOakRays => {
+                let wander = 0.9 * (vnoise(x / 24.0, y / 15.0, s ^ 0x396) - 0.5)
+                    + 0.25 * (vnoise(x / 9.0, y / 6.0, s ^ 0x397) - 0.5);
+                let along = x + wander;
+                let growth = 8.0
+                    * (crate::smoothstep(0.42, 0.67, vnoise(along / 1.4, y / 95.0, s ^ 0x398))
+                        - 0.5);
+                let fine = 3.0 * (vnoise(along / 0.21, y / 60.0, s ^ 0x399) - 0.5);
+                let ray = crate::smoothstep(
+                    0.57,
+                    0.76,
+                    vnoise((x + 0.12 * y) / 4.5, y / 0.27, s ^ 0x39a),
+                );
+                let broken = crate::smoothstep(0.32, 0.7, vnoise(x / 22.0, y / 19.0, s ^ 0x39b));
+                let uneven = 0.65 + 0.7 * vnoise(x / 14.0, y / 23.0, s ^ 0x39c);
+                uneven * (growth + fine) + 2.8 * ray * broken
+            }
         };
         self.ground_um() + tooth + grain
     }
@@ -108,6 +126,10 @@ impl Canvas {
 
     pub fn panel_oil_available(&self) -> Option<&[f32]> {
         self.panel.as_ref().map(|_| self.absorb.as_slice())
+    }
+
+    pub fn panel_gloss(&self) -> Option<&[f32]> {
+        self.panel.as_ref().map(|_| self.gloss.as_slice())
     }
 
     pub(crate) fn build_panel(&mut self) {
@@ -380,5 +402,87 @@ mod tests {
         });
         assert_eq!(bytes(&a), bytes(&b));
         assert_ne!(a.height, sample(Panel::chalk(7)).height);
+    }
+
+    #[test]
+    fn oak_rays_are_resolved_and_keep_their_checkpoint_tag() {
+        let p = Panel {
+            topography: Topography::QuarterSawnOakRays,
+            ..Panel::chalk(23)
+        };
+        let c = sample(p);
+        let span = c.height.iter().copied().fold(f32::MIN, f32::max)
+            - c.height.iter().copied().fold(f32::MAX, f32::min);
+        assert!(span > 6.0 && span < 20.0, "ray ground span {span} µm");
+        let state = bytes(&c);
+        let (d, _) = Canvas::read_state(&mut state.as_slice()).unwrap();
+        assert_eq!(d.panel(), Some(p));
+        assert_eq!(state, bytes(&d));
+        let crop = Crop {
+            units: [200.0, 200.0, 750.0, 750.0],
+            margin: 0.0,
+        };
+        let window = Canvas::new_window(160, 1.0, p.color(), Some(crop))
+            .with_size_mm(40.0)
+            .with_panel(p);
+        for i in 0..window.height.len() {
+            assert_eq!(
+                window.height[i].to_bits(),
+                c.height[window.f.whole_index(i)].to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn impasto_bridges_ray_ground_more_than_a_thin_film() {
+        let mut thin = sample(Panel {
+            topography: Topography::QuarterSawnOakRays,
+            ..Panel::chalk(23)
+        });
+        let mut thick = thin.clone();
+        let paint = Paint::body(crate::hex("#ebe4ce"));
+        for (c, coats) in [(&mut thin, 0.15), (&mut thick, 5.0)] {
+            c.wet.vol.fill(coats);
+            c.wet.lat.fill(paint.latent());
+            c.wet.hide.fill(paint.prop());
+            c.wet.touch(0, 0, c.f.w, c.f.h);
+        }
+        let fine_rms = |c: &Canvas| {
+            let h = c.wet_surface();
+            let low = crate::surface::box_blur(
+                &crate::surface::box_blur(&h, c.f.w, c.f.h, 1),
+                c.f.w,
+                c.f.h,
+                1,
+            );
+            (h.iter()
+                .zip(low)
+                .map(|(&v, l)| ((v - l) as f64).powi(2))
+                .sum::<f64>()
+                / h.len() as f64)
+                .sqrt()
+        };
+        assert!(fine_rms(&thick) < 0.6 * fine_rms(&thin));
+    }
+
+    #[test]
+    fn panel_gallery_sheen_uses_gloss_without_changing_color() {
+        let mut matte = sample(Panel::chalk(7));
+        matte.px.fill(crate::hex("#3b3028"));
+        matte.gloss.fill(0.05);
+        let mut oily = matte.clone();
+        oily.gloss.fill(0.8);
+        let m = matte.seen_lit(115.0, 55.0, 1.0);
+        let o = oily.seen_lit(115.0, 55.0, 1.0);
+        let sheen = |c: &Canvas, lit: &[Rgb]| {
+            let color = c.seen();
+            lit.iter()
+                .zip(color)
+                .map(|(a, b)| crate::color::luminance(*a) - crate::color::luminance(b))
+                .sum::<f32>()
+                / lit.len() as f32
+        };
+        assert!(sheen(&oily, &o) > sheen(&matte, &m) + 0.005);
+        assert_eq!(matte.px, oily.px);
     }
 }

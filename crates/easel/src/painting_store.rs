@@ -173,6 +173,51 @@ fn sync_dir(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
 }
 
+fn protect_output(dir: &Path, path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    if crate::normalized_path(path)?.starts_with(crate::normalized_path(dir)?) {
+        return Err(invalid("output must be outside the painting store"));
+    }
+    let output = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for directory in [dir.to_path_buf(), dir.join("objects"), dir.join("revisions")] {
+        for entry in std::fs::read_dir(directory)? {
+            let metadata = std::fs::metadata(entry?.path())?;
+            if metadata.is_file() && (metadata.dev(), metadata.ino()) == (output.dev(), output.ino()) {
+                return Err(invalid("output aliases a painting store file"));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn atomic_output(path: &Path, render: impl FnOnce(&Path) -> Result<(), String>) -> Result<(), String> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut opened = None;
+    for _ in 0..128 {
+        let part = dir.join(format!(".pending-{}-{}.png", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        match OpenOptions::new().write(true).create_new(true).open(&part) {
+            Ok(file) => { opened = Some((part, file)); break }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    let (part, file) = opened.ok_or("cannot create exclusive output staging file")?;
+    let result = (|| {
+        render(&part)?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        std::fs::rename(&part, path).map_err(|e| e.to_string())?;
+        sync_dir(dir).map_err(|e| e.to_string())
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(part); }
+    result
+}
+
 fn temp(dir: &Path) -> io::Result<(PathBuf, File)> {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     for _ in 0..128 {
@@ -275,8 +320,7 @@ impl PaintingStore {
     }
 
     pub fn protect_output(&self, path: &Path) -> io::Result<()> {
-        if crate::normalized_path(path)?.starts_with(crate::normalized_path(&self.dir)?) { return Err(invalid("output must be outside the painting store")); }
-        Ok(())
+        protect_output(&self.dir, path)
     }
 
     pub fn open(dir: PathBuf, budget: u64, runtime: String) -> io::Result<Self> {
@@ -487,6 +531,10 @@ impl PaintingStore {
 
 #[cfg(any(feature = "replay", test))]
 impl ReadRevision {
+    pub fn protect_output(&self, path: &Path) -> io::Result<()> {
+        protect_output(&self.dir, path)
+    }
+
     pub fn open(dir: PathBuf) -> io::Result<Self> {
         let gate = File::open(dir.join("readers.lock"))?;
         gate.lock_shared()?;

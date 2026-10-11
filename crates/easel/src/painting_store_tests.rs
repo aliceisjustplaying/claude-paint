@@ -401,7 +401,7 @@ fn rewrite_manifest(dir: &Path, m: &Manifest) -> String {
 
 #[test]
 fn corrupt_pointer_manifest_source_and_checkpoint_are_refused_without_repair() {
-    for damaged in ["pointer", "manifest", "source", "checkpoint"] {
+    for damaged in ["pointer", "missing-pointer", "manifest", "source", "checkpoint"] {
         let temp = Temp::new();
         let mut store = open(&temp.store());
         let s = material();
@@ -410,6 +410,7 @@ fn corrupt_pointer_manifest_source_and_checkpoint_are_refused_without_repair() {
         drop(store);
         match damaged {
             "pointer" => std::fs::write(temp.store().join("CURRENT"), b"../escape\n").unwrap(),
+            "missing-pointer" => std::fs::remove_file(temp.store().join("CURRENT")).unwrap(),
             "manifest" => overwrite_immutable(
                 &temp.store().join("revisions").join(format!("{id}.json")),
                 b"{}",

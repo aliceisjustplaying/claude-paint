@@ -89,11 +89,11 @@ fn bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
 fn root(dir: &Path) -> io::Result<Option<String>> {
     match bounded(&dir.join("CURRENT"), 65) {
         Ok(bytes) => {
+            if bytes == b"none\n" { return Ok(None); }
             let text = std::str::from_utf8(&bytes).map_err(|_| invalid("invalid current revision"))?;
             let id = text.strip_suffix('\n').filter(|s| valid_id(s)).ok_or_else(|| invalid("invalid current revision"))?;
             Ok(Some(id.into()))
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
 }
@@ -293,6 +293,14 @@ impl PaintingStore {
         writer.try_lock().map_err(|_| invalid("another writer owns the painting store"))?;
         let gate = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(dir.join("readers.lock"))?;
         gate.lock()?;
+        if !dir.join("CURRENT").exists() {
+            if std::fs::read_dir(dir.join("objects"))?.next().is_some() || std::fs::read_dir(dir.join("revisions"))?.next().is_some() {
+                return Err(invalid("painting store lost its current pointer; accepted objects will not be collected"));
+            }
+            let mut file = OpenOptions::new().write(true).create_new(true).open(dir.join("CURRENT"))?;
+            file.write_all(b"none\n")?;
+            file.sync_all()?;
+        }
         sync_dir(&dir)?;
         for ancestor in dir.ancestors() {
             sync_dir(ancestor)?;

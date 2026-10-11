@@ -7,7 +7,7 @@
 //! stroke, so all mixing, smearing, dry-brush and ridges come from the
 //! bristle simulation, not from blend modes.
 
-use crate::bristle::{Clip, Gesture, Held, Orient, Rect, Tool, footprint};
+use crate::bristle::{Clip, Gesture, Held, Orient, Rect, Tool, footprint_for_engine};
 use crate::canvas::{Canvas, Frame};
 use crate::color::{Rgb, from_oklab, to_oklab};
 use crate::mask::Mask;
@@ -723,7 +723,7 @@ impl Canvas {
             // a straight dab's footprint (units), plus room for its bow
             const X: f32 = 1.0e4;
             let (rtool, rlen) = (sized(&hd.tool, kmax), len * kmax);
-            let r = footprint(&rtool, &[(X - 0.5 * rlen, X), (X + 0.5 * rlen, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
+            let r = footprint_for_engine(self.engine, &rtool, &[(X - 0.5 * rlen, X), (X + 0.5 * rlen, X)], hd.shake, 1.0, 1 << 16, 1 << 16);
             r.map_or(rlen, |r| (X - r.0 as f32).max(r.2 as f32 - X).max(X - r.1 as f32).max(r.3 as f32 - X)) + 0.15 * rlen
         };
         let (mut plans, ex, ey) = (Vec::new(), reach, reach);
@@ -976,7 +976,7 @@ impl Canvas {
 fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
     // footprints in whole-canvas pixels (a crop render plans the same tiles)
     let f = cv.f;
-    let rect = footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
+    let rect = footprint_for_engine(cv.engine, tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));

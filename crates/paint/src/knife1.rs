@@ -10,6 +10,10 @@ impl Knife {
     pub fn experimental(mut self, flex: f32) -> Self {
         if flex.is_finite() && (0.0..=1.0).contains(&flex) {
             self.flex = Some(flex);
+            #[cfg(feature = "knife-2")]
+            {
+                self.second = false;
+            }
         }
         self
     }
@@ -277,6 +281,9 @@ impl Canvas {
                     } else {
                         noise < (1.0 - spent) * 0.33
                     };
+                    let peel_tear = body_pass
+                        && crate::surface::vnoise(u * 8.0 + 2.0, d * mm_px * 0.36, seed ^ 0x7EAD)
+                            < 0.48 * peeling;
                     let flow = 1.0 - smoothstep(0.15, 0.35, k.hide[1]);
                     let wet_reach = reach + 220.0 * flow * pr;
                     let fluid_contact = flow > 0.0 && now - plane <= 45.0 * pr;
@@ -294,8 +301,9 @@ impl Canvas {
                     if lay
                         && !edge
                         && !skip
+                        && !peel_tear
                         && (plane > now || fluid_contact || body_coating > 0.0)
-                        && (plane - now <= wet_reach || body_pass)
+                        && plane - now <= wet_reach + adhesion
                         && k.vol > 1e-9
                     {
                         let liquid = blade_paint + blade_solvent;
@@ -317,8 +325,26 @@ impl Canvas {
                         } else {
                             None
                         };
+                        let side_noise = if body_pass {
+                            crate::surface::vnoise(
+                                d * mm_px * 0.22,
+                                u.signum() + 4.0,
+                                seed ^ 0x51DE,
+                            )
+                        } else {
+                            1.0
+                        };
+                        let side_inner = if side.is_some() {
+                            let offset = u.signum() * (half * 1.03 + (0.3 * noise - 0.55) / mm_px)
+                                - u * half;
+                            pix(x + e.0 * offset, y + e.1 * offset)
+                        } else {
+                            None
+                        };
                         let share = if side.is_some() {
-                            ((u.abs() - 0.7) / 0.3).clamp(0.0, 1.0) * 0.7
+                            ((u.abs() - 0.7) / 0.3).clamp(0.0, 1.0)
+                                * 0.7
+                                * (0.35 + 0.65 * side_noise)
                         } else {
                             0.0
                         };
@@ -332,15 +358,18 @@ impl Canvas {
                         }
                         *sf.cover.add(i) = 1.0;
                         if let Some(j) = side {
-                            sf.add(j, side_paint, &k.lat, k.hide, k.cure);
-                            if !sf.solv.is_null() {
-                                *sf.solv.add(j) += side_solvent * COAT_UM;
+                            let inner = side_inner.unwrap_or(j);
+                            for (j, fraction) in [(inner, 0.65), (j, 0.35)] {
+                                sf.add(j, side_paint * fraction, &k.lat, k.hide, k.cure);
+                                if !sf.solv.is_null() {
+                                    *sf.solv.add(j) += side_solvent * fraction * COAT_UM;
+                                }
+                                *sf.cover.add(j) = 1.0;
+                                *sf.stroke.add(j) = id;
+                                let rx = sf.ox + j % sf.w;
+                                let ry = sf.oy + j / sf.w;
+                                grow(&mut bounds, rx, ry, rx + 1, ry + 1);
                             }
-                            *sf.cover.add(j) = 1.0;
-                            *sf.stroke.add(j) = id;
-                            let rx = sf.ox + j % sf.w;
-                            let ry = sf.oy + j / sf.w;
-                            grow(&mut bounds, rx, ry, rx + 1, ry + 1);
                         }
                         blade_paint = (blade_paint
                             - (face_paint as f64 + side_paint as f64) * area as f64)
@@ -393,7 +422,17 @@ impl Canvas {
                         row as f32
                     };
                     let weight = if body_pass {
-                        (0.15 + 0.85 * noise) * (std::f32::consts::PI * t).sin().max(0.0)
+                        (0.15 + 0.85 * noise)
+                            * (std::f32::consts::PI * t).sin().max(0.0)
+                            * smoothstep(
+                                0.25,
+                                0.6,
+                                crate::surface::vnoise(
+                                    u * 8.0 + 2.0,
+                                    total * mm_px * 0.36,
+                                    seed ^ 0x7EAD,
+                                ),
+                            )
                     } else {
                         noise * (1.0 - 0.22 * row as f32)
                     };
@@ -799,6 +838,92 @@ mod round_two_tests {
             )
         };
         assert_eq!(mark(false), mark(true));
+    }
+
+    #[test]
+    fn knife_2_torn_end_and_side_piles_use_the_finite_bead() {
+        let mut c = fixture();
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        k.load(Paint::body(crate::hex("#a89a7e")), 1.0);
+        let before = (
+            c.wet_total() + k.paint_volume(),
+            c.solvent_total() + k.solvent_volume(),
+        );
+        c.knife_1(
+            &mut k,
+            &[(240.0, 250.0), (430.0, 250.0)],
+            (0.15, 0.3),
+            None,
+            true,
+            0.35,
+            10.0,
+        );
+        close(&c, &k, before);
+        let s = c.f.scale;
+        let mut ends = Vec::new();
+        for y in (225.0 * s) as usize..(275.0 * s) as usize {
+            let end = (200..c.f.w)
+                .rev()
+                .find(|&x| c.wet.vol[y * c.f.w + x] > 0.1)
+                .unwrap();
+            ends.push(end);
+        }
+        let spread = ends.iter().max().unwrap() - ends.iter().min().unwrap();
+        assert!(
+            spread >= 4,
+            "the terminal silhouette varies across the blade: {spread}px"
+        );
+        let mut face = 0.0;
+        let mut count = 0.0;
+        let mut side = 0.0f32;
+        let mut end = 0.0f32;
+        for y in (230.0 * s) as usize..(270.0 * s) as usize {
+            for x in (330.0 * s) as usize..(380.0 * s) as usize {
+                face += c.wet.vol[y * c.f.w + x];
+                count += 1.0;
+            }
+        }
+        for y in (305.0 * s) as usize..(315.0 * s) as usize {
+            for x in (280.0 * s) as usize..(380.0 * s) as usize {
+                side = side.max(c.wet.vol[y * c.f.w + x]);
+            }
+        }
+        for y in (210.0 * s) as usize..(290.0 * s) as usize {
+            for x in (390.0 * s) as usize..(440.0 * s) as usize {
+                end = end.max(c.wet.vol[y * c.f.w + x]);
+            }
+        }
+        let face = face / count;
+        assert!(side > face * 1.5, "side={side}, face={face}");
+        assert!(end > face * 2.0, "end={end}, face={face}");
+        assert!(c.wet.vol.iter().copied().fold(0.0, f32::max) * COAT_UM < 2000.0);
+        assert!(k.vol > 0.0, "unreleased bead stays on the blade");
+    }
+
+    #[test]
+    fn knife_2_still_bridges_deep_set_valleys() {
+        let mut c = fixture();
+        let s = c.f.scale;
+        for y in (240.0 * s) as usize..(260.0 * s) as usize {
+            for x in 0..c.f.w {
+                c.height[y * c.f.w + x] += 3000.0;
+            }
+        }
+        let support = c.height.clone();
+        let mut k = Knife::new(110.0).experimental_2(0.65);
+        k.load(Paint::body(crate::hex("#bd7045")), 0.5);
+        c.knife_1(
+            &mut k,
+            &[(190.0, 250.0), (790.0, 250.0)],
+            (0.2, 0.2),
+            None,
+            true,
+            0.0,
+            20.0,
+        );
+        assert_eq!(support, c.height);
+        assert!(c.wet_um(400.0, 250.0) > 0.0);
+        assert_eq!(c.wet_um(400.0, 285.0), 0.0, "deep valleys stay untouched");
     }
 
     #[test]

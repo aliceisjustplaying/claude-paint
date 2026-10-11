@@ -23,6 +23,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 R=$repo/scripts/test
 unset LOCKRUN_TOKEN LOCKRUN_DIR SCRIPTS_TEST_OUTER_LIMIT
+export SCRIPTS_TEST_TIMEOUT_SCALE=1
 W=$(mktemp -d /tmp/cptr.XXXXXX)
 cleanup() {
   for f in "$W"/*/pid.*; do [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null || true; done
@@ -333,6 +334,83 @@ alive "$(cat "$D/pid.daemon")" || fail "kache: shared daemon was stopped"
 alive "$(cat "$D/pid.compiler")" && fail "kache: compiler wrapper survived"
 kill "$(cat "$D/pid.daemon")"
 ok "kache daemon survives; kache compiler wrapper is stopped"
+fi
+
+if want 19; then
+D=$(case_dir timeout_scale)
+step scaled 2 1 '^done$' 'echo done' >"$D/list.tsv"
+SCRIPTS_TEST_TIMEOUT_SCALE=2 LOCKRUN_DIR=$D/lk "$R" --list "$D/list.tsv" --summary "$D/result.json" --logs "$D/logs" >"$D/out" 2>&1 || fail "scaled limits: $(cat "$D/out")"
+[ "$(summary "$D/result.json" '(s["timeout_scale"], s["steps"][0]["limit"], s["phases"]["check"]["limit"])')" = '(2.0, 4.0, 1200.0)' ] || fail "scaled limits: summary"
+for scale in nan inf 0 17 invalid; do
+  SCRIPTS_TEST_TIMEOUT_SCALE=$scale "$R" --list "$D/list.tsv" >"$D/invalid.out" 2>&1 && fail "invalid timeout scale $scale passed"
+  grep -q 'finite number from 1 to 16' "$D/invalid.out" || fail "invalid scale: message"
+done
+python3 - "$R" <<'PY'
+import os, runpy, sys
+from unittest.mock import patch
+os.environ.pop("SCRIPTS_TEST_TIMEOUT_SCALE", None)
+with patch.object(sys, "platform", "darwin"):
+    runner = runpy.run_path(sys.argv[1])
+    assert runner["timeout_scale"]() == 1.0
+with patch.object(sys, "platform", "linux"):
+    for cores, expected in [(4, 4.0), (8, 2.0), (32, 1.0)]:
+        with patch.object(os, "sched_getaffinity", return_value=set(range(cores)), create=True):
+            assert runner["timeout_scale"]() == expected
+PY
+ok "timeout scaling: explicit and Linux CPU defaults, unchanged Mac budgets, invalid scales refused"
+fi
+
+if want 20; then
+D=$(case_dir cargo_known)
+mkdir -p "$D/bin"
+cat >"$D/bin/cargo" <<'PY'
+#!/usr/bin/env python3
+import json, os
+d = os.environ["CARGO_KNOWN_FIXTURE"]
+for name, kind in [("paint", "lib"), ("another", "test")]:
+    print(json.dumps({"reason":"compiler-artifact", "executable":d + "/" + name,
+                      "profile":{"test":True}, "target":{"name":name, "kind":[kind]},
+                      "manifest_path":d + "/Cargo.toml"}))
+PY
+cat >"$D/paint" <<'SH'
+#!/usr/bin/env bash
+if [ "$CARGO_KNOWN_CASE" = pass ]; then
+  echo 'test good ... ok'
+  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
+  exit 0
+fi
+echo 'test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... FAILED'
+if [ "$CARGO_KNOWN_CASE" = extra ]; then
+  echo 'test another_failure ... FAILED'
+  echo 'test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
+elif [ "$CARGO_KNOWN_CASE" != incomplete ]; then
+  echo 'test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
+fi
+exit 101
+SH
+cat >"$D/another" <<'SH'
+#!/usr/bin/env bash
+if [ "$CARGO_KNOWN_CASE" = sibling ]; then
+  echo 'test sibling_failure ... FAILED'
+  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
+  exit 101
+fi
+echo 'test good ... ok'
+echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
+SH
+chmod +x "$D/bin/cargo" "$D/paint" "$D/another"
+for case in known extra sibling incomplete pass; do
+  code=0
+  PATH="$D/bin:$PATH" CARGO_KNOWN_FIXTURE=$D CARGO_KNOWN_CASE=$case "$repo/scripts/tests/cargo_tests.sh" >"$D/$case.out" 2>&1 || code=$?
+  expected=1; [ "$case" = known ] && expected=4; [ "$case" = pass ] && expected=0
+  [ "$code" = "$expected" ] || fail "cargo known $case: exit $code: $(cat "$D/$case.out")"
+  if [ "$case" = known ]; then
+    grep -q '^cargo_tests: only known failure:' "$D/$case.out" || fail 'cargo known: missing marker'
+  else
+    grep -q '^cargo_tests: only known failure:' "$D/$case.out" && fail "cargo known: $case masked"
+  fi
+done
+ok "cargo known failure is reported only for the sole complete rag assertion failure"
 fi
 
 echo "test_runner: all $passed checks passed"

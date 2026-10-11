@@ -650,16 +650,21 @@ impl Canvas {
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let (reflection, spec) = match version {
-                    LookVersion::Legacy => (0.0, (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit),
+                let (reflection, spec, rough_response) = match version {
+                    LookVersion::Legacy => (0.0, (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit, 0.0),
                     LookVersion::Gloss => {
-                        let (gloss, wet) = self.display_gloss(i);
-                        let (_, sheen) = surface_sheen(n, hv, gloss, wet);
+                        let (gloss, wet_share) = self.display_gloss(i);
+                        let (_, sheen) = surface_sheen(n, hv, gloss, wet_share);
                         let spec = sheen * lit * strength.clamp(0.0, 1.0);
-                        (spec, spec)
+                        let rough = (0.02 + 0.10 * wet) * (ndh.powf(40.0) - hv[2].powf(40.0)) * lit * strength.clamp(0.0, 1.0);
+                        (spec, spec, rough)
                     }
                 };
                 let p = base[i];
+                let shade = match version {
+                    LookVersion::Legacy => shade,
+                    LookVersion::Gloss => (shade + rough_response / color::luminance(p).max(1e-4)).max(0.1 * shade),
+                };
                 p.map(|v| (v * shade * (1.0 - reflection) + spec).max(0.0))
             })
             .collect()
@@ -979,7 +984,7 @@ mod review_lighting_tests {
 
     #[test]
     fn gloss_light_only_sheens_on_a_light_facing_slope() {
-        let mut c = Canvas::new_window(32, 1.0, [0.02; 3], None);
+        let mut c = Canvas::new_window(32, 1.0, [0.12; 3], None);
         c.gloss.fill(1.0);
         let az = 115.0f32.to_radians();
         let slope = 17.5f32.to_radians().tan();
@@ -993,17 +998,37 @@ mod review_lighting_tests {
                 }
             }
             let glossy = c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss)[i][0];
-            let glossy_ratio = glossy / c.seen()[i][0];
             c.gloss.fill(0.05);
+            c.px.fill([(0.12 - 0.038) / (1.0 - 0.038); 3]);
             let matte = c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss)[i][0];
-            let matte_ratio = matte / c.seen()[i][0];
             c.gloss.fill(1.0);
+            c.px.fill([0.12; 3]);
             if facing > 0.0 {
-                assert!(glossy_ratio > matte_ratio + 0.9, "facing slope: {glossy_ratio} vs {matte_ratio}");
+                assert!(glossy > matte + 0.016, "facing slope: {glossy} vs {matte}");
             } else {
-                assert!((glossy_ratio - matte_ratio).abs() < 1e-5, "away slope: {glossy_ratio} vs {matte_ratio}");
+                assert!((glossy - matte).abs() < 1e-5, "away slope: {glossy} vs {matte}");
             }
         }
+    }
+
+    #[test]
+    fn gloss_light_retains_matte_relief_without_flat_surface_lift() {
+        let mut c = Canvas::new_window(64, 1.0, [0.02, 0.015, 0.01], None).with_size_mm(30.0);
+        c.gloss.fill(0.05);
+        for y in 0..64 {
+            for x in 0..64 {
+                c.height[y * 64 + x] = 400.0 * (x as f32 * 0.3).sin();
+            }
+        }
+        let sigma = |pixels: Vec<Rgb>| {
+            let values: Vec<f64> = pixels.into_iter().map(|p| color::luminance(p) as f64).collect();
+            let mean = values.iter().sum::<f64>() / values.len() as f64;
+            (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64).sqrt()
+        };
+        let old = sigma(c.seen_lit(115.0, 55.0, 1.0));
+        let new = sigma(c.seen_lit_version(115.0, 55.0, 1.0, LookVersion::Gloss));
+        assert!(new / old >= 0.85, "relief contrast retention {}", new / old);
+        assert!((new / old - 1.0).abs() < 0.001);
     }
 
     #[test]

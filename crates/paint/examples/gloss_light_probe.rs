@@ -10,6 +10,7 @@ fn save(c: &Canvas, path: &Path, pixels: &[paint::Rgb]) -> Result<(), Box<dyn st
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out = std::env::args().nth(1).ok_or("gloss_light_probe <output-directory>")?;
+    let states = std::env::args().nth(2).map(std::path::PathBuf::from);
     let out = Path::new(&out);
     std::fs::create_dir_all(out)?;
     for (name, polished, raised, wet) in [
@@ -19,22 +20,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("raised-glossy", true, true, false),
         ("fresh-dark", false, false, true),
     ] {
-        let dark = [0.02, 0.015, 0.01];
-        let mut c = Canvas::new_window(320, 1.0, dark, None).with_size_mm(50.0);
-        c.ground_finish(1.0);
-        if raised {
-            c.prime(dark, 0.92, 250.0, 1.0, 1.0, 91);
-        }
-        if polished {
-            c.varnished();
-        }
-        if wet {
-            let mut brush = Held::new(Tool::hog_flat(90.0), 23);
-            brush.load(Paint::body(dark), 1.0);
-            c.drag(&mut brush, &Gesture::line((100.0, 400.0), (900.0, 600.0)).pressure(0.8, 0.8), None);
-        }
-        let mut state = Vec::new();
-        c.write_state(&mut state, name)?;
+        let state = if let Some(states) = &states {
+            std::fs::read(states.join(format!("{name}.ckpt")))?
+        } else {
+            let dark = [0.02, 0.015, 0.01];
+            let mut c = Canvas::new_window(320, 1.0, dark, None).with_size_mm(50.0);
+            c.ground_finish(1.0);
+            if raised {
+                c.prime(dark, 0.92, 250.0, 1.0, 1.0, 91);
+            }
+            if polished {
+                c.varnished();
+            }
+            if wet {
+                let mut brush = Held::new(Tool::hog_flat(90.0), 23);
+                brush.load(Paint::body(dark), 1.0);
+                c.drag(&mut brush, &Gesture::line((100.0, 400.0), (900.0, 600.0)).pressure(0.8, 0.8), None);
+            }
+            let mut state = Vec::new();
+            c.write_state(&mut state, name)?;
+            state
+        };
         std::fs::write(out.join(format!("{name}.ckpt")), &state)?;
         let (restored, _) = Canvas::read_state(&mut state.as_slice())?;
         save(&restored, &out.join(format!("{name}-color.png")), &restored.seen())?;

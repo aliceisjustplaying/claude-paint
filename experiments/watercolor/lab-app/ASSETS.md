@@ -4,4 +4,4 @@ The source, styles, index page and assets were copied from Watercolor Lab by Rya
 
 Binary assets cannot carry source comments. `public/fonts/figtree-normal.woff2`, `public/fonts/figtree-italic.woff2` and `public/opengraph.png` are copied unchanged from those exact upstream paths at the pinned commit. `public/robots.txt` and `public/sitemap.xml` are also copied unchanged. The Figtree fonts retain the SIL Open Font License in `public/fonts/OFL.txt`; they are not relicensed under MIT. The full upstream MIT license covers the Watercolor Lab source and other copied material.
 
-The GPU simulator remains at `src/engine/simulation.ts`. The scripted browser API remains `window.__wash`. The added CPU WASM adapter uses the original GLSL only for display; every simulation pass runs in Rust on the CPU. Both options use the same display shader, sheet settings and simulation resolution. Switching clears the sheet because wet-state transfer between engines is not implemented.
+The simulation runs in our Rust `lab-core` port through WASM and WebGPU. The scripted browser API remains `window.__wash`.

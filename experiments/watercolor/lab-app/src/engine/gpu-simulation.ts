@@ -1,16 +1,13 @@
 import init, { WasmSimulation } from "../../wasm/watercolor_lab_wasm";
-import { DEFAULT_PARAMS, type Params, type Simulation, type XrayField } from "./simulation";
+import { DEFAULT_PARAMS, type Params, type XrayField } from "./simulation";
 import type { PaperKind } from "./paper";
 import type { Stamp } from "../paint/brush";
 import type { Pigment } from "../paint/pigments";
 
 export const initializeGpu = init;
-export type SheetSimulation = Omit<Pick<Simulation, "simWidth" | "simHeight" | "params" | "foreverWet" | "paperKind" | "paperSeed" | "setPaper" | "resetState" | "splat" | "addSalt" | "addScrub" | "dryFast" | "update" | "stepMany" | "render" | "snapshot" | "undo" | "clearSheet" | "probe" | "serializeDried" | "restoreDried">, "probe" | "serializeDried"> & {
-  probe(x: number, y: number, radius: number): Promise<{ dried: number; workable: number; wet: number }>;
-  serializeDried(): Promise<Float32Array>;
-};
+export type SheetSimulation = GpuSimulation;
 
-export class GpuSimulation implements SheetSimulation {
+export class GpuSimulation {
   params: Params = { ...DEFAULT_PARAMS };
   foreverWet = false;
   paperKind: PaperKind = "cold-press";
@@ -47,7 +44,7 @@ export class GpuSimulation implements SheetSimulation {
   dryFast(): void { this.core.dry_fast(); }
   update(): void { this.configure(); this.core.update(); }
   stepMany(steps: number, evapMul = 1): void { this.configure(); this.core.step_many(steps, evapMul); }
-  render(backlight: number, field: XrayField = 0): void { this.core.render(backlight, field); }
+  render(backlight: number, field: XrayField = 0): void { this.configure(); this.core.render(backlight, field); }
   snapshot(): void { this.core.snapshot(); }
   undo(): boolean { return this.core.undo(); }
   clearSheet(): void { this.core.clear_sheet(); }

@@ -54,7 +54,7 @@ declare global {
       el(
         "p",
         { class: "t-lede" },
-        "Real watercolor, simulated: water flows across the sheet, pigment rides it and settles, and the paper decides the rest. Thirty-six real pigments, wet-on-wet blooms, granulation and backruns, all running locally in your browser."
+        "Real watercolor, simulated: water flows across the sheet, pigment rides it and settles, and the paper decides the rest. Thirty-six real pigments, wet-on-wet blooms, granulation and backruns, all live on your GPU."
       )
     )
   );
@@ -101,7 +101,7 @@ const BENCH_NOTES: { k: string; v: (string | HTMLElement)[] }[] = [
         { href: "https://grail.cs.washington.edu/projects/watercolor/" },
         "Curtis, Anderson, Seims, Fleischer & Salesin, Computer-Generated Watercolor (SIGGRAPH 1997)"
       ),
-      ", as WebGL2 fragment shaders. The ",
+      ", in our Rust port on WebGPU. The original ",
       el("a", { href: "https://github.com/uxpreview/watercolor-lab" }, "source"),
       " is on GitHub.",
     ],

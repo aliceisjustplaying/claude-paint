@@ -1,6 +1,7 @@
 # Watercolor Lab
 
-The `lab-core/src/{paper,km,pigments,brush}.rs` modules mechanically port
+The `lab-core/src/{paper,km,pigments,brush,simulation,gpu}.rs` modules,
+`lab-core/src/shaders/` GPU passes and `lab-wasm/src/lib.rs` mechanically port
 Watercolor Lab by Ryan McCarty, https://github.com/uxpreview/watercolor-lab,
 pinned to commit `a19bfa2a026856a98ceb400a8eec41f091f04a11`.
 Each ported function records its source file and line range at that commit.

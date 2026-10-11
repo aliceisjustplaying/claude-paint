@@ -55,6 +55,59 @@ fn boxed(b: Option<(usize, usize, usize, usize)>) -> Vec<u64> {
 }
 
 impl Canvas {
+    pub fn field_digests(&self) -> Vec<(&'static str, u64)> {
+        fn hash(bytes: impl Iterator<Item = u8>) -> u64 {
+            bytes.fold(0xcbf29ce484222325, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
+        }
+        fn floats(values: impl Iterator<Item = f32>) -> u64 {
+            hash(values.flat_map(f32::to_le_bytes))
+        }
+        let wt = &self.wet;
+        let ck = &wt.clock;
+        let mut fields = vec![
+            ("color", floats(self.px.iter().flatten().copied())),
+            ("height", floats(self.height.iter().copied())),
+            ("film", floats(self.film.iter().copied())),
+            ("wet.vol", floats(wt.vol.iter().copied())),
+            ("wet.lat", floats(wt.lat.iter().flatten().copied())),
+            ("wet.hide", floats(wt.hide.iter().flat_map(|p| p[..3].iter().copied()))),
+            ("wet.stroke", hash(wt.stroke.iter().flat_map(|x| x.to_le_bytes()))),
+            ("wet.touched", hash(wt.touched.iter().flat_map(|x| x.to_le_bytes()))),
+            ("wet.floor", floats(wt.floor.iter().copied())),
+            ("wet.cover", floats(wt.cover.iter().copied())),
+            ("wet.current", hash(wt.current.to_le_bytes().into_iter())),
+            ("wet.dirty", hash(boxed(wt.dirty).into_iter().flat_map(u64::to_le_bytes))),
+            ("clock.now", hash(ck.now.to_le_bytes().into_iter())),
+            ("clock.mark", hash(ck.mark.to_le_bytes().into_iter())),
+            ("clock.tacky", hash(boxed(ck.tacky).into_iter().flat_map(u64::to_le_bytes))),
+        ];
+        let parts: [(&str, fn(&crate::drying::Px) -> f32); 6] = [
+            ("clock.cure", |p| p.cure),
+            ("clock.lev", |p| p.lev),
+            ("clock.seen", |p| p.seen),
+            ("clock.sub", |p| p.sub),
+            ("clock.srate", |p| p.srate),
+            ("clock.th", |p| p.th),
+        ];
+        for (name, get) in parts {
+            fields.push((name, floats(ck.px.iter().map(get))));
+        }
+        fields.push(("wet.solvent", if wt.solv.len() == self.f.w * self.f.h {
+            floats(wt.solv.iter().copied())
+        } else {
+            floats(std::iter::repeat_n(0.0, self.f.w * self.f.h))
+        }));
+        if self.engine >= 4 {
+            fields.extend([
+                ("wet.turps", floats(wt.hide.iter().map(|p| p[3]))),
+                ("wet.oil", floats(wt.hide.iter().map(|p| p[4]))),
+                ("gloss", floats(self.gloss.iter().copied())),
+                ("absorb", floats(self.absorb.iter().copied())),
+            ]);
+        }
+        fields
+    }
+
     /// The canvas's state as named fields (see the module docs).
     pub fn state_fields(&self) -> Vec<Field> {
         let f = self.f;
@@ -124,5 +177,42 @@ impl Canvas {
             v.push(Field { name: "absorb", shape: px(1), values: Values::F32(self.absorb.clone()) });
         }
         v
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn field_digests_match_dump_bytes_without_changing_state() {
+        let mut c = Canvas::new(16, 1.0, [0.3, 0.4, 0.5]);
+        c.wet.ensure_solvent();
+        c.wet.vol[0] = 0.75;
+        c.wet.hide[0] = [0.1, 0.2, 0.3, 0.4, 0.5];
+        c.wet.solv[0] = 1.25;
+        c.height[0] = -0.0;
+        c.wait(5.0);
+        let before: Vec<_> = c.state_fields().into_iter().map(|f| (f.name, f.values.le_bytes())).collect();
+        let digests = c.field_digests();
+        assert!(digests.iter().any(|(name, _)| *name == "color"));
+        assert!(digests.iter().any(|(name, _)| *name == "wet.solvent"));
+        for (name, got) in digests {
+            let bytes = &before.iter().find(|(field, _)| *field == name).unwrap().1;
+            let want = bytes.iter().fold(0xcbf29ce484222325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x100000001b3));
+            assert_eq!(got, want, "{name}");
+        }
+        let after: Vec<_> = c.state_fields().into_iter().map(|f| (f.name, f.values.le_bytes())).collect();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn field_digests_localize_float_bit_changes() {
+        let mut c = Canvas::new(16, 1.0, [0.3, 0.4, 0.5]);
+        let before = c.field_digests();
+        c.height[0] = f32::from_bits(c.height[0].to_bits() ^ 1);
+        let after = c.field_digests();
+        let changed: Vec<_> = before.iter().zip(&after).filter(|(a, b)| a != b).map(|(a, _)| a.0).collect();
+        assert_eq!(changed, ["height"]);
     }
 }

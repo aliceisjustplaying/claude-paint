@@ -2968,6 +2968,8 @@ pub struct Knife {
     flex: Option<f32>,
     #[cfg(feature = "knife-2")]
     second: bool,
+    #[cfg(feature = "knife-2")]
+    faces: Option<Box<[knife1::Face; 8]>>,
 }
 
 impl std::fmt::Debug for Knife {
@@ -2981,6 +2983,8 @@ impl std::fmt::Debug for Knife {
             #[cfg(feature = "knife-2")]
             let name = if self.second { "knife_2_flex" } else { name };
             d.field(name, &flex);
+            #[cfg(feature = "knife-2")]
+            if self.second && self.faces.is_some() { d.field("knife_2_faces", &self.faces); }
         }
         d.finish()
     }
@@ -3011,6 +3015,8 @@ impl Knife {
             flex: None,
             #[cfg(feature = "knife-2")]
             second: false,
+            #[cfg(feature = "knife-2")]
+            faces: None,
         }
     }
     /// A full load: a bead along the blade twice its length deep and 12
@@ -3022,6 +3028,13 @@ impl Knife {
     pub fn load(&mut self, paint: Paint, amount: f32) {
         // (no amount that is not a number: it would leave the blade's paint NaN)
         if !(0.0..=1.0).contains(&amount) || !self.width.is_finite() || !(1.0..=1000.0).contains(&self.width) {
+            return;
+        }
+        #[cfg(feature = "knife-2")]
+        if self.second && amount == 0.0 { return; }
+        #[cfg(feature = "knife-2")]
+        if self.second && (self.faces.is_some() || paint.stiff > 0.35) {
+            self.load_faces(paint, amount);
             return;
         }
         let liquid = amount * self.full();
@@ -3045,6 +3058,8 @@ impl Knife {
     pub fn wipe(&mut self) {
         self.vol = 0.0;
         self.solvent = 0.0;
+        #[cfg(feature = "knife-2")]
+        { self.faces = None; }
     }
     /// Paint on the blade, relative to a full load.
     pub fn fullness(&self) -> f32 {

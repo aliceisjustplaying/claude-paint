@@ -380,6 +380,11 @@ if [ "$CARGO_KNOWN_CASE" = pass ]; then
   exit 0
 fi
 echo 'test rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground ... FAILED'
+if [ "$CARGO_KNOWN_CASE" = regressed ]; then
+  echo 'spirits lift nearly all the film: (0.9744877972682747, 0.8, 0.9429845345729168)'
+elif [ "$CARGO_KNOWN_CASE" != otherassertion ]; then
+  echo 'spirits lift nearly all the film: (0.9744877972682747, 0.8993446338235231, 0.9429845345729168)'
+fi
 if [ "$CARGO_KNOWN_CASE" = extra ]; then
   echo 'test another_failure ... FAILED'
   echo 'test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
@@ -399,7 +404,7 @@ echo 'test good ... ok'
 echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s'
 SH
 chmod +x "$D/bin/cargo" "$D/paint" "$D/another"
-for case in known extra sibling incomplete pass; do
+for case in known extra sibling incomplete regressed otherassertion pass; do
   code=0
   PATH="$D/bin:$PATH" CARGO_KNOWN_FIXTURE=$D CARGO_KNOWN_CASE=$case "$repo/scripts/tests/cargo_tests.sh" >"$D/$case.out" 2>&1 || code=$?
   expected=1; [ "$case" = known ] && expected=4; [ "$case" = pass ] && expected=0

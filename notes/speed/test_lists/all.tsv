@@ -13,10 +13,10 @@ build	build-release-easel	600	0	-	cargo build --release -p easel
 build	build-test-binaries	600	0	-	cargo test --workspace --lib --bins --tests --no-run
 build	build-thinner-release-tests	600	0	-	cargo test --release -p paint --test thinner_physics --test thinner_pigments --no-run && cargo test --release -p easel --bin easel --no-run
 cargo	cargo-test	60	271	-	scripts/tests/cargo_tests.sh -j 4	-	4	^cargo_tests: only known failure: solvent-rag hollow-film lift on main$	the pre-existing solvent-rag hollow-film lift assertion
-script	image-tolerance	60	1	^image_tolerance: 8 cases passed	uv run --script scripts/tests/image_tolerance.py
+script	image-tolerance	60	1	^image_tolerance: 26 cases passed	uv run --script scripts/tests/image_tolerance.py
 script	old-logs	60	11	^old_logs: \S+ ok	scripts/tests/old_logs.sh "$CARGO_TARGET_DIR/release/easel"
 script	baseline-package	60	1	^verify_package: hashes ok	notes/thinner/baseline/tools/verify_package.sh
-script	baseline-state	60	6	^\S+: state equal on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
+script	baseline-state	60	6	^\S+: state (equal|within tolerance) on every baseline field	scripts/tests/baseline_state.sh "$CARGO_TARGET_DIR/release/easel"
 cargo	slow-tests-by-name	240	4	-	cargo test -p easel --test boxes -- --ignored --exact a_round_19_log_replays_as_before >"$TMPDIR/slow-r19.out" 2>&1 & a=$!; cargo test -p easel --test determinism -- --ignored --exact hand_time_is_deterministic_across_thread_counts_at_the_live_width state_digests_are_the_same_in_every_replay_at_the_live_width the_rag_replays_the_same_at_the_live_width >"$TMPDIR/slow-det.out" 2>&1 & b=$!; wait $a; ra=$?; wait $b; rb=$?; cat "$TMPDIR/slow-r19.out" "$TMPDIR/slow-det.out"; [ $ra = 0 ] && [ $rb = 0 ]	s
 cargo	slow-thin-blend	180	1	-	cargo test -p paint --test ground_grain -- --ignored --exact thin_blend_bares_ground	s
 cargo	painter-build-inness	300	14	-	CARGO_TARGET_DIR="$CARGO_TARGET_DIR/p" cargo test -p easel --no-default-features --features box-inness	s

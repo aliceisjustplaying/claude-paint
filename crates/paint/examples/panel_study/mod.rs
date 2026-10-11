@@ -256,7 +256,7 @@ pub fn winter(c: &mut Canvas, load_scale: f32, broken: bool) {
     let sky = pal
         .pile(vec![(0, 0.93), (4, 0.04), (2, 0.03)])
         .laid(0.4)
-        .with_hiding(if broken { 0.75 } else { 0.48 });
+        .with_hiding(if broken { 0.65 } else { 0.48 });
     if broken {
         let clip = Mask::from_fn(c.frame(), |x, y| {
             paint::smoothstep(
@@ -266,7 +266,7 @@ pub fn winter(c: &mut Canvas, load_scale: f32, broken: bool) {
             )
         });
         let mut rng = Rng::new(811);
-        for i in 0..95 {
+        for i in 0..220 {
             let x = rng.range(55.0, 850.0);
             let y = rng.range(65.0, 580.0);
             let len = rng.range(65.0, 190.0);
@@ -279,7 +279,7 @@ pub fn winter(c: &mut Canvas, load_scale: f32, broken: bool) {
                 ..Tool::hog_flat(rng.range(45.0, 85.0))
             };
             let mut h = Held::new(tool, 811 + i).with_engine(c.engine());
-            h.load(sky, rng.range(0.10, 0.22) * load_scale);
+            h.load(sky, rng.range(0.08, 0.18) * load_scale);
             c.drag(
                 &mut h,
                 &Gesture::new(vec![

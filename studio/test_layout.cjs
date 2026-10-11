@@ -48,11 +48,16 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
     if (shots) fs.mkdirSync(shots, { recursive:true });
     for (const [width, height, stream] of [...sizes, [1920, 1080, true]]) {
       const mobile = width < 1000;
+      const label = `${stream ? 'stream-' : ''}${width}x${height}`;
       const context = await browser.newContext({ ...(mobile ? devices['iPhone 13'] : {}), viewport:{ width, height } });
       await context.addInitScript(() => localStorage.setItem('studio.intro', '1'));
       const page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)));
       await page.goto(`http://127.0.0.1:${server.address().port}/?p=fixture${stream ? '&stream=1' : ''}`);
       await page.waitForFunction(() => events.length === 13 && document.getElementById('pipimg').complete && document.getElementById('pipimg').naturalWidth > 0 && document.querySelectorAll('.palette-chip').length === 16);
+      await page.waitForFunction(() => ['img', 'pipimg'].every(id => document.getElementById(id).complete && document.getElementById(id).naturalWidth > 0));
+      const scroller = page.locator(mobile ? 'main' : '#jbody');
+      const gap = () => scroller.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
+      if (!baseline) assert(await gap() <= 24, label + ': initial transcript shows the selected event');
       await page.evaluate(() => { live = false; show(events.length - 1); });
       await page.waitForFunction(() => typingThought === null);
       await page.waitForFunction(() => ['img', 'img2', 'pipimg'].every(id => document.getElementById(id).complete && document.getElementById(id).naturalWidth > 0));
@@ -73,7 +78,6 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
           journalOverflow:getComputedStyle(document.getElementById('jbody')).overflowY,
         };
       });
-      const label = `${stream ? 'stream-' : ''}${width}x${height}`;
       console.log(label, JSON.stringify(metrics));
       if (shots) {
         await page.screenshot({ path:path.join(shots, label + '.png') });
@@ -107,6 +111,41 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
           await page.evaluate(() => pip(-1, false));
           await page.screenshot({ path:path.join(shots, label + '-unchanged.png') });
         }
+      }
+      if (!baseline) {
+        const appendThought = async () => {
+          await page.evaluate(() => {
+            live = true;
+            events.push({ kind:'think', ts:new Date().toISOString(), text:('## A live thought\n\nI am looking at the light and the next brushstroke.\n\n').repeat(40) });
+            show(events.length - 1);
+          });
+          await page.waitForFunction(() => typingThought !== null && document.querySelector('.th.last').textContent.length > 30);
+        };
+        await scroller.evaluate(el => el.scrollTop = el.scrollHeight);
+        await appendThought();
+        assert(await gap() <= 24, label + ': follows the first typewriter ticks');
+        await page.waitForFunction(() => typingThought === null);
+        assert(await gap() <= 24, label + ': follows the complete live append');
+        if (shots) await page.screenshot({ path:path.join(shots, label + '-live-append.png') });
+        if (mobile) {
+          await scroller.evaluate(el => el.scrollTop = 0);
+          await appendThought();
+          await page.waitForFunction(() => typingThought === null);
+          assert.equal(await scroller.evaluate(el => el.scrollTop), 0, label + ': a live append preserves the painting position');
+          await scroller.evaluate(el => el.scrollTop = el.scrollHeight);
+          await appendThought();
+          assert(await gap() <= 24, label + ': resumes following at the bottom');
+          await scroller.evaluate(el => el.scrollTop = 0);
+          await page.waitForFunction(() => typingThought === null);
+          assert.equal(await scroller.evaluate(el => el.scrollTop), 0, label + ': scrolling up interrupts typewriter following');
+        }
+        await page.evaluate(() => { live = false; show(11); });
+        await page.waitForFunction(() => typingThought === null);
+        assert(await gap() <= 24, label + ': backward seek shows the selected thought');
+        await scroller.evaluate(el => el.scrollTop = 0);
+        await page.evaluate(() => show(events.length - 1));
+        assert(await gap() <= 24, label + ': forward seek shows the selected thought');
+        if (shots) await page.screenshot({ path:path.join(shots, label + '-seek.png') });
       }
       await context.close();
     }

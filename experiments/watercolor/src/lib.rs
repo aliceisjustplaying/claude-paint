@@ -622,7 +622,7 @@ impl Watercolor {
                     / (self.water[i] + self.water[j]).max(0.001);
                 let viscosity = 1.0 / (1.0 + 45.0 * concentration);
                 (-14.0 * dt).exp() * mobility * previous
-                    + dt * 1560.0
+                    + dt * 780.0
                         * (CELL_MM / self.cell_mm).powi(2)
                         * depth
                         * mobility
@@ -686,7 +686,7 @@ impl Watercolor {
                     * (CELL_MM / self.cell_mm).powi(2)
                     * self.water[i].min(self.water[j])
                     * ((0.18 + 0.45 * (1.0 - properties.granulation)) * (ci - cj)
-                        + 0.9
+                        + 0.12
                             * properties.granulation
                             * (ci + cj)
                             * 0.5

@@ -123,8 +123,20 @@ def session_thinking(path):
 
 
 # the runners' studio lists: ~/tmp/gallery-*/r<round>/run/studios.json, {"<lane><n>": "paint-studio-..."}
-RUNS = os.path.expanduser("~/tmp/gallery-*/r*/run/studios.json")
+RUNS = os.path.expanduser("~/src/a/stillwet-runs/**/run/studios.json")
 _lanes = {"at": 0.0, "map": {}}
+
+
+def runner_paths():
+    return sorted(set(glob.glob(os.path.expanduser("~/tmp/gallery-*/r*/run/studios.json")) +
+                      glob.glob(RUNS, recursive=True)))
+
+
+def runner_key(path, key):
+    for cut in range(len(key) - 1, 0, -1):
+        if key[cut:].isdigit() and os.path.isdir(os.path.join(os.path.dirname(path), key[:cut])):
+            return key[:cut], key[cut:]
+    return re.match(r"^(.*?)(\d*)$", key).groups()
 
 
 def lanes():
@@ -133,13 +145,13 @@ def lanes():
     import time
     if time.time() - _lanes["at"] > 30:
         m = {}
-        for f in glob.glob(RUNS):
+        for f in runner_paths():
             rnd = os.path.basename(os.path.dirname(os.path.dirname(f)))  # r17, r18g, r19, ...
             try:
                 names = json.load(open(f))
             except (OSError, ValueError):
                 continue
-            keys = {k: re.match(r"^(.*?)(\d*)$", k).groups() for k in names}
+            keys = {k: runner_key(f, k) for k in names}
             for k, studio in names.items():
                 lane, n = keys[k]
                 size = sum(1 for l, _ in keys.values() if l == lane)
@@ -175,7 +187,10 @@ _subjects = {}  # studio -> (BRIEF.md mtime, what its brief says: see about_brie
 
 def _artist_of(brief):
     """The artist a brief names, in full ("in the manner of Kendric Tonn" -> "Kendric Tonn"), or ""."""
-    m = re.search(r"in\s+the\s+manner\s+of\s+((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    m = re.search(r"in\s+the\s+manner\s+of\s+(?:(?:early|later|late)\s+)?"
+                  r"((?:[A-Z][\w.'-]*\s+)*[A-Z][\w.'-]*)", brief)
+    if not m:
+        m = re.search(r"explore\s+((?:[A-Z][\w.-]*\s+)*[A-Z][\w.-]*)['’]s\s+materials", brief)
     return " ".join(m.group(1).split()) if m else ""
 
 
@@ -276,7 +291,8 @@ def list_sessions():
                 if i["model"] and i["model"] not in models:
                     models.append(i["model"])
             rnd, lane, n, size, outcome = lanes().get(name, ("", "", 0, 0, None))
-            out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models), "sittings": len(fs),
+            out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models),
+                        "sittings": sum(_glance_file(f)["worked"] for f in fs),
                         "thinking": session_thinking(fs[-1]), **about_brief(name),
                         "round": rnd, "lane": lane, "n": n, "chain": size if size > 1 else 0,
                         "outcome": outcome,
@@ -620,6 +636,8 @@ TITLE_LINE = re.compile(r"[ \t]*(?:#{1,6}[ \t]*)?(\*\*?|__?)([^*_\n]{2,100}?)\1[
 # **Nymphéas, reflet du soir** (...)", "I'm leaving **Luncheonette, Four O'Clock** finished as it is."
 NAMED = re.compile(r"[^\n*_]{0,40}?\b(?:call(?:ed|ing)?|title[ds]?|name[ds]?|finish(?:ed|ing)?|left|leav(?:e|ing)"
                    r"|complet(?:ed|e|ing))(?:\s+(?:it|this|(?:the|this|my)\s+(?:painting|picture|canvas)))?\s+(\*\*?|__?)([^*_\n]{2,100}?)\1(?![*_\w])")
+LABELED_TITLE = re.compile(r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?Title:[ \t]*"
+                           r"(?:\*\*|__)?[ \t]*(?:\*\*?|__?)?([^*_\n]{2,100}?)(?:\*\*?|__?){0,2}[ \t]*$", re.M | re.I)
 
 
 def clean_title(t):
@@ -630,13 +648,20 @@ def clean_title(t):
 def title_of(say):
     """The painting's title from the painter's last words, if they begin with one or have one alone on a line among
     their first three paragraphs; else None."""
+    m = LABELED_TITLE.search(say or "")
+    if m:
+        return clean_title(m.group(1))
     m = TITLE.match(say or "") or NAMED.match(say or "")
     if m:
-        return clean_title(m.group(2))
+        title = clean_title(m.group(2))
+        if title and not title.endswith(":"):
+            return title
     for para in [p for p in re.split(r"\n\s*\n", say or "") if p.strip()][1:3]:
         m = TITLE_LINE.fullmatch(para.strip("\n"))
         if m:
-            return clean_title(m.group(2))
+            title = clean_title(m.group(2))
+            if title and not title.endswith(":"):
+                return title
     return None
 
 
@@ -663,7 +688,7 @@ def _glance_file(path):
         g = _glances.get(path)
         size = os.path.getsize(path)
         if not g or size < g["offset"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "say": "", "cwd": ""}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "say": "", "cwd": "", "worked": False}
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -685,7 +710,10 @@ def _glance_file(path):
                     for x in content:
                         if x.get("type") == "text" and x.get("text", "").strip():
                             g["say"] = x["text"]
+                            g["worked"] = True
                         elif x.get("type") == "toolCall":  # a look's request; REFERENCE for a read from reference/
+                            if x.get("name") and x["name"] not in ("look", "read", "status", "log"):
+                                g["worked"] = True
                             a = x.get("arguments") or {}
                             g["calls"][x.get("id")] = (look_text(a) if x.get("name") == "look" else REFERENCE
                                                        if x.get("name") == "read" and in_reference(a.get("path", ""), g["cwd"])
@@ -920,7 +948,7 @@ class H(http.server.BaseHTTPRequestHandler):
             u = int(q.get("u", ["0"])[0]) if q.get("epoch", [""])[0] == str(st["epoch"]) else 0
             ups = [[i, ev[i]] for i in st["updates"][u:] if i < since]
             return self._send(200, json.dumps({"events": ev[since:], "total": len(ev), "epoch": st["epoch"],
-                                               "sittings": len(files), "updates": ups,
+                                               "sittings": sum(_glance_file(f)["worked"] for f in files), "updates": ups,
                                                "nupdates": len(st["updates"])}).encode(), "application/json")
         if u.path == "/api/file":  # the painting's current source, from the painter's folder
             cwd, rels = painting_sources(st["events"])

@@ -700,6 +700,75 @@ def test_a_last_sitting_that_only_looked_keeps_the_earlier_title():
     assert S.title_of_closings(["**The Blue Barn**\n\nA barn.", "The painting is exactly as the journal left it."]) == "The Blue Barn"
 
 
+def test_title_labels_allow_nested_emphasis_and_skip_reply_headings():
+    assert S.title_of("**Title: *Cleaners, Late***\n\nThe painting is finished.") == "Cleaners, Late"
+    assert S.title_of("**Saved painting:** `out/painting.png`\n**Log:** `painting.lua`\n\n"
+                      "**Title:** *The Last Light on the Flats*\n\nA dusk estuary.") == "The Last Light on the Flats"
+    assert S.title_of("**Saved painting:** `out/painting.png`\n\n**Handoff:**\n\nStill unresolved.") is None
+
+
+def test_brief_artist_can_have_a_period_qualifier_or_materials_instruction():
+    assert S._subject_of("Paint in the manner of later Claude Monet, at the easel.") == "Monet"
+    assert S._artist_of("Then explore George Inness's materials and paint handling in the studio\nnotes.") == "George Inness"
+    assert S._subject_of("Then explore George Inness’s materials and paint handling.") == "Inness"
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_runner_discovery_includes_non_gallery_runs_and_digit_ending_lanes(home, server, monkeypatch, via):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + say("**After Harvest, Storm Coming**"))
+    run = tmp_path / "src/a/stillwet-runs/oil-yolo-fixture/run"
+    rd = run / "OYO1"
+    rd.mkdir(parents=True)
+    (run / "studios.json").write_text(json.dumps({"OYO11": PAINTER}))
+    (rd / "p1.finished").write_text("render exported")
+    (rd / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "reviewed and stopped"}))
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    if via == "live server":
+        entries = json.loads(server("/api/sessions")[1])
+    else:
+        out = tmp_path / "out"
+        assert export(tmp_path, out).returncode == 0
+        entries = json.loads((out / "data/sessions.json").read_text())
+    p = next(s for s in entries if s.get("p") == PAINTER)
+    assert (p["lane"], p["n"], p["outcome"]) == ("OYO1", 1, {"status": "finished", "reason": "reviewed and stopped"})
+    if via == "static export":
+        assert p["completed_at"] == os.path.getmtime(rd / "p1_outcome.json")
+    import export_static as E
+    (rd / "p1_sittings.json").write_text('[{"status":"running"}]')
+    E.runner_states([p], {PAINTER}, p["mtime"])
+    assert not p["active"]
+    p["outcome"] = None
+    E.runner_states([p], {PAINTER}, p["mtime"])
+    assert p["active"]
+
+
+def test_sittings_exclude_startup_only_crashes_but_keep_painting_and_final_review(home, server):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    crash = log.with_name("2026-09-29T11-00-00-000Z_crash.jsonl")
+    crash.write_text(start(str(studio)) + look("l1", png_of("blue")) +
+                     line({"type": "message", "message": {"role": "assistant", "content": [], "stopReason": "error"}}))
+    review = log.with_name("2026-09-29T12-00-00-000Z_review.jsonl")
+    review.write_text(start(str(studio)) + look("l2", png_of("blue")) + say("**The Blue Barn**\n\nI've reviewed it and stopped."))
+    p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert p["sittings"] == 2
+    assert json.loads(server(f"/api/events?p={PAINTER}")[1])["sittings"] == 2
+    out = tmp_path / "out"
+    assert export(tmp_path, out).returncode == 0
+    assert json.loads((out / "data" / PAINTER / "events.json").read_text())["sittings"] == 2
+    crash.write_text(crash.read_text() + call("c2", "wait(10)"))
+    p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert p["sittings"] == 3
+
+
+def test_muse_wonder_full_display_name_matches_viewer_and_export():
+    import export_static as E
+    assert E.MODEL_NAMES["muse-wonder-full-1.0"] == "Muse Wonder Full"
+    assert "'muse-wonder-full-1.0':'Muse Wonder Full'" in open(os.path.join(HERE, "index.html")).read()
+
+
 def test_a_palette_look_is_not_the_painting():
     # the easel's palette look (look{palette=true}) shows the mixed piles, not the canvas
     assert S.is_whole(S.look_text({}))

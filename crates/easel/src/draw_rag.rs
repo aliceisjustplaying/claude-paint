@@ -331,8 +331,10 @@ mod tests {
     /// An engine-2 log replays with the globals it had: no `rag`, and
     /// `pairs(_G)` walks the same names in the same order. The count and
     /// hash were printed by the round-23 easel (7b80cb0) for this program;
-    /// a log of today's engine has the rag.
+    /// a log of today's engine has the rag. The historical build included
+    /// the three whole-picture finish verbs.
     #[test]
+    #[cfg(feature = "finish")]
     fn an_older_log_sees_the_globals_it_saw() {
         let walk = r#"local n, keys = 0, {}
 for k in pairs(_G) do n = n + 1; keys[n] = tostring(k) end

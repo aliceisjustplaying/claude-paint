@@ -370,8 +370,9 @@ const BOXES: &[(&str, &[&str])] = &[
 pub struct Palette {
     pub name: &'static str,
     pub tubes: Vec<Tube>,
-    /// The engine version paint from this box is painted with (`ENGINE`;
-    /// a replay sets its log's). A canvas prepared by a `Style` takes it.
+    /// The rendering engine for paint from this box. Published boxes retain
+    /// engine 5; custom palettes default to `ENGINE`. A `Style` takes it,
+    /// while the Easel selects the current or logged engine per session.
     pub engine: u32,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
@@ -389,6 +390,10 @@ impl std::fmt::Debug for Palette {
         f.debug_struct("Palette").field("name", &self.name).field("tubes", &self.tubes.iter().map(|t| t.name).collect::<Vec<_>>()).finish()
     }
 }
+
+// Published boxes retain their declared engine and exact tube snapshot.
+// The Easel selects the current or logged rendering engine per session.
+const BOX_ENGINE: u32 = 5;
 
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
@@ -459,7 +464,7 @@ impl Palette {
     /// from it.
     #[cfg(tube_box)]
     pub fn tube_box() -> Self {
-        Palette::new(DEFAULT_BOX, pick(TUBE_BOX))
+        Palette { engine: BOX_ENGINE, ..Palette::new(DEFAULT_BOX, pick(TUBE_BOX)) }
     }
 
     /// The same tubes under another name.
@@ -500,7 +505,7 @@ impl Palette {
         if name == DEFAULT_BOX {
             return Some(Palette::tube_box());
         }
-        BOXES.iter().find(|b| b.0 == name).map(|b| Palette::new(b.0, pick(b.1)))
+        BOXES.iter().find(|b| b.0 == name).map(|b| Palette { engine: BOX_ENGINE, ..Palette::new(b.0, pick(b.1)) })
     }
 
     /// The tubes as a markdown table: name, pigment, hiding, stiffness,

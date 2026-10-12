@@ -91,7 +91,7 @@ fn final_checkpoint_export_needs_no_dump_and_existing_zstd_save_renders_without_
     run(&[source.clone(), "--width".into(), "96".into(), "--out".into(), out.clone(), "--checkpoint-out".into(), checkpoint.clone()]).unwrap();
     assert_eq!(std::fs::read_dir(temp.0.join("saved")).unwrap().count(), 1);
     let raw = std::fs::read(&checkpoint).unwrap();
-    assert_eq!(&raw[..8], b"PAINTC11");
+    assert_eq!(&raw[..8], b"PAINTC13");
     assert!(raw.windows(b"easel save 1\n".len()).any(|v| v == b"easel save 1\n"));
     let compressed = temp.file("live.ckpt.zst");
     std::fs::write(&compressed, zstd::stream::encode_all(raw.as_slice(), 1).unwrap()).unwrap();

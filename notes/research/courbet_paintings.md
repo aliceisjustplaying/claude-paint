@@ -127,7 +127,7 @@ description and 16 have catalog data only.
 
 - **Record.** https://www.metmuseum.org/art/collection/search/438820 (open-access image: yes; museum API) [OBJ].
 - **Ground.** Red ground, per Silvestre (1856) [RIAT p.146].
-- **Layers and changes.** X-rays show the figures were enlarged; original positions show through paint grown more transparent [OBJ; MET-YL].
+- **Layers and changes.** X-rays show the cattle were enlarged; their original positions show through paint grown more transparent [OBJ; MET-YL].
 - **Note.** French title supplied for identification; the Met record is in English.
 
 ### 11. The Bathers (Les Baigneuses)
@@ -326,7 +326,7 @@ description and 16 have catalog data only.
 - **[CRMF-ATL]** C2RMF, "Restauration : *L'Atelier du peintre* de Courbet" (restoration 2013–16). Read directly. https://c2rmf.fr/actualite/restauration-latelier-du-peintre-de-courbet
 - **[CRMF]** C2RMF, "Gustave Courbet étudié et restauré au C2RMF : un travail au long cours," updated 3 April 2025. Read directly. https://c2rmf.fr/actualite/le-c2rmf-et-gustave-courbet
 - **[TECH-TB]** Collet, I. and Sindaco-Domas, C., "Les Trois baigneuses de Courbet (musée du Petit Palais) : restauration et découvertes," *Technè* 42 (2015). Read only through search excerpts (the journal site blocks automated reading). https://journals.openedition.org/techne/7176
-- **[TECH-M]** Mottin, B., "De La Source aux Trois baigneuses : les tableaux à transformations de Gustave Courbet," *Technè* 42 (2015). Abstract only. https://doi.org/10.4000/techne.6406
+- **[TECH-M]** Mottin, B., "De La Source aux Trois baigneuses : les tableaux à transformations de Gustave Courbet," *Technè* 42 (2015). Abstract only. https://doi.org/10.4000/techne.7155
 - **[REICHE15]** Reiche, I. et al., "Toward a three-dimensional vision of the different compositions and the stratigraphy of the painting L'Homme blessé by G. Courbet," *Applied Physics A* 121 (2015), 903–913. Abstract only. https://doi.org/10.1007/s00339-015-9428-1
 - **[REICHE16]** Reiche, I. et al., "New insights into the painting stratigraphy of L'Homme blessé by Gustave Courbet combining scanning macro-XRF and confocal micro-XRF," *Applied Physics A* 122 (2016), 947. Abstract only. https://doi.org/10.1007/s00339-016-0457-1
 - **[MET-YL]** Metropolitan Museum of Art, audio guide for 40.175 (1851–52), conservator Charlotte Hale on X-rays. Read through a search excerpt. https://www.metmuseum.org/art/collection/search/110003533

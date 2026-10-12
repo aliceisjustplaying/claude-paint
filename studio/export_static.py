@@ -45,7 +45,7 @@ MODEL_NAMES = {
     "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
     "claude-sonnet-5": "Claude Sonnet 5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
     "gpt-6-astra": "GPT-6 Astra", "gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol",
-    "gemini-3.8-flash": "Gemini 3.8 Flash", "muse-spark-1.3": "Muse Spark 1.3",
+    "gemini-3.8-flash": "Gemini 3.8 Flash", "muse-spark-1.3": "Muse Spark 1.3", "muse-wonder-full-1.0": "Muse Wonder Full",
     "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3", "space-bunny-free": "Space Bunny",
 }
@@ -71,12 +71,12 @@ def runner_states(sessions, working, now):
     """Require a running sitting, a live Pi in that studio and recent session activity. Completion
     comes only from the runner outcome, never a title, quiet session or exported render."""
     records = {}
-    for path in glob.glob(S.RUNS):
+    for path in S.runner_paths():
         try:
             with open(path) as fh:
                 names = json.load(fh)
             for key, painter in names.items():
-                lane, number = re.match(r"^(.*?)(\d*)$", key).groups()
+                lane, number = S.runner_key(path, key)
                 rd = os.path.join(os.path.dirname(path), lane)
                 stem = os.path.join(rd, "p" + (number or "0"))
                 running = False
@@ -385,7 +385,7 @@ def export(out, skip=(), only=None, live=False):
             with Image.open(io.BytesIO(data)) as im:
                 s["og_image"] = {"url": SITE + "/studio/" + rel, "width": im.width, "height": im.height}
         text(os.path.join(out, "data", p, "events.json"),
-             json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": len(files), "imgext": exts, "web": web}))
+             json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": s["sittings"], "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
         cwd, rels = S.painting_sources(ev)
         for rel in sorted(rels):

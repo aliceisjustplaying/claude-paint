@@ -351,7 +351,7 @@ let viewI = -1, viewI2 = -1;  // the looks in the main view: the painting, and w
 let hasLooks = false;  // the painter uses the easel's look tool (round 19 on); before it, the main view is simply the last picture it saw
 // model ids as people say them
 const NAMES = {'claude-opus-5-5':'Claude Opus 5.5', 'claude-fable-5-1':'Claude Fable 5.1', 'claude-sonnet-5':'Claude Sonnet 5', 'claude-sonnet-5-5':'Claude Sonnet 5.5',
-  'gpt-6-astra':'GPT-6 Astra', 'gpt-6-luna':'GPT-6 Luna', 'gpt-6.1-sol':'GPT-6.1 Sol', 'gemini-3.8-flash':'Gemini 3.8 Flash', 'muse-spark-1.3':'Muse Spark 1.3',
+  'gpt-6-astra':'GPT-6 Astra', 'gpt-6-luna':'GPT-6 Luna', 'gpt-6.1-sol':'GPT-6.1 Sol', 'gemini-3.8-flash':'Gemini 3.8 Flash', 'muse-spark-1.3':'Muse Spark 1.3', 'muse-wonder-full-1.0':'Muse Wonder Full',
   'glm-5.3-flash':'GLM-5.3 Flash', 'mimo-v2.6-pro':'MiMo v2.6 Pro', 'deepseek-v4.1-flash':'DeepSeek V4.1 Flash', 'kimi-k3':'Kimi K3', 'space-bunny-free':'Space Bunny'};
 const modelName = m => NAMES[m] || m;
 const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
@@ -711,7 +711,7 @@ function status() {
   // LIVE only while the painter works; after that the same control just goes to the end
   const g = $('golive'); g.classList.toggle('on', atLive && active); g.classList.toggle('end', !active);
   g.textContent = active ? '● LIVE' : 'End ⇥'; g.title = active ? 'jump to live  l' : 'go to the end  l';
-  const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = sitStarts.length;
+  const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = atLive ? nSittings : sitStarts.length;
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
   $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
   const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = false;

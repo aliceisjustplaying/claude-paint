@@ -126,6 +126,10 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
         assert(await gap() <= 24, label + ': follows the first typewriter ticks');
         await page.waitForFunction(() => typingThought === null);
         assert(await gap() <= 24, label + ': follows the complete live append');
+        if (mobile && height > 500) {
+          const img = await page.evaluate(() => { const r = document.getElementById('img').getBoundingClientRect(); return { top:r.top, bottom:r.bottom }; });
+          assert(img.top >= 0 && img.bottom <= height / 2 + 60, label + ': the painting stays on screen while the journal follows ' + JSON.stringify(img));
+        }
         if (shots) await page.screenshot({ path:path.join(shots, label + '-live-append.png') });
         if (mobile) {
           await scroller.evaluate(el => el.scrollTop = 0);

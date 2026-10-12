@@ -235,6 +235,16 @@
     #speed, #pos { display:none } #togglecode { font-size:10px; padding:2px 7px }
     footer { padding:4px 8px calc(4px + env(safe-area-inset-bottom)) }
   }
+  /* phone, portrait: the painting stays pinned at the top while everything below it (close-up, scratch canvas,
+     palette, journal) scrolls and follows beneath it. The view pane dissolves so the painting can stick to main. */
+  @media (max-width: 720px) and (min-height: 501px) {
+    main { position:relative }
+    #viewpane, #view, #viewpane:has(#pip:not([hidden])) { display:contents }
+    #whole { position:sticky; top:0; z-index:3; background:#070708; padding:4px 4px 3px; border-bottom:1px solid var(--line) }
+    #whole img { max-height:42dvh; object-fit:contain }
+    #lighting, #other, #pal, #pband { background:#070708 } #other, #pal { padding:4px }
+    #pip { margin:4px 8px 6px }
+  }
 </style></head>
 <body class="nocode">
 <header>

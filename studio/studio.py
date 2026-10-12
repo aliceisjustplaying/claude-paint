@@ -18,6 +18,7 @@ timeline to scrub. Read-only: it never touches the painter.
 import argparse
 import base64
 import glob
+import hashlib
 import http.server
 import json
 import os
@@ -655,7 +656,7 @@ def _glance_file(path):
         g = _glances.get(path)
         size = os.path.getsize(path)
         if not g or size < g["offset"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "say": "", "cwd": ""}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "say": "", "cwd": ""}
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -688,8 +689,10 @@ def _glance_file(path):
                         if x.get("type") == "image" and x.get("data"):
                             if look is None:
                                 g["last"] = (g["n"], at, k)
+                                g["last_version"] = hashlib.sha256(x["data"].encode()).hexdigest()
                             elif look is not REFERENCE and is_whole(look):
                                 g["whole"] = (g["n"], at, k)
+                                g["whole_version"] = hashlib.sha256(x["data"].encode()).hexdigest()
                             g["n"] += 1
                             k += 1
         return g
@@ -700,16 +703,20 @@ def glance(files):
     last picture it saw; never a reference picture; None if it has seen none of its own) as a stream image index,
     "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
     gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
+    version, last_version = None, None
     for f, g in zip(files, gs):
         if g["whole"]:
             look, src = base + g["whole"][0], (f,) + g["whole"][1:]
+            version = g["whole_version"]
         if g["last"]:
             last, lsrc = base + g["last"][0], (f,) + g["last"][1:]
+            last_version = g["last_version"]
         base += g["n"]
     title = title_of_closings([g["say"] for g in gs if g["say"]])
     if look is None:
         look, src = last, lsrc
-    return {"look": look, "title": title, "src": src}
+        version = last_version
+    return {"look": look, "title": title, "src": src, "version": version}
 
 
 def glance_image(src):
@@ -825,7 +832,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         # a look never changes: the browser keeps it (and asks again for everything else)
-        self.send_header("Cache-Control", "private, max-age=86400, immutable" if ctype.startswith("image/") else "no-store")
+        self.send_header("Cache-Control", "private, max-age=86400, immutable" if ctype.startswith("image/") and urllib.parse.urlparse(self.path).path != "/api/glance" else "no-store")
         if PUBLIC:
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
                              "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
@@ -857,7 +864,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 s["epoch"] = STREAM_EPOCH
                 if s.get("painter") and (_warm is None or _warm.is_set()):  # (until the first scan is done, without)  # the picker's picture and title (the static export has them in sessions.json)
                     g = glance(s["files"])
-                    s.update(look=g["look"], title=g["title"])
+                    s.update(look=g["look"], title=g["title"], thumb_version=g["version"])
             if PUBLIC:
                 ss = [{k: v for k, v in s.items() if k != "files"} for s in ss if s.get("painter")]
             return self._send(200, json.dumps(ss).encode(), "application/json")

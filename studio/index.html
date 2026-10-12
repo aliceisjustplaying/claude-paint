@@ -451,7 +451,7 @@ function displayPic(im, e, caption, label) {
   const lit = eligible && preset.image && e[lightName];
   const describe = () => {
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
-    const light = actual.image ? actual.label : preset.image && eligible ? `Color · ${preset.label.toLowerCase()} unavailable` : eligible ? 'Color' : '';
+    const light = actual.image ? actual.label : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];

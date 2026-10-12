@@ -104,7 +104,7 @@ async function ready(page, which, light) {
       assert.equal(await page.locator('#relief').getAttribute('aria-pressed'), 'true');
       await page.locator('#img2').click(); await ready(page, 'zimg', 'relief'); await page.locator('#zoom').click();
       await page.locator('#color').click(); await ready(page, 'img', false); await ready(page, 'img2', false);
-      assert.match(await page.locator('#cap').textContent(), /Color/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
       await shot(`after-${stream ? 'stream' : 'normal'}-color`);
       await page.reload(); await ready(page, 'img', false);
       assert.equal(await page.evaluate(() => STATIC), staticMode);
@@ -123,15 +123,15 @@ async function ready(page, which, light) {
         await page.locator('#' + light).click();
         for (const p of ['fallback', 'falsePalette', 'broken']) {
           await page.goto(url(p)); await ready(page, 'img', false);
-          await page.waitForFunction(light => document.getElementById('cap').textContent.includes((light === 'gallery' ? 'gallery light' : 'relief') + ' unavailable'), light);
+          assert.doesNotMatch(await page.locator('#cap').textContent(), /Gallery light|Relief|Color|unavailable/);
           assert.equal(await page.locator('#' + light).getAttribute('aria-pressed'), 'true');
         }
       }
       await page.goto(url('galleryOnly')); await ready(page, 'img', false);
-      assert.match(await page.locator('#cap').textContent(), /Color · relief unavailable$/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|unavailable/);
       await page.locator('#gallery').click(); await ready(page, 'img', true);
       await page.goto(url('reliefOnly')); await ready(page, 'img', false);
-      assert.match(await page.locator('#cap').textContent(), /Color · gallery light unavailable$/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|unavailable/);
       await page.locator('#relief').click(); await ready(page, 'img', 'relief');
       await page.locator('#gallery').click();
       await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
@@ -184,7 +184,7 @@ async function ready(page, which, light) {
       holdColor = true; await page.goto(url('fallback'), { waitUntil:'domcontentloaded' });
       await page.waitForFunction(() => events.length > 0 && document.getElementById('img').dataset.want);
       await page.locator('#color').click(); holdColor = false; await release(); await ready(page, 'img', false);
-      assert.match(await page.locator('#cap').textContent(), / · Color$/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
       await page.locator('#gallery').click();
       await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:3, look:'', gallery:true, relief:true }); show(events.length - 1); });
@@ -192,7 +192,7 @@ async function ready(page, which, light) {
       assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/0\.png$/ : /i=0$/);
       await page.locator('#zoom').click();
       await page.waitForFunction(() => /(?:i=3|\/3\.png)/.test(document.getElementById('img').dataset.zoom || ''));
-      assert.match(await page.locator('#cap').textContent(), /Color · gallery light unavailable/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|unavailable/);
       await page.locator('#img').click(); await ready(page, 'zimg', false);
       assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/3\.png$/ : /i=3$/);
       await page.locator('#zoom').click();
@@ -222,7 +222,7 @@ async function ready(page, which, light) {
       assert.match(await page.locator('#cap').textContent(), /Gallery light$/);
       await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
       await page.locator('#color').click(); await ready(page, 'img', false); holdLit = false; await release();
-      assert.match(await page.locator('#cap').textContent(), /Color$/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
       await context.close();
     }
     assert.deepEqual(errors, []);

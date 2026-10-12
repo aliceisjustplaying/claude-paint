@@ -785,7 +785,7 @@ impl Surf {
     /// Lay `v` coats of paint of cure `cure` (0: fresh) at pixel `i`: it
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
-    #[inline]
+    #[inline(always)]
     unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
         unsafe {
             if v <= 0.0 {

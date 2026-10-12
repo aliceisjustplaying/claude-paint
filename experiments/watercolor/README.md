@@ -42,7 +42,8 @@ The two smoke chunks demonstrate saved continuation through the public Lua API. 
 
 `scripts/export_r16_studio watercolor DEST` exports the committed current branch's
 `watercolor-studio`, MCP adapter, draft `notes/watercolor_easel_guide.md`, its house
-`notes/easel_guide.md` alias and an empty journal. Set `R16_BRANCH` to choose another
+`notes/easel_guide.md` alias, `notes/watercolor_techniques.md`,
+`notes/research/watercolor_physics.md` (sources stripped) and an empty journal. Set `R16_BRANCH` to choose another
 committed ref and `STUDIO_BUILDS` for a private build directory. Run
 `uv run --no-project --script DEST/bin/mcp/server.py --studio DEST`. The existing
 `--sessions-root` option records viewer-compatible Pi JSONL. Painter Color looks

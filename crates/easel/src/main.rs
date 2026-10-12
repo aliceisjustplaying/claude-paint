@@ -88,7 +88,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/painting/painting.png), lit on its relief if asked
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG inside the studio (default out/easel/painting/painting.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
@@ -107,7 +107,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
-  easel save [path] [--light az,el | --gallery]   the canvas as a PNG (default out/easel/<name>/<name>.png), lit on its relief if asked
+  easel save [path] [--light az,el | --gallery]   the canvas as a PNG inside the studio (default out/easel/<name>/<name>.png), lit on its relief if asked
   easel frames on|off save a look after every chunk
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
@@ -1457,13 +1457,24 @@ impl Server {
             "save" => {
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only
                 let (path, light) = save_args(args)?;
-                let p = path.unwrap_or_else(|| session_dir(&self.name).join(format!("{}.png", self.name)));
+                let p = match path {
+                    Some(p) if !p.is_absolute() => root().join(p),
+                    Some(p) => p,
+                    None => session_dir(&self.name).join(format!("{}.png", self.name)),
+                };
                 #[cfg(feature = "state-store")]
                 if let Some(store) = &self.committed {
                     store.protect_output(&p).map_err(|e| e.to_string())?;
                     if same_file(&log_path(&self.name), &p)? || same_file(&self.witness(), &p)? {
                         return Err("save output must differ from the painting's journal exports".into());
                     }
+                }
+                let p = in_studio_png(&p)?;
+                // A path inside the studio can still share an inode with a file outside it.
+                // Keep the store's more specific alias checks above this general refusal.
+                use std::os::unix::fs::MetadataExt;
+                if std::fs::metadata(&p).is_ok_and(|m| m.is_file() && m.nlink() > 1) {
+                    return Err("save: that picture has hard links: save to a new file in this studio".into());
                 }
                 let c = self.s.canvas().ok_or("no canvas yet")?;
                 #[cfg(feature = "state-store")]
@@ -1531,6 +1542,51 @@ fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), S
         i += 1;
     }
     Ok((path, light))
+}
+
+/// Where `save <path>` may write: a `.png` inside this studio (EASEL_ROOT,
+/// or the painter's studio), as `look --compare` may only read one. A
+/// relative path is the studio's. The deepest folder of it that exists must
+/// be in the studio once its links are followed, the folders below it are
+/// plain names (no `..`), and the file itself, if it is there, is no link:
+/// so stable paths cannot lead outside the studio.
+fn in_studio_png(path: &Path) -> Result<PathBuf, String> {
+    use std::path::Component;
+    let refuse = |why: &str| Err(format!("save {}: {why}", path.display()));
+    if path.extension().and_then(|e| e.to_str()).is_none_or(|e| !e.eq_ignore_ascii_case("png")) {
+        return refuse("a picture is saved as a .png");
+    }
+    let studio = root().canonicalize().map_err(|e| format!("save: the studio {}: {e}", root().display()))?;
+    let p = if path.is_absolute() { path.to_path_buf() } else { studio.join(path) };
+    // the deepest folder that exists, and the plain names below it
+    let mut base = p.parent().ok_or("save: no folder")?.to_path_buf();
+    let mut tail = Vec::new();
+    while !base.exists() {
+        let name = base.file_name().map(|n| n.to_os_string());
+        match name {
+            Some(n) => tail.push(n),
+            None => return refuse("no folder of it exists"),
+        }
+        base = base.parent().ok_or("save: no folder")?.to_path_buf();
+    }
+    if p.components().any(|c| matches!(c, Component::ParentDir)) && !tail.is_empty() {
+        return refuse("`..` in a folder that doesn't exist yet");
+    }
+    let real = base.canonicalize().map_err(|e| format!("save {}: {e}", path.display()))?;
+    if !real.starts_with(&studio) {
+        return Err(format!("save {}: a picture is saved in this studio ({})", path.display(), studio.display()));
+    }
+    let mut out = real;
+    for n in tail.into_iter().rev() {
+        out.push(n);
+    }
+    let out = out.join(p.file_name().ok_or("save: no file name")?);
+    // Check the path we will actually write: a trailing slash or `/.` may
+    // have kept symlink_metadata on the original spelling from seeing a link.
+    if std::fs::symlink_metadata(&out).is_ok_and(|m| m.file_type().is_symlink()) {
+        return refuse("that is a link: save to a picture in this studio");
+    }
+    Ok(out)
 }
 
 /// The delivered PNG: the canvas as it is seen now (wet paint as laid, no

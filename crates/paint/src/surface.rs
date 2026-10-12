@@ -202,22 +202,20 @@ pub(crate) fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
                     acc += tmp[k.saturating_sub(r).min(h - 1) * w + x];
                 }
                 for y in 0..h {
-                    res[ci * h + y] = acc / n;
+                    res[y * cs.len() + ci] = acc / n;
                     acc += tmp[(y + r + 1).min(h - 1) * w + x] - tmp[y.saturating_sub(r) * w + x];
                 }
             }
             res
         })
         .collect();
-    for (bi, block) in colvals.iter().enumerate() {
-        let x0 = bi * 64;
-        let nc = block.len() / h;
-        for ci in 0..nc {
-            for y in 0..h {
-                out[y * w + x0 + ci] = block[ci * h + y];
-            }
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        for (bi, block) in colvals.iter().enumerate() {
+            let x0 = bi * 64;
+            let nc = block.len() / h;
+            row[x0..x0 + nc].copy_from_slice(&block[y * nc..(y + 1) * nc]);
         }
-    }
+    });
     out
 }
 

@@ -59,10 +59,18 @@ fn running_median(s: &[f32], r: usize, out: &mut [f32]) {
     for (i, o) in out.iter_mut().enumerate() {
         *o = win[r];
         let (gone, come) = (at(i as isize - r as isize), at(i as isize + r as isize + 1));
-        let k = win.partition_point(|v| v.total_cmp(&gone).is_lt());
-        win.remove(k);
-        let k = win.partition_point(|v| v.total_cmp(&come).is_lt());
-        win.insert(k, come);
+        if gone.to_bits() == come.to_bits() {
+            continue;
+        }
+        let from = win.partition_point(|v| v.total_cmp(&gone).is_lt());
+        let to = win.partition_point(|v| v.total_cmp(&come).is_lt());
+        let to = if to > from { to - 1 } else { to };
+        if from < to {
+            win.copy_within(from + 1..=to, from);
+        } else if to < from {
+            win.copy_within(to..from, to + 1);
+        }
+        win[to] = come;
     }
 }
 

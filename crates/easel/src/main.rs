@@ -16,6 +16,7 @@
 //! painting, `PAINTING`. See notes/easel_guide.md.
 
 mod api;
+mod ground_cache;
 mod board;
 mod check;
 #[cfg(all(test, feature = "replay"))]

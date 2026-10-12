@@ -430,6 +430,7 @@ def target_dir():
 def main():
     ap = argparse.ArgumentParser(prog="scripts/test", description=__doc__.split("\n\n")[0])
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--bench-exact", action="store_true", help="run the small report-only timing benchmark instead of the test gate")
     ap.add_argument("--candidate")
     ap.add_argument("--summary")
     ap.add_argument("--logs")
@@ -439,6 +440,10 @@ def main():
                     help="the build steps, the other steps, or both (default: two lockrun jobs, builds first)")
     ap.add_argument("--locked", action="store_true", help=argparse.SUPPRESS)  # set when run by lockrun
     a, rest = ap.parse_known_args()
+    if a.bench_exact:
+        if rest or a.all or a.candidate or a.only or a.list:
+            ap.error("--bench-exact runs alone")
+        return subprocess.call([sys.executable, os.path.join(REPO, "scripts", "bench_exact"), "--report-only"])
     if a.candidate:
         if not a.all:
             ap.error("--candidate goes with --all")

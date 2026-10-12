@@ -1757,7 +1757,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
-                let mut c = sty.prepare(width, aspect, seed);
+                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }

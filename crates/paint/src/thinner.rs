@@ -184,13 +184,26 @@ pub fn exchange_kj() -> (f32, f32) {
 /// constant. A power of two, so quarter minutes fall on it exactly.
 pub const FLOW_TICKS: u32 = 64;
 
+type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32);
+
+#[derive(Default)]
+struct FlowScratch {
+    active: Vec<usize>,
+    indices: Vec<usize>,
+    out: Vec<[f32; 4]>,
+    next: Vec<FlowCell>,
+}
+
+thread_local! {
+    static FLOW_SCRATCH: std::cell::RefCell<FlowScratch> = std::cell::RefCell::new(FlowScratch::default());
+}
+
 /// Below this (µm) a pixel's solvent is gone. A chosen numerical cutoff
 /// (it lets a wait end with the solvent gone), not a physical constant.
 pub(crate) const SOLVENT_FLOOR: f32 = 1e-8;
 
 use crate::canvas::Canvas;
 use crate::surface::COAT_UM;
-use crate::wet::{Latent, Prop};
 use rayon::prelude::*;
 
 /// Most substeps of the flow in one call of `spread`; past it the flow
@@ -298,7 +311,9 @@ impl Canvas {
         // the box of the pixels the flow changed
         let mut moved: Option<(usize, usize, usize, usize)> = None;
         let original_len = solvent.len();
-        let mut active: Vec<usize> = solvent.iter().copied().filter(|&i| mob(wet, i) > 0.0).collect();
+        let FlowScratch { mut active, mut indices, mut out, mut next } = FLOW_SCRATCH.with(|s| std::mem::take(&mut *s.borrow_mut()));
+        active.clear();
+        active.extend(solvent.iter().copied().filter(|&i| mob(wet, i) > 0.0));
         let mut m_max = m0;
 
         let mut left = dt;
@@ -317,7 +332,7 @@ impl Canvas {
             let wet = &self.wet;
             let height = &self.height;
             let sparse = active.len() < rw * rh / 8;
-            let mut indices = Vec::new();
+            indices.clear();
             if sparse {
                 for &i in &active {
                     let (x, y) = (i % w, i / w);
@@ -334,7 +349,7 @@ impl Canvas {
             let index = |k: usize| if sparse { indices[k] } else { (y0 + k / rw) * w + x0 + k % rw };
             // pass 1: each pixel's outflow (coats of liquid) to its four
             // neighbors (left, right, up, down)
-            let out: Vec<[f32; 4]> = (0..len)
+            (0..len)
                 .into_par_iter()
                 .map(|k2| {
                     let i = index(k2);
@@ -366,7 +381,7 @@ impl Canvas {
                     }
                     q
                 })
-                .collect();
+                .collect_into_vec(&mut out);
             if out.iter().all(|q| q.iter().all(|&v| v <= 0.0)) {
                 // level: the rest of the time moves nothing either
                 break;
@@ -380,8 +395,7 @@ impl Canvas {
             let at = |x: usize, y: usize| if sparse { indices.binary_search(&(y * w + x)).ok() } else { Some((y - y0) * rw + x - x0) };
             // (and the mobility it then has, for the next substep's length,
             // and the drying thickness of the paint that came in)
-            type Cell = (f32, f32, Latent, Prop, f32, bool, f32, f32);
-            let next: Vec<Cell> = (0..len)
+            (0..len)
                 .into_par_iter()
                 .map(|k2| {
                     let i = index(k2);
@@ -424,15 +438,16 @@ impl Canvas {
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
                     (pv, ps, lat, hide, cure, changed, mob_of(pv, ps, cure), th_in)
                 })
-                .collect();
+                .collect_into_vec(&mut next);
             // the largest mobility now: every pixel that has any is in the
             // region (the next substep reaches one pixel further, where
             // nothing has any yet)
             m_max = next.par_iter().map(|c| c.6).reduce(|| 0.0, f32::max);
-            active = next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))).collect();
+            active.clear();
+            active.extend(next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))));
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.into_iter().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.iter().copied().enumerate() {
                 if !changed {
                     continue;
                 }
@@ -479,6 +494,7 @@ impl Canvas {
         if let Some((a, b, c, d)) = moved {
             self.wet.touch(a, b, c, d);
         }
+        FLOW_SCRATCH.with(|s| *s.borrow_mut() = FlowScratch { active, indices, out, next });
     }
 
     /// Cure of the open film at a point (units): 0 fresh, `drying::GEL` at

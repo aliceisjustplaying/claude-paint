@@ -38,6 +38,11 @@ use crate::surface::{COAT_UM, SET_TIME};
 use crate::{smoothstep, surface::vnoise};
 use rayon::prelude::*;
 
+thread_local! {
+    static FILM_SCRATCH: std::cell::RefCell<[Vec<f32>; 5]> = std::cell::RefCell::new(Default::default());
+    static BAKE_SCRATCH: std::cell::RefCell<[Vec<f32>; 7]> = std::cell::RefCell::new(Default::default());
+}
+
 /// Minutes to touch-dry for one lean 25 µm coat of average paint
 /// (`drying` 1) in engines 1 and 2 (engine 3: `TOUCH_DRY_MIN_3`). Estimate
 /// from thin-film touch-dry times: 1–2 days (umber, lead white) to 2–5 days
@@ -544,8 +549,12 @@ impl Canvas {
         let (ex0, ey0, ex1, ey1) = (x0.saturating_sub(pad), y0.saturating_sub(pad), (x1 + pad).min(w), (y1 + pad).min(h));
         let (ew, eh) = (ex1 - ex0, ey1 - ey0);
         let vol = &self.wet.vol;
-        let mut v = vec![0.0f32; ew * eh];
-        let mut m = vec![0.0f32; ew * eh];
+        let mut scratch = FILM_SCRATCH.with(|s| std::mem::take(&mut *s.borrow_mut()));
+        let [v, m, mid, bv, bm] = &mut scratch;
+        v.resize(ew * eh, 0.0);
+        v.fill(0.0);
+        m.resize(ew * eh, 0.0);
+        m.fill(0.0);
         for y in 0..eh {
             for x in 0..ew {
                 let a = vol[(ey0 + y) * w + ex0 + x];
@@ -555,8 +564,10 @@ impl Canvas {
                 }
             }
         }
-        let blur = |f: &[f32]| crate::surface::box_blur(&crate::surface::box_blur(f, ew, eh, r), ew, eh, r);
-        let (bv, bm) = (blur(&v), blur(&m));
+        crate::surface::box_blur_into(v, ew, eh, r, mid);
+        crate::surface::box_blur_into(mid, ew, eh, r, bv);
+        crate::surface::box_blur_into(m, ew, eh, r, mid);
+        crate::surface::box_blur_into(mid, ew, eh, r, bm);
         let bw = x1 - x0;
         let mut out = vec![0.0f32; bw * (y1 - y0)];
         for y in y0..y1 {
@@ -567,6 +578,7 @@ impl Canvas {
                 }
             }
         }
+        FILM_SCRATCH.with(|s| *s.borrow_mut() = scratch);
         out
     }
 
@@ -743,6 +755,10 @@ impl Canvas {
     /// Level and bake open films into the dry picture: every film (`all`,
     /// clearing the wet layer's residue too) or those past the gel point.
     fn bake(&mut self, all: bool) {
+        BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, &mut s.borrow_mut()));
+    }
+
+    fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 7]) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (x1, y1) = (x1.min(w), y1.min(h));
@@ -759,12 +775,14 @@ impl Canvas {
         }) {
             return;
         }
-        let mut add = vec![0.0f32; ew * eh];
-        let mut stiff = vec![0.5f32; ew * eh];
-        let mut oil = vec![1.0f32; ew * eh];
-        let mut sets = vec![SET_TIME; ew * eh];
+        let [add, stiff, oil, sets, rates, cv, prev] = scratch;
+        for (v, fill) in [(&mut *add, 0.0), (&mut *stiff, 0.5), (&mut *oil, 1.0), (&mut *sets, SET_TIME)] {
+            v.resize(ew * eh, fill);
+            v.fill(fill);
+        }
         // cure per minute of each film that bakes (for its tack afterwards)
-        let mut rates = vec![0.0f32; if all { 0 } else { ew * eh }];
+        rates.resize(if all { 0 } else { ew * eh }, 0.0);
+        rates.fill(0.0);
         let mut any = false;
         let pace = Pace::of(self.engine);
         let cp = &self.wet.clock.px;
@@ -827,12 +845,13 @@ impl Canvas {
         // neighbors hold none), so the gaps between the hairs of a wide
         // pointed-tool mark fill as it levels, while a hairline (bare on
         // either side) keeps its share (see `wet::over_share`)
-        let cover: Vec<f32> = {
+        let cover = {
             let wet = &self.wet;
             // (two passes: a gap two pixels wide closes too)
-            let mut cv: Vec<f32> = (ex.1..ex.3).flat_map(|y| (ex.0..ex.2).map(move |x| if wet.vol[y * w + x] >= 1e-5 { wet.cover[y * w + x] } else { 0.0 })).collect();
+            cv.clear();
+            cv.extend((ex.1..ex.3).flat_map(|y| (ex.0..ex.2).map(move |x| if wet.vol[y * w + x] >= 1e-5 { wet.cover[y * w + x] } else { 0.0 })));
             for _ in 0..2 {
-                let prev = cv.clone();
+                prev.clone_from(cv);
                 let held = |x: usize, y: usize| prev[(y - ex.1) * ew + x - ex.0];
                 for y in ex.1 + 1..ex.3.saturating_sub(1) {
                     for x in ex.0 + 1..ex.2.saturating_sub(1) {

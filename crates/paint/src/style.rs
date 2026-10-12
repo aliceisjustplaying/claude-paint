@@ -172,10 +172,56 @@ impl Style {
     }
 
     fn prepare_on(&self, c: Canvas, seed: u64) -> Canvas {
+        self.prepare_cached_on(c, seed, None)
+    }
+
+    pub fn prepare_cached(&self, width_px: usize, aspect: f32, seed: u64, directory: &std::path::Path, build: &str) -> Canvas {
+        self.prepare_cached_on(Canvas::new(width_px, aspect, self.raw), seed, Some((directory, build)))
+    }
+
+    fn prepare_cached_on(&self, c: Canvas, seed: u64, cache: Option<(&std::path::Path, &str)>) -> Canvas {
+        use sha2::{Digest, Sha256};
         let mut c = c
             .with_engine(self.palette.engine)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
+        let cache = cache.filter(|_| self.ground.iter().any(|g| g.um > 0.0 && matches!(g.apply, Apply::Brush))).map(|(dir, build)| {
+            let mut key = Sha256::new();
+            key.update(b"prepared ground 1\0");
+            key.update(build.as_bytes());
+            key.update(self.palette.name.as_bytes());
+            for n in [c.f.w, c.f.h, c.f.x0, c.f.y0, c.f.full_w, c.f.full_h, c.keep.0, c.keep.1, c.keep.2, c.keep.3] {
+                key.update((n as u64).to_le_bytes());
+            }
+            key.update(seed.to_le_bytes());
+            key.update(c.engine.to_le_bytes());
+            key.update(c.engine.min(3).to_le_bytes());
+            for f in [c.f.scale, c.mm_per_unit, self.raw[0], self.raw[1], self.raw[2], self.linen.warp_per_cm, self.linen.weft_per_cm, self.linen.crown_um, self.linen.slubs] {
+                key.update(f.to_bits().to_le_bytes());
+            }
+            key.update((self.ground.len() as u64).to_le_bytes());
+            for g in &self.ground {
+                for f in [g.color[0], g.color[1], g.color[2], g.hiding, g.um, g.stiff, g.absorbent] {
+                    key.update(f.to_bits().to_le_bytes());
+                }
+                let (kind, texture) = match g.apply { Apply::Knife { texture } => (0u8, texture), Apply::Roller => (1, 0.0), Apply::Brush => (2, 0.0) };
+                key.update([kind]);
+                key.update(texture.to_bits().to_le_bytes());
+            }
+            let key = format!("{:x}", key.finalize());
+            (dir.join(build).join(format!("{key}.ckpt")), key)
+        });
+        if let Some((path, key)) = &cache {
+            if let Ok(bytes) = std::fs::read(path) {
+                if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
+                    if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
+                        if header == *key {
+                            return cached;
+                        }
+                    }
+                }
+            }
+        }
         // the canvas is prepared alike in every engine: engine 4's stiffer
         // films and clumping hair are the painting's, not the primer's
         let engine = c.engine;
@@ -197,6 +243,23 @@ impl Style {
             c.ground_finish(g.absorbent);
         }
         c.engine = engine;
+        if let Some((path, key)) = cache {
+            let mut bytes = Vec::new();
+            if c.write_state(&mut bytes, &key).is_ok() {
+                use std::io::Write;
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+                let saved = (|| -> std::io::Result<()> {
+                    std::fs::create_dir_all(path.parent().unwrap())?;
+                    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+                    file.write_all(&Sha256::digest(&bytes))?;
+                    file.write_all(&bytes)?;
+                    drop(file);
+                    std::fs::rename(&temp, &path)
+                })();
+                if saved.is_err() { let _ = std::fs::remove_file(temp); }
+            }
+        }
         c
     }
 }

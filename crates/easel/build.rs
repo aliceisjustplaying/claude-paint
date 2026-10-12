@@ -3,10 +3,13 @@
 //! paint from the default box are compiled only then, so a painter's build
 //! for one box (`--no-default-features --features box-<name>`) runs the rest.
 
+include!("../box_features.rs");
+
 fn main() {
+    println!("cargo::rerun-if-changed=../box_features.rs");
     println!("cargo::rustc-check-cfg=cfg(tube_box)");
     let on = |f: &str| std::env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
-    let named = ["BOX_FRIEDRICH", "BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN", "BOX_HOPPER", "BOX_GIVERNY", "BOX_IMPRESSIONIST", "BOX_SEURAT", "BOX_CEZANNE"].iter().filter(|f| on(f)).count();
+    let named = BOX_FEATURES.iter().filter(|f| on(f)).count();
     if named == 0 || on("ALL_BOXES") {
         println!("cargo::rustc-cfg=tube_box");
     }

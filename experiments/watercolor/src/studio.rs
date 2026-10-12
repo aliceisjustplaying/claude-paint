@@ -601,9 +601,14 @@ fn lab_stroke(
                 - (1.0 - grade)
                     * ((stamp.y * cell - ymin) / (ymax - ymin).max(1e-30)).clamp(0.0, 1.0));
         stamp.pigment *= pigment_grade;
+        let wet = !dry && !scrub;
+        let release_area = if wet { area * 12.0 } else { area };
+        if wet {
+            stamp.water *= (inventory.water / 40.0).min(1.0);
+        }
         let lab = ctx.canvas()?.lab.as_mut().unwrap();
         let (ww, pw) = lab.stamp_weights(&stamp);
-        let wanted_water = stamp.water * 0.055 * ww * area;
+        let wanted_water = stamp.water * 0.055 * ww * release_area;
         let wanted_pigment = stamp.pigment * 0.13 * pw * area;
         let water = wanted_water.min(inventory.water);
         let remaining = inventory
@@ -623,7 +628,13 @@ fn lab_stroke(
         if wanted_water > 0.0 {
             stamp.water *= water / wanted_water;
         }
-        if wanted_pigment > 0.0 {
+        if wet {
+            stamp.pigment = if pw > 0.0 {
+                pigment * 40.0 / (1.2 * 0.055 * pw * release_area)
+            } else {
+                0.0
+            };
+        } else if wanted_pigment > 0.0 {
             stamp.pigment *= pigment / wanted_pigment;
         }
         lab.splat(

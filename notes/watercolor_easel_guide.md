@@ -60,7 +60,7 @@ can load several pigments together. The brush holds a finite amount and
 keeps what it hasn't laid between strokes and chunks. `b:status()` reports
 its `width` and its remaining `water` and `pigments`. A new name gives a
 clean, empty brush.
-A width-24 round at pressure 0.35 on cold-press paper carried about 1,200 cells with 10 µL water and 0.25 French Ultramarine mass units, and at least 2,272 cells with 40 µL and 1 mass unit.
+With a width-24 round at pressure 0.35 on cold-press paper, 40 µL water/1 French Ultramarine unit and 80 µL/2 units each carried a fading 936-cell stroke, leaving 3.30 and 9.01 µL.
 
 ## Marks and water
 

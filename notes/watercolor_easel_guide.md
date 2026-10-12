@@ -6,6 +6,7 @@ named brush loads and the material clock for the next chunk. A chunk that
 fails leaves the committed painting as it was. Each chunk starts in a fresh
 Lua VM: get your saved brushes back by name, and define your Lua variables
 and functions again.
+Lua's `io` library is unavailable; output uses `print`.
 
 In the examples below, `<pigment>` stands for an id from `palette()`. Other
 numbers in the examples show how a call is written; the values are yours to
@@ -59,6 +60,7 @@ can load several pigments together. The brush holds a finite amount and
 keeps what it hasn't laid between strokes and chunks. `b:status()` reports
 its `width` and its remaining `water` and `pigments`. A new name gives a
 clean, empty brush.
+With a width-24 round at pressure 0.35 on cold-press paper, 40 µL water/1 French Ultramarine unit and 80 µL/2 units each carried a fading 936-cell stroke, leaving 3.30 and 9.01 µL.
 
 ## Marks and water
 

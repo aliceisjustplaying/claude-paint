@@ -448,6 +448,23 @@ fn deposit(
     Ok(())
 }
 
+fn refill(ctx: &mut Context, inventory: &mut Brush, load: &Brush, fraction: f64) {
+    let water = (load.water - inventory.water) * fraction;
+    inventory.water += water;
+    ctx.state.water_supplied += water;
+    for p in 0..PIGMENTS {
+        let pigment = (load.pigment[p] - inventory.pigment[p]) * fraction;
+        inventory.pigment[p] += pigment;
+        ctx.state.pigment_supplied[p] += pigment;
+    }
+    for (id, mass) in &load.lab_pigments {
+        let remaining = inventory.lab_pigments.entry(id.clone()).or_default();
+        let pigment = (mass - *remaining) * fraction;
+        *remaining += pigment;
+        ctx.state.pigment_supplied[0] += pigment;
+    }
+}
+
 /// Brush adapter for src/paint/brush.ts:87–161 at a19bfa2a026856a98ceb400a8eec41f091f04a11; units and finite inventory stay outside the core.
 fn lab_stroke(
     ctx: &mut Context,
@@ -456,6 +473,7 @@ fn lab_stroke(
     attrs: &Table,
     scrub: bool,
     wash_grade: f64,
+    refill_load: Option<&Brush>,
 ) -> Result<()> {
     let xy = points(path)?;
     let pressure = number(attrs, "pressure", 0.35)?;
@@ -586,6 +604,9 @@ fn lab_stroke(
     }
     let mut elapsed_ns = 0;
     for (time, mut stamp) in schedule {
+        if let Some(load) = refill_load {
+            refill(ctx, &mut inventory, load, 0.25);
+        }
         let target_ns = (time * 1e9).round() as u64;
         ctx.canvas()?.wait_ns(target_ns.saturating_sub(elapsed_ns));
         elapsed_ns = target_ns;
@@ -743,7 +764,7 @@ impl UserData for Handle {
                     None => lua.create_table()?,
                 };
                 if ctx.canvas()?.lab.is_some() {
-                    return lab_stroke(&mut ctx, &this.name, &path, &attrs, false, 1.0);
+                    return lab_stroke(&mut ctx, &this.name, &path, &attrs, false, 1.0, None);
                 }
                 let width = ctx.state.brushes[&this.name].width;
                 let mask = stroke_mask(ctx.canvas()?, &points, width);
@@ -758,13 +779,17 @@ impl UserData for Handle {
                 let y = number(&t, "y", 0.0)?;
                 let width = number(&t, "width", 1.0)?;
                 let height = number(&t, "height", 1.0)?;
-                let brush_width = ctx.state.brushes[&this.name].width;
+                let load = ctx.state.brushes[&this.name].clone();
+                let brush_width = load.width;
                 let rows = (height / (brush_width * 0.7)).ceil().max(1.0) as usize;
                 let grade = number(&t, "grade", 1.0)?;
                 if !(0.0..=1.0).contains(&grade) {
                     return Err(error("grade must be 0..1"));
                 }
                 for row in 0..rows {
+                    let mut inventory = ctx.state.brushes[&this.name].clone();
+                    refill(&mut ctx, &mut inventory, &load, 1.0);
+                    ctx.state.brushes.insert(this.name.clone(), inventory);
                     let yy = y + (row as f64 + 0.5) * height / rows as f64;
                     let path = lua.create_table()?;
                     path.set(1, lua.create_sequence_from([x, yy])?)?;
@@ -776,6 +801,7 @@ impl UserData for Handle {
                         &t,
                         false,
                         1.0 - (1.0 - grade) * row as f64 / (rows - 1).max(1) as f64,
+                        Some(&load),
                     )?;
                 }
                 return Ok(());
@@ -787,7 +813,15 @@ impl UserData for Handle {
             let points = points(&path)?;
             let mut ctx = this.ctx.borrow_mut();
             if ctx.canvas()?.lab.is_some() {
-                return lab_stroke(&mut ctx, &this.name, &path, &lua.create_table()?, true, 1.0);
+                return lab_stroke(
+                    &mut ctx,
+                    &this.name,
+                    &path,
+                    &lua.create_table()?,
+                    true,
+                    1.0,
+                    None,
+                );
             }
             let mut brush = ctx.state.brushes[&this.name].clone();
             let mask = stroke_mask(ctx.canvas()?, &points, brush.width);
@@ -1220,10 +1254,24 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
     Ok(())
 }
 
-struct Lock(PathBuf);
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+pub struct Writer {
+    root: PathBuf,
+    _lock: fs::File,
+}
+
+impl Writer {
+    pub fn open(root: &Path) -> Result<Self> {
+        let lock = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(root.join(".writer-lock"))
+            .map_err(error)?;
+        lock.try_lock().map_err(error)?;
+        Ok(Self {
+            root: root.to_owned(),
+            _lock: lock,
+        })
     }
 }
 
@@ -1257,13 +1305,7 @@ pub fn restore(root: &Path, name: &str) -> Result<()> {
     if !name.ends_with(".json") {
         return Err(error("checkpoint filename must end .json"));
     }
-    let lock = root.join(".writer-lock");
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock)
-        .map_err(error)?;
-    let _guard = Lock(lock);
+    let _guard = Writer::open(root)?;
     load(root)?;
     let state = Session::decode(&fs::read(root.join(name)).map_err(error)?)?;
     let temp = root.join(format!(".restore-{}", std::process::id()));
@@ -1289,80 +1331,81 @@ pub fn restore(root: &Path, name: &str) -> Result<()> {
 }
 
 pub fn run(root: &Path, source: &str) -> Result<Session> {
-    let lock = root.join(".writer-lock");
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock)
-        .map_err(error)?;
-    let _guard = Lock(lock);
-    let mut state = load(root)?;
-    if let Some(canvas) = &mut state.canvas {
-        if canvas.schema == 5 {
-            canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;
-        }
-    }
-    if state.applied_sources.iter().any(|s| s == source) {
-        return Err(error(
-            "this exact chunk already ran; submit a new continuation chunk",
-        ));
-    }
-    let stage = root.join(format!(".pending-{}", std::process::id()));
-    if stage.exists() {
-        return Err(error(
-            "pending files from an interrupted run; inspect them before retrying",
-        ));
-    }
-    fs::create_dir(&stage).map_err(error)?;
-    let ctx = Rc::new(RefCell::new(Context {
-        state,
-        stage: stage.clone(),
-        frames: None,
-        rendered_frames: 0,
-    }));
-    let result = (|| {
-        let lua = Lua::new_with(
-            StdLib::MATH | StdLib::TABLE | StdLib::STRING | StdLib::UTF8,
-            LuaOptions::default(),
-        )?;
-        lua.set_memory_limit(128 * 1024 * 1024)?;
-        lua.globals().set("dofile", Value::Nil)?;
-        lua.globals().set("loadfile", Value::Nil)?;
-        let budget = Cell::new(0u32);
-        lua.set_hook(
-            mlua::HookTriggers::new().every_nth_instruction(10_000),
-            move |_, _| {
-                budget.set(budget.get() + 1);
-                if budget.get() > 200 {
-                    return Err(error("Lua instruction budget exceeded"));
-                }
-                Ok(mlua::VmState::Continue)
-            },
-        )?;
-        install(&lua, ctx.clone())?;
-        lua.load(source).set_name("watercolor chunk").exec()?;
-        let mut c = ctx.borrow_mut();
-        if c.state.canvas.is_none() {
-            return Err(error("chunk made no paper"));
-        }
-        c.state.check_balance()?;
-        c.state.applied_sources.push(source.to_owned());
-        write_state(&stage.join("checkpoint.json"), &c.state)?;
-        for entry in fs::read_dir(&stage).map_err(error)? {
-            let entry = entry.map_err(error)?;
-            if entry.file_name() != "checkpoint.json" {
-                fs::rename(entry.path(), root.join(entry.file_name())).map_err(error)?;
+    Writer::open(root)?.run(source)
+}
+
+impl Writer {
+    pub fn run(&self, source: &str) -> Result<Session> {
+        let root = &self.root;
+        let mut state = load(root)?;
+        if let Some(canvas) = &mut state.canvas {
+            if canvas.schema == 5 {
+                canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;
             }
         }
-        fs::rename(stage.join("checkpoint.json"), root.join("checkpoint.json")).map_err(error)?;
-        Ok(())
-    })();
-    let _ = fs::remove_dir_all(stage);
-    result.map(|()| {
-        Rc::try_unwrap(ctx)
-            .ok()
-            .expect("context still held")
-            .into_inner()
-            .state
-    })
+        if state.applied_sources.iter().any(|s| s == source) {
+            return Err(error(
+                "this exact chunk already ran; submit a new continuation chunk",
+            ));
+        }
+        let stage = root.join(format!(".pending-{}", std::process::id()));
+        if stage.exists() {
+            return Err(error(
+                "pending files from an interrupted run; inspect them before retrying",
+            ));
+        }
+        fs::create_dir(&stage).map_err(error)?;
+        let ctx = Rc::new(RefCell::new(Context {
+            state,
+            stage: stage.clone(),
+            frames: None,
+            rendered_frames: 0,
+        }));
+        let result = (|| {
+            let lua = Lua::new_with(
+                StdLib::MATH | StdLib::TABLE | StdLib::STRING | StdLib::UTF8,
+                LuaOptions::default(),
+            )?;
+            lua.set_memory_limit(128 * 1024 * 1024)?;
+            lua.globals().set("dofile", Value::Nil)?;
+            lua.globals().set("loadfile", Value::Nil)?;
+            let budget = Cell::new(0u32);
+            lua.set_hook(
+                mlua::HookTriggers::new().every_nth_instruction(10_000),
+                move |_, _| {
+                    budget.set(budget.get() + 1);
+                    if budget.get() > 200 {
+                        return Err(error("Lua instruction budget exceeded"));
+                    }
+                    Ok(mlua::VmState::Continue)
+                },
+            )?;
+            install(&lua, ctx.clone())?;
+            lua.load(source).set_name("watercolor chunk").exec()?;
+            let mut c = ctx.borrow_mut();
+            if c.state.canvas.is_none() {
+                return Err(error("chunk made no paper"));
+            }
+            c.state.check_balance()?;
+            c.state.applied_sources.push(source.to_owned());
+            write_state(&stage.join("checkpoint.json"), &c.state)?;
+            for entry in fs::read_dir(&stage).map_err(error)? {
+                let entry = entry.map_err(error)?;
+                if entry.file_name() != "checkpoint.json" {
+                    fs::rename(entry.path(), root.join(entry.file_name())).map_err(error)?;
+                }
+            }
+            fs::rename(stage.join("checkpoint.json"), root.join("checkpoint.json"))
+                .map_err(error)?;
+            Ok(())
+        })();
+        let _ = fs::remove_dir_all(stage);
+        result.map(|()| {
+            Rc::try_unwrap(ctx)
+                .ok()
+                .expect("context still held")
+                .into_inner()
+                .state
+        })
+    }
 }

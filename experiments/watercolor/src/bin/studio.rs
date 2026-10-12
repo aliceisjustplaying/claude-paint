@@ -13,6 +13,7 @@ fn main() {
         }
         let root = Path::new(&args[3]);
         let mut work = root.to_path_buf();
+        let mut writer = None;
         if args.iter().any(|s| s == "--scratch") {
             let main = studio::load(root)?;
             let paper = main.canvas.as_ref().ok_or_else(|| {
@@ -23,6 +24,13 @@ fn main() {
                 .as_ref()
                 .ok_or_else(|| mlua::Error::external("scratch paper needs the Lab engine"))?;
             work = root.join("out/watercolor/scratch");
+            if args[2] == "run"
+                || args.iter().any(|s| s == "--new")
+                || !work.join("checkpoint.json").exists()
+            {
+                fs::create_dir_all(&work).map_err(mlua::Error::external)?;
+                writer = Some(studio::Writer::open(&work)?);
+            }
             if !work.join("box").exists() {
                 studio::init(&work)?;
             }
@@ -71,6 +79,8 @@ fn main() {
             }
         } else if args.iter().any(|s| s == "--new") {
             return Err(mlua::Error::external("new_scratch needs scratch: true"));
+        } else if args[2] == "run" {
+            writer = Some(studio::Writer::open(&work)?);
         }
         let clock = |state: &studio::Session| {
             state.canvas.as_ref().map_or(0.0, |c| {
@@ -103,7 +113,7 @@ fn main() {
                 } else {
                     fs::read_to_string(&args[4]).map_err(mlua::Error::external)?
                 };
-                let state = studio::run(&work, &source)?;
+                let state = writer.as_ref().unwrap().run(&source)?;
                 let canvas = state
                     .canvas
                     .as_ref()

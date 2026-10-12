@@ -309,8 +309,8 @@ if (STREAM) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.
 const addr = q => '?' + q + (STREAM ? '&stream=1' : '');
 let IMGEXT = [], lastStatic = 0, staticV = null;  // static: when events.json was last read (it's re-read every minute)
 const P = () => Q && Q.startsWith('p=') ? decodeURIComponent(Q.slice(2)) : '';
-const imgURL = i => STATIC ? dataURL(`data/${dataPainter()}/img/${i}.${IMGEXT[i] || 'png'}`) : `/img?${Q}&i=${i}`;
-const lightURL = (i, light) => STATIC ? dataURL(`data/${dataPainter()}/${light}/${i}.png`) : `/img?${Q}&i=${i}&${light}=1`;
+const imgURL = i => STATIC ? dataURL(`data/${dataPainter()}/img/${i}.${IMGEXT[i] || 'png'}`) : `/img?${Q}&epoch=${epoch}&i=${i}`;
+const lightURL = (i, light) => STATIC ? dataURL(`data/${dataPainter()}/${light}/${i}.png`) : `/img?${Q}&epoch=${epoch}&i=${i}&${light}=1`;
 const DISPLAY_LIGHTS = { color:{ label:'Color' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
 try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
@@ -360,7 +360,7 @@ const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => !outcomeLabel(s) &
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
 const models = s => (s.model || '').split(' → ').map(modelName).join(' → ');
-const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? s.p : encodeURIComponent(s.p)}/t/${s.look}.jpg`) : `/api/glance?p=${encodeURIComponent(s.p)}&i=${s.look}`;
+const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? s.p : encodeURIComponent(s.p)}/t/${s.look}.jpg`) : `/api/glance?p=${encodeURIComponent(s.p)}&i=${s.look}&epoch=${s.epoch || 0}`;
 // what the picker and the header say about a painter: the gallery's title and picture if it has them, else its own
 function about(s) {
   const g = GALLERY && s.p ? GALLERY[s.p] : null, live = isLive(s);

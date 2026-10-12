@@ -29,6 +29,7 @@ from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
 EXCLUDE_SESSIONS = set()
+STREAM_EPOCH = 0
 DISPLAY_LIGHTS = ("gallery", "relief")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
 PUBLIC = False
@@ -749,7 +750,7 @@ def stream(key, files):
             if not same:
                 st = {"epoch": st["epoch"] + 1, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         else:
-            st = {"epoch": 0, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
+            st = {"epoch": STREAM_EPOCH, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         _streams[key] = st
         old, ioff = st["parts"], 0
         for k, (f, n, ni) in enumerate(parts):
@@ -853,6 +854,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if u.path == "/api/sessions":
             ss = list_sessions()
             for s in ss:
+                s["epoch"] = STREAM_EPOCH
                 if s.get("painter") and (_warm is None or _warm.is_set()):  # (until the first scan is done, without)  # the picker's picture and title (the static export has them in sessions.json)
                     g = glance(s["files"])
                     s.update(look=g["look"], title=g["title"])
@@ -897,7 +899,7 @@ class H(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    global SESSIONS
+    global SESSIONS, STREAM_EPOCH
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1", help="e.g. this machine's Tailscale IP to watch from another of your devices")
@@ -906,6 +908,7 @@ def main():
     ap.add_argument("--public", action="store_true", help="painters only, home path and account name scrubbed (a link for others)")
     a = ap.parse_args()
     SESSIONS = os.path.abspath(os.path.expanduser(a.sessions))
+    STREAM_EPOCH = int(datetime.now().timestamp() * 1_000_000)
     EXCLUDE_SESSIONS.update(a.exclude_session)
     global PUBLIC
     PUBLIC = a.public

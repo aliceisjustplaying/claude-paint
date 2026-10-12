@@ -28,6 +28,7 @@ from datetime import datetime
 from palette_board import palette_board
 
 SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
+EXCLUDE_SESSIONS = set()
 DISPLAY_LIGHTS = ("gallery", "relief")
 # --public: painters only, nothing that names this machine's owner (for a link shown to others)
 PUBLIC = False
@@ -247,6 +248,8 @@ def list_sessions():
     everything else, one per session file ({"s": path}); newest activity first."""
     files = {}
     for f in glob.glob(os.path.join(SESSIONS, "*paint*", "*.jsonl")):
+        if not session_allowed(f):
+            continue
         files.setdefault(os.path.basename(os.path.dirname(f)), []).append(f)
     out = []
     for d, fs in files.items():
@@ -279,16 +282,20 @@ def list_sessions():
     return out
 
 
+def session_allowed(path):
+    return os.path.basename(os.path.realpath(path)) not in EXCLUDE_SESSIONS
+
+
 def painter_files(name):
     """The session files of a painter folder (given by its short name), in start order."""
     if not name or "/" in name or name.startswith("."):
         return []
     for folder, ps in SPLIT.items():
         if name in ps:
-            return sorted(glob.glob(os.path.join(SESSIONS, "*-src-a-" + folder + "--", ps[name] + "*.jsonl")))
+            return sorted(f for f in glob.glob(os.path.join(SESSIONS, "*-src-a-" + folder + "--", ps[name] + "*.jsonl")) if session_allowed(f))
     for d in glob.glob(os.path.join(SESSIONS, "*" + name + "*")):
         if short(os.path.basename(d)) == name:
-            return sorted(glob.glob(os.path.join(d, "*.jsonl")), key=os.path.basename)
+            return sorted((f for f in glob.glob(os.path.join(d, "*.jsonl")) if session_allowed(f)), key=os.path.basename)
     return []
 
 
@@ -591,7 +598,10 @@ def look_text(args):
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
     not the palette, not a survey's tile, not a comparison, not a held knife and not the scratch canvas."""
-    return look is not None and not re.search(r"crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)", look)
+    if look is None:
+        return False
+    look = re.sub(r"mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)", "", look)
+    return not re.search(r"crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -856,7 +866,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._send(200, im[1], im[0]) if im else self._send(404, b"not found", "text/plain")
         if u.path not in ("/api/events", "/api/file", "/img"):
             return self._send(404, b"not found", "text/plain")
-        files = painter_files(painter) if painter else [path] if path and os.path.isfile(path) else []
+        files = painter_files(painter) if painter else [path] if path and session_allowed(path) and os.path.isfile(path) else []
         if not files:
             return self._send(404, b"no such session", "text/plain")
         st = stream(("p:" + painter) if painter else ("s:" + path), files)
@@ -892,9 +902,11 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1", help="e.g. this machine's Tailscale IP to watch from another of your devices")
     ap.add_argument("--sessions", default=SESSIONS, help="where pi keeps its session logs")
+    ap.add_argument("--exclude-session", action="append", default=[], metavar="BASENAME", help="omit this session log from the picker and API (repeatable)")
     ap.add_argument("--public", action="store_true", help="painters only, home path and account name scrubbed (a link for others)")
     a = ap.parse_args()
     SESSIONS = os.path.abspath(os.path.expanduser(a.sessions))
+    EXCLUDE_SESSIONS.update(a.exclude_session)
     global PUBLIC
     PUBLIC = a.public
     global _warm

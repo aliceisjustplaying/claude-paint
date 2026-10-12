@@ -50,9 +50,9 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   118 × 95 cells apart) kept the area wet for 2 to 4 seconds after the last
   stroke at 5 to 8 µL a drop, and for about 12 seconds at 22 µL. Nine
   rows across the whole 1,056-cell width of the sheet, laid in 25-cell
-  segments at 3,500 cells a second, took 2.8 seconds of painter clock. Rows that took 4 seconds to lay over a
-  4 µL pre-wet showed bands where they landed late; rows laid in 2.8 seconds
-  over a 5 µL pre-wet blended.
+  segments at 3,500 cells a second, took 2.8 seconds of painter clock.
+  Rows that took 4 seconds to lay over a 4 µL pre-wet showed bands where
+  they landed late; rows laid in 2.8 seconds over a 5 µL pre-wet blended.
 - **Reading the stage.** `balance()` returns `max_surface_water`,
   `max_wetness` and `dry`. Standing water above 0.002 means some of the
   sheet is still wet; 0.002 or less with wetness left is damp; `dry` is true when wetness
@@ -187,8 +187,9 @@ rows of strokes:
   `buff-titanium` and `naples-yellow` at 0.1 to 0.15 units per 2.5 to
   3 µL disappeared, and 0.6 to 0.8 units per 1.5 µL showed as light marks.
   Over the same passage, dark lines from brushes 2 to 9 cells wide needed
-  about 0.25 to 0.35 `sepia` with 0.2 to 0.25 `french-ultramarine` per 0.4 to 1 µL; 0.15
-  `sepia` with 0.1 `french-ultramarine` hardly showed at width 2. A glaze
+  about 0.25 to 0.35 `sepia` with 0.2 to 0.25 `french-ultramarine` per
+  0.4 to 1 µL; 0.15 `sepia` with 0.1 `french-ultramarine` hardly showed at
+  width 2. A glaze
   of 0.03 `quinacridone-rose` with 0.012 `french-ultramarine` per 2.2 µL
   barely changed a dried `cobalt-blue` and `buff-titanium` passage.
 

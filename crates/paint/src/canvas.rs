@@ -233,6 +233,8 @@ pub struct Canvas {
     pub(crate) engine: u32,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
+    /// Through-hardening and traction damage (engine 6 and later).
+    pub(crate) traction: crate::traction::Traction,
 }
 
 impl Canvas {
@@ -280,6 +282,7 @@ impl Canvas {
             hand_slice: None,
             engine: crate::ENGINE,
             soak: None,
+            traction: crate::traction::Traction::default(),
         }
     }
 

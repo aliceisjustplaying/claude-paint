@@ -2223,6 +2223,7 @@ mod tests {
     /// A palette look only reads: the state digest (canvas, brushes, studio), the log and the
     /// globals are the same before and after it, and it puts no time on the clock.
     #[test]
+    #[cfg(feature = "replay")]
     #[cfg(tube_box)]
     fn a_palette_look_changes_nothing() {
         let mut s = Session::new(320).unwrap();

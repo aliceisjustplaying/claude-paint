@@ -1,0 +1,430 @@
+use super::*;
+use crate::canvas::Crop;
+use crate::color::hex;
+use crate::wet::Paint;
+use std::io::Cursor;
+
+const DAY: f32 = 24.0 * 60.0;
+const PAINTED: [f32; 4] = [100.0, 100.0, 900.0, 900.0];
+
+fn canvas(px: usize, engine: u32, crop: Option<Crop>) -> Canvas {
+    Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(engine)
+}
+
+fn undercoat() -> Paint {
+    Paint::body(hex("#201c18")).with_stiff(0.3).with_drying(0.5)
+}
+fn topcoat() -> Paint {
+    Paint::body(hex("#ece6d6")).with_stiff(0.8).with_drying(2.0)
+}
+
+/// Uniform physical film, as a brush deposits it; no drying state is seeded.
+fn film(c: &mut Canvas, paint: Paint, um: f32, bounds: [f32; 4], stroke: u32) {
+    let f = c.f;
+    let p = |u: f32| (u * f.scale).round().max(0.0) as usize;
+    let Some((x0, y0, x1, y1)) = f.clip((p(bounds[0]), p(bounds[1]), p(bounds[2]), p(bounds[3]))) else {
+        return;
+    };
+    let lat = paint.latent();
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let i = y * f.w + x;
+            c.wet.vol[i] = um / COAT_UM;
+            c.wet.lat[i] = lat;
+            c.wet.hide[i] = paint.prop();
+            c.wet.stroke[i] = stroke;
+        }
+    }
+    c.wet.current = stroke;
+    c.wet.touch(x0, y0, x1, y1);
+}
+
+fn prepared(px: usize, engine: u32, hardened: bool) -> Canvas {
+    let mut c = canvas(px, engine, None);
+    film(&mut c, undercoat(), 200.0, PAINTED, 1);
+    c.dry();
+    if hardened {
+        c.wait(3.0 * 365.0 * DAY);
+    }
+    film(&mut c, topcoat(), 25.0, PAINTED, 2);
+    c
+}
+
+fn region(c: &Canvas) -> impl Iterator<Item = usize> + '_ {
+    (0..c.px.len()).filter(|&i| {
+        let (x, y) = (c.f.ux(i % c.f.w), c.f.uy(i / c.f.w));
+        (150.0..850.0).contains(&x) && (150.0..850.0).contains(&y)
+    })
+}
+
+fn luminance(p: Rgb) -> f32 {
+    0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
+}
+fn mean_luminance(c: &Canvas) -> f32 {
+    let (sum, n) = region(c).fold((0.0f64, 0), |(sum, n), i| (sum + luminance(c.px[i]) as f64, n + 1));
+    (sum / n as f64) as f32
+}
+fn dark_share(c: &Canvas) -> f32 {
+    let (dark, n) = region(c).fold((0, 0), |(dark, n), i| (dark + usize::from(luminance(c.px[i]) < 0.4), n + 1));
+    dark as f32 / n as f32
+}
+
+fn surface_near(a: &Canvas, b: &Canvas) {
+    assert_eq!(a.f, b.f);
+    for i in 0..a.px.len() {
+        let p = Surface::capture(a, i).values();
+        let q = Surface::capture(b, i).values();
+        for k in 0..p.len() {
+            let tolerance = if k == 3 { 0.002 } else { 0.00002 };
+            assert!((p[k] - q[k]).abs() <= tolerance, "pixel {i}, surface field {k}: {} vs {}", p[k], q[k]);
+        }
+    }
+}
+
+fn anchored_near(a: &Canvas, b: &Canvas) {
+    assert_eq!(a.traction.soft.len(), b.traction.soft.len());
+    for (i, (s, t)) in a.traction.soft.iter().zip(&b.traction.soft).enumerate() {
+        assert!((s.amount - t.amount).abs() < 0.0002, "soft amount at {i}: {} vs {}", s.amount, t.amount);
+        assert!((s.rate - t.rate).abs() < 1e-10, "through-rate at {i}");
+        assert!((s.at - t.at).abs() < 0.02, "soft date at {i}: {} vs {}", s.at, t.at);
+    }
+    assert_eq!(a.traction.cracks.len(), b.traction.cracks.len());
+    for (s, t) in a.traction.cracks.iter().zip(&b.traction.cracks) {
+        assert_eq!(s.i, t.i);
+        assert!(
+            (s.set_at - t.set_at).abs() < 0.02 && (s.dry_at - t.dry_at).abs() < 0.02,
+            "crack dates at {}",
+            s.i
+        );
+        assert!(
+            (s.shown - t.shown).abs() < 0.00002 && (s.hw_mm - t.hw_mm).abs() < 0.00002,
+            "crack opening at {}",
+            s.i
+        );
+        assert_eq!(s.d_mm, t.d_mm);
+    }
+}
+
+fn saved(c: &Canvas) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    c.write_state(&mut bytes, "").unwrap();
+    bytes
+}
+
+#[test]
+fn soft_undercoat_cracks_but_hardened_and_engine_five_controls_do_not() {
+    let mut soft = prepared(180, ENGINE, false);
+    let mut hard = prepared(180, ENGINE, true);
+    let mut five = prepared(180, 5, false);
+    soft.wait(60.0 * DAY);
+    hard.wait(60.0 * DAY);
+    five.wait(60.0 * DAY);
+    assert!(dark_share(&soft) > 0.01, "soft-undercoat dark share {}", dark_share(&soft));
+    assert!(mean_luminance(&soft) + 0.02 < mean_luminance(&hard));
+    assert!(dark_share(&hard) < 0.001 && hard.traction.cracks.is_empty());
+    assert!(dark_share(&five) < 0.001 && five.traction.cracks.is_empty() && five.traction.soft.is_empty());
+    surface_near(&hard, &five);
+}
+
+#[test]
+fn first_dry_retains_substrate_softness_and_matches_waiting() {
+    let mut dry = canvas(120, ENGINE, None);
+    film(&mut dry, undercoat(), 200.0, PAINTED, 1);
+    let mut wait = dry.clone();
+    assert!(dry.wet.clock.px.is_empty());
+    dry.dry();
+    assert!(dry.wet.clock.tacky.is_none());
+    assert!(dry.wet.clock.px.iter().all(|p| p.sub >= 1.0));
+    assert!(dry.traction.soft.iter().any(|s| s.at(dry.clock()) > SOFT0));
+    wait.wait(dry.clock() as f32);
+    surface_near(&dry, &wait);
+    anchored_near(&dry, &wait);
+    for c in [&mut dry, &mut wait] {
+        film(c, topcoat(), 25.0, PAINTED, 2);
+        c.wait(60.0 * DAY);
+    }
+    let mut control = prepared(120, 5, false);
+    control.wait(60.0 * DAY);
+    assert!(mean_luminance(&dry) + 0.01 < mean_luminance(&control), "first dry left no cracking");
+    surface_near(&dry, &wait);
+    anchored_near(&dry, &wait);
+}
+
+#[test]
+fn cracking_survives_long_and_fractionally_split_waits() {
+    let start = prepared(120, ENGINE, false);
+    for total in [60.0 * DAY, 10.0 * 365.0 * DAY] {
+        let mut long = start.clone();
+        let mut split = start.clone();
+        long.wait(total);
+        // Exact binary fractions; the last part completes the same interval.
+        for dt in [0.125, 719.875, 3.0 * DAY, total - 720.0 - 3.0 * DAY] {
+            split.wait(dt);
+        }
+        assert_eq!(long.clock(), split.clock());
+        let mut control = prepared(120, 5, false);
+        control.wait(total);
+        assert!(
+            mean_luminance(&long) + 0.01 < mean_luminance(&control),
+            "long wait suppressed cracking at {total} minutes"
+        );
+        surface_near(&long, &split);
+        anchored_near(&long, &split);
+    }
+}
+
+#[test]
+fn checkpoint_continues_opening_and_threads_do_not_change_it() {
+    let run = || {
+        let mut c = prepared(120, ENGINE, false);
+        c.wait(5.0 * DAY);
+        assert!(!c.traction.cracks.is_empty());
+        let early = mean_luminance(&c);
+        let bytes = saved(&c);
+        let (mut resumed, _) = Canvas::read_state(&mut Cursor::new(&bytes)).unwrap();
+        assert_eq!(saved(&resumed), bytes);
+        c.wait(55.0 * DAY);
+        resumed.wait(55.0 * DAY);
+        assert!(mean_luminance(&c) < early - 0.01, "cracks did not widen after checkpoint");
+        assert_eq!(saved(&c), saved(&resumed));
+        assert_eq!(c.px, resumed.px);
+        saved(&c)
+    };
+    let one = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap().install(run);
+    let four = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap().install(run);
+    assert_eq!(one, four);
+}
+
+#[test]
+fn different_films_and_a_recoat_preserve_wait_partitioning() {
+    let mut long = canvas(120, ENGINE, None);
+    film(&mut long, undercoat(), 200.0, PAINTED, 1);
+    long.dry();
+    film(&mut long, topcoat(), 0.75 * COAT_UM, [100.0, 100.0, 480.0, 900.0], 2);
+    film(&mut long, topcoat().with_drying(0.9), 1.75 * COAT_UM, [520.0, 100.0, 900.0, 900.0], 3);
+    let mut split = long.clone();
+    long.wait(5.0 * DAY);
+    for dt in [0.125, 719.875, 2.0 * DAY, 2.5 * DAY] {
+        split.wait(dt);
+    }
+    assert!(!long.traction.cracks.is_empty());
+    surface_near(&long, &split);
+    for c in [&mut long, &mut split] {
+        film(c, Paint::body(hex("#ca5842")).with_stiff(0.7).with_drying(1.5), 0.15 * COAT_UM, PAINTED, 4);
+    }
+    long.wait(120.0 * DAY);
+    for dt in [0.125, 719.875, DAY, 118.5 * DAY] {
+        split.wait(dt);
+    }
+    assert_eq!(long.clock(), split.clock());
+    surface_near(&long, &split);
+    anchored_near(&long, &split);
+}
+
+#[test]
+fn crop_uses_the_whole_canvas_crack_coordinates() {
+    let crop = Crop {
+        units: [250.0, 230.0, 750.0, 770.0],
+        margin: 150.0,
+    };
+    let mut whole = canvas(180, ENGINE, None);
+    let mut window = canvas(180, ENGINE, Some(crop));
+    for c in [&mut whole, &mut window] {
+        film(c, undercoat(), 200.0, [0.0, 0.0, 1000.0, 1000.0], 1);
+        c.dry();
+        film(c, topcoat(), 25.0, [0.0, 0.0, 1000.0, 1000.0], 2);
+        c.wait(60.0 * DAY);
+    }
+    assert!(window.f.x0 > 0 && window.f.y0 > 0 && !window.traction.cracks.is_empty());
+    let (x0, y0, x1, y1) = window.keep;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let i = y * window.f.w + x;
+            let j = window.f.whole_index(i);
+            assert_eq!(Surface::capture(&window, i), Surface::capture(&whole, j), "whole-canvas pixel {j}");
+        }
+    }
+}
+
+#[test]
+fn network_cache_tracks_physical_size_and_support_seed() {
+    let mut c = canvas(120, ENGINE, None);
+    let first = c.traction_net();
+    let mut wider = c.clone().with_size_mm(120.0);
+    let resized = wider.traction_net();
+    assert!(!std::sync::Arc::ptr_eq(&first, &resized));
+    assert_eq!(resized.size_mm, [120.0; 2]);
+    let mut linen = c.with_linen(crate::surface::Linen::fine(51));
+    let reseeded = linen.traction_net();
+    assert!(!std::sync::Arc::ptr_eq(&first, &reseeded));
+    assert_ne!(first.seed, reseeded.seed);
+    let (mut resumed, _) = Canvas::read_state(&mut Cursor::new(saved(&wider))).unwrap();
+    let restored = resumed.traction_net();
+    assert_eq!(resized.size_mm, restored.size_mm);
+    assert_eq!(resized.seed, restored.seed);
+    for point in [[10.0, 15.0], [59.0, 83.0], [111.0, 105.0]] {
+        assert_eq!(resized.nearest(point, 4), restored.nearest(point, 4));
+    }
+}
+
+#[test]
+fn cracks_restore_actual_textured_substrate_and_all_material_fields() {
+    let mut c = canvas(120, ENGINE, None);
+    film(&mut c, undercoat(), 200.0, PAINTED, 1);
+    c.dry();
+    for i in 0..c.height.len() {
+        c.height[i] += 12.0 * ((i % c.f.w) as f32 * 0.4).sin();
+    }
+    let under: Vec<Surface> = (0..c.px.len()).map(|i| Surface::capture(&c, i)).collect();
+    film(&mut c, topcoat(), 25.0, PAINTED, 2);
+    // The lean top has different gloss, making its exposure observable too.
+    for hd in &mut c.wet.hide {
+        hd[4] = 0.25;
+    }
+    c.wait(3.0 * DAY);
+    assert!(!c.traction.cracks.is_empty());
+    for crack in &c.traction.cracks {
+        assert_eq!(crack.under, under[crack.i], "substrate at {}", crack.i);
+    }
+    let indices: Vec<usize> = c.traction.cracks.iter().map(|p| p.i).collect();
+    // Force full pixel coverage to check the interpolation's material endpoint.
+    let pm = c.px_mm();
+    for crack in &mut c.traction.cracks {
+        crack.d_mm = 0.0;
+        crack.hw_mm = 10.0 * pm;
+    }
+    c.wait(60.0 * DAY);
+    for i in indices {
+        assert_eq!(Surface::capture(&c, i), under[i], "fully exposed substrate at {i}");
+    }
+}
+
+#[test]
+fn glaze_and_varnish_are_preserved_by_later_waits() {
+    let mut start = prepared(120, ENGINE, false);
+    start.wait(5.0 * DAY);
+    assert!(!start.traction.cracks.is_empty());
+    for glaze in [false, true] {
+        let mut c = start.clone();
+        if glaze {
+            c.glaze(&crate::pigment::Pigment::transparent(hex("#304060")), None, |_, _| 0.3);
+        } else {
+            c.varnished();
+        }
+        let surface: Vec<Surface> = (0..c.px.len()).map(|i| Surface::capture(&c, i)).collect();
+        c.wait(60.0 * DAY);
+        assert!(c.traction.cracks.is_empty());
+        assert_eq!(surface, (0..c.px.len()).map(|i| Surface::capture(&c, i)).collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn invalid_traction_materials_indices_and_dates_are_rejected() {
+    let surface = Surface {
+        color: [0.2, 0.3, 0.4],
+        height: 10.0,
+        film: 1.0,
+        gloss: 0.4,
+        absorb: 0.0,
+    };
+    let crack = |i| CrackPx {
+        i,
+        under: surface,
+        top: surface,
+        d_mm: 0.1,
+        hw_mm: 0.2,
+        shown: 0.3,
+        set_at: 2.0,
+        dry_at: 4.0,
+    };
+    let state = Traction {
+        soft: vec![
+            Soft {
+                amount: 50.0,
+                rate: 1e-4,
+                at: 1.0
+            };
+            2
+        ],
+        cracks: vec![crack(0), crack(1)],
+        net: NetCache::default(),
+    };
+    let mut valid = Vec::new();
+    state.write(&mut valid, 2, 10.0).unwrap();
+    let reject = |bytes: Vec<u8>| {
+        assert_eq!(Traction::read(&mut &bytes[..], 2, 10.0).err().unwrap().kind(), io::ErrorKind::InvalidData);
+    };
+    // mark, version, softness flag, crack count, first index, second index.
+    for (offset, value) in [(0, 0), (8, 0), (8, 2), (16, 2), (72, 3), (80, 2), (172, 0)] {
+        let mut bytes = valid.clone();
+        bytes[offset..offset + 8].copy_from_slice(&u64::to_le_bytes(value));
+        reject(bytes);
+    }
+    // Soft amount/rate/date and crack setting/dry dates.
+    for (offset, value) in [
+        (24, f64::NAN),
+        (24, -1.0),
+        (32, -1.0),
+        (32, 0.0),
+        (40, 11.0),
+        (156, 11.0),
+        (164, 1.0),
+        (164, 2.0),
+    ] {
+        let mut bytes = valid.clone();
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        reject(bytes);
+    }
+    // RGB, film, gloss, distance, width and shown coverage.
+    for (offset, value) in [(88, f32::NAN), (88, 1.1), (104, -1.0), (108, 1.1), (144, -1.0), (148, -1.0), (152, 1.1)] {
+        let mut bytes = valid.clone();
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        reject(bytes);
+    }
+    let no_substrate = Traction { soft: Vec::new(), ..state };
+    assert!(no_substrate.write(&mut Vec::new(), 2, 10.0).is_err());
+}
+
+/// Reproducible synthetic evidence; the normal suite never writes studies.
+#[test]
+#[ignore = "writes the small traction study when TRACTION_STUDY_OUT is set"]
+fn write_traction_study() {
+    let Some(out) = std::env::var_os("TRACTION_STUDY_OUT") else { return };
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let mut csv = String::from("case,engine,undercoat_um,topcoat_um,extra_undercoat_wait_minutes,topcoat_wait_minutes,dark_share,mean_luminance\n");
+    let mut panels = image::RgbImage::new(960, 320);
+    for (column, (label, engine, hardened)) in [("soft-undercoat", ENGINE, false), ("hardened-undercoat", ENGINE, true), ("engine-5", 5, false)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut c = prepared(320, engine, hardened);
+        c.wait(60.0 * DAY);
+        csv.push_str(&format!(
+            "{label},{engine},200,25,{},{},{:.8},{:.8}\n",
+            if hardened { 3.0 * 365.0 * DAY } else { 0.0 },
+            60.0 * DAY,
+            dark_share(&c),
+            mean_luminance(&c)
+        ));
+        let path = out.join(format!("{label}.png"));
+        c.save(&path).unwrap();
+        let panel = image::open(path).unwrap().to_rgb8();
+        image::imageops::replace(&mut panels, &panel, column as i64 * 320, 0);
+    }
+    panels.save(out.join("traction-controls.png")).unwrap();
+    std::fs::write(out.join("measurements.csv"), csv).unwrap();
+}
+
+#[test]
+fn a_gel_rounding_boundary_can_be_checkpointed() {
+    let mut c = canvas(40, ENGINE, None);
+    let paint = Paint::body(hex("#606060")).with_stiff(0.5).with_drying(1.0);
+    film(&mut c, paint, 25.0, [0.0, 0.0, 1000.0, 1000.0], 1);
+    c.wait(f32::from_bits(2808.0f32.to_bits() - 1));
+    assert!(c.wet.vol.iter().all(|&v| v == 0.0), "film rounded to gel and baked");
+    assert!(c.traction.soft.iter().any(|s| s.amount > 0.0));
+    let bytes = saved(&c);
+    let (resumed, _) = Canvas::read_state(&mut Cursor::new(&bytes)).unwrap();
+    assert_eq!(saved(&resumed), bytes);
+}

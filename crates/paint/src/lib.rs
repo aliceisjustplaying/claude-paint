@@ -43,6 +43,7 @@ pub mod hand;
 pub mod outline;
 pub mod surface;
 pub mod thinner;
+mod traction;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;
@@ -94,7 +95,8 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-pub const ENGINE: u32 = 5;
+/// - 6 (provisional): traction cracks over paint that has not dried through.
+pub const ENGINE: u32 = traction::ENGINE;
 
 /// Hermite smoothstep.
 #[inline]

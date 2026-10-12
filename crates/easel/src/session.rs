@@ -132,7 +132,9 @@ impl Session {
     /// A session painting from the default box (tests).
     #[cfg(all(test, tube_box))]
     pub fn new(width: usize) -> mlua::Result<Self> {
-        Self::with_box(width, Palette::tube_box())
+        let mut tubes = Palette::tube_box();
+        tubes.engine = paint::ENGINE;
+        Self::with_box(width, tubes)
     }
 
     /// A session painting from `tubes` (a box: `Palette::named_box`).
@@ -184,7 +186,9 @@ impl Session {
     /// `easel run` and `check` use `replay_with`).
     #[cfg(all(test, tube_box))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
-        Self::replay_with(width, Palette::tube_box())
+        let mut tubes = Palette::tube_box();
+        tubes.engine = paint::ENGINE;
+        Self::replay_with(width, tubes)
     }
 
     /// A session that replays a program painted from `tubes`: a failed chunk
@@ -942,7 +946,9 @@ fn box_list() -> String {
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+        let mut tubes = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
+        tubes.engine = paint::ENGINE;
+        return Ok(tubes);
     };
     let engine = logged_engine(text)?;
     let logged = logged_box(text)?;
@@ -1803,7 +1809,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine {}\n\n--@ chunk 1\n{CANVAS}\n", paint::ENGINE);
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");

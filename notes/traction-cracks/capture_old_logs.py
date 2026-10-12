@@ -138,7 +138,7 @@ def compare_captures(before_directory, after_directory, after_manifest):
         receipt["identical"] = receipt["png_identical"] and receipt["state_digest_identical"]
         receipts.append(receipt)
     with (after_directory / "old-log-comparison.csv").open("w", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=list(receipts[0]))
+        writer = csv.DictWriter(target, fieldnames=list(receipts[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(receipts)
     identical = all(row["identical"] for row in receipts)

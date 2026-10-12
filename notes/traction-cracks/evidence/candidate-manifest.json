@@ -1,5 +1,5 @@
 {
-  "commit": "002fc74ef07df437766010c50994c7dd99d8f872",
+  "commit": "1a3d97dcc29000116038165f32aa192a19d1aceb",
   "working_tree_dirty": false,
   "binary_sha256": "762b5ac3eeacb68c445b2963cec0be7eed9fd70287dee075eb46d42ec3bc6bad",
   "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
@@ -123,10 +123,12 @@
     }
   ],
   "comparison": {
-    "before_manifest_sha256": "dbd4a5d9563c208a29718fc621e81c4aa64fdd1a6373de950e07d88452633bfa",
-    "before_commit": "b4f9c4ebb7428eda1737f46c9ae1db8add6b40c3",
+    "before_manifest_sha256": "0ae602fdf8f1d80c739113ecfef32894dd9a8c4e19dadcdf957e40d2841d4f22",
+    "before_commit": "ea33747d6fea14055223809f47375b130c6a589e",
     "before_binary_sha256": "1a505780fce9b3ef81e2933e4d7b6d4fe480e6799d51d29c7f366f121b742f95",
     "before_rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
     "identical": true
-  }
+  },
+  "binary_built_from_commit": "002fc74ef07df437766010c50994c7dd99d8f872",
+  "binary_reused_with_identical_engine_and_build_inputs": true
 }

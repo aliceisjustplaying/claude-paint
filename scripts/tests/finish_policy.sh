@@ -21,7 +21,15 @@ for box in hopper friedrich default; do
   trap - EXIT
   log=$studio/paintings/lua/painting.lua
   cp "$studio/out/easel/painting/live.png" "$studio/plain.png"
-  for source in save replay; do
+  save=$studio/out/easel/painting/live.ckpt
+  cp "$save" "$studio/end.ckpt"
+  for source in save gzip zstd replay; do
+    rm -f "$save" "$save.gz" "$save.zst"
+    case "$source" in
+      save) cp "$studio/end.ckpt" "$save" ;;
+      gzip) gzip -c "$studio/end.ckpt" > "$save.gz"; printf 'invalid save' > "$save" ;;
+      zstd) command -v zstd >/dev/null || continue; zstd -q -c "$studio/end.ckpt" > "$save.zst" ;;
+    esac
     out=$studio/${source}_FRDC1_finished.png
     opts=(--coats 0.4)
     [ "$box" = friedrich ] || opts+=(--relief)
@@ -37,6 +45,12 @@ for box in hopper friedrich default; do
       cmp "$log" "${out%.png}.lua"
       cmp "$studio/plain.png" "$out"
     fi
+    if [ "$source" = replay ]; then
+      grep -q 'no usable matching saved end state; replaying the full log' "$studio/$source.log"
+    else
+      grep -q 'finished from the save:' "$studio/$source.log"
+    fi
+    cmp "$studio/save_FRDC1_finished.png" "$out"
   done
   grep -q 'finished from the save:' "$studio/save.log"
   grep -q '^finished:' "$studio/replay.log"

@@ -1,6 +1,6 @@
 # Traction cracks over a still-soft undercoat
 
-Working port from upstream main `b4f9c4ebb7428eda1737f46c9ae1db8add6b40c3`.
+Working port from upstream main `ea33747d6fea14055223809f47375b130c6a589e`.
 Written by a Codex agent and independently reviewed by other agents.
 
 A fast-setting top film can part over a thick undercoat that is touch-dry but
@@ -94,14 +94,26 @@ Every heavy job used the unchanged machine-wide `scripts/lockrun`.
 | Paint traction/checkpoint tests, `--no-default-features` | 14 passed, 1 ignored study |
 | Port's explicit study writer | 1 passed; PNGs/CSV generated |
 | Current-main versus candidate old-log capture | All 11 PNGs and state digests byte-identical; each binary's repeated output identical |
+| Updated-main Studio Python tests | 73 passed |
+| Updated-main Studio headless Chrome checks | Gallery passed all 4 view combinations; replay passed 9 groups / 42 main comparisons, no page errors |
 
-The only code change after the full gate is a feature guard and explanatory
+The only contribution code change after the full gate is a feature guard and explanatory
 comment on an existing historical-globals **test**. The final fast gate and
 bare painter tests cover that guard; production engine code is unchanged.
-The final evidence commit adds reports and images only. The [validation archive](evidence/validation-receipts.zip) contains
+The evidence commit adds reports and images only. Upstream main subsequently
+advanced from `b4f9c4e` to `ea33747`; those six Studio-only file changes were
+merged into the contribution branch. The `crates`, `Cargo.toml`, `Cargo.lock`
+and `.cargo` Git objects are identical on both main revisions. The tested
+engine commits remain in the merge history. Updated Studio tests and refreshed
+replay captures are recorded below, with explicit binary build provenance.
+The refreshed capture is bound to clean merge commit `1a3d97d`; the final
+receipt update and capture-helper CSV line-ending correction change no engine
+or Studio code. The [validation archive](evidence/validation-receipts.zip) contains
 `all-checks.json` and `fast-checks.json`, recording revisions, clean-tree status,
 individual commands, counts, timings and log hashes. It also contains the
-baseline/control logs and the resumed painter/study/replay checks.
+baseline/control logs, the resumed painter/study/replay checks, and the
+current-main Studio check manifest, input hashes and three logs. The Chrome
+checks use synthetic browser transports/images; they replay no paintings.
 
 Normal tests cover soft/hardened/engine-5 controls, first `dry()`, fractional
 and ten-year waits, nonuniform films and recoating, exact checkpoint
@@ -120,7 +132,8 @@ The full gate is **not all green**. `cargo-test` fails only
 the spirits tuple is
 `(0.9744869296698226, 0.8993446396277543, 0.9429845376359838)`;
 the hollow-film share misses the required `> 0.9`. The exact same tuple was
-reproduced on untouched current main; `main-rag.log` in the validation archive
+reproduced on untouched main `b4f9c4e` (whose engine/build inputs are identical
+to current main `ea33747`); `main-rag.log` in the validation archive
 is retained. `baseline-state` and `thinner-all` report the related known
 historical rag baseline mismatch; unchanged main's baseline check also fails.
 The final fast gate's `thinner-quick` reports that same mismatch. Every other
@@ -149,8 +162,12 @@ control worktree contained no port code and was removed afterward.
 [old-log-comparison.csv](evidence/old-log-comparison.csv) records matching
 before/after PNG and state-digest SHA256 for all 11 existing cases. The
 [main manifest](evidence/main-manifest.json) binds the independent unchanged
-`b4f9c4e` capture; the [candidate manifest](evidence/candidate-manifest.json)
-binds clean commit `002fc74`, input hashes, compiler and executable hashes.
+`ea33747` capture; the [candidate manifest](evidence/candidate-manifest.json)
+binds the clean merged contribution, input hashes, compiler and executable hashes.
+Both captures reuse the already-tested release binaries: main built from
+`b4f9c4e`, candidate from `002fc74`. The [build provenance](evidence/build-provenance.json)
+records identical Git objects for every engine/build input across the respective
+Studio/documentation-only updates. No rebuilt binary is claimed.
 [old-log-replays.zip](evidence/old-log-replays.zip) includes both complete
 captures for inspection. Only the non-state `secs=` field is removed; every
 other digest byte is preserved. All PNGs also match their existing historical
@@ -178,7 +195,7 @@ TRACTION_STUDY_OUT="$TMPDIR/traction-study" scripts/lockrun --timeout 60 -- carg
 scripts/lockrun --timeout 60 -- python3 notes/traction-cracks/capture_old_logs.py . "$CARGO_TARGET_DIR/release/easel" "$TMPDIR/traction-after" --compare "$TMPDIR/traction-before"
 ```
 
-Build and capture untouched `b4f9c4e` separately to produce `traction-before`.
+Build and capture untouched `ea33747` separately to produce `traction-before`.
 The first cold full run exceeded its 600 s check-phase budget during the box
 matrix. Its unfinished group was isolated and all 28 box cases passed in
 97.9 s; the final full run then completed within both unchanged phase limits.

@@ -1281,17 +1281,21 @@ const GHOST_TOUCH: f32 = 0.8;
 fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg2 = dx * dx + dy * dy;
+    let seg = seg2.sqrt();
+    let track = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
     let mut sum = 0.0f32;
     for y in r.1..r.3 {
         for x in r.0..r.2 {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
-            let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
-            let dist = (qx * qx + qy * qy).sqrt();
             if fine {
-                sum += fine_cover(a, b, rb, px, py);
-            } else if dist <= rb + 0.5 {
-                sum += 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+                sum += fine_cover_at(a, rb, track, px, py);
+            } else {
+                let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
+                let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
+                let dist = (qx * qx + qy * qy).sqrt();
+                if dist <= rb + 0.5 {
+                    sum += 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist);
+                }
             }
         }
     }
@@ -1319,10 +1323,7 @@ fn strip_cover(dist: f32, rb: f32) -> f32 {
 /// and a hair's successive steps tile its path without overlapping: the
 /// paint a step lays and the area it darkens don't depend on where the
 /// pixel centers fall. A hair that doesn't move covers a square 2·`rb` wide.
-fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let seg = (dx * dx + dy * dy).sqrt();
-    let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
+fn fine_cover_at(a: (f32, f32), rb: f32, (ux, uy, lo, hi): (f32, f32, f32, f32), px: f32, py: f32) -> f32 {
     // the pixel center in track coordinates: along `t`, across `q`
     let (rx, ry) = (px - a.0, py - a.1);
     let t = rx * ux + ry * uy;
@@ -1374,6 +1375,14 @@ fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
         area += p.0 * q.1 - q.0 * p.1;
     }
     (0.5 * area.abs()).clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let seg = (dx * dx + dy * dy).sqrt();
+    let track = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
+    fine_cover_at(a, rb, track, px, py)
 }
 
 /// Smooth 1-D value noise, −1..1.
@@ -1469,6 +1478,7 @@ unsafe fn exchange(
         // a pointed tool's moving hair covers pixels by the exact share of
         // its track in them (see `strip_cover`)
         let fine = tool.point > 0.0 && dep.is_none();
+        let track = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
         // lowest surface height this bristle reaches down to. The loaded tip
         // of a pointed soft brush carries a bead of paint that wets the
         // weave's valleys as well as its peaks, however lightly it is
@@ -1493,6 +1503,9 @@ unsafe fn exchange(
         let wet = smoothstep(0.1, 0.8, liquid / full);
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
+        // soft hair bends down into the valleys of the weave; stiff hog
+        // bristles ride on the peaks
+        let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
 
         // pass 1: contact weights
         let bw = x1 - x0;
@@ -1506,20 +1519,19 @@ unsafe fn exchange(
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
-                let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
-                let dist = (qx * qx + qy * qy).sqrt();
                 // a moving bristle has a crisp track; in a pressed tip (fixed
                 // deposit) paint wicks between the hairs, so each hair's
                 // contact fades out and neighbors sum to one smooth patch
                 let cov = if fine {
-                    fine_cover(a, b, rb, px, py)
-                } else if dist > rb + 0.5 {
-                    continue;
-                } else if dep.is_some() {
-                    1.0 - smoothstep(0.0, rb, dist)
+                    fine_cover_at(a, rb, track, px, py)
                 } else {
-                    1.0 - smoothstep(rb * 0.5, rb + 0.5, dist)
+                    let t = if seg2 > 1e-8 { (((px - a.0) * dx + (py - a.1) * dy) / seg2).clamp(0.0, 1.0) } else { 0.0 };
+                    let (qx, qy) = (a.0 + dx * t - px, a.1 + dy * t - py);
+                    let dist = (qx * qx + qy * qy).sqrt();
+                    if dist > rb + 0.5 {
+                        continue;
+                    }
+                    if dep.is_some() { 1.0 - smoothstep(0.0, rb, dist) } else { 1.0 - smoothstep(rb * 0.5, rb + 0.5, dist) }
                 };
                 if cov <= 0.0 {
                     continue;
@@ -1527,9 +1539,6 @@ unsafe fn exchange(
                 sum_cov += cov;
                 let i = (y - oy) * bw_buf + x - ox;
                 let surf = (*sf.base.add(i) + 0.35 * *sf.vol.add(i)).min(1.5);
-                // soft hair bends down into the valleys of the weave; stiff hog
-                // bristles ride on the peaks
-                let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
                 let wt = match clip {
                     None => cov * smoothstep(th - give, th + 0.2, surf),
                     Some(Clip::Mask(m)) => cov * smoothstep(th - give, th + 0.2, surf) * m.data[y * w + x],

@@ -12,7 +12,7 @@ import sqlite3
 from mcp import types
 from mcp.server import Server
 
-from server import Easel
+from server import Easel, tool_definitions
 
 
 def stamp():
@@ -191,7 +191,7 @@ class RemoteStudio:
 
 def mcp_server(studio):
     server = Server("easel")
-    definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
+    definitions = tool_definitions(studio.studio)
 
     @server.list_tools()
     async def list_tools():

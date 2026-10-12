@@ -1,0 +1,6 @@
+case,full_checkpoint_bytes_equal,seen_linear_pixels_equal,seen_png_pixels_equal,max_seen_linear_channel_delta,max_height_um_delta
+first-dry-direct-vs-wait0,false,true,true,0.000000000,0.000000000
+one-3y-vs-2d-plus-remainder,false,false,false,0.769221485,25.000000000
+checkpoint-immediate-roundtrip,true,true,true,0.000000000,0.000000000
+checkpoint-after-55d-more,true,true,true,0.000000000,0.000000000
+one-thread-vs-four-threads-5d,true,true,true,0.000000000,0.000000000

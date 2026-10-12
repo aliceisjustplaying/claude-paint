@@ -83,8 +83,24 @@ async function ready(page, which, light) {
       servingStatic = staticMode;
       const context = await browser.newContext({ viewport:{ width:stream ? 1920 : 1440, height:stream ? 1080 : 1000 } });
       await context.addInitScript(() => localStorage.setItem('studio.intro', '1'));
+      if (stream) await context.addInitScript(() => {
+        const originalFetch = window.fetch;
+        window.fetch = (input, options) => {
+          const u = typeof input === 'string' && new URL(input, location.href), light = sessionStorage.getItem('studio.testLighting');
+          if (light && u && (u.pathname === '/api/events' || u.pathname.endsWith('/events.json'))) { displayLight = light; lightingControls(); }
+          return originalFetch.call(window, input, options);
+        };
+      });
       const page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)));
       const url = p => `${origin}/?p=${p}${stream ? '&stream=1' : ''}`;
+      const selectLight = async light => {
+        if (!stream) return page.locator('#' + light).click();
+        await page.evaluate(light => {
+          sessionStorage.setItem('studio.testLighting', light);
+          displayLight = light; localStorage.setItem('studio.lighting', light);
+          lightingControls(); document.getElementById('zoom').style.display = 'none'; pictures();
+        }, light);
+      };
       const shot = async name => { if (evidence && !staticMode) { await page.waitForFunction(() => typingThought === null); await page.screenshot({ path:path.join(evidence, name + '.png'), fullPage:true }); } };
       if (evidence && process.env.STUDIO_BASELINE && !staticMode) {
         for (const p of ['normal', 'scratch']) { await page.goto(url(p) + '&before=1'); await ready(page, 'img', false); await shot(`before-${stream ? 'stream' : 'normal'}-${p}`); }
@@ -96,31 +112,49 @@ async function ready(page, which, light) {
       assert.match(await page.locator('#cap2').textContent(), /Gallery light/);
       await shot(`after-${stream ? 'stream' : 'normal'}-gallery`);
       await page.locator('#img2').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
-      await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'img2', 'relief');
-      assert.match(await page.locator('#cap').textContent(), /Relief$/);
-      assert.match(await page.locator('#cap2').textContent(), /Relief$/);
-      await shot(`after-${stream ? 'stream' : 'normal'}-relief`);
-      await page.reload(); await ready(page, 'img', 'relief'); await ready(page, 'img2', 'relief');
-      assert.equal(await page.locator('#relief').getAttribute('aria-pressed'), 'true');
-      await page.locator('#img2').click(); await ready(page, 'zimg', 'relief'); await page.locator('#zoom').click();
-      await page.locator('#color').click(); await ready(page, 'img', false); await ready(page, 'img2', false);
-      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
-      await shot(`after-${stream ? 'stream' : 'normal'}-color`);
-      await page.reload(); await ready(page, 'img', false);
-      assert.equal(await page.evaluate(() => STATIC), staticMode);
-      assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
+      if (stream) {
+        assert.equal(await page.locator('#lighting').isVisible(), false);
+        for (const saved of ['color', 'relief']) {
+          await page.evaluate(saved => localStorage.setItem('studio.lighting', saved), saved);
+          await page.goto(url('normal'));
+          for (const reload of [false, true]) {
+            if (reload) await page.reload();
+            await ready(page, 'img', true); await ready(page, 'img2', true);
+            assert.equal(await page.locator('#lighting').isVisible(), false);
+            assert.equal(await page.evaluate(() => displayLight), 'gallery');
+            assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
+            assert.equal(await page.evaluate(() => localStorage.getItem('studio.lighting')), saved);
+          }
+        }
+        assert.equal(await page.evaluate(() => STATIC), staticMode);
+        await selectLight('color');
+      } else {
+        await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'img2', 'relief');
+        assert.match(await page.locator('#cap').textContent(), /Relief$/);
+        assert.match(await page.locator('#cap2').textContent(), /Relief$/);
+        await shot(`after-${stream ? 'stream' : 'normal'}-relief`);
+        await page.reload(); await ready(page, 'img', 'relief'); await ready(page, 'img2', 'relief');
+        assert.equal(await page.locator('#relief').getAttribute('aria-pressed'), 'true');
+        await page.locator('#img2').click(); await ready(page, 'zimg', 'relief'); await page.locator('#zoom').click();
+        await page.locator('#color').click(); await ready(page, 'img', false); await ready(page, 'img2', false);
+        assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
+        await shot(`after-${stream ? 'stream' : 'normal'}-color`);
+        await page.reload(); await ready(page, 'img', false);
+        assert.equal(await page.evaluate(() => STATIC), staticMode);
+        assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
+      }
       await page.goto(url('scratch')); await ready(page, 'img', false);
-      await page.locator('#gallery').click(); await ready(page, 'img', true); await ready(page, 'pipimg', true);
+      await selectLight('gallery'); await ready(page, 'img', true); await ready(page, 'pipimg', true);
       assert.match(await page.locator('#cap').textContent(), /Scratch canvas.*Gallery light/);
       await shot(`after-${stream ? 'stream' : 'normal'}-scratch-gallery`);
-      await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'pipimg', 'relief');
+      await selectLight('relief'); await ready(page, 'img', 'relief'); await ready(page, 'pipimg', 'relief');
       assert.match(await page.locator('#cap').textContent(), /Scratch canvas.*Relief$/);
       await page.locator('#pipimg').click(); await ready(page, 'zimg', 'relief'); await page.locator('#zoom').click();
       await shot(`after-${stream ? 'stream' : 'normal'}-scratch-relief`);
-      await page.locator('#color').click(); await ready(page, 'img', false); await ready(page, 'pipimg', false);
+      await selectLight('color'); await ready(page, 'img', false); await ready(page, 'pipimg', false);
       await shot(`after-${stream ? 'stream' : 'normal'}-scratch-color`);
       for (const light of ['gallery', 'relief']) {
-        await page.locator('#' + light).click();
+        await selectLight(light);
         for (const p of ['fallback', 'falsePalette', 'broken']) {
           await page.goto(url(p)); await ready(page, 'img', false);
           assert.doesNotMatch(await page.locator('#cap').textContent(), /Gallery light|Relief|Color|unavailable/);
@@ -129,11 +163,11 @@ async function ready(page, which, light) {
       }
       await page.goto(url('galleryOnly')); await ready(page, 'img', false);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|unavailable/);
-      await page.locator('#gallery').click(); await ready(page, 'img', true);
+      await selectLight('gallery'); await ready(page, 'img', true);
       await page.goto(url('reliefOnly')); await ready(page, 'img', false);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|unavailable/);
-      await page.locator('#relief').click(); await ready(page, 'img', 'relief');
-      await page.locator('#gallery').click();
+      await selectLight('relief'); await ready(page, 'img', 'relief');
+      await selectLight('gallery');
       await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
       assert.match(await page.locator('#cap2').textContent(), /^Value check · /);
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
@@ -142,16 +176,16 @@ async function ready(page, which, light) {
         await page.goto(url('analytical')); await ready(page, 'img', true); await ready(page, 'img2', false);
         assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
       }
-      await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'img2', false);
+      await selectLight('relief'); await ready(page, 'img', 'relief'); await ready(page, 'img2', false);
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
-      await page.locator('#gallery').click(); await ready(page, 'img', true);
+      await selectLight('gallery'); await ready(page, 'img', true);
       for (const light of ['gallery', 'relief']) {
-        await page.locator('#' + light).click(); await page.goto(url('flaggedAnalytical'));
+        await selectLight(light); await page.goto(url('flaggedAnalytical'));
         await ready(page, 'img', light); await ready(page, 'img2', false);
         assert.match(await page.locator('#cap2').textContent(), /^Value check · /);
         assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
       }
-      await page.locator('#gallery').click();
+      await selectLight('gallery');
       fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })];
       let holdLit = false, holdColor = false;
       const held = [];
@@ -160,33 +194,33 @@ async function ready(page, which, light) {
         if (lit ? holdLit : holdColor) held.push(route); else return route.continue();
       });
       const release = async () => { for (const route of held.splice(0)) await route.continue(); };
-      await page.locator('#color').click(); await page.goto(url('normal')); await ready(page, 'img', false); await ready(page, 'img2', false);
-      holdLit = true; await page.locator('#gallery').click();
+      await selectLight('color'); await page.goto(url('normal')); await ready(page, 'img', false); await ready(page, 'img2', false);
+      holdLit = true; await selectLight('gallery');
       await page.waitForFunction(() => document.getElementById('img2').dataset.want.includes('gallery'));
       assert.equal(await page.locator('#img2').getAttribute('data-light'), 'color');
       assert.doesNotMatch(await page.locator('#cap2').textContent(), /Gallery light/);
       await page.locator('#img2').click(); await ready(page, 'zimg', false); await page.locator('#zoom').click();
-      await page.locator('#color').click(); holdLit = false; await release(); await ready(page, 'img', false);
+      await selectLight('color'); holdLit = false; await release(); await ready(page, 'img', false);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
       await page.goto(url('normal')); await ready(page, 'img', false); await ready(page, 'img2', false);
-      holdLit = true; await page.locator('#gallery').click();
+      holdLit = true; await selectLight('gallery');
       await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:4, look:'', gallery:true, relief:true }); show(events.length - 1); });
       await page.locator('#img').click(); await ready(page, 'zimg', false);
       assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/0\.png$/ : /i=0$/);
       await page.locator('#zoom').click(); holdLit = false; await release(); await ready(page, 'img', true);
       await page.waitForFunction(() => /(?:i=4|\/4\.png)/.test(document.getElementById('img').src));
-      holdColor = true; await page.locator('#color').click();
+      holdColor = true; await selectLight('color');
       assert.equal(await page.locator('#img').getAttribute('data-light'), 'gallery');
       assert.match(await page.locator('#cap').textContent(), /Gallery light/);
       await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
       holdColor = false; await release(); await ready(page, 'img', false);
-      await page.locator('#gallery').click(); await ready(page, 'img', true);
+      await selectLight('gallery'); await ready(page, 'img', true);
       holdColor = true; await page.goto(url('fallback'), { waitUntil:'domcontentloaded' });
       await page.waitForFunction(() => events.length > 0 && document.getElementById('img').dataset.want);
-      await page.locator('#color').click(); holdColor = false; await release(); await ready(page, 'img', false);
+      await selectLight('color'); holdColor = false; await release(); await ready(page, 'img', false);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
       assert.doesNotMatch(await page.locator('#cap').textContent(), /unavailable/);
-      await page.locator('#gallery').click();
+      await selectLight('gallery');
       await page.evaluate(() => { events.push({ ts:new Date().toISOString(), kind:'image', img:3, look:'', gallery:true, relief:true }); show(events.length - 1); });
       await page.locator('#img').click(); await ready(page, 'zimg', false);
       assert.match(await page.locator('#zimg').getAttribute('src'), staticMode ? /\/img\/0\.png$/ : /i=0$/);
@@ -212,16 +246,16 @@ async function ready(page, which, light) {
       assert.match(await page.locator('#img').getAttribute('src'), staticMode ? /\/gallery\/5\.png$/ : /i=5&gallery=1$/);
       assert.match(await page.locator('#cap').textContent(), /^Scratch canvas · close-up · .* · Gallery light$/);
       assert.equal(await page.locator('#cropbox').isVisible(), false);
-      await page.locator('#relief').click(); await ready(page, 'img', 'relief'); await ready(page, 'pipimg', 'relief');
+      await selectLight('relief'); await ready(page, 'img', 'relief'); await ready(page, 'pipimg', 'relief');
       assert.match(await page.locator('#cap').textContent(), /^Scratch canvas · close-up · .* · Relief$/);
       assert.equal(await page.locator('#cropbox').isVisible(), false);
-      await page.locator('#gallery').click(); await page.goto(url('normal')); await ready(page, 'img', true);
-      holdLit = true; await page.locator('#relief').click();
+      await selectLight('gallery'); await page.goto(url('normal')); await ready(page, 'img', true);
+      holdLit = true; await selectLight('relief');
       await page.waitForFunction(() => document.getElementById('img').dataset.want.includes('relief'));
       assert.equal(await page.locator('#img').getAttribute('data-light'), 'gallery');
       assert.match(await page.locator('#cap').textContent(), /Gallery light$/);
       await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
-      await page.locator('#color').click(); await ready(page, 'img', false); holdLit = false; await release();
+      await selectLight('color'); await ready(page, 'img', false); holdLit = false; await release();
       assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
       await context.close();
     }

@@ -97,10 +97,11 @@ Every heavy job used the unchanged machine-wide `scripts/lockrun`.
 | Updated-main Studio Python tests | 73 passed |
 | Updated-main Studio headless Chrome checks | Gallery passed all 4 view combinations; replay passed 9 groups / 42 main comparisons, no page errors |
 
-The only contribution code change after the full gate is a feature guard and explanatory
+The only Rust source change after the full gate is a feature guard and explanatory
 comment on an existing historical-globals **test**. The final fast gate and
 bare painter tests cover that guard; production engine code is unchanged.
-The evidence commit adds reports and images only. Upstream main subsequently
+The evidence updates add reports, images and receipts and normalize capture
+CSV line endings. Upstream main subsequently
 advanced from `b4f9c4e` to `ea33747`; those six Studio-only file changes were
 merged into the contribution branch. The `crates`, `Cargo.toml`, `Cargo.lock`
 and `.cargo` Git objects are identical on both main revisions. The tested

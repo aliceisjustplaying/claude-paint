@@ -48,7 +48,8 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   standing water within about 2 seconds of the last stroke and were dry
   within about 4. A pre-wet grid of `drop{}` (radius 80, about
   118 × 95 cells apart) kept the area wet for 2 to 4 seconds after the last
-  stroke at 5 to 8 µL a drop, and for about 12 seconds at 22 µL. Nine
+  stroke at 5 to 8 µL a drop. A 22 µL grid (radius 85, about 118 × 100
+  cells apart) kept it wet for about 12 seconds. Nine
   rows across the whole 1,056-cell width of the sheet, laid in 25-cell
   segments at 3,500 cells a second, took 2.8 seconds of painter clock.
   Rows that took 4 seconds to lay over a 4 µL pre-wet showed bands where

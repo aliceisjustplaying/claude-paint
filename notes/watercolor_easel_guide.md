@@ -57,11 +57,11 @@ b:load{water=<microliters>, pigments={["<pigment>"]=<amount>}}
 
 A load adds to what the brush already holds. Each call takes 0 to 100
 microliters of water and 0 to 10 arbitrary mass units of each pigment, and
-can load several pigments together. The brush holds a finite amount and
-keeps what it hasn't laid between strokes and chunks. `b:status()` reports
-its `width` and its remaining `water` and `pigments`. Loads add up with no
-ceiling: five loads of 100 microliters leave the brush holding 500
-microliters. A new name gives a clean, empty brush.
+can load several pigments together. There is no cap on what a brush can
+hold: five loads of 100 microliters leave it holding 500 microliters.
+Strokes use the load up as they lay it, and the brush keeps what it hasn't
+laid between strokes and chunks. `b:status()` reports its `width` and its
+remaining `water` and `pigments`. A new name gives a clean, empty brush.
 With a width-24 round at pressure 0.35 on cold-press paper, 40 µL water/1 French Ultramarine unit and 80 µL/2 units each carried a fading 936-cell stroke, leaving 3.30 and 9.01 µL.
 
 ## Marks and water

@@ -83,11 +83,20 @@ async function ready(page, which, light) {
       servingStatic = staticMode;
       const context = await browser.newContext({ viewport:{ width:stream ? 1920 : 1440, height:stream ? 1080 : 1000 } });
       await context.addInitScript(() => localStorage.setItem('studio.intro', '1'));
+      if (stream) await context.addInitScript(() => {
+        const originalFetch = window.fetch;
+        window.fetch = (input, options) => {
+          const u = typeof input === 'string' && new URL(input, location.href), light = sessionStorage.getItem('studio.testLighting');
+          if (light && u && (u.pathname === '/api/events' || u.pathname.endsWith('/events.json'))) { displayLight = light; lightingControls(); }
+          return originalFetch.call(window, input, options);
+        };
+      });
       const page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)));
       const url = p => `${origin}/?p=${p}${stream ? '&stream=1' : ''}`;
       const selectLight = async light => {
         if (!stream) return page.locator('#' + light).click();
         await page.evaluate(light => {
+          sessionStorage.setItem('studio.testLighting', light);
           displayLight = light; localStorage.setItem('studio.lighting', light);
           lightingControls(); document.getElementById('zoom').style.display = 'none'; pictures();
         }, light);
@@ -105,9 +114,18 @@ async function ready(page, which, light) {
       await page.locator('#img2').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
       if (stream) {
         assert.equal(await page.locator('#lighting').isVisible(), false);
-        await page.reload(); await ready(page, 'img', true); await ready(page, 'img2', true);
-        assert.equal(await page.evaluate(() => displayLight), 'gallery');
-        assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
+        for (const saved of ['color', 'relief']) {
+          await page.evaluate(saved => localStorage.setItem('studio.lighting', saved), saved);
+          await page.goto(url('normal'));
+          for (const reload of [false, true]) {
+            if (reload) await page.reload();
+            await ready(page, 'img', true); await ready(page, 'img2', true);
+            assert.equal(await page.locator('#lighting').isVisible(), false);
+            assert.equal(await page.evaluate(() => displayLight), 'gallery');
+            assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
+            assert.equal(await page.evaluate(() => localStorage.getItem('studio.lighting')), saved);
+          }
+        }
         assert.equal(await page.evaluate(() => STATIC), staticMode);
         await selectLight('color');
       } else {

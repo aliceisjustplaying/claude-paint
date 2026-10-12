@@ -49,3 +49,6 @@ header::after { content: "stillwet.art"; flex: none; margin-left: 18px; padding-
 #view.pal.tall { grid-template-rows: minmax(0,1fr) !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w p' !important }
 #view.two.pal.tall { grid-template-rows: minmax(0,1fr) minmax(0,1fr) !important; grid-template-areas: 'w o' 'w p' !important }
 #view.two.pal.tall #cap, #view.two.pal.tall #cap2 { min-height: 0 !important }
+/* the stream is watched, not clicked: no display-light toggle (the view stays on its default, Gallery light) */
+#lighting { display: none !important }
+#viewpane:has(#pip:not([hidden])) #pband { grid-row: 3 }

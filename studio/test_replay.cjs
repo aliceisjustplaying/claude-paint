@@ -153,6 +153,39 @@ async function pollUpdate(v, i, replacement) {
       await v.page.close();
     }
     report.checks.push('canvas reset boundaries, stale whole-look ages, safe crop outlines and rewind in normal/stream and API/static views');
+    for (const streamMode of [false, true]) {
+      const v = await viewer(browser, [ev('start'), ev('paint', {code:'work{}', out:'ok'}, 1),
+        ev('look', {text:''}, 2), ev('image', {img:0, look:''}, 3)], {streamMode, liveFile:false});
+      await v.page.waitForFunction(() => document.getElementById('img').naturalWidth > 0);
+      const painting = await v.page.locator('#img').getAttribute('src');
+      const remains = async () => assert(await v.page.evaluate(src => {
+        const im = document.getElementById('img');
+        return im.getAttribute('src') === src && im.complete && im.naturalWidth > 0 && document.getElementById('nopic').hidden;
+      }, painting), 'the painting stays visible while awaiting the first scratch look');
+      await v.page.evaluate(e => { events.push(e); live = true; show(events.length - 1); },
+        ev('paint', {scratch:true, new_scratch:true, code:'work{}', out:'ok', ts:new Date().toISOString()}, 4));
+      await remains();
+      assert.equal(await v.page.locator('#cap').textContent(), 'The painting · awaiting first scratch look');
+      assert.equal(await v.page.locator('#pip').isVisible(), false);
+      let release;
+      const held = new Promise(resolve => { release = resolve; });
+      await v.page.route(u => u.pathname === '/img' && u.searchParams.get('i') === '1', async route => { await held; await route.fallback(); });
+      const requested = v.page.waitForRequest(request => { const u = new URL(request.url()); return u.pathname === '/img' && u.searchParams.get('i') === '1'; });
+      await v.page.evaluate(e => { events.push(e); show(events.length - 1); }, ev('image', {img:1, look:'scratch True', ts:new Date().toISOString()}, 5));
+      await requested;
+      await v.page.waitForFunction(() => document.getElementById('img').dataset.want.includes('i=1'));
+      await remains();
+      assert.equal(await v.page.locator('#cap').textContent(), 'The painting · awaiting first scratch look');
+      assert.equal(await v.page.locator('#pip').isVisible(), false);
+      release();
+      await v.page.waitForFunction(() => { const im = document.getElementById('img'); return im.dataset.loadedWant === im.dataset.want && im.complete && im.naturalWidth > 0; });
+      assert.notEqual(await v.page.locator('#img').getAttribute('src'), painting);
+      assert.match(await v.page.locator('#cap').textContent(), /^Scratch canvas · /);
+      await v.page.waitForFunction(() => { const im = document.getElementById('pipimg'); return !document.getElementById('pip').hidden && im.complete && im.naturalWidth > 0; });
+      assert.equal(await v.page.locator('#pipimg').getAttribute('data-picture'), '0');
+      await v.page.close();
+    }
+    report.checks.push('first scratch keeps the painting visible until the delayed scratch image loads in normal/stream views');
     const waits = JSON.parse(fs.readFileSync(path.join(root, 'fixtures/monet-waits.json'), 'utf8')).cases;
     for (const staticMode of [false, true]) {
       const sample = waits[1];

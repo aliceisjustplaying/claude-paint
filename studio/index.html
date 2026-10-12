@@ -331,7 +331,7 @@ const imgURL = i => STATIC ? dataURL(`data/${dataPainter()}/img/${i}.${IMGEXT[i]
 const lightURL = (i, light) => STATIC ? dataURL(`data/${dataPainter()}/${light}/${i}.png`) : `/img?${Q}&epoch=${epoch}&i=${i}&${light}=1`;
 const DISPLAY_LIGHTS = { color:{ label:'Color' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
-try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
+if (!STREAM) try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
 function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }
 for (const [id, preset] of Object.entries(DISPLAY_LIGHTS)) {
   const button = document.createElement('button'); button.id = id; button.type = 'button'; button.textContent = preset.label;
@@ -453,11 +453,12 @@ function glimpse() {
 function setPic(im, urls, loaded) {
   im._picLoaded = loaded;
   if (im.dataset.want === urls[0]) { if (loaded && im.dataset.loadedWant === urls[0]) loaded(im.dataset.loaded); return; }
+  if (im === $('img') && !im.getAttribute('src')) { $('nopic').textContent = 'Loading…'; $('nopic').hidden = false; }
   const want = im.dataset.want = urls[0]; let k = 0, tries = 0, rounds = 0;
   const again = () => { if (++rounds < 6 || HOSTED) { k = 0; tries = 0; setTimeout(go, 5000); } };
   const go = () => { if (im.dataset.want !== want) return; const p = new Image(), u = urls[k];
     if (im === $('img')) p.fetchPriority = 'high';
-    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; im.dataset.loaded = u; im.dataset.loadedWant = want; if (im._picLoaded) im._picLoaded(u); if (k) again(); };
+    p.onload = () => { if (im.dataset.want !== want) return; if (!im.src.endsWith(u)) im.src = u; im.dataset.loaded = u; im.dataset.loadedWant = want; if (im === $('img')) $('nopic').hidden = true; if (im._picLoaded) im._picLoaded(u); if (k) again(); };
     p.onerror = () => { if (++tries < 2) return setTimeout(go, 1000); tries = 0; if (++k < urls.length) go(); else again(); };
     p.src = u; };
   go();
@@ -467,18 +468,19 @@ function displayPic(im, e, caption, label) {
   const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
   const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && !['normal', 'color'].includes(m.trim()));
   const lit = eligible && preset.image && e[lightName];
+  const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
+  if (lit) urls.unshift(url);
   const describe = () => {
+    if (im === $('img') && im.getAttribute('src') && im.dataset.loadedWant !== urls[0]) return;
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
     const light = actual.image ? actual.label : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
-  const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
-  if (lit) urls.unshift(url);
   describe();
-  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
+  setPic(im, urls, u => { im.dataset.picture = e.img; im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
 }
 const zoomURL = im => im.dataset.zoom || im.src;
-function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
+function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.picture; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
@@ -1275,7 +1277,7 @@ function shape() {
   if (im.naturalWidth) $('view').classList.toggle('tall', im.naturalWidth < im.naturalHeight * 1.15);
   placeCrop(); placeTag();
 }
-$('img').addEventListener('load', shape); $('img').addEventListener('load', warmSoon); $('img2').addEventListener('load', shape);
+$('img').addEventListener('load', shape); $('img').addEventListener('load', warmSoon); $('img').addEventListener('load', () => { if (events.length) pictures(); }); $('img2').addEventListener('load', shape);
 { const ro = new ResizeObserver(() => { placeCrop(); placeTag(); }); ro.observe($('whole')); ro.observe($('other')); }
 
 // ---- show event i everywhere
@@ -1287,15 +1289,16 @@ function pictures() {
   const boundary = atLiveEnd && scratchingAt(pos) ? events.slice(0, pos + 1).findLast(scratchBoundary) : null;
   const pendingScratch = boundary && scratchReset(boundary) && !boundary.err && picturesAt(pos, true, true)[0] < 0;
   let sc = scratchingAt(pos) && (!rested || pendingScratch);
-  let [w, o] = picturesAt(pos, rested, sc), previousScratch = false;
+  let [w, o] = picturesAt(pos, rested, sc), previousScratch = false, awaitingScratch = false;
   if (sc && pendingScratch) {
     for (let k = pos; k >= 0; k--) { const e = events[k];
       if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e)) { w = k; o = -1; previousScratch = true; break; }
     }
+    if (!previousScratch) { [w, o] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
   }
   pip(picturesAt(pos, true, !sc)[0], sc);
-  if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true;
-    displayPic($('img'), img, $('cap'), previousScratch ? `PREVIOUS scratch snapshot · awaiting fresh look · ${hhmm(img.ts)}` : pictureCaption(w, sc));
+  if (w >= 0) { const img = events[w]; viewI = img.img;
+    displayPic($('img'), img, $('cap'), previousScratch ? `PREVIOUS scratch snapshot · awaiting fresh look · ${hhmm(img.ts)}` : awaitingScratch ? 'The painting · awaiting first scratch look' : pictureCaption(w, sc));
     $('img').alt = previousScratch ? 'a previous scratch snapshot, awaiting a fresh look' : sc ? 'the scratch canvas' : 'the painting';
     second(o, w); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
@@ -1312,7 +1315,7 @@ function pictures() {
 // the other canvas in the corner (k: its picture's event, -1 none); sc: the big picture is the scratch canvas
 let pipI = -1;
 function pip(k, sc) {
-  const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
+  const on = k >= 0 && (sc || events[k] && isScratch(events[k])) && !(sc && $('img').dataset.picture === String(events[k].img)); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
   $('pip').classList.toggle('painting', on && !!sc);
   if (!on) { clearPic($('pipimg')); return; }
   displayPic($('pipimg'), events[k], $('pipcap'), pictureCaption(k, !sc));

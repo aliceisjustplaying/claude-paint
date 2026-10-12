@@ -3,6 +3,7 @@
     uv run --with pytest pytest studio
 """
 import http.server
+import io
 import json
 import os
 import shutil
@@ -492,6 +493,32 @@ def test_a_held_knife_is_never_the_picker_fallback(home):
     assert S.glance([str(log)])["look"] is None
 
 
+def test_glance_is_a_small_cached_jpeg(home, server, monkeypatch):
+    from PIL import Image
+    _, studio, log = home
+    buf = io.BytesIO()
+    Image.new("RGB", (1000, 625), "blue").save(buf, "PNG")
+    log.write_text(start(str(studio)) + look("l1", buf.getvalue()))
+    monkeypatch.setattr(S, "PUBLIC", True)
+    p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    url = server.base + f"/api/glance?p={PAINTER}&i={p['look']}&epoch={p['epoch']}&version={p['thumb_version']}"
+    with urllib.request.urlopen(url) as response:
+        picture = response.read()
+        assert response.headers["Content-Type"] == "image/jpeg"
+        assert response.headers["Cache-Control"] == "private, max-age=86400, immutable"
+    with Image.open(io.BytesIO(picture)) as thumbnail:
+        assert thumbnail.format == "JPEG"
+        assert thumbnail.size == (360, 225)
+        assert max(thumbnail.size) <= S.GLANCE_SIZE
+    monkeypatch.setattr(S, "glance_image", lambda src: pytest.fail("thumbnail was decoded again"))
+    assert get(url) == (200, picture)
+    with log.open("a") as fh:
+        fh.write(look("l2", png_of("red")))
+    updated = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert updated["thumb_version"] != p["thumb_version"]
+    assert get(url)[0] == 404
+
+
 @pytest.mark.parametrize("via", ["live server", "static export"])
 def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_reply(home, server, via):
     # a whole look, then a whole look and a squint asked for together: the picture is the second whole look,
@@ -512,7 +539,11 @@ def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_re
         p = next(s for s in json.loads((out / "data" / "sessions.json").read_text()) if s["p"] == PAINTER)
         picture = (out / "data" / PAINTER / "img" / f"{p['look']}.png").read_bytes()
     assert (p["look"], p["title"]) == (1, "The Blue Barn")
-    assert picture == png_of("blue")
+    if via == "live server":
+        from PIL import Image
+        assert Image.open(io.BytesIO(picture)).getpixel((0, 0)) == (0, 0, 254)
+    else:
+        assert picture == png_of("blue")
 
 
 @pytest.mark.parametrize("asset,ctype", [
@@ -582,14 +613,24 @@ def test_a_reference_picture_is_marked_and_is_never_the_painters_picture(home, s
     with open(log, "a") as fh:
         fh.write(read_picture("old", "out/easel/look-0000.png", png_of("red")))
     p, picture, _ = painter_and_events()
-    assert (p["look"], picture) == (3, png_of("red"))
+    assert p["look"] == 3
+    if via == "live server":
+        from PIL import Image
+        assert Image.open(io.BytesIO(picture)).getpixel((0, 0)) == (254, 0, 0)
+    else:
+        assert picture == png_of("red")
 
     # its own canvas, then the reference again (by its full path), then a render it reads as the early painters did
     with open(log, "a") as fh:
         fh.write(look("l1", png_of("blue")) + read_picture("r2", f"{studio}/reference/his.png", png_of("green"))
                  + read_picture("r3", "out/easel/look-0001.png", png_of("red")))
     p, picture, events = painter_and_events()
-    assert (p["look"], picture) == (4, png_of("blue"))
+    assert p["look"] == 4
+    if via == "live server":
+        from PIL import Image
+        assert Image.open(io.BytesIO(picture)).getpixel((0, 0)) == (0, 0, 254)
+    else:
+        assert picture == png_of("blue")
     assert [bool(e.get("ref")) for e in events if e["kind"] == "image"] == [True, False, False, False, False, True, False]
     assert [bool(e.get("ref")) for e in events if e["kind"] == "read"] == [True, False, True, False]
 

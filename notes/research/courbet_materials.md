@@ -112,7 +112,7 @@ the artist during work.
   far from this ébauche; one figure moved 28 cm [ORS-ENT].
 - **Underdrawing in some.** Infrared reflectography found underdrawing
   and large repentirs "in some cases" [CRMF].
-- **Landscapes without drawing.** The catalogue raisonné says he could
+- **Landscapes without drawing.** The catalog raisonné says he could
   paint a large landscape with the knife "without preliminary drawing"
   [FERN p.VIII]. A witness watched him start a landscape directly with
   the knife on a black canvas [RIAT p.218]. *Witness accounts.*
@@ -125,10 +125,10 @@ the artist during work.
 
 | Pigment | Evidence | Notes |
 |---|---|---|
-| Lead white | Named by a fellow student [RIAT p.52]; found in paint and ground of one still life [NG5983]; "a little" in the ébauche of a large canvas [ORS-ENT] | As a student he kept "the most ordinary colors, which are sold by the kilo," in huge bladders [RIAT p.52] |
+| Lead white | A fellow student names "white," pigment unspecified [RIAT p.52]; lead white found in paint and ground of one still life [NG5983]; "a little" in the ébauche of a large canvas [ORS-ENT] | As a student he kept "the most ordinary colors, which are sold by the kilo," in huge bladders [RIAT p.52] |
 | Yellow ochre / yellow earth | Named [RIAT p.52]; in the ground and orange-red paint of one still life [NG5983] | |
 | Vermilion | Named [RIAT p.52]; ground, upper ground and many paint layers of one still life [NG5983] | |
-| Black: ivory black, carbon black, charcoal | Named [RIAT p.52]; ivory black in ground and background; "probably charcoal" in the reddish-brown upper ground [NG5983] | |
+| Black: ivory black, carbon black, charcoal | A fellow student names "black," pigment unspecified [RIAT p.52]; ivory black in ground and background; "probably charcoal" in the reddish-brown upper ground [NG5983] | |
 | Red earth | Upper ground and background of one still life [NG5983] | |
 | Red lake | A thick glaze over an orange-red underlayer, and in background layers [NG5983] | |
 | Prussian blue with chrome yellow | Greens in other National Gallery Courbets are "mixed from Prussian blue and chrome yellow" [NG5983] | Stated as a general finding; the individual analyses were not read |
@@ -212,7 +212,7 @@ the artist during work.
 
 ## 7. The knife, the brush and other tools
 
-- **The knife.** The catalogue raisonné says his palette knife was the
+- **The knife.** The catalog raisonné says his palette knife was the
   spatula painters used to scrape color from the grinding slab, with the
   blade thinned by careful sharpening to make it more supple [FERN
   p.VIII]. *Late, secondhand account.* A visitor in 1869 saw him
@@ -333,7 +333,7 @@ there.
 - **Repentirs.** He changed one large composition "until the moment of
   hanging," and the repentirs aged into zones of increased transparency
   that restorers left visible [CRMF-ATL].
-- **Changes seen in X-rays.** Figures in another large canvas were
+- **Changes seen in X-rays.** Cattle in another large canvas were
   enlarged; their earlier outlines show as the paint became more
   transparent [MET-YL]. *Read through a search excerpt.* A family
   portrait had a figure painted out, and a double self-portrait was
@@ -374,8 +374,9 @@ earth → yellow ochre; vermilion → vermilion; red earth → red earth;
 ivory black, carbon black and charcoal → bone black (a proxy); red lake
 → rose madder (a proxy); Prussian blue → Prussian blue; chrome yellow →
 chrome yellow; cadmium yellow → cadmium yellow; Indian yellow → Indian
-yellow; viridian → viridian; French ultramarine → ultramarine blue. The
-last four rest on one painting (§4).
+yellow; viridian → viridian; French ultramarine → ultramarine blue.
+Cadmium yellow, Indian yellow and viridian rest on one still life;
+ultramarine was also found in the 1874 lake view (§4).
 
 ## Sources
 
@@ -392,7 +393,7 @@ last four rest on one painting (§4).
 - **[CRMF]** C2RMF, "Gustave Courbet étudié et restauré au C2RMF : un travail au long cours," updated 3 April 2025. Read directly. https://c2rmf.fr/actualite/le-c2rmf-et-gustave-courbet
 - **[MCO]** Musée Gustave Courbet, Ornans, *Les carnets du musée Gustave Courbet* n°2, "La nature comme tableau," p.6 (quoting Courthion, *Courbet raconté par lui-même et par ses amis*, 1948–50). Read directly. https://www.musee-courbet.fr/wp-content/uploads/carnet2-la-nature-comme-tableau.pdf
 - **[TECH-TB]** Collet, I. and Sindaco-Domas, C., "Les Trois baigneuses de Courbet (musée du Petit Palais) : restauration et découvertes," *Technè* 42 (2015). Read only through search excerpts (the journal site blocks automated reading). https://journals.openedition.org/techne/7176
-- **[TECH-M]** Mottin, B., "De La Source aux Trois baigneuses : les tableaux à transformations de Gustave Courbet," *Technè* 42 (2015). Abstract only. https://doi.org/10.4000/techne.6406
+- **[TECH-M]** Mottin, B., "De La Source aux Trois baigneuses : les tableaux à transformations de Gustave Courbet," *Technè* 42 (2015). Abstract only. https://doi.org/10.4000/techne.7155
 - **[REICHE15]** Reiche, I. et al., "Toward a three-dimensional vision of the different compositions and the stratigraphy of the painting L'Homme blessé by G. Courbet," *Applied Physics A* 121 (2015), 903–913. Abstract only. https://doi.org/10.1007/s00339-015-9428-1
 - **[REICHE16]** Reiche, I. et al., "New insights into the painting stratigraphy of L'Homme blessé by Gustave Courbet combining scanning macro-XRF and confocal micro-XRF," *Applied Physics A* 122 (2016), 947. Abstract only. https://doi.org/10.1007/s00339-016-0457-1
 - **[FINN]** Finnefrock, A. C. and Mass, J. L., "Pigment Analysis of a Landscape by Gustave Courbet," in *At the Source: A Courbet Landscape Rediscovered* (Philadelphia: Arthur Ross Gallery / Penn Press, 2023), p.105. Read through a search excerpt. https://doi.org/10.9783/9781734733853-013

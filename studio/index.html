@@ -447,7 +447,7 @@ function setPic(im, urls, loaded) {
 function displayPic(im, e, caption, label) {
   const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], url = preset.image && preset.image(e.img);
   const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
-  const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && m.trim() !== 'normal');
+  const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && !['normal', 'color'].includes(m.trim()));
   const lit = eligible && preset.image && e[lightName];
   const describe = () => {
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
@@ -1001,7 +1001,7 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(e.look);
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)/.test(e.look.replace(/mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)/g, ''));
 // the scratch canvas beside the painting: a look at it, or a chunk painted on it
 const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
 const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
@@ -1206,7 +1206,7 @@ function refWords() {
   const cur = allSessions.find(s => qOf(s) === Q), by = cur && cur.reference_artist;
   return ['Reference', by ? `A painting by ${by} that the painter is studying: not the painter's own picture.` : "A reference picture the painter is studying: not the painter's own picture."];
 }
-let crop = null, otherK = -1;  // the second look's window, outlined on the painting; the second picture's event
+let crop = null, cropUnits = 1000, otherK = -1;  // the second look's window, outlined on the painting; the second picture's event
 function second(k, w = -1) {
   const on = k >= 0; $('other').hidden = !on; $('view').classList.toggle('two', on); viewI2 = on ? events[k].img : -1; otherK = k;
   crop = null; $('other').classList.toggle('ref', on && !!events[k].ref);
@@ -1214,6 +1214,12 @@ function second(k, w = -1) {
     $('cap2').querySelector('b').textContent = e.ref ? t : lookWords(unscratched(e.look))[0].split(',')[0];
     const detail = e.ref ? null : cropOf(e.look);
     crop = detail && w >= k && wholePicture(events[w]) ? detail : null;
+    cropUnits = 1000;
+    if (crop) for (let j = w; j >= 0; j--) { const earlier = events[j];
+      if (earlier.kind !== 'paint' || !!earlier.scratch !== isScratch(events[w])) continue;
+      const cells = (earlier.out || '').match(/Lab GPU: (\d+)x(\d+) cells/);
+      if (cells) { cropUnits = +cells[1]; break; }
+    }
     const age = e.ref ? '' : snapshotAge(k, isScratch(e));
     displayPic($('img2'), e, $('cap2').querySelector('span'), ' · ' + [hhmm(e.ts), age].filter(Boolean).join(' · '));
     $('cap2').title = e.ref ? why : `Recorded look at ${hhmm(e.ts)}${age ? ': ' + age : ''}${why ? '. ' + why : ''}${crop ? '. Outlined on the painting.' : detail ? '. No outline: the whole look is older or unavailable.' : '.'}`;
@@ -1237,8 +1243,9 @@ function placeTag() {
 function placeCrop() {
   const im = $('img'), cb = $('cropbox');
   if (!crop || !im.naturalWidth || !im.src) { cb.hidden = true; return; }
-  const [left, top, w] = shownAt(im), u = w / 1000, H = 1000 * im.naturalHeight / im.naturalWidth, cl = (v, hi) => Math.max(0, Math.min(hi, v));
-  const [x0, y0, x1, y1] = [cl(crop[0], 1000), cl(crop[1], H), cl(crop[2], 1000), cl(crop[3], H)];
+  const W = cropUnits;
+  const [left, top, w] = shownAt(im), u = w / W, H = W * im.naturalHeight / im.naturalWidth, cl = (v, hi) => Math.max(0, Math.min(hi, v));
+  const [x0, y0, x1, y1] = [cl(crop[0], W), cl(crop[1], H), cl(crop[2], W), cl(crop[3], H)];
   if (x1 <= x0 || y1 <= y0) { cb.hidden = true; return; }
   Object.assign(cb.style, {left: left + x0 * u + 'px', top: top + y0 * u + 'px', width: (x1 - x0) * u + 'px', height: (y1 - y0) * u + 'px'});
   cb.hidden = false;
@@ -1258,12 +1265,20 @@ let rested = false;  // the view as last drawn was resting
 function pictures() {
   rested = resting();
   // at the scratch canvas (and a picture of it seen): it is the big picture and the painting the small one
-  let sc = scratchingAt(pos) && !rested;
-  const [w, o] = picturesAt(pos, rested, sc);
+  const atLiveEnd = live && pos === events.length - 1;
+  const boundary = atLiveEnd && scratchingAt(pos) ? events.slice(0, pos + 1).findLast(scratchBoundary) : null;
+  const pendingScratch = boundary && scratchReset(boundary) && !boundary.err && picturesAt(pos, true, true)[0] < 0;
+  let sc = scratchingAt(pos) && (!rested || pendingScratch);
+  let [w, o] = picturesAt(pos, rested, sc), previousScratch = false;
+  if (sc && pendingScratch) {
+    for (let k = pos; k >= 0; k--) { const e = events[k];
+      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e)) { w = k; o = -1; previousScratch = true; break; }
+    }
+  }
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img; $('nopic').hidden = true;
-    displayPic($('img'), img, $('cap'), pictureCaption(w, sc));
-    $('img').alt = sc ? 'the scratch canvas' : 'the painting';
+    displayPic($('img'), img, $('cap'), previousScratch ? `PREVIOUS scratch snapshot · awaiting fresh look · ${hhmm(img.ts)}` : pictureCaption(w, sc));
+    $('img').alt = previousScratch ? 'a previous scratch snapshot, awaiting a fresh look' : sc ? 'the scratch canvas' : 'the painting';
     second(o, w); }
   else if (o >= 0) { noPainting(); second(o); shape(); }  // only a reference picture so far: it shows beside the painting's empty place
   else { noPicture(); if (sc) { $('nopic').textContent = 'No current scratch look'; $('cap').textContent = 'Scratch canvas'; } }
@@ -1293,7 +1308,11 @@ function show(i) {
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 // replay steps through the painting: each whole look in turn (before the look tool, each picture), with the thinking that led to it
-const steps = () => looks().filter(k => !events[k].ref && (!hasLooks ? events[k].whole !== false : isWhole(events[k])));
+const steps = () => {
+  const L = looks().filter(k => !events[k].ref && !isPalette(events[k]));
+  const W = L.filter(k => !hasLooks ? events[k].whole !== false : isWhole(events[k]));
+  return W.length ? W : L.filter(k => isScratch(events[k]));
+};
 function stop() { if (playing) { clearTimeout(playing); playing = null; } $('play').textContent = '▶ Replay'; $('play').title = 'watch the painting grow, one look at a time  space'; }
 function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {

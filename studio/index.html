@@ -331,7 +331,7 @@ const imgURL = i => STATIC ? dataURL(`data/${dataPainter()}/img/${i}.${IMGEXT[i]
 const lightURL = (i, light) => STATIC ? dataURL(`data/${dataPainter()}/${light}/${i}.png`) : `/img?${Q}&epoch=${epoch}&i=${i}&${light}=1`;
 const DISPLAY_LIGHTS = { color:{ label:'Color' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
-try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
+if (!STREAM) try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
 function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }
 for (const [id, preset] of Object.entries(DISPLAY_LIGHTS)) {
   const button = document.createElement('button'); button.id = id; button.type = 'button'; button.textContent = preset.label;
@@ -477,10 +477,10 @@ function displayPic(im, e, caption, label) {
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   describe();
-  setPic(im, urls, u => { im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
+  setPic(im, urls, u => { im.dataset.picture = e.img; im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
 }
 const zoomURL = im => im.dataset.zoom || im.src;
-function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
+function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.picture; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
 $('pklist').onclick = e => {
@@ -1277,7 +1277,7 @@ function shape() {
   if (im.naturalWidth) $('view').classList.toggle('tall', im.naturalWidth < im.naturalHeight * 1.15);
   placeCrop(); placeTag();
 }
-$('img').addEventListener('load', shape); $('img').addEventListener('load', warmSoon); $('img2').addEventListener('load', shape);
+$('img').addEventListener('load', shape); $('img').addEventListener('load', warmSoon); $('img').addEventListener('load', () => { if (events.length) pictures(); }); $('img2').addEventListener('load', shape);
 { const ro = new ResizeObserver(() => { placeCrop(); placeTag(); }); ro.observe($('whole')); ro.observe($('other')); }
 
 // ---- show event i everywhere
@@ -1315,7 +1315,7 @@ function pictures() {
 // the other canvas in the corner (k: its picture's event, -1 none); sc: the big picture is the scratch canvas
 let pipI = -1;
 function pip(k, sc) {
-  const on = k >= 0 && (sc || events[k] && isScratch(events[k])); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
+  const on = k >= 0 && (sc || events[k] && isScratch(events[k])) && !(sc && $('img').dataset.picture === String(events[k].img)); $('pip').hidden = !on; pipI = on ? events[k].img : -1;
   $('pip').classList.toggle('painting', on && !!sc);
   if (!on) { clearPic($('pipimg')); return; }
   displayPic($('pipimg'), events[k], $('pipcap'), pictureCaption(k, !sc));

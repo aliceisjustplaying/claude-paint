@@ -166,6 +166,7 @@ async function pollUpdate(v, i, replacement) {
         ev('paint', {scratch:true, new_scratch:true, code:'work{}', out:'ok', ts:new Date().toISOString()}, 4));
       await remains();
       assert.equal(await v.page.locator('#cap').textContent(), 'The painting · awaiting first scratch look');
+      assert.equal(await v.page.locator('#pip').isVisible(), false);
       let release;
       const held = new Promise(resolve => { release = resolve; });
       await v.page.route(u => u.pathname === '/img' && u.searchParams.get('i') === '1', async route => { await held; await route.fallback(); });
@@ -175,10 +176,13 @@ async function pollUpdate(v, i, replacement) {
       await v.page.waitForFunction(() => document.getElementById('img').dataset.want.includes('i=1'));
       await remains();
       assert.equal(await v.page.locator('#cap').textContent(), 'The painting · awaiting first scratch look');
+      assert.equal(await v.page.locator('#pip').isVisible(), false);
       release();
       await v.page.waitForFunction(() => { const im = document.getElementById('img'); return im.dataset.loadedWant === im.dataset.want && im.complete && im.naturalWidth > 0; });
       assert.notEqual(await v.page.locator('#img').getAttribute('src'), painting);
       assert.match(await v.page.locator('#cap').textContent(), /^Scratch canvas · /);
+      await v.page.waitForFunction(() => { const im = document.getElementById('pipimg'); return !document.getElementById('pip').hidden && im.complete && im.naturalWidth > 0; });
+      assert.equal(await v.page.locator('#pipimg').getAttribute('data-picture'), '0');
       await v.page.close();
     }
     report.checks.push('first scratch keeps the painting visible until the delayed scratch image loads in normal/stream views');

@@ -79,13 +79,32 @@ mv "$finished.part" "$finished"
 # the save the painter's session wrote when it closed: <studio>/out/easel/<name>/live.ckpt
 name=$(basename "$log" .lua)
 save=$(cd "$(dirname "$log")/../.." && pwd)/out/easel/$name/live.ckpt
-if [ -f "$save" ]; then
-  if "$easel" finish "$save" "$out" --log "$log" "${opts[@]}"; then
-    if command -v zstd >/dev/null; then zstd -q -T2 --rm -f "$save"; else gzip -1 -f "$save"; fi
-    echo "finished from the save: $out (log: $finished; save compressed)"
+for candidate in "$save" "$save.zst" "$save.gz"; do
+  [ -f "$candidate" ] || continue
+  input=$candidate
+  temporary=
+  if [[ $candidate = *.gz ]]; then
+    temporary=$(mktemp "${TMPDIR:-/tmp}/finish-save.XXXXXX")
+    trap 'rm -f "$temporary"' EXIT
+    if ! gzip -dc "$candidate" > "$temporary"; then
+      echo "finish_painting: couldn't read saved end state $candidate; trying the next save" >&2
+      rm -f "$temporary"
+      trap - EXIT
+      continue
+    fi
+    input=$temporary
+  fi
+  if "$easel" finish "$input" "$out" --log "$log" "${opts[@]}"; then
+    if [ "$candidate" = "$save" ]; then
+      if command -v zstd >/dev/null; then zstd -q -T2 --rm -f "$save"; else gzip -1 -f "$save"; fi
+    fi
+    echo "finished from the save: $out (log: $finished; saved end state: $candidate; no replay)"
     exit 0
   fi
-  echo "finish_painting: the save didn't finish (above); replaying the log instead" >&2
-fi
+  [ -z "$temporary" ] || rm -f "$temporary"
+  trap - EXIT
+  echo "finish_painting: saved end state $candidate didn't match or couldn't finish; trying the next save" >&2
+done
+echo "finish_painting: no usable matching saved end state; replaying the full log $log" >&2
 "$easel" run "$finished" --out "$out"
 echo "finished: $out (log: $finished)"

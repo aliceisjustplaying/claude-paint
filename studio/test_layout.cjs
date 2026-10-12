@@ -139,6 +139,9 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
           });
           await appendThought(); await page.waitForFunction(() => typingThought === null);
           assert(await paintingOnScreen(), label + ': the painting stays on screen while the painter works on scratch');
+          await scroller.evaluate(el => el.scrollTop = 0);
+          assert(await paintingOnScreen(), label + ': the painting is on top during scratch work, scrolled to the start');
+          await scroller.evaluate(el => el.scrollTop = el.scrollHeight);
           await page.evaluate(() => { events.splice(-4); show(events.length - 1); });
         }
         if (shots) await page.screenshot({ path:path.join(shots, label + '-live-append.png') });

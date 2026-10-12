@@ -237,9 +237,11 @@
   }
   /* phone, portrait (not the stream): the painting stays pinned at the top while everything else (close-up,
      scratch canvas, palette, journal) scrolls and follows beneath it. The view pane dissolves so the painting can
-     stick to main. While the painter works on scratch, the painting is in the corner picture, so that one is pinned. */
+     stick to main. While the painter works on scratch, the painting is in the corner picture, so that one moves first and is pinned. */
   @media (max-width: 720px) and (min-height: 501px) and (orientation: portrait) {
-    body.pinpic main { position:relative }
+    body.pinpic main { position:relative; display:flex; flex-direction:column }
+    body.pinpic :is(#lighting, #whole, #other, #pal, #pip, #pband, #journal) { flex:none }
+    body.pinpic #lighting { order:-2 } body.pinpic #pip.painting { order:-1 }
     body.pinpic #viewpane, body.pinpic #view, body.pinpic #viewpane:has(#pip:not([hidden])) { display:contents }
     body.pinpic #whole { position:sticky; top:0; z-index:3; background:#070708; padding:4px 4px 3px; border-bottom:1px solid var(--line) }
     body.pinpic #whole img { max-height:42dvh; object-fit:contain }

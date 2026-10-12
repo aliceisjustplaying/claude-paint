@@ -83,8 +83,9 @@ even load.
 
 `b:wash{x=, y=, width=, height=, grade=}` lays a rectangle as rows of brush
 strokes. Its coordinates and dimensions are in cells. It takes the same
-pressure, dry-contact, grade and duration options. The brush can run out of
-water or pigment before it covers the whole area.
+pressure, dry-contact, grade and duration options. Each row starts with the
+brush's starting water and pigment load. That load is gradually replenished
+along the row so a loaded brush can cover the rectangle.
 
 `drop{x=, y=, water=<microliters>, radius=<cells>}` adds clean water: 0 to
 100 microliters over a radius of 1 to 1,200 cells, 12 by default. Water can

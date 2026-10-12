@@ -43,6 +43,17 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   clock too. In a slow stroke the first contacts have begun drying before
   the last ones land. Give a stroke that should stay wet along its length a
   short duration.
+- **Broad areas.** In the first watercolor sitting, rows of short
+  topped-up strokes on dry paper (6 µL per top-up, width 80) lost their
+  standing water within about 2 seconds of the last stroke and were dry
+  within about 4. A pre-wet grid of `drop{}` (radius 80, about
+  118 × 95 cells apart) kept the area wet for 2 to 4 seconds after the last
+  stroke at 5 to 8 µL a drop. A 22 µL grid (radius 85, about 118 × 100
+  cells apart) kept it wet for about 12 seconds. Nine
+  rows across the whole 1,056-cell width of the sheet, laid in 25-cell
+  segments at 3,500 cells a second, took 2.8 seconds of painter clock.
+  Rows that took 4 seconds to lay over a 4 µL pre-wet showed bands where
+  they landed late; rows laid in 2.8 seconds over a 5 µL pre-wet blended.
 - **Reading the stage.** `balance()` returns `max_surface_water`,
   `max_wetness` and `dry`. Standing water above 0.002 means some of the
   sheet is still wet; 0.002 or less with wetness left is damp; `dry` is true when wetness
@@ -75,6 +86,28 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   contact around the nominal width.
 - `b:wash{x=, y=, width=, height=}` lays a rectangle as rows of strokes;
   `grade=` thins the pigment from top to bottom (`1` is even).
+
+## Broad areas
+
+What the first watercolor sitting found when it covered large areas with
+rows of strokes:
+
+- **A fresh load lands heaviest at the start of the next stroke.** With
+  width-60 brushes, 20 µL per 120-cell segment left a bloom at every
+  segment start, and 8 µL per 60 cells was nearly even. Topping the brush
+  up to a fixed load of 2 to 6 µL every 10 to 30 cells laid an even band.
+  To top up, load the difference between the target and what `b:status()`
+  reports.
+- **Every segment is a stroke call**, and stroke calls set a chunk's wall
+  time (see the easel guide's Lua section).
+- **Row edges show.** Neighboring rows of one mix laid in quick succession
+  on dry paper merged. Where a row ended it left a hard, slightly ragged
+  edge, and rows laid after their neighbors had dried showed as stripes.
+  Short stacked rows read as flat bars with rounded ends.
+- **A light pre-wet joins the rows.** A grid of 5 µL drops (radius 80,
+  about 118 × 95 cells apart) laid just before the rows let neighboring
+  rows blend while the colors stayed roughly in place. At 22 µL a drop the
+  pigment traveled across the wet area and piled up at its boundary.
 
 ## Wet-in-wet
 
@@ -150,6 +183,16 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   how much depends on the load. Transparent ones let what is under them show
   through. Try a glaze over the same
   underlayer on the scratch paper first.
+- **Weak mixes vanish over dark or strong passages.** In the first watercolor
+  sitting, over a dried `burnt-umber` and `french-ultramarine` passage,
+  `buff-titanium` and `naples-yellow` at 0.1 to 0.15 units per 2.5 to
+  3 µL disappeared, and 0.6 to 0.8 units per 1.5 µL showed as light marks.
+  Over the same passage, dark lines from brushes 2 to 9 cells wide needed
+  about 0.25 to 0.35 `sepia` with 0.2 to 0.25 `french-ultramarine` per
+  0.4 to 1 µL; 0.15 `sepia` with 0.1 `french-ultramarine` hardly showed at
+  width 2. A glaze
+  of 0.03 `quinacridone-rose` with 0.012 `french-ultramarine` per 2.2 µL
+  barely changed a dried `cobalt-blue` and `buff-titanium` passage.
 
 ## Dry brush
 
@@ -176,6 +219,13 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 
 ## Finishing
 
-- Let the sheet dry (`balance().dry`) before the last look. The studio viewer
-  shows the painting in Gallery light by default; `look` with
-  `mode="gallery"` shows the same.
+- Let the sheet dry (`balance().dry`) before the final looks; a last
+  `paint` chunk can `wait` and print `balance().dry`.
+- The brief's final look in normal color is a whole-sheet `look` and
+  detail crops, all without `mode`, taken after the last `paint` call on the
+  painting. A `paint` call on the painting after them, even one that only
+  waits or prints, means taking them again. `paint` calls on the scratch
+  sheet leave them standing.
+- Gallery and Relief looks are extra views. The studio viewer shows the
+  painting in Gallery light by default; `look` with `mode="gallery"` shows
+  the same.

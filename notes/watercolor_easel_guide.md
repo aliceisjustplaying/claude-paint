@@ -60,8 +60,8 @@ microliters of water and 0 to 10 arbitrary mass units of each pigment, and
 can load several pigments together. The brush holds a finite amount and
 keeps what it hasn't laid between strokes and chunks. `b:status()` reports
 its `width` and its remaining `water` and `pigments`. Loads add up with no
-ceiling: five loads of 100 microliters leave the brush holding 500. A new
-name gives a clean, empty brush.
+ceiling: five loads of 100 microliters leave the brush holding 500
+microliters. A new name gives a clean, empty brush.
 With a width-24 round at pressure 0.35 on cold-press paper, 40 µL water/1 French Ultramarine unit and 80 µL/2 units each carried a fading 936-cell stroke, leaving 3.30 and 9.01 µL.
 
 ## Marks and water
@@ -171,8 +171,8 @@ a glaze or a drying time before it goes on the painting. `paint`, `look`,
 the painting.
 
 - The first use sets it up as the painting's paper was set up: the same
-  size, kind and seed. The painting needs its own `paper{}` first. A
-  scratch sheet, the first one or a fresh one, already has its paper, so
+  size, kind and seed. The painting needs its own `paper{}` first. Each
+  scratch sheet, the first and every fresh one, comes with its paper, so
   scratch chunks start without `paper{}`.
 - It is a separate sheet with its own brushes, loads, clock and log,
   `paintings/lua/scratch.lua`. Load a brush again here. Nothing done on
@@ -197,9 +197,9 @@ and waiting run outside that instruction budget. Keep the same runner build
 when continuing a painting.
 
 A `paint` call has 12 minutes of wall time, on either sheet. A chunk still
-running then is stopped, and the call replies "the easel didn't answer;
-`log` shows whether the chunk ran". Wall time grows with the number of
-stroke calls more than with their length. In the first watercolor sitting,
+running at 12 minutes is stopped, and the call replies "the easel didn't
+answer; `log` shows whether the chunk ran". Wall time grows with the number
+of stroke calls more than with their length. In the first watercolor sitting,
 on the Mac GPU at 1,056 × 704 cells, stroke calls took about 0.3 seconds
 each: chunks of 1,100 to 1,300 strokes took 5 to 8 minutes, and a chunk of
 about 3,900 strokes was stopped. The sheet stays as it was between chunks,

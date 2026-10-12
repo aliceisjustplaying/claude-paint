@@ -43,16 +43,16 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   clock too. In a slow stroke the first contacts have begun drying before
   the last ones land. Give a stroke that should stay wet along its length a
   short duration.
-- **Larger areas.** In the first watercolor sitting, rows of short
+- **Broad areas.** In the first watercolor sitting, rows of short
   topped-up strokes on dry paper (6 µL per top-up, width 80) lost their
   standing water within about 2 seconds of the last stroke and were dry
   within about 4. A pre-wet grid of `drop{}` (radius 80, about
   118 × 95 cells apart) kept the area wet for 2 to 4 seconds after the last
-  stroke at 5 to 8 µL a drop, and for about 12 seconds at 22 µL. Laying
-  takes painter clock too: nine full-width rows of 25-cell segments at
-  3,500 cells a second took 2.8 seconds. Rows laid over 4 seconds onto a
-  4 µL pre-wet banded where they landed late; at 5 µL and 2.8 seconds they
-  blended.
+  stroke at 5 to 8 µL a drop, and for about 12 seconds at 22 µL. Nine
+  full-width rows of 25-cell segments at 3,500 cells a second took 2.8
+  seconds of painter clock to lay. Rows that took 4 seconds to lay over a
+  4 µL pre-wet showed bands where they landed late; rows laid in 2.8 seconds
+  over a 5 µL pre-wet blended.
 - **Reading the stage.** `balance()` returns `max_surface_water`,
   `max_wetness` and `dry`. Standing water above 0.002 means some of the
   sheet is still wet; 0.002 or less with wetness left is damp; `dry` is true when wetness
@@ -91,14 +91,14 @@ watercolor behaves. What you paint is yours to choose. In the examples,
 What the first watercolor sitting found when it covered large areas with
 rows of strokes:
 
-- **A fresh load lands heaviest where the next stroke starts.** With
+- **A fresh load lands heaviest at the start of the next stroke.** With
   width-60 brushes, 20 µL per 120-cell segment left a bloom at every
   segment start, and 8 µL per 60 cells was nearly even. Topping the brush
   up to a fixed load of 2 to 6 µL every 10 to 30 cells laid an even band.
   To top up, load the difference between the target and what `b:status()`
   reports.
 - **Every segment is a stroke call**, and stroke calls set a chunk's wall
-  time (the easel guide's Lua section).
+  time (see the easel guide's Lua section).
 - **Row edges show.** Neighboring rows of one mix laid in quick succession
   on dry paper merged. Where a row ended it left a hard, slightly ragged
   edge, and rows laid after their neighbors had dried showed as stripes.
@@ -220,9 +220,10 @@ rows of strokes:
 - Let the sheet dry (`balance().dry`) before the final looks; a last
   `paint` chunk can `wait` and print `balance().dry`.
 - The brief's final look in normal color is a whole-sheet `look` and
-  detail crops, all without `mode`, after the last `paint` call on the
-  painting. A `paint` call after them, even one that only waits or prints,
-  needs new looks. Calls on the scratch sheet don't count as changes.
+  detail crops, all without `mode`, taken after the last `paint` call on the
+  painting. A `paint` call on the painting after them, even one that only
+  waits or prints, means taking them again. `paint` calls on the scratch
+  sheet leave them standing.
 - Gallery and Relief looks are extra views. The studio viewer shows the
   painting in Gallery light by default; `look` with `mode="gallery"` shows
   the same.

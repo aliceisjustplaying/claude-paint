@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://watercolor.ryankm.com/sitemap.xml

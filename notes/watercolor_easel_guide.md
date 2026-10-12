@@ -25,7 +25,8 @@ paper{width=<cells>, height=<cells>, kind="<kind>", seed=<seed>}
 
 The defaults are width 1,056, height 704, `"cold-press"` and seed 71, so
 `paper{}` makes that sheet. The paper is created once; a continuation chunk
-paints on the existing sheet.
+paints on the existing sheet. `paper{}` on a sheet that already has paper
+stops the chunk with "paper already exists".
 
 Coordinates and brush widths are in cells. The origin is the upper-left
 corner; x increases to the right and y downward. Fractional coordinates are
@@ -56,10 +57,11 @@ b:load{water=<microliters>, pigments={["<pigment>"]=<amount>}}
 
 A load adds to what the brush already holds. Each call takes 0 to 100
 microliters of water and 0 to 10 arbitrary mass units of each pigment, and
-can load several pigments together. The brush holds a finite amount and
-keeps what it hasn't laid between strokes and chunks. `b:status()` reports
-its `width` and its remaining `water` and `pigments`. A new name gives a
-clean, empty brush.
+can load several pigments together. There is no cap on what a brush can
+hold: five loads of 100 microliters leave it holding 500 microliters.
+Strokes use the load up as they lay it, and the brush keeps what it hasn't
+laid between strokes and chunks. `b:status()` reports its `width` and its
+remaining `water` and `pigments`. A new name gives a clean, empty brush.
 With a width-24 round at pressure 0.35 on cold-press paper, 40 µL water/1 French Ultramarine unit and 80 µL/2 units each carried a fading 936-cell stroke, leaving 3.30 and 9.01 µL.
 
 ## Marks and water
@@ -89,7 +91,9 @@ along the row so a loaded brush can cover the rectangle.
 
 `drop{x=, y=, water=<microliters>, radius=<cells>}` adds clean water: 0 to
 100 microliters over a radius of 1 to 1,200 cells, 12 by default. Water can
-move workable paint and make a backrun.
+move workable paint and make a backrun. A drop lands at once and takes no
+painter-clock time. A drop whose circle misses the sheet entirely stops the
+chunk with "drop is outside paper". Stroke paths can run past the edges.
 
 `b:lift(path)` lays the round lift contact along a path of the same form.
 It supplies water from the brush, loosens workable pigment on the sheet and
@@ -141,8 +145,9 @@ Looking changes neither the material nor the clock.
 
 `size` sets the long side of a whole-sheet look, from 16 to 2,400 pixels.
 Without it, the view has one pixel per cell. `crop: "x0,y0,x1,y1"` gives two
-opposite corners in integer cells and returns that region at 1:1. The `look`
-tool takes `mode`, `size`, `crop` and `scratch`.
+opposite corners in integer cells and returns that region at 1:1; `size`
+has no effect on a crop. The `look` tool takes `mode`, `size`, `crop` and
+`scratch`.
 
 Within Lua, `look{path="<name>.png", mode="color", width=<pixels>}` writes a
 PNG into the studio, from 1 to 2,400 pixels wide. A Lua crop is
@@ -167,7 +172,9 @@ a glaze or a drying time before it goes on the painting. `paint`, `look`,
 the painting.
 
 - The first use sets it up as the painting's paper was set up: the same
-  size, kind and seed. The painting needs its own `paper{}` first.
+  size, kind and seed. The painting needs its own `paper{}` first. Each
+  scratch sheet, the first and every fresh one, comes with its paper, so
+  scratch chunks start without `paper{}`.
 - It is a separate sheet with its own brushes, loads, clock and log,
   `paintings/lua/scratch.lua`. Load a brush again here. Nothing done on
   it reaches the painting.
@@ -189,3 +196,12 @@ Lua has the math, table, string and utf8 libraries, a 128 MB memory limit
 and a budget of about two million instructions per chunk. Native painting
 and waiting run outside that instruction budget. Keep the same runner build
 when continuing a painting.
+
+A `paint` call has 12 minutes of wall time, on either sheet. A chunk still
+running at 12 minutes is stopped, and the call replies "the easel didn't
+answer; `log` shows whether the chunk ran". Wall time grows with the number
+of stroke calls more than with their length. In the first watercolor sitting,
+on the Mac GPU at 1,056 × 704 cells, stroke calls took about 0.3 seconds
+each: chunks of 1,100 to 1,300 strokes took 5 to 8 minutes, and a chunk of
+about 3,900 strokes was stopped. The sheet stays as it was between chunks,
+so a long pass can continue in the next chunk while its paint is still wet.

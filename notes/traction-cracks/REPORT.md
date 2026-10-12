@@ -68,3 +68,121 @@ three extra years before the topcoat; the engine-5 control uses the same films.
 This diagnostic isolates drying behavior and is not a whole painting replay.
 
 Only the engine assignment remains an integration question.
+
+![Traction controls](evidence/traction-controls.png)
+
+Left: still-soft undercoat; center: hardened undercoat; right: engine 5.
+At 60 days the 320 px study's dark-pixel shares are 0.14775988, 0 and 0;
+mean linear luminance is 0.64947033, 0.75960767 and 0.75960767. Full settings
+are in [measurements.csv](evidence/measurements.csv). Individual images are
+[soft](evidence/soft-undercoat.png),
+[hardened](evidence/hardened-undercoat.png) and
+[engine 5](evidence/engine-5.png).
+
+## Validation
+
+macOS arm64, rustc 1.97.1, repository build profiles and fixed Lua hash seed.
+Every heavy job used the unchanged machine-wide `scripts/lockrun`.
+
+| Check | Result |
+| --- | --- |
+| `scripts/test --all`, engine commit `bc14cf3` | Completed: 29 steps, 1,110 runner-reported checks; exit 4, known rag failures only; 662.5 s |
+| Final `scripts/test`, commit `002fc74` | Completed: 12 steps, 456 checks; exit 4, known rag failures only; 202 s |
+| Replay release build | Passed in both gates |
+| `cargo build --locked -p easel --no-default-features` | Passed |
+| `cargo test --locked -p easel --no-default-features` | 102 passed, 1 ignored |
+| Paint traction/checkpoint tests, `--no-default-features` | 14 passed, 1 ignored study |
+| Port's explicit study writer | 1 passed; PNGs/CSV generated |
+| Current-main versus candidate old-log capture | All 11 PNGs and state digests byte-identical; each binary's repeated output identical |
+
+The only code change after the full gate is a feature guard and explanatory
+comment on an existing historical-globals **test**. The final fast gate and
+bare painter tests cover that guard; production engine code is unchanged.
+The final evidence commit adds reports and images only. The [validation archive](evidence/validation-receipts.zip) contains
+`all-checks.json` and `fast-checks.json`, recording revisions, clean-tree status,
+individual commands, counts, timings and log hashes. It also contains the
+baseline/control logs and the resumed painter/study/replay checks.
+
+Normal tests cover soft/hardened/engine-5 controls, first `dry()`, fractional
+and ten-year waits, nonuniform films and recoating, exact checkpoint
+continuation and 1/4-thread equivalence, crop coordinates, cache size/seed
+changes, textured undercoat relief and all material endpoints, glaze/varnish
+ownership, and malformed new checkpoint sections. A separate gel-rounding
+regression failed before clamping the gel date and passes afterward. Surface
+partition tolerances are 0.00002 for RGB/film/gloss/absorbency and 0.002 µm for
+height; softness origins agree within 0.0002 µm and dates within 0.02 minutes.
+These are small f32 differences, not permission for waits to suppress damage.
+
+### Known failures, reproduced on main
+
+The full gate is **not all green**. `cargo-test` fails only
+`rag::tests::a_dry_rag_leaves_a_pale_tint_and_spirits_lift_nearly_to_the_ground`:
+the spirits tuple is
+`(0.9744869296698226, 0.8993446396277543, 0.9429845376359838)`;
+the hollow-film share misses the required `> 0.9`. The exact same tuple was
+reproduced on untouched current main; `main-rag.log` in the validation archive
+is retained. `baseline-state` and `thinner-all` report the related known
+historical rag baseline mismatch; unchanged main's baseline check also fails.
+The final fast gate's `thinner-quick` reports that same mismatch. Every other
+required step passes. No rag assertion or expected answer was changed.
+
+### Pre-existing painter test configuration defects
+
+Untouched main's bare painter tests first fail to compile: the default-box
+`a_palette_look_changes_nothing` test references replay-only
+`state_digest_line` (four E0425 errors). The port gates this test on `replay`;
+`main-painter-compile.log` in that archive is retained.
+
+With only that compile repair, main's
+`api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` fails in the bare
+build: 66 globals / hash 415863763 versus the historical 69 / 602616302.
+The historical build included `varnish`, `cracks` and `relief`; these are owned
+by the `finish` feature. Enabling only `finish` makes the same exact test pass
+on main. The port therefore gates this historical fingerprint on `finish`,
+without changing its answer. This also handles replay-without-finish builds
+correctly. The independent control report, bare failure and finish-only pass are retained
+as `painter-control-*` files in the validation archive. The
+control worktree contained no port code and was removed afterward.
+
+### Exact old-log evidence
+
+[old-log-comparison.csv](evidence/old-log-comparison.csv) records matching
+before/after PNG and state-digest SHA256 for all 11 existing cases. The
+[main manifest](evidence/main-manifest.json) binds the independent unchanged
+`b4f9c4e` capture; the [candidate manifest](evidence/candidate-manifest.json)
+binds clean commit `002fc74`, input hashes, compiler and executable hashes.
+[old-log-replays.zip](evidence/old-log-replays.zip) includes both complete
+captures for inspection. Only the non-state `secs=` field is removed; every
+other digest byte is preserved. All PNGs also match their existing historical
+macOS arm64 references. This platform-specific exact comparison does not
+replace the project's cross-platform image-tolerance policy.
+
+The current-main digest of `easel4_free` already differs from the older
+`af49348` historical digest, while its PNG remains byte-identical. The required
+compatibility comparison here is candidate versus current main; it is exact.
+No historical fixture was regenerated.
+
+### Reproduction
+
+The temporary paths below are placeholders; use separate build targets for
+replay and painter configurations. The committed capture helper reads the
+existing tiny cases only and never writes their protected fixture tree.
+
+```sh
+export CARGO_TARGET_DIR="$TMPDIR/traction-replay-target"
+scripts/test --all --summary "$TMPDIR/traction-all.json"
+scripts/lockrun --timeout 600 -- cargo build --locked -p easel --no-default-features --target-dir "$TMPDIR/traction-painter-target"
+scripts/lockrun --timeout 600 -- cargo test --locked -p easel --no-default-features --target-dir "$TMPDIR/traction-painter-target"
+scripts/lockrun --timeout 600 -- cargo test --locked -p paint --no-default-features --lib traction --target-dir "$TMPDIR/traction-painter-target"
+TRACTION_STUDY_OUT="$TMPDIR/traction-study" scripts/lockrun --timeout 60 -- cargo test --locked -p paint --lib traction::tests::write_traction_study -- --ignored --exact
+scripts/lockrun --timeout 60 -- python3 notes/traction-cracks/capture_old_logs.py . "$CARGO_TARGET_DIR/release/easel" "$TMPDIR/traction-after" --compare "$TMPDIR/traction-before"
+```
+
+Build and capture untouched `b4f9c4e` separately to produce `traction-before`.
+The first cold full run exceeded its 600 s check-phase budget during the box
+matrix. Its unfinished group was isolated and all 28 box cases passed in
+97.9 s; the final full run then completed within both unchanged phase limits.
+One later paint-test compilation exhausted scratch disk space; task-created
+caches were removed and the unfinished check completed. Neither event is
+counted as a pass. No whole painting was replayed. Temporary control/build
+directories are cleaned after preserving these receipts.

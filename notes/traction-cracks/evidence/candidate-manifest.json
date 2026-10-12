@@ -1,0 +1,132 @@
+{
+  "commit": "002fc74ef07df437766010c50994c7dd99d8f872",
+  "working_tree_dirty": false,
+  "binary_sha256": "762b5ac3eeacb68c445b2963cec0be7eed9fd70287dee075eb46d42ec3bc6bad",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "rustc_verbose": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6",
+  "host": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "cases_tsv_sha256": "4675f0233bb8d4e06afa4b91aa2709c52d1c3a718005de35607fe85cf6e55427",
+  "digest_normalization": "remove only secs= fields; retain all other bytes",
+  "cases": [
+    {
+      "case": "engine1_tiny",
+      "input": "engine1_tiny.lua",
+      "width": 160,
+      "input_sha256": "2008650c208b4bc8f7e39c860c6d5481eb6145cabeffa76a61cb04375d4ca9c3",
+      "png_sha256": "a0d58a9e1f252e63f4dbd2774043109b74e87ca2db1e6ef973ef11753a6d32a8",
+      "state_digest_sha256": "d664302166818685ca7c2b8e247c72bb22a297c73a101af3ae5cc507c14a49db",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "studio_6399ad",
+      "input": "studio_6399ad.first3.lua",
+      "width": 128,
+      "input_sha256": "96cb8e4608d995f336588c6d3a0919637afffd56bee1ee78f3b2950feb9ec3f3",
+      "png_sha256": "b1dc00c54836e5fd3daf23984172e4e74dfdec7798d2ae3647def574586de7e0",
+      "state_digest_sha256": "df251583a0cbdb6445c6637ca19f63ef8f74012b29e84f6b25e4d0e6e4e1b839",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "studio_db6324",
+      "input": "studio_db6324.first3.lua",
+      "width": 128,
+      "input_sha256": "e0d80d66507e8304be33bd29107dd5876a00722424b5809db2ac9dff8c699c52",
+      "png_sha256": "44f8cd8433881049548cade57cf0c16c95972ebec72c34db1c58dc8646a3b1bb",
+      "state_digest_sha256": "0188b56396132c70b3cb31bc86891c627e1bb1e9ae1d0e475db16c1166c208a2",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel3_free",
+      "input": "easel3_free.first3.lua",
+      "width": 128,
+      "input_sha256": "004e1f94a9c80e4126a7edc3de9b7be01697068ddc3733b38ae64802c15b0712",
+      "png_sha256": "2e9e37cd2b228121a71beeea9f0ca0719bca886e69be151941ee65b238aeb972",
+      "state_digest_sha256": "60d85891daaf5864f3b6a396e1bb8e8fb9722f1e7757c4aba68eb4dc0ba63ce8",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel3_green",
+      "input": "easel3_green.first3.lua",
+      "width": 128,
+      "input_sha256": "a9ba1510252b2b3b140ee83a0c6a5fc7bad23cf016bd94ba7596e2db857bc017",
+      "png_sha256": "29ae47c9c2064a080f2da74e22264be2a0bef5220ac7246be2444f37141a9efe",
+      "state_digest_sha256": "fe70d3803719f8e4e87ff4d33eec9ad302c6d38439f611fffac327babaa35c80",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel3_near",
+      "input": "easel3_near.first2.lua",
+      "width": 128,
+      "input_sha256": "6fe66135eba6ab2f101c6bb561bfe5ebf39c11835fc8788786cea049b28a63fb",
+      "png_sha256": "046f0e110afc1ef6fa110be9f2d82cfcb21b404744688af6bd4fd4f487bf3d46",
+      "state_digest_sha256": "7bc8eead30291de0ee35dfeda969e2b2435de452df039ba70060e21a78494c9d",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel4_free",
+      "input": "easel4_free.first3.lua",
+      "width": 128,
+      "input_sha256": "8348868c3cac0b4a67057f08e74d74398e6bda5d213249f027eaf126464a654e",
+      "png_sha256": "6db971f8531ce7f4cc6c040b69b5cf9da335b7de9589db97637384d02ad70d3d",
+      "state_digest_sha256": "aa554fac75074cd268ec009e74bd32babb07d72b8ec417c6db346f2cfd0c5f38",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel4_green",
+      "input": "easel4_green.first3.lua",
+      "width": 128,
+      "input_sha256": "b6a3ff61d18398e30a614a4941c975128e2e6120f6c3508461c8af038f8c778e",
+      "png_sha256": "3929af1b6f1e16682c0ca481598091157d62a51c58661ee140a3e1924deb0700",
+      "state_digest_sha256": "a02803793662657cb07ce0faf7021e56f55320c4db25d95f7ccd3b40e315c106",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "easel4_near",
+      "input": "easel4_near.first3.lua",
+      "width": 128,
+      "input_sha256": "157d37784a7c6e6dccbba2c6db5d0838e5e820c6e24fa28529143657e054b260",
+      "png_sha256": "3ac60db9dbb46c4d89b0b47be4aa0a4b3a07252af1c89ca19eafa37e2175451b",
+      "state_digest_sha256": "d88a7e0f7d598398cc4fdc3355d6396046608052e3c299377e60bd9ce4c786f6",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "r19",
+      "input": "../r19_default_box.lua",
+      "width": 320,
+      "input_sha256": "e7280cc46cd4ef5d73b2254901a8b9cb4af12163f3238dae8bbfffd4ad7f9e7a",
+      "png_sha256": "d6bda85192b19814e1b274711003630a29813c69ecba6750a936996c21677586",
+      "state_digest_sha256": "7e3bc964e97d9699e328338cda7926f861276bcbc62cbe616123d32bad8dc7ea",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    },
+    {
+      "case": "legacy_tiny",
+      "input": "legacy_tiny.lua",
+      "width": 128,
+      "input_sha256": "f016f90473017ec7635e5ab389d120bb77612427d4e2ae200bd7aeac1f3968ca",
+      "png_sha256": "7ebc27a9aff986756cc5b6a341183e683b8801ee41c999eac962d0366ebb067e",
+      "state_digest_sha256": "c7742db4b0831cf0527047a833abd4784c27b7d197a55efca04b1c8b06fdba71",
+      "same_binary_repeat": "identical",
+      "historical_png": "identical"
+    }
+  ],
+  "comparison": {
+    "before_manifest_sha256": "dbd4a5d9563c208a29718fc621e81c4aa64fdd1a6373de950e07d88452633bfa",
+    "before_commit": "b4f9c4ebb7428eda1737f46c9ae1db8add6b40c3",
+    "before_binary_sha256": "1a505780fce9b3ef81e2933e4d7b6d4fe480e6799d51d29c7f366f121b742f95",
+    "before_rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "identical": true
+  }
+}

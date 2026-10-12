@@ -26,6 +26,7 @@ import os
 import re
 import threading
 import urllib.parse
+from collections import OrderedDict
 from datetime import datetime
 from PIL import Image
 from palette_board import palette_board
@@ -647,8 +648,10 @@ def title_of_closings(says):
 REFERENCE = object()  # in a glance's calls: a read of a reference picture
 _warm = None  # the server's first scan of every painter for the picker: set when done (None: scan on request)
 _glances = {}  # path -> what the picker needs from one session file, read incrementally without keeping images
-_thumbnails = {}
+_thumbnails = OrderedDict()
+_thumbnails_lock = threading.Lock()
 GLANCE_SIZE = 360
+GLANCE_CACHE_SIZE = 256
 
 
 def _glance_file(path):
@@ -735,17 +738,20 @@ def glance_image(src):
 
 def glance_thumbnail(g):
     """A memoized JPEG of the picker's look, leaving the original image untouched."""
-    key = (g["src"][0], g["look"], g["version"])
-    with _lock("t:" + repr(key)):
+    im = glance_image(g["src"])
+    if not im:
+        return None
+    key = hashlib.sha256(im[1]).digest()
+    with _thumbnails_lock:
         if key not in _thumbnails:
-            im = glance_image(g["src"])
-            if not im:
-                return None
             with Image.open(io.BytesIO(im[1])) as picture:
                 picture.thumbnail((GLANCE_SIZE, GLANCE_SIZE), Image.Resampling.LANCZOS)
                 buf = io.BytesIO()
                 picture.convert("RGB").save(buf, "JPEG", quality=80)
             _thumbnails[key] = ("image/jpeg", buf.getvalue())
+            if len(_thumbnails) > GLANCE_CACHE_SIZE:
+                _thumbnails.popitem(last=False)
+        _thumbnails.move_to_end(key)
         return _thumbnails[key]
 
 
@@ -846,13 +852,15 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, body, ctype, cache_control=None):
+    def _send(self, code, body, ctype, cache_control=None, etag=None):
         if PUBLIC and not ctype.startswith("image/") and ctype != "application/wasm":
             body = scrub(body)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         # a look never changes: the browser keeps it (and asks again for everything else)
         self.send_header("Cache-Control", cache_control or ("private, max-age=86400, immutable" if ctype.startswith("image/") else "no-store"))
+        if etag:
+            self.send_header("ETag", etag)
         if PUBLIC:
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; "
                              "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:")
@@ -891,11 +899,13 @@ class H(http.server.BaseHTTPRequestHandler):
         if u.path == "/api/glance":  # a painter's picture in the picker, read alone (not the painter's whole log)
             files = painter_files(painter)
             g = glance(files) if files else None
-            version = q.get("version", [""])[0]
-            if version and (not g or version != g["version"]):
-                return self._send(404, b"not found", "text/plain")
             im = glance_thumbnail(g) if g and g["src"] else None
-            return self._send(200, im[1], im[0], None if version else "private, max-age=60") if im else self._send(404, b"not found", "text/plain")
+            if not im:
+                return self._send(404, b"not found", "text/plain")
+            etag = '"' + hashlib.sha256(im[1]).hexdigest() + '"'
+            tags = [tag.strip().removeprefix("W/") for tag in self.headers.get("If-None-Match", "").split(",")]
+            code = 304 if etag in tags or "*" in tags else 200
+            return self._send(code, b"" if code == 304 else im[1], im[0], "private, max-age=300", etag)
         if u.path not in ("/api/events", "/api/file", "/img"):
             return self._send(404, b"not found", "text/plain")
         files = painter_files(painter) if painter else [path] if path and session_allowed(path) and os.path.isfile(path) else []

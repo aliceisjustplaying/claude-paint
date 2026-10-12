@@ -494,29 +494,51 @@ def test_a_held_knife_is_never_the_picker_fallback(home):
 
 
 def test_glance_is_a_small_cached_jpeg(home, server, monkeypatch):
+    import hashlib
     from PIL import Image
     _, studio, log = home
     buf = io.BytesIO()
-    Image.new("RGB", (1000, 625), "blue").save(buf, "PNG")
+    Image.new("RGB", (1000, 625), "blue").save(buf, "PNG", compress_level=0)
     log.write_text(start(str(studio)) + look("l1", buf.getvalue()))
     monkeypatch.setattr(S, "PUBLIC", True)
+    monkeypatch.setattr(S, "_thumbnails", type(S._thumbnails)())
+    monkeypatch.setattr(S, "GLANCE_CACHE_SIZE", 2)
     p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
     url = server.base + f"/api/glance?p={PAINTER}&i={p['look']}&epoch={p['epoch']}&version={p['thumb_version']}"
     with urllib.request.urlopen(url) as response:
         picture = response.read()
         assert response.headers["Content-Type"] == "image/jpeg"
-        assert response.headers["Cache-Control"] == "private, max-age=86400, immutable"
+        assert response.headers["Cache-Control"] == "private, max-age=300"
+        etag = response.headers["ETag"]
+        assert etag == '"' + hashlib.sha256(picture).hexdigest() + '"'
     with Image.open(io.BytesIO(picture)) as thumbnail:
         assert thumbnail.format == "JPEG"
         assert thumbnail.size == (360, 225)
         assert max(thumbnail.size) <= S.GLANCE_SIZE
-    monkeypatch.setattr(S, "glance_image", lambda src: pytest.fail("thumbnail was decoded again"))
-    assert get(url) == (200, picture)
-    with log.open("a") as fh:
-        fh.write(look("l2", png_of("red")))
-    updated = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
-    assert updated["thumb_version"] != p["thumb_version"]
-    assert get(url)[0] == 404
+    with monkeypatch.context() as cached:
+        cached.setattr(S.Image, "open", lambda *args: pytest.fail("thumbnail was decoded again"))
+        assert get(url) == (200, picture)
+        request = urllib.request.Request(url, headers={"If-None-Match": etag})
+        with pytest.raises(urllib.error.HTTPError) as unchanged:
+            urllib.request.urlopen(request)
+        assert unchanged.value.code == 304
+        assert unchanged.value.read() == b""
+        assert unchanged.value.headers["ETag"] == etag
+        assert unchanged.value.headers["Cache-Control"] == "private, max-age=300"
+    size = log.stat().st_size
+    for color in ("red", "green"):
+        rewritten = io.BytesIO()
+        Image.new("RGB", (1000, 625), color).save(rewritten, "PNG", compress_level=0)
+        log.write_text(start(str(studio)) + look("l1", rewritten.getvalue()))
+        assert log.stat().st_size == size
+        with urllib.request.urlopen(request) as response:
+            updated = response.read()
+            assert response.status == 200
+            assert updated != picture
+            assert response.headers["ETag"] == '"' + hashlib.sha256(updated).hexdigest() + '"'
+    assert len(S._thumbnails) == 2
+    assert hashlib.sha256(buf.getvalue()).digest() not in S._thumbnails
+    assert hashlib.sha256(rewritten.getvalue()).digest() in S._thumbnails
 
 
 @pytest.mark.parametrize("via", ["live server", "static export"])

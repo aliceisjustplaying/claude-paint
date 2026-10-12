@@ -360,7 +360,7 @@ const ageOf = s => Date.now() / 1000 - s.mtime, isLive = s => !outcomeLabel(s) &
 const SUBJ = {Friedrich:'after Friedrich', free:'free subject', 'self-portrait':'self-portrait'};
 const subj = s => s.subject ? SUBJ[s.subject] || 'after ' + (s.artist || s.subject) : '';  // (the artist in full when the brief names one: 'after Kendric Tonn')
 const models = s => (s.model || '').split(' → ').map(modelName).join(' → ');
-const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? s.p : encodeURIComponent(s.p)}/t/${s.look}.jpg`) : `/api/glance?p=${encodeURIComponent(s.p)}&i=${s.look}&epoch=${s.epoch || 0}`;
+const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? s.p : encodeURIComponent(s.p)}/t/${s.look}.jpg`) : `/api/glance?p=${encodeURIComponent(s.p)}&i=${s.look}&epoch=${s.epoch || 0}&version=${s.thumb_version || ''}`;
 // what the picker and the header say about a painter: the gallery's title and picture if it has them, else its own
 function about(s) {
   const g = GALLERY && s.p ? GALLERY[s.p] : null, live = isLive(s);

@@ -18,6 +18,7 @@ from mcp.client.stdio import stdio_client
 import yaml
 
 from test_protocol import FAKE, PNG, SERVER
+from painting_chunks import classify
 
 
 class AgyTests(unittest.IsolatedAsyncioTestCase):
@@ -38,6 +39,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         self.temp.cleanup()
 
     async def test_end_sitting_blocks_and_returns_handoff(self):
+        self.assertEqual(classify("--@ chunk 1\ndab = b.touch; dab(b, 10, 10)"), [(1, True)])
+        self.assertEqual(classify("--@ chunk 1\na = b.touch; d = a; e = d\n--@ chunk 2\ne(b, 10, 10)"), [(1, True), (2, True)])
         params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(self.studio),
             "--sessions-root", str(Path(self.temp.name) / "recorded"), "--sittings", "--break-seconds", "0.2", "--sitting-seconds", "600"])
         async with stdio_client(params) as (read, write):

@@ -390,7 +390,7 @@ const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? 
 function about(s) {
   const g = GALLERY && s.p ? GALLERY[s.p] : null, live = isLive(s);
   return { title: (g && typeof g.title === 'string' && g.title) || s.title || (live ? 'Untitled, in progress' : 'Untitled'),
-           thumb: siteURL(g && g.thumb) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s) };
+           thumb: (isHopper(s) ? ownThumb(s) : siteURL(g && g.thumb)) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s) };
 }
 const sessLabel = s => `${s.folder.replace(/^claude-paint-/, '')}${s.model ? ' · ' + s.model : ''} · ${when(s.mtime)}`;
 // an old ?s= link to one sitting of a painter: what to call it

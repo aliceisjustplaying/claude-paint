@@ -602,6 +602,25 @@ impl Mixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    include!("../../box_features.rs");
+
+    #[test]
+    #[cfg(feature = "all-boxes")]
+    fn box_feature_lists_agree() {
+        let expected: Vec<_> = BOX_FEATURES.iter().map(|f| f.to_lowercase().replace('_', "-")).collect();
+        let actual: Vec<_> = BOXES.iter().map(|b| format!("box-{}", b.0)).collect();
+        assert_eq!(expected, actual);
+        for manifest in [include_str!("../Cargo.toml"), include_str!("../../easel/Cargo.toml")] {
+            let declared: std::collections::BTreeSet<_> = manifest.lines().filter_map(|line| {
+                let (name, _) = line.split_once(" = ")?;
+                name.starts_with("box-").then_some(name)
+            }).collect();
+            assert_eq!(declared, expected.iter().map(String::as_str).collect());
+            let all = manifest.lines().find(|line| line.starts_with("all-boxes = ")).unwrap();
+            let enabled: std::collections::BTreeSet<_> = all.split('"').filter(|s| s.starts_with("box-")).collect();
+            assert_eq!(enabled, declared);
+        }
+    }
 
     /// A pile laid as knifed dries at its tubes' rate in its box's engine,
     /// mixed by volume: lead white fast, bone black slower (engine 2: its

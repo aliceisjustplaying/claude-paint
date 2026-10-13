@@ -172,12 +172,32 @@ fn conserve_total(add: &[f32], out: &mut [f32], lo: impl Fn(usize) -> f32 + Sync
 }
 
 /// Separable box blur of a rect-sized buffer (w × h), radius r, clamped.
+#[derive(Default)]
+struct BlurScratch {
+    tmp: Vec<f32>,
+    columns: Vec<Vec<f32>>,
+}
+
+thread_local! {
+    static BLUR_SCRATCH: std::cell::RefCell<BlurScratch> = std::cell::RefCell::new(BlurScratch::default());
+    static SETTLE_SCRATCH: std::cell::RefCell<[Vec<f32>; 8]> = std::cell::RefCell::new(Default::default());
+}
+
 pub(crate) fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    let mut out = Vec::new();
+    box_blur_into(src, w, h, r, &mut out);
+    out
+}
+
+pub(crate) fn box_blur_into(src: &[f32], w: usize, h: usize, r: usize, out: &mut Vec<f32>) {
+    out.resize(w * h, 0.0);
     if r == 0 {
-        return src.to_vec();
+        out.copy_from_slice(src);
+        return;
     }
     let n = (2 * r + 1) as f32;
-    let mut tmp = vec![0.0f32; w * h];
+    let BlurScratch { mut tmp, mut columns } = BLUR_SCRATCH.with(|s| std::mem::take(&mut *s.borrow_mut()));
+    tmp.resize(w * h, 0.0);
     tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         let s = &src[y * w..(y + 1) * w];
         let mut acc = 0.0f32;
@@ -189,34 +209,32 @@ pub(crate) fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
             acc += s[(x + r + 1).min(w - 1)] - s[x.saturating_sub(r)];
         }
     });
-    let mut out = vec![0.0f32; w * h];
     // vertical: running sums per column, processed in column blocks
-    let cols: Vec<usize> = (0..w).collect();
-    let colvals: Vec<Vec<f32>> = cols
-        .par_chunks(64)
-        .map(|cs| {
-            let mut res = vec![0.0f32; cs.len() * h];
-            for (ci, &x) in cs.iter().enumerate() {
+    columns.resize_with(w.div_ceil(64), Vec::new);
+    columns.par_iter_mut().enumerate().for_each(|(bi, res)| {
+            let x0 = bi * 64;
+            let nc = (w - x0).min(64);
+            res.resize(nc * h, 0.0);
+            for ci in 0..nc {
+                let x = x0 + ci;
                 let mut acc = 0.0f32;
                 for k in 0..=2 * r {
                     acc += tmp[k.saturating_sub(r).min(h - 1) * w + x];
                 }
                 for y in 0..h {
-                    res[y * cs.len() + ci] = acc / n;
+                    res[y * nc + ci] = acc / n;
                     acc += tmp[(y + r + 1).min(h - 1) * w + x] - tmp[y.saturating_sub(r) * w + x];
                 }
             }
-            res
-        })
-        .collect();
+        });
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        for (bi, block) in colvals.iter().enumerate() {
+        for (bi, block) in columns.iter().enumerate() {
             let x0 = bi * 64;
             let nc = block.len() / h;
             row[x0..x0 + nc].copy_from_slice(&block[y * nc..(y + 1) * nc]);
         }
     });
-    out
+    BLUR_SCRATCH.with(|s| *s.borrow_mut() = BlurScratch { tmp, columns });
 }
 
 impl Canvas {
@@ -304,8 +322,10 @@ impl Canvas {
         // (engine 4's stiffer paint is the painting's films; a ground is
         // laid and leveled as it always was)
         let engine = if bridge { self.engine } else { self.engine.min(3) };
-        let mut old = vec![0.0f32; rw * rh];
-        let mut s = vec![0.0f32; rw * rh];
+        let mut scratch = SETTLE_SCRATCH.with(|s| std::mem::take(&mut *s.borrow_mut()));
+        let [old, s, mid, l1, l2, laid, kept, fine] = &mut scratch;
+        old.resize(rw * rh, 0.0);
+        s.resize(rw * rh, 0.0);
         for y in 0..rh {
             for x in 0..rw {
                 let i = y * rw + x;
@@ -314,8 +334,10 @@ impl Canvas {
             }
         }
 
-        let l1 = box_blur(&box_blur(&s, rw, rh, r1), rw, rh, r1);
-        let l2 = box_blur(&box_blur(&l1, rw, rh, r2), rw, rh, r2);
+        box_blur_into(s, rw, rh, r1, mid);
+        box_blur_into(mid, rw, rh, r1, l1);
+        box_blur_into(l1, rw, rh, r2, mid);
+        box_blur_into(mid, rw, rh, r2, l2);
         let mut out = vec![0.0f32; rw * rh];
         out.par_chunks_mut(rw).enumerate().for_each(|(y, row)| {
             for x in 0..rw {
@@ -340,8 +362,10 @@ impl Canvas {
         // but only the paint that was put down can move, and only nearby.
         // Rescale by the ratio of paint laid to paint kept, both averaged
         // over the leveling distance, so each neighborhood keeps its volume.
-        let laid = box_blur(&box_blur(add, rw, rh, r2), rw, rh, r2);
-        let kept = box_blur(&box_blur(&out, rw, rh, r2), rw, rh, r2);
+        box_blur_into(add, rw, rh, r2, mid);
+        box_blur_into(mid, rw, rh, r2, laid);
+        box_blur_into(&out, rw, rh, r2, mid);
+        box_blur_into(mid, rw, rh, r2, kept);
         out.par_iter_mut().enumerate().for_each(|(i, o)| {
             // (a ratio of blur residues is not a ratio: it can overflow and
             // turn 0 × ∞ into NaN, which then paints full masstone)
@@ -363,7 +387,8 @@ impl Canvas {
         // some tens of µm of paint. Only the surface: the film's thickness
         // (and so its color) is as leveled above.
         if bridge {
-            let fine = box_blur(&box_blur(&old, rw, rh, r1), rw, rh, r1);
+            box_blur_into(old, rw, rh, r1, mid);
+            box_blur_into(mid, rw, rh, r1, fine);
             for y in 0..rh {
                 for x in 0..rw {
                     let i = y * rw + x;
@@ -375,6 +400,7 @@ impl Canvas {
                 }
             }
         }
+        SETTLE_SCRATCH.with(|s| *s.borrow_mut() = scratch);
         out
     }
 

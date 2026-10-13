@@ -22,7 +22,7 @@ deletes only the listed files it didn't write again. It won't write into a folde
 except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
 at the top), which it adopts, owning all of data/ as the old exporter did.
 """
-import argparse, base64, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
+import argparse, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
@@ -327,23 +327,23 @@ def export(out, skip=(), only=None, live=False):
             for e in ev:
                 names.update(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", e.get("code", "")))
                 if e["kind"] == "image" and re.search(r"palette (?!False)", e.get("look", "")):
-                    im = S.image(st, e["img"])
-                    chips = palette_chips(base64.b64decode(im[1]), names) if im else None
+                    im = S.image_bytes(st, e["img"])
+                    chips = palette_chips(im[1], names) if im else None
                     if chips:
                         e["palette"] = chips
         n = sum(len(im) for _, _, im in [(f, 0, S._cache[f]["images"]) for f in files])
         exts, web, jobs = [], [0] * n, {}
         for i in range(n):
-            im = S.image(st, i)
+            im = S.image_bytes(st, i)
             ext = EXT.get(im[0], "bin") if im else "bin"
             exts.append(ext)
             if im:
-                data = base64.b64decode(im[1])
+                data = im[1]
                 changed = write(os.path.join(out, "data", p, "img", f"{i}.{ext}"), data)
                 for light in S.DISPLAY_LIGHTS:
-                    lit = S.image(st, i, light=light)
+                    lit = S.image_bytes(st, i, light=light)
                     if lit:
-                        write(os.path.join(out, "data", p, light, f"{i}.png"), base64.b64decode(lit[1]))
+                        write(os.path.join(out, "data", p, light, f"{i}.png"), lit[1])
                 if Image:
                     t, v = (os.path.join(out, "data", p, d, f"{i}.jpg") for d in ("t", "v"))
                     if changed or not (os.path.isfile(t) and os.path.isfile(v)):

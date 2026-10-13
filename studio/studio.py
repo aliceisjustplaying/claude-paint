@@ -57,6 +57,10 @@ _cache = {}  # path -> {"offset", "events", "images", "calls"}: one session file
 _streams = {}  # key -> a stitched stream of session files (see stream())
 _locks = {}
 _locks_lock = threading.Lock()
+_image_cache = OrderedDict()
+_image_cache_bytes = 0
+IMAGE_CACHE_BYTES = 64 * 1024 * 1024
+_image_cache_lock = threading.Lock()
 
 
 def _lock(key):
@@ -335,17 +339,15 @@ def parse(path):
 def _parse(path):
     # changed: indices of events whose result came in after them, in arrival order (see stream())
     c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "lights": {light: {} for light in DISPLAY_LIGHTS}, "calls": {}, "changed": [], "cwd": ""})
-    size = os.path.getsize(path)
-    if size < c["offset"]:  # rewritten
+    stat = os.stat(path)
+    size = stat.st_size
+    stamp = (stat.st_dev, stat.st_ino, stat.st_mtime_ns)
+    if size < c["offset"] or c.get("stamp") and (stamp[:2] != c["stamp"][:2] or size <= c.get("size", 0) and stamp != c["stamp"]):
         c.update(offset=0, events=[], images=[], lights={light: {} for light in DISPLAY_LIGHTS}, calls={}, changed=[], cwd="")
-    with open(path, "rb") as fh:
-        fh.seek(c["offset"])
-        chunk = fh.read()
-    last_nl = chunk.rfind(b"\n")
-    if last_nl < 0:
-        return c["events"], c["images"]
-    c["offset"] += last_nl + 1
-    for line in chunk[: last_nl + 1].splitlines():
+        c["generation"] = c.get("generation", 0) + 1
+        c.pop("sig", None)
+    c.update(stamp=stamp, size=size)
+    for at, line in session_lines(path, c):
         try:
             d = json.loads(line)
         except ValueError:
@@ -420,7 +422,7 @@ def _parse(path):
             for x in content:
                 if x.get("type") == "image" and x.get("data"):
                     idx = len(c["images"])
-                    c["images"].append((x.get("mimeType", "image/jpeg"), x["data"]))
+                    c["images"].append((path, at, picture_n))
                     src = c["events"][parent].get("path", "") if parent is not None else ""
                     ev = {"ts": ts, "kind": "image", "img": idx, "path": src}
                     display_path = ""
@@ -431,9 +433,9 @@ def _parse(path):
                     elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
                         display_path = src
                     for light in DISPLAY_LIGHTS:
-                        lit = display_companion(c["cwd"], display_path, light) if display_path else None
+                        lit = display_companion_path(c["cwd"], display_path, light) if display_path else None
                         if lit:
-                            c["lights"][light][idx] = ("image/png", base64.b64encode(lit).decode())
+                            c["lights"][light][idx] = (lit, None, None)
                             ev[light] = True
                     picture_n += 1
                     if re.search(r"palette (?!False)", ev.get("look", "")):
@@ -456,7 +458,19 @@ def _parse(path):
     return c["events"], c["images"]
 
 
-def display_companion(cwd, path, light):
+def session_lines(path, c):
+    with open(path, "rb") as fh:
+        fh.seek(c["offset"])
+        while True:
+            at = fh.tell()
+            line = fh.readline()
+            if not line.endswith(b"\n"):
+                return
+            c["offset"] = fh.tell()
+            yield at, line
+
+
+def display_companion_path(cwd, path, light):
     if not cwd or light not in DISPLAY_LIGHTS:
         return None
     original = os.path.realpath(os.path.join(cwd, path))
@@ -465,10 +479,18 @@ def display_companion(cwd, path, light):
         return None
     try:
         with open(companion, "rb") as fh:
-            data = fh.read()
-        return data if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+            header = fh.read(8)
+        return companion if header == b"\x89PNG\r\n\x1a\n" else None
     except OSError:
         return None
+
+
+def display_companion(cwd, path, light):
+    companion = display_companion_path(cwd, path, light)
+    if companion:
+        with open(companion, "rb") as fh:
+            return fh.read()
+    return None
 
 
 def _signature(data):
@@ -523,7 +545,7 @@ def mark_whole(c, path):
     the last picture opened, as without this. Where the easel command that wrote a picture can be read (_look_said),
     it decides instead."""
     ims = [e for e in c["events"] if e["kind"] == "image" and not e.get("ref")]
-    key = f"v4:{path}:{os.path.getsize(path)}:{len(ims)}"
+    key = f"v5:{path}:{c['stamp']}:{os.path.getsize(path)}:{len(ims)}"
     done = _whole_cache().get(key)
     if done is not None and len(done) == len(ims):
         for e, w in zip(ims, done):
@@ -532,7 +554,8 @@ def mark_whole(c, path):
     sig = c.setdefault("sig", {})
     for e in ims:
         if e["img"] not in sig:
-            sig[e["img"]] = _signature(c["images"][e["img"]][1])
+            im = read_image(c["images"][e["img"]])
+            sig[e["img"]] = _signature(base64.b64encode(im[1])) if im else None
     shapes = [round(sig[e["img"]][0], 2) for e in ims if sig[e["img"]]]
     if not shapes:
         return
@@ -803,12 +826,13 @@ def stream(key, files):
         st = _streams.get(key)
         parsed = [parse(f) for f in files]
         parts = [(f, len(ev), len(im)) for f, (ev, im) in zip(files, parsed)]
+        generations = [_cache[f].get("generation", 0) for f in files]
         if st:
             old = st["parts"]
             same = (len(old) <= len(parts) and all(o[0] == n[0] for o, n in zip(old, parts))
                     and all(o == n for o, n in zip(old[:-1], parts))
                     and (not old or parts[len(old) - 1][1] >= old[-1][1] and parts[len(old) - 1][2] >= old[-1][2]))
-            if not same:
+            if not same or st.get("generations", []) != generations[:len(old)]:
                 st = {"epoch": st["epoch"] + 1, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         else:
             st = {"epoch": STREAM_EPOCH, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
@@ -833,6 +857,7 @@ def stream(key, files):
                 st["events"].append(dict(e, img=e["img"] + ioff) if e["kind"] == "image" else e)
             ioff += ni
         st["parts"] = parts
+        st["generations"] = generations
         return st
 
 
@@ -864,16 +889,54 @@ def painting_sources(events):
     return cwd, {r for r in rels if ok.fullmatch(r) and ".." not in r.split("/")}
 
 
-def image(st, i, light=None):
-    """Image i of a stitched stream: (mime, base64 data), or None."""
+def read_image(src):
+    global _image_cache_bytes
+    if not src:
+        return None
+    path, at, k = src
+    try:
+        stat = os.stat(path)
+        key = (src, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        with _image_cache_lock:
+            if key in _image_cache:
+                _image_cache.move_to_end(key)
+                return _image_cache[key]
+            if at is None:
+                with open(path, "rb") as fh:
+                    im = ("image/png", fh.read())
+            else:
+                im = glance_image((path, at, k))
+            if not im:
+                return None
+            n = len(im[1])
+            if n <= IMAGE_CACHE_BYTES:
+                while _image_cache and _image_cache_bytes + n > IMAGE_CACHE_BYTES:
+                    _image_cache_bytes -= len(_image_cache.popitem(last=False)[1][1])
+                _image_cache[key] = im
+                _image_cache_bytes += n
+            return im
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def image_bytes(st, i, light=None):
+    """Image i of a stitched stream: (mime, bytes), or None."""
+    if i < 0:
+        return None
     for f, _, ni in st["parts"]:
         if i < ni:
             if light:
-                return _cache[f]["lights"].get(light, {}).get(i)
+                return read_image(_cache[f]["lights"].get(light, {}).get(i))
             imgs = _cache[f]["images"]
-            return imgs[i] if 0 <= i < len(imgs) else None
+            return read_image(imgs[i]) if i < len(imgs) else None
         i -= ni
     return None
+
+
+def image(st, i, light=None):
+    """Compatibility view of image i: (mime, base64 data), or None."""
+    im = image_bytes(st, i, light)
+    return (im[0], base64.b64encode(im[1]).decode()) if im else None
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -960,9 +1023,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return self._send(404, b"", "text/plain")
         if u.path == "/img":
             light = next((light for light in DISPLAY_LIGHTS if q.get(light) == ["1"]), None)
-            im = image(st, int(q.get("i", ["0"])[0]), light=light)
+            im = image_bytes(st, int(q.get("i", ["0"])[0]), light=light)
             if im:
-                return self._send(200, base64.b64decode(im[1]), im[0])
+                return self._send(200, im[1], im[0])
         self._send(404, b"not found", "text/plain")
 
 

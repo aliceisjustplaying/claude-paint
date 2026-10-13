@@ -79,13 +79,16 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   later returns it with its remaining load. A new name is a clean brush.
 - `b:load{water=<µL>, pigments={["<pigment>"]=<mass>}}` adds to the load.
   The brush releases water and pigment from what it holds, and `b:status()`
-  shows what is left. The brush runs dry, and a
-  stroke or wash can end before its path does.
+  shows what is left. A standalone stroke can run dry before its path ends.
 - `b:stroke(path, {pressure=..., duration=...})`. Each point can carry its own
   pressure and time, `{x, y, pressure, t}`. Pressure widens or narrows the
   contact around the nominal width.
 - `b:wash{x=, y=, width=, height=}` lays a rectangle as rows of strokes;
-  `grade=` thins the pigment from top to bottom (`1` is even).
+  it replenishes the brush's starting load along each row. On a new sheet,
+  a row defaults to its length divided by 2,800 cells per second, with a
+  minimum of 0.015625 seconds. `duration=` sets the time per row. Existing
+  paintings keep their original timing. `grade=` thins the pigment from
+  top to bottom (`1` is even).
 
 ## Broad areas
 

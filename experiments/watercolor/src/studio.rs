@@ -500,12 +500,12 @@ fn lab_stroke(
         .map(|p| (p[1][0] - p[0][0]).hypot(p[1][1] - p[0][1]))
         .sum();
     let cells = ctx.canvas()?.schema == 5;
-    let fast_wash = refill_load.is_some() && ctx.state.engine_version >= 2;
+    let fast_wash = cells && refill_load.is_some() && ctx.state.engine_version >= 2;
     let duration = number(
         attrs,
         "duration",
         (length
-            / if fast_wash && cells {
+            / if fast_wash {
                 2800.0
             } else if cells {
                 800.0

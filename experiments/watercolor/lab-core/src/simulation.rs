@@ -646,6 +646,10 @@ fn srgb_byte(v: f32) -> u8 {
 impl Simulation {
     // src/engine/simulation.ts:270-311 and src/engine/shaders.ts:455-515 at a19bfa2a026856a98ceb400a8eec41f091f04a11.
     pub fn splat(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>) {
+        self.splat_water_profile(stamps, pigment, false);
+    }
+
+    pub fn splat_water_profile(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>, spread_water: bool) {
         let k = pigment.map_or([0.0; 3], |p| p.k);
         let s = pigment.map_or([0.0; 3], |p| p.s);
         let props = pigment.map_or([0.4, 0.0, 0.3], |p| [p.density, p.granulation, p.staining]);
@@ -670,7 +674,11 @@ impl Simulation {
                     if r > 1.0 {
                         continue;
                     }
-                    let body = smoothstep(1.0, 0.62, r);
+                    let body = if spread_water {
+                        (-4.5 * r * r).exp() - (-4.5_f32).exp()
+                    } else {
+                        smoothstep(1.0, 0.62, r)
+                    };
                     let mut water = water * body;
                     let mut pigment = amount * body;
                     if dryness > 0.0 {

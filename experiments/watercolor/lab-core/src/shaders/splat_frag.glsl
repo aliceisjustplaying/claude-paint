@@ -53,6 +53,7 @@ void main() {
   // Soft-bodied stamp with a definite rim: a loaded brush wets fully inside
   // its footprint and falls off fast at the edge.
   float body = smoothstep(1.0, 0.62, r);
+  if (uField == 1) body = exp(-4.5 * r * r) - exp(-4.5);
   float water = vStamp.w * body;
   float pigment = vPaint.x * body;
 

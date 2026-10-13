@@ -69,15 +69,19 @@ def classify(source: str) -> list[tuple[int, bool]]:
     out = []
     for n, chunk in split_chunks(source):
         code = _code(chunk)
-        paints = _refers(code, names, methods)
-        if paints:
-            for pat in _FUNC_DEFS:
-                for m in pat.finditer(code):
-                    names.add(m.group(1))
-                    methods.add(m.group(1))
-        alt = "|".join(sorted(map(re.escape, names | methods)))
-        for m in re.finditer(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*(?:{_NAME}\s*[.:]\s*)?(?:{alt})\b(?!\s*[({{\"])", code):
-            names.add(m.group(1))
+        while True:
+            known = names.copy(), methods.copy()
+            alt = "|".join(sorted(map(re.escape, names | methods)))
+            for m in re.finditer(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*(?:{_NAME}\s*[.:]\s*)?(?:{alt})\b(?!\s*[({{\"])", code):
+                names.add(m.group(1))
+            paints = _refers(code, names, methods)
+            if paints:
+                for pat in _FUNC_DEFS:
+                    for m in pat.finditer(code):
+                        names.add(m.group(1))
+                        methods.add(m.group(1))
+            if known == (names, methods):
+                break
         out.append((n, paints))
     return out
 

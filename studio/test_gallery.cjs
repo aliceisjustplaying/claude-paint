@@ -15,6 +15,7 @@ const whole = [e('start', { cwd:'/fixture' }), e('paint', { code:'canvas{}', out
   e('image', { img:0, look:'', gallery:true, relief:true }), e('think', { text:'I look again at the color and the marks.' }),
   e('look', { text:'crop 390,390,810,555' }), e('image', { img:1, look:'crop 390,390,810,555', gallery:true, relief:true })];
 const fixtures = {
+  hopper:whole,
   normal:whole,
   scratch:[...whole.slice(0, 4), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
     e('look', { text:'scratch True' }), e('image', { img:2, look:'scratch True', gallery:true, relief:true }), e('think', { text:'Trying a mark on the scratch canvas.' })],
@@ -34,6 +35,8 @@ const fixtures = {
     e('image', { img:1, look:'scratch True, crop 100,100,300,300', gallery:true, relief:true }), e('think', { text:'A fresh mark after the whole-canvas look.' })],
 };
 const sessions = Object.keys(fixtures).map(p => ({ p, folder:p, painter:true, active:true, sittings:1, mtime:Date.now() / 1000, title:'Gallery lighting fixture' }));
+sessions.find(s => s.p === 'hopper').artist = 'Edward Hopper';
+sessions.find(s => s.p === 'normal').artist = 'Claude Monet';
 let servingStatic = false;
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://localhost');
@@ -102,6 +105,14 @@ async function ready(page, which, light) {
         }, light);
       };
       const shot = async name => { if (evidence && !staticMode) { await page.waitForFunction(() => typingThought === null); await page.screenshot({ path:path.join(evidence, name + '.png'), fullPage:true }); } };
+      await page.goto(url('hopper')); await ready(page, 'img', 'color');
+      assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
+      assert.match(await page.locator('#cap').textContent(), /Color/);
+      await page.evaluate(() => choose('p=normal')); await ready(page, 'img', 'gallery');
+      assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
+      await page.evaluate(() => localStorage.setItem('studio.lighting', 'relief'));
+      await page.goto(url('hopper')); await ready(page, 'img', stream ? 'color' : 'relief');
+      await page.evaluate(() => localStorage.removeItem('studio.lighting'));
       if (evidence && process.env.STUDIO_BASELINE && !staticMode) {
         for (const p of ['normal', 'scratch']) { await page.goto(url(p) + '&before=1'); await ready(page, 'img', false); await shot(`before-${stream ? 'stream' : 'normal'}-${p}`); }
       }

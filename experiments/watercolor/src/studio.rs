@@ -1368,9 +1368,11 @@ impl Writer {
                     ));
                 }
                 state.engine_version = version;
-                state
-                    .applied_sources
-                    .retain(|s| !s.starts_with("--@ watercolor-engine "));
+                if state.canvas.is_none() {
+                    state
+                        .applied_sources
+                        .retain(|s| !s.starts_with("--@ watercolor-engine "));
+                }
             }
         }
         if let Some(canvas) = &mut state.canvas {

@@ -88,11 +88,16 @@ strokes. Its coordinates and dimensions are in cells. It takes the same
 pressure, dry-contact, grade and duration options. Each row starts with the
 brush's starting water and pigment load. That load is gradually replenished
 along the row so a loaded brush can cover the rectangle.
+On a new sheet, each wash row defaults to its length divided by 2,800 cells
+per second, with a minimum of 0.015625 seconds. `duration` sets the time for
+each row. Existing paintings keep the wash timing they started with.
 
 `drop{x=, y=, water=<microliters>, radius=<cells>}` adds clean water: 0 to
-100 microliters over a radius of 1 to 1,200 cells, 12 by default. Water can
+100 microliters. Radius accepts 1 to 1,200 cells, 12 by default. On a new
+sheet it sets the scale of a soft water patch whose edge reaches 1.8 times
+the radius from the center. Water can
 move workable paint and make a backrun. A drop lands at once and takes no
-painter-clock time. A drop whose circle misses the sheet entirely stops the
+painter-clock time. A drop whose water patch misses the sheet entirely stops the
 chunk with "drop is outside paper". Stroke paths can run past the edges.
 
 `b:lift(path)` lays the round lift contact along a path of the same form.

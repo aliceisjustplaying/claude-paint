@@ -164,3 +164,46 @@ fn balance_distinguishes_peak_depth_from_surface_volume() {
     state.check_balance().unwrap();
     fs::remove_dir_all(p).unwrap();
 }
+
+#[test]
+fn new_wash_default_and_unversioned_replay_keep_their_timing() {
+    let a = root();
+    let b = root();
+    let legacy = root();
+    let start = "paper{width=128,height=64,seed=3117}; b=brush{name='wash',width=20}; b:load{water=8,pigments={['french-ultramarine']=0.12}}; ";
+    let wash = "b:wash{x=0,y=0,width=128,height=28,pressure=0.6}";
+    let implicit = studio::run(&a, &format!("{start}{wash}")).unwrap();
+    let explicit = studio::run(
+        &b,
+        &format!("{start}b:wash{{x=0,y=0,width=128,height=28,pressure=0.6,duration=128/2800}}"),
+    )
+    .unwrap();
+    assert_eq!(implicit.canvas, explicit.canvas);
+    assert_eq!(implicit.brushes, explicit.brushes);
+    assert_eq!(implicit.engine_version, 2);
+    assert!(implicit.applied_sources[0].contains("watercolor-engine 2"));
+    let mut old = serde_json::to_value(studio::Session::default()).unwrap();
+    old.as_object_mut().unwrap().remove("engine_version");
+    old["applied_sources"] = serde_json::json!([]);
+    let old = studio::Session::decode(&serde_json::to_vec(&old).unwrap()).unwrap();
+    assert_eq!(old.engine_version, 1);
+    fs::write(
+        legacy.join("checkpoint.json"),
+        serde_json::to_vec(&old).unwrap(),
+    )
+    .unwrap();
+    let replayed = studio::run(&legacy, &format!("{start}{wash}")).unwrap();
+    let canvas = replayed.canvas.unwrap();
+    assert_eq!(
+        canvas.tick * watercolor_pilot::TICK_NS + canvas.residual_ns,
+        320_000_000
+    );
+    let canvas = implicit.canvas.unwrap();
+    assert_eq!(
+        canvas.tick * watercolor_pilot::TICK_NS + canvas.residual_ns,
+        91_428_572
+    );
+    for p in [a, b, legacy] {
+        fs::remove_dir_all(p).unwrap();
+    }
+}

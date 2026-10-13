@@ -1357,6 +1357,11 @@ impl Writer {
     pub fn run(&self, source: &str) -> Result<Session> {
         let root = &self.root;
         let mut state = load(root)?;
+        if state.applied_sources.iter().any(|s| s == source) {
+            return Err(error(
+                "this exact chunk already ran; submit a new continuation chunk",
+            ));
+        }
         for line in source.lines() {
             if let Some(version) = line.strip_prefix("--@ watercolor-engine ") {
                 let version: u32 = version.parse().map_err(error)?;
@@ -1369,9 +1374,9 @@ impl Writer {
                 }
                 state.engine_version = version;
                 if state.canvas.is_none() {
-                    state
-                        .applied_sources
-                        .retain(|s| !s.starts_with("--@ watercolor-engine "));
+                    state.applied_sources.retain(|s| {
+                        s.lines().count() != 1 || !s.starts_with("--@ watercolor-engine ")
+                    });
                 }
             }
         }
@@ -1379,11 +1384,6 @@ impl Writer {
             if canvas.schema == 5 {
                 canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;
             }
-        }
-        if state.applied_sources.iter().any(|s| s == source) {
-            return Err(error(
-                "this exact chunk already ran; submit a new continuation chunk",
-            ));
         }
         let stage = root.join(format!(".pending-{}", std::process::id()));
         if stage.exists() {

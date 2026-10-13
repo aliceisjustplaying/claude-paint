@@ -82,6 +82,7 @@ def merge_records(recorder, transcript, model=None, observed=None):
         if kind == "init" and isinstance(row.get("init"), dict):
             steps = {}
             has_prose = False
+            events.append({"type": "custom", "customType": "agy", "timestamp": timestamp, "data": row})
             continue
         if kind == "step_update" and payload.get("step_type") == "tool":
             continue
@@ -92,6 +93,7 @@ def merge_records(recorder, transcript, model=None, observed=None):
                     "role": "assistant", "content": [{"type": "text", "text": response}],
                 }})
                 has_prose = True
+            events.append({"type": "custom", "customType": "agy", "timestamp": timestamp, "data": row})
             continue
         if (kind == "step_update" and payload.get("step_type") == "agent_response"
                 and isinstance(payload.get("step_index"), int)
@@ -151,6 +153,12 @@ def project(recorder, transcript, output, model=None, follow=False, observed=Non
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
+    for link in output.parent.glob("*.jsonl"):
+        if link not in (recorder, transcript, output) and link.is_symlink() and link.resolve() == sources[0]:
+            archived = link.with_suffix(".jsonl.raw")
+            if (archived.exists() or archived.is_symlink()) and not (archived.is_symlink() and archived.resolve() == sources[0]):
+                raise ValueError(f"unrelated file at {archived}")
+            link.rename(archived)
 
 
 def main():

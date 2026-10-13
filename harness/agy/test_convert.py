@@ -73,9 +73,12 @@ class ConvertTests(unittest.TestCase):
             self.assertEqual([block for block in blocks if block["type"] == "toolCall"], recorder_rows[2]["message"]["content"])
             results = [row for row in merged if row.get("message", {}).get("role") == "toolResult"]
             self.assertEqual(results, [recorder_rows[3]])
-            self.assertEqual([row["data"] for row in merged if row["type"] == "custom"], [unknown])
+            self.assertEqual([row["data"] for row in merged if row["type"] == "custom"], [transcript_rows[0], unknown, transcript_rows[-1]])
+            future = {"event": "result", "result": {"future_schema": {"text": "preserve me"}}}
+            self.assertEqual([row["data"] for row in merge_records(recorder_rows, [future]) if row["type"] == "custom"], [future])
             self.assertEqual(raw_link.resolve(), recorder.resolve())
-            self.assertEqual(viewer_link.resolve(), recorder.resolve())
+            self.assertFalse(viewer_link.exists())
+            self.assertEqual(viewer_link.with_suffix(".jsonl.raw").resolve(), recorder.resolve())
             self.assertEqual(other.read_text(), "unrelated session\n")
             self.assertEqual((recorder.read_bytes(), transcript.read_bytes()), source_bytes)
             self.assertEqual(merge_records(recorder_rows, transcript_rows)[1]["modelId"], "documented-model")
@@ -96,10 +99,12 @@ class ConvertTests(unittest.TestCase):
             self.assertNotIn("After looking.", output.read_text())
             with transcript.open("ab") as file:
                 file.write(tail[len(tail) // 2:] + b"\n")
+            viewer_link.symlink_to(recorder)
             project(recorder, transcript, output, "explicit-model", follow=True, observed=observed)
             self.assertIn("After looking.", output.read_text())
             self.assertEqual(raw_link.resolve(), recorder.resolve())
-            self.assertEqual(viewer_link.resolve(), recorder.resolve())
+            self.assertFalse(viewer_link.exists())
+            self.assertEqual(viewer_link.with_suffix(".jsonl.raw").resolve(), recorder.resolve())
             before = output.read_bytes(), output.stat().st_ino
             project(recorder, transcript, output, "explicit-model", follow=True, observed=observed)
             self.assertEqual((output.read_bytes(), output.stat().st_ino), before)

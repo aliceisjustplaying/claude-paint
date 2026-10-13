@@ -75,10 +75,9 @@ def classify(source: str) -> list[tuple[int, bool]]:
                 for m in pat.finditer(code):
                     names.add(m.group(1))
                     methods.add(m.group(1))
-            # aliases: `dab = work`, `local s = b.stroke`
-            alt = "|".join(sorted(map(re.escape, names | methods)))
-            for m in re.finditer(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*(?:{_NAME}\s*[.:]\s*)?(?:{alt})\b(?!\s*[({{\"])", code):
-                names.add(m.group(1))
+        alt = "|".join(sorted(map(re.escape, names | methods)))
+        for m in re.finditer(rf"(?:\blocal\s+)?\b({_NAME})\s*=\s*(?:{_NAME}\s*[.:]\s*)?(?:{alt})\b(?!\s*[({{\"])", code):
+            names.add(m.group(1))
         out.append((n, paints))
     return out
 

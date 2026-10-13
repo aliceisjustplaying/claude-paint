@@ -30,14 +30,17 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     shutil.copy2(repo / "harness/agy/painter.md", agents / "easel-painter.md")
     shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
+    sessions_root = sessions_root.expanduser().resolve()
     args = ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(studio),
-            "--sittings", "--break-seconds", str(break_seconds), "--sessions-root", str(studio / "out/easel/agy-recorder")]
+            "--sittings", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
     if sitting_seconds is not None:
         args += ["--sitting-seconds", str(sitting_seconds)]
     config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": {}}}}
     (studio / ".agents/mcp_config.json").write_text(json.dumps(config, indent=2) + "\n")
-    sessions_root = sessions_root.expanduser().resolve()
-    viewer = sessions_root / ("--mcp-src-a-" + studio.name + "--") / "agy.jsonl"
+    folder = "--" + str(studio).strip("/").replace("/", "-") + "--"
+    if "-src-a-" not in folder:
+        folder = f"--mcp-src-a-{studio.name}--"
+    viewer = sessions_root / folder / "agy.jsonl"
     metadata = {"recorder": str(studio / "out/easel/mcp/session.jsonl"), "output": str(viewer)}
     (studio / ".agents/recording.json").write_text(json.dumps(metadata, indent=2) + "\n")
     return config

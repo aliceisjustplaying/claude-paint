@@ -59,22 +59,23 @@ class SittingEasel(Easel):
                               painting_before=self.painting_count(), whole=False, detail=False, due=None)
             self.save()
             journal = self.journal()
-            text = f"Sitting {self.state['sitting']}\nClock: {clock}\n\nYour journal handoff:\n{journal}"
+            message = Path(__file__).with_name("sitting-message.txt").read_text().strip()
+            text = f"{message}\n\nSitting {self.state['sitting']}\nPainting clock: {clock}\n\nYour journal (notes/journal.md):\n{journal}"
             return [types.TextContent(type="text", text=text), *look]
         if name == "paint" and (self.state["due"] is not None or self.state["complete"]):
-            raise ValueError("paint: this sitting has ended")
+            raise ValueError("paint: the painting is complete" if self.state["complete"] else "paint: this sitting has ended; end_sitting starts the next one")
         before = self.painting_count() if name == "paint" and not params.get("scratch") else None
         result = await super().call(name, params)
         if before is not None and self.painting_count() > before:
             self.state.update(whole=False, detail=False)
             self.save()
-        if name == "look" and not any(params.get(key) for key in ("scratch", "palette", "mode", "hold", "compare")):
+        if name == "look" and not any(params.get(key) for key in ("scratch", "palette", "mode")):
             if any(item.type == "image" for item in result):
                 self.state["detail" if params.get("crop") else "whole"] = True
                 self.save()
         if name == "status":
-            remaining = "unlimited" if self.sitting_seconds is None else f"{max(0, self.sitting_seconds - (time.time() - self.state['started'])):.0f} seconds"
-            result.append(types.TextContent(type="text", text=f"Sitting {self.state['sitting']}: {remaining} remaining"))
+            remaining = "untimed" if self.sitting_seconds is None else f"{max(0, self.sitting_seconds - (time.time() - self.state['started'])):.0f} of {self.sitting_seconds:.0f} seconds left"
+            result.append(types.TextContent(type="text", text=f"Sitting {self.state['sitting']}, {remaining}"))
         return result
 
     def journal(self):
@@ -82,4 +83,4 @@ class SittingEasel(Easel):
         return path.read_text() if path.exists() else ""
 
     def completion(self):
-        return [types.TextContent(type="text", text=f"Painting complete. Sitting {self.state['sitting']} added no paint and included successful whole-canvas and detail looks in normal color.\n\nYour journal handoff:\n{self.journal()}")]
+        return [types.TextContent(type="text", text=f"The painting is complete. Sitting {self.state['sitting']} added no paint and had a whole-canvas look and a detail crop in normal color.\n\nYour journal (notes/journal.md):\n{self.journal()}")]

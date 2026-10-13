@@ -331,12 +331,13 @@ const imgURL = i => STATIC ? dataURL(`data/${dataPainter()}/img/${i}.${IMGEXT[i]
 const lightURL = (i, light) => STATIC ? dataURL(`data/${dataPainter()}/${light}/${i}.png`) : `/img?${Q}&epoch=${epoch}&i=${i}&${light}=1`;
 const DISPLAY_LIGHTS = { color:{ label:'Color' }, gallery:{ label:'Gallery light', image:i => lightURL(i, 'gallery') }, relief:{ label:'Relief', image:i => lightURL(i, 'relief') } };
 let displayLight = 'gallery';
-if (!STREAM) try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) displayLight = saved; } catch (e) {}
+let explicitLight = null;
+if (!STREAM) try { const stored = localStorage.getItem('studio.lighting'), saved = stored === 'colour' ? 'color' : stored; if (Object.hasOwn(DISPLAY_LIGHTS, saved)) explicitLight = displayLight = saved; } catch (e) {}
 function lightingControls() { for (const id of Object.keys(DISPLAY_LIGHTS)) $(id).setAttribute('aria-pressed', String(displayLight === id)); }
 for (const [id, preset] of Object.entries(DISPLAY_LIGHTS)) {
   const button = document.createElement('button'); button.id = id; button.type = 'button'; button.textContent = preset.label;
   button.onclick = () => {
-    displayLight = id;
+    explicitLight = displayLight = id;
     try { localStorage.setItem('studio.lighting', displayLight); } catch (e) {}
     lightingControls(); $('zoom').style.display = 'none'; pictures();
   };
@@ -356,6 +357,12 @@ const NAMES = {'claude-opus-5-5':'Claude Opus 5.5', 'claude-fable-5-1':'Claude F
 const modelName = m => NAMES[m] || m;
 const sitLabel = e => `sitting ${e.n} · ${hhmm(e.ts)}`;
 const qOf = s => s.p ? 'p=' + encodeURIComponent(s.p) : 's=' + encodeURIComponent(s.s);
+const isHopper = s => /(?:^|\s)Hopper$/i.test(s?.artist || '');
+const currentSession = () => allSessions.find(s => qOf(s) === Q || Q?.startsWith('s=') && s.files?.includes(decodeURIComponent(Q.slice(2))));
+function sessionLighting() {
+  displayLight = explicitLight || (isHopper(currentSession()) ? 'color' : 'gallery');
+  lightingControls();
+}
 
 let allSessions = [], sessionsLoaded = false;
 const when = t => new Date(t*1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
@@ -383,7 +390,7 @@ const ownThumb = s => s.look == null ? null : STATIC ? dataURL(`data/${HOSTED ? 
 function about(s) {
   const g = GALLERY && s.p ? GALLERY[s.p] : null, live = isLive(s);
   return { title: (g && typeof g.title === 'string' && g.title) || s.title || (live ? 'Untitled, in progress' : 'Untitled'),
-           thumb: siteURL(g && g.thumb) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s) };
+           thumb: (isHopper(s) ? ownThumb(s) : siteURL(g && g.thumb)) || ownThumb(s), own: ownThumb(s), url: siteURL(g && g.url), live, model: models(s) };
 }
 const sessLabel = s => `${s.folder.replace(/^claude-paint-/, '')}${s.model ? ' · ' + s.model : ''} · ${when(s.mtime)}`;
 // an old ?s= link to one sitting of a painter: what to call it
@@ -438,7 +445,7 @@ function warmPicker() {
 function closePicker(refocus) { if ($('picker').hidden) return; $('picker').hidden = true; $('who').setAttribute('aria-expanded', 'false'); if (refocus) $('who').focus(); }
 function choose(q) {
   closePicker(true); if (q === Q) return;
-  reset(); Q = q; live = true; history.replaceState(null, '', addr(Q)); renderHeader(); glimpse(); poll();
+  reset(); Q = q; sessionLighting(); live = true; history.replaceState(null, '', addr(Q)); renderHeader(); glimpse(); poll();
 }
 // before a painter's events arrive: its newest whole look (sessions.json has it) in the painting's place, the
 // thumbnail at once (the picker has just shown it) and the view copy once it's in, so the place isn't black meanwhile
@@ -513,6 +520,7 @@ async function loadSessions() {
     }
     Q = u.get('p') ? 'p=' + encodeURIComponent(u.get('p')) : s ? 's=' + encodeURIComponent(s) : first ? qOf(first) : null;
   }
+  const previousLight = displayLight; sessionLighting(); if (previousLight !== displayLight && events.length) pictures();
   renderHeader(); if (otherK >= 0 && events[otherK] && events[otherK].ref) second(otherK);  // (the reference's label names the artist once the list has it)
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus
 }
@@ -542,6 +550,7 @@ async function poll() {
           r = await get(files[`data/${p}/events.json`]);
           if (g !== gen) return;
           Q = q; liveFiles = files; liveRevision = m.revision; allSessions = ss; sessionsLoaded = true;
+          sessionLighting();
           renderHeader(); if ($('picker').hidden) renderPicker();
         } else {
         const a = await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json` : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`, STATIC ? {cache: 'no-cache'} : {});
@@ -1373,9 +1382,10 @@ const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(loc
 Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;
 if (initial && qOf(initial) === Q) allSessions = [initial];
 else if (initial) { noPicture(); $('view').classList.remove('tall'); $('badge').textContent = ''; $('badge').className = ''; }
+sessionLighting();
 renderHeader();
 document.documentElement.classList.remove('studio-route-pending');
-if (Q) { glimpse(); poll(); }
+if (Q && initial) { glimpse(); poll(); }
 // Gallery metadata can improve titles and links later; it never holds up the selected canvas or events.
 loadGallery().then(() => { renderHeader(); if (sessionsLoaded && $('picker').hidden) renderPicker();
   if (otherK >= 0 && events[otherK]?.ref) second(otherK); });

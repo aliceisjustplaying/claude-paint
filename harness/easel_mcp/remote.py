@@ -142,7 +142,7 @@ class RemoteStudio:
             self.completed[call_id] = (asyncio.get_running_loop().time(), task)
             self.evict_completed()
 
-    async def call(self, name, arguments):
+    async def call(self, name, arguments, cancel_on_disconnect=False):
         self.evict_completed()
         arguments = dict(arguments)
         call_id = arguments.pop("call_id")
@@ -172,6 +172,11 @@ class RemoteStudio:
             result = await asyncio.wait_for(asyncio.shield(task[1]), self.response_wait)
         except asyncio.TimeoutError:
             return text_result(f"Call {call_id} is still running. Retry this same call with the same call_id to get its result.")
+        except asyncio.CancelledError:
+            if cancel_on_disconnect:
+                task[1].cancel()
+                await asyncio.gather(task[1], return_exceptions=True)
+            raise
         return result
 
     async def close(self):

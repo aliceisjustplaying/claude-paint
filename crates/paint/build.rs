@@ -9,11 +9,14 @@
 //! easel has one box, and a union of some boxes is no build anything uses
 //! (`cfg(box_conflict)` makes lib.rs a compile error).
 
+include!("../box_features.rs");
+
 fn main() {
+    println!("cargo::rerun-if-changed=../box_features.rs");
     println!("cargo::rustc-check-cfg=cfg(tube_box)");
     println!("cargo::rustc-check-cfg=cfg(box_conflict)");
     let on = |f: &str| std::env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
-    let named = ["BOX_FRIEDRICH", "BOX_SARGENT", "BOX_INNESS", "BOX_ALMA_TADEMA", "BOX_TONN", "BOX_HOPPER", "BOX_GIVERNY", "BOX_IMPRESSIONIST", "BOX_SEURAT", "BOX_CEZANNE", "BOX_EVERY"].iter().filter(|f| on(f)).count();
+    let named = BOX_FEATURES.iter().filter(|f| on(f)).count();
     let all = on("ALL_BOXES");
     if named == 0 || all {
         println!("cargo::rustc-cfg=tube_box");

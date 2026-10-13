@@ -615,7 +615,7 @@ function thumb(e, i, to) {
   let t = im;  // (a reference picture: the thumbnail in a marked frame)
   if (e.ref) { t = document.createElement('span'); t.className = 'refthumb'; t.appendChild(im); const b = document.createElement('b'); b.textContent = 'REF'; t.appendChild(b); }
   t.dataset.i = i; t.title = hhmm(e.ts) + '  ' + (e.ref ? 'reference picture: ' : '') + fname(e.path);
-  t.onclick = () => { live = false; stop(); show(i); }; to.appendChild(t);
+  t.onclick = () => { live = false; stop(); show(i, true); }; to.appendChild(t);
 }
 function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }
 
@@ -808,15 +808,18 @@ codeChannel.port1.onmessage = () => codeBatch?.();
 function queueCodeBatch(batch) { codeBatch = batch; codeChannel.port2.postMessage(null); }
 function clearCode() {
   ++codeRequest; codeCache = null; codeSelection = null;
+  if (codeWorker) codeWorker.postMessage({ cancel:true });
   codeBatch = null; $('code').replaceChildren(); $('file').textContent = ''; $('codeformat').textContent = '';
   $('togglecode').disabled = true; $('togglecode').title = 'preparing code';
 }
-function renderCode(path, text, newLines, before = null) {
+const codeFormatAllowed = stepping => !playing && (codeShown() || stepping);
+function renderCode(path, text, newLines, before = null, stepping = false) {
   const previous = newLines.size ? before : null, changedKey = [...newLines].join(',');
-  if (codeCache?.path === path && codeCache.input === text && codeCache.previous === previous && codeCache.changedKey === changedKey) return;
+  const format = codeFormatAllowed(stepping);
+  if (codeCache?.path === path && codeCache.input === text && codeCache.previous === previous && codeCache.changedKey === changedKey && codeCache.format === format) return;
   const id = ++codeRequest, lua = /\.lua$/.test(path);
   codeBatch = null;
-  codeCache = { path, input:text, previous, changedKey };
+  codeCache = { path, input:text, previous, changedKey, format };
   const draw = (display, changed, formatted, chunks = null) => {
     if (id !== codeRequest) return;
     codeBatch = null;
@@ -852,7 +855,7 @@ function renderCode(path, text, newLines, before = null) {
     queueCodeBatch(batch);
   };
   const raw = () => draw(text, newLines, false);
-  if (!lua || !text || codeWorker === false) { raw(); return; }
+  if (!lua || !text || !format || codeWorker === false) { if (codeWorker) codeWorker.postMessage({ cancel:true }); raw(); return; }
   try {
     if (!codeWorker) codeWorker = new Worker('code-format.js', { type:'module' });
     codeWorker.onerror = () => { codeWorker.terminate(); codeWorker = false; raw(); };
@@ -863,22 +866,22 @@ function renderCode(path, text, newLines, before = null) {
     codeWorker.postMessage({ id, input:text, previous, changed:[...newLines] });
   } catch (e) { if (codeWorker) codeWorker.terminate(); codeWorker = false; raw(); }
 }
-function codeAt(i) {
+function codeAt(i, stepping = false) {
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1;
-  if (atLive && liveText != null) return renderCode(p, liveText, new Set());
+  if (atLive && liveText != null) return renderCode(p, liveText, new Set(), null, stepping);
   const s = source(p, i);
-  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest) return;
+  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
   const { text, before, changed, known } = s;
   const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
-  renderCode(p, known ? text : (liveText || ''), nl, before);
-  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest };
+  renderCode(p, known ? text : (liveText || ''), nl, before, stepping);
+  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest, format:codeFormatAllowed(stepping) };
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips
 let typed = -1, typer = null, jgen = 0, journalView = null, journalItems = new Map(), journalNodes = new Map(), typingThought = null;
 // (a look's chip shows that look)
-$('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i); } };
+$('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i, true); } };
 function journalScroll() {
   const jb = $('jbody'), el = getComputedStyle(jb).overflowY === 'visible' ? jb.closest('main') : jb;
   return { el, following:el === jb || el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
@@ -1322,10 +1325,10 @@ function pip(k, sc) {
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
 $('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg')); $('zoom').style.display = 'flex'; } };
-function show(i) {
+function show(i, stepping = false) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   const scroll = journalScroll();
-  pictures(); codeAt(pos); journal(pos, scroll); status();
+  pictures(); codeAt(pos, stepping); journal(pos, scroll); status();
   $('pos').textContent = `${pos + 1}/${events.length}`;
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
@@ -1338,7 +1341,7 @@ const steps = () => {
 function stop() { if (playing) { clearTimeout(playing); playing = null; } $('play').textContent = '▶ Replay'; $('play').title = 'watch the painting grow, one look at a time  space'; }
 function goLive() { stop(); live = true; show(events.length - 1); stripEnd(); refreshLiveCode(); }
 $('play').onclick = () => {
-  if (playing) { stop(); status(); return; }
+  if (playing) { stop(); codeAt(pos, true); status(); return; }
   const W = steps(); if (!W.length) return;
   live = false; let j = W.findIndex(k => k > pos);
   if (j < 0 || pos >= W[W.length - 1]) j = 0;  // from the end (or past the last look): from the first
@@ -1347,11 +1350,11 @@ $('play').onclick = () => {
   const step = () => { if (j >= W.length) { playing = null; goLive(); return; } show(W[j++]); playing = setTimeout(step, 1000 / +$('speed').value); };
   playing = true; step();
 };
-$('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1]); };
-$('nextlook').onclick = () => { stop(); const L = looks().filter(k => k > pos); if (L.length) { live = false; show(L[0]); } else goLive(); };
+$('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1], true); };
+$('nextlook').onclick = () => { stop(); const L = looks().filter(k => k > pos); if (L.length) { live = false; show(L[0], true); } else goLive(); };
 $('golive').onclick = goLive;
-$('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value); };
-$('togglecode').onclick = () => { document.body.classList.toggle('nocode'); const shown = codeShown(); $('togglecode').setAttribute('aria-expanded', String(shown)); $('codepane').setAttribute('aria-hidden', String(!shown)); $('codepane').inert = !shown; };
+$('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value, true); };
+$('togglecode').onclick = () => { document.body.classList.toggle('nocode'); const shown = codeShown(); $('togglecode').setAttribute('aria-expanded', String(shown)); $('codepane').setAttribute('aria-hidden', String(!shown)); $('codepane').inert = !shown; codeAt(pos); };
 $('codeclose').onclick = () => { if (codeShown()) $('togglecode').click(); $('togglecode').focus(); };
 $('img').onclick = () => { $('zimg').src = zoomURL($('img')); $('zoom').style.display = 'flex'; };
 $('img2').onclick = () => { $('zimg').src = zoomURL($('img2')); $('zoom').style.display = 'flex'; };
@@ -1362,11 +1365,9 @@ document.onkeydown = e => {
   if (t.closest && t.closest('#picker') || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
   if (t.tagName === 'BUTTON' && t.id !== 'play' && (k === ' ' || k === 'Enter')) return;  // the focused button's own action
   // (the right arrow reaching the end is at the end, as the scrub bar is: live again, or at rest)
-  if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1); }
+  if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1, true); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1, true); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); $('zoom').style.display = 'none'; } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-// Load and compile StyLua while the initial session and pictures are arriving.
-try { codeWorker = new Worker('code-format.js', { type:'module' }); codeWorker.onerror = () => { codeWorker.terminate(); codeWorker = false; }; } catch (e) { codeWorker = false; }
 $('all').checked = localStorage.getItem('studio.all') === '1';
 const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(location.search);
 Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;

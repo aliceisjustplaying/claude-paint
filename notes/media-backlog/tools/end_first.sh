@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # end_first.sh <in.mp4> <out.mp4>: the clip with its own last frame held for its first 0.5 s
 # (24 fps, H.264 yuv420p, faststart, as the clips are), then the clip as it was.
 set -euo pipefail

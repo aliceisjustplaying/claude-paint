@@ -84,9 +84,18 @@ impl LabSheet {
     }
 
     pub fn splat(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>) {
+        self.splat_water_profile(stamps, pigment, false);
+    }
+
+    pub fn splat_water_profile(
+        &mut self,
+        stamps: &[Stamp],
+        pigment: Option<&Pigment>,
+        spread_water: bool,
+    ) {
         self.ensure_gpu();
         if let Some(gpu) = &mut self.gpu.gpu {
-            gpu.splat(stamps, pigment);
+            gpu.splat_water_profile(stamps, pigment, spread_water);
             for (field, target) in [
                 (0, &mut self.simulation.flow.read),
                 (2, &mut self.simulation.sus_k.read),
@@ -97,7 +106,8 @@ impl LabSheet {
                     .expect("Watercolor Lab GPU splat readback failed");
             }
         } else {
-            self.simulation.splat(stamps, pigment);
+            self.simulation
+                .splat_water_profile(stamps, pigment, spread_water);
         }
     }
 
@@ -198,6 +208,10 @@ impl LabSheet {
 
     /// Contact integrals from src/engine/shaders.ts:488–514 at the pinned commit.
     pub fn stamp_weights(&self, stamp: &Stamp) -> (f64, f64) {
+        self.stamp_weights_water_profile(stamp, false)
+    }
+
+    pub fn stamp_weights_water_profile(&self, stamp: &Stamp, spread_water: bool) -> (f64, f64) {
         let s = &self.simulation;
         let mut water = 0.0;
         let mut pigment = 0.0;
@@ -216,7 +230,11 @@ impl LabSheet {
                     continue;
                 }
                 let t = ((r - 1.0) / (0.62 - 1.0)).clamp(0.0, 1.0);
-                let body = t * t * (3.0 - 2.0 * t);
+                let body = if spread_water {
+                    (-4.5 * r * r).exp() - (-4.5_f64).exp()
+                } else {
+                    t * t * (3.0 - 2.0 * t)
+                };
                 let p = s.paper[yy * s.width + xx];
                 let level = 0.56 - 0.14 * (1.0 - stamp.dryness);
                 let t = ((p[0] as f64 + p[1] as f64 * 0.3 - level) / 0.05).clamp(0.0, 1.0);

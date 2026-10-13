@@ -54,8 +54,8 @@ fn main() {
             }
             if !work.join("checkpoint.json").exists() {
                 let mut fresh = studio::Session::default();
-                fresh.wash_version = main.wash_version;
-                if fresh.wash_version == 1 {
+                fresh.engine_version = main.engine_version;
+                if fresh.engine_version == 1 {
                     fresh.applied_sources.clear();
                 }
                 fresh.canvas = Some(
@@ -107,7 +107,7 @@ fn main() {
                     studio::init(root)?;
                     if args.len() == 5 {
                         let mut state = studio::Session::default();
-                        state.wash_version = 1;
+                        state.engine_version = 1;
                         state.applied_sources.clear();
                         fs::write(
                             root.join("checkpoint.json"),

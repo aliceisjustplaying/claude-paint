@@ -61,8 +61,8 @@ pub struct Brush {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Session {
     pub format: String,
-    #[serde(default = "legacy_wash_version")]
-    pub wash_version: u32,
+    #[serde(default = "legacy_engine_version")]
+    pub engine_version: u32,
     pub canvas: Option<Watercolor>,
     pub brushes: BTreeMap<String, Brush>,
     pub water_supplied: f64,
@@ -72,7 +72,7 @@ pub struct Session {
     pub applied_sources: Vec<String>,
 }
 
-fn legacy_wash_version() -> u32 {
+fn legacy_engine_version() -> u32 {
     1
 }
 
@@ -80,14 +80,14 @@ impl Default for Session {
     fn default() -> Self {
         Self {
             format: "experimental-watercolor-studio-1".into(),
-            wash_version: 2,
+            engine_version: 2,
             canvas: None,
             brushes: BTreeMap::new(),
             water_supplied: 0.0,
             pigment_supplied: [0.0; PIGMENTS],
             blotted_water: 0.0,
             blotted_pigment: [0.0; PIGMENTS],
-            applied_sources: vec!["--@ watercolor-wash 2".into()],
+            applied_sources: vec!["--@ watercolor-engine 2".into()],
         }
     }
 }
@@ -96,7 +96,7 @@ impl Session {
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let state: Self = serde_json::from_slice(bytes).map_err(error)?;
         if state.format != "experimental-watercolor-studio-1"
-            || !(1..=2).contains(&state.wash_version)
+            || !(1..=2).contains(&state.engine_version)
         {
             return Err(error("unsupported studio checkpoint"));
         }
@@ -500,19 +500,19 @@ fn lab_stroke(
         .map(|p| (p[1][0] - p[0][0]).hypot(p[1][1] - p[0][1]))
         .sum();
     let cells = ctx.canvas()?.schema == 5;
-    let steady_wash = refill_load.is_some() && ctx.state.wash_version >= 2;
+    let fast_wash = refill_load.is_some() && ctx.state.engine_version >= 2;
     let duration = number(
         attrs,
         "duration",
         (length
-            / if steady_wash && cells {
+            / if fast_wash && cells {
                 2800.0
             } else if cells {
                 800.0
             } else {
                 40.0
             })
-        .max(if steady_wash { 0.015625 } else { 0.0625 }),
+        .max(if fast_wash { 0.015625 } else { 0.0625 }),
     )?;
     if !(0.0..=600.0).contains(&duration) || (length > 0.0 && duration == 0.0) {
         return Err(error(
@@ -623,12 +623,7 @@ fn lab_stroke(
     let mut elapsed_ns = 0;
     for (time, mut stamp) in schedule {
         if let Some(load) = refill_load {
-            refill(
-                ctx,
-                &mut inventory,
-                load,
-                if steady_wash { 1.0 } else { 0.25 },
-            );
+            refill(ctx, &mut inventory, load, 0.25);
         }
         let target_ns = (time * 1e9).round() as u64;
         ctx.canvas()?.wait_ns(target_ns.saturating_sub(elapsed_ns));
@@ -988,6 +983,7 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
             let y = number(&t, "y", 0.0)?;
             let water = number(&t, "water", 1.0)?;
             let mut c = c.borrow_mut();
+            let spread_water = c.state.engine_version >= 2;
             let canvas = c.canvas()?;
             let cells = canvas.schema == 5;
             let radius = number(&t, "radius", if cells { 12.0 } else { 0.75 })?;
@@ -1007,17 +1003,17 @@ fn install(lua: &Lua, ctx: Rc<RefCell<Context>>) -> Result<()> {
                 let mut stamp = lab_brush::Stamp {
                     x: x / cell_mm,
                     y: y / cell_mm,
-                    radius: radius / cell_mm,
+                    radius: radius / cell_mm * if spread_water { 1.8 } else { 1.0 },
                     water: 1.0,
                     pigment: 0.0,
                     dryness: 0.0,
                 };
-                let (weight, _) = lab.stamp_weights(&stamp);
+                let (weight, _) = lab.stamp_weights_water_profile(&stamp, spread_water);
                 if weight == 0.0 {
                     return Err(error("drop is outside paper"));
                 }
                 stamp.water = water / (0.055 * weight * area);
-                lab.splat(&[stamp], None);
+                lab.splat_water_profile(&[stamp], None, spread_water);
                 lab.water_released_mm3 += water;
                 c.state.water_supplied += water;
                 return Ok(());
@@ -1362,17 +1358,19 @@ impl Writer {
         let root = &self.root;
         let mut state = load(root)?;
         for line in source.lines() {
-            if let Some(version) = line.strip_prefix("--@ watercolor-wash ") {
+            if let Some(version) = line.strip_prefix("--@ watercolor-engine ") {
                 let version: u32 = version.parse().map_err(error)?;
                 if !(1..=2).contains(&version)
-                    || (state.canvas.is_some() && state.wash_version != version)
+                    || (state.canvas.is_some() && state.engine_version != version)
                 {
-                    return Err(error("unsupported or conflicting wash version"));
+                    return Err(error(
+                        "unsupported or conflicting watercolor engine version",
+                    ));
                 }
-                state.wash_version = version;
+                state.engine_version = version;
                 state
                     .applied_sources
-                    .retain(|s| !s.starts_with("--@ watercolor-wash "));
+                    .retain(|s| !s.starts_with("--@ watercolor-engine "));
             }
         }
         if let Some(canvas) = &mut state.canvas {

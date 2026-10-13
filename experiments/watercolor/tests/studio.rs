@@ -170,6 +170,7 @@ fn new_wash_default_and_unversioned_replay_keep_their_timing() {
     let a = root();
     let b = root();
     let legacy = root();
+    let versioned = root();
     let start = "paper{width=128,height=64,seed=3117}; b=brush{name='wash',width=20}; b:load{water=8,pigments={['french-ultramarine']=0.12}}; ";
     let wash = "b:wash{x=0,y=0,width=128,height=28,pressure=0.6}";
     let implicit = studio::run(&a, &format!("{start}{wash}")).unwrap();
@@ -192,6 +193,15 @@ fn new_wash_default_and_unversioned_replay_keep_their_timing() {
         serde_json::to_vec(&old).unwrap(),
     )
     .unwrap();
+    fs::write(
+        versioned.join("checkpoint.json"),
+        serde_json::to_vec(&old).unwrap(),
+    )
+    .unwrap();
+    let from_log = studio::run(&versioned, &implicit.applied_sources.join("\n\n")).unwrap();
+    assert_eq!(from_log.engine_version, 2);
+    assert_eq!(from_log.canvas, implicit.canvas);
+    assert_eq!(from_log.brushes, implicit.brushes);
     let replayed = studio::run(&legacy, &format!("{start}{wash}")).unwrap();
     let canvas = replayed.canvas.unwrap();
     assert_eq!(
@@ -203,7 +213,7 @@ fn new_wash_default_and_unversioned_replay_keep_their_timing() {
         canvas.tick * watercolor_pilot::TICK_NS + canvas.residual_ns,
         91_428_572
     );
-    for p in [a, b, legacy] {
+    for p in [a, b, legacy, versioned] {
         fs::remove_dir_all(p).unwrap();
     }
 }

@@ -61,6 +61,8 @@ pub struct Brush {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Session {
     pub format: String,
+    #[serde(default = "legacy_wash_version")]
+    pub wash_version: u32,
     pub canvas: Option<Watercolor>,
     pub brushes: BTreeMap<String, Brush>,
     pub water_supplied: f64,
@@ -70,17 +72,22 @@ pub struct Session {
     pub applied_sources: Vec<String>,
 }
 
+fn legacy_wash_version() -> u32 {
+    1
+}
+
 impl Default for Session {
     fn default() -> Self {
         Self {
             format: "experimental-watercolor-studio-1".into(),
+            wash_version: 2,
             canvas: None,
             brushes: BTreeMap::new(),
             water_supplied: 0.0,
             pigment_supplied: [0.0; PIGMENTS],
             blotted_water: 0.0,
             blotted_pigment: [0.0; PIGMENTS],
-            applied_sources: Vec::new(),
+            applied_sources: vec!["--@ watercolor-wash 2".into()],
         }
     }
 }
@@ -88,7 +95,9 @@ impl Default for Session {
 impl Session {
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let state: Self = serde_json::from_slice(bytes).map_err(error)?;
-        if state.format != "experimental-watercolor-studio-1" {
+        if state.format != "experimental-watercolor-studio-1"
+            || !(1..=2).contains(&state.wash_version)
+        {
             return Err(error("unsupported studio checkpoint"));
         }
         if let Some(canvas) = &state.canvas {
@@ -491,10 +500,19 @@ fn lab_stroke(
         .map(|p| (p[1][0] - p[0][0]).hypot(p[1][1] - p[0][1]))
         .sum();
     let cells = ctx.canvas()?.schema == 5;
+    let steady_wash = refill_load.is_some() && ctx.state.wash_version >= 2;
     let duration = number(
         attrs,
         "duration",
-        (length / if cells { 800.0 } else { 40.0 }).max(0.0625),
+        (length
+            / if steady_wash && cells {
+                2800.0
+            } else if cells {
+                800.0
+            } else {
+                40.0
+            })
+        .max(if steady_wash { 0.015625 } else { 0.0625 }),
     )?;
     if !(0.0..=600.0).contains(&duration) || (length > 0.0 && duration == 0.0) {
         return Err(error(
@@ -605,7 +623,12 @@ fn lab_stroke(
     let mut elapsed_ns = 0;
     for (time, mut stamp) in schedule {
         if let Some(load) = refill_load {
-            refill(ctx, &mut inventory, load, 0.25);
+            refill(
+                ctx,
+                &mut inventory,
+                load,
+                if steady_wash { 1.0 } else { 0.25 },
+            );
         }
         let target_ns = (time * 1e9).round() as u64;
         ctx.canvas()?.wait_ns(target_ns.saturating_sub(elapsed_ns));
@@ -1338,6 +1361,20 @@ impl Writer {
     pub fn run(&self, source: &str) -> Result<Session> {
         let root = &self.root;
         let mut state = load(root)?;
+        for line in source.lines() {
+            if let Some(version) = line.strip_prefix("--@ watercolor-wash ") {
+                let version: u32 = version.parse().map_err(error)?;
+                if !(1..=2).contains(&version)
+                    || (state.canvas.is_some() && state.wash_version != version)
+                {
+                    return Err(error("unsupported or conflicting wash version"));
+                }
+                state.wash_version = version;
+                state
+                    .applied_sources
+                    .retain(|s| !s.starts_with("--@ watercolor-wash "));
+            }
+        }
         if let Some(canvas) = &mut state.canvas {
             if canvas.schema == 5 {
                 canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;

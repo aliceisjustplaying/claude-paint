@@ -1,0 +1,12 @@
+[
+  {
+    "name": "end_sitting",
+    "description": "End this sitting after leaving a handoff in notes/journal.md. A sitting with no new paint and successful whole-canvas and detail looks in normal color completes the painting. Otherwise this call waits through the configured break and returns the next sitting's number, clock, journal and a fresh whole-canvas look. status shows the sitting's time remaining. The break does not advance the painting's clock.",
+    "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false}
+  },
+  {
+    "name": "read",
+    "description": "Read a file in this studio. PNG files return an image; other files return text.",
+    "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": false}
+  }
+]

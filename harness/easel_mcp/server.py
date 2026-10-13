@@ -14,13 +14,14 @@ import re
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+import anyio
 
 
 def hide_counters(text):
@@ -125,7 +126,8 @@ class Easel:
                 os.killpg(proc.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            await proc.wait()
+            with anyio.CancelScope(shield=True):
+                await proc.wait()
             raise
         return proc.returncode, out.decode(errors="replace")
 
@@ -280,7 +282,7 @@ class Easel:
         return [types.TextContent(type="text", text=said)]
 
 
-def tool_definitions(studio):
+def tool_definitions(studio, sittings=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
         for definition in definitions:
@@ -292,23 +294,53 @@ def tool_definitions(studio):
             for key in ("scratch", "new_scratch"):
                 if key in definition["inputSchema"]["properties"]:
                     definition["inputSchema"]["properties"][key]["description"] = "true: use separate scratch paper, with the painting's size, kind and seed, its own brushes, clock and log" if key == "scratch" else "with scratch: true, keep the old scratch sheet's log and checkpoint and start a fresh sheet before this chunk"
+    if sittings:
+        definitions += json.loads(Path(__file__).with_name("sitting-tools.json").read_text())
+        next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left."
     return definitions
+
+
+async def keepalive(context, stopped):
+    progress = 0
+    while True:
+        token = context.meta.progressToken if context.meta else None
+        if token is not None:
+            await context.session.send_progress_notification(token, progress)
+        progress += 1
+        try:
+            await asyncio.wait_for(stopped.wait(), 15)
+            return
+        except asyncio.TimeoutError:
+            try:
+                await context.session.send_request(types.ServerRequest(types.PingRequest()), types.EmptyResult,
+                                                   request_read_timeout_seconds=timedelta(seconds=5))
+            except Exception:
+                return
 
 
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--studio", default=os.environ.get("EASEL_ROOT"))
     parser.add_argument("--sessions-root", type=Path, help="opt in to durable viewer session recording")
+    parser.add_argument("--sittings", action="store_true")
+    parser.add_argument("--break-seconds", type=float, default=0)
+    parser.add_argument("--sitting-seconds", type=float)
     args = parser.parse_args()
     if not args.studio:
         parser.error("set --studio or EASEL_ROOT to an exported studio")
-    easel = Easel(Path(args.studio))
+    if any(value is not None and (not math.isfinite(value) or value < 0) for value in (args.break_seconds, args.sitting_seconds)):
+        parser.error("sitting and break durations must be finite and nonnegative")
+    if args.sittings:
+        from sittings import SittingEasel
+        easel = SittingEasel(Path(args.studio), args.break_seconds, args.sitting_seconds)
+    else:
+        easel = Easel(Path(args.studio))
     recorded = None
     if args.sessions_root:
         from remote import RemoteStudio
-        recorded = RemoteStudio(easel.studio, args.sessions_root, response_wait=24 * 60 * 60, easel=easel)
+        recorded = RemoteStudio(easel.studio, args.sessions_root, response_wait=None, easel=easel)
     server = Server("easel")
-    definitions = tool_definitions(easel.studio)
+    definitions = tool_definitions(easel.studio, args.sittings)
 
     @server.list_tools()
     async def list_tools():
@@ -317,12 +349,19 @@ async def main():
     @server.call_tool()
     async def call_tool(name, arguments):
         async with easel.lock:
-            if recorded:
-                return await recorded.call(name, dict(arguments, call_id=str(uuid4())))
+            stopped = asyncio.Event()
+            heartbeat = asyncio.create_task(keepalive(server.request_context, stopped)) if name == "end_sitting" else None
             try:
+                if recorded:
+                    return await recorded.call(name, dict(arguments, call_id=str(uuid4())), cancel_on_disconnect=True)
                 return types.CallToolResult(content=await easel.call(name, arguments))
             except (ValueError, OSError) as error:
                 return types.CallToolResult(isError=True, content=[types.TextContent(type="text", text=str(error))])
+            finally:
+                if heartbeat:
+                    stopped.set()
+                    with anyio.CancelScope(shield=True):
+                        await asyncio.gather(heartbeat, return_exceptions=True)
 
     try:
         async with stdio_server() as (read, write):

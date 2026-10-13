@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Round 15 painter chain: three painters in sequence, each in a fresh
 # studio exported from branch r15-base (no git, no build artifacts), each
 # given only the previous painters' craft notes. Painters run without the

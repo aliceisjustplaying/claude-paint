@@ -202,6 +202,8 @@ fn new_wash_default_and_unversioned_replay_keep_their_timing() {
     assert_eq!(from_log.engine_version, 2);
     assert_eq!(from_log.canvas, implicit.canvas);
     assert_eq!(from_log.brushes, implicit.brushes);
+    let continued = studio::run(&versioned, "--@ watercolor-engine 2\nwait(0.0625)").unwrap();
+    assert_eq!(continued.applied_sources[0], from_log.applied_sources[0]);
     let replayed = studio::run(&legacy, &format!("{start}{wash}")).unwrap();
     let canvas = replayed.canvas.unwrap();
     assert_eq!(

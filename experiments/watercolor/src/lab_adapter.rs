@@ -214,6 +214,24 @@ impl LabSheet {
     pub fn stamp_weights_water_profile(&mut self, stamp: &Stamp, spread_water: bool) -> (f64, f64) {
         if spread_water {
             self.ensure_gpu();
+            if let Some(gpu) = &mut self.gpu.gpu {
+                let mut probe = *stamp;
+                probe.water = 1_000_000.0;
+                gpu.write_field(
+                    0,
+                    &vec![[0.0; 4]; self.simulation.width * self.simulation.height],
+                );
+                gpu.splat_water_profile(&[probe], None, true);
+                let deposited = pollster::block_on(gpu.read_field(0));
+                gpu.write_field(0, &self.simulation.flow.read);
+                let water = deposited
+                    .expect("Watercolor Lab GPU drop footprint readback failed")
+                    .iter()
+                    .map(|pixel| pixel[2] as f64)
+                    .sum::<f64>()
+                    / (0.055 * probe.water);
+                return (water, 0.0);
+            }
         }
         let s = &self.simulation;
         let mut water = 0.0;
@@ -221,11 +239,7 @@ impl LabSheet {
         let cx = stamp.x as f32;
         let cy = (s.height as f64 - stamp.y) as f32;
         let radius = stamp.radius as f32;
-        let quad = if spread_water && self.gpu.gpu.is_some() {
-            [cx - radius, cy - radius, cx + radius, cy + radius]
-        } else {
-            s.stamp_quad(cx, cy, radius)
-        };
+        let quad = s.stamp_quad(cx, cy, radius);
         let (x0, x1, y0, y1) = s.stamp_bounds(quad);
         for yy in y0..y1 {
             for xx in x0..x1 {

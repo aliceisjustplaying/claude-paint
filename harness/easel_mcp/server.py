@@ -14,13 +14,14 @@ import re
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+import anyio
 
 
 def hide_counters(text):
@@ -125,7 +126,8 @@ class Easel:
                 os.killpg(proc.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            await proc.wait()
+            with anyio.CancelScope(shield=True):
+                await proc.wait()
             raise
         return proc.returncode, out.decode(errors="replace")
 
@@ -309,7 +311,11 @@ async def keepalive(context, stopped):
             await asyncio.wait_for(stopped.wait(), 15)
             return
         except asyncio.TimeoutError:
-            await context.session.send_ping()
+            try:
+                await context.session.send_request(types.ServerRequest(types.PingRequest()), types.EmptyResult,
+                                                   request_read_timeout_seconds=timedelta(seconds=5))
+            except Exception:
+                return
 
 
 async def main():
@@ -354,7 +360,8 @@ async def main():
             finally:
                 if heartbeat:
                     stopped.set()
-                    await asyncio.gather(heartbeat, return_exceptions=True)
+                    with anyio.CancelScope(shield=True):
+                        await asyncio.gather(heartbeat, return_exceptions=True)
 
     try:
         async with stdio_server() as (read, write):

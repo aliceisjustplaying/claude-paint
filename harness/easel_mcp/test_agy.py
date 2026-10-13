@@ -45,7 +45,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 await session.initialize()
                 status = await session.call_tool("status", {})
                 self.assertIn("seconds left", status.content[-1].text)
-                await session.call_tool("paint", {"lua": "b:touch(0, 0)"})
+                await session.call_tool("paint", {"lua": "dab = b.touch"})
+                await session.call_tool("paint", {"lua": "dab(b, 0, 0)"})
                 await session.call_tool("look", {})
                 await session.call_tool("look", {"crop": "0,0,1,1"})
                 progress = []
@@ -95,7 +96,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(config["mcpServers"]), {"easel"})
         self.assertIn("--sittings", config["mcpServers"]["easel"]["args"])
         metadata = json.loads((self.studio / ".agents/recording.json").read_text())
-        self.assertNotIn(str(Path(self.temp.name) / "sessions"), config["mcpServers"]["easel"]["args"])
+        self.assertIn(str((Path(self.temp.name) / "sessions").resolve()), config["mcpServers"]["easel"]["args"])
         self.assertTrue(metadata["output"].endswith("--mcp-src-a-paint-studio-abcd--/agy.jsonl"))
         frontmatter = (self.studio / ".agents/agents/easel-painter.md").read_text().split("---", 2)[1]
         agent = yaml.safe_load(frontmatter)

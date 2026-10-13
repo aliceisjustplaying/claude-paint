@@ -11,6 +11,7 @@ import sqlite3
 
 from mcp import types
 from mcp.server import Server
+import anyio
 
 from server import Easel, tool_definitions
 
@@ -175,7 +176,8 @@ class RemoteStudio:
         except asyncio.CancelledError:
             if cancel_on_disconnect:
                 task[1].cancel()
-                await asyncio.gather(task[1], return_exceptions=True)
+                with anyio.CancelScope(shield=True):
+                    await asyncio.gather(task[1], return_exceptions=True)
             raise
         return result
 

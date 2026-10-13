@@ -18,14 +18,14 @@ During `end_sitting` the server pings every 15 seconds and sends MCP progress no
 
 ## Recording
 
-`out/easel/mcp/session.jsonl` records tool calls, returned text and PNGs live. The Lua is in `paintings/lua/painting.lua` and the journal in `notes/journal.md`. `.agents/recording.json` names the raw recorder and the merged viewer output. The raw recorder writes to a private sessions root outside the viewer's root, so the viewer shows each session once.
+`out/easel/mcp/session.jsonl` records tool calls, returned text and PNGs live. The Lua is in `paintings/lua/painting.lua` and the journal in `notes/journal.md`. `.agents/recording.json` names the raw recorder and the merged viewer output. Tool calls and looks appear in the viewer as soon as the stdio server starts recording. The converter writes the merged file into the same session folder and renames each viewer link to the raw recorder as `.jsonl.raw`, leaving the recorder file intact. The viewer then shows the merged timeline.
 
-A separate converter follows agy's transcript and the recorder; it never starts agy. agy's status-line documentation gives `transcript_path`, usually `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. With the real path and the exact model label, the operator command is:
+A separate converter follows agy's transcript and the recorder; it never starts agy. agy's status-line documentation gives `transcript_path`, usually `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. The output path is the `output` field in `.agents/recording.json`. With the real paths and the exact model label, the operator command is:
 
 ```sh
 uv run --no-project /path/to/claude-paint/harness/agy/convert.py \
   --recorder "$PWD/out/easel/mcp/session.jsonl" --transcript /path/to/transcript.jsonl \
-  --output /sessions-root/--mcp-src-a-paint-studio-HEX--/agy.jsonl \
+  --output /path/to/merged/agy.jsonl \
   --model 'EXACT SELECTED MODEL' --follow
 ```
 
@@ -33,6 +33,6 @@ The converter maps the documented stream-json response fields, keeps each record
 
 ## Stop
 
-Ctrl+C in agy's terminal interrupts the active turn. Exiting agy disconnects the stdio server and cancels its active call. The easel can stay open, as it does between house sittings. A running chunk's cancellation goes to its own process group. The first session checks that agy really cancels and that no paint lands after a stop. These steps affect only this agy session and its easel.
+Ctrl+C in agy's terminal interrupts the active turn. Exiting agy disconnects the stdio server and cancels its active MCP request. A break wait stops there. An oil-paint chunk the easel daemon has already started runs to its end after agy stops, and if it succeeds its marks stay on the painting; a chunk still waiting for the daemon is skipped. The easel can stay open, as it does between house sittings. The first session checks that agy really cancels the request. These steps affect only this agy session and its easel.
 
 Sources: [MCP](https://antigravity.google/docs/cli/mcp/), [custom agents](https://antigravity.google/docs/subagents/), [permissions](https://antigravity.google/docs/cli/permissions/), [headless output](https://antigravity.google/docs/cli/headless/) and [transcript path](https://antigravity.google/docs/cli/statusline/).

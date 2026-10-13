@@ -480,7 +480,7 @@ function displayPic(im, e, caption, label) {
   const describe = () => {
     if (im === $('img') && im.getAttribute('src') && im.dataset.loadedWant !== urls[0]) return;
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
-    const light = actual.image || eligible && isHopper(currentSession()) ? actual.label : '';
+    const light = actual.image ? actual.label : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   describe();

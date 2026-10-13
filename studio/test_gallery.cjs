@@ -107,7 +107,7 @@ async function ready(page, which, light) {
       const shot = async name => { if (evidence && !staticMode) { await page.waitForFunction(() => typingThought === null); await page.screenshot({ path:path.join(evidence, name + '.png'), fullPage:true }); } };
       await page.goto(url('hopper')); await ready(page, 'img', 'color');
       assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
-      assert.match(await page.locator('#cap').textContent(), /Color/);
+      assert.doesNotMatch(await page.locator('#cap').textContent(), /Color|Gallery light|Relief/);
       assert.equal(await page.evaluate(() => {
         const s = {p:'hopper',artist:'Edward Hopper',look:0};
         GALLERY = {hopper:{thumb:'/gallery-light.jpg'}};

@@ -44,7 +44,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 status = await session.call_tool("status", {})
-                self.assertIn("seconds remaining", status.content[-1].text)
+                self.assertIn("seconds left", status.content[-1].text)
                 await session.call_tool("paint", {"lua": "b:touch(0, 0)"})
                 await session.call_tool("look", {})
                 await session.call_tool("look", {"crop": "0,0,1,1"})
@@ -61,7 +61,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreaterEqual(time.monotonic() - started, 0.2)
                 self.assertFalse(result.isError)
                 self.assertIn("Sitting 2", result.content[0].text)
-                self.assertIn("Clock: day 1, 00:00", result.content[0].text)
+                self.assertIn("Painting clock: day 1, 00:00", result.content[0].text)
+                self.assertIn("You're back at the easel.", result.content[0].text)
                 self.assertIn("My handoff, unchanged.", result.content[0].text)
                 self.assertTrue(any(item.type == "image" for item in result.content))
                 self.assertEqual(progress[0], 0)
@@ -76,7 +77,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 await session.call_tool("look", {"crop": "0,0,1,1"})
                 await session.call_tool("paint", {"lua": "print(wait(0))"})
                 done = await session.call_tool("end_sitting", {})
-                self.assertIn("Painting complete.", done.content[0].text)
+                self.assertIn("The painting is complete.", done.content[0].text)
                 self.assertTrue(json.loads((self.studio / "out/easel/sittings.json").read_text())["complete"])
         events = [json.loads(line) for line in (self.studio / "out/easel/mcp/session.jsonl").read_text().splitlines()]
         results = [event["message"] for event in events if event.get("message", {}).get("role") == "toolResult"]

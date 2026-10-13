@@ -87,13 +87,19 @@ even load.
 strokes. Its coordinates and dimensions are in cells. It takes the same
 pressure, dry-contact, grade and duration options. Each row starts with the
 brush's starting water and pigment load. That load is gradually replenished
-along the row so a loaded brush can cover the rectangle.
+along the row so a loaded brush can cover the rectangle. By default a row
+lasts its length divided by 2,800 cells per second, with a minimum of
+0.015625 seconds; `duration` sets the time of each row. A painting begun on
+an earlier version of the easel keeps the wash timing it started with.
 
 `drop{x=, y=, water=<microliters>, radius=<cells>}` adds clean water: 0 to
-100 microliters over a radius of 1 to 1,200 cells, 12 by default. Water can
-move workable paint and make a backrun. A drop lands at once and takes no
-painter-clock time. A drop whose circle misses the sheet entirely stops the
-chunk with "drop is outside paper". Stroke paths can run past the edges.
+100 microliters. Radius accepts 1 to 1,200 cells, 12 by default. The water
+lands as a soft patch that fades out 1.8 times the radius from the center.
+Water can move workable paint and make a backrun. A drop lands at once and
+takes no painter-clock time. A drop whose patch misses the sheet entirely
+stops the chunk with "drop is outside paper". Stroke paths can run past the
+edges. A painting begun on an earlier version of the easel keeps the drop
+it started with, whose water stops at the radius.
 
 `b:lift(path)` lays the round lift contact along a path of the same form.
 It supplies water from the brush, loosens workable pigment on the sheet and

@@ -84,9 +84,18 @@ impl LabSheet {
     }
 
     pub fn splat(&mut self, stamps: &[Stamp], pigment: Option<&Pigment>) {
+        self.splat_water_profile(stamps, pigment, false);
+    }
+
+    pub fn splat_water_profile(
+        &mut self,
+        stamps: &[Stamp],
+        pigment: Option<&Pigment>,
+        spread_water: bool,
+    ) {
         self.ensure_gpu();
         if let Some(gpu) = &mut self.gpu.gpu {
-            gpu.splat(stamps, pigment);
+            gpu.splat_water_profile(stamps, pigment, spread_water);
             for (field, target) in [
                 (0, &mut self.simulation.flow.read),
                 (2, &mut self.simulation.sus_k.read),
@@ -97,7 +106,8 @@ impl LabSheet {
                     .expect("Watercolor Lab GPU splat readback failed");
             }
         } else {
-            self.simulation.splat(stamps, pigment);
+            self.simulation
+                .splat_water_profile(stamps, pigment, spread_water);
         }
     }
 
@@ -197,26 +207,54 @@ impl LabSheet {
     }
 
     /// Contact integrals from src/engine/shaders.ts:488–514 at the pinned commit.
-    pub fn stamp_weights(&self, stamp: &Stamp) -> (f64, f64) {
+    pub fn stamp_weights(&mut self, stamp: &Stamp) -> (f64, f64) {
+        self.stamp_weights_water_profile(stamp, false)
+    }
+
+    pub fn stamp_weights_water_profile(&mut self, stamp: &Stamp, spread_water: bool) -> (f64, f64) {
+        if spread_water {
+            self.ensure_gpu();
+            if let Some(gpu) = &mut self.gpu.gpu {
+                let mut probe = *stamp;
+                probe.water = 1_000_000.0;
+                gpu.write_field(
+                    0,
+                    &vec![[0.0; 4]; self.simulation.width * self.simulation.height],
+                );
+                gpu.splat_water_profile(&[probe], None, true);
+                let deposited = pollster::block_on(gpu.read_field(0));
+                gpu.write_field(0, &self.simulation.flow.read);
+                let water = deposited
+                    .expect("Watercolor Lab GPU drop footprint readback failed")
+                    .iter()
+                    .map(|pixel| pixel[2] as f64)
+                    .sum::<f64>()
+                    / (0.055 * probe.water);
+                return (water, 0.0);
+            }
+        }
         let s = &self.simulation;
         let mut water = 0.0;
         let mut pigment = 0.0;
-        let quad = s.stamp_quad(
-            stamp.x as f32,
-            (s.height as f64 - stamp.y) as f32,
-            stamp.radius as f32,
-        );
+        let cx = stamp.x as f32;
+        let cy = (s.height as f64 - stamp.y) as f32;
+        let radius = stamp.radius as f32;
+        let quad = s.stamp_quad(cx, cy, radius);
         let (x0, x1, y0, y1) = s.stamp_bounds(quad);
         for yy in y0..y1 {
             for xx in x0..x1 {
                 let lx = (xx as f32 + 0.5 - quad[0]) * (2.0 / (quad[2] - quad[0])) - 1.0;
                 let ly = (yy as f32 + 0.5 - quad[1]) * (2.0 / (quad[3] - quad[1])) - 1.0;
-                let r = (lx * lx + ly * ly).sqrt() as f64;
+                let r = (lx * lx + ly * ly).sqrt();
                 if r > 1.0 {
                     continue;
                 }
-                let t = ((r - 1.0) / (0.62 - 1.0)).clamp(0.0, 1.0);
-                let body = t * t * (3.0 - 2.0 * t);
+                let t = ((r as f64 - 1.0) / (0.62 - 1.0)).clamp(0.0, 1.0);
+                let body = if spread_water {
+                    ((-4.5 * r * r).exp() - (-4.5_f32).exp()) as f64
+                } else {
+                    t * t * (3.0 - 2.0 * t)
+                };
                 let p = s.paper[yy * s.width + xx];
                 let level = 0.56 - 0.14 * (1.0 - stamp.dryness);
                 let t = ((p[0] as f64 + p[1] as f64 * 0.3 - level) / 0.05).clamp(0.0, 1.0);

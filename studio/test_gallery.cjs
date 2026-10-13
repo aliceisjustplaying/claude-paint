@@ -108,6 +108,11 @@ async function ready(page, which, light) {
       await page.goto(url('hopper')); await ready(page, 'img', 'color');
       assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
       assert.match(await page.locator('#cap').textContent(), /Color/);
+      assert.equal(await page.evaluate(() => {
+        const s = {p:'hopper',artist:'Edward Hopper',look:0};
+        GALLERY = {hopper:{thumb:'/gallery-light.jpg'}};
+        const matches = about(s).thumb === ownThumb(s); GALLERY = null; return matches;
+      }), true);
       await page.evaluate(() => choose('p=normal')); await ready(page, 'img', 'gallery');
       assert.equal(await page.locator('#gallery').getAttribute('aria-pressed'), 'true');
       await page.evaluate(() => localStorage.setItem('studio.lighting', 'relief'));

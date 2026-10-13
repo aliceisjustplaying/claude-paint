@@ -49,7 +49,9 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   within about 4. A pre-wet grid of `drop{}` (radius 80, about
   118 × 95 cells apart) kept the area wet for 2 to 4 seconds after the last
   stroke at 5 to 8 µL a drop. A 22 µL grid (radius 85, about 118 × 100
-  cells apart) kept it wet for about 12 seconds. Nine
+  cells apart) kept it wet for about 12 seconds. Those drops were laid on
+  an earlier version of the easel, where a drop's water stopped at its
+  radius. Nine
   rows across the whole 1,056-cell width of the sheet, laid in 25-cell
   segments at 3,500 cells a second, took 2.8 seconds of painter clock.
   Rows that took 4 seconds to lay over a 4 µL pre-wet showed bands where
@@ -79,12 +81,15 @@ watercolor behaves. What you paint is yours to choose. In the examples,
   later returns it with its remaining load. A new name is a clean brush.
 - `b:load{water=<µL>, pigments={["<pigment>"]=<mass>}}` adds to the load.
   The brush releases water and pigment from what it holds, and `b:status()`
-  shows what is left. The brush runs dry, and a
-  stroke or wash can end before its path does.
+  shows what is left. A standalone stroke can run dry before its path ends.
 - `b:stroke(path, {pressure=..., duration=...})`. Each point can carry its own
   pressure and time, `{x, y, pressure, t}`. Pressure widens or narrows the
   contact around the nominal width.
-- `b:wash{x=, y=, width=, height=}` lays a rectangle as rows of strokes;
+- `b:wash{x=, y=, width=, height=}` lays a rectangle as rows of strokes and
+  replenishes the brush's starting load along each row. By default a row
+  lasts its length divided by 2,800 cells per second, with a minimum of
+  0.015625 seconds; `duration=` sets the time of each row. A painting begun
+  on an earlier version of the easel keeps the wash timing it started with.
   `grade=` thins the pigment from top to bottom (`1` is even).
 
 ## Broad areas
@@ -107,7 +112,9 @@ rows of strokes:
 - **A light pre-wet joins the rows.** A grid of 5 µL drops (radius 80,
   about 118 × 95 cells apart) laid just before the rows let neighboring
   rows blend while the colors stayed roughly in place. At 22 µL a drop the
-  pigment traveled across the wet area and piled up at its boundary.
+  pigment traveled across the wet area and piled up at its boundary. These
+  drops were laid on an earlier version of the easel, where a drop's water
+  stopped at its radius.
 
 ## Wet-in-wet
 

@@ -54,6 +54,10 @@ fn main() {
             }
             if !work.join("checkpoint.json").exists() {
                 let mut fresh = studio::Session::default();
+                fresh.engine_version = main.engine_version;
+                if fresh.engine_version == 1 {
+                    fresh.applied_sources.clear();
+                }
                 fresh.canvas = Some(
                     Watercolor::new_lab(
                         paper.width,
@@ -98,9 +102,19 @@ fn main() {
         };
         match args[2].as_str() {
             "restore" if args.len() == 5 => studio::restore(root, &args[4])?,
-            "init" if args.len() == 4 => {
+            "init" if args.len() == 4 || (args.len() == 5 && args[4] == "--replay") => {
                 if !root.join("box").exists() {
                     studio::init(root)?;
+                    if args.len() == 5 {
+                        let mut state = studio::Session::default();
+                        state.engine_version = 1;
+                        state.applied_sources.clear();
+                        fs::write(
+                            root.join("checkpoint.json"),
+                            serde_json::to_vec(&state).map_err(mlua::Error::external)?,
+                        )
+                        .map_err(mlua::Error::external)?;
+                    }
                 }
             }
             "run" if args.len() >= 5 => {

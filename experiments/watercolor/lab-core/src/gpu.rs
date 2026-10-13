@@ -555,10 +555,20 @@ impl GpuSimulation {
         stamps: &[crate::brush::Stamp],
         pigment: Option<&crate::pigments::Pigment>,
     ) {
+        self.splat_water_profile(stamps, pigment, false);
+    }
+
+    pub fn splat_water_profile(
+        &mut self,
+        stamps: &[crate::brush::Stamp],
+        pigment: Option<&crate::pigments::Pigment>,
+        spread_water: bool,
+    ) {
         if stamps.is_empty() {
             return;
         }
         let mut settings = self.settings(1.0);
+        settings[37] = if spread_water { 1.0 } else { 0.0 };
         if let Some(p) = pigment {
             settings[24..27].copy_from_slice(&p.k);
             settings[28..31].copy_from_slice(&p.s);

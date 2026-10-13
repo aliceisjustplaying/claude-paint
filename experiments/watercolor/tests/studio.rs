@@ -164,3 +164,74 @@ fn balance_distinguishes_peak_depth_from_surface_volume() {
     state.check_balance().unwrap();
     fs::remove_dir_all(p).unwrap();
 }
+
+#[test]
+fn new_wash_default_and_unversioned_replay_keep_their_timing() {
+    let a = root();
+    let b = root();
+    let legacy = root();
+    let versioned = root();
+    let start = "paper{width=128,height=64,seed=3117}; b=brush{name='wash',width=20}; b:load{water=8,pigments={['french-ultramarine']=0.12}}; ";
+    let wash = "b:wash{x=0,y=0,width=128,height=28,pressure=0.6}";
+    let implicit = studio::run(&a, &format!("{start}{wash}")).unwrap();
+    let explicit = studio::run(
+        &b,
+        &format!("{start}b:wash{{x=0,y=0,width=128,height=28,pressure=0.6,duration=128/2800}}"),
+    )
+    .unwrap();
+    assert_eq!(implicit.canvas, explicit.canvas);
+    assert_eq!(implicit.brushes, explicit.brushes);
+    assert_eq!(implicit.engine_version, 2);
+    assert!(implicit.applied_sources[0].contains("watercolor-engine 2"));
+    let mut old = serde_json::to_value(studio::Session::default()).unwrap();
+    old.as_object_mut().unwrap().remove("engine_version");
+    old["applied_sources"] = serde_json::json!([]);
+    let old = studio::Session::decode(&serde_json::to_vec(&old).unwrap()).unwrap();
+    assert_eq!(old.engine_version, 1);
+    fs::write(
+        legacy.join("checkpoint.json"),
+        serde_json::to_vec(&old).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        versioned.join("checkpoint.json"),
+        serde_json::to_vec(&old).unwrap(),
+    )
+    .unwrap();
+    let from_log = studio::run(&versioned, &implicit.applied_sources.join("\n\n")).unwrap();
+    assert_eq!(from_log.engine_version, 2);
+    assert_eq!(from_log.canvas, implicit.canvas);
+    assert_eq!(from_log.brushes, implicit.brushes);
+    let continued = studio::run(&versioned, "--@ watercolor-engine 2\nwait(0.0625)").unwrap();
+    assert_eq!(continued.applied_sources[0], from_log.applied_sources[0]);
+    assert!(studio::run(&versioned, "--@ watercolor-engine 2\nwait(0.0625)").is_err());
+    assert_eq!(studio::load(&versioned).unwrap(), continued);
+    let replayed = studio::run(&legacy, &format!("{start}{wash}")).unwrap();
+    let canvas = replayed.canvas.unwrap();
+    assert_eq!(
+        canvas.tick * watercolor_pilot::TICK_NS + canvas.residual_ns,
+        320_000_000
+    );
+    let canvas = implicit.canvas.unwrap();
+    assert_eq!(
+        canvas.tick * watercolor_pilot::TICK_NS + canvas.residual_ns,
+        91_428_572
+    );
+    for p in [a, b, legacy, versioned] {
+        fs::remove_dir_all(p).unwrap();
+    }
+}
+
+#[test]
+fn off_edge_soft_drop_keeps_requested_water_on_gpu() {
+    let p = root();
+    let state = studio::run(
+        &p,
+        "paper{width=128,height=64}; drop{x=-21.05,y=32,water=1,radius=12}",
+    )
+    .unwrap();
+    let canvas = state.canvas.unwrap();
+    let water = canvas.lab.unwrap().surface_water(canvas.cell_mm);
+    assert!((water - 1.0).abs() < 0.001, "released water: {water}");
+    fs::remove_dir_all(p).unwrap();
+}

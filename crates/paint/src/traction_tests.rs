@@ -30,6 +30,15 @@ fn oversized_physical_canvases_refuse_traction_before_allocating_the_grid() {
     assert!(c.traction.net.0.is_none());
 }
 
+#[test]
+fn memory_preflight_uses_the_whole_physical_canvas_even_for_a_small_crop() {
+    let crop = Crop { units: [450.0, 450.0, 550.0, 550.0], margin: 0.0 };
+    let c = canvas(80, true, Some(crop)).with_size_mm(5000.0);
+    let error = c.check_traction_memory().unwrap_err();
+    assert!(error.contains("5000 × 5000 mm"), "{error}");
+    assert!(c.with_traction(false).check_traction_memory().is_ok());
+}
+
 fn canvas(px: usize, traction: bool, crop: Option<Crop>) -> Canvas {
     Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(crate::ENGINE).with_traction(traction)
 }

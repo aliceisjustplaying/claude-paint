@@ -450,14 +450,19 @@ pub(crate) struct Budget {
 impl Budget {
     fn limited(size: V2, limit: usize) -> Self {
         let mut budget = Self { limit: Some(limit), used: 0, size };
+        if !size.iter().all(|v| v.is_finite() && *v > 0.0) { budget.refused(); }
         budget.charge::<u8>(1 << 20);
         budget
     }
 
-    fn refused(&self) -> ! {
+    fn error(&self) -> String {
         let [width_mm, height_mm] = self.size;
         let budget_mib = self.limit.unwrap() / (1 << 20);
-        panic!("This {width_mm} × {height_mm} mm canvas is too large for an automatic traction-crack network within the {budget_mib} MiB memory budget, so no cracks were added.");
+        format!("This {width_mm} × {height_mm} mm canvas is too large for an automatic traction-crack network within the {budget_mib} MiB memory budget, so no cracks were added.")
+    }
+
+    fn refused(&self) -> ! {
+        panic!("{}", self.error());
     }
 
     pub(crate) fn charge<T>(&mut self, count: usize) {
@@ -498,9 +503,7 @@ impl Budget {
 impl Builder {
     fn new(k: &Cracks, size: V2, pitch: V2, mut budget: Budget) -> Self {
         let s = k.island().max(0.2);
-        let gc = s * GRID;
-        let gx = (size[0] / gc).ceil() as usize + 1;
-        let gy = (size[1] / gc).ceil() as usize + 1;
+        let (gc, gx, gy) = stress_grid(size, s);
         let seed = k.seed;
         // mean stress: isotropic shrinkage of the film, varying slowly
         let broad = Fbm::new(seed as u32 ^ 0x51, 3, 12.0 * s);
@@ -526,9 +529,10 @@ impl Builder {
         let along_x = size[0] >= size[1];
         let mut sig = Vec::new();
         let mut strength = Vec::new();
-        budget.reserve(&mut sig, gx * gy);
-        budget.reserve(&mut strength, gx * gy);
-        (0..gx * gy)
+        let n = gx.checked_mul(gy).unwrap_or_else(|| budget.refused());
+        budget.reserve(&mut sig, n);
+        budget.reserve(&mut strength, n);
+        (0..n)
             .into_par_iter()
             .map(|i| {
                 let p = [(i % gx) as f32 * gc + 0.5 * gc, (i / gx) as f32 * gc + 0.5 * gc];
@@ -591,9 +595,9 @@ impl Builder {
         let ic = (0.25 * s).max(step);
         let ix = (size[0] / ic).ceil() as usize + 1;
         let iy = (size[1] / ic).ceil() as usize + 1;
-        let cells = budget.filled(ix * iy, Vec::new());
-        let mark = budget.filled(gx * gy, 0);
-        let best = budget.filled(gx * gy, (0.0, [0.0; 2]));
+        let cells = budget.filled(ix.checked_mul(iy).unwrap_or_else(|| budget.refused()), Vec::new());
+        let mark = budget.filled(n, 0);
+        let best = budget.filled(n, (0.0, [0.0; 2]));
         Builder {
             budget,
             size,
@@ -1111,6 +1115,19 @@ impl Stretcher {
 /// `pitch_mm` (x: across the warp threads, y: across the weft).
 pub fn network(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2]) -> Network {
     Builder::new(k, size_mm, pitch_mm, Budget::default()).run().0
+}
+
+fn stress_grid(size: V2, island: f32) -> (f32, usize, usize) {
+    let gc = island.max(0.2) * GRID;
+    (gc, ((size[0] / gc).ceil() as usize).saturating_add(1), ((size[1] / gc).ceil() as usize).saturating_add(1))
+}
+
+pub(crate) fn check_network_grid(size: V2, island: f32, limit: usize) -> Result<(), String> {
+    let budget = Budget::limited(size, limit);
+    let (_, gx, gy) = stress_grid(size, island);
+    let per_cell = std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<f32>() + std::mem::size_of::<u32>() + std::mem::size_of::<(f32, V2)>();
+    let bytes = gx.checked_mul(gy).and_then(|n| n.checked_mul(per_cell)).and_then(|n| n.checked_add(budget.used));
+    if bytes.is_some_and(|n| n <= limit) { Ok(()) } else { Err(budget.error()) }
 }
 
 pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2], limit: usize) -> (Network, Budget) {

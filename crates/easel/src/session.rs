@@ -1048,27 +1048,19 @@ mod tests {
     #[cfg(tube_box)]
     fn a_traction_memory_refusal_rolls_back_the_live_chunk() {
         let mut live = Session::new(80).unwrap().with_traction(true);
-        live.run(r#"canvas{size=5000, aspect=1, linen=15, seed=11, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap();
         let state = |s: &Session| {
             let mut bytes = Vec::new();
-            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            if let Some(c) = s.canvas() { c.write_state(&mut bytes, "").unwrap(); }
             bytes
         };
         let before = state(&live);
         let log = live.program("memory-limit");
-        let error = live.run(r#"k = knife{width=200}
-            k:load(pile{{"bone black", 1}, oil="poppy", medium=0.5}, 1)
-            k:lay({{200, 500}, {800, 500}}, {pressure=0.3, lift=0})
-            wait(1440)
-            k:wipe()
-            k:load(pile{{"lead white", 1}}, 0.2)
-            k:lay({{200, 500}, {800, 500}}, {pressure=0.7, lift=0})
-            wait(86400)"#).unwrap_err();
+        let error = live.run(r#"k = 42; canvas{size=5000, aspect=1, linen=15, seed=11, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap_err();
         assert!(error.contains("1024 MiB memory budget"), "{error}");
         assert_eq!(state(&live), before);
         assert_eq!(live.program("memory-limit"), log);
         assert!(live.lua.globals().get::<Value>("k").unwrap().is_nil());
-        live.run("answer = 42").unwrap();
+        live.run(CANVAS).unwrap();
     }
 
     #[test]

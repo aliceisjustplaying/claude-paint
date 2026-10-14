@@ -1759,6 +1759,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 }
                 let width = st.borrow().width;
                 let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_traction(st.borrow().traction);
+                c.check_traction_memory().map_err(mlua::Error::runtime)?;
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }

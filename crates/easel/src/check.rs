@@ -80,6 +80,8 @@ pub fn client_gone(conn: &UnixStream) -> bool {
 /// bits of what's seen and of the surface.
 pub struct Input {
     pub width: usize,
+    /// The paper-and-pastel switch (session.rs `PAPER_MARK`).
+    pub paper: bool,
     /// The box the session paints from.
     pub tubes: paint::Palette,
     pub chunks: Vec<String>,
@@ -146,7 +148,7 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
 /// if a chunk failed or the check was stopped.
 fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bool, String> {
     let give_up = |stop: &AtomicBool, conn: &UnixStream| stop.load(Ordering::Relaxed) || client_gone(conn);
-    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?;
+    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?.with_paper(input.paper);
     {
         let (stop, conn) = (stop.clone(), conn.try_clone().map_err(|e| e.to_string())?);
         fresh

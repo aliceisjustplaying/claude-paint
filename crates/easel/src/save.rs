@@ -56,6 +56,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.drain {
         kv("drain", "1".to_string());
     }
+    if st.paper {
+        kv("paper", "1".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -155,7 +158,7 @@ fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, Str
 /// the log.
 #[cfg(feature = "replay")]
 pub fn read(path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK};
+    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
     use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let input: Box<dyn std::io::Read> = if path.extension().is_some_and(|e| e == "zst") {
@@ -194,6 +197,14 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     if drain {
         logged.push_str(&format!("{DRAIN_MARK}\n"));
     }
+    let paper = match h.get("paper") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's paper={v:?} isn't 1")),
+    };
+    if paper {
+        logged.push_str(&format!("{PAPER_MARK}\n"));
+    }
     let mut tubes = crate::session::box_for(Some(&logged))?;
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
@@ -206,7 +217,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
     let width: usize = parse(&h, "width")?;
-    let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;
+    let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?.with_paper(paper);
     {
         let mut st = s.st.borrow_mut();
         st.seed = parse(&h, "seed")?;

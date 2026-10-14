@@ -48,6 +48,19 @@ pub fn canonical_tables(engine: u32) -> bool {
 /// did is kept. Replays have no limit: a chunk in the log succeeded once and must replay the
 /// same on a slower or busier machine.
 pub const CHUNK_LIMIT: Duration = Duration::from_secs(600);
+
+/// The head line naming the width a painting is painted at: a log without
+/// one was painted at `LEGACY_WIDTH` (or is a sketch, `SKETCH_MARK`).
+pub const WIDTH_MARK: &str = "--@ width";
+pub const LEGACY_WIDTH: usize = crate::LIVE_WIDTH;
+/// The widths a painting may name.
+pub const WIDTHS: [usize; 2] = [2400, 4800];
+
+/// A chunk's limit at a width: `CHUNK_LIMIT` at the legacy width, scaled with the pixel count
+/// above it, so a chunk that fit at 2400 px still fits at 4800.
+pub fn chunk_limit_for(width: usize) -> Duration {
+    if width > LEGACY_WIDTH { CHUNK_LIMIT * ((width * width).div_ceil(LEGACY_WIDTH * LEGACY_WIDTH)) as u32 } else { CHUNK_LIMIT }
+}
 /// Lua instructions between two looks at the clock.
 const HOOK_EVERY: u32 = 1_000_000;
 
@@ -178,7 +191,7 @@ impl Session {
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: CHUNK_LIMIT, heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: chunk_limit_for(width), heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials, #[cfg(test)] fail_at: Cell::new(None) })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -408,6 +421,11 @@ impl Session {
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
+        }
+        // only a painting width other than the legacy one is named (test sessions use small widths)
+        let width = self.st.borrow().width;
+        if width != LEGACY_WIDTH && WIDTHS.contains(&width) {
+            let _ = writeln!(s, "{WIDTH_MARK} {width}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -896,6 +914,29 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         }
     }
     Ok(found.unwrap_or(1))
+}
+
+/// The width a session file names in its head (its `WIDTH_MARK` line before
+/// the first chunk): `LEGACY_WIDTH` if it names none.
+pub fn logged_width(text: &str) -> Result<usize, String> {
+    let mut found = None;
+    for l in text.lines() {
+        let l = l.trim();
+        if l.starts_with(MARK) {
+            break;
+        }
+        if let Some(rest) = l.strip_prefix(WIDTH_MARK) {
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<usize>().ok()).filter(|v| WIDTHS.contains(v));
+            let Some(v) = v else {
+                return Err(format!("the log's line {l:?} names no width this easel paints at ({WIDTH_MARK} <{}>)", WIDTHS.map(|w| w.to_string()).join("|")));
+            };
+            if found.is_some() {
+                return Err(format!("the log names its width twice ({WIDTH_MARK} lines)"));
+            }
+            found = Some(v);
+        }
+    }
+    Ok(found.unwrap_or(LEGACY_WIDTH))
 }
 
 /// Whether a session file's head marks it a sketch (a `SKETCH_MARK` line
@@ -1962,6 +2003,26 @@ mod tests {
         let guide = include_str!("../../../notes/easel_guide.md");
         let table: String = guide.lines().skip_while(|l| !l.starts_with("| tube | pigment |")).take_while(|l| l.starts_with('|')).map(|l| format!("{l}\n")).collect();
         assert_eq!(table, Palette::tube_box().table());
+    }
+
+    /// A painting at 4800 px names its width; a log without the line was
+    /// painted at 2400 and replays at 2400.
+    #[test]
+    fn the_log_names_its_width() {
+        let mut a = Session::new(4800).unwrap();
+        a.run(CANVAS).unwrap();
+        let prog = a.program("t");
+        assert!(prog.contains(&format!("{WIDTH_MARK} 4800\n")), "{prog}");
+        assert_eq!(logged_width(&prog), Ok(4800));
+        assert_eq!(logged_width(&prog.replace(&format!("{WIDTH_MARK} 4800\n"), "")), Ok(LEGACY_WIDTH));
+        let mut b = Session::new(LEGACY_WIDTH).unwrap();
+        b.run(CANVAS).unwrap();
+        assert!(!b.program("t").contains(WIDTH_MARK));
+        assert_eq!(chunk_limit_for(4800), CHUNK_LIMIT * 4);
+        assert_eq!(chunk_limit_for(LEGACY_WIDTH), CHUNK_LIMIT);
+        for bad in ["--@ width 1000", "--@ width x", "--@ width 4800\n--@ width 4800"] {
+            assert!(logged_width(&format!("{bad}\n\n--@ chunk 1\n")).is_err(), "{bad}");
+        }
     }
 
     // a view's form counts visible bodies only, not proxies

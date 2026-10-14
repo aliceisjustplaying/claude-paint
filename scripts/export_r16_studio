@@ -73,9 +73,12 @@ case "$profile" in
   impressionist) box=impressionist; materials=impressionist_materials.md; own=(Monet Renoir Pissarro Sisley Morisot Degas Cézanne Seurat) ;;
   *) usage ;;
 esac
-# the studio's easel reads its box from bin/box, else EASEL_BOX: not from the
-# environment of this export
-unset EASEL_BOX
+# the studio's easel reads its box from bin/box, else EASEL_BOX, and a new
+# painting's width from bin/width, else EASEL_WIDTH: not from the environment of
+# this export. STUDIO_WIDTH=4800 writes bin/width (unset: 2400, no file).
+unset EASEL_BOX EASEL_WIDTH
+width=${STUDIO_WIDTH:-}
+case "$width" in ''|2400|4800) ;; *) echo "STUDIO_WIDTH=$width: want 2400 or 4800" >&2; exit 2 ;; esac
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 branch=${R16_BRANCH:-round-16}
@@ -177,6 +180,7 @@ fi
 mkdir -p "$dest/bin" "$dest/paintings/lua"
 cp "$built" "$dest/bin/easel"
 [ -z "$box" ] || echo "$box" > "$dest/bin/box"
+[ -z "$width" ] || echo "$width" > "$dest/bin/width"
 notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
 # Older rounds may not have the techniques handbook.
 ! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
@@ -215,7 +219,7 @@ if [ -z "$box" ] && ! git -C "$repo" show "$branch:notes/easel_guide.md" | cmp -
 fi
 
 # nothing but those
-extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
+extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -path ./bin/width ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
 [ -z "$extra" ] || { echo "unexpected files in $dest:" >&2; echo "$extra" >&2; exit 1; }
 
 # names of painters: none anywhere a painter can read in the blank studio

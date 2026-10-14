@@ -61,29 +61,47 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 /// The width a painting is painted, replayed and delivered at (px) unless it
-/// names another (`session::WIDTH_MARK`, from `EASEL_WIDTH` when it began).
+/// names another (`session::WIDTH_MARK`, configured when it began: `configured_width`).
 const LIVE_WIDTH: usize = 2400;
 
 /// The width a painting paints at: an existing one its log's (a sketch if
 /// its head says so, `session::SKETCH_MARK`; else the width its head names,
 /// `session::WIDTH_MARK`, or `LIVE_WIDTH`), a new one a sketch's if the
-/// session's name starts with "sketch", else `EASEL_WIDTH`'s if it is set
-/// (one of `session::WIDTHS`), else `LIVE_WIDTH`.
+/// session's name starts with "sketch", else the configured one (`configured_width`).
 fn width_for(name: &str, log: Option<&str>) -> Result<usize, String> {
     match log {
         Some(text) if session::logged_sketch(text) => Ok(session::SKETCH_WIDTH),
         Some(text) => session::logged_width(text),
         None if name.starts_with("sketch") => Ok(session::SKETCH_WIDTH),
-        None => new_width(std::env::var("EASEL_WIDTH").ok().as_deref()),
+        None => configured_width(),
     }
 }
 
-/// A new painting's width: `EASEL_WIDTH` if set, else `LIVE_WIDTH`.
-fn new_width(var: Option<&str>) -> Result<usize, String> {
-    let Some(v) = var.filter(|v| !v.is_empty()) else { return Ok(LIVE_WIDTH) };
-    v.parse::<usize>().ok().filter(|w| session::WIDTHS.contains(w)).ok_or_else(|| {
-        format!("EASEL_WIDTH={v}: want one of {:?}", session::WIDTHS)
-    })
+/// A new painting's width, as its box is configured (`session::configured_box`): a file
+/// `width` next to this executable (a painter's client passes the easel no EASEL_* variable),
+/// else `EASEL_WIDTH`, else `LIVE_WIDTH`. One of `session::WIDTHS`; both set, they must agree.
+fn configured_width() -> Result<usize, String> {
+    let file = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(|d| d.join("width")));
+    let from_file = match file {
+        Some(f) if f.exists() => Some((std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?, f.display().to_string())),
+        _ => None,
+    };
+    new_width(from_file.as_ref().map(|(t, p)| (t.as_str(), p.as_str())), std::env::var("EASEL_WIDTH").ok().as_deref())
+}
+
+/// `configured_width` from what the file (its text and path) and `EASEL_WIDTH` say.
+fn new_width(file: Option<(&str, &str)>, env: Option<&str>) -> Result<usize, String> {
+    let parse = |v: &str, from: &str| {
+        v.trim().parse::<usize>().ok().filter(|w| session::WIDTHS.contains(w))
+            .ok_or_else(|| format!("{from} says width {:?}: want one of {:?}", v.trim(), session::WIDTHS))
+    };
+    let f = file.map(|(text, path)| parse(text, path)).transpose()?;
+    let e = env.filter(|v| !v.trim().is_empty()).map(|v| parse(v, "EASEL_WIDTH")).transpose()?;
+    match (f, e) {
+        (Some(a), Some(b)) if a != b => Err(format!("the width file says {a} but EASEL_WIDTH says {b}: set one, or both the same")),
+        (Some(w), _) | (None, Some(w)) => Ok(w),
+        (None, None) => Ok(LIVE_WIDTH),
+    }
 }
 
 /// The painter build's one session.
@@ -141,7 +159,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   else the default tube box; its log names the box (a line \"--@ box <name>\"), and every
   replay of the log uses that box.
 
-  A new painting is LIVE_WIDTH (2400) px wide, or EASEL_WIDTH's (2400 or 4800); a log
+  A new painting is 2400 px wide, or the width in a file `width` next to this executable,
+  else EASEL_WIDTH (2400 or 4800); a log
   painted at another width names it (a line \"--@ width <px>\"), and every replay uses it.
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
@@ -502,7 +521,7 @@ fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
-        return Err("open: no width option (a log replays at its own width; EASEL_WIDTH sets a new painting's)".into());
+        return Err("open: no width option (a log replays at its own width; a file `width` beside the easel, or EASEL_WIDTH, sets a new painting's)".into());
     }
     Ok(name)
 }
@@ -560,12 +579,16 @@ fn open(args: &[String]) -> Result<(), String> {
     }
     // Replaying a real painting can take tens of minutes. Follow the server's
     // startup log so `open` shows that work instead of looking dead, and only
-    // time out when the replay itself has made no progress for 30 minutes.
+    // time out when the replay itself has made no progress for longer than a chunk may run.
     // The server is started only by the `open` that takes the session's lock; any
     // other waits for it (or, if it has gone, takes the lock in turn).
     let mut started = false;
     let mut shown = 0usize;
     let mut last_progress = Instant::now();
+    // a chunk may take its whole limit to replay (session::chunk_limit_for, by the width its log
+    // names): no progress for that long, and ten minutes more, is a stall
+    let width = std::fs::read_to_string(log_path(&name)).ok().and_then(|t| session::logged_width(&t).ok()).unwrap_or(LIVE_WIDTH);
+    let stall = session::chunk_limit_for(width) + Duration::from_secs(600);
     loop {
         if let Some(lock) = try_lock(&name)? {
             if started {
@@ -617,8 +640,8 @@ fn open(args: &[String]) -> Result<(), String> {
             }
             return Err(log);
         }
-        if last_progress.elapsed() > Duration::from_secs(1800) {
-            return Err(format!("session made no replay progress for 30 minutes; see {}", dir.join("server.log").display()));
+        if last_progress.elapsed() > stall {
+            return Err(format!("session made no replay progress for {} minutes; see {}", stall.as_secs() / 60, dir.join("server.log").display()));
         }
     }
 }
@@ -701,7 +724,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
-        return Err("easel: fatal: no width option (a log replays at its own width; EASEL_WIDTH sets a new painting's)".into());
+        return Err("easel: fatal: no width option (a log replays at its own width; a file `width` beside the easel, or EASEL_WIDTH, sets a new painting's)".into());
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
@@ -1074,6 +1097,11 @@ impl Server {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
             _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())?),
         };
+        // the state store's budgets are a 2400 px painting's (a 4800 px state is about four times as large)
+        #[cfg(feature = "state-store")]
+        if committed.is_some() && width > LIVE_WIDTH {
+            return Err(format!("EASEL_STATE_SESSION keeps paintings of {LIVE_WIDTH} px; this one is {width} px"));
+        }
         #[cfg(feature = "state-store")]
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
@@ -1281,7 +1309,7 @@ impl Server {
         Ok(reply)
     }
 
-    /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
+    /// The whole canvas at full detail (2.4 px a unit, as a crop), in tiles of at most 500 units a side,
     /// in reading order; the view's modes (gallery, value...) apply to each.
     fn survey(&mut self, args: &[String]) -> Result<String, String> {
         if args.iter().any(|a| a == "--crop" || a == "--size") {
@@ -1291,7 +1319,7 @@ impl Server {
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let view = look::View::parse(args)?;
         let (wu, hu) = (c.width(), c.height());
-        // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
+        // (a tile is at most 500 units: 1200 px as a crop is shown, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
         let (tw, th) = (wu / cols as f32, hu / rows as f32);
@@ -1784,6 +1812,11 @@ fn run(args: &[String]) -> Result<(), String> {
     let chunks = parse_program(&text);
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
+    }
+    // the state store's budgets are a 2400 px painting's (as for a live session: resume_as)
+    #[cfg(feature = "state-store")]
+    if flag(args, "--state-store").is_some() && width > LIVE_WIDTH {
+        return Err(format!("--state-store keeps paintings of {LIVE_WIDTH} px; {file} is {width} px"));
     }
     #[cfg(feature = "state-store")]
     let mut store = match flag(args, "--state-store") {
@@ -2408,10 +2441,14 @@ mod tests {
         assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), Ok(session::SKETCH_WIDTH));
         assert_eq!(width_for("sketchbook", Some(&head(""))), Ok(LIVE_WIDTH));
         assert_eq!(width_for("painting", Some(&head("--@ width 4800"))), Ok(4800));
-        // a new painting: LIVE_WIDTH, or EASEL_WIDTH's (one of session::WIDTHS)
-        assert_eq!(new_width(None), Ok(LIVE_WIDTH));
-        assert_eq!(new_width(Some("")), Ok(LIVE_WIDTH));
-        assert_eq!(new_width(Some("4800")), Ok(4800));
-        assert!(new_width(Some("3000")).is_err() && new_width(Some("wide")).is_err());
+        // a new painting: LIVE_WIDTH, or the width file's, or EASEL_WIDTH's (one of session::WIDTHS)
+        assert_eq!(new_width(None, None), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(None, Some("")), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(None, Some("4800")), Ok(4800));
+        assert_eq!(new_width(Some(("4800\n", "bin/width")), None), Ok(4800));
+        assert_eq!(new_width(Some(("4800", "bin/width")), Some("4800")), Ok(4800));
+        assert!(new_width(Some(("4800", "bin/width")), Some("2400")).unwrap_err().contains("set one"));
+        assert!(new_width(None, Some("3000")).is_err() && new_width(None, Some("wide")).is_err());
+        assert!(new_width(Some(("", "bin/width")), None).unwrap_err().contains("bin/width"));
     }
 }

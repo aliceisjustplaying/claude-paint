@@ -1052,7 +1052,7 @@ mod tests {
         live.run(r#"b = brush("flat", 24)
             b:load(pile{{"raw umber", 1}}, 0.8)
             b:stroke({{100, 200}, {900, 200}})
-            dry()
+            wait(1440)
             b:load(pile{{"lead white", 1}}, 0.6)
             b:stroke({{100, 200}, {900, 200}})
             wait(86400)"#).unwrap();

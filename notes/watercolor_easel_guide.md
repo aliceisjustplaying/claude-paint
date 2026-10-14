@@ -26,11 +26,13 @@ paper{width=<cells>, height=<cells>, kind="<kind>", seed=<seed>}
 The defaults are width 1,056, height 704, `"cold-press"` and seed 71, so
 `paper{}` makes that sheet. The paper is created once; a continuation chunk
 paints on the existing sheet. `paper{}` on a sheet that already has paper
-stops the chunk with "paper already exists". The painting's first chunk has
-to call `paper{}`, even one that only prints `palette()`: a chunk that ends
-with no paper on the painting stops. The scratch paper takes its size, kind
-and seed from the painting's paper, so it can be used once the painting has
-paper.
+stops the chunk with "paper already exists". A chunk can run before the
+painting has paper: one that only prints, such as `print(1)` or a chunk
+that prints the ids `palette()` returns, succeeds and goes into the log like
+any other successful chunk. `brush{}` and its marks, `drop{}`, `wait()`,
+`clock()`, `glaze()` and Lua `look{}` need paper, so call `paper{}` before
+them. The scratch paper takes its size, kind and seed from the painting's
+paper, so it can be used once the painting has paper.
 
 Coordinates and brush widths are in cells. The origin is the upper-left
 corner; x increases to the right and y downward. Fractional coordinates are

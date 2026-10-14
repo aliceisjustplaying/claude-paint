@@ -317,6 +317,7 @@ impl Session {
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
+        self._serials.capped.set(false);
         // Everything that can fail before the chunk is kept is inside this guard: the chunk,
         // prelude.lua's check, putting its hand time on the clock and reading the globals it
         // left. A failure anywhere in it is a failed chunk, rolled back below.
@@ -339,6 +340,9 @@ impl Session {
             Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
             Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
+        if fail.is_none() && self._serials.capped.get() {
+            fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));
+        }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
         // below reinstates the deadline because it can run Lua work.
@@ -614,6 +618,10 @@ pub struct Serials {
     /// allocation fails and Lua raises "not enough memory"
     used: Cell<usize>,
     cap: usize,
+    /// set when the cap refused an allocation; `run` fails a chunk that hit
+    /// it, even one that caught the error or that Lua's emergency collection
+    /// recovered from, since only a live session's heap holds its snapshot
+    capped: Cell<bool>,
     /// userdata and thread blocks: user address -> (serial, size)
     inner: RefCell<BTreeMap<usize, (i64, usize)>>,
 }
@@ -621,8 +629,9 @@ pub struct Serials {
 const HDR: usize = 16;
 /// The most a session's Lua state may hold. A chunk that builds something huge
 /// (a giant string.rep, a loop filling a table) then errors and is rolled back
-/// instead of swapping the machine. A constant, not a setting, so a replay
-/// fails exactly the chunks the live session failed.
+/// instead of swapping the machine. A live session's heap also holds the
+/// snapshot a replay doesn't take, so a chunk that meets the cap fails however
+/// it handles that (`Serials::capped`): no kept chunk ever met it.
 const LUA_MAX_BYTES: usize = 2 << 30;
 const PLAIN: i64 = 0;
 const AT_START: i64 = 1;
@@ -645,6 +654,7 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
                 return std::ptr::null_mut();
             }
             if nsize.saturating_add(HDR) > h.cap.saturating_sub(h.used.get()) {
+                h.capped.set(true);
                 return std::ptr::null_mut();
             }
             let b = std::alloc::alloc(layout(nsize));
@@ -682,6 +692,7 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             return std::ptr::null_mut();
         }
         if nsize > osize && nsize - osize > h.cap.saturating_sub(h.used.get()) {
+            h.capped.set(true);
             return std::ptr::null_mut();
         }
         // only arrays and buffers are reallocated, never objects
@@ -724,7 +735,7 @@ impl Serials {
 /// (see `Serials`).
 fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
-    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap: LUA_MAX_BYTES });
+    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap: LUA_MAX_BYTES, capped: Cell::new(false) });
     unsafe {
         let ud = &*serials as *const Serials as *mut c_void;
         let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
@@ -1103,6 +1114,20 @@ mod tests {
         let e = s.run("x = string.rep('x', 8 * 1024 * 1024 * 1024)").unwrap_err();
         assert!(e.contains("memory"), "{e}");
         s.run("assert(x == nil)").unwrap();
+    }
+
+    /// A chunk that catches the cap's error still fails: a live heap holds a
+    /// snapshot a replay's doesn't, so what the cap refused live a replay
+    /// might allow, and the chunk would paint differently there.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_caught_runaway_allocation_still_fails_the_chunk() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CHUNKS[0]).unwrap();
+        let e = s.run("ok = pcall(string.rep, 'x', 8 * 1024 * 1024 * 1024)").unwrap_err();
+        assert!(e.contains("memory"), "{e}");
+        s.run("assert(ok == nil)").unwrap();
+        assert_eq!(s.log.len(), 2, "the failed chunk was logged");
     }
 
     #[test]

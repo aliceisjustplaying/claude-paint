@@ -26,7 +26,10 @@ paper{width=<cells>, height=<cells>, kind="<kind>", seed=<seed>}
 The defaults are width 1,056, height 704, `"cold-press"` and seed 71, so
 `paper{}` makes that sheet. The paper is created once; a continuation chunk
 paints on the existing sheet. `paper{}` on a sheet that already has paper
-stops the chunk with "paper already exists".
+stops the chunk with "paper already exists". The painting's first chunk has
+to call `paper{}`, even one that only prints `palette()`: a chunk that ends
+with no paper on the painting stops. The scratch paper copies the
+painting's sheet, so it can be used once the painting has paper.
 
 Coordinates and brush widths are in cells. The origin is the upper-left
 corner; x increases to the right and y downward. Fractional coordinates are
@@ -84,22 +87,29 @@ makes a dry contact and keeps the brush's water. A brush holding less than
 even load.
 
 `b:wash{x=, y=, width=, height=, grade=}` lays a rectangle as rows of brush
-strokes. Its coordinates and dimensions are in cells. It takes the same
-pressure, dry-contact, grade and duration options. Each row starts with the
-brush's starting water and pigment load. That load is gradually replenished
-along the row so a loaded brush can cover the rectangle. By default a row
-lasts its length divided by 2,800 cells per second, with a minimum of
-0.015625 seconds; `duration` sets the time of each row. A painting begun on
-an earlier version of the easel keeps the wash timing it started with.
+strokes. Its coordinates and dimensions are in cells. Row centers are at
+most 0.7 brush widths apart. Each row's path runs from the rectangle's left
+side to its right, so the brush's contact reaches past both sides. It
+takes the same pressure, dry-contact, grade and duration options. Each row
+starts with the brush's starting water and pigment load. That load is
+gradually replenished along the row so a loaded brush can cover the
+rectangle. By default a row lasts its length divided by 2,800 cells per
+second, with a minimum of 0.015625 seconds; `duration` sets the time of
+each row. A painting begun on an earlier version of the easel keeps the
+wash timing it started with.
 
 `drop{x=, y=, water=<microliters>, radius=<cells>}` adds clean water: 0 to
 100 microliters. Radius accepts 1 to 1,200 cells, 12 by default. The water
 lands as a soft patch that fades out 1.8 times the radius from the center.
-Water can move workable paint and make a backrun. A drop lands at once and
-takes no painter-clock time. A drop whose patch misses the sheet entirely
-stops the chunk with "drop is outside paper". Stroke paths can run past the
-edges. A painting begun on an earlier version of the easel keeps the drop
-it started with, whose water stops at the radius.
+A radius-40 drop's water lands up to 72 cells from its center. For a
+drop's patch to land inside a shape, place its center at least 1.8 radii in
+from each edge: a radius-40 drop centered 40 cells inside an edge lands
+water up to 32 cells past it. Water can move workable paint and make a
+backrun. A drop lands at once and takes no painter-clock time. A drop
+whose patch misses the sheet entirely stops the chunk with "drop is outside
+paper". Stroke paths can run past the edges. A painting begun on an earlier
+version of the easel keeps the drop it started with, whose water stops at
+the radius.
 
 `b:lift(path)` lays the round lift contact along a path of the same form.
 It supplies water from the brush, loosens workable pigment on the sheet and
@@ -178,9 +188,8 @@ a glaze or a drying time before it goes on the painting. `paint`, `look`,
 the painting.
 
 - The first use sets it up as the painting's paper was set up: the same
-  size, kind and seed. The painting needs its own `paper{}` first. Each
-  scratch sheet, the first and every fresh one, comes with its paper, so
-  scratch chunks start without `paper{}`.
+  size, kind and seed. Each scratch sheet, the first and every fresh one,
+  comes with its paper, so scratch chunks start without `paper{}`.
 - It is a separate sheet with its own brushes, loads, clock and log,
   `paintings/lua/scratch.lua`. Load a brush again here. Nothing done on
   it reaches the painting.
@@ -194,7 +203,12 @@ the painting.
   so on, so an operator can render that sheet later.
 - A trial judges a passage only as far as it repeats that passage's
   conditions: lay the underlayer you mean to work over, and let it dry
-  as long as it has on the painting.
+  as long as it has on the painting. For a wash or glaze, the trial also
+  covers the passage's whole area at the same wetness, with the same rows,
+  overlaps and top-ups. One stroke lays the load once; across an area,
+  overlapping rows and passes lay it two or more times. A larger area also
+  takes longer to lay, so its first rows have longer to dry before the
+  last ones land.
 
 ## Lua
 
@@ -203,11 +217,15 @@ and a budget of about two million instructions per chunk. Native painting
 and waiting run outside that instruction budget. Keep the same runner build
 when continuing a painting.
 
+## The 12-minute limit
+
 A `paint` call has 12 minutes of wall time, on either sheet. A chunk still
 running at 12 minutes is stopped, and the call replies "the easel didn't
-answer; `log` shows whether the chunk ran". Wall time grows with the number
-of stroke calls more than with their length. In the first watercolor sitting,
-on the Mac GPU at 1,056 × 704 cells, stroke calls took about 0.3 seconds
-each: chunks of 1,100 to 1,300 strokes took 5 to 8 minutes, and a chunk of
-about 3,900 strokes was stopped. The sheet stays as it was between chunks,
-so a long pass can continue in the next chunk while its paint is still wet.
+answer; `log` shows whether the chunk ran". No number of strokes is known
+to be safe: in earlier sittings, some chunks of a few hundred strokes or
+fewer were stopped, while larger ones finished. The sheet stays as it was
+between chunks, so a long pass can continue in the next chunk while its
+paint is still wet. Lay a long wet pass over several chunks, each ending
+after a whole row or wash, and start the next chunk at the row that
+follows. After a stopped chunk, the pass picks up from the end of the last
+chunk that finished.

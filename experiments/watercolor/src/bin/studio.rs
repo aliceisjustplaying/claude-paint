@@ -17,7 +17,7 @@ fn main() {
         if args.iter().any(|s| s == "--scratch") {
             let main = studio::load(root)?;
             let paper = main.canvas.as_ref().ok_or_else(|| {
-                mlua::Error::external("create the painting's paper before using scratch")
+                mlua::Error::external("scratch copies the painting's paper, and the painting has none yet; make it first with paper{} in a paint chunk without scratch: true")
             })?;
             let lab = paper
                 .lab
@@ -131,7 +131,7 @@ fn main() {
                 let canvas = state
                     .canvas
                     .as_ref()
-                    .ok_or_else(|| mlua::Error::external("chunk made no paper"))?;
+                    .ok_or_else(|| mlua::Error::external("the painting has no paper, so the chunk can't complete; add paper{} to this chunk and run it again"))?;
                 let logs = root.join("paintings/lua");
                 fs::create_dir_all(&logs).map_err(mlua::Error::external)?;
                 fs::write(

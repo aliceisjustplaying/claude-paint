@@ -218,7 +218,7 @@ and a budget of about two million instructions per chunk. Native painting
 and waiting run outside that instruction budget. Keep the same runner build
 when continuing a painting.
 
-## The 12-minute limit
+### The 12-minute limit
 
 A `paint` call has 12 minutes of wall time, on either sheet. A chunk still
 running at 12 minutes is stopped, and the call replies "the easel didn't

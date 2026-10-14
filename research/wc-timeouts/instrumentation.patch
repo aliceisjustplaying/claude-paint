@@ -1,0 +1,142 @@
+diff --git a/experiments/watercolor/src/lab_adapter.rs b/experiments/watercolor/src/lab_adapter.rs
+index ac5df733..ba92a5f1 100644
+--- a/experiments/watercolor/src/lab_adapter.rs
++++ b/experiments/watercolor/src/lab_adapter.rs
+@@ -4,6 +4,26 @@ use serde::{Deserialize, Serialize};
+ use watercolor_lab_core::brush::Stamp;
+ use watercolor_lab_core::{gpu::GpuSimulation, pigments::Pigment};
+ use watercolor_lab_core::{km, simulation::Simulation};
++use std::{cell::RefCell, time::Instant};
++
++#[derive(Default, Debug)]
++struct Profile {
++    splats: u64,
++    splat_seconds: f64,
++    readback_seconds: f64,
++    ticks: u64,
++    tick_seconds: f64,
++    weights: u64,
++    weights_seconds: f64,
++}
++
++thread_local! {
++    static PROFILE: RefCell<Profile> = RefCell::new(Profile::default());
++}
++
++pub fn profile_summary() {
++    PROFILE.with(|p| eprintln!("WC_PROFILE {:?}", p.borrow()));
++}
+ 
+ #[derive(Default)]
+ pub struct GpuCache {
+@@ -53,6 +73,7 @@ impl LabSheet {
+     }
+ 
+     pub fn advance_tick(&mut self) {
++        let started = Instant::now();
+         let steps = self.quarter_steps as usize + 45;
+         self.ensure_gpu();
+         if let Some(gpu) = &mut self.gpu.gpu {
+@@ -64,6 +85,14 @@ impl LabSheet {
+             self.simulation.step_many(steps / 4, 1.0);
+         }
+         self.quarter_steps = (steps % 4) as u8;
++        PROFILE.with(|p| {
++            let mut p = p.borrow_mut();
++            p.ticks += 1;
++            p.tick_seconds += started.elapsed().as_secs_f64();
++            if p.ticks.is_multiple_of(200) {
++                eprintln!("WC_PROFILE {:?}", *p);
++            }
++        });
+     }
+ 
+     fn ensure_gpu(&mut self) {
+@@ -93,9 +122,11 @@ impl LabSheet {
+         pigment: Option<&Pigment>,
+         spread_water: bool,
+     ) {
++        let started = Instant::now();
+         self.ensure_gpu();
+         if let Some(gpu) = &mut self.gpu.gpu {
+             gpu.splat_water_profile(stamps, pigment, spread_water);
++            let readback_started = Instant::now();
+             for (field, target) in [
+                 (0, &mut self.simulation.flow.read),
+                 (2, &mut self.simulation.sus_k.read),
+@@ -105,10 +136,19 @@ impl LabSheet {
+                 *target = pollster::block_on(gpu.read_field(field))
+                     .expect("Watercolor Lab GPU splat readback failed");
+             }
++            PROFILE.with(|p| p.borrow_mut().readback_seconds += readback_started.elapsed().as_secs_f64());
+         } else {
+             self.simulation
+                 .splat_water_profile(stamps, pigment, spread_water);
+         }
++        PROFILE.with(|p| {
++            let mut p = p.borrow_mut();
++            p.splats += stamps.len() as u64;
++            p.splat_seconds += started.elapsed().as_secs_f64();
++            if p.splats.is_multiple_of(1000) {
++                eprintln!("WC_PROFILE {:?}", *p);
++            }
++        });
+     }
+ 
+     pub fn add_scrub(&mut self, stamps: &[Stamp]) {
+@@ -208,7 +248,14 @@ impl LabSheet {
+ 
+     /// Contact integrals from src/engine/shaders.ts:488–514 at the pinned commit.
+     pub fn stamp_weights(&mut self, stamp: &Stamp) -> (f64, f64) {
+-        self.stamp_weights_water_profile(stamp, false)
++        let started = Instant::now();
++        let result = self.stamp_weights_water_profile(stamp, false);
++        PROFILE.with(|p| {
++            let mut p = p.borrow_mut();
++            p.weights += 1;
++            p.weights_seconds += started.elapsed().as_secs_f64();
++        });
++        result
+     }
+ 
+     pub fn stamp_weights_water_profile(&mut self, stamp: &Stamp, spread_water: bool) -> (f64, f64) {
+diff --git a/experiments/watercolor/src/studio.rs b/experiments/watercolor/src/studio.rs
+index be477592..4e884466 100644
+--- a/experiments/watercolor/src/studio.rs
++++ b/experiments/watercolor/src/studio.rs
+@@ -1355,8 +1355,10 @@ pub fn run(root: &Path, source: &str) -> Result<Session> {
+ 
+ impl Writer {
+     pub fn run(&self, source: &str) -> Result<Session> {
++        let profile_started = std::time::Instant::now();
+         let root = &self.root;
+         let mut state = load(root)?;
++        eprintln!("WC_PHASE load {:.6}", profile_started.elapsed().as_secs_f64());
+         if state.applied_sources.iter().any(|s| s == source) {
+             return Err(error(
+                 "this exact chunk already ran; submit a new continuation chunk",
+@@ -1385,6 +1387,7 @@ impl Writer {
+                 canvas.lab.as_mut().unwrap().require_gpu().map_err(error)?;
+             }
+         }
++        eprintln!("WC_PHASE gpu_ready {:.6}", profile_started.elapsed().as_secs_f64());
+         let stage = root.join(format!(".pending-{}", std::process::id()));
+         if stage.exists() {
+             return Err(error(
+@@ -1419,6 +1422,8 @@ impl Writer {
+             )?;
+             install(&lua, ctx.clone())?;
+             lua.load(source).set_name("watercolor chunk").exec()?;
++            crate::lab_adapter::profile_summary();
++            eprintln!("WC_PHASE lua_done {:.6}", profile_started.elapsed().as_secs_f64());
+             let mut c = ctx.borrow_mut();
+             if c.state.canvas.is_none() {
+                 return Err(error("chunk made no paper"));
+@@ -1426,6 +1431,7 @@ impl Writer {
+             c.state.check_balance()?;
+             c.state.applied_sources.push(source.to_owned());
+             write_state(&stage.join("checkpoint.json"), &c.state)?;
++            eprintln!("WC_PHASE saved {:.6}", profile_started.elapsed().as_secs_f64());
+             for entry in fs::read_dir(&stage).map_err(error)? {
+                 let entry = entry.map_err(error)?;
+                 if entry.file_name() != "checkpoint.json" {

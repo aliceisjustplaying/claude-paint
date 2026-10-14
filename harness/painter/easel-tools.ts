@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
-import { atEasel, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
+import { atEasel, directoryListing, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
@@ -158,6 +158,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			const real = studioPath(studio, p.path);
 			if (!real) throw new Error(`${p.path} is outside the studio`);
 			if (!existsSync(real)) throw new Error(`${p.path}: no such file in the studio`);
+			const listing = directoryListing(real);
+			if (listing !== undefined) return text(listing);
 			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
 		},
 		executionMode: "sequential",

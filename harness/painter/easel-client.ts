@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { realpathSync, renameSync, statSync } from "node:fs";
+import { readdirSync, realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -135,6 +135,14 @@ export function studioPath(studio: string, path: string): string | undefined {
 	const rel = relative(root, real);
 	// outside: a first step that is exactly ".." (not a name like "..draft.md"), or another drive
 	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) ? real : undefined;
+}
+
+export function directoryListing(path: string): string | undefined {
+	if (!statSync(path).isDirectory()) return undefined;
+	return readdirSync(path, { withFileTypes: true })
+		.map((entry) => entry.name + (entry.isDirectory() ? "/" : ""))
+		.sort()
+		.join("\n") || "empty folder";
 }
 
 /** `full` with links followed; for a missing file, its nearest existing folder's. */

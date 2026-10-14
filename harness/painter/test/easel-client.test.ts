@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+
+test("reading a studio directory lists its files and subdirectories in order", () => {
+	const studio = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	try {
+		const reference = join(studio, "reference");
+		mkdirSync(reference);
+		writeFileSync(join(reference, "reference.png"), "image");
+		writeFileSync(join(reference, "details.txt"), "details");
+		mkdirSync(join(reference, "crops"));
+		assert.equal(directoryListing(studioPath(studio, "reference")!), "crops/\ndetails.txt\nreference.png");
+		assert.equal(directoryListing(join(reference, "crops")), "empty folder");
+		assert.equal(directoryListing(join(reference, "reference.png")), undefined);
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
 
 test("read opens only studio files, however the path is spelled", () => {
 	const top = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));

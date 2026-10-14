@@ -43,7 +43,9 @@
 //! thickness (for craquelure fitted to the ground); each wet pixel's paint
 //! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
 //! every cell of the deposit (coverage, flake reflectance, lift, fixed
-//! floor, film when drawn) and the whole-canvas guide with its fixed floor;
+//! floor, film when drawn; with a pastel stick's pastel, flag 2, the
+//! reflectance in color and the pastel in the tooth, loose and bound) and
+//! the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
@@ -387,7 +389,9 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                put_u64(w, 1)?;
+                // 1: graphite and chalk; 2: with a pastel stick's pastel, its
+                // cells in color with what lies in the tooth (graphite.rs)
+                put_u64(w, d.layout())?;
                 put_all(w, d.to_f32s())?;
             }
         }
@@ -536,9 +540,9 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            1 => {
+            v @ (1 | 2) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
-                let d = crate::graphite::Drawing::from_f32s(n, whole, |k| get_all(r, k))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
@@ -742,6 +746,40 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    /// A sheet of paper with stick pastel in its tooth survives a
+    /// checkpoint bit for bit (the paper, its micro-roughness, the loose and
+    /// bound pastel), and goes on taking pastel as it would have; a drawing
+    /// with stick pastel is flag 2, and a corrupt one is refused.
+    #[test]
+    fn paper_and_stick_pastel_survive_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(crate::paper::Paper::drawing(2));
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(200.0));
+        c.fix_pastel(None, 0.15);
+        c.stick_stroke(&mut st, &line(260.0));
+        let d = c.drawing.as_ref().unwrap();
+        assert!(d.layout() == 2 && d.cells.iter().any(|c| c.loose > 0.0) && d.cells.iter().any(|c| c.bound > 0.0));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b.clone())).unwrap();
+        assert!(r.pixels() == c.pixels() && r.height == c.height && r.micro == c.micro && r.paper == c.paper);
+        let mut again = Vec::new();
+        r.write_state(&mut again, "").unwrap();
+        assert!(again == b, "rewritten as it was read");
+        let mut st2 = st.clone();
+        c.stick_stroke(&mut st, &line(300.0));
+        r.stick_stroke(&mut st2, &line(300.0));
+        assert!(r.pixels() == c.pixels() && st == st2);
+        // a negative volume in the tooth is refused
+        c.drawing.as_mut().unwrap().cells[7].loose = -1.0;
+        let mut bad = Vec::new();
+        c.write_state(&mut bad, "").unwrap();
+        assert_eq!(Canvas::read_state(&mut Cursor::new(bad)).err().unwrap().kind(), io::ErrorKind::InvalidData);
     }
 
     /// A resumed canvas keeps its drawing: the deposit (so the

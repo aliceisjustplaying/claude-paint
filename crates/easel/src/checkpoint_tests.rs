@@ -47,10 +47,15 @@ fn traction_checkpoint_restores_the_session_flag_and_continues_exactly() {
     let mut restored = save::read(&checkpoint).unwrap().session;
     assert!(restored.st.borrow().traction);
     assert!(restored.canvas().unwrap().traction_enabled());
-    assert_eq!(state_digest_line(&live, 2, 0.0), state_digest_line(&restored, 2, 0.0));
+    let state = |s: &Session| {
+        let mut bytes = Vec::new();
+        s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+        bytes
+    };
+    assert_eq!(state(&live), state(&restored));
     live.run("wait(86400)").unwrap();
     restored.run("wait(86400)").unwrap();
-    assert_eq!(state_digest_line(&live, 3, 0.0), state_digest_line(&restored, 3, 0.0));
+    assert_eq!(state(&live), state(&restored));
     assert!(restored.program("traction").contains("--@ engine 5\n--@ traction\n"));
 }
 

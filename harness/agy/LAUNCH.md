@@ -20,7 +20,7 @@ During `end_sitting` the server pings every 15 seconds and sends MCP progress no
 
 `out/easel/mcp/session.jsonl` records tool calls, returned text and PNGs live. The Lua is in `paintings/lua/painting.lua` and the journal in `notes/journal.md`. `.agents/recording.json` names the raw recorder and the merged viewer output. Tool calls and looks appear in the viewer as soon as the stdio server starts recording. The converter writes the merged file into the same session folder and renames each viewer link to the raw recorder as `.jsonl.raw`, leaving the recorder file intact. The viewer then shows the merged timeline.
 
-A separate converter follows agy's transcript and the recorder; it never starts agy. agy's status-line documentation gives `transcript_path`, usually `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. The output path is the `output` field in `.agents/recording.json`. With the real paths and the exact model label, the operator command is:
+A separate converter follows agy's transcript and the recorder; it never starts agy. agy's status-line documentation gives `transcript_path`, usually `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. An interactive agy 1.3.5 session with Gemini wrote `~/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript_full.jsonl`, with `transcript.jsonl` beside it. Both hold the same user and planner prose. `transcript_full.jsonl` keeps full tool output and decoded tool arguments, while `transcript.jsonl` may truncate tool output and stores arguments as JSON strings. The output path is the `output` field in `.agents/recording.json`. With the real paths and the exact model label, the operator command is:
 
 ```sh
 uv run --no-project /path/to/claude-paint/harness/agy/convert.py \
@@ -29,7 +29,7 @@ uv run --no-project /path/to/claude-paint/harness/agy/convert.py \
   --model 'EXACT SELECTED MODEL' --follow
 ```
 
-The converter maps the documented stream-json response fields, keeps each recorder tool call and image once and keeps unknown events without showing them as prose. Thinking appears only when the transcript exposes it. agy's docs don't describe the interactive transcript schema, so prose and thinking conversion stays provisional until the first real session, and the raw files stay intact for that check. The synthetic test covers made-up events only.
+The converter maps the documented stream-json response fields, keeps each recorder tool call and image once and keeps unknown events without showing them as prose. Thinking appears only when the transcript exposes it. In the interactive transcript, `USER_INPUT.content` becomes user text and `PLANNER_RESPONSE.thinking` and `PLANNER_RESPONSE.content` become assistant thinking and text. Transcript `created_at` times have second precision and recorder times have millisecond precision, so the converter matches easel tool names in step order and places the prose after each tool step behind the matching recorder result. Tool calls, results and images come from the recorder alone, so none appear twice. The raw files stay intact. The tests cover made-up events and a shortened real transcript with no token counts or secrets, including partial and follow updates.
 
 ## Stop
 

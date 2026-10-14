@@ -9,7 +9,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--suite", choices=["policy", "geometry", "state", "all"], default="all")
 args = parser.parse_args()
 base = Path.home() / ".capy/work/wc-timeouts"
-binary = base / "target/release/watercolor-studio"
+retained = base / "profile-watercolor-studio"
+binary = retained if retained.exists() else base / "target/release/watercolor-studio"
 cases = []
 if args.suite in ["policy", "all"]:
     for policy, flags in [("normal", []), ("utility", ["/usr/sbin/taskpolicy", "-c", "utility"]), ("background", ["/usr/sbin/taskpolicy", "-b"]), ("app", ["/usr/sbin/taskpolicy", "-a"])]:

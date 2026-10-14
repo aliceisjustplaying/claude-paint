@@ -2,10 +2,10 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""Project recorder tools and agy stream-json prose into a separate pi session.
+"""Project recorder tools and agy transcript prose into a separate pi session.
 
-The interactive transcript schema is unverified. Only documented stream-json
-fields and an optional agent_response.thinking_delta string are interpreted.
+Supports interactive USER_INPUT and PLANNER_RESPONSE steps as well as documented
+stream-json fields and an optional agent_response.thinking_delta string.
 Other events become custom records ignored by the studio viewer. Untimestamped
 events use observation time in follow mode; historical interleaving is unknown.
 """
@@ -64,12 +64,26 @@ def merge_records(recorder, transcript, model=None, observed=None):
     if model:
         header.append({"type": "model_change", "modelId": model, "timestamp": session.get("timestamp", "")})
     events = [row for row in recorder if row.get("type") not in ("session", "model_change")]
+
+    def clock(event):
+        try:
+            parsed = datetime.fromisoformat(event.get("timestamp", "").replace("Z", "+00:00"))
+            return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+        except (ValueError, TypeError, AttributeError):
+            return 0
+
+    tools = [block for event in events for block in event.get("message", {}).get("content", [])
+             if isinstance(block, dict) and block.get("type") == "toolCall"]
+    results = {event["message"].get("toolCallId"): event for event in events
+               if event.get("message", {}).get("role") == "toolResult"}
+    tool_index = 0
+    after_tools = {}
     steps = {}
     has_prose = False
     for number, row in enumerate(transcript):
         payload = row.get(row.get("event")) if isinstance(row, dict) and isinstance(row.get("event"), str) else None
         payload = payload if isinstance(payload, dict) else {}
-        timestamp = (row.get("timestamp") if isinstance(row, dict) else None) or payload.get("timestamp")
+        timestamp = (row.get("timestamp") or row.get("created_at") if isinstance(row, dict) else None) or payload.get("timestamp")
         if not isinstance(timestamp, str) or not timestamp:
             timestamp = session.get("timestamp", "")
             if observed is not None:
@@ -79,6 +93,30 @@ def merge_records(recorder, transcript, model=None, observed=None):
                     observed[number] = (signature, datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
                 timestamp = observed[number][1]
         kind = row.get("event") if isinstance(row, dict) else None
+        if (isinstance(row, dict) and isinstance(row.get("step_index"), int)
+                and row.get("type") in ("USER_INPUT", "PLANNER_RESPONSE", "GENERIC")):
+            if row["type"] == "GENERIC":
+                continue
+            if clock(after_tools) > clock({"timestamp": timestamp}):
+                timestamp = after_tools["timestamp"]
+            blocks = []
+            thinking, text = row.get("thinking"), row.get("content")
+            if row["type"] == "PLANNER_RESPONSE" and isinstance(thinking, str) and thinking:
+                blocks.append({"type": "thinking", "thinking": thinking})
+            if isinstance(text, str) and text:
+                blocks.append({"type": "text", "text": text})
+            if blocks:
+                events.append({"type": "message", "timestamp": timestamp, "message": {
+                    "role": "user" if row["type"] == "USER_INPUT" else "assistant", "content": blocks,
+                }})
+            for call in row.get("tool_calls", []):
+                if (tool_index < len(tools) and isinstance(call, dict)
+                        and call.get("name") == "mcp_easel_" + tools[tool_index].get("name", "")):
+                    result = results.get(tools[tool_index].get("id"), {})
+                    if clock(result) > clock(after_tools):
+                        after_tools = result
+                    tool_index += 1
+            continue
         if kind == "init" and isinstance(row.get("init"), dict):
             steps = {}
             has_prose = False
@@ -121,13 +159,6 @@ def merge_records(recorder, transcript, model=None, observed=None):
                         content.append(block)
                 continue
         events.append({"type": "custom", "customType": "agy", "timestamp": timestamp, "data": row})
-
-    def clock(event):
-        try:
-            parsed = datetime.fromisoformat(event.get("timestamp", "").replace("Z", "+00:00"))
-            return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
-        except (ValueError, TypeError, AttributeError):
-            return 0
 
     return header + sorted(events, key=clock)
 

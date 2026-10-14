@@ -221,7 +221,8 @@ class Easel:
             args = ["open"]
 
     async def at(self, args, text=None):
-        wait = 12 * 60 if args[0] == "do" else 3 * 60
+        # a chunk may run 10 minutes at 2400 px and 40 at 4800 (session::chunk_limit_for)
+        wait = 42 * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
         if await self.ensure_open(deadline):
             deadline = time.monotonic() + wait

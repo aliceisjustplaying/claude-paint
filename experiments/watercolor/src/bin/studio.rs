@@ -17,7 +17,7 @@ fn main() {
         if args.iter().any(|s| s == "--scratch") {
             let main = studio::load(root)?;
             let paper = main.canvas.as_ref().ok_or_else(|| {
-                mlua::Error::external("scratch copies the painting's paper, and the painting has none yet; make it first with paper{} in a paint chunk without scratch: true")
+                mlua::Error::external("scratch paper takes its size, kind and seed from the painting's paper, which doesn't exist yet; make it first with paper{} in a paint chunk without scratch: true")
             })?;
             let lab = paper
                 .lab

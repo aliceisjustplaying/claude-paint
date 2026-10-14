@@ -28,8 +28,9 @@ The defaults are width 1,056, height 704, `"cold-press"` and seed 71, so
 paints on the existing sheet. `paper{}` on a sheet that already has paper
 stops the chunk with "paper already exists". The painting's first chunk has
 to call `paper{}`, even one that only prints `palette()`: a chunk that ends
-with no paper on the painting stops. The scratch paper copies the
-painting's sheet, so it can be used once the painting has paper.
+with no paper on the painting stops. The scratch paper takes its size, kind
+and seed from the painting's paper, so it can be used once the painting has
+paper.
 
 Coordinates and brush widths are in cells. The origin is the upper-left
 corner; x increases to the right and y downward. Fractional coordinates are
@@ -104,7 +105,7 @@ lands as a soft patch that fades out 1.8 times the radius from the center.
 A radius-40 drop's water lands up to 72 cells from its center. For a
 drop's patch to land inside a shape, place its center at least 1.8 radii in
 from each edge: a radius-40 drop centered 40 cells inside an edge lands
-water up to 32 cells past it. Water can move workable paint and make a
+water up to 32 cells past that edge. Water can move workable paint and make a
 backrun. A drop lands at once and takes no painter-clock time. A drop
 whose patch misses the sheet entirely stops the chunk with "drop is outside
 paper". Stroke paths can run past the edges. A painting begun on an earlier
@@ -203,10 +204,10 @@ the painting.
   so on, so an operator can render that sheet later.
 - A trial judges a passage only as far as it repeats that passage's
   conditions: lay the underlayer you mean to work over, and let it dry
-  as long as it has on the painting. For a wash or glaze, the trial also
-  covers the passage's whole area at the same wetness, with the same rows,
-  overlaps and top-ups. One stroke lays the load once; across an area,
-  overlapping rows and passes lay it two or more times. A larger area also
+  as long as it has on the painting. For a wash or glaze, those conditions
+  also include the passage's whole area and wetness, with the same rows,
+  overlaps and top-ups. One stroke shows the load laid once; where rows or
+  passes overlap, the paper takes it two or more times. A larger area also
   takes longer to lay, so its first rows have longer to dry before the
   last ones land.
 

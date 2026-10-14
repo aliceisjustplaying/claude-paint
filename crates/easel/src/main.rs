@@ -1223,10 +1223,11 @@ impl Server {
         };
         // the paper-and-pastel switch: a log's own; a new painting's on, a scratch canvas's
         // its painting's
-        srv.s.st.borrow_mut().paper = match &text {
+        let paper = match &text {
             Some(text) => session::logged_paper(text),
             None => like.is_none_or(|s| s.st.borrow().paper),
         };
+        srv.s.set_paper(paper).map_err(|e| e.to_string())?;
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -2149,7 +2150,7 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
-    let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?.with_paper(session::logged_paper(&text));
+    let mut s = Session::replay_with(width, tubes).and_then(|s| s.with_paper(session::logged_paper(&text))).map_err(|e| e.to_string())?;
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();

@@ -2278,6 +2278,13 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
+/// The verbs the paper-and-pastel switch brings (`Studio::paper`): pastel
+/// sticks, the finger and `feel` (draw_pencil.rs `install_paper`). Run
+/// once, after `install` and before the first chunk, when the switch is on.
+pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
+    draw_pencil::install_paper(lua, st)
+}
+
 
 
 

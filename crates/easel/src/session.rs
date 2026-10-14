@@ -381,10 +381,31 @@ impl Session {
     /// Set the paper-and-pastel switch (`PAPER_MARK`): a new painting's is
     /// on, a replay's is its log's (`logged_paper`). Set before the first
     /// chunk runs.
-    pub fn with_paper(self, on: bool) -> Self {
+    pub fn with_paper(mut self, on: bool) -> mlua::Result<Self> {
+        self.set_paper(on)?;
+        Ok(self)
+    }
+
+    /// `with_paper` in place. Switched on, the session gets the switch's
+    /// verbs (`api::install_paper`: `pastel`, `smudge`, `feel` and the
+    /// stick's methods), which are then the easel's own globals as much as
+    /// those `api::install` set; switched off it has none of them, so a log
+    /// painted before the switch sees exactly the globals it saw.
+    pub fn set_paper(&mut self, on: bool) -> mlua::Result<()> {
         debug_assert!(self.log.is_empty(), "the paper-and-pastel switch is set before the first chunk");
-        self.st.borrow_mut().paper = on;
-        self
+        let was = self.st.borrow().paper;
+        match (was, on) {
+            (false, true) => {
+                self.st.borrow_mut().paper = true;
+                api::install_paper(&self.lua, self.st.clone())?;
+                // (no chunk has run: every global is the easel's own)
+                self.own = global_values(&self.lua)?;
+                self.globals = self.own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
+                Ok(())
+            }
+            (true, false) => Err(mlua::Error::runtime("the paper-and-pastel switch, once on, stays on")),
+            _ => Ok(()),
+        }
     }
 
     /// Replaying (reopening a log): no snapshot before each chunk, since a failed chunk ends
@@ -466,7 +487,7 @@ impl Session {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?.with_paper(self.st.borrow().paper);
+        let mut fresh = Session::with_box(width, tubes).and_then(|s| s.with_paper(self.st.borrow().paper)).map_err(|e| e.to_string())?;
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -1888,11 +1909,11 @@ mod tests {
         assert!(e.contains(PAPER_MARK), "{e}");
         old.run(CANVAS).unwrap();
         assert!(!logged_paper(&old.program("old")));
-        let mut live = Session::new(96).unwrap().with_paper(true);
+        let mut live = Session::new(96).unwrap().with_paper(true).unwrap();
         live.run(sheet).unwrap();
         let log = live.program("paper");
         assert!(log.contains(&format!("{ENGINE_MARK} {}\n{PAPER_MARK}\n\n{MARK} 1\n", paint::ENGINE)), "{log}");
-        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(logged_paper(&log));
+        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(logged_paper(&log)).unwrap();
         for chunk in parse_program(&log) {
             replay.run(&chunk).unwrap();
         }
@@ -1918,7 +1939,7 @@ mod tests {
         let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
         for setup in [CANVAS, sheet] {
             let path = std::env::temp_dir().join(format!("easel-paper-save-{}-{}.ckpt", std::process::id(), setup.len()));
-            let mut live = Session::new(96).unwrap().with_paper(true);
+            let mut live = Session::new(96).unwrap().with_paper(true).unwrap();
             live.run(setup).unwrap();
             live.run("b = brush(\"round\", 6); b:load(pile{{\"raw umber\", 1}}, 0.6); b:stroke({{100, 300}, {800, 320}})").unwrap();
             crate::save::write(&live, &live.program("t"), &path).unwrap();

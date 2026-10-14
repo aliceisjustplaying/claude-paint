@@ -72,7 +72,7 @@ def merge_records(recorder, transcript, model=None, observed=None):
         except (ValueError, TypeError, AttributeError):
             return 0
 
-    tools = [block for event in events for block in event.get("message", {}).get("content", [])
+    tools = [(block, clock(event)) for event in events for block in event.get("message", {}).get("content", [])
              if isinstance(block, dict) and block.get("type") == "toolCall"]
     results = {event["message"].get("toolCallId"): event for event in events
                if event.get("message", {}).get("role") == "toolResult"}
@@ -110,12 +110,29 @@ def merge_records(recorder, transcript, model=None, observed=None):
                     "role": "user" if row["type"] == "USER_INPUT" else "assistant", "content": blocks,
                 }})
             for call in row.get("tool_calls", []):
-                if (tool_index < len(tools) and isinstance(call, dict)
-                        and call.get("name") == "mcp_easel_" + tools[tool_index].get("name", "")):
-                    result = results.get(tools[tool_index].get("id"), {})
+                if not isinstance(call, dict) or not isinstance(call.get("args", {}), dict):
+                    continue
+                arguments = {key: value for key, value in call.get("args", {}).items() if key != "toolSummary"}
+                try:
+                    decoded = {key: json.loads(value) if isinstance(value, str) else value for key, value in arguments.items()}
+                except ValueError:
+                    decoded = None
+                start = clock({"timestamp": row.get("created_at")})
+                if not start:
+                    continue
+                end = next((clock({"timestamp": step.get("created_at")}) + 1 for step in transcript[number + 1:]
+                            if isinstance(step, dict) and step.get("type") in ("USER_INPUT", "PLANNER_RESPONSE")
+                            and clock({"timestamp": step.get("created_at")})), float("inf"))
+                for index in range(tool_index, len(tools)):
+                    tool, called_at = tools[index]
+                    if (not start <= called_at < end or call.get("name") != "mcp_easel_" + tool.get("name", "")
+                            or tool.get("arguments", {}) not in (arguments, decoded)):
+                        continue
+                    result = results.get(tool.get("id"), {})
                     if clock(result) > clock(after_tools):
                         after_tools = result
-                    tool_index += 1
+                    tool_index = index + 1
+                    break
             continue
         if kind == "init" and isinstance(row.get("init"), dict):
             steps = {}

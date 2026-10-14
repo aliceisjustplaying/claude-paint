@@ -29,9 +29,10 @@ class ConvertTests(unittest.TestCase):
         transcript = [json.loads(line) for line in INTERACTIVE.splitlines() if line.strip()]
         recorder = [{"type": "session", "cwd": "/synthetic", "timestamp": "2026-10-14T21:06:04.800Z"}]
         for name, start, end in [("read", "21:06:17.178", "21:06:17.180"), ("paint", "21:06:34.100", "21:06:34.200")]:
+            arguments = {"path": "notes/easel_guide.md"} if name == "read" else {"lua": 'print("test")', "scratch": True}
             recorder.extend([
                 {"type": "message", "timestamp": f"2026-10-14T{start}Z", "message": {"role": "assistant", "content": [
-                    {"type": "toolCall", "id": name, "name": name, "arguments": {}},
+                    {"type": "toolCall", "id": name, "name": name, "arguments": arguments},
                 ]}},
                 {"type": "message", "timestamp": f"2026-10-14T{end}Z", "message": {"role": "toolResult", "toolCallId": name,
                     "isError": name == "paint", "content": [{"type": "text", "text": name + " result"},
@@ -73,6 +74,40 @@ class ConvertTests(unittest.TestCase):
             inode = output.stat().st_ino
             project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
             self.assertEqual(output.stat().st_ino, inode)
+
+    def test_tool_alignment_uses_supplied_conversation(self):
+        recorder = [{"type": "session", "timestamp": "2026-10-14T12:00:00Z"}]
+        for call_id, start, arguments in [
+            ("old", "12:00:02", {"crop": "0,0,100,100", "scratch": True}),
+            ("different-args", "12:01:01", {"crop": "100,100,200,200", "scratch": True}),
+            ("current", "12:01:02", {"crop": "0,0,100,100", "scratch": True}),
+            ("later", "12:02:02", {"crop": "0,0,100,100", "scratch": True}),
+        ]:
+            recorder.extend([
+                {"type": "message", "timestamp": f"2026-10-14T{start}.100Z", "message": {
+                    "role": "assistant", "content": [{"type": "toolCall", "id": call_id, "name": "look", "arguments": arguments}]}},
+                {"type": "message", "timestamp": f"2026-10-14T{start}.200Z", "message": {
+                    "role": "toolResult", "toolCallId": call_id, "content": [{"type": "text", "text": call_id}]}},
+            ])
+        transcript = [
+            {"step_index": 0, "type": "USER_INPUT", "created_at": "2026-10-14T12:01:00Z", "content": "Look again."},
+            {"step_index": 1, "type": "PLANNER_RESPONSE", "created_at": "2026-10-14T12:01:00Z", "thinking": "Before looking.",
+             "tool_calls": [{"name": "mcp_easel_look", "args": {"crop": "0,0,100,100", "scratch": True, "toolSummary": "Look"}}]},
+            {"step_index": 2, "type": "GENERIC", "created_at": "2026-10-14T12:01:02Z", "content": "Look result."},
+            {"step_index": 3, "type": "PLANNER_RESPONSE", "created_at": "2026-10-14T12:01:02Z",
+             "thinking": "After looking.", "content": "Here is the canvas."},
+        ]
+        for encoded_arguments in (False, True):
+            with self.subTest(encoded_arguments=encoded_arguments):
+                if encoded_arguments:
+                    args = transcript[1]["tool_calls"][0]["args"]
+                    transcript[1]["tool_calls"][0]["args"] = {key: json.dumps(value) for key, value in args.items()}
+                merged = merge_records(recorder, transcript)
+                reply = next(row for row in merged if row.get("message", {}).get("content", [{}])[-1].get("text") == "Here is the canvas.")
+                self.assertEqual(reply["timestamp"], "2026-10-14T12:01:02.200Z")
+                self.assertGreater(merged.index(reply), merged.index(recorder[6]))
+                self.assertLess(merged.index(reply), merged.index(recorder[7]))
+                self.assertEqual([row for row in merged if row in recorder[1:]], recorder[1:])
 
     def test_synthetic_projection_and_live_append(self):
         recorder_rows = [

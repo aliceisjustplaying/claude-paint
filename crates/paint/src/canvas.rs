@@ -233,7 +233,8 @@ pub struct Canvas {
     pub(crate) engine: u32,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
-    /// Through-hardening and traction damage (engine 6 and later).
+    pub(crate) traction_enabled: bool,
+    /// Through-hardening and traction damage.
     pub(crate) traction: crate::traction::Traction,
 }
 
@@ -282,6 +283,7 @@ impl Canvas {
             hand_slice: None,
             engine: crate::ENGINE,
             soak: None,
+            traction_enabled: false,
             traction: crate::traction::Traction::default(),
         }
     }
@@ -294,6 +296,15 @@ impl Canvas {
     }
     pub fn engine(&self) -> u32 {
         self.engine
+    }
+
+    pub fn with_traction(mut self, enabled: bool) -> Self {
+        self.traction_enabled = enabled;
+        self
+    }
+
+    pub fn traction_enabled(&self) -> bool {
+        self.traction_enabled
     }
 
     /// Physical width of the painting in mm (default 700).

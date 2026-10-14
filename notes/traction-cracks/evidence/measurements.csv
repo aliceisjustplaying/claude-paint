@@ -1,4 +1,0 @@
-case,engine,undercoat_um,topcoat_um,extra_undercoat_wait_minutes,topcoat_wait_minutes,dark_share,mean_luminance
-soft-undercoat,6,200,25,0,86400,0.14775988,0.64947033
-hardened-undercoat,6,200,25,1576800,86400,0.00000000,0.75960767
-engine-5,5,200,25,0,86400,0.00000000,0.75960767

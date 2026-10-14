@@ -132,9 +132,7 @@ impl Session {
     /// A session painting from the default box (tests).
     #[cfg(all(test, tube_box))]
     pub fn new(width: usize) -> mlua::Result<Self> {
-        let mut tubes = Palette::tube_box();
-        tubes.engine = paint::ENGINE;
-        Self::with_box(width, tubes)
+        Self::with_box(width, Palette::tube_box())
     }
 
     /// A session painting from `tubes` (a box: `Palette::named_box`).
@@ -186,9 +184,7 @@ impl Session {
     /// `easel run` and `check` use `replay_with`).
     #[cfg(all(test, tube_box))]
     pub fn replay(width: usize) -> mlua::Result<Self> {
-        let mut tubes = Palette::tube_box();
-        tubes.engine = paint::ENGINE;
-        Self::replay_with(width, tubes)
+        Self::replay_with(width, Palette::tube_box())
     }
 
     /// A session that replays a program painted from `tubes`: a failed chunk
@@ -211,6 +207,11 @@ impl Session {
     /// the reopen anyway, and no time limit. Off again once the log is in.
     pub fn set_replaying(&mut self, on: bool) {
         self.replay = on;
+    }
+
+    pub fn with_traction(self, enabled: bool) -> Self {
+        self.st.borrow_mut().traction = enabled;
+        self
     }
 
     fn snap(&mut self) -> mlua::Result<Snap> {
@@ -286,6 +287,7 @@ impl Session {
             (s.width, (*s.tubes).clone())
         };
         let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+        fresh.st.borrow_mut().traction = self.st.borrow().traction;
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -402,6 +404,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().traction {
+            let _ = writeln!(s, "--@ traction");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -901,6 +906,10 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+pub fn logged_traction(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ traction")
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -946,11 +955,12 @@ fn box_list() -> String {
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        let mut tubes = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
-        tubes.engine = paint::ENGINE;
-        return Ok(tubes);
+        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
     };
     let engine = logged_engine(text)?;
+    if logged_traction(text) && engine != 5 {
+        return Err("the log's traction switch requires engine 5".into());
+    }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
         return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
@@ -1024,6 +1034,47 @@ pub fn root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traction_is_only_read_from_the_log_header() {
+        assert!(!logged_traction("--@ engine 5\n--@ chunk 1\n--@ traction\n"));
+        assert!(logged_traction("--@ engine 5\n  --@ traction  \n--@ chunk 1\n"));
+        assert!(!logged_traction("--@ engine 5\n--@ traction-off\n--@ chunk 1\n"));
+        assert!(!logged_traction("--@ engine 5\n--@ chunk 1\nprint('--@ traction')\n"));
+        assert!(box_for(Some("--@ engine 4\n--@ traction\n--@ chunk 1\n")).is_err());
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn traction_header_replays_and_rebuilds_the_live_state() {
+        let mut live = Session::new(96).unwrap().with_traction(true);
+        live.run(CANVAS).unwrap();
+        live.run(r#"b = brush("flat", 24)
+            b:load(pile{{"raw umber", 1}}, 0.8)
+            b:stroke({{100, 200}, {900, 200}})
+            dry()
+            b:load(pile{{"lead white", 1}}, 0.6)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(86400)"#).unwrap();
+        let log = live.program("traction");
+        assert!(log.contains("--@ engine 5\n--@ traction\n\n--@ chunk 1\n"));
+        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_traction(logged_traction(&log));
+        for chunk in parse_program(&log) {
+            replay.run(&chunk).unwrap();
+        }
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        assert!(live.canvas().unwrap().traction_enabled());
+        assert_eq!(state(&replay), state(&live));
+        assert_eq!(replay.program("traction"), log);
+        let before = state(&live);
+        live.rebuild().unwrap();
+        assert_eq!(state(&live), before);
+        assert_eq!(live.program("traction"), log);
+    }
 
     #[test]
     #[cfg(tube_box)]
@@ -1809,7 +1860,7 @@ mod tests {
         let mut a = Session::new(W).unwrap();
         a.run(CANVAS).unwrap();
         let prog = a.program("t");
-        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine {}\n\n--@ chunk 1\n{CANVAS}\n", paint::ENGINE);
+        let want = format!("-- easel session \"t\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n\n--@ chunk 1\n{CANVAS}\n");
         assert_eq!(prog, want);
         assert_eq!(logged_box(&prog).unwrap(), None);
         assert_eq!(box_for(Some(&prog)).map(|b| b.name), Ok(paint::palette::DEFAULT_BOX), "(EASEL_BOX set in the test's environment?)");

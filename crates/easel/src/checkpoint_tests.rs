@@ -34,6 +34,27 @@ wait(30)
 }
 
 #[test]
+fn traction_checkpoint_restores_the_session_flag_and_continues_exactly() {
+    let temp = Temp::new("traction");
+    let mut live = Session::new(96).unwrap().with_traction(true);
+    for chunk in parse_program(&program(5)) {
+        live.run(&chunk).unwrap();
+    }
+    let log = live.program("traction");
+    let checkpoint = temp.0.join("traction.ckpt");
+    save::write(&live, &log, &checkpoint).unwrap();
+    assert_eq!(&std::fs::read(&checkpoint).unwrap()[..8], b"PAINTC13");
+    let mut restored = save::read(&checkpoint).unwrap().session;
+    assert!(restored.st.borrow().traction);
+    assert!(restored.canvas().unwrap().traction_enabled());
+    assert_eq!(state_digest_line(&live, 2, 0.0), state_digest_line(&restored, 2, 0.0));
+    live.run("wait(86400)").unwrap();
+    restored.run("wait(86400)").unwrap();
+    assert_eq!(state_digest_line(&live, 3, 0.0), state_digest_line(&restored, 3, 0.0));
+    assert!(restored.program("traction").contains("--@ engine 5\n--@ traction\n"));
+}
+
+#[test]
 fn checkpoint_render_matches_native_color_and_look_companions_for_every_engine() {
     let temp = Temp::new("parity");
     for engine in 1..=paint::ENGINE {
@@ -91,7 +112,7 @@ fn final_checkpoint_export_needs_no_dump_and_existing_zstd_save_renders_without_
     run(&[source.clone(), "--width".into(), "96".into(), "--out".into(), out.clone(), "--checkpoint-out".into(), checkpoint.clone()]).unwrap();
     assert_eq!(std::fs::read_dir(temp.0.join("saved")).unwrap().count(), 1);
     let raw = std::fs::read(&checkpoint).unwrap();
-    assert_eq!(&raw[..8], b"PAINTC13");
+    assert_eq!(&raw[..8], b"PAINTC11");
     assert!(raw.windows(b"easel save 1\n".len()).any(|v| v == b"easel save 1\n"));
     let compressed = temp.file("live.ckpt.zst");
     std::fs::write(&compressed, zstd::stream::encode_all(raw.as_slice(), 1).unwrap()).unwrap();

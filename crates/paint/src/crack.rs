@@ -403,6 +403,7 @@ struct ArmState {
 }
 
 struct Builder {
+    budget: Budget,
     size: V2,
     /// Target spacing S, step length (a thread pitch is `sub` steps),
     /// thread pitch (x, y), weave w.
@@ -439,8 +440,63 @@ struct Builder {
     seed: u64,
 }
 
+#[derive(Default)]
+pub(crate) struct Budget {
+    limit: Option<usize>,
+    used: usize,
+    size: V2,
+}
+
+impl Budget {
+    fn limited(size: V2, limit: usize) -> Self {
+        let mut budget = Self { limit: Some(limit), used: 0, size };
+        budget.charge::<u8>(1 << 20);
+        budget
+    }
+
+    fn refused(&self) -> ! {
+        let [width_mm, height_mm] = self.size;
+        let budget_mib = self.limit.unwrap() / (1 << 20);
+        panic!("This {width_mm} × {height_mm} mm canvas is too large for an automatic traction-crack network within the {budget_mib} MiB memory budget, so no cracks were added.");
+    }
+
+    pub(crate) fn charge<T>(&mut self, count: usize) {
+        let Some(limit) = self.limit else { return };
+        if count == 0 { return; }
+        let bytes = count.checked_mul(std::mem::size_of::<T>()).and_then(|n| n.checked_add(64));
+        let Some(used) = bytes.and_then(|n| self.used.checked_add(n)).filter(|&n| n <= limit) else { self.refused() };
+        self.used = used;
+    }
+
+    pub(crate) fn reserve<T>(&mut self, values: &mut Vec<T>, additional: usize) {
+        let Some(needed) = values.len().checked_add(additional) else { self.refused() };
+        if needed <= values.capacity() { return; }
+        if self.limit.is_none() {
+            values.reserve(additional);
+            return;
+        }
+        let capacity = needed.max(values.capacity().saturating_mul(2)).max(4);
+        self.charge::<T>(capacity);
+        if values.try_reserve_exact(capacity - values.len()).is_err() { self.refused(); }
+    }
+
+    pub(crate) fn push<T>(&mut self, values: &mut Vec<T>, value: T) {
+        self.reserve(values, 1);
+        values.push(value);
+    }
+
+    pub(crate) fn filled<T: Clone>(&mut self, count: usize, value: T) -> Vec<T> {
+        if self.limit.is_none() { return vec![value; count]; }
+        self.charge::<T>(count);
+        let mut values = Vec::new();
+        if values.try_reserve_exact(count).is_err() { self.refused(); }
+        values.resize(count, value);
+        values
+    }
+}
+
 impl Builder {
-    fn new(k: &Cracks, size: V2, pitch: V2) -> Self {
+    fn new(k: &Cracks, size: V2, pitch: V2, mut budget: Budget) -> Self {
         let s = k.island().max(0.2);
         let gc = s * GRID;
         let gx = (size[0] / gc).ceil() as usize + 1;
@@ -468,7 +524,11 @@ impl Builder {
         let grain = GRAIN * k.grain.clamp(0.0, 1.0);
         let drift = Fbm::new(seed as u32 ^ 0x57, 2, 180.0);
         let along_x = size[0] >= size[1];
-        let cells: Vec<([f32; 3], f32)> = (0..gx * gy)
+        let mut sig = Vec::new();
+        let mut strength = Vec::new();
+        budget.reserve(&mut sig, gx * gy);
+        budget.reserve(&mut strength, gx * gy);
+        (0..gx * gy)
             .into_par_iter()
             .map(|i| {
                 let p = [(i % gx) as f32 * gc + 0.5 * gc, (i / gx) as f32 * gc + 0.5 * gc];
@@ -521,8 +581,7 @@ impl Builder {
                 }
                 (t, st)
             })
-            .collect();
-        let (sig, strength) = cells.into_iter().unzip();
+            .unzip_into_vecs(&mut sig, &mut strength);
         // cracks are jagged below the thread scale (paint and ground grain):
         // steps of ≤ 0.25 mm, a whole number per thread pitch
         let pitch = [pitch[0].min(s / 3.0), pitch[1].min(s / 3.0)];
@@ -532,7 +591,11 @@ impl Builder {
         let ic = (0.25 * s).max(step);
         let ix = (size[0] / ic).ceil() as usize + 1;
         let iy = (size[1] / ic).ceil() as usize + 1;
+        let cells = budget.filled(ix * iy, Vec::new());
+        let mark = budget.filled(gx * gy, 0);
+        let best = budget.filled(gx * gy, (0.0, [0.0; 2]));
         Builder {
+            budget,
             size,
             s,
             step,
@@ -548,12 +611,12 @@ impl Builder {
             ic,
             ix,
             iy,
-            cells: (0..ix * iy).map(|_| Vec::new()).collect(),
+            cells,
             segs: Vec::new(),
             arms: Vec::new(),
             ncracks: 0,
-            mark: vec![0; gx * gy],
-            best: vec![(0.0, [0.0; 2]); gx * gy],
+            mark,
+            best,
             touched: Vec::new(),
             epoch: 0,
             r: R_FIRST,
@@ -595,13 +658,21 @@ impl Builder {
 
     fn add_seg(&mut self, a: V2, b: V2, who: Who) {
         let id = self.segs.len() as u32;
-        self.segs.push(Seg { a, b, crack: who.crack, arm: who.arm, k: who.k });
+        self.budget.push(&mut self.segs, Seg { a, b, crack: who.crack, arm: who.arm, k: who.k });
         let lo = [a[0].min(b[0]), a[1].min(b[1])];
         let hi = [a[0].max(b[0]), a[1].max(b[1])];
-        let cs: Vec<usize> = self.index_cells(lo, hi).collect();
+        let cs = self.collected_cells(lo, hi);
         for c in cs {
-            self.cells[c].push(id);
+            self.budget.push(&mut self.cells[c], id);
         }
+    }
+
+    fn collected_cells(&mut self, lo: V2, hi: V2) -> Vec<usize> {
+        let count = self.index_cells(lo, hi).count();
+        let mut cells = Vec::new();
+        self.budget.reserve(&mut cells, count);
+        cells.extend(self.index_cells(lo, hi));
+        cells
     }
 
     /// First place segment pq meets another crack: (point, crack).
@@ -691,7 +762,7 @@ impl Builder {
                 let q = addv(p, mul(a.h, LINK * self.s));
                 if let Some((x, c)) = self.hit(p, q, who) {
                     self.add_seg(p, x, who);
-                    a.arm.pts.push(x);
+                    self.budget.push(&mut a.arm.pts, x);
                     a.arm.end = End::Crack(c);
                 }
                 break;
@@ -753,18 +824,18 @@ impl Builder {
             let q = addv(a.ideal, mul(dn, jit));
             if let Some((x, c)) = self.hit(p, q, who) {
                 self.add_seg(p, x, who);
-                a.arm.pts.push(x);
+                self.budget.push(&mut a.arm.pts, x);
                 a.arm.end = End::Crack(c);
                 break;
             }
             if let Some(x) = self.border(p, q) {
                 self.add_seg(p, x, who);
-                a.arm.pts.push(x);
+                self.budget.push(&mut a.arm.pts, x);
                 a.arm.end = End::Border;
                 break;
             }
             self.add_seg(p, q, who);
-            a.arm.pts.push(q);
+            self.budget.push(&mut a.arm.pts, q);
         }
         let last = self.segs.len();
         self.arms[ai] = a;
@@ -808,7 +879,7 @@ impl Builder {
                     if self.mark[i] != ep {
                         self.mark[i] = ep;
                         self.best[i] = (dd, nrm);
-                        self.touched.push(i as u32);
+                        self.budget.push(&mut self.touched, i as u32);
                     } else if dd < self.best[i].0 {
                         self.best[i] = (dd, nrm);
                     }
@@ -855,7 +926,7 @@ impl Builder {
                 run += dot(d, d).sqrt();
                 let last = si + 1 == r.end;
                 if run >= lc || last {
-                    chords.push((a, sb, free && last));
+                    self.budget.push(&mut chords, (a, sb, free && last));
                     a = sb;
                     run = 0.0;
                 }
@@ -887,8 +958,9 @@ impl Builder {
         let mut grown = Vec::new();
         for side in [1.0f32, -1.0] {
             let ai = self.arms.len();
-            self.arms.push(ArmState {
-                arm: Arm { crack, pts: vec![p], end: End::Free, opening: 0.0, generation },
+            let pts = self.budget.filled(1, p);
+            self.budget.push(&mut self.arms, ArmState {
+                arm: Arm { crack, pts, end: End::Free, opening: 0.0, generation },
                 h: mul(h, side),
                 omega: 0.0,
                 wob: 0.0,
@@ -899,7 +971,7 @@ impl Builder {
                 rel: (0.0, 0.0),
             });
             let r = self.grow(ai);
-            grown.push((ai, r));
+            self.budget.push(&mut grown, (ai, r));
         }
         // opening ≈ the stress the crack released, relative to the mean
         let (a, b) = (self.arms.len() - 2, self.arms.len() - 1);
@@ -909,7 +981,7 @@ impl Builder {
         self.relax_arms(&grown);
     }
 
-    fn run(mut self) -> Network {
+    fn run(mut self) -> (Network, Budget) {
         for g in 0..GENERATIONS {
             let f = g as f32 / (GENERATIONS - 1) as f32;
             self.r = R_FIRST * (R_LAST / R_FIRST).powf(f);
@@ -923,12 +995,12 @@ impl Builder {
                 }
             }
             // then new cracks, strongest stress / strength first
-            let mut heap: BinaryHeap<(u32, Reverse<u32>)> = (0..self.gx * self.gy)
-                .filter_map(|i| {
-                    let q = self.ratio(i);
-                    (q > 1.0).then_some((q.to_bits(), Reverse(i as u32)))
-                })
-                .collect();
+            let mut candidates = Vec::new();
+            for i in 0..self.gx * self.gy {
+                let q = self.ratio(i);
+                if q > 1.0 { self.budget.push(&mut candidates, (q.to_bits(), Reverse(i as u32))); }
+            }
+            let mut heap = BinaryHeap::from(candidates);
             while let Some((qb, Reverse(i))) = heap.pop() {
                 let i = i as usize;
                 let q = self.ratio(i);
@@ -944,7 +1016,10 @@ impl Builder {
             }
         }
         self.fatigue();
-        Network { size_mm: self.size, arms: self.arms.into_iter().map(|a| a.arm).collect() }
+        let mut arms = Vec::new();
+        self.budget.reserve(&mut arms, self.arms.len());
+        arms.extend(self.arms.into_iter().map(|a| a.arm));
+        (Network { size_mm: self.size, arms }, self.budget)
     }
 
     /// Decades of humidity cycling: a free tip creeps on at any stress
@@ -957,7 +1032,11 @@ impl Builder {
             if self.arms[ai].arm.end != End::Free {
                 continue;
             }
-            let keep = self.arms[ai].clone();
+            let pts = std::mem::take(&mut self.arms[ai].arm.pts);
+            let mut keep = self.arms[ai].clone();
+            self.budget.reserve(&mut keep.arm.pts, pts.len());
+            keep.arm.pts.extend_from_slice(&pts);
+            self.arms[ai].arm.pts = pts;
             let r = self.grow(ai);
             if !matches!(self.arms[ai].arm.end, End::Crack(_)) {
                 // undo: drop the new segments from the index, newest first
@@ -965,7 +1044,7 @@ impl Builder {
                     let (a, b) = (self.segs[si].a, self.segs[si].b);
                     let lo = [a[0].min(b[0]), a[1].min(b[1])];
                     let hi = [a[0].max(b[0]), a[1].max(b[1])];
-                    let cs: Vec<usize> = self.index_cells(lo, hi).collect();
+                    let cs = self.collected_cells(lo, hi);
                     for c in cs {
                         if self.cells[c].last() == Some(&(si as u32)) {
                             self.cells[c].pop();
@@ -1031,7 +1110,11 @@ impl Stretcher {
 /// Grow a crack network over a `size_mm` surface on linen of thread pitch
 /// `pitch_mm` (x: across the warp threads, y: across the weft).
 pub fn network(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2]) -> Network {
-    Builder::new(k, size_mm, pitch_mm).run()
+    Builder::new(k, size_mm, pitch_mm, Budget::default()).run().0
+}
+
+pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2], limit: usize) -> (Network, Budget) {
+    Builder::new(k, size_mm, pitch_mm, Budget::limited(size_mm, limit)).run()
 }
 
 /// A crack segment for rasterizing: ends in mm and relative opening at each.

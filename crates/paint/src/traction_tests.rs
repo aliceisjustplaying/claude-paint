@@ -7,6 +7,29 @@ use std::io::Cursor;
 const DAY: f32 = 24.0 * 60.0;
 const PAINTED: [f32; 4] = [100.0, 100.0, 900.0, 900.0];
 
+#[test]
+fn budgeted_network_keeps_the_unbounded_arm_geometry() {
+    let k = crate::crack::Cracks { island_mm: Some(FINEST_MM), ground_um: Some(300.0), corners: false, grain: 0.0, ..crate::crack::Cracks::aged(11) };
+    let original = crate::crack::network(&k, [80.0; 2], [0.7; 2]);
+    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.7; 2], NETWORK_MEMORY_BUDGET);
+    assert_eq!(original.size_mm, bounded.size_mm);
+    assert_eq!(original.arms.len(), bounded.arms.len());
+    for (a, b) in original.arms.iter().zip(&bounded.arms) {
+        assert_eq!((a.crack, a.end, a.opening.to_bits(), a.generation), (b.crack, b.end, b.opening.to_bits(), b.generation));
+        assert_eq!(a.pts.iter().map(|p| p.map(f32::to_bits)).collect::<Vec<_>>(), b.pts.iter().map(|p| p.map(f32::to_bits)).collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn oversized_physical_canvases_refuse_traction_before_allocating_the_grid() {
+    let mut c = prepared(80, true, false).with_size_mm(5000.0);
+    let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.wait(60.0 * DAY))).unwrap_err();
+    let message = error.downcast_ref::<String>().unwrap();
+    assert!(message.contains("5000 × 5000 mm"), "{message}");
+    assert!(message.contains("1024 MiB memory budget"), "{message}");
+    assert!(c.traction.net.0.is_none());
+}
+
 fn canvas(px: usize, traction: bool, crop: Option<Crop>) -> Canvas {
     Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(crate::ENGINE).with_traction(traction)
 }

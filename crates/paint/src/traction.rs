@@ -18,6 +18,7 @@ const OPEN_MIN: f64 = 30.0 * 24.0 * 60.0;
 const FINEST_MM: f32 = 1.6;
 const LAST_GEN: u8 = 4;
 const GAP_MAX: f32 = 0.2;
+const NETWORK_MEMORY_BUDGET: usize = 1024 << 20;
 const MARK: u64 = 0x4e4f_4954_4341_5254; // TRACTION
 const SECTION_V: u64 = 1;
 
@@ -325,7 +326,7 @@ pub(crate) struct DryNet {
 
 impl DryNet {
     fn new(size_mm: [f32; 2], seed: u64) -> DryNet {
-        use crate::crack::{Cracks, End, network};
+        use crate::crack::{Cracks, End, network_with_budget};
         let k = Cracks {
             island_mm: Some(FINEST_MM),
             ground_um: Some(300.0),
@@ -333,7 +334,7 @@ impl DryNet {
             grain: 0.0,
             ..Cracks::aged(seed)
         };
-        let net = network(&k, size_mm, [0.7, 0.7]);
+        let (net, mut budget) = network_with_budget(&k, size_mm, [0.7, 0.7], NETWORK_MEMORY_BUDGET);
         let mut segs = Vec::new();
         for a in &net.arms {
             let n = a.pts.len();
@@ -341,7 +342,7 @@ impl DryNet {
                 continue;
             }
             // length along the arm, for the taper to a free end
-            let mut along = vec![0.0f32; n];
+            let mut along = budget.filled(n, 0.0f32);
             for j in 1..n {
                 along[j] = along[j - 1] + ((a.pts[j][0] - a.pts[j - 1][0]).powi(2) + (a.pts[j][1] - a.pts[j - 1][1]).powi(2)).sqrt();
             }
@@ -355,12 +356,12 @@ impl DryNet {
                 a.opening.clamp(0.2, 1.5) * taper
             };
             for j in 1..n {
-                segs.push((a.pts[j - 1], a.pts[j], open(j - 1), open(j), a.generation));
+                budget.push(&mut segs, (a.pts[j - 1], a.pts[j], open(j - 1), open(j), a.generation));
             }
         }
         let cell = 2.0f32;
         let (cols, rows) = (((size_mm[0] / cell).ceil() as usize).max(1), ((size_mm[1] / cell).ceil() as usize).max(1));
-        let mut cells = vec![Vec::new(); cols * rows];
+        let mut cells = budget.filled(cols * rows, Vec::new());
         for (si, &(a, b, ..)) in segs.iter().enumerate() {
             let (x0, x1) = (
                 (a[0].min(b[0]) / cell).floor().max(0.0) as usize,
@@ -373,7 +374,7 @@ impl DryNet {
             for y in y0..=y1.max(y0) {
                 for x in x0..=x1.max(x0) {
                     if x < cols && y < rows {
-                        cells[y * cols + x].push(si as u32);
+                        budget.push(&mut cells[y * cols + x], si as u32);
                     }
                 }
             }

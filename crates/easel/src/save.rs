@@ -187,7 +187,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     }
     let tubes = crate::session::box_for(Some(&logged))?;
     let width: usize = parse(&h, "width")?;
-    let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?.with_paper(paper);
+    let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {
         let mut st = s.st.borrow_mut();
         st.seed = parse(&h, "seed")?;

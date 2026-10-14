@@ -7,8 +7,8 @@ use std::io::Cursor;
 const DAY: f32 = 24.0 * 60.0;
 const PAINTED: [f32; 4] = [100.0, 100.0, 900.0, 900.0];
 
-fn canvas(px: usize, engine: u32, crop: Option<Crop>) -> Canvas {
-    Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(engine)
+fn canvas(px: usize, traction: bool, crop: Option<Crop>) -> Canvas {
+    Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(crate::ENGINE).with_traction(traction)
 }
 
 fn undercoat() -> Paint {
@@ -39,8 +39,8 @@ fn film(c: &mut Canvas, paint: Paint, um: f32, bounds: [f32; 4], stroke: u32) {
     c.wet.touch(x0, y0, x1, y1);
 }
 
-fn prepared(px: usize, engine: u32, hardened: bool) -> Canvas {
-    let mut c = canvas(px, engine, None);
+fn prepared(px: usize, traction: bool, hardened: bool) -> Canvas {
+    let mut c = canvas(px, traction, None);
     film(&mut c, undercoat(), 200.0, PAINTED, 1);
     c.dry();
     if hardened {
@@ -112,10 +112,10 @@ fn saved(c: &Canvas) -> Vec<u8> {
 }
 
 #[test]
-fn soft_undercoat_cracks_but_hardened_and_engine_five_controls_do_not() {
-    let mut soft = prepared(180, ENGINE, false);
-    let mut hard = prepared(180, ENGINE, true);
-    let mut five = prepared(180, 5, false);
+fn soft_undercoat_cracks_but_hardened_and_traction_off_controls_do_not() {
+    let mut soft = prepared(180, true, false);
+    let mut hard = prepared(180, true, true);
+    let mut five = prepared(180, false, false);
     soft.wait(60.0 * DAY);
     hard.wait(60.0 * DAY);
     five.wait(60.0 * DAY);
@@ -128,7 +128,7 @@ fn soft_undercoat_cracks_but_hardened_and_engine_five_controls_do_not() {
 
 #[test]
 fn first_dry_retains_substrate_softness_and_matches_waiting() {
-    let mut dry = canvas(120, ENGINE, None);
+    let mut dry = canvas(120, true, None);
     film(&mut dry, undercoat(), 200.0, PAINTED, 1);
     let mut wait = dry.clone();
     assert!(dry.wet.clock.px.is_empty());
@@ -143,7 +143,7 @@ fn first_dry_retains_substrate_softness_and_matches_waiting() {
         film(c, topcoat(), 25.0, PAINTED, 2);
         c.wait(60.0 * DAY);
     }
-    let mut control = prepared(120, 5, false);
+    let mut control = prepared(120, false, false);
     control.wait(60.0 * DAY);
     assert!(mean_luminance(&dry) + 0.01 < mean_luminance(&control), "first dry left no cracking");
     surface_near(&dry, &wait);
@@ -152,7 +152,7 @@ fn first_dry_retains_substrate_softness_and_matches_waiting() {
 
 #[test]
 fn cracking_survives_long_and_fractionally_split_waits() {
-    let start = prepared(120, ENGINE, false);
+    let start = prepared(120, true, false);
     for total in [60.0 * DAY, 10.0 * 365.0 * DAY] {
         let mut long = start.clone();
         let mut split = start.clone();
@@ -162,7 +162,7 @@ fn cracking_survives_long_and_fractionally_split_waits() {
             split.wait(dt);
         }
         assert_eq!(long.clock(), split.clock());
-        let mut control = prepared(120, 5, false);
+        let mut control = prepared(120, false, false);
         control.wait(total);
         assert!(
             mean_luminance(&long) + 0.01 < mean_luminance(&control),
@@ -176,7 +176,7 @@ fn cracking_survives_long_and_fractionally_split_waits() {
 #[test]
 fn checkpoint_continues_opening_and_threads_do_not_change_it() {
     let run = || {
-        let mut c = prepared(120, ENGINE, false);
+        let mut c = prepared(120, true, false);
         c.wait(5.0 * DAY);
         assert!(!c.traction.cracks.is_empty());
         let early = mean_luminance(&c);
@@ -197,7 +197,7 @@ fn checkpoint_continues_opening_and_threads_do_not_change_it() {
 
 #[test]
 fn different_films_and_a_recoat_preserve_wait_partitioning() {
-    let mut long = canvas(120, ENGINE, None);
+    let mut long = canvas(120, true, None);
     film(&mut long, undercoat(), 200.0, PAINTED, 1);
     long.dry();
     film(&mut long, topcoat(), 0.75 * COAT_UM, [100.0, 100.0, 480.0, 900.0], 2);
@@ -227,8 +227,8 @@ fn crop_uses_the_whole_canvas_crack_coordinates() {
         units: [250.0, 230.0, 750.0, 770.0],
         margin: 150.0,
     };
-    let mut whole = canvas(180, ENGINE, None);
-    let mut window = canvas(180, ENGINE, Some(crop));
+    let mut whole = canvas(180, true, None);
+    let mut window = canvas(180, true, Some(crop));
     for c in [&mut whole, &mut window] {
         film(c, undercoat(), 200.0, [0.0, 0.0, 1000.0, 1000.0], 1);
         c.dry();
@@ -248,7 +248,7 @@ fn crop_uses_the_whole_canvas_crack_coordinates() {
 
 #[test]
 fn network_cache_tracks_physical_size_and_support_seed() {
-    let mut c = canvas(120, ENGINE, None);
+    let mut c = canvas(120, true, None);
     let first = c.traction_net();
     let mut wider = c.clone().with_size_mm(120.0);
     let resized = wider.traction_net();
@@ -269,7 +269,7 @@ fn network_cache_tracks_physical_size_and_support_seed() {
 
 #[test]
 fn cracks_restore_actual_textured_substrate_and_all_material_fields() {
-    let mut c = canvas(120, ENGINE, None);
+    let mut c = canvas(120, true, None);
     film(&mut c, undercoat(), 200.0, PAINTED, 1);
     c.dry();
     for i in 0..c.height.len() {
@@ -301,7 +301,7 @@ fn cracks_restore_actual_textured_substrate_and_all_material_fields() {
 
 #[test]
 fn glaze_and_varnish_are_preserved_by_later_waits() {
-    let mut start = prepared(120, ENGINE, false);
+    let mut start = prepared(120, true, false);
     start.wait(5.0 * DAY);
     assert!(!start.traction.cracks.is_empty());
     for glaze in [false, true] {
@@ -392,16 +392,16 @@ fn write_traction_study() {
     let Some(out) = std::env::var_os("TRACTION_STUDY_OUT") else { return };
     let out = std::path::PathBuf::from(out);
     std::fs::create_dir_all(&out).unwrap();
-    let mut csv = String::from("case,engine,undercoat_um,topcoat_um,extra_undercoat_wait_minutes,topcoat_wait_minutes,dark_share,mean_luminance\n");
+    let mut csv = String::from("case,traction,undercoat_um,topcoat_um,extra_undercoat_wait_minutes,topcoat_wait_minutes,dark_share,mean_luminance\n");
     let mut panels = image::RgbImage::new(960, 320);
-    for (column, (label, engine, hardened)) in [("soft-undercoat", ENGINE, false), ("hardened-undercoat", ENGINE, true), ("engine-5", 5, false)]
+    for (column, (label, traction, hardened)) in [("soft-undercoat", true, false), ("hardened-undercoat", true, true), ("traction-off", false, false)]
         .into_iter()
         .enumerate()
     {
-        let mut c = prepared(320, engine, hardened);
+        let mut c = prepared(320, traction, hardened);
         c.wait(60.0 * DAY);
         csv.push_str(&format!(
-            "{label},{engine},200,25,{},{},{:.8},{:.8}\n",
+            "{label},{traction},200,25,{},{},{:.8},{:.8}\n",
             if hardened { 3.0 * 365.0 * DAY } else { 0.0 },
             60.0 * DAY,
             dark_share(&c),
@@ -418,7 +418,7 @@ fn write_traction_study() {
 
 #[test]
 fn a_gel_rounding_boundary_can_be_checkpointed() {
-    let mut c = canvas(40, ENGINE, None);
+    let mut c = canvas(40, true, None);
     let paint = Paint::body(hex("#606060")).with_stiff(0.5).with_drying(1.0);
     film(&mut c, paint, 25.0, [0.0, 0.0, 1000.0, 1000.0], 1);
     c.wait(f32::from_bits(2808.0f32.to_bits() - 1));

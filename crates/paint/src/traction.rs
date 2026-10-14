@@ -11,8 +11,6 @@ use crate::surface::COAT_UM;
 use rayon::prelude::*;
 use std::io::{self, Read, Write};
 
-/// Provisional next engine; the integrator may assign another number.
-pub(crate) const ENGINE: u32 = 6;
 const THROUGH: f32 = 6.0;
 const SOFT0: f32 = 30.0;
 const SOFT1: f32 = 120.0;

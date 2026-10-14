@@ -494,9 +494,9 @@ impl Canvas {
         let low = if flow { f32::MIN_POSITIVE } else { 1e-5 };
         let w = self.f.w;
         // Capture gel dates before a large interval magnifies f32 cure.
-        // The extra scan and all traction state are confined to the new engine.
+        // The extra scan and all traction state are confined to opted-in canvases.
         let mut dates = Vec::new();
-        if self.engine >= crate::traction::ENGINE && let Some((x0, y0, x1, y1)) = self.wet.dirty {
+        if self.traction_enabled && let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let pace = Pace::of(self.engine);
             let start = now - dt as f64;
             for y in y0..y1.min(self.f.h) {
@@ -554,7 +554,7 @@ impl Canvas {
         }
         // films past the gel point level and set
         self.bake(false, now, &dates);
-        if self.engine >= crate::traction::ENGINE { self.traction_open(now); }
+        if self.traction_enabled { self.traction_open(now); }
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -663,7 +663,7 @@ impl Canvas {
             self.wait_out_solvent();
         }
         // Traction needs substrate history even on the first dry().
-        if self.engine >= crate::traction::ENGINE && self.wet.clock.px.is_empty() {
+        if self.traction_enabled && self.wet.clock.px.is_empty() {
             self.wet.clock.px = vec![Px::FRESH; self.f.w * self.f.h];
         }
         if !self.wet.clock.px.is_empty() {
@@ -695,7 +695,7 @@ impl Canvas {
                 })
                 .reduce(|| 0.0, f32::max);
         }
-        if self.engine >= crate::traction::ENGINE {
+        if self.traction_enabled {
             if let Some((x0, y0, x1, y1)) = self.wet.clock.tacky {
                 let w = self.f.w;
                 for y in y0..y1 {
@@ -749,7 +749,7 @@ impl Canvas {
         };
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-        if self.engine >= crate::traction::ENGINE {
+        if self.traction_enabled {
             // A fresh coat covers the opening surface immediately, before gel.
             self.traction.cracks.retain(|c| self.wet.vol[c.index()] < 1e-5);
         }
@@ -879,11 +879,11 @@ impl Canvas {
         }
         // Leveling can bridge the old relief. Cracks must expose the actual
         // undercoat, including its height before that bridging.
-        let under_height = if self.engine >= crate::traction::ENGINE {
+        let under_height = if self.traction_enabled {
             (ex.1..ex.3).flat_map(|y| self.height[y * w + ex.0..y * w + ex.2].iter().copied()).collect::<Vec<_>>()
         } else { Vec::new() };
         let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
-        let cracks = if self.engine >= crate::traction::ENGINE {
+        let cracks = if self.traction_enabled {
             self.traction_before(ex, &add, &t, &under_height, now, dates)
         } else { Vec::new() };
         // engine 4: the film's surface is as glossy as it is rich in oil (a

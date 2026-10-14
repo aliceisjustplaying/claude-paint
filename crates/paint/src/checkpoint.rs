@@ -61,8 +61,8 @@
 //!
 //! Traction cracks (`crate::traction`) use version 13 (`PAINTC13`), or 14
 //! (`PAINTC14`) on raw cloth: version 11 or 12's payload followed by the
-//! traction section. Only canvases of the traction engine use these formats;
-//! older engines retain their exact checkpoint layout.
+//! traction section. Only canvases with traction enabled use these formats;
+//! canvases without the flag retain their exact checkpoint layout.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -229,9 +229,12 @@ impl Canvas {
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
         }
+        if self.traction_enabled && self.engine != 5 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "traction requires engine 5"));
+        }
         let version = match (self.engine, self.soak.is_some()) {
-            (engine, true) if engine >= crate::traction::ENGINE => 14,
-            (engine, false) if engine >= crate::traction::ENGINE => 13,
+            (_, true) if self.traction_enabled => 14,
+            (_, false) if self.traction_enabled => 13,
             (3, true) => 10,
             (3, false) => 9,
             (4.., true) => 12,
@@ -345,7 +348,7 @@ impl Canvas {
         if let Some(s) = &self.soak {
             write_soak(w, s)?;
         }
-        if self.engine >= crate::traction::ENGINE {
+        if self.traction_enabled {
             self.traction.write(w, self.f.w * self.f.h, self.wet.clock.now)?;
         }
         Ok(())
@@ -484,8 +487,9 @@ impl Canvas {
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
-        if (version >= 13) != (c.engine >= crate::traction::ENGINE) {
-            return Err(bad("checkpoint traction format does not match its engine"));
+        c.traction_enabled = version >= 13;
+        if c.traction_enabled && c.engine != 5 {
+            return Err(bad("checkpoint traction requires engine 5"));
         }
         if version >= 11 {
             if c.engine < 4 {
@@ -590,7 +594,7 @@ mod tests {
             c.write_state(&mut b, "").unwrap();
             b
         };
-        let b = canvas(4);
+        let b = canvas(crate::ENGINE);
         assert_eq!(&b[..8], b"PAINTC11");
         let d = load(b).unwrap();
         assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5]));
@@ -627,7 +631,7 @@ mod tests {
     #[test]
     fn traction_checkpoint_wraps_material_payload_and_round_trips() {
         for raw in [false, true] {
-            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(crate::traction::ENGINE);
+            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_traction(true);
             if raw {
                 c.raw_canvas(crate::soak::Fabric::cotton_duck(), 7);
             }
@@ -638,7 +642,7 @@ mod tests {
             c.write_state(&mut bytes, "").unwrap();
             assert_eq!(&bytes[..8], if raw { MAGIC14 } else { MAGIC13 });
             assert_eq!(read_header(&mut Cursor::new(&bytes)).unwrap(), "");
-            let old = c.clone().with_engine(5);
+            let old = c.clone().with_traction(false);
             let mut legacy = Vec::new();
             old.write_state(&mut legacy, "").unwrap();
             let mut soak = Vec::new();
@@ -652,7 +656,8 @@ mod tests {
             assert_eq!(payload, legacy);
             assert_eq!(&bytes[legacy.len()..], &section);
             let d = load(bytes.clone()).unwrap();
-            assert_eq!(d.engine, crate::traction::ENGINE);
+            assert_eq!(d.engine, 5);
+            assert!(d.traction_enabled());
             assert_eq!(d.is_raw(), raw);
             let mut resumed = Vec::new();
             d.write_state(&mut resumed, "").unwrap();
@@ -663,12 +668,12 @@ mod tests {
     #[test]
     fn traction_checkpoint_rejects_wrong_engine_format_and_incomplete_sections() {
         for raw in [false, true] {
-            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(crate::traction::ENGINE);
+            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_traction(true);
             if raw {
                 c.raw_canvas(crate::soak::Fabric::linen(), 8);
             }
             let mut legacy = Vec::new();
-            c.clone().with_engine(5).write_state(&mut legacy, "").unwrap();
+            c.clone().with_traction(false).write_state(&mut legacy, "").unwrap();
             let mut soak = Vec::new();
             if let Some(s) = &c.soak {
                 write_soak(&mut soak, s).unwrap();
@@ -677,10 +682,10 @@ mod tests {
             let mut bytes = Vec::new();
             c.write_state(&mut bytes, "").unwrap();
             let mut older_engine = bytes.clone();
-            set(&mut older_engine, engine_word, 5);
+            set(&mut older_engine, engine_word, 4);
             rejected(older_engine, "traction format with an older engine");
-            set(&mut legacy, engine_word, crate::traction::ENGINE as u64);
-            rejected(legacy, "traction engine without its section");
+            legacy[..8].copy_from_slice(if raw { MAGIC14 } else { MAGIC13 });
+            assert_eq!(load(legacy).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
             for engine in [0, crate::ENGINE as u64 + 1] {
                 let mut invalid_engine = bytes.clone();
                 set(&mut invalid_engine, engine_word, engine);

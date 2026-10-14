@@ -72,6 +72,19 @@
 //! it is: a canvas without it is written as before, and a reader that
 //! doesn't know version 14 refuses a draining canvas instead of loading it
 //! without its packing. (Version 13 is left to the paper's section.)
+//! A canvas on a sheet of paper (`crate::paper`) is version 13
+//! (`PAINTC13`): version 11's bytes after the magic, then the paper's
+//! section, which is the file's last: a `PAPR` mark and the section's own
+//! version (1, `PAPER_V`), the sheet's make (grammage, fiber length, width
+//! and thickness, coarseness, porosity, flocs and their size, pressing,
+//! calendering, absorbency and z modulus, one f32 each), its seed, its felt
+//! and laid wires (each a 0/1 flag, then its numbers), and the pores' mean
+//! depth per buffer pixel (`Canvas::micro`). The section is there exactly
+//! when the canvas has paper, whatever its engine: a canvas without paper
+//! is written as before, and a reader that doesn't know version 13 refuses
+//! a sheet instead of loading it as linen. A sheet of paper is engine 4's
+//! or later (its pores take oil as an absorbent ground does) and never a
+//! raw canvas.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -91,6 +104,12 @@ const MAGIC12: &[u8; 8] = b"PAINTC12";
 /// Version 11 with the drain section (`Canvas::with_drain`), and a raw
 /// canvas's soak section after it if there is one.
 const MAGIC14: &[u8; 8] = b"PAINTC14";
+const MAGIC16: &[u8; 8] = b"PAINTC16";
+/// Version 11 followed by the paper's section (`crate::paper`).
+const MAGIC13: &[u8; 8] = b"PAINTC13";
+/// Marks the paper's section ("PAPR"), and its version.
+const PAPER_MARK: u64 = 0x52504150;
+const PAPER_V: u64 = 1;
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
@@ -203,6 +222,71 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     Ok(crate::soak::Soak::new(fabric, t0, seed, weave))
 }
 
+fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io::Result<()> {
+    put_u64(w, PAPER_MARK)?;
+    put_u64(w, PAPER_V)?;
+    for v in [p.grammage, p.fiber_mm, p.fiber_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
+        put_f32(w, v)?;
+    }
+    put_u64(w, p.seed)?;
+    match p.felt {
+        None => put_u64(w, 0)?,
+        Some(f) => {
+            put_u64(w, 1)?;
+            put_f32(w, f.cell_mm)?;
+            put_f32(w, f.depth_um)?;
+        }
+    }
+    match p.laid {
+        None => put_u64(w, 0)?,
+        Some(l) => {
+            put_u64(w, 1)?;
+            put_f32(w, l.per_cm)?;
+            put_f32(w, l.chain_mm)?;
+            put_f32(w, l.deficit)?;
+        }
+    }
+    put_all(w, micro.iter().copied())
+}
+
+fn read_paper(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, Vec<f32>)> {
+    use crate::paper::{Felt, Laid, Paper};
+    if get_u64(r)? != PAPER_MARK {
+        return Err(bad("checkpoint paper mark is wrong"));
+    }
+    match get_u64(r)? {
+        PAPER_V => {}
+        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads version {PAPER_V} only"))),
+    }
+    let mut v = [0.0f32; 12];
+    for x in v.iter_mut() {
+        *x = get_f32(r)?;
+    }
+    let seed = get_u64(r)?;
+    let felt = match get_u64(r)? {
+        0 => None,
+        1 => Some(Felt { cell_mm: get_f32(r)?, depth_um: get_f32(r)? }),
+        _ => return Err(bad("checkpoint paper felt flag is invalid")),
+    };
+    let laid = match get_u64(r)? {
+        0 => None,
+        1 => Some(Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
+        _ => return Err(bad("checkpoint paper laid flag is invalid")),
+    };
+    let micro = get_all(r, n)?;
+    // (a corrupt file is an error here, not a panic or NaN pixels later)
+    let felt_ok = felt.is_none_or(|f| f.cell_mm.is_finite() && f.depth_um.is_finite());
+    let laid_ok = laid.is_none_or(|l| [l.per_cm, l.chain_mm, l.deficit].iter().all(|x| x.is_finite()));
+    if !(v.iter().all(|x| x.is_finite()) && felt_ok && laid_ok && micro.iter().all(|x| x.is_finite() && *x >= 0.0)) {
+        return Err(bad("checkpoint paper is invalid"));
+    }
+    let p = Paper {
+        grammage: v[0], fiber_mm: v[1], fiber_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
+        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+    };
+    Ok((p, micro))
+}
+
 /// Read just the header of a checkpoint (to validate it before loading).
 pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
@@ -222,6 +306,8 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
         m if m == MAGIC14 => 14,
+        m if m == MAGIC16 => 16,
+        m if m == MAGIC13 => 13,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -252,8 +338,14 @@ impl Canvas {
         if self.drain && self.engine < 4 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "the drain switch drains engine 4's oil: this canvas is set to an older engine"));
         }
+        // (a sheet of paper: version 13 holds version 11's bytes)
+        if self.paper.is_some() && (self.engine < 4 || self.soak.is_some() || self.micro.len() != self.f.w * self.f.h) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a sheet of paper is engine 4's or later, on no raw cloth, with its pores laid (`with_paper`)"));
+        }
         let version = match (self.engine, self.soak.is_some()) {
+            _ if self.drain && self.paper.is_some() => 16,
             _ if self.drain => 14,
+            _ if self.paper.is_some() => 13,
             (3, true) => 10,
             (3, false) => 9,
             (4.., true) => 12,
@@ -262,6 +354,8 @@ impl Canvas {
         };
         w.write_all(match version {
             14 => MAGIC14,
+            16 => MAGIC16,
+            13 => MAGIC13,
             12 => MAGIC12,
             11 => MAGIC11,
             10 => MAGIC10,
@@ -367,7 +461,7 @@ impl Canvas {
         }
         // the drain section (version 14): whether a soak section follows,
         // and the pigment's packing per pixel
-        if version == 14 {
+        if matches!(version, 14 | 16) {
             put_u64(w, DRAIN_MARK)?;
             put_u64(w, DRAIN_V)?;
             put_u64(w, u64::from(self.soak.is_some()))?;
@@ -376,6 +470,10 @@ impl Canvas {
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
             write_soak(w, s)?;
+        }
+        // a sheet of paper's section (version 13), last
+        if let Some(p) = &self.paper {
+            write_paper(w, p, &self.micro)?;
         }
         Ok(())
     }
@@ -561,7 +659,7 @@ impl Canvas {
         // per pixel, and whether a soak section follows
         let raw = match version {
             10 | 12 => true,
-            14 => {
+            14 | 16 => {
                 if get_u64(r)? != DRAIN_MARK {
                     return Err(bad("checkpoint drain mark is wrong"));
                 }
@@ -583,7 +681,7 @@ impl Canvas {
                     h[5..].copy_from_slice(k);
                 }
                 c.drain = true;
-                if !raw && r.read(&mut [0u8; 1])? != 0 {
+                if !raw && version != 16 && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
@@ -596,6 +694,15 @@ impl Canvas {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
             c.soak = Some(Box::new(read_soak(r, n)?));
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
+        }
+        // a sheet of paper's section, which ends the file
+        if matches!(version, 13 | 16) {
+            let (p, micro) = read_paper(r, n)?;
+            c.paper = Some(p);
+            c.micro = micro;
             if r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
@@ -663,5 +770,83 @@ mod tests {
         assert!(load(b).is_err(), "trailing data");
         let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(3).with_drain(true);
         assert!(c.write_state(&mut Vec::new(), "").is_err());
+    }
+
+    #[test]
+    fn drained_paper_keeps_both_sections() {
+        let mut c = Canvas::new_window(32, 1.0, [0.5; 3], None)
+            .with_paper(crate::paper::Paper::drawing(2))
+            .with_drain(true);
+        c.wet.vol[0] = 1.5;
+        c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
+        let mut bytes = Vec::new();
+        c.write_state(&mut bytes, "").unwrap();
+        assert_eq!(&bytes[..8], b"PAINTC16");
+        let d = load(bytes.clone()).unwrap();
+        assert!(d.drain && d.paper == c.paper && d.micro == c.micro && d.wet.hide == c.wet.hide);
+        let mut again = Vec::new();
+        d.write_state(&mut again, "").unwrap();
+        assert_eq!(again, bytes);
+        bytes.push(0);
+        assert!(load(bytes).is_err());
+    }
+
+    fn rejected(b: Vec<u8>, what: &str) {
+        match load(b) {
+            Ok(_) => panic!("{what}: accepted"),
+            Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
+        }
+    }
+
+    /// A sheet of paper is written as version 13 and comes back bit for
+    /// bit (the sheet's make, its pores, its surface, matte face and
+    /// absorbency), and goes on taking a ground as it would have; without
+    /// the sheet (linen put in its place) the canvas is version 11 again.
+    /// The section is refused when it is cut short, followed by more, or
+    /// carries a wrong mark or a NaN, and a sheet is no engine-3 canvas.
+    #[test]
+    fn a_sheet_of_paper_survives_a_checkpoint() {
+        use crate::paper::{Laid, Paper};
+        let p = Paper { laid: Some(Laid { per_cm: 9.0, chain_mm: 24.0, deficit: 0.2 }), ..Paper::drawing(2) };
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(p);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert_eq!(&b[..8], b"PAINTC13");
+        let mut d = load(b.clone()).unwrap();
+        assert!(d.paper == c.paper && d.micro == c.micro && d.height == c.height && d.absorb == c.absorb && d.gloss == c.gloss && d.absorb_any);
+        let mut again = Vec::new();
+        d.write_state(&mut again, "").unwrap();
+        assert!(again == b, "rewritten as it was read");
+        for k in [&mut c, &mut d] {
+            k.prime([0.8, 0.78, 0.7], 0.6, 40.0, 0.3, 0.4, 5);
+            k.ground_finish(0.5);
+        }
+        assert!(d.pixels() == c.pixels() && d.height == c.height && d.absorb == c.absorb);
+        let mut linen = Vec::new();
+        c.clone().with_linen(Linen::fine(1)).write_state(&mut linen, "").unwrap();
+        assert_eq!(&linen[..8], b"PAINTC11");
+        let mut cut = b.clone();
+        cut.pop();
+        assert_eq!(load(cut).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
+        let mut trailing = b.clone();
+        trailing.push(0);
+        rejected(trailing, "trailing byte");
+        let n = c.f.w * c.f.h;
+        // (the section: mark, version, 12 numbers, seed, felt, laid, then the pores)
+        let section = b.len() - (8 + 8 + 12 * 4 + 8 + (8 + 2 * 4) + (8 + 3 * 4) + 4 * n);
+        let mut mark = b.clone();
+        set(&mut mark, section, 0);
+        rejected(mark, "paper mark");
+        let mut nan = b.clone();
+        let last = nan.len() - 4;
+        nan[last..].copy_from_slice(&f32::NAN.to_le_bytes());
+        rejected(nan, "a NaN pore");
+        let mut no_section = b[..section].to_vec();
+        no_section[..8].copy_from_slice(b"PAINTC11");
+        assert!(load(no_section.clone()).is_ok());
+        no_section[..8].copy_from_slice(b"PAINTC13");
+        assert_eq!(load(no_section).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
+        let e = c.clone().with_engine(3).write_state(&mut Vec::new(), "").unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
     }
 }

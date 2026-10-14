@@ -29,7 +29,10 @@ if shutil.disk_usage(base).free < 15 * 1024**3:
 for name in ["box", "checkpoint.json"]:
     origin = args.checkpoint if name == "checkpoint.json" and args.checkpoint else original / name
     subprocess.run(["/bin/cp", "-c", str(origin), str(root / name)], check=True)
-binary = base / "target/release/watercolor-studio" if args.profile else base / "watercolor-studio"
+binary = base / "watercolor-studio"
+if args.profile:
+    retained = base / "profile-watercolor-studio"
+    binary = retained if retained.exists() else base / "target/release/watercolor-studio"
 if not binary.exists():
     shutil.copy2(original / "bin/watercolor-studio", binary)
 source = base / f"{args.name}.lua"

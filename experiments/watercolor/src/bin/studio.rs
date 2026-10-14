@@ -128,10 +128,6 @@ fn main() {
                     fs::read_to_string(&args[4]).map_err(mlua::Error::external)?
                 };
                 let state = writer.as_ref().unwrap().run(&source)?;
-                let canvas = state
-                    .canvas
-                    .as_ref()
-                    .ok_or_else(|| mlua::Error::external("the painting has no paper, so the chunk can't complete; add paper{} to this chunk and run it again"))?;
                 let logs = root.join("paintings/lua");
                 fs::create_dir_all(&logs).map_err(mlua::Error::external)?;
                 fs::write(
@@ -143,11 +139,15 @@ fn main() {
                     state.applied_sources.join("\n\n"),
                 )
                 .map_err(mlua::Error::external)?;
-                if let Some(lab) = &canvas.lab {
-                    println!(
-                        "Lab GPU: {}x{} cells",
-                        lab.simulation.width, lab.simulation.height
-                    );
+                if let Some(canvas) = &state.canvas {
+                    if let Some(lab) = &canvas.lab {
+                        println!(
+                            "Lab GPU: {}x{} cells",
+                            lab.simulation.width, lab.simulation.height
+                        );
+                    }
+                } else {
+                    println!("no paper yet; make it with paper{{}}");
                 }
                 println!(
                     "{}\npainting time: {:.4}s\nok",

@@ -30,15 +30,19 @@ fn explicit_box_and_duplicate_chunks_fail_closed() {
 }
 
 #[test]
-fn first_chunk_errors_explain_paper_setup_without_committing() {
+fn paperless_inspections_commit_and_scratch_still_needs_paper() {
     let p = root();
-    let before = studio::load(&p).unwrap();
-    for source in ["print(1)", "print(table.concat(palette(), ', '))"] {
-        let message = studio::run(&p, source).unwrap_err().to_string();
-        assert!(message.contains("paper{}"), "{message}");
-        assert_eq!(before, studio::load(&p).unwrap());
-        assert!(!p.join("checkpoint.json").exists());
+    for source in [
+        "print(1)",
+        "print(table.concat(palette(), ', '))",
+        "print(balance().conserved)",
+    ] {
+        let state = studio::run(&p, source).unwrap();
+        assert!(state.canvas.is_none());
+        assert_eq!(state.applied_sources.last().unwrap(), source);
+        assert_eq!(state, studio::load(&p).unwrap());
     }
+    let before = fs::read(p.join("checkpoint.json")).unwrap();
     let result = std::process::Command::new(env!("CARGO_BIN_EXE_watercolor-studio"))
         .args(["--box", "watercolor", "status"])
         .arg(&p)
@@ -49,10 +53,45 @@ fn first_chunk_errors_explain_paper_setup_without_committing() {
     let message = String::from_utf8(result.stderr).unwrap();
     assert!(message.contains("paper{}"), "{message}");
     assert!(message.contains("scratch: true"), "{message}");
-    assert_eq!(before, studio::load(&p).unwrap());
-    assert!(!p.join("checkpoint.json").exists());
+    assert_eq!(before, fs::read(p.join("checkpoint.json")).unwrap());
     assert!(!p.join("out/watercolor/scratch").exists());
     fs::remove_dir_all(p).unwrap();
+}
+
+#[test]
+fn paperless_first_chunk_is_logged_and_replays_with_following_paper() {
+    let p = root();
+    let replay = root();
+    let script = p.join("chunk.lua");
+    for source in ["print(1)", "paper{solver='current',size=3,aspect=1.5}"] {
+        fs::write(&script, source).unwrap();
+        let result = std::process::Command::new(env!("CARGO_BIN_EXE_watercolor-studio"))
+            .args(["--box", "watercolor", "run"])
+            .arg(&p)
+            .arg(&script)
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{result:?}");
+        let state = studio::load(&p).unwrap();
+        assert_eq!(state.applied_sources.last().unwrap(), source);
+        let log = fs::read_to_string(p.join("paintings/lua/painting.lua")).unwrap();
+        assert_eq!(log, state.applied_sources.join("\n\n"));
+        if source == "print(1)" {
+            assert!(state.canvas.is_none());
+            assert_eq!(
+                String::from_utf8(result.stdout).unwrap(),
+                "1\nno paper yet; make it with paper{}\nday 1, 09:00\npainting time: 0.0000s\nok\n"
+            );
+        } else {
+            assert!(state.canvas.is_some());
+            let rerun = studio::run(&replay, &log).unwrap();
+            assert_eq!(rerun.canvas, state.canvas);
+            assert_eq!(rerun.engine_version, state.engine_version);
+        }
+    }
+    for dir in [p, replay] {
+        fs::remove_dir_all(dir).unwrap();
+    }
 }
 
 #[test]

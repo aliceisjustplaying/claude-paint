@@ -79,6 +79,7 @@ esac
 unset EASEL_BOX EASEL_WIDTH
 width=${STUDIO_WIDTH:-}
 case "$width" in ''|2400|4800) ;; *) echo "STUDIO_WIDTH=$width: want 2400 or 4800" >&2; exit 2 ;; esac
+[ "$profile" != watercolor ] || [ "${width:-2400}" = 2400 ] || { echo "STUDIO_WIDTH=$width: the watercolor studio has no width option" >&2; exit 2; }
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 branch=${R16_BRANCH:-round-16}
@@ -272,6 +273,10 @@ E="$probe/bin/easel"
 # its log names the studio's box (the default box: no line)
 logged=$(sed -n '/^--@ chunk/q; s/^--@ box //p' "$probe/paintings/lua/painting.lua")
 [ "$logged" = "$box" ] || { echo "the probe's log names box '$logged', not '$box'" >&2; exit 1; }
+# and the width asked for (2400: no line): an easel built from a revision that doesn't read
+# bin/width paints at 2400 whatever STUDIO_WIDTH says
+logged_width=$(sed -n '/^--@ chunk/q; s/^--@ width //p' "$probe/paintings/lua/painting.lua")
+[ "${logged_width:-2400}" = "${width:-2400}" ] || { echo "the probe painted at ${logged_width:-2400} px, not the ${width:-2400} px STUDIO_WIDTH asks for: the easel built from $branch doesn't read bin/width" >&2; exit 1; }
 if "$E" run "$probe/paintings/lua/painting.lua" >/dev/null 2>&1; then
   echo "the exported easel has a run command" >&2
   exit 1

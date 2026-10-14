@@ -39,6 +39,16 @@ fn memory_preflight_uses_the_whole_physical_canvas_even_for_a_small_crop() {
     assert!(c.with_traction(false).check_traction_memory().is_ok());
 }
 
+#[test]
+fn catching_a_memory_panic_does_not_hide_it_from_the_chunk_guard() {
+    let mut c = prepared(80, true, false).with_size_mm(5000.0);
+    let error = crate::crack::guard_traction_memory(|| {
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.wait(60.0 * DAY))).is_err());
+    }).unwrap_err();
+    assert!(error.contains("1024 MiB memory budget"), "{error}");
+    assert!(crate::crack::guard_traction_memory(|| ()).is_ok());
+}
+
 fn canvas(px: usize, traction: bool, crop: Option<Crop>) -> Canvas {
     Canvas::new_window(px, 1.0, hex("#d8cdb4"), crop).with_size_mm(80.0).with_engine(crate::ENGINE).with_traction(traction)
 }

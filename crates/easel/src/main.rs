@@ -60,18 +60,30 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-/// The one width a painting is painted, replayed and delivered at (px).
+/// The width a painting is painted, replayed and delivered at (px) unless it
+/// names another (`session::WIDTH_MARK`, from `EASEL_WIDTH` when it began).
 const LIVE_WIDTH: usize = 2400;
 
 /// The width a painting paints at: an existing one its log's (a sketch if
-/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
-/// session's name starts with "sketch".
-fn width_for(name: &str, log: Option<&str>) -> usize {
-    let sketch = match log {
-        Some(text) => session::logged_sketch(text),
-        None => name.starts_with("sketch"),
-    };
-    if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
+/// its head says so, `session::SKETCH_MARK`; else the width its head names,
+/// `session::WIDTH_MARK`, or `LIVE_WIDTH`), a new one a sketch's if the
+/// session's name starts with "sketch", else `EASEL_WIDTH`'s if it is set
+/// (one of `session::WIDTHS`), else `LIVE_WIDTH`.
+fn width_for(name: &str, log: Option<&str>) -> Result<usize, String> {
+    match log {
+        Some(text) if session::logged_sketch(text) => Ok(session::SKETCH_WIDTH),
+        Some(text) => session::logged_width(text),
+        None if name.starts_with("sketch") => Ok(session::SKETCH_WIDTH),
+        None => new_width(std::env::var("EASEL_WIDTH").ok().as_deref()),
+    }
+}
+
+/// A new painting's width: `EASEL_WIDTH` if set, else `LIVE_WIDTH`.
+fn new_width(var: Option<&str>) -> Result<usize, String> {
+    let Some(v) = var.filter(|v| !v.is_empty()) else { return Ok(LIVE_WIDTH) };
+    v.parse::<usize>().ok().filter(|w| session::WIDTHS.contains(w)).ok_or_else(|| {
+        format!("EASEL_WIDTH={v}: want one of {:?}", session::WIDTHS)
+    })
 }
 
 /// The painter build's one session.
@@ -115,7 +127,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at its width and write the PNG
       [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
@@ -128,6 +140,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,
   else the default tube box; its log names the box (a line \"--@ box <name>\"), and every
   replay of the log uses that box.
+
+  A new painting is LIVE_WIDTH (2400) px wide, or EASEL_WIDTH's (2400 or 4800); a log
+  painted at another width names it (a line \"--@ width <px>\"), and every replay uses it.
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
@@ -487,7 +502,7 @@ fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
-        return Err("open: live sessions are fixed at 2400px; no width option".into());
+        return Err("open: no width option (a log replays at its own width; EASEL_WIDTH sets a new painting's)".into());
     }
     Ok(name)
 }
@@ -686,7 +701,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
-        return Err("easel: fatal: live sessions are fixed at 2400px".into());
+        return Err("easel: fatal: no width option (a log replays at its own width; EASEL_WIDTH sets a new painting's)".into());
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
@@ -1052,7 +1067,7 @@ impl Server {
         // configured box (session::box_for)
         let (tubes, width) = match (like, &text) {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
-            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
+            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())?),
         };
         #[cfg(feature = "state-store")]
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
@@ -1653,7 +1668,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(any(feature = "replay", feature = "state-store"))]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
@@ -1714,9 +1729,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
     // a development preview may replay narrower (kernel radii are in mm, so it is not the
     // painting at a smaller size: see notes/workflow.md); the painting is the width it was
-    // painted at (LIVE_WIDTH, a sketch's SKETCH_WIDTH)
+    // painted at (LIVE_WIDTH, the width its head names, a sketch's SKETCH_WIDTH)
     let width = match flag(args, "--width") {
-        None => width_for(&stem, Some(&text)),
+        None => width_for(&stem, Some(&text))?,
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
@@ -2361,10 +2376,15 @@ mod tests {
     /// A new session is a sketch by its name; a log by what its head says.
     #[test]
     fn a_log_replays_at_the_width_it_was_painted_at() {
-        assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
-        assert_eq!(width_for("painting", None), LIVE_WIDTH);
+        assert_eq!(width_for("sketch-1", None), Ok(session::SKETCH_WIDTH));
         let head = |mark: &str| format!("-- easel session\n--@ engine 4\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
-        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
-        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
+        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), Ok(session::SKETCH_WIDTH));
+        assert_eq!(width_for("sketchbook", Some(&head(""))), Ok(LIVE_WIDTH));
+        assert_eq!(width_for("painting", Some(&head("--@ width 4800"))), Ok(4800));
+        // a new painting: LIVE_WIDTH, or EASEL_WIDTH's (one of session::WIDTHS)
+        assert_eq!(new_width(None), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(Some("")), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(Some("4800")), Ok(4800));
+        assert!(new_width(Some("3000")).is_err() && new_width(Some("wide")).is_err());
     }
 }

@@ -30,6 +30,32 @@ fn explicit_box_and_duplicate_chunks_fail_closed() {
 }
 
 #[test]
+fn first_chunk_errors_explain_paper_setup_without_committing() {
+    let p = root();
+    let before = studio::load(&p).unwrap();
+    for source in ["print(1)", "print(table.concat(palette(), ', '))"] {
+        let message = studio::run(&p, source).unwrap_err().to_string();
+        assert!(message.contains("paper{}"), "{message}");
+        assert_eq!(before, studio::load(&p).unwrap());
+        assert!(!p.join("checkpoint.json").exists());
+    }
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_watercolor-studio"))
+        .args(["--box", "watercolor", "status"])
+        .arg(&p)
+        .arg("--scratch")
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    let message = String::from_utf8(result.stderr).unwrap();
+    assert!(message.contains("paper{}"), "{message}");
+    assert!(message.contains("scratch: true"), "{message}");
+    assert_eq!(before, studio::load(&p).unwrap());
+    assert!(!p.join("checkpoint.json").exists());
+    assert!(!p.join("out/watercolor/scratch").exists());
+    fs::remove_dir_all(p).unwrap();
+}
+
+#[test]
 fn resume_keeps_named_loads_clock_material_and_images_exact() {
     let a = root();
     let b = root();

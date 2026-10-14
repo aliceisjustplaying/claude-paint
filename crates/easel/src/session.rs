@@ -1045,6 +1045,32 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "replay", tube_box))]
+    fn legacy_canvas_keeps_the_header_traction_flag() {
+        for traction in [false, true] {
+            let mut live = Session::new(96).unwrap().with_traction(traction);
+            live.run(r#"canvas{style="friedrich", aspect=5, size=300, seed=11}"#).unwrap();
+            assert_eq!(live.canvas().unwrap().traction_enabled(), traction);
+            let log = live.program("legacy-traction");
+            assert_eq!(logged_traction(&log), traction);
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_traction(logged_traction(&log));
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let state = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            let bytes = state(&live);
+            assert_eq!(&bytes[..8], if traction { b"PAINTC13" } else { b"PAINTC11" });
+            assert_eq!(state(&replay), bytes);
+            let (restored, _) = Canvas::read_state(&mut std::io::Cursor::new(bytes)).unwrap();
+            assert_eq!(restored.traction_enabled(), traction);
+        }
+    }
+
+    #[test]
     #[cfg(tube_box)]
     fn traction_header_replays_and_rebuilds_the_live_state() {
         let mut live = Session::new(96).unwrap().with_traction(true);

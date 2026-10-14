@@ -13,6 +13,7 @@ parser.add_argument("--limit", type=float, default=900)
 parser.add_argument("--sample", action="store_true")
 parser.add_argument("--profile", action="store_true")
 parser.add_argument("--label")
+parser.add_argument("--checkpoint", type=Path)
 args = parser.parse_args()
 base = Path.home() / ".capy/work/wc-timeouts"
 manifest = json.loads((base / "manifest.json").read_text())
@@ -26,7 +27,8 @@ root.mkdir(parents=True)
 if shutil.disk_usage(base).free < 15 * 1024**3:
     raise RuntimeError("Less than 15 GiB free")
 for name in ["box", "checkpoint.json"]:
-    subprocess.run(["/bin/cp", "-c", str(original / name), str(root / name)], check=True)
+    origin = args.checkpoint if name == "checkpoint.json" and args.checkpoint else original / name
+    subprocess.run(["/bin/cp", "-c", str(origin), str(root / name)], check=True)
 binary = base / "target/release/watercolor-studio" if args.profile else base / "watercolor-studio"
 if not binary.exists():
     shutil.copy2(original / "bin/watercolor-studio", binary)
@@ -62,6 +64,6 @@ with (root / "stdout.txt").open("w") as stdout, (root / "stderr.txt").open("w") 
             raise RuntimeError("Disk fell below 15 GiB")
         time.sleep(1)
 elapsed = time.perf_counter() - started
-result = dict(name=args.name, command=command, env=env, wall_seconds=elapsed, limit=args.limit, timed_out=timed_out, returncode=process.returncode, binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), state_basis="Copied final main checkpoint; new scratch receives original paper dimensions/kind/seed. Historical main state not retained.", stdout=(root / "stdout.txt").read_text(), stderr=(root / "stderr.txt").read_text())
+result = dict(name=args.name, command=command, env=env, wall_seconds=elapsed, limit=args.limit, timed_out=timed_out, returncode=process.returncode, binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), state_basis=str(args.checkpoint) if args.checkpoint else "Copied final main checkpoint; new scratch receives original paper dimensions/kind/seed. Historical main state not retained.", stdout=(root / "stdout.txt").read_text(), stderr=(root / "stderr.txt").read_text())
 (root / "timing.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2))

@@ -268,7 +268,10 @@ impl Canvas {
         put_all(w, wt.vol.iter().copied())?;
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         if version >= 11 {
-            put_all(w, wt.hide.iter().flat_map(|h| *h))?;
+            // (engine 4's five properties: the pigment's packing, `Prop`'s
+            // last five, stays in memory, and reads back as paint naming no
+            // tubes)
+            put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2], h[3], h[4]]))?;
         } else {
             // (three properties, as before engine 4: its paint is a tube's in oil)
             put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2]]))?;
@@ -402,11 +405,13 @@ impl Canvas {
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
+        // (the pigment's packing is not written: paint naming no tubes')
+        let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
         wet.hide = if version >= 11 {
-            get_all(r, n * 5)?.as_chunks::<5>().0.to_vec()
+            get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|h| [h[0], h[1], h[2], h[3], h[4], p, f, 0.0, q, 0.0]).collect()
         } else {
             // (before engine 4: a tube paint's oil)
-            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0]).collect()
+            get_all(r, n * 3)?.as_chunks::<3>().0.iter().map(|h| [h[0], h[1], h[2], 0.0, 1.0, p, f, 0.0, q, 0.0]).collect()
         };
         wet.stroke = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
         wet.touched = get_all(r, n)?.into_iter().map(f32::to_bits).collect();
@@ -561,7 +566,7 @@ mod tests {
             c.gloss.iter_mut().for_each(|g| *g = 0.9);
             c.absorb.iter_mut().for_each(|a| *a = 0.3);
             c.wet.vol[0] = 1.5;
-            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5];
+            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
             let mut b = Vec::new();
             c.write_state(&mut b, "").unwrap();
             b
@@ -569,12 +574,15 @@ mod tests {
         let b = canvas(crate::ENGINE);
         assert_eq!(&b[..8], b"PAINTC11");
         let d = load(b).unwrap();
-        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5]));
+        // (the pigment's packing stays in memory: it reads back as paint
+        // naming no tubes')
+        let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
+        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5, p, f, 0.0, q, 0.0]));
         for (engine, magic) in [(2, b"PAINTCK8"), (3, b"PAINTCK9")] {
             let b = canvas(engine);
             assert_eq!(&b[..8], magic);
             let d = load(b).unwrap();
-            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0]), "engine {engine}");
+            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0, p, f, 0.0, q, 0.0]), "engine {engine}");
         }
     }
 

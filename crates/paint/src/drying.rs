@@ -946,7 +946,7 @@ mod tests {
     use crate::bristle::{Gesture, Held, Tool};
     use crate::color::hex;
     use crate::surface::Linen;
-    use crate::wet::Paint;
+    use crate::wet::{DRAINED_FLOOR, OIL_VOLUME, PACKED_OIL, Paint};
 
     fn canvas() -> Canvas {
         Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(Linen::fine(3))
@@ -1108,7 +1108,7 @@ mod tests {
         let mut c = Canvas::new(40, 1.0, [0.5; 3]).with_size_mm(40.0).with_engine(engine);
         let lat = Paint::body([0.9; 3]).latent();
         for i in 0..c.wet.vol.len() {
-            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0], 1);
+            (c.wet.vol[i], c.wet.lat[i], c.wet.hide[i], c.wet.stroke[i]) = (coats, lat, [0.85, stiff, drying, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0], 1);
         }
         c.wet.current = 1;
         c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
@@ -1284,7 +1284,7 @@ mod tests {
                 let i = y * f.w + x;
                 c.wet.vol[i] = t;
                 c.wet.lat[i] = lat;
-                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE, 0.0, 1.0];
+                c.wet.hide[i] = [0.85, 0.8, drier::LEAD_WHITE, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0];
                 c.wet.stroke[i] = 1;
             }
         }
@@ -1344,7 +1344,7 @@ mod tests {
                 let thin = x % 2 == 0;
                 c.wet.vol[i] = if thin { 0.2 } else { 4.0 };
                 c.wet.lat[i] = p.latent();
-                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }, 0.0, 1.0];
+                c.wet.hide[i] = [p.scatter, 1.0, if thin { 2.0 } else { 0.4 }, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0];
                 c.wet.stroke[i] = 1;
             }
         }

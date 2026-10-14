@@ -75,6 +75,9 @@ fn session() -> Session {
             strength: 1.0,
             drying: 1.0,
             drying_3: 1.0,
+            oa: 25.0,
+            density: 3.0,
+            drain: 0.9,
         }],
     );
     tubes.engine = 5;

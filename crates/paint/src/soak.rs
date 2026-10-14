@@ -325,13 +325,13 @@ mod tests {
         // New engines retain both cloth state and the extended material arrays.
         let mut material = on(40, Fabric::cotton_duck()).with_engine(4);
         material.wet.vol[0] = 0.5;
-        material.wet.hide[0] = [0.8, 0.6, 1.1, 0.2, 0.7];
+        material.wet.hide[0] = [0.8, 0.6, 1.1, 0.2, 0.7, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0];
         material.gloss[0] = 0.4;
         material.absorb[0] = 0.3;
         let bytes = saved(&material);
         assert_eq!(&bytes[..8], b"PAINTC12");
         let resumed = load(bytes.clone()).unwrap();
-        assert!(saved(&resumed) == bytes, "raw material state must round-trip without loss");
+        assert!(saved(&resumed) == bytes && resumed.wet.hide[0] == material.wet.hide[0], "raw material state must round-trip without loss");
     }
 
     #[test]

@@ -19,7 +19,7 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
-    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops stay 1:1.
+    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops are shown at `LOOK_SCALE` px a unit (a 2400 px canvas's own).
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
@@ -463,7 +463,7 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
         let a = wx0 as f32 / f.scale;
         let b = wy0 as f32 / f.scale;
         return Err(format!(
-            "--crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
+            "--crop exceeds 1200 pixels per side (a crop is shown at 2.4 pixels a unit); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
             a + side,
             b + side
         ));

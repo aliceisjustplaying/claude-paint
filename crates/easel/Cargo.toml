@@ -48,7 +48,7 @@ paint = { path = "../paint", default-features = false }
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 # the old logs' trees, sky and rocks (src/legacy; the replay build)
 rayon = { version = "1", optional = true }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 zstd = { version = "0.13", optional = true }
 sha2 = { version = "0.10", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }

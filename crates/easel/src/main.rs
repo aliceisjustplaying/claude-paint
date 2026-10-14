@@ -1366,8 +1366,8 @@ impl Server {
                 at(ox + x * k, oy + y * k)
             })
             .collect();
-        let (_, _, left) = look::render_seen(&c, &v, Some(&motif))?;
-        let (_, _, right) = look::render(&c, &v)?;
+        // (one scale for both: the size budget may shrink a busy photograph's panel)
+        let ((_, _, left), (_, _, right)) = look::render_pair(&c, &v, &motif)?;
         drop(c);
         let (l, r) = (image::load_from_memory(&left).map_err(|e| e.to_string())?.to_rgb8(), image::load_from_memory(&right).map_err(|e| e.to_string())?.to_rgb8());
         let gap = 12;
@@ -2367,6 +2367,17 @@ mod tests {
                 assert!((got[q] - want[q]).abs() <= 2.0, "{recipe}: laid {got:?}, swatch {want:?}");
             }
         }
+    }
+
+    /// A motif for `look --ref` is often a photograph: the easel reads JPEG
+    /// as well as PNG.
+    #[test]
+    fn a_jpeg_motif_can_be_read() {
+        let im = image::RgbImage::from_fn(16, 12, |x, y| image::Rgb([(x * 16) as u8, (y * 20) as u8, 128]));
+        let mut jpg = Vec::new();
+        im.write_to(&mut std::io::Cursor::new(&mut jpg), image::ImageFormat::Jpeg).unwrap();
+        let back = image::load_from_memory(&jpg).unwrap().to_rgb8();
+        assert_eq!(back.dimensions(), (16, 12));
     }
 
     #[test]

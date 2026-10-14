@@ -327,15 +327,17 @@ impl Session {
         // prelude.lua's check, putting its hand time on the clock and reading the globals it
         // left. A failure anywhere in it is a failed chunk, rolled back below.
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            // through prelude.lua's guard: an error value is shown without its address
-            guard.call::<()>(chunk.into_function()?)?;
-            check.call::<()>(())?;
-            // the hand time the chunk spent goes on the clock before it ends
-            if self.inject("flush").is_err() {
-                panic!("injected failure: flush");
-            }
-            crate::time::flush(&self.st, true);
-            self.next_globals(n as usize)
+            paint::crack::guard_traction_memory(|| {
+                // through prelude.lua's guard: an error value is shown without its address
+                guard.call::<()>(chunk.into_function()?)?;
+                check.call::<()>(())?;
+                // the hand time the chunk spent goes on the clock before it ends
+                if self.inject("flush").is_err() {
+                    panic!("injected failure: flush");
+                }
+                crate::time::flush(&self.st, true);
+                self.next_globals(n as usize)
+            }).map_err(mlua::Error::runtime)?
         }));
         self.deadline.set(None);
         let secs = t0.elapsed().as_secs_f64();
@@ -1061,6 +1063,47 @@ mod tests {
         assert_eq!(live.program("memory-limit"), log);
         assert!(live.lua.globals().get::<Value>("k").unwrap().is_nil());
         live.run(CANVAS).unwrap();
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn lua_cannot_keep_partial_state_by_catching_a_traction_memory_panic() {
+        let mut prepared = Canvas::new(80, 1.0, [0.1; 3]).with_size_mm(80.0).with_traction(true);
+        let mut knife = paint::bristle::Knife::new(800.0);
+        knife.load(paint::wet::Paint::body([0.1; 3]).with_stiff(0.3).with_drying(0.5), 1.0);
+        prepared.knife(&mut knife, &[(100.0, 500.0), (900.0, 500.0)], (0.3, 0.3), None, true, 0.0);
+        prepared.dry();
+        knife.wipe();
+        knife.load(paint::wet::Paint::body([0.9; 3]).with_stiff(0.8).with_drying(2.0), 1.0);
+        prepared.knife(&mut knife, &[(100.0, 500.0), (900.0, 500.0)], (0.9, 0.9), None, true, 0.0);
+        let prepared = prepared.with_size_mm(700.0);
+        assert!(prepared.check_traction_memory().is_ok());
+        for call in ["pcall(refuse_traction)", "xpcall(refuse_traction, tostring)"] {
+            let mut live = Session::new(80).unwrap().with_traction(true);
+            live.run(CANVAS).unwrap();
+            let st = live.st.clone();
+            let c = prepared.clone();
+            let refuse = live.lua.create_function(move |_, ()| {
+                let mut st = st.borrow_mut();
+                st.canvas = Some(c.clone());
+                st.canvas.as_mut().unwrap().wait(60.0 * 24.0 * 60.0);
+                Ok(())
+            }).unwrap();
+            live.lua.globals().set("refuse_traction", refuse).unwrap();
+            let state = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            let before = state(&live);
+            let log = live.program("caught-memory-limit");
+            let error = live.run(&format!("junk = 42; local ok = {call}; assert(not ok)")).unwrap_err();
+            assert!(error.contains("1024 MiB memory budget"), "{call}: {error}");
+            assert_eq!(state(&live), before, "{call}");
+            assert_eq!(live.program("caught-memory-limit"), log, "{call}");
+            assert!(live.lua.globals().get::<Value>("junk").unwrap().is_nil());
+            live.run("assert(junk == nil)").unwrap();
+        }
     }
 
     #[test]

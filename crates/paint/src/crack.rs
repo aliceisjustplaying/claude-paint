@@ -447,6 +447,26 @@ pub(crate) struct Budget {
     size: V2,
 }
 
+thread_local! {
+    static MEMORY_REFUSAL: std::cell::RefCell<Option<Option<String>>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn guard_traction_memory<R>(run: impl FnOnce() -> R) -> Result<R, String> {
+    struct Restore(Option<Option<String>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            MEMORY_REFUSAL.with(|slot| { *slot.borrow_mut() = self.0.take(); });
+        }
+    }
+    let _restore = Restore(MEMORY_REFUSAL.with(|slot| slot.replace(Some(None))));
+    let result = run();
+    let refusal = MEMORY_REFUSAL.with(|slot| slot.borrow_mut().as_mut().unwrap().take());
+    match refusal {
+        Some(error) => Err(error),
+        None => Ok(result),
+    }
+}
+
 impl Budget {
     fn limited(size: V2, limit: usize) -> Self {
         let mut budget = Self { limit: Some(limit), used: 0, size };
@@ -462,7 +482,13 @@ impl Budget {
     }
 
     fn refused(&self) -> ! {
-        panic!("{}", self.error());
+        let error = self.error();
+        MEMORY_REFUSAL.with(|slot| {
+            if let Some(refusal) = slot.borrow_mut().as_mut() {
+                *refusal = Some(error.clone());
+            }
+        });
+        panic!("{error}");
     }
 
     pub(crate) fn charge<T>(&mut self, count: usize) {

@@ -2008,6 +2008,7 @@ mod tests {
     /// A painting at 4800 px names its width; a log without the line was
     /// painted at 2400 and replays at 2400.
     #[test]
+    #[ignore = "slow 4800-pixel session; run with cargo test -p easel --bin easel session::tests::the_log_names_its_width -- --exact --ignored"]
     fn the_log_names_its_width() {
         let mut a = Session::new(4800).unwrap();
         a.run(CANVAS).unwrap();

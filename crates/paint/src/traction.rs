@@ -432,6 +432,13 @@ impl PartialEq for NetCache {
 }
 
 impl Canvas {
+    pub fn check_traction_memory(&self) -> Result<(), String> {
+        if !self.traction_enabled { return Ok(()); }
+        let pm = self.px_mm();
+        let size = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
+        crate::crack::check_network_grid(size, FINEST_MM, NETWORK_MEMORY_BUDGET)
+    }
+
     fn traction_net(&mut self) -> std::sync::Arc<DryNet> {
         let pm = self.px_mm();
         let size_mm = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];

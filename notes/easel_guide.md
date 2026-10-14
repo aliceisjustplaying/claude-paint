@@ -518,7 +518,7 @@ shore = outline{{0, 500}, {500, 480}, {1000, 550}, open=true}
 land = shore:below()
 ```
 
-## Drawing: pencil, chalk and eraser
+## Drawing: pencil, chalk, pastel and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -527,6 +527,7 @@ h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
 h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
+h:hatch(m, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
@@ -538,6 +539,64 @@ hollows. Soft leads lay darker, glossier lines, hard ones pale silver
 lines. The eraser lifts most of a line, more from the tops than the
 hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
+
+**Pastel.** A pastel is a stick of pigment with a little gum and chalk:
+a solid that rests on the tooth, wears and sheds what it abrades.
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
+h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
+q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
+p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
+p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
+p:line(pts, {pressure=0.5})    -- a pencil's call: pressure as force (5 N at 1), held at 60°
+smudge(pts, {force=1, pad=})   -- a finger drawn along a path (pad: a stump's few mm²)
+fix(mask)                      -- binds what is there, and darkens it a little
+feel(x, y)                     -- what a fingertip feels there
+```
+
+- **One stroke at a time.** `stroke` is a single movement of the hand:
+  `force` in newtons (a feathered touch 0.1–0.5, normal 0.5–2, heavy 2–5),
+  `alt` the stick's angle to the paper in degrees (upright 90, on its side 0),
+  `azimuth` where its upper end points (degrees: 0 to the right, 90 down the
+  canvas; a right hand holds it at about 45), `roll` turned about its axis,
+  `speed` in mm/s. Each is a number or a list along the points. The hand
+  lands and lifts as a hand does: its force comes up from nothing over about
+  50 ms of the stroke and falls back over about 40 ms.
+- **The stick rests on the tooth.** Under the force it sinks into the paper's
+  micro-relief until the material it meets carries the force: the paper gives
+  a little (it is compressible), and the soft pastel yields on the tops it
+  touches. A light stroke touches only the highest fibers and leaves the
+  paper's grain broken through the mark; a heavy one reaches into the pores.
+- **It wears.** It lays what it abrades, in proportion to the force and the
+  distance (Archard's law), and wears flat against the paper: a stick held
+  one way grows a facet and draws wider as it does; rolled or tilted it cuts a
+  new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
+  says how many facets it has and how long it is.
+- **The tooth fills.** Loose pastel in the pores is a third body the stick
+  slides on: the more there is, the less a stroke lays, until the paper
+  refuses it. Fixative binds it into a rough crust that files the stick again,
+  so a fixed passage takes more pastel; and darkens it a little, as the resin
+  wets the particles.
+- **The finger** picks up loose pastel and lays it down along its path as fine
+  grains pressed into the pores: colors drag into each other and the passage
+  covers more for its thickness. It leaves fixed pastel where it is.
+- **Color.** A stick is its pigments as they look dry: absorption as in oil,
+  scattering raised by the contrast between each pigment and air (much for
+  ultramarine, Prussian blue, the lakes and the earths' clays; little for
+  vermilion and the chromes). Dry blacks are a little grayer than in oil.
+- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+  far it has set) and the pastel in the tooth (loose or fixed; a little, the
+  tooth taking it, half full and more, full).
+- Pastel skips wet paint, as graphite does; let the paint set first. Paint
+  laid over pastel seals it, as it seals a drawing.
+
+Pastel is there in a painting begun since it came, with paper (its log's
+head says `--@ paper`); an older painting replays as it was painted, and
+has no `pastel`, `smudge` or `feel`. The numbers (how hard a stick is, how
+fast it wears, what dry pigment looks like) are estimates, not
+measurements (notes/pastel.md).
 
 ## The rag
 

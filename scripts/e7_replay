@@ -16,8 +16,8 @@ first K chunks. Under --out it writes:
     <name>.png        the replay's gallery-lit image (easel run --gallery)
     <name>.stderr     easel's stderr, verbatim
     <name>.json       wall, CPU, CPU/wall, peak RSS, per-chunk seconds and,
-                      when easel prints E7BATCH lines (E7_STATS=1 is set),
-                      each batch's ready width
+                      with E7_STATS=1 set, engine 7's E7BATCH ready
+                      widths and E7NODE footprint areas
 
 <name> is <log stem>-e<engine>-w<workers>[-p<chunks>]. The JSON record is
 the engine7-bench-v1 schema (handoffs/engine-next/CONTRACTS.md); unmeasured
@@ -44,8 +44,7 @@ MARK = "--@ chunk"
 FINISHING = "--@ chunk (finishing)"
 CHUNK = re.compile(r"^\s*chunk\s+(\d+)\s+([0-9.]+)s\s*$")
 PAINTED = re.compile(r"painted in ([0-9.]+)s, total ([0-9.]+)s")
-BATCH = re.compile(r"^E7BATCH\t(.*)$")
-BATCH_FIELDS = ["chunk", "batch", "tiles", "peak_ready", "peak_inflight", "wall_s", "sum_tile_s"]
+BATCH_FIELDS = ["batch", "tiles", "peak_ready", "peak_inflight", "wall_s", "sum_tile_s"]
 ENGINE_LINE = re.compile(r"^--@ engine (\d+)\s*$", re.M)
 SIZE = re.compile(r"canvas\s*\{[^}]*?size\s*=\s*([0-9.]+)")
 
@@ -69,13 +68,23 @@ def program(text, chunks):
     return "".join(out), min(seen, chunks or seen)
 
 
-def batches(lines):
-    rows = []
+def stats(lines):
+    """E7BATCH rows (each tagged with the chunk whose E7CHUNK line follows
+    it) and the summed E7NODE footprint areas, exact and conservative."""
+    rows, pending, nodes = [], [], {"count": 0, "exact_px": 0, "conservative_px": 0}
+    area = lambda r: 0 if r == "-" else (lambda v: (v[2] - v[0]) * (v[3] - v[1]))([int(x) for x in r.split(",")])
     for line in lines:
-        m = BATCH.match(line)
-        if m:
-            rows.append({k: float(v) for k, v in zip(BATCH_FIELDS, m.group(1).split("\t"))})
-    return rows
+        f = line.split("\t")
+        if f[0] == "E7BATCH":
+            pending.append({k: float(v) for k, v in zip(BATCH_FIELDS, f[1:])})
+        elif f[0] == "E7CHUNK":
+            rows += [dict(r, chunk=int(f[1])) for r in pending]
+            pending = []
+        elif f[0] == "E7NODE":
+            nodes["count"] += 1
+            nodes["exact_px"] += area(f[5])
+            nodes["conservative_px"] += area(f[6])
+    return rows + pending, nodes if nodes["count"] else None
 
 
 def ready_width(rows):
@@ -92,8 +101,8 @@ def ready_width(rows):
 
 def with_engine(text, engine):
     """The program with its head naming engine (only 5 -> 7 is a change)."""
-    head = text.split(MARK, 1)[0]
-    m = ENGINE_LINE.search(head)
+    first = re.search(r"^\s*--@ chunk", text, re.M)
+    m = ENGINE_LINE.search(text, 0, first.start())
     logged = int(m.group(1)) if m else 1
     if engine == logged:
         return text
@@ -134,7 +143,7 @@ def run(args):
     cpu = (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
     # ru_maxrss is KiB on Linux, bytes on macOS
     rss = after.ru_maxrss * (1 if platform.system() == "Darwin" else 1024)
-    rows = batches(lines)
+    rows, nodes = stats(lines)
     result = {
         "schema": "engine7-bench-v1",
         "painting": log.name,
@@ -154,6 +163,7 @@ def run(args):
         "ready_width": ready_width(rows),
         "chunks": [{"index": i + 1, "wall_s": t} for i, t in enumerate(per_chunk)],
         "batches": rows,
+        "nodes": nodes,
         "host": platform.node(),
         "machine": platform.machine(),
         "cpus": os.cpu_count(),

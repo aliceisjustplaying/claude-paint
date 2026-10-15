@@ -52,23 +52,27 @@ MODEL_NAMES = {
 
 
 def working_studios():
-    """Actual Pi process working directories, not persistent easel servers or saved running records."""
+    """Actual painter processes, not persistent easel servers or saved running records: a Pi's working directory,
+    or the --studio of an agy painter's easel tool server (the studio's bin/mcp/server.py --agy)."""
     try:
         ps = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, check=True, timeout=10)
         pids = [parts[0] for row in ps.stdout.splitlines()
                 if len(parts := row.split()) == 2 and os.path.basename(parts[1]) == "pi"]
+        args = subprocess.run(["ps", "-wwAo", "args="], capture_output=True, text=True, check=True, timeout=10)
+        agy = {os.path.basename(argv[argv.index("--studio") + 1]) for argv in map(str.split, args.stdout.splitlines())
+               if "--agy" in argv and "--studio" in argv[:-1] and any(a.endswith("/bin/mcp/server.py") for a in argv)}
         lsof = shutil.which("lsof") or "/usr/sbin/lsof"
         if not pids:
-            return set()
+            return agy
         r = subprocess.run([lsof, "-a", "-p", ",".join(pids), "-d", "cwd", "-Fn"],
                            capture_output=True, text=True, timeout=10)
-        return {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
+        return agy | {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
     except (OSError, subprocess.SubprocessError):
         return set()  # no execution evidence: never claim live
 
 
 def runner_states(sessions, working, now):
-    """Require a running sitting, a live Pi in that studio and recent session activity. Completion
+    """Require a running sitting, a live painter in that studio and recent session activity. Completion
     comes only from the runner outcome, never a title, quiet session or exported render."""
     records = {}
     for path in S.runner_paths():

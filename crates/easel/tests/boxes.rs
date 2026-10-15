@@ -84,7 +84,9 @@ fn a_new_painting_takes_the_studio_box_and_every_replay_uses_it() {
     let log = dir.join("paintings/lua/p.lua");
     let text = std::fs::read_to_string(&log).unwrap();
     assert_eq!(text.lines().nth(2), Some("--@ box sargent"), "{text}");
-    assert!(text.lines().any(|l| l == "--@ work-tiles quarter"), "{text}");
+    assert!(text.lines().any(|l| l == "--@ engine 7"), "{text}");
+    assert!(!text.contains("--@ work-tiles"), "{text}");
+    assert!(!text.contains("--@ adaptive-sweep"), "{text}");
 
     // replayed elsewhere, by an easel with no box of its own
     let other = base("elsewhere");
@@ -123,7 +125,7 @@ fn a_log_without_a_box_line_is_the_default_box() {
     let log = dir.join("paintings/lua/p.lua");
     let text = std::fs::read_to_string(&log).unwrap();
     assert!(!text.contains("--@ box"), "{text}");
-    assert!(text.starts_with("-- easel session \"p\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 5\n--@ work-tiles quarter\n--@ adaptive-sweep\n--@ drain\n\n--@ chunk 1\n"), "{text}");
+    assert!(text.starts_with("-- easel session \"p\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 7\n--@ drain\n\n--@ chunk 1\n"), "{text}");
     let out = dir.join("x.png");
     ok(&plain(), &dir, None, &["run", log.to_str().unwrap(), "--out", out.to_str().unwrap()]);
     ok(&plain(), &dir, Some("tube box"), &["run", log.to_str().unwrap(), "--out", out.to_str().unwrap()]);

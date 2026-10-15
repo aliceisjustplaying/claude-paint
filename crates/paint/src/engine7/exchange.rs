@@ -155,16 +155,19 @@ pub(crate) unsafe fn exchange(
         unsafe { crate::bristle::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim) };
         return;
     }
-    let seg = SegmentInput { sf, bristle: br, tool, a, b, rb, reach, full, dep, excl, clip, stroke_id: id, limit: lim };
-    window::with(|w| unsafe { contact(seg, bounds, w) });
+    let seg = SegmentInput { sf, bristle: &mut *br, tool, a, b, rb, reach, full, dep, excl, clip, stroke_id: id, limit: lim };
+    if window::with(|w| unsafe { contact(seg, bounds, w) }).is_none() {
+        unsafe { crate::bristle::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim) };
+    }
 }
 
 /// One ordered contact: pass 1 gathers the capsule's contact into `win`,
 /// pass 2 picks up, lays and ploughs pixel after pixel, and the ploughed
-/// paint lands before it returns.
+/// paint lands before it returns. None, having changed nothing, if the
+/// pixels it may plough into don't fit the window.
 ///
-/// SAFETY: as `exchange`; the capsule's pixels fit the window.
-unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) -> AcceptedTransfer {
+/// SAFETY: as `exchange`.
+unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) -> Option<AcceptedTransfer> {
     unsafe {
         let SegmentInput { sf, bristle: br, tool, a, b, rb, reach, full, dep, excl, clip, stroke_id: id, limit: lim } = seg;
         let sf = &sf;
@@ -178,11 +181,32 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let cy1 = ((-floor(-(a.1.max(b.1) + rb + 1.0))).max(0.0) as usize).min(h);
         let none = AcceptedTransfer::default();
         if cx1 <= cx0 || cy1 <= cy0 {
-            return none;
+            return Some(none);
         }
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
+        let fine = tool.point > 0.0 && dep.is_none();
+        // the brush side of the plough, fixed for the contact
+        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
+        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
+        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
+        let off = if dep.is_some() {
+            rb + 1.0
+        } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
+            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+        } else {
+            2.0 * hair
+        };
+        // the pixels its plough may reach on the whole canvas must fit the
+        // window (whatever a crop render holds of them, so a crop paints
+        // with the same kernel as the whole canvas)
+        let pad = off as usize + 3;
+        let (ex0, ey0, ex1, ey1) = (cx0.max(lim.0), cy0.max(lim.1), cx1.min(lim.2), cy1.min(lim.3));
+        if ex1 > ex0 && ey1 > ey0 && ((ex1 + pad).min(lim.2) - ex0.saturating_sub(pad).max(lim.0)) * ((ey1 + pad).min(lim.3) - ey0.saturating_sub(pad).max(lim.1)) > window::CAPACITY {
+            return None;
+        }
         let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
         let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
         if x1 <= x0 || y1 <= y0 {
@@ -205,7 +229,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
                 };
             }
-            return AcceptedTransfer { laid: before - br.vol - br.solvent, ..none };
+            return Some(AcceptedTransfer { laid: before - br.vol - br.solvent, ..none });
         }
         debug_assert!(
             x0 >= lim.0 && y0 >= lim.1 && x1 <= lim.2 && y1 <= lim.3,
@@ -213,11 +237,10 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         );
         let (x0, y0, x1, y1) = (x0.max(lim.0), y0.max(lim.1), x1.min(lim.2), y1.min(lim.3));
         if x1 <= x0 || y1 <= y0 {
-            return none;
+            return Some(none);
         }
         let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
         let (nx, ny) = (-my, mx);
-        let fine = tool.point > 0.0 && dep.is_none();
         let liquid = if br.solvent > 0.0 { br.vol + br.solvent } else { br.vol };
         let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
         let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
@@ -227,25 +250,12 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
-        // the brush side of the plough, fixed for the contact
-        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
-        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
-        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
-        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
-        let off = if dep.is_some() {
-            rb + 1.0
-        } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
-            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
-        } else {
-            2.0 * hair
-        };
         let spread = dep.is_none();
         // where ploughed paint may land: the crop window, the footprint, and
         // within reach of the capsule (a target is ≤ 0.875·off away, and a
         // bilinear share one pixel further)
         let (lx, ly) = (ox.max(lim.0), oy.max(lim.1));
         let (hx, hy) = (w.min(ox + sf.w).min(lim.2), h.min(oy + sf.h).min(lim.3));
-        let pad = off as usize + 3;
         let interior = (x0.saturating_sub(pad).max(lx), y0.saturating_sub(pad).max(ly), (x1 + pad).min(hx), (y1 + pad).min(hy));
         win.begin((x0, y0, x1, y1), interior);
         let (lx, ly, hx, hy) = (interior.0 as isize, interior.1 as isize, interior.2 as isize, interior.3 as isize);
@@ -323,7 +333,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
         }
         if ct.weight <= 1e-6 {
-            return none;
+            return Some(none);
         }
         let sum_w = ct.weight;
         let tack = ct.tack / sum_w;
@@ -528,7 +538,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         }
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
-        AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed }
+        Some(AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed })
     }
 }
 
@@ -616,6 +626,42 @@ mod tests {
             }
         }
         (c, held)
+    }
+
+    /// A stationary dab whose capsule fits the window but whose plough
+    /// interior doesn't runs engine 5's exchange and leaves the window alone,
+    /// also in a crop render that holds only a window's worth of it.
+    #[test]
+    fn a_contact_whose_plough_overflows_the_window_falls_back() {
+        let run = |e7: bool, crop: bool| {
+            let mut c = canvas(7);
+            film(&mut c, (150.0, 150.0, 350.0, 350.0), Paint::body(hex("#3050a0")), 2.0);
+            let mut held = Held::new(Tool::hog_flat(20.0), 1).with_engine(7);
+            held.load(Paint::body(hex("#803020")), 1.0);
+            let (full, tool, mut sf, lim) = (held.full(), held.tool.clone(), c.surf(), (0, 0, c.f.w, c.f.h));
+            if crop {
+                (sf.ox, sf.oy, sf.w, sf.h) = (84, 84, 32, 32);
+            }
+            let (mut wts, mut bounds) = (Vec::new(), None);
+            let b = &mut held.bristles[0];
+            let args = ((100.0, 100.0), (100.0, 100.0), 12.0, 0.8, full, Some(0.5), 1.0);
+            let g0 = super::window::with(|w| w.generation);
+            unsafe {
+                if e7 {
+                    super::exchange(sf, b, &tool, args.0, args.1, args.2, args.3, args.4, args.5, args.6, None, 1, &mut wts, &mut bounds, lim);
+                } else {
+                    crate::bristle::exchange(sf, b, &tool, args.0, args.1, args.2, args.3, args.4, args.5, args.6, None, 1, &mut wts, &mut bounds, lim);
+                }
+            }
+            let contacts = super::window::with(|w| w.generation) - g0;
+            let bits: Vec<u32> = c.wet.vol.iter().chain(c.wet.lat.iter().flatten()).map(|v| v.to_bits()).chain([b.vol.to_bits()]).collect();
+            (contacts, bits, bounds)
+        };
+        let (old, new) = (run(false, false), run(true, false));
+        assert!(old.2.is_some(), "the dab touched nothing");
+        assert_eq!(new.0, 0, "engine 7 used its window");
+        assert_eq!(new.1, old.1);
+        assert_eq!(run(true, true).0, 0, "engine 7 used its window in a crop");
     }
 
     /// How far apart two paintings' wet films are: the paint moved between

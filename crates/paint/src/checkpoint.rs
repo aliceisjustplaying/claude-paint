@@ -214,6 +214,9 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        if !crate::supports_engine(self.engine) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "checkpoint engine version is invalid"));
+        }
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
@@ -462,7 +465,7 @@ impl Canvas {
             1
         } else {
             match get_u64(r)? {
-                v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+                v if u32::try_from(v).is_ok_and(crate::supports_engine) => v as u32,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };

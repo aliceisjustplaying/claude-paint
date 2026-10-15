@@ -114,7 +114,7 @@ fn manifest(dir: &Path, id: &str) -> io::Result<Manifest> {
         || m.checkpoint.as_ref().is_some_and(|o| !valid_id(&o.id) || o.bytes > MAX_STATE_BYTES)
         || m.renderable != m.checkpoint.is_some() || m.finishable != m.renderable
         || m.window.is_some() != m.renderable || m.um_per_px_bits.is_some() != m.renderable
-        || !(16..=9600).contains(&m.painting_width) || !(1..=paint::ENGINE).contains(&m.engine)
+        || !(16..=9600).contains(&m.painting_width) || !paint::supports_engine(m.engine)
     {
         return Err(invalid("unsupported or inconsistent revision manifest"));
     }

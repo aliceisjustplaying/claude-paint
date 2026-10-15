@@ -878,9 +878,9 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
             break;
         }
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
-            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| paint::supports_engine(*v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} {:?})", paint::SUPPORTED_ENGINES));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -1341,6 +1341,23 @@ mod tests {
         let mut tubes = Palette::tube_box();
         tubes.engine = v;
         Session::with_box(W, tubes).unwrap()
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn engine7_log_reopens_and_rolls_back() {
+        let mut s = with_engine(7);
+        s.run(CANVAS).unwrap();
+        let before = state(&s);
+        assert!(s.run("wait(1); error('engine7 rollback')").is_err());
+        assert_eq!(state(&s), before);
+        s.run("wait(1)").unwrap();
+        let program = s.program("t");
+        assert_eq!(logged_engine(&program), Ok(7));
+        let restored = replayed(&s);
+        assert_eq!(state(&restored), state(&s));
+        assert_eq!(restored.canvas().unwrap().engine(), 7);
+        assert!(logged_engine("--@ engine 6\n--@ chunk 1\n").is_err());
     }
 
     /// A fresh replay of a session's log, as a reopen or `easel run` makes it.

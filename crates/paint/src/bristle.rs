@@ -87,7 +87,7 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
 
 /// How far into the tooth's range the paint a fully loaded hair carries
 /// reaches ahead of the hair (see `exchange`).
-const WET_REACH: f32 = 0.5;
+pub(crate) const WET_REACH: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -335,20 +335,20 @@ impl Tool {
 #[derive(Clone)]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
-    rx: f32,
-    ry: f32,
-    len: f32,
+    pub(crate) rx: f32,
+    pub(crate) ry: f32,
+    pub(crate) len: f32,
     /// Pressure needed before this bristle touches.
-    thresh: f32,
-    bend: (f32, f32),
-    seed: u64,
-    prev: [Option<(f32, f32)>; 2],
+    pub(crate) thresh: f32,
+    pub(crate) bend: (f32, f32),
+    pub(crate) seed: u64,
+    pub(crate) prev: [Option<(f32, f32)>; 2],
     pub(crate) vol: f32,
-    lat: Latent,
-    hide: Prop,
+    pub(crate) lat: Latent,
+    pub(crate) hide: Prop,
     /// Cure of the paint in it (0 fresh from the palette; paint lifted off
     /// a drying film brings the film's).
-    cure: f32,
+    pub(crate) cure: f32,
     /// Solvent it carries beside its paint (`vol`), in the same units
     /// (`crate::thinner`; engine 3): from a thinned pile, or lifted with
     /// the paint off a solvent-wet film. 0 for unthinned paint.
@@ -714,7 +714,7 @@ impl Gesture {
             }
         }
     }
-    fn pressure_at(&self, u: f32) -> f32 {
+    pub(crate) fn pressure_at(&self, u: f32) -> f32 {
         let base = (self.pressure.0 + (self.pressure.1 - self.pressure.0) * u) * self.swell_at(u);
         let a = if self.attack > 0.0 { 0.08 + 0.92 * smoothstep(0.0, self.attack, u) } else { 1.0 };
         let r = if self.release > 0.0 { 0.05 + 0.95 * smoothstep(0.0, self.release, 1.0 - u) } else { 1.0 };
@@ -726,45 +726,46 @@ impl Gesture {
 /// of the canvas can run in parallel (see `Canvas::work`).
 #[derive(Clone, Copy)]
 pub(crate) struct Surf {
+    pub(crate) engine: u32,
     /// The buffers' pixels: a window (origin `ox`, `oy`, size `w` × `h`) of
     /// the whole `fw` × `fh` canvas. Brush geometry works in whole-canvas
     /// pixels; only buffer indices are translated.
-    w: usize,
-    h: usize,
-    ox: usize,
-    oy: usize,
-    fw: usize,
-    fh: usize,
-    scale: f32,
-    vol: *mut f32,
-    lat: *mut Latent,
-    hide: *mut Prop,
-    stroke: *mut u32,
-    touched: *mut u32,
-    floor: *mut f32,
-    cover: *mut f32,
-    base: *const f32,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) ox: usize,
+    pub(crate) oy: usize,
+    pub(crate) fw: usize,
+    pub(crate) fh: usize,
+    pub(crate) scale: f32,
+    pub(crate) vol: *mut f32,
+    pub(crate) lat: *mut Latent,
+    pub(crate) hide: *mut Prop,
+    pub(crate) stroke: *mut u32,
+    pub(crate) touched: *mut u32,
+    pub(crate) floor: *mut f32,
+    pub(crate) cover: *mut f32,
+    pub(crate) base: *const f32,
     /// Drying state (null until the canvas has waited): how open or tacky
     /// the paint under a bristle is (see `drying::feel`).
-    dry: *mut crate::drying::Px,
+    pub(crate) dry: *mut crate::drying::Px,
     /// Paint laid or moved updates the film's cure at once (see `add`;
     /// engine 2). Engine 1 left it to the next `wait`.
-    cure_now: bool,
+    pub(crate) cure_now: bool,
     /// Engine 4: bristles in stiff paint gather into clumps that lay it in
     /// ridges and furrows and plough it aside a clump's width (`exchange`).
-    clump: bool,
+    pub(crate) clump: bool,
     /// Engine 4: paint laid loses its solvent at once (it evaporates in
     /// minutes), and an absorbent ground draws oil out of it (`add`).
-    lean: bool,
+    pub(crate) lean: bool,
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
-    absorb: *mut f32,
+    pub(crate) absorb: *mut f32,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
-    solv: *mut f32,
-    laid: *mut f32,
-    laid_id: *mut u32,
+    pub(crate) solv: *mut f32,
+    pub(crate) laid: *mut f32,
+    pub(crate) laid_id: *mut u32,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -774,7 +775,7 @@ unsafe impl Sync for Surf {}
 /// Dirty pixel bounds collected by a drag.
 pub(crate) type Bounds = Option<(usize, usize, usize, usize)>;
 
-fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
+pub(crate) fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
     *b = Some(match *b {
         None => (x0, y0, x1, y1),
         Some((a, c, d, e)) => (a.min(x0), c.min(y0), d.max(x1), e.max(y1)),
@@ -786,7 +787,7 @@ impl Surf {
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
     #[inline]
-    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+    pub(crate) unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
         unsafe {
             if v <= 0.0 {
                 return;
@@ -842,7 +843,7 @@ impl Surf {
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
     /// left bare (as `wait` judges it) holds no film to have one.
     #[inline]
-    unsafe fn take(&self, i: usize, v: f32) {
+    pub(crate) unsafe fn take(&self, i: usize, v: f32) {
         unsafe {
             let vol = &mut *self.vol.add(i);
             *vol -= v;
@@ -881,6 +882,7 @@ impl Canvas {
             self.base = Some((self.surf_gen, base));
         }
         Surf {
+            engine: self.engine,
             w: self.f.w,
             h: self.f.h,
             ox: self.f.x0,
@@ -1013,7 +1015,7 @@ fn cohesion(held: &Held, full: f32) -> f32 {
 /// Cure of `v` coats of paint of cure `c` mixed into `vol` coats of cure
 /// `cure`.
 #[inline]
-fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
+pub(crate) fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
     if v <= 0.0 { cure } else { cure + (c - cure) * v / (vol + v) }
 }
 
@@ -1274,11 +1276,11 @@ pub(crate) unsafe fn drag_on(
 
 /// How much of a capsule's contact a bristle is assumed to make outside a
 /// crop window (where there is no canvas to feel).
-const GHOST_TOUCH: f32 = 0.8;
+pub(crate) const GHOST_TOUCH: f32 = 0.8;
 
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.
-fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
+pub(crate) fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg2 = dx * dx + dy * dy;
     let mut sum = 0.0f32;
@@ -1319,7 +1321,7 @@ fn strip_cover(dist: f32, rb: f32) -> f32 {
 /// and a hair's successive steps tile its path without overlapping: the
 /// paint a step lays and the area it darkens don't depend on where the
 /// pixel centers fall. A hair that doesn't move covers a square 2·`rb` wide.
-fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
+pub(crate) fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg = (dx * dx + dy * dy).sqrt();
     let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
@@ -1377,7 +1379,7 @@ fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
 }
 
 /// Smooth 1-D value noise, −1..1.
-fn wander(t: f32, seed: u64) -> f32 {
+pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     let i = t.floor();
     let f = t - i;
     let f = f * f * (3.0 - 2.0 * f);
@@ -1392,6 +1394,33 @@ fn wander(t: f32, seed: u64) -> f32 {
 /// coats) it would lay on full contact (a touch: film splitting).
 #[allow(clippy::too_many_arguments)]
 unsafe fn exchange(
+    sf: Surf,
+    br: &mut Bristle,
+    tool: &Tool,
+    a: (f32, f32),
+    b: (f32, f32),
+    rb: f32,
+    reach: f32,
+    full: f32,
+    dep: Option<f32>,
+    excl: f32,
+    clip: Option<Clip<'_>>,
+    id: u32,
+    wts: &mut Vec<f32>,
+    bounds: &mut Bounds,
+    lim: Rect,
+) {
+    unsafe {
+        if sf.engine == 7 {
+            crate::engine7::exchange::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim);
+        } else {
+            exchange_legacy(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn exchange_legacy(
     sf: Surf,
     br: &mut Bristle,
     tool: &Tool,

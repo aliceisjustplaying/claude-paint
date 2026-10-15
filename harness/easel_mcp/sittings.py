@@ -8,23 +8,26 @@ from uuid import uuid4
 
 from mcp import types
 
-from painting_chunks import count_painting_chunks
+from painting_chunks import WATERCOLOR_METHODS, WATERCOLOR_VERBS, count_painting_chunks
 from server import LOG_PAGE, LOG_SCRATCH_PAGE, READ_PAGE, REPLY_PAGE, Easel, page_of, studio_path, text_pages
 
 
 class SittingEasel(Easel):
     def __init__(self, studio, break_seconds=0, sitting_seconds=None):
         super().__init__(studio)
+        self.watercolor = (self.studio / "bin/watercolor-studio").is_file()
         self.break_seconds = break_seconds
         self.sitting_seconds = sitting_seconds
         self.state_path = self.studio / "out/easel/sittings.json"
         self.state = json.loads(self.state_path.read_text()) if self.state_path.exists() else {
-            "sitting": 1, "started": time.time(), "painting_before": self.painting_count(),
+            "sitting": 1, "started": time.time(), "painting_before": 0 if self.watercolor else self.painting_count(),
             "whole": False, "detail": False, "due": None, "complete": False,
         }
         self.save()
 
     def painting_count(self):
+        if self.watercolor:
+            return self.state.get("marks", 0)
         path = self.studio / "paintings/lua/painting.lua"
         return count_painting_chunks(path.read_text()) if path.exists() else 0
 
@@ -57,8 +60,8 @@ class SittingEasel(Easel):
                 self.state["due"] = time.time() + self.break_seconds
                 self.save()
             await asyncio.sleep(max(0, self.state["due"] - time.time()))
-            clock_result = await super().call("paint", {"lua": "print(wait(0))"})
-            clock = re.findall(r"^day \d+, \d\d:\d\d$", clock_result[0].text, re.MULTILINE)[-1]
+            said = await self.at(["status"]) if self.watercolor else (await super().call("paint", {"lua": "print(wait(0))"}))[0].text
+            clock = re.findall(r"^day \d+, \d\d:\d\d$", said, re.MULTILINE)[-1]
             look = await super().call("look", {})
             self.state.update(sitting=self.state["sitting"] + 1, started=time.time(),
                               painting_before=self.painting_count(), whole=False, detail=False, due=None)
@@ -71,6 +74,8 @@ class SittingEasel(Easel):
             raise ValueError("paint: the painting is complete" if self.state["complete"] else "paint: this sitting has ended; end_sitting starts the next one")
         before = self.painting_count() if name == "paint" and not params.get("scratch") else None
         result = await super().call(name, params)
+        if before is not None and self.watercolor and count_painting_chunks("--@ chunk 1\n" + params["lua"], WATERCOLOR_VERBS, WATERCOLOR_METHODS):
+            self.state["marks"] = before + 1
         if before is not None and self.painting_count() > before:
             self.state.update(whole=False, detail=False)
             self.save()

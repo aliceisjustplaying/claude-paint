@@ -160,6 +160,9 @@ point for Opus (Alice's global override) and about 1,021K for Gemini (global
 16 also used. `PAINTER_COMPACT_RESERVE` (tokens) sets `reserveTokens` for one
 run: for a smaller window, or a test that makes compaction happen early (no
 round 19 sitting came near 900K; the largest was Gemini's 328K).
+`PAINTER_COMPACTION_NOTES=1` adds a paragraph after the summary's header line
+(`CARRIES_OVER` in `summary.ts`) saying what carries over and that the
+journal does, for a painter whose session is condensed often.
 
 Round 17's painters read the settings file in their studio (`cat
 .pi/settings.json` was the first thing both did), so the values moved out of

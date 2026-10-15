@@ -16,7 +16,7 @@
 #   --no-cracks   skip the cracks
 #   --relief      also light the surface's relief (the easel's default strength)
 #
-# Writes <out.png> (2400 px, like `easel save`) and, beside it, <out>.lua:
+# Writes <out.png> (at the painting's width, like `easel save`) and, beside it, <out>.lua:
 # the painter's log, with a finishing chunk only for Friedrich, which `easel run`
 # replays to the same picture. Uses the replay build (default features:
 # `replay` and `finish`), built from this checkout. A save that isn't of

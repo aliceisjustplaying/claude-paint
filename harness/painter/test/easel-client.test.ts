@@ -139,6 +139,9 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ ref: "reference/motif.jpg", mode: "value" }), ["--ref", "reference/motif.jpg", "--mode", "value"]);
 	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
 	assert.deepEqual(lookArgs({ hold: "skyP", at: "400,320", mode: "value" }), ["--hold", "skyP", "--at", "400,320", "--mode", "value"]);
+	assert.equal(toolWords("look: --pose and --side hold a pastel stick"), "look: pose and side hold a pastel stick");
+	assert.deepEqual(lookArgs({ hold: "P.glow", at: "400,320", pose: "2,55,30" }), ["--hold", "P.glow", "--at", "400,320", "--pose", "2,55,30"]);
+	assert.deepEqual(lookArgs({ hold: "P.glow", at: "400,320", side: "0" }), ["--hold", "P.glow", "--at", "400,320", "--side", "0"]);
 });
 
 test("mask overlays pass named masks through the look client", () => {

@@ -73,7 +73,8 @@ pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;
 
-/// The engine version new paintings are painted with. A painting replays
+/// The default engine version for low-level canvases and palettes. The easel
+/// selects engine 7 for new paintings and records it in the log. A painting replays
 /// with the version it was painted with (its log's `--@ engine` line; a log
 /// without one is version 1), so a fix that changes what paint does never
 /// changes a past painting. Exception: engine-5 solvent waits were
@@ -99,12 +100,12 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
-/// - 7 (opt-in, never the default): engine 5, with the parts `engine7`
+/// - 7: engine 5, with the parts `engine7`
 ///   reimplements for speed. A log asks for it with `--@ engine 7`.
 pub const ENGINE: u32 = 5;
 
 /// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
-/// those before it, and the opt-in engine 7 (`engine7`). There is no engine 6.
+/// those before it, and engine 7 (`engine7`). There is no engine 6.
 pub const SUPPORTED_ENGINES: [u32; 6] = [1, 2, 3, 4, 5, engine7::ENGINE];
 
 /// Whether engine version `v` is one this crate paints with.

@@ -79,7 +79,7 @@ class SittingEasel(Easel):
         if before is not None and self.painting_count() > before:
             self.state.update(whole=False, detail=False)
             self.save()
-        if name == "look" and not any(params.get(key) for key in ("scratch", "palette", "mode")):
+        if name == "look" and not any(params.get(key) for key in ("scratch", "palette")) and params.get("mode") in (None, "", "color"):
             if any(item.type == "image" for item in result):
                 self.state["detail" if params.get("crop") else "whole"] = True
                 self.save()

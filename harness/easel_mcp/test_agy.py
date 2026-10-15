@@ -172,7 +172,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
 
                 async def sitting(lua):
                     self.assertFalse((await session.call_tool("paint", {"lua": lua})).isError)
-                    await session.call_tool("look", {})
+                    await session.call_tool("look", {"mode": "color"})
                     await session.call_tool("look", {"crop": "0,0,1,1"})
                     return (await session.call_tool("end_sitting", {})).content[0].text
 

@@ -878,9 +878,9 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
             break;
         }
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
-            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, or {}>)", paint::ENGINE, paint::engine7::ENGINE));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -1907,6 +1907,17 @@ mod tests {
         for bad in ["--@ engine 0", "--@ engine 99", "--@ engine two", "--@ engine 1\n--@ engine 1"] {
             assert!(logged_engine(&format!("{bad}\n{MARK} 1\n")).is_err(), "{bad}");
         }
+    }
+
+    /// A log may name the opt-in engine 7 (`paint::engine7`), never 6.
+    #[test]
+    fn a_log_may_name_engine_7_but_not_6() {
+        assert_eq!(logged_engine(&format!("{ENGINE_MARK} 7
+{MARK} 1
+")), Ok(7));
+        assert!(logged_engine(&format!("{ENGINE_MARK} 6
+{MARK} 1
+")).is_err());
     }
 
     /// Paintings from before the engine version was recorded (no `--@ engine`

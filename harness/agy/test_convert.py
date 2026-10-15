@@ -14,8 +14,101 @@ from convert import main, merge_records, project
 
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII="
 
+INTERACTIVE = r"""
+{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-10-14T21:06:11Z","content":"<USER_REQUEST>\nhey hi welcome quick q what tools do you have\n</USER_REQUEST>"}
+{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-14T21:06:11Z","thinking":"Hmm... 🤔 Initial query indicates a need to list available tools within the paint studio context.","tool_calls":[{"name":"mcp_easel_read","args":{"path":"notes/easel_guide.md","toolSummary":"Read easel guide"}}]}
+{"step_index":2,"source":"MODEL","type":"GENERIC","status":"DONE","created_at":"2026-10-14T21:06:17Z","content":"Created At: 2026-10-14T23:06:17+02:00\nCompleted At: 2026-10-14T23:06:17+02:00\n# The easel"}
+{"step_index":5,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-14T21:06:24Z","thinking":"Examining `BRIEF.md` and `notes/easel_guide.md` reveals the available easel tools.","tool_calls":[{"name":"mcp_easel_paint","args":{"lua":"print(\"test\")","scratch":true}}]}
+{"step_index":6,"source":"MODEL","type":"GENERIC","status":"ERROR","created_at":"2026-10-14T21:06:34Z","error":"the painting has none yet: its first chunk is canvas{...}","content":"Encountered error in step execution: the painting has none yet: its first chunk is canvas{...}"}
+{"step_index":7,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-14T21:06:34Z","thinking":"Checking documentation for line numbers in `BRIEF.md` and `notes/easel_guide.md`.","content":"The studio environment provides ten tools across the easel and harness systems:"}
+"""
+
 
 class ConvertTests(unittest.TestCase):
+    def test_interactive_transcript_projection_and_snapshot_updates(self):
+        transcript = [json.loads(line) for line in INTERACTIVE.splitlines() if line.strip()]
+        recorder = [{"type": "session", "cwd": "/synthetic", "timestamp": "2026-10-14T21:06:04.800Z"}]
+        for name, start, end in [("read", "21:06:17.178", "21:06:17.180"), ("paint", "21:06:34.100", "21:06:34.200")]:
+            arguments = {"path": "notes/easel_guide.md"} if name == "read" else {"lua": 'print("test")', "scratch": True}
+            recorder.extend([
+                {"type": "message", "timestamp": f"2026-10-14T{start}Z", "message": {"role": "assistant", "content": [
+                    {"type": "toolCall", "id": name, "name": name, "arguments": arguments},
+                ]}},
+                {"type": "message", "timestamp": f"2026-10-14T{end}Z", "message": {"role": "toolResult", "toolCallId": name,
+                    "isError": name == "paint", "content": [{"type": "text", "text": name + " result"},
+                        {"type": "image", "mimeType": "image/png", "data": PNG}]}},
+            ])
+        merged = merge_records(recorder, transcript, "gemini-3.8-flash")
+        messages = [row["message"] for row in merged if row["type"] == "message"]
+        self.assertEqual([message["role"] for message in messages],
+                         ["user", "assistant", "assistant", "toolResult", "assistant", "assistant", "toolResult", "assistant"])
+        self.assertEqual(messages[0]["content"], [{"type": "text", "text": transcript[0]["content"]}])
+        self.assertEqual(messages[-1]["content"], [
+            {"type": "thinking", "thinking": transcript[-1]["thinking"]},
+            {"type": "text", "text": transcript[-1]["content"]},
+        ])
+        self.assertEqual([row for row in merged if row in recorder[1:]], recorder[1:])
+        self.assertFalse(any(row["type"] == "custom" for row in merged))
+        with tempfile.TemporaryDirectory(prefix="agy-interactive-") as root:
+            recorder_path, transcript_path, output = (Path(root) / name for name in ("recorder.jsonl", "transcript.jsonl", "merged.jsonl"))
+            recorder_path.write_text("".join(json.dumps(row) + "\n" for row in recorder))
+            transcript_path.write_text("".join(json.dumps(row) + "\n" for row in transcript[:-1]))
+            observed = {}
+            project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
+            encoded = json.dumps(transcript[-1])
+            with transcript_path.open("a") as file:
+                file.write(encoded[:20])
+            before = output.read_bytes()
+            project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
+            self.assertEqual(output.read_bytes(), before)
+            with transcript_path.open("a") as file:
+                file.write(encoded[20:] + "\n")
+            project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
+            self.assertEqual([json.loads(line) for line in output.read_text().splitlines()], merged)
+            transcript[-1]["content"] += " Updated reply."
+            transcript_path.write_text("".join(json.dumps(row) + "\n" for row in transcript))
+            project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
+            updated = [json.loads(line) for line in output.read_text().splitlines()]
+            self.assertEqual(len(updated), len(merged))
+            self.assertEqual(updated[-1]["message"]["content"][-1]["text"], transcript[-1]["content"])
+            inode = output.stat().st_ino
+            project(recorder_path, transcript_path, output, "gemini-3.8-flash", follow=True, observed=observed)
+            self.assertEqual(output.stat().st_ino, inode)
+
+    def test_tool_alignment_uses_supplied_conversation(self):
+        recorder = [{"type": "session", "timestamp": "2026-10-14T12:00:00Z"}]
+        for call_id, start, arguments in [
+            ("old", "12:00:02", {"crop": "0,0,100,100", "scratch": True}),
+            ("different-args", "12:01:01", {"crop": "100,100,200,200", "scratch": True}),
+            ("current", "12:01:02", {"crop": "0,0,100,100", "scratch": True}),
+            ("later", "12:02:02", {"crop": "0,0,100,100", "scratch": True}),
+        ]:
+            recorder.extend([
+                {"type": "message", "timestamp": f"2026-10-14T{start}.100Z", "message": {
+                    "role": "assistant", "content": [{"type": "toolCall", "id": call_id, "name": "look", "arguments": arguments}]}},
+                {"type": "message", "timestamp": f"2026-10-14T{start}.200Z", "message": {
+                    "role": "toolResult", "toolCallId": call_id, "content": [{"type": "text", "text": call_id}]}},
+            ])
+        transcript = [
+            {"step_index": 0, "type": "USER_INPUT", "created_at": "2026-10-14T12:01:00Z", "content": "Look again."},
+            {"step_index": 1, "type": "PLANNER_RESPONSE", "created_at": "2026-10-14T12:01:00Z", "thinking": "Before looking.",
+             "tool_calls": [{"name": "mcp_easel_look", "args": {"crop": "0,0,100,100", "scratch": True, "toolSummary": "Look"}}]},
+            {"step_index": 2, "type": "GENERIC", "created_at": "2026-10-14T12:01:02Z", "content": "Look result."},
+            {"step_index": 3, "type": "PLANNER_RESPONSE", "created_at": "2026-10-14T12:01:02Z",
+             "thinking": "After looking.", "content": "Here is the canvas."},
+        ]
+        for encoded_arguments in (False, True):
+            with self.subTest(encoded_arguments=encoded_arguments):
+                if encoded_arguments:
+                    args = transcript[1]["tool_calls"][0]["args"]
+                    transcript[1]["tool_calls"][0]["args"] = {key: json.dumps(value) for key, value in args.items()}
+                merged = merge_records(recorder, transcript)
+                reply = next(row for row in merged if row.get("message", {}).get("content", [{}])[-1].get("text") == "Here is the canvas.")
+                self.assertEqual(reply["timestamp"], "2026-10-14T12:01:02.200Z")
+                self.assertGreater(merged.index(reply), merged.index(recorder[6]))
+                self.assertLess(merged.index(reply), merged.index(recorder[7]))
+                self.assertEqual([row for row in merged if row in recorder[1:]], recorder[1:])
+
     def test_synthetic_projection_and_live_append(self):
         recorder_rows = [
             {"type": "session", "cwd": "/synthetic/paint-studio-aabbcc", "timestamp": "2026-10-13T12:00:00Z"},

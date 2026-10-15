@@ -105,6 +105,36 @@ crust roughness 3 µm, crust wear 0.5, the finger's 20%/25%, the felt's cells
 (0.8 mm, 20 µm), the resin wetting 15% of the particles. The research notes
 end with bench measurements that would replace them.
 
+## Crumbs, and the eraser
+
+Two changes found while painting.
+
+- **Crumbs** (`pastel::SHED`, `lay_crumbs`). Laying all the pastel a
+  contact abrades on the pixels in contact left the paper's hollows empty:
+  two heavy passes of a soft stick covered about 30–60 % and the tooth then
+  read "full". Measured (Archambault, in pastel_stick_tribology.md): a
+  stroke covers about 6.6 times its real contact area, the debris spreading,
+  fragmenting and collecting in the texture. Now 1/6.6 of what a contact
+  abrades stays there; the rest rides under the face as crumbs and settles
+  (1 − e^(−ds/3 mm) a step) into the pixels under the face that lie within a
+  crumb's size (150 µm) of it, the deeper ones taking more. Each crumb is one
+  agglomerate, its area drawn from the measured P(A) ∝ A^(−3/2) (cut-off 80–300
+  µm by softness and force), pressed flat to PARTICLE_UM like the contact's
+  own deposit. Where no paper lies within a crumb's size of the face, the
+  crumbs ride on to the next step; what is still carried at lift-off drops
+  where the face last was, or falls clear of the picture if nothing lay
+  under it. Crumbs that settle on wet paint are lost in it, as the contact's
+  own deposit is. Result: two heavy passes cover about 90 %, a light stroke
+  stays broken, and the crumbs are discrete specks, not a veil.
+- **The eraser lifts the particles** (`Canvas::erase`). It lowered pastel's
+  coverage but left its volume in the tooth, so an erased patch stayed
+  "full" and refused new pastel. Now the loose volume falls with the
+  coverage taken. Graphite and chalk keep no loose volume, so a pencil
+  drawing erases as before.
+
+Estimates in use: the 3 mm a crumb rides, the 150 µm bed, the cut-off's
+dependence on softness and force (within the measured 100–300 µm).
+
 Learned while painting:
 
 - Pastel skips wet paint. Thick touches of blotted essence were still
@@ -114,8 +144,3 @@ Learned while painting:
   micro-roughness (0.3–2 µm for lean paint, as the research gives), so
   pastel over a heavy essence lay-in fills its tooth in one light pass.
   Keep essence thin where pastel will go, or leave the paper bare.
-- Everything a contact abrades stays on the pixels in contact, so the
-  paper's hollows take none and two heavy passes of a soft stick cover only
-  about 30–60 %; measured strokes cover about 6.6 times their real contact
-  area (pastel_stick_tribology.md). The crumbs that spread it are the next
-  step.

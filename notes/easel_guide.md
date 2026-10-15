@@ -574,11 +574,17 @@ feel(x, y)                     -- what a fingertip feels there
   one way grows a facet and draws wider as it does; rolled or tilted it cuts a
   new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
   says how many facets it has and how long it is.
+- **Crumbs.** Most of what the stick abrades comes away as crumbs that ride
+  under its face and settle into the tooth along and beside the stroke, the
+  hollows taking more: a mark covers several times what the stick touches,
+  as discrete specks. Crumbs that fall on wet paint are lost in it.
 - **The tooth fills.** Loose pastel in the pores is a third body the stick
   slides on: the more there is, the less a stroke lays, until the paper
   refuses it. Fixative binds it into a rough crust that files the stick again,
   so a fixed passage takes more pastel; and darkens it a little, as the resin
   wets the particles.
+  The eraser lifts loose pastel out of the tooth with the coverage it takes,
+  so an erased passage takes pastel again.
 - **The finger** picks up loose pastel and lays it down along its path as fine
   grains pressed into the pores: colors drag into each other and the passage
   covers more for its thickness. It leaves fixed pastel where it is.

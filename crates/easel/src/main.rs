@@ -60,18 +60,48 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-/// The one width a painting is painted, replayed and delivered at (px).
+/// The width a painting is painted, replayed and delivered at (px) unless it
+/// names another (`session::WIDTH_MARK`, configured when it began: `configured_width`).
 const LIVE_WIDTH: usize = 2400;
 
 /// The width a painting paints at: an existing one its log's (a sketch if
-/// its head says so, `session::SKETCH_MARK`), a new one a sketch's if the
-/// session's name starts with "sketch".
-fn width_for(name: &str, log: Option<&str>) -> usize {
-    let sketch = match log {
-        Some(text) => session::logged_sketch(text),
-        None => name.starts_with("sketch"),
+/// its head says so, `session::SKETCH_MARK`; else the width its head names,
+/// `session::WIDTH_MARK`, or `LIVE_WIDTH`), a new one a sketch's if the
+/// session's name starts with "sketch", else the configured one (`configured_width`).
+fn width_for(name: &str, log: Option<&str>) -> Result<usize, String> {
+    match log {
+        Some(text) if session::logged_sketch(text) => Ok(session::SKETCH_WIDTH),
+        Some(text) => session::logged_width(text),
+        None if name.starts_with("sketch") => Ok(session::SKETCH_WIDTH),
+        None => configured_width(),
+    }
+}
+
+/// A new painting's width, as its box is configured (`session::configured_box`): a file
+/// `width` next to this executable (a painter's client passes the easel no EASEL_* variable),
+/// else `EASEL_WIDTH`, else `LIVE_WIDTH`. One of `session::WIDTHS`; both set, they must agree.
+fn configured_width() -> Result<usize, String> {
+    let file = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(|d| d.join("width")));
+    let from_file = match file {
+        Some(f) if f.exists() => Some((std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?, f.display().to_string())),
+        _ => None,
     };
-    if sketch { session::SKETCH_WIDTH } else { LIVE_WIDTH }
+    new_width(from_file.as_ref().map(|(t, p)| (t.as_str(), p.as_str())), std::env::var("EASEL_WIDTH").ok().as_deref())
+}
+
+/// `configured_width` from what the file (its text and path) and `EASEL_WIDTH` say.
+fn new_width(file: Option<(&str, &str)>, env: Option<&str>) -> Result<usize, String> {
+    let parse = |v: &str, from: &str| {
+        v.trim().parse::<usize>().ok().filter(|w| session::WIDTHS.contains(w))
+            .ok_or_else(|| format!("{from} says width {:?}: want one of {:?}", v.trim(), session::WIDTHS))
+    };
+    let f = file.map(|(text, path)| parse(text, path)).transpose()?;
+    let e = env.filter(|v| !v.trim().is_empty()).map(|v| parse(v, "EASEL_WIDTH")).transpose()?;
+    match (f, e) {
+        (Some(a), Some(b)) if a != b => Err(format!("the width file says {a} but EASEL_WIDTH says {b}: set one, or both the same")),
+        (Some(w), _) | (None, Some(w)) => Ok(w),
+        (None, None) => Ok(LIVE_WIDTH),
+    }
 }
 
 /// The painter build's one session.
@@ -117,7 +147,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at 2400px and write the PNG
+  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at its width and write the PNG
       [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
@@ -130,6 +160,10 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   A new painting takes its box from a file `box` next to this executable, else EASEL_BOX,
   else the default tube box; its log names the box (a line \"--@ box <name>\"), and every
   replay of the log uses that box.
+
+  A new painting is 2400 px wide, or the width in a file `width` next to this executable,
+  else EASEL_WIDTH (2400 or 4800); a log
+  painted at another width names it (a line \"--@ width <px>\"), and every replay uses it.
 
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
@@ -489,7 +523,7 @@ fn open_name(args: &[String]) -> Result<String, String> {
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
-        return Err("open: live sessions are fixed at 2400px; no width option".into());
+        return Err("open: no width option (a log replays at its own width; a file `width` beside the easel, or EASEL_WIDTH, sets a new painting's)".into());
     }
     Ok(name)
 }
@@ -547,12 +581,16 @@ fn open(args: &[String]) -> Result<(), String> {
     }
     // Replaying a real painting can take tens of minutes. Follow the server's
     // startup log so `open` shows that work instead of looking dead, and only
-    // time out when the replay itself has made no progress for 30 minutes.
+    // time out when the replay itself has made no progress for longer than a chunk may run.
     // The server is started only by the `open` that takes the session's lock; any
     // other waits for it (or, if it has gone, takes the lock in turn).
     let mut started = false;
     let mut shown = 0usize;
     let mut last_progress = Instant::now();
+    // a chunk may take its whole limit to replay (session::chunk_limit_for, by the width its log
+    // names): no progress for that long and ten minutes more, and never less than 30 minutes, is a stall
+    let width = std::fs::read_to_string(log_path(&name)).ok().and_then(|t| session::logged_width(&t).ok()).unwrap_or(LIVE_WIDTH);
+    let stall = (session::chunk_limit_for(width) + Duration::from_secs(600)).max(Duration::from_secs(1800));
     loop {
         if let Some(lock) = try_lock(&name)? {
             if started {
@@ -604,8 +642,8 @@ fn open(args: &[String]) -> Result<(), String> {
             }
             return Err(log);
         }
-        if last_progress.elapsed() > Duration::from_secs(1800) {
-            return Err(format!("session made no replay progress for 30 minutes; see {}", dir.join("server.log").display()));
+        if last_progress.elapsed() > stall {
+            return Err(format!("session made no replay progress for {} minutes; see {}", stall.as_secs() / 60, dir.join("server.log").display()));
         }
     }
 }
@@ -688,7 +726,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
-        return Err("easel: fatal: live sessions are fixed at 2400px".into());
+        return Err("easel: fatal: no width option (a log replays at its own width; a file `width` beside the easel, or EASEL_WIDTH, sets a new painting's)".into());
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
     let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
@@ -963,11 +1001,16 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     board.knife(&mut knife, &[(10.0, cy), (50.0 + len, cy)], (0.15, 0.1), None, true, 0.25);
     let (_, _, bpng) = look::render(&board, &seen_as([30.0, cy - wide / 2.0, 30.0 + len, cy + wide / 2.0]))?;
     let blade_img = image::load_from_memory(&bpng).map_err(|e| e.to_string())?.to_rgb8();
-    // held over the passage: the blade's end at the point, its length to the right
-    let x0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
-    let y0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
-    let x = (at.0 * f.scale).round() as i64 - x0;
-    let y = (at.1 * f.scale).round() as i64 - y0 - blade_img.height() as i64 / 2;
+    // held over the passage: the blade's end at the point, its length to the right. The
+    // passage may be shown smaller than the canvas's own pixels (a crop of a painting wider
+    // than 2400 px, look.rs LOOK_SCALE; the blade is shown so too): the point is placed in
+    // the passage as shown
+    let px = |u: f32, lo: usize, hi: usize| ((u * f.scale).round().max(0.0) as usize).clamp(lo, hi) as i64;
+    let (x0, x1) = (px(crop[0], f.x0, f.x0 + f.w), px(crop[2], f.x0, f.x0 + f.w));
+    let (y0, y1) = (px(crop[1], f.y0, f.y0 + f.h), px(crop[3], f.y0, f.y0 + f.h));
+    let (kx, ky) = (passage.width() as f32 / (x1 - x0) as f32, passage.height() as f32 / (y1 - y0) as f32);
+    let x = (((at.0 * f.scale).round() as i64 - x0) as f32 * kx).round() as i64;
+    let y = (((at.1 * f.scale).round() as i64 - y0) as f32 * ky).round() as i64 - blade_img.height() as i64 / 2;
     image::imageops::overlay(&mut passage, &blade_img, x, y);
     let (w, h) = (passage.width(), passage.height());
     let mut out = Vec::new();
@@ -1054,8 +1097,13 @@ impl Server {
         // configured box (session::box_for)
         let (tubes, width) = match (like, &text) {
             (Some(l), None) => ((*l.st.borrow().tubes).clone(), l.st.borrow().width),
-            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())),
+            _ => (session::box_for(text.as_deref())?, width_for(&name, text.as_deref())?),
         };
+        // the state store's budgets are a 2400 px painting's (a 4800 px state is about four times as large)
+        #[cfg(feature = "state-store")]
+        if committed.is_some() && width > LIVE_WIDTH {
+            return Err(format!("EASEL_STATE_SESSION keeps paintings of {LIVE_WIDTH} px; this one is {width} px"));
+        }
         #[cfg(feature = "state-store")]
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
@@ -1273,7 +1321,7 @@ impl Server {
         Ok(reply)
     }
 
-    /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
+    /// The whole canvas at full detail (2.4 px a unit, as a crop), in tiles of at most 500 units a side,
     /// in reading order; the view's modes (gallery, value...) apply to each.
     fn survey(&mut self, args: &[String]) -> Result<String, String> {
         if args.iter().any(|a| a == "--crop" || a == "--size") {
@@ -1283,7 +1331,7 @@ impl Server {
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let view = look::View::parse(args)?;
         let (wu, hu) = (c.width(), c.height());
-        // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
+        // (a tile is at most 500 units: 1200 px as a crop is shown, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
         let (tw, th) = (wu / cols as f32, hu / rows as f32);
@@ -1726,7 +1774,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
 }
 
 #[cfg(feature = "replay")]
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 #[cfg(any(feature = "replay", feature = "state-store"))]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
@@ -1787,9 +1835,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
     // a development preview may replay narrower (kernel radii are in mm, so it is not the
     // painting at a smaller size: see notes/workflow.md); the painting is the width it was
-    // painted at (LIVE_WIDTH, a sketch's SKETCH_WIDTH)
+    // painted at (LIVE_WIDTH, the width its head names, a sketch's SKETCH_WIDTH)
     let width = match flag(args, "--width") {
-        None => width_for(&stem, Some(&text)),
+        None => width_for(&stem, Some(&text))?,
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
@@ -1837,6 +1885,11 @@ fn run(args: &[String]) -> Result<(), String> {
     let chunks = parse_program(&text);
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
+    }
+    // the state store's budgets are a 2400 px painting's (as for a live session: resume_as)
+    #[cfg(feature = "state-store")]
+    if flag(args, "--state-store").is_some() && width > LIVE_WIDTH {
+        return Err(format!("--state-store keeps paintings of {LIVE_WIDTH} px; {file} is {width} px"));
     }
     #[cfg(feature = "state-store")]
     let mut store = match flag(args, "--state-store") {
@@ -1891,6 +1944,9 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if paint::engine7::stats() {
+            eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
+        }
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }
@@ -2269,6 +2325,28 @@ mod tests {
 
     const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
 
+    /// On a painting wider than 2400 px a passage is shown smaller than its own pixels
+    /// (look.rs LOOK_SCALE): the blade is still held at the point, the passage's middle,
+    /// not where the canvas's own pixels would put it (outside the passage).
+    #[cfg(feature = "replay")]
+    #[test]
+    fn a_held_knife_is_at_the_point_on_a_wide_painting() {
+        let mut s = Session::new(3000).unwrap();
+        s.run(PALETTE_CANVAS).unwrap();
+        s.run(r#"dk = pile{{"raw umber", 2}, {"bone black", 1}}; k = knife{width=40}; k:load(dk, 0.8)"#).unwrap();
+        let at = (400.0, 320.0);
+        let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
+        let crop = [at.0 - HOLD_HALF, at.1 - HOLD_HALF, at.0 + HOLD_HALF, at.1 + HOLD_HALF];
+        let (w, h, png) = hold_look(&s, "k", at, &look::View::default()).unwrap();
+        let bare = rgb(&look::render(&s.canvas().unwrap(), &look::View { crop: Some(crop), ..look::View::default() }).unwrap().2);
+        assert_eq!((w as u32, h as u32), bare.dimensions(), "the passage is shown as a crop of it is");
+        let held = rgb(&png);
+        let (side, mid) = (w.min(h) as u32, (w.min(h) / 2) as u32);
+        assert!((0..mid - 1).all(|x| (0..side).all(|y| held.get_pixel(x, y) == bare.get_pixel(x, y))), "left of the point untouched");
+        let covered = (mid..side).filter(|&x| held.get_pixel(x, mid) != bare.get_pixel(x, mid)).count();
+        assert!(covered as u32 > (side - mid) / 2, "the blade runs right from the point: {covered} of {} pixels", side - mid);
+    }
+
     /// The held knife (speculative) only reads, as the palette look: the state digest, the
     /// log, the globals and the clock are as they were. It shows the passage with a knife
     /// over it at the point: a knife global with its own load, or a pile freshly loaded.
@@ -2442,10 +2520,19 @@ mod tests {
     /// A new session is a sketch by its name; a log by what its head says.
     #[test]
     fn a_log_replays_at_the_width_it_was_painted_at() {
-        assert_eq!(width_for("sketch-1", None), session::SKETCH_WIDTH);
-        assert_eq!(width_for("painting", None), LIVE_WIDTH);
+        assert_eq!(width_for("sketch-1", None), Ok(session::SKETCH_WIDTH));
         let head = |mark: &str| format!("-- easel session\n--@ engine 4\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
-        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), session::SKETCH_WIDTH);
-        assert_eq!(width_for("sketchbook", Some(&head(""))), LIVE_WIDTH);
+        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), Ok(session::SKETCH_WIDTH));
+        assert_eq!(width_for("sketchbook", Some(&head(""))), Ok(LIVE_WIDTH));
+        assert_eq!(width_for("painting", Some(&head("--@ width 4800"))), Ok(4800));
+        // a new painting: LIVE_WIDTH, or the width file's, or EASEL_WIDTH's (one of session::WIDTHS)
+        assert_eq!(new_width(None, None), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(None, Some("")), Ok(LIVE_WIDTH));
+        assert_eq!(new_width(None, Some("4800")), Ok(4800));
+        assert_eq!(new_width(Some(("4800\n", "bin/width")), None), Ok(4800));
+        assert_eq!(new_width(Some(("4800", "bin/width")), Some("4800")), Ok(4800));
+        assert!(new_width(Some(("4800", "bin/width")), Some("2400")).unwrap_err().contains("set one"));
+        assert!(new_width(None, Some("3000")).is_err() && new_width(None, Some("wide")).is_err());
+        assert!(new_width(Some(("", "bin/width")), None).unwrap_err().contains("bin/width"));
     }
 }

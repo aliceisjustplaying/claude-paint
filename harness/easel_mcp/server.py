@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp==1.30.0"]
+# dependencies = ["mcp==1.30.0", "Pillow==12.3.0"]
 # ///
 
 import argparse
@@ -65,6 +65,57 @@ def studio_path(studio, value):
     return path
 
 
+PAGE_BYTES = 8000
+READ_PAGE = 'Page {n} of {total}. For page {next}, call read with {{"path": {path}, "page": {next}}}'
+LOG_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": false, "page": {next}}}'
+LOG_SCRATCH_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": true, "page": {next}}}'
+REPLY_PAGE = 'Reply saved in full to {file}. Page 1 of {total}. For page 2, call read with {{"path": {path}, "page": 2}}'
+LAST_PAGE = "Page {total} of {total}, the last page."
+SAVED = " When the reply's text is over 8,000 bytes, the whole text is saved to a file in the studio and this returns its first page."
+AGY_DESCRIPTIONS = {
+    "read": "Read a file in this studio. PNG files return an image; other files return text. Text over 8,000 bytes comes back one page at a time, each page ending with one line that gives the page number and the page count.",
+    "log": "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua). Text over 8,000 bytes comes back one page at a time, as with read.",
+}
+AGY_PAGE_PARAMS = {
+    "read": "Which page of a long text file to return, counting from 1. Leave it out for page 1.",
+    "log": "Which page to return, counting from 1. Leave it out for page 1.",
+}
+
+
+def text_pages(text, limit=PAGE_BYTES):
+    pages, page, size = [], [], 0
+    for line in text.splitlines(keepends=True):
+        while line:
+            encoded = line.encode()
+            if size + len(encoded) <= limit:
+                page.append(line)
+                size += len(encoded)
+                line = ""
+            elif size:
+                pages.append("".join(page))
+                page, size = [], 0
+            else:
+                cut = encoded[:limit].decode(errors="ignore")
+                pages.append(cut)
+                line = line[len(cut):]
+    if page or not pages:
+        pages.append("".join(page))
+    return pages
+
+
+def page_of(text, page, more, tool, limit=PAGE_BYTES):
+    pages = text_pages(text, limit)
+    number = 1 if page is None else int(page) if isinstance(page, str) and page.isdigit() else page
+    if isinstance(number, float) and number.is_integer():
+        number = int(number)
+    if isinstance(number, bool) or not isinstance(number, int) or not 1 <= number <= len(pages):
+        raise ValueError(f"{tool}: there is no page {page}; pages run from 1 to {len(pages)}")
+    if len(pages) == 1:
+        return text
+    line = more(number, len(pages)) if number < len(pages) else LAST_PAGE.format(n=number, total=len(pages))
+    return f"{pages[number - 1]}\n{line}"
+
+
 def look_args(view):
     if view.get("palette"):
         if any(key != "palette" and value is not None and value is not False and value != "" for key, value in view.items()):
@@ -99,10 +150,30 @@ def image_limits():
 
 
 class Easel:
+    def wide(self):
+        try:
+            wide = False
+            for line in (self.studio / "paintings/lua/painting.lua").read_text().splitlines():
+                head = line.strip()
+                if head.startswith("--@ chunk"):
+                    break
+                if head == "--@ sketch":
+                    return False
+                if re.fullmatch(r"--@ width\s+4800", head):
+                    wide = True
+            return wide
+        except FileNotFoundError:
+            pass
+        try:
+            return (self.studio / "bin/width").read_text().strip() == "4800"
+        except OSError:
+            return False
+
     def __init__(self, studio):
         self.studio = studio.resolve(strict=True)
         self.lock = asyncio.Lock()
         self.max_images, self.max_chars = image_limits()
+        self.page_bytes = None
 
     async def step(self, args, text, deadline):
         env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "")}
@@ -154,7 +225,8 @@ class Easel:
                 total = n
                 if not rebuilding or k > completed:
                     completed = k
-                    progress_deadline = time.monotonic() + 30 * 60
+                    # a chunk may take 40 minutes to replay at 4800 px: the easel's own stall is 50 there
+                    progress_deadline = time.monotonic() + (50 if self.wide() else 30) * 60
                 rebuilding = True
                 if time.monotonic() >= progress_deadline:
                     raise ValueError("the easel rebuild stalled without progress")
@@ -169,7 +241,7 @@ class Easel:
             args = ["open"]
 
     async def at(self, args, text=None):
-        wait = 12 * 60 if args[0] == "do" else 3 * 60
+        wait = (48 if self.wide() else 12) * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
         if await self.ensure_open(deadline):
             deadline = time.monotonic() + wait
@@ -294,7 +366,7 @@ class Easel:
         return [types.TextContent(type="text", text=said)]
 
 
-def tool_definitions(studio, sittings=False):
+def tool_definitions(studio, sittings=False, agy=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
         for definition in definitions:
@@ -309,6 +381,14 @@ def tool_definitions(studio, sittings=False):
     if sittings:
         definitions += json.loads(Path(__file__).with_name("sitting-tools.json").read_text())
         next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left."
+    if agy:
+        for definition in definitions:
+            name = definition["name"]
+            if name in AGY_DESCRIPTIONS:
+                definition["description"] = AGY_DESCRIPTIONS[name]
+                definition["inputSchema"]["properties"]["page"] = {"type": "integer", "minimum": 1, "description": AGY_PAGE_PARAMS[name]}
+            elif name in ("paint", "end_sitting"):
+                definition["description"] = definition["description"].rstrip() + SAVED
     return definitions
 
 
@@ -337,11 +417,14 @@ async def main():
     parser.add_argument("--sittings", action="store_true")
     parser.add_argument("--break-seconds", type=float, default=0)
     parser.add_argument("--sitting-seconds", type=float)
+    parser.add_argument("--agy", action="store_true", help="agy client: mark every tool alwaysLoad and page text replies over 8,000 bytes")
     args = parser.parse_args()
     if not args.studio:
         parser.error("set --studio or EASEL_ROOT to an exported studio")
     if any(value is not None and (not math.isfinite(value) or value < 0) for value in (args.break_seconds, args.sitting_seconds)):
         parser.error("sitting and break durations must be finite and nonnegative")
+    if args.agy and not args.sittings:
+        parser.error("--agy goes with --sittings")
     if args.sittings:
         from sittings import SittingEasel
         easel = SittingEasel(Path(args.studio), args.break_seconds, args.sitting_seconds)
@@ -351,12 +434,15 @@ async def main():
     if args.sessions_root:
         from remote import RemoteStudio
         recorded = RemoteStudio(easel.studio, args.sessions_root, response_wait=None, easel=easel)
+    if args.agy:
+        easel.page_bytes = PAGE_BYTES
     server = Server("easel")
-    definitions = tool_definitions(easel.studio, args.sittings)
+    definitions = tool_definitions(easel.studio, args.sittings, args.agy)
+    meta = {"_meta": {"antigravity/alwaysLoad": True}} if args.agy else {}
 
     @server.list_tools()
     async def list_tools():
-        return [types.Tool(**tool) for tool in definitions]
+        return [types.Tool(**tool, **meta) for tool in definitions]
 
     @server.call_tool()
     async def call_tool(name, arguments):

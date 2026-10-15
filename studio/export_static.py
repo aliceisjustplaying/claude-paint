@@ -359,7 +359,7 @@ def export(out, skip=(), only=None, live=False):
         # index, the studio's picker)
         s["look"] = None
         for e in ev:
-            if e["kind"] == "image" and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
+            if e["kind"] == "image" and not e.get("display_pending") and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
                 s["look"] = e["img"]
         # the painting's title, if the painter's last words begin with one
         # (the closing words of each sitting: its last words before the next sitting starts, newest first)

@@ -61,7 +61,7 @@ fn the_shipped_easel_paints_its_one_painting_in_its_own_studio() {
     for d in ["bin", "notes", "paintings/lua"] {
         std::fs::create_dir_all(studio().join(d)).unwrap();
     }
-    std::fs::copy(env!("CARGO_BIN_EXE_easel"), studio().join("bin/easel")).unwrap();
+    std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), studio().join("bin/easel")).unwrap();
     std::fs::create_dir_all(elsewhere().join("crates/easel")).unwrap();
     std::fs::write(elsewhere().join("crates/easel/Cargo.toml"), "").unwrap();
     let studio = studio().canonicalize().unwrap();
@@ -156,7 +156,7 @@ fn the_studio_box_file_sets_the_box() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("bin")).unwrap();
     let e = dir.join("bin/easel");
-    std::fs::copy(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
+    std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
     let run = |args: &[&str]| Command::new(&e).args(args).current_dir(&dir).env_remove("EASEL_BOX").output().unwrap();
     let usage = String::from_utf8(run(&["help"]).stdout).unwrap();
     assert!(usage.contains("easel tubes"), "{usage}");

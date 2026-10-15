@@ -9,7 +9,7 @@ const SESSION: &str = "sketch-save";
 #[cfg(not(feature = "replay"))]
 const SESSION: &str = "painting";
 
-// The painter's native width is fixed; a thin, bare canvas keeps this path test cheap.
+// A new painting here is 2400 px (no bin/width, EASEL_WIDTH unset); a thin, bare canvas keeps this path test cheap.
 const CANVAS: &str = r#"canvas{size=100, aspect=5, linen=15, seed=7, raw="cotton duck"}"#;
 const KEEP: &[u8] = b"outside file: preserve these bytes";
 
@@ -35,7 +35,7 @@ impl Studio {
         #[cfg(not(feature = "replay"))]
         let binary = {
             let binary = root.join("bin/easel");
-            std::fs::copy(env!("CARGO_BIN_EXE_easel"), &binary).unwrap();
+            std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), &binary).unwrap();
             binary
         };
         let studio = Self {
@@ -59,6 +59,7 @@ impl Studio {
             .current_dir(&self.elsewhere)
             .env("RAYON_NUM_THREADS", "2")
             .env_remove("EASEL_BOX")
+            .env_remove("EASEL_WIDTH")
             .env_remove("EASEL_STATE_SESSION")
             .env_remove("EASEL_STATE_DISK_MIB")
             .env_remove("EASEL_LOCK_ON_STDIN");

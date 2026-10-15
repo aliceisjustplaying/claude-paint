@@ -13,7 +13,7 @@ fn root() -> PathBuf {
 }
 
 fn easel(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", root()).env_remove("EASEL_SESSION").output().unwrap()
+    Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", root()).env_remove("EASEL_SESSION").output().unwrap()
 }
 
 fn ok(args: &[&str]) -> String {

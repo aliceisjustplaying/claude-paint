@@ -1120,6 +1120,42 @@ fn limit(r: Option<Option<Rect>>) -> Rect {
     r.flatten().unwrap_or((0, 0, 0, 0))
 }
 
+fn sweep_step(tool: &Tool, g: &Gesture, path: &[(f32, f32)], arc: &[f32], scale: f32, base: f32, adaptive: bool) -> f32 {
+    if !adaptive {
+        return base;
+    }
+    let total = arc.last().copied().unwrap_or(0.0);
+    if total <= 0.0 {
+        return base * 2.0;
+    }
+    let mut curvature = 0.0f32;
+    let mut previous: Option<((f32, f32), f32)> = None;
+    for (i, pair) in path.windows(2).enumerate() {
+        let len = arc[i + 1] - arc[i];
+        if len <= 1e-3 {
+            continue;
+        }
+        let dir = ((pair[1].0 - pair[0].0) / len, (pair[1].1 - pair[0].1) / len);
+        if let Some((last, last_len)) = previous {
+            let turn = ((dir.0 - last.0).powi(2) + (dir.1 - last.1).powi(2)).sqrt();
+            curvature = curvature.max(turn / (0.5 * (len + last_len)));
+        }
+        previous = Some((dir, len));
+    }
+    let samples = ((total / base).ceil() as usize).max(1);
+    let mut pressure_change = 0.0f32;
+    let mut previous_pressure = g.pressure_at(0.0).clamp(0.0, 1.0);
+    for i in 1..=samples {
+        let pressure = g.pressure_at(i as f32 / samples as f32).clamp(0.0, 1.0);
+        pressure_change = pressure_change.max((pressure - previous_pressure).abs());
+        previous_pressure = pressure;
+    }
+    let width_limit = tool.width * scale / (2.0 * base);
+    let curve_limit = 0.25 / (curvature * base).max(1e-6);
+    let pressure_limit = 0.08 / pressure_change.max(1e-6);
+    base * width_limit.min(curve_limit).min(pressure_limit).clamp(2.0, 4.0)
+}
+
 /// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`, and
 /// `held.tool` must pass `Tool::validate`. (Defense in depth: every pixel
 /// access is clamped to that footprint, and debug builds assert that the
@@ -1151,7 +1187,7 @@ pub(crate) unsafe fn drag_on(
     // below a pixel (see `strip_cover`)
     let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
-    let step = rb.max(1.25);
+    let step = sweep_step(&tool, g, &path, &arc, s, rb.max(1.25), std::env::var("PAINT_ADAPTIVE_SWEEP").as_deref() == Ok("1"));
     let batch_exchange = sf.batch_exchange && tool.point == 0.0 && std::env::var_os("PAINT_PARALLEL_EXCHANGE").is_some_and(|v| v == "1");
     let mut batch_contacts = Vec::with_capacity(if batch_exchange { held.bristles.len() } else { 0 });
     let nsteps = ((total / step).ceil() as usize).max(1);
@@ -1297,6 +1333,49 @@ pub(crate) unsafe fn drag_on(
 /// How much of a capsule's contact a bristle is assumed to make outside a
 /// crop window (where there is no canvas to feel).
 const GHOST_TOUCH: f32 = 0.8;
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    fn step(tool: &Tool, g: &Gesture, adaptive: bool) -> f32 {
+        let path = densify(&g.pts);
+        let arc = crate::path::arclen(&path);
+        sweep_step(tool, g, &path, &arc, 1.0, 1.25, adaptive)
+    }
+
+    #[test]
+    fn adaptive_sweep_is_opt_in_and_bounded_by_tool_width() {
+        let g = Gesture::line((0.0, 0.0), (100.0, 0.0)).ramps(0.0, 0.0).shake(0.0);
+        assert_eq!(step(&Tool::hog_flat(40.0), &g, false), 1.25);
+        assert_eq!(step(&Tool::hog_flat(40.0), &g, true), 5.0);
+        assert_eq!(step(&Tool::rigger(1.0), &g, true), 2.5);
+        assert_eq!(step(&Tool::hog_flat(8.0), &g, true), 4.0);
+    }
+
+    #[test]
+    fn adaptive_sweep_shortens_for_curvature_and_pressure_changes() {
+        let tool = Tool::hog_flat(40.0);
+        let straight = Gesture::line((0.0, 0.0), (100.0, 0.0)).ramps(0.0, 0.0);
+        let curve = Gesture::new(vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]).ramps(0.0, 0.0);
+        let ramp = Gesture::line((0.0, 0.0), (10.0, 0.0)).pressure(0.0, 1.0).ramps(0.0, 0.0);
+        let attack = straight.clone().ramps(0.02, 0.02);
+        let swell = straight.clone().swell(vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]);
+        for g in [&curve, &ramp, &attack, &swell] {
+            let shorter = step(&tool, g, true);
+            assert!((2.5..5.0).contains(&shorter), "{g:?}: {shorter}");
+        }
+    }
+
+    #[test]
+    fn adaptive_sweep_handles_stationary_and_repeated_points() {
+        let tool = Tool::round_sable(12.0);
+        let stationary = Gesture::line((4.0, 4.0), (4.0, 4.0));
+        let repeated = Gesture::new(vec![(0.0, 0.0), (0.0, 0.0), (100.0, 0.0)]);
+        assert_eq!(step(&tool, &stationary, true), 2.5);
+        assert!((2.5..=5.0).contains(&step(&tool, &repeated, true)));
+    }
+}
 
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.

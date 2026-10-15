@@ -102,6 +102,29 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    async def test_background_display_paths_are_not_renamed(self):
+        loader = SourceFileLoader("display_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        with patch.dict(os.environ, EASEL_ASYNC_DISPLAY="1", EASEL_DISPLAY_THREADS="2", PAINTER_SECRET="s"):
+            await easel.step(["open"], None, module.time.monotonic() + 5)
+        environment = json.loads((self.studio / "calls.jsonl").read_text().splitlines()[0])["env"]
+        self.assertEqual(environment["EASEL_ASYNC_DISPLAY"], "1")
+        self.assertEqual(environment["EASEL_DISPLAY_THREADS"], "2")
+        self.assertNotIn("PAINTER_SECRET", environment)
+        source = self.studio / "out/65c0681641604c1b93c51bdcfd66302e.png"
+        marker = source.parent / ".display" / source.name
+        marker.parent.mkdir(parents=True)
+        source.write_bytes(base64.b64decode(PNG))
+        path = str(source.relative_to(self.studio))
+        for state in ("pending", "ready", "failed"):
+            marker.write_text(state + "\n")
+            said, paths = easel.rename_looks(path + " (1x1, 0.01s)")
+            self.assertEqual(said, path + " (1x1)")
+            self.assertEqual(paths, [path])
+            self.assertTrue(source.is_file())
+
     async def test_opt_in_recording_preserves_stdio_tools_and_results(self):
         studio = self.studio / "paint-studio-abcd"
         studio.mkdir()

@@ -137,6 +137,10 @@ fn png(snapshot: &RenderSnapshot, r: [usize; 4], light: Option<[u32; 3]>, writer
     let f = snapshot.frame();
     let lit = light.map(|bits| { let [az, el, strength] = bits.map(f32::from_bits); snapshot.lit(az, el, strength) });
     let pixels = lit.as_deref().unwrap_or(snapshot.color());
+    png_pixels(pixels, f, r, writer)
+}
+
+fn png_pixels(pixels: &[paint::Rgb], f: paint::Frame, r: [usize; 4], writer: &mut impl Write) -> io::Result<()> {
     let bytes = crate::output::rgb8_exact_region(pixels, f.w, [r[0] - f.x0, r[1] - f.y0, r[2] - f.x0, r[3] - f.y0]);
     image::codecs::png::PngEncoder::new(writer).write_image(&bytes, (r[2] - r[0]) as u32, (r[3] - r[1]) as u32, image::ExtendedColorType::Rgb8).map_err(|e| invalid(e.to_string()))
 }
@@ -312,11 +316,14 @@ pub fn companions(args: &[String]) -> Result<(), String> {
         }
         if selected.is_none() {
             if used.checked_add(png_budget(r) * 3 + 65536).is_none_or(|v| v > budget) { return Err(invalid("insufficient companion transaction space")); }
+            let prepared = snapshot.into_prepared_optics();
             let mut images = Vec::new();
             for illumination in [None, Some(gallery), Some(relief)] {
                 let staged = dir.join(format!(".optical-{}-{}.part", std::process::id(), images.len()));
                 if staged.exists() { return Err(invalid("companion staging collision")); }
-                atomic(&staged, png_budget(r), |w| png(&snapshot, r, illumination, w))?;
+                let lit = illumination.map(|bits| { let [az, el, strength] = bits.map(f32::from_bits); prepared.seen_lit(az, el, strength) });
+                let pixels = lit.as_deref().unwrap_or(prepared.color());
+                atomic(&staged, png_budget(r), |w| png_pixels(pixels, prepared.frame(), r, w))?;
                 let (digest, bytes) = hashed_file(&staged, png_budget(r))?;
                 std::fs::rename(&staged, dir.join(format!("{digest}.png")))?;
                 images.push(Png { id: digest, bytes });

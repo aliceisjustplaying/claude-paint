@@ -11,7 +11,7 @@ fn root() -> PathBuf {
 }
 
 fn easel(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", root()).env("EASEL_SESSION", "wet").output().unwrap()
+    Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH").args(args).env("EASEL_ROOT", root()).env("EASEL_SESSION", "wet").output().unwrap()
 }
 
 fn ok(args: &[&str]) -> String {

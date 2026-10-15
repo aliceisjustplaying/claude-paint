@@ -855,7 +855,7 @@ impl Canvas {
         let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
         let small_tiles = if self.engine == 5 { std::env::var("PAINT_SMALL_TILES").ok() } else { None };
         let mut quarter_tiles = false;
-        if matches!(small_tiles.as_deref(), Some("1" | "quarter")) {
+        if matches!(small_tiles.as_deref(), Some("1" | "quarter")) && plans.iter().all(|(_, _, _, p)| p.id.is_none()) {
             let mut counts = vec![0usize; tw * th];
             for (cx, cy, rect, _) in &plans {
                 if rect.is_some() {
@@ -1434,6 +1434,62 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_id_fill_keeps_its_layout_and_paint_in_a_crop_with_small_tiles() {
+        const CHILD: &str = "PAINT_FILL_CROP_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let mut failures = String::new();
+            for mode in ["1", "quarter"] {
+                let out = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "handling::tests::fixed_id_fill_keeps_its_layout_and_paint_in_a_crop_with_small_tiles", "--nocapture"])
+                    .env(CHILD, "1")
+                    .env("PAINT_SMALL_TILES", mode)
+                    .env("RAYON_NUM_THREADS", "4")
+                    .output()
+                    .unwrap();
+                if !out.status.success() {
+                    failures.push_str(&format!("mode {mode}:\n{}\n{}\n", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)));
+                }
+            }
+            assert!(failures.is_empty(), "{failures}");
+            return;
+        }
+        let fill = |crop| {
+            let mut c = Canvas::new_window(500, 1.0, [0.8; 3], crop).with_engine(5);
+            let mask = Mask::from_fn(c.frame(), |x, y| {
+                if ((100.0..200.0).contains(&x) && (100.0..200.0).contains(&y)) || ((700.0..720.0).contains(&x) && (100.0..120.0).contains(&y)) { 1.0 } else { 0.0 }
+            });
+            let hd = Handling::new(Tool::filbert(8.0)).color(|_, _| [0.15, 0.3, 0.6]);
+            c.fill_gaps(&mask, &hd, 0, None, None, 3);
+            c
+        };
+        let whole = fill(None);
+        let crop = fill(Some(crate::canvas::Crop { units: [696.0, 96.0, 724.0, 124.0], margin: 48.0 }));
+        let (x0, y0, x1, y1) = crop.keep;
+        let mut painted = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = y * crop.f.w + x;
+                let j = crop.f.whole_index(i);
+                painted += (whole.wet.vol[j] > 0.0) as usize;
+                assert_eq!(crop.px[i], whole.px[j], "color at whole pixel {j}");
+                assert_eq!(crop.height[i], whole.height[j], "height at whole pixel {j}");
+                assert_eq!(crop.film[i], whole.film[j], "film at whole pixel {j}");
+                assert_eq!(crop.wet.vol[i], whole.wet.vol[j], "wet volume at whole pixel {j}");
+                assert_eq!(crop.wet.lat[i], whole.wet.lat[j], "wet color at whole pixel {j}");
+                assert_eq!(crop.wet.hide[i], whole.wet.hide[j], "wet properties at whole pixel {j}");
+                assert_eq!(crop.wet.stroke[i], whole.wet.stroke[j], "stroke at whole pixel {j}");
+                assert_eq!(crop.wet.touched[i], whole.wet.touched[j], "touch at whole pixel {j}");
+                assert_eq!(crop.wet.floor[i], whole.wet.floor[j], "floor at whole pixel {j}");
+                assert_eq!(crop.wet.cover[i], whole.wet.cover[j], "coverage at whole pixel {j}");
+                assert_eq!(crop.wet.solv[i], whole.wet.solv[j], "solvent at whole pixel {j}");
+                assert_eq!(crop.wet.laid[i], whole.wet.laid[j], "stroke volume at whole pixel {j}");
+                assert_eq!(crop.wet.laid_id[i], whole.wet.laid_id[j], "stroke volume id at whole pixel {j}");
+            }
+        }
+        assert!(painted > 20, "the kept region must exercise overlapping fill dabs");
+    }
 
     #[test]
     #[cfg(tube_box)]

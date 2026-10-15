@@ -1,5 +1,4 @@
 use crate::{Canvas, Frame, color::Rgb};
-use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 
@@ -70,7 +69,7 @@ fn validate_metadata(
         || frame.scale <= 0.0
         || !um_px.is_finite()
         || um_px <= 0.0
-        || !(1..=5).contains(&engine)
+        || !crate::supported_engine(engine)
     {
         return Err(invalid("unsupported engine or invalid snapshot scale"));
     }
@@ -319,89 +318,22 @@ impl RenderSnapshot {
         (self.frame.w, self.frame.h)
     }
 
-    pub fn lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
-        let ambient = crate::lerp(0.3, 0.55, crate::smoothstep(10.0, 55.0, elevation));
-        let base = &self.color;
-        let (w, h) = (self.frame.w, self.frame.h);
-        let um_px = self.um_px;
-        let surf = &self.surface;
-        let (az, el) = (
-            azimuth.to_radians(),
-            elevation.clamp(3.0, 89.0).to_radians(),
-        );
-        let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
-        let k = 0.5 / um_px;
-        let rise = el.tan() * um_px;
-        let (hi, lo) = surf
-            .par_iter()
-            .fold(|| (f32::MIN, f32::MAX), |(a, b), &v| (a.max(v), b.min(v)))
-            .reduce(
-                || (f32::MIN, f32::MAX),
-                |(a, b), (c, d)| (a.max(c), b.min(d)),
-            );
-        let steps = (((hi - lo) / rise).ceil() as usize)
-            .max(1)
-            .min(w.saturating_add(h));
-        let (sx, sy) = {
-            let m = (lx * lx + ly * ly).sqrt().max(1e-6);
-            (lx / m, ly / m)
-        };
-        let at = |x: isize, y: isize| {
-            surf[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize]
-        };
-        let shade_surf = crate::surface::box_blur(surf, w, h, 1);
-        let shade_hi = shade_surf.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let sat = |x: isize, y: isize| {
-            shade_surf
-                [(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize]
-        };
-        let hv = {
-            let v = [lx, ly, lz + 1.0];
-            let hm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-            [v[0] / hm, v[1] / hm, v[2] / hm]
-        };
-        (0..w * h)
-            .into_par_iter()
-            .map(|i| {
-                let (x, y) = ((i % w) as isize, (i / w) as isize);
-                let dx = (at(x + 1, y) - at(x - 1, y)) * k;
-                let dy = (at(x, y + 1) - at(x, y - 1)) * k;
-                let g = (dx * dx + dy * dy).sqrt();
-                let soft = 1.0 / (1.0 + g / 1.2);
-                let (dx, dy) = (dx * soft, dy * soft);
-                let m = (dx * dx + dy * dy + 1.0).sqrt();
-                let n = [-dx / m, -dy / m, 1.0 / m];
-                let ndl = (n[0] * lx + n[1] * ly + n[2] * lz).max(0.0);
-                let h0 = shade_surf[i];
-                let mut lit = 1.0f32;
-                for s in 1..=steps {
-                    let ray_height = h0 + rise * s as f32;
-                    if ray_height > shade_hi || lit == 0.0 {
-                        break;
-                    }
-                    let (px, py) = (x as f32 + sx * s as f32, y as f32 + sy * s as f32);
-                    if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 {
-                        break;
-                    }
-                    let over = sat(px.round() as isize, py.round() as isize) - ray_height;
-                    if over > 0.0 {
-                        lit = lit.min(1.0 - (over / (0.5 * rise)).min(1.0));
-                    }
-                }
-                let diffuse = (ambient + (1.0 - ambient) * ndl * lit / lz).min(1.6);
-                let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
-                let wet = (self.wet[i] * 4.0).min(1.0);
-                let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
-                let p = base[i];
-                [
-                    (p[0] * shade + spec).max(0.0),
-                    (p[1] * shade + spec).max(0.0),
-                    (p[2] * shade + spec).max(0.0),
-                ]
-            })
-            .collect()
+    pub fn into_prepared_optics(self) -> crate::PreparedOptics {
+        crate::PreparedOptics::new(
+            self.frame,
+            self.um_px,
+            self.color,
+            &self.surface,
+            self.wet,
+        )
     }
+
+    pub fn lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        crate::prepared_optics::PreparedLighting::new(
+            &self.surface, self.frame.w, self.frame.h, self.um_px,
+        ).lit(&self.color, &self.wet, azimuth, elevation, strength)
+    }
+
 }
 
 #[cfg(test)]

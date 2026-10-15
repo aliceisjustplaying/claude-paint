@@ -28,6 +28,7 @@ pub mod palette;
 pub mod paper;
 pub mod pastel;
 pub mod pigment;
+pub mod prepared_optics;
 pub mod rng;
 #[cfg(feature = "render-snapshot")]
 pub mod render_snapshot;
@@ -38,6 +39,7 @@ pub mod soak;
 pub mod spectral;
 pub mod wet;
 pub mod bristle;
+pub mod engine7;
 pub mod handling;
 pub mod stipple;
 pub mod state_dump;
@@ -68,11 +70,13 @@ pub use form::{Form, Light, Relief, Sdf, Shade, Solid};
 pub use scene::{Spot, Sun, View, Water, World};
 pub use noise::Fbm;
 pub use pigment::Pigment;
+pub use prepared_optics::PreparedOptics;
 pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;
 
-/// The engine version new paintings are painted with. A painting replays
+/// The default engine version for low-level canvases and palettes. The easel
+/// selects engine 7 for new paintings and records it in the log. A painting replays
 /// with the version it was painted with (its log's `--@ engine` line; a log
 /// without one is version 1), so a fix that changes what paint does never
 /// changes a past painting. Exception: engine-5 solvent waits were
@@ -98,7 +102,18 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
+/// - 7: engine 5, with the parts `engine7`
+///   reimplements for speed. A log asks for it with `--@ engine 7`.
 pub const ENGINE: u32 = 5;
+
+/// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
+/// those before it, and engine 7 (`engine7`). There is no engine 6.
+pub const SUPPORTED_ENGINES: [u32; 6] = [1, 2, 3, 4, 5, engine7::ENGINE];
+
+/// Whether engine version `v` is one this crate paints with.
+pub fn supported_engine(v: u32) -> bool {
+    SUPPORTED_ENGINES.contains(&v)
+}
 
 /// Hermite smoothstep.
 #[inline]

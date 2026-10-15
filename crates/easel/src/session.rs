@@ -28,6 +28,7 @@ pub const ENGINE_MARK: &str = "--@ engine";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
+pub const TILES_MARK: &str = "--@ work-tiles";
 /// The paper-and-pastel switch, in the head of a session file: a painting
 /// whose log has it may be on a sheet of paper (`canvas{paper=}`, paint's
 /// `paper`), and what comes with paper is its too. A new painting has it; a
@@ -439,6 +440,12 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().tubes.quarter_tiles {
+            let _ = writeln!(s, "{TILES_MARK} quarter");
+        }
+        if self.st.borrow().tubes.adaptive_sweep {
+            let _ = writeln!(s, "--@ adaptive-sweep");
         }
         if self.st.borrow().paper {
             let _ = writeln!(s, "{PAPER_MARK}");
@@ -944,9 +951,9 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
             break;
         }
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
-            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|v| (1..=paint::ENGINE).contains(v));
+            let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}>)", paint::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, or {}>)", paint::ENGINE, paint::engine7::ENGINE));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -967,6 +974,22 @@ pub fn logged_sketch(text: &str) -> bool {
 /// `PAPER_MARK` line before the first chunk).
 pub fn logged_paper(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == PAPER_MARK)
+}
+
+pub fn logged_quarter_tiles(text: &str) -> Result<bool, String> {
+    let mut found = false;
+    for l in text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)) {
+        if let Some(rest) = l.strip_prefix(TILES_MARK) {
+            if rest.strip_prefix(' ').map(str::trim) != Some("quarter") || found {
+                return Err(format!("the log's line {l:?} names no work tiles this easel has, or names them twice ({TILES_MARK} quarter, at most once)"));
+            }
+            found = true;
+        }
+    }
+    if found && logged_engine(text)? != 5 {
+        return Err(format!("the log asks for quarter work tiles ({TILES_MARK} quarter), but only engine 5 paints with them"));
+    }
+    Ok(found)
 }
 
 /// Where the box of a new painting is set: a file `box` next to the easel's
@@ -1009,16 +1032,22 @@ fn box_list() -> String {
 /// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one the current
-/// (`paint::ENGINE`), an existing one its log's (`logged_engine`).
+/// engine version the painting is painted with: a new one engine 7,
+/// an existing one its log's (`logged_engine`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+        let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
+        b.engine = paint::engine7::ENGINE;
+        return Ok(b);
     };
     let engine = logged_engine(text)?;
     if logged_paper(text) && engine < 5 {
         return Err(format!("the log's {PAPER_MARK} line (the paper-and-pastel switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
+    let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
+    if adaptive_sweep && engine != 5 {
+        return Err("the log's adaptive sweep switch requires engine 5".into());
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -1035,6 +1064,8 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let mut b = find_box(name)?;
     b.engine = engine;
+    b.quarter_tiles = logged_quarter_tiles(text)?;
+    b.adaptive_sweep = adaptive_sweep;
     Ok(b)
 }
 
@@ -1096,6 +1127,77 @@ mod tests {
 
     #[test]
     #[cfg(tube_box)]
+    fn adaptive_sweep_header_is_recorded_and_replays_and_rebuilds_exactly() {
+        let mut old_state = None;
+        for enabled in [false, true] {
+            let mut tubes = Palette::tube_box();
+            tubes.adaptive_sweep = enabled;
+            assert_eq!(tubes.adaptive_sweep, enabled);
+            assert_eq!(tubes.clone().adaptive_sweep, enabled);
+            assert_eq!(tubes.only(&["lead white"]).adaptive_sweep, enabled);
+            assert_eq!(tubes.with(Vec::new()).adaptive_sweep, enabled);
+            tubes.engine = 5;
+            let mut live = Session::with_box(240, tubes).unwrap();
+            live.run(CANVAS).unwrap();
+            live.run(r#"b = brush("flat", 40); b:load(pile{{"cobalt blue", 1}}, 0.9); b:stroke({{100, 300}, {850, 320}})"#).unwrap();
+            assert_eq!(live.canvas().unwrap().adaptive_sweep(), enabled);
+            let text = live.program("adaptive");
+            assert_eq!(text.contains("--@ adaptive-sweep\n"), enabled);
+            let mut replay = Session::replay_with(240, box_for(Some(&text)).unwrap()).unwrap();
+            for chunk in parse_program(&text) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(state(&live), state(&replay));
+            assert_eq!(text, replay.program("adaptive"));
+            let before = state(&live);
+            live.rebuild().unwrap();
+            assert_eq!(state(&live), before);
+            if enabled {
+                assert_ne!(old_state.as_ref().unwrap(), &before);
+            } else {
+                old_state = Some(before);
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_sweep_only_reads_the_log_header_and_requires_engine_5() {
+        let log = |text: &str| format!("--@ box {}\n{text}", Palette::fallback_box());
+        for text in [
+            "--@ engine 5\n--@ chunk 1\n--@ adaptive-sweep\n",
+            "--@ engine 5\n--@ adaptive-sweep-off\n--@ chunk 1\n",
+            "--@ engine 5\n--@ chunk 1\nprint('--@ adaptive-sweep')\n",
+        ] {
+            assert!(!box_for(Some(&log(text))).unwrap().adaptive_sweep);
+        }
+        assert!(box_for(Some(&log("--@ engine 5\n  --@ adaptive-sweep  \n--@ chunk 1\n"))).unwrap().adaptive_sweep);
+        for engine in [1, 4, 7] {
+            assert!(box_for(Some(&log(&format!("--@ engine {engine}\n--@ adaptive-sweep\n--@ chunk 1\n")))).is_err());
+        }
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn adaptive_sweep_ground_cache_keeps_selected_primer_and_flag() {
+        let path = std::env::temp_dir().join(format!("adaptive-ground-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        for enabled in [false, true, false] {
+            let mut tubes = Palette::tube_box();
+            tubes.adaptive_sweep = enabled;
+            let sty = Style::oil_with(tubes);
+            let c = sty.prepare_cached(64, 1.25, 7, &path, "adaptive-test");
+            assert_eq!(c.adaptive_sweep(), enabled);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let mut expected = Vec::new();
+            sty.prepare(64, 1.25, 7).write_state(&mut expected, "").unwrap();
+            assert_eq!(expected, bytes);
+        }
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    #[cfg(tube_box)]
     fn palette_add_refreshes_recipe_and_dilutes_materials() {
         let mut s = Session::new(48).unwrap();
         s.run(CANVAS).unwrap();
@@ -1135,6 +1237,14 @@ mod tests {
 
     #[cfg(tube_box)]
     pub(crate) const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
+
+    /// A sheet of paper for `canvas{}` (needs the paper-and-pastel switch).
+    #[cfg(tube_box)]
+    const SHEET_CANVAS: &str = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+
+    /// A pastel stick drawn across the sheet (needs the switch too).
+    #[cfg(tube_box)]
+    const STICK_STROKE: &str = r#"p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"}) p:stroke({{200, 300}, {800, 320}}, {force=2.5, alt=55})"#;
 
     #[cfg(tube_box)]
     const CHUNKS: [&str; 4] = [
@@ -1422,7 +1532,7 @@ mod tests {
     #[cfg(tube_box)]
     fn replayed(s: &Session) -> Session {
         let prog = s.program("t");
-        let mut b = Session::replay_with(W, box_for(Some(&prog)).expect("(EASEL_BOX set in the test's environment?)")).unwrap();
+        let mut b = Session::replay_with(W, box_for(Some(&prog)).expect("(EASEL_BOX set in the test's environment?)")).unwrap().with_paper(logged_paper(&prog)).unwrap();
         for c in parse_program(&prog) {
             b.run(&c).unwrap();
         }
@@ -1982,6 +2092,185 @@ mod tests {
         for bad in ["--@ engine 0", "--@ engine 99", "--@ engine two", "--@ engine 1\n--@ engine 1"] {
             assert!(logged_engine(&format!("{bad}\n{MARK} 1\n")).is_err(), "{bad}");
         }
+    }
+
+    /// A log may name engine 7 (`paint::engine7`), never 6.
+    #[test]
+    fn a_log_may_name_engine_7_but_not_6() {
+        assert_eq!(logged_engine(&format!("{ENGINE_MARK} 7
+{MARK} 1
+")), Ok(7));
+        assert!(logged_engine(&format!("{ENGINE_MARK} 6
+{MARK} 1
+")).is_err());
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn new_paintings_record_engine_7_and_keep_its_own_spacing() {
+        // a new painting at the easel has the paper-and-pastel switch on
+        // (main.rs): on linen and on a sheet of paper with a pastel stick's
+        // stroke on it
+        for setup in [CANVAS, SHEET_CANVAS] {
+            let tubes = box_for(None).unwrap();
+            assert_eq!(tubes.engine, 7);
+            assert!(!tubes.quarter_tiles);
+            assert!(!tubes.adaptive_sweep);
+            let mut live = Session::with_box(W, tubes).unwrap().with_paper(true).unwrap();
+            live.run(setup).unwrap();
+            live.run(CHUNKS[2]).unwrap();
+            if setup == SHEET_CANVAS {
+                live.run(STICK_STROKE).unwrap();
+            }
+            let program = live.program("t");
+            assert!(program.contains(&format!("--@ engine 7\n{PAPER_MARK}\n\n--@ chunk 1\n")), "{program}");
+            assert!(!program.contains(TILES_MARK));
+            assert!(!program.contains("--@ adaptive-sweep"));
+            assert_eq!(logged_engine(&program), Ok(7));
+            assert_eq!(live.canvas().unwrap().engine(), 7);
+            let mut bytes = Vec::new();
+            live.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            assert_eq!(&bytes[..8] == b"PAINTC13", setup == SHEET_CANVAS);
+            assert!(!live.canvas().unwrap().quarter_tiles());
+            assert!(!live.canvas().unwrap().adaptive_sweep());
+            let before = state(&live);
+            assert_eq!(state(&replayed(&live)), before);
+            live.rebuild().unwrap();
+            assert_eq!(state(&live), before);
+            assert_eq!(live.program("t"), program);
+        }
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn existing_logs_keep_their_engine_and_engine_5_flags() {
+        for engine in paint::SUPPORTED_ENGINES {
+            let text = format!("--@ engine {engine}\n{MARK} 1\n");
+            let tubes = box_for(Some(&text)).unwrap();
+            assert_eq!(tubes.engine, engine);
+            assert!(!tubes.quarter_tiles);
+            assert!(!tubes.adaptive_sweep);
+        }
+        let tubes = box_for(Some(&format!("{MARK} 1\n"))).unwrap();
+        assert_eq!(tubes.engine, 1);
+        assert!(!tubes.quarter_tiles);
+        assert!(!tubes.adaptive_sweep);
+        for (quarter, adaptive) in [(false, false), (false, true), (true, false), (true, true)] {
+            let text = format!("--@ engine 5\n{}{}", if quarter { "--@ work-tiles quarter\n" } else { "" }, if adaptive { "--@ adaptive-sweep\n" } else { "" });
+            let mut legacy = Session::with_box(W, box_for(Some(&text)).unwrap()).unwrap();
+            let mut tubes = Palette::tube_box();
+            tubes.quarter_tiles = quarter;
+            tubes.adaptive_sweep = adaptive;
+            let mut expected = Session::with_box(W, tubes).unwrap();
+            for chunk in [CANVAS, CHUNKS[2]] {
+                legacy.run(chunk).unwrap();
+                expected.run(chunk).unwrap();
+            }
+            assert_eq!(state(&legacy), state(&expected));
+            assert_eq!(legacy.program("t"), expected.program("t"));
+        }
+    }
+
+    #[test]
+    #[cfg(all(tube_box, feature = "replay"))]
+    fn new_engine_7_paintings_round_trip_through_checkpoints() {
+        // with the paper-and-pastel switch on, as at the easel: on linen and
+        // on a sheet with a pastel stick's stroke on it
+        for setup in [CANVAS, SHEET_CANVAS] {
+            let path = std::env::temp_dir().join(format!("easel-default-engine-{}.ckpt", std::process::id()));
+            let mut live = Session::with_box(W, box_for(None).unwrap()).unwrap().with_paper(true).unwrap();
+            live.run(setup).unwrap();
+            live.run(CHUNKS[2]).unwrap();
+            if setup == SHEET_CANVAS {
+                live.run(STICK_STROKE).unwrap();
+            }
+            crate::save::write(&live, &live.program("t"), &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            let saved = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            assert_eq!(saved(&restored), saved(&live));
+            assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == SHEET_CANVAS);
+            assert!(restored.st.borrow().paper);
+            assert_eq!(restored.canvas().unwrap().engine(), 7);
+            assert!(!restored.canvas().unwrap().quarter_tiles());
+            assert!(!restored.canvas().unwrap().adaptive_sweep());
+            for tubes in [&restored.st.borrow().tubes, &restored.st.borrow().style.as_ref().unwrap().palette] {
+                assert_eq!(tubes.engine, 7);
+                assert!(!tubes.quarter_tiles);
+                assert!(!tubes.adaptive_sweep);
+            }
+            restored.run("wait(0.1)").unwrap();
+            live.run("wait(0.1)").unwrap();
+            restored.run(CHUNKS[1]).unwrap();
+            live.run(CHUNKS[1]).unwrap();
+            assert_eq!(saved(&restored), saved(&live));
+            let program = restored.program("t");
+            assert_eq!(logged_engine(&program), Ok(7));
+            assert!(logged_paper(&program));
+            assert!(!program.contains(TILES_MARK));
+            assert!(!program.contains("--@ adaptive-sweep"));
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn new_paintings_record_quarter_tiles_and_headerless_logs_keep_legacy_tiles() {
+        let mut tubes = Palette::tube_box();
+        tubes.quarter_tiles = true;
+        let mut s = Session::with_box(W, tubes).unwrap();
+        s.run(CANVAS).unwrap();
+        assert!(s.canvas().unwrap().quarter_tiles());
+        let program = s.program("t");
+        assert!(program.contains(&format!("{TILES_MARK} quarter\n")), "{program}");
+        assert_eq!(logged_quarter_tiles(&program), Ok(true));
+        assert_eq!(bits(&s), bits(&replayed(&s)));
+        s.rebuild().unwrap();
+        assert!(s.canvas().unwrap().quarter_tiles());
+        assert_eq!(s.program("t"), program);
+
+        let old = program.replace(&format!("{TILES_MARK} quarter\n"), "");
+        let mut legacy = Session::with_box(W, box_for(Some(&old)).unwrap()).unwrap();
+        for chunk in parse_program(&old) {
+            legacy.run(&chunk).unwrap();
+        }
+        assert!(!legacy.canvas().unwrap().quarter_tiles());
+        assert_eq!(legacy.program("t"), old);
+        assert_eq!(logged_quarter_tiles(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{TILES_MARK} quarter")), Ok(false));
+        for bad in ["--@ work-tiles", "--@ work-tiles half", "--@ work-tiles quarter\n--@ work-tiles quarter"] {
+            assert!(logged_quarter_tiles(&format!("{ENGINE_MARK} 5\n{bad}\n{MARK} 1")).is_err(), "{bad}");
+        }
+        for engine in [1, 4, 7] {
+            assert!(logged_quarter_tiles(&format!("{ENGINE_MARK} {engine}\n{TILES_MARK} quarter\n{MARK} 1")).is_err());
+        }
+    }
+
+    #[test]
+    #[cfg(all(tube_box, feature = "replay"))]
+    fn saved_sessions_keep_the_recorded_work_tiles() {
+        let path = std::env::temp_dir().join(format!("easel-work-tiles-{}.ckpt", std::process::id()));
+        for quarter in [false, true] {
+            let mut tubes = Palette::tube_box();
+            tubes.quarter_tiles = quarter;
+            let mut s = Session::with_box(W, tubes).unwrap();
+            s.run(CANVAS).unwrap();
+            let program = s.program("t");
+            crate::save::write(&s, &program, &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            assert_eq!(restored.canvas().unwrap().quarter_tiles(), quarter);
+            assert_eq!(restored.st.borrow().tubes.quarter_tiles, quarter);
+            assert_eq!(restored.st.borrow().style.as_ref().unwrap().palette.quarter_tiles, quarter);
+            restored.run("wait(0.1)").unwrap();
+            s.run("wait(0.1)").unwrap();
+            restored.run(CHUNKS[1]).unwrap();
+            s.run(CHUNKS[1]).unwrap();
+            assert_eq!(bits(&restored), bits(&s));
+            assert_eq!(logged_quarter_tiles(&restored.program("t")), Ok(quarter));
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     /// Paintings from before the engine version was recorded (no `--@ engine`

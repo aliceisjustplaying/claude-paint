@@ -32,7 +32,7 @@ pub mod window;
 
 pub use footprint::Footprint;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 /// The engine version that selects engine 7.
 pub const ENGINE: u32 = 7;
@@ -54,43 +54,48 @@ pub fn stats() -> bool {
     *ON.get_or_init(|| std::env::var_os("E7_STATS").is_some_and(|v| v == "1"))
 }
 
-/// Ready and running tiles of the pass being painted (`E7_STATS` only).
-pub(crate) static READY: AtomicUsize = AtomicUsize::new(0);
-static PEAK_READY: AtomicUsize = AtomicUsize::new(0);
-static RUNNING: AtomicUsize = AtomicUsize::new(0);
-static PEAK_RUNNING: AtomicUsize = AtomicUsize::new(0);
-static BATCH: AtomicUsize = AtomicUsize::new(0);
-
-/// `n` more tiles became ready to run (`E7_STATS` only).
-pub(crate) fn tiles_ready(n: usize) {
-    let now = READY.fetch_add(n, Ordering::Relaxed) + n;
-    PEAK_READY.fetch_max(now, Ordering::Relaxed);
+/// One batch's scheduling counts (`E7_STATS` only): each batch owns its
+/// own, so canvases painting at the same time don't mix them.
+#[derive(Default)]
+pub(crate) struct BatchStats {
+    /// Tiles whose predecessors are done and that haven't finished
+    /// (queued or running), and the most there were.
+    ready: AtomicUsize,
+    peak_ready: AtomicUsize,
+    /// Tiles running, and the most at once.
+    running: AtomicUsize,
+    peak_running: AtomicUsize,
+    /// Every tile's time, summed (ns).
+    tile_ns: AtomicU64,
 }
 
-/// Paint one tile with `work`, counted and timed (`E7_STATS` only): its
-/// result and seconds.
-pub(crate) fn tile<T>(work: impl FnOnce() -> T) -> (T, f64) {
-    READY.fetch_sub(1, Ordering::Relaxed);
-    let now = RUNNING.fetch_add(1, Ordering::Relaxed) + 1;
-    PEAK_RUNNING.fetch_max(now, Ordering::Relaxed);
-    let t = std::time::Instant::now();
-    let v = work();
-    let secs = t.elapsed().as_secs_f64();
-    RUNNING.fetch_sub(1, Ordering::Relaxed);
-    (v, secs)
-}
-
-/// Start counting a batch of a pass (`E7_STATS` only).
-pub(crate) fn batch_start() {
-    for a in [&READY, &PEAK_READY, &RUNNING, &PEAK_RUNNING] {
-        a.store(0, Ordering::Relaxed);
+impl BatchStats {
+    /// `n` more tiles are ready to run.
+    pub(crate) fn ready(&self, n: usize) {
+        let now = self.ready.fetch_add(n, Ordering::Relaxed) + n;
+        self.peak_ready.fetch_max(now, Ordering::Relaxed);
     }
-}
 
-/// Print the batch's `E7BATCH` line (`E7_STATS` only).
-pub(crate) fn batch_end(tiles: usize, wall: f64, tile_secs: f64) {
-    let b = BATCH.fetch_add(1, Ordering::Relaxed) + 1;
-    eprintln!("E7BATCH	{b}	{tiles}	{}	{}	{wall:.6}	{tile_secs:.6}", PEAK_READY.load(Ordering::Relaxed), PEAK_RUNNING.load(Ordering::Relaxed));
+    /// Run one ready tile's `work`, counted and timed. It stays ready
+    /// until `work` returns.
+    pub(crate) fn tile<T>(&self, work: impl FnOnce() -> T) -> T {
+        let now = self.running.fetch_add(1, Ordering::Relaxed) + 1;
+        self.peak_running.fetch_max(now, Ordering::Relaxed);
+        let t = std::time::Instant::now();
+        let v = work();
+        self.tile_ns.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        self.running.fetch_sub(1, Ordering::Relaxed);
+        self.ready.fetch_sub(1, Ordering::Relaxed);
+        v
+    }
+
+    /// Print the batch's `E7BATCH` line: `tiles` painted in `wall` seconds.
+    pub(crate) fn print(&self, tiles: usize, wall: f64) {
+        static BATCH: AtomicUsize = AtomicUsize::new(0);
+        let b = BATCH.fetch_add(1, Ordering::Relaxed) + 1;
+        let tile_secs = self.tile_ns.load(Ordering::Relaxed) as f64 * 1e-9;
+        eprintln!("E7BATCH	{b}	{tiles}	{}	{}	{wall:.6}	{tile_secs:.6}", self.peak_ready.load(Ordering::Relaxed), self.peak_running.load(Ordering::Relaxed));
+    }
 }
 
 /// Print a `work` stroke's `E7NODE` line (`E7_STATS` only). Seeds and
@@ -158,6 +163,32 @@ mod tests {
             assert!(!crate::supported_engine(v), "{v}");
         }
         assert_eq!(crate::ENGINE, 5);
+    }
+
+    /// Passes counted at the same time keep their own counts; a tile counts
+    /// as ready until it finishes.
+    #[test]
+    fn concurrent_batches_count_their_own_tiles() {
+        let disjoint: Vec<Option<Rect>> = (0..16).map(|i| Some((i * 10, 0, i * 10 + 5, 5))).collect();
+        let chain: Vec<Option<Rect>> = vec![Some((0, 0, 5, 5)); 6];
+        let stats: Vec<BatchStats> = (0..4).map(|_| BatchStats::default()).collect();
+        rayon::scope(|s| {
+            for (k, st) in stats.iter().enumerate() {
+                let rects = if k % 2 == 0 { &disjoint } else { &chain };
+                s.spawn(move |_| {
+                    let order: Vec<usize> = (0..rects.len()).collect();
+                    crate::sched::run_ordered(&order, rects, Some(st), |_| std::thread::sleep(std::time::Duration::from_millis(2)));
+                });
+            }
+        });
+        for (k, st) in stats.iter().enumerate() {
+            let get = |a: &AtomicUsize| a.load(Ordering::Relaxed);
+            assert_eq!((get(&st.ready), get(&st.running)), (0, 0), "batch {k}");
+            let want = if k % 2 == 0 { 16 } else { 1 };
+            assert_eq!(get(&st.peak_ready), want, "batch {k}");
+            assert!((1..=want).contains(&get(&st.peak_running)), "batch {k}");
+            assert!(st.tile_ns.load(Ordering::Relaxed) > 0);
+        }
     }
 
     #[test]

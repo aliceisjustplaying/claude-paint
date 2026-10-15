@@ -28,20 +28,24 @@ struct Ctx<'a, T, W> {
     pending: Vec<AtomicUsize>,
     out: Vec<Mutex<Option<T>>>,
     work: &'a W,
+    stats: Option<&'a crate::engine7::BatchStats>,
 }
 
 fn run<'a, 's, T: Send, W: Fn(usize) -> T + Sync>(c: &'a Ctx<'a, T, W>, s: &Scope<'s>, k: usize)
 where
     'a: 's,
 {
-    let v = (c.work)(c.order[k]);
+    let v = match c.stats {
+        Some(st) => st.tile(|| (c.work)(c.order[k])),
+        None => (c.work)(c.order[k]),
+    };
     *c.out[k].lock().unwrap() = Some(v);
     for &j in &c.succ[k] {
         // the last predecessor to finish starts it (AcqRel: j sees every
         // predecessor's writes)
         if c.pending[j].fetch_sub(1, Ordering::AcqRel) == 1 {
-            if crate::engine7::stats() {
-                crate::engine7::tiles_ready(1);
+            if let Some(st) = c.stats {
+                st.ready(1);
             }
             s.spawn(move |s| run(c, s, j));
         }
@@ -50,8 +54,9 @@ where
 
 /// Run `work(i)` for every `i` in `order`, as if one by one in that order,
 /// where `rects[i]` bounds every pixel `work(i)` touches. Returns the
-/// results in `order`'s order.
-pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], rects: &[Option<Rect>], work: W) -> Vec<T> {
+/// results in `order`'s order. Counts ready and running tiles into
+/// `stats`, if given (`E7_STATS`).
+pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], rects: &[Option<Rect>], stats: Option<&crate::engine7::BatchStats>, work: W) -> Vec<T> {
     let n = order.len();
     let overlaps = |a: Rect, b: Rect| a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3;
     let r: Vec<Rect> = order.iter().map(|&i| rects[i].expect("tile without footprint")).collect();
@@ -82,10 +87,11 @@ pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], re
         pending: count.iter().map(|&c| AtomicUsize::new(c)).collect(),
         out: (0..n).map(|_| Mutex::new(None)).collect(),
         work: &work,
+        stats,
     };
     let ready: Vec<usize> = (0..n).filter(|&k| count[k] == 0).collect();
-    if crate::engine7::stats() {
-        crate::engine7::tiles_ready(ready.len());
+    if let Some(st) = stats {
+        st.ready(ready.len());
     }
     rayon::scope(|s| {
         for k in ready {
@@ -183,15 +189,12 @@ impl Canvas {
             // tiles run in parallel wherever that can't change the result: a
             // tile starts once every earlier tile (in `order`) it overlaps is
             // done
-            let dirty = if crate::engine7::stats() {
-                crate::engine7::batch_start();
-                let t0 = std::time::Instant::now();
-                let out = run_ordered(&order, &rects, |t| crate::engine7::tile(|| paint(surf, t, first.wrapping_add(offsets[t]))));
-                crate::engine7::batch_end(order.len(), t0.elapsed().as_secs_f64(), out.iter().map(|o| o.1).sum());
-                out.into_iter().map(|o| o.0).fold(None, union)
-            } else {
-                run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union)
-            };
+            let stats = crate::engine7::stats().then(crate::engine7::BatchStats::default);
+            let t0 = std::time::Instant::now();
+            let dirty = run_ordered(&order, &rects, stats.as_ref(), |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            if let Some(st) = &stats {
+                st.print(order.len(), t0.elapsed().as_secs_f64());
+            }
             if let Some((x0, y0, x1, y1)) = dirty {
                 self.wet.touch(x0, y0, x1, y1);
             }
@@ -243,7 +246,7 @@ mod tests {
         let rects: Vec<Option<Rect>> = (0..40).map(|i| Some(((i % 8) * 10, (i / 8) * 10, (i % 8) * 10 + 15, (i / 8) * 10 + 15))).collect();
         let order: Vec<usize> = (0..40).rev().collect();
         let log = Mutex::new(Vec::new());
-        let out = run_ordered(&order, &rects, |i| {
+        let out = run_ordered(&order, &rects, None, |i| {
             log.lock().unwrap().push(i);
             i * 2
         });

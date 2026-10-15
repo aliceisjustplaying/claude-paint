@@ -493,6 +493,37 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     assert front["og:image"] == card["og:image"]
 
 
+def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_sitting(home, monkeypatch):
+    import export_static as E
+    tmp_path, studio, log = home
+    agy, done = "paint-studio-063cbb", "paint-studio-d64bb7"
+    tables = {
+        ("ps", "-Ao", "pid=,comm="): "  501 /opt/bin/pi\n  502 agy\n",
+        ("ps", "-wwAo", "args="): "\n".join([
+            f"/bin/uv run --no-project --script /Users/x/src/a/{agy}/bin/mcp/server.py --studio /Users/x/src/a/{agy}"
+            " --sittings --agy --break-seconds 0 --sessions-root /Users/x/.pi/agent/sessions",
+            f"/env/bin/python /Users/x/Art Work/{done}/bin/mcp/server.py --studio /Users/x/Art Work/{done} --sittings --agy",
+            "/env/bin/python /Users/x/work/watch.py --studio /Users/x/src/a/paint-studio-aaa111 --agy-dir /Users/x/.gemini",
+            "/env/bin/python /Users/x/src/a/paint-studio-bbb222/bin/mcp/server.py --studio /Users/x/src/a/paint-studio-bbb222",
+            "agy --agent easel-painter", ""]),
+    }
+
+    def run(cmd, **kw):
+        out = tables.get(tuple(cmd)) or ("p501\nfcwd\nn/Users/x/src/a/" + PAINTER + "\n" if cmd[1:3] == ["-a", "-p"] else "")
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+    monkeypatch.setattr(E.subprocess, "run", run)
+    assert E.working_studios() == {PAINTER, agy, done}
+
+    run_dir = tmp_path / "src/a/stillwet-runs/cowboy-zombie-agy/run"
+    (run_dir / "GEMINI").mkdir(parents=True)
+    (run_dir / "studios.json").write_text(json.dumps({"GEMINI1": agy}))
+    (run_dir / "GEMINI" / "p1_sittings.json").write_text('[{"sitting": 1, "part": 1, "status": "running"}]')
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+    sessions = [{"p": agy, "mtime": 1000.0}, {"p": done, "mtime": 1000.0}]
+    E.runner_states(sessions, E.working_studios(), 1060.0)
+    assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

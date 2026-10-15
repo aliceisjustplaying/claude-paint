@@ -22,6 +22,7 @@ mod check;
 #[cfg(all(test, feature = "replay"))]
 mod checkpoint_tests;
 mod depth;
+mod display;
 mod draw_edges;
 mod draw_outline;
 #[cfg(feature = "finish")]
@@ -32,6 +33,7 @@ mod frames;
 #[cfg(feature = "replay")]
 mod legacy;
 mod look;
+mod output;
 mod save;
 #[cfg(feature = "state-store")]
 mod painting_store;
@@ -49,6 +51,7 @@ mod thinner_measure;
 mod thinner_tests;
 
 use paint::Canvas;
+#[cfg(test)]
 use paint::color::linear_to_srgb;
 use session::{Session, parse_program, root};
 use std::io::{Read, Write};
@@ -662,6 +665,7 @@ struct Server {
     /// canvas, with its own clock: time spent or waited there doesn't pass for the painting.
     /// None until first used.
     scratch: Option<Box<Server>>,
+    display: Option<std::rc::Rc<display::Pool>>,
     #[cfg(feature = "state-store")]
     committed: Option<painting_store::PaintingStore>,
     #[cfg(feature = "state-store")]
@@ -1015,12 +1019,13 @@ impl Server {
     }
 
     fn resume(name: String) -> Result<Self, String> {
-        Self::resume_as(name, None)
+        let display = if display::enabled() { Some(std::rc::Rc::new(display::Pool::configured()?)) } else { None };
+        Self::resume_as(name, None, display)
     }
 
     /// `resume`; a new session's box and width are `like`'s when given (the scratch canvas
     /// takes the painting's), else the configured box and the name's width.
-    fn resume_as(name: String, like: Option<&Session>) -> Result<Self, String> {
+    fn resume_as(name: String, like: Option<&Session>, display: Option<std::rc::Rc<display::Pool>>) -> Result<Self, String> {
         let lp = log_path(&name);
         #[cfg(feature = "state-store")]
         let committed = if like.is_none() && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
@@ -1052,7 +1057,7 @@ impl Server {
         #[cfg(feature = "state-store")]
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None,
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None, display,
             #[cfg(feature = "state-store")] committed,
             #[cfg(feature = "state-store")] state_failed: false,
         };
@@ -1226,6 +1231,27 @@ impl Server {
             return Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
         }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        if let Some(pool) = &self.display && v.display_eligible() {
+            let mut reply = None;
+            pool.submit(|| {
+                let optics = c.prepare_optics();
+                let (w, h, png) = look::render_pixels(optics.frame(), &v, optics.color())?;
+                let path = match path {
+                    Some(p) => {
+                        if let Some(dir) = p.parent() {
+                            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                        }
+                        std::fs::write(&p, &png).map_err(|e| e.to_string())?;
+                        p
+                    }
+                    None => display::new_look(&session_dir(&self.name), &png)?,
+                };
+                let publication = display::Publication::new(vec![(v, path.clone())])?;
+                reply = Some(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+                Ok(Box::new(move |cancel| publication.render(optics, cancel)))
+            })?;
+            return Ok(reply.unwrap());
+        }
         let (w, h, path) = match path {
             Some(p) => {
                 let (w, h) = look::look(&c, &v, &p)?;
@@ -1250,29 +1276,44 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let view = look::View::parse(args)?;
-        let seen = match view.light {
-            Some((az, el)) => c.seen_lit(az, el, 1.0),
-            None => c.seen(),
-        };
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
         let rows = (hu / 500.0).ceil().max(1.0) as usize;
         let (tw, th) = (wu / cols as f32, hu / rows as f32);
-        let mut out = format!("survey: {rows} rows x {cols} columns of {tw:.0} x {th:.0} units, at full detail\n");
-        let mut views = Vec::new();
-        for r in 0..rows {
-            for k in 0..cols {
-                let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
-                let mut a = args.to_vec();
-                a.extend(["--crop".to_string(), crop.clone()]);
-                let v = look::View::parse(&a)?;
-                let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
-                let p = new_look(&session_dir(&self.name), &png)?;
-                out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
-                views.push((v, p));
+        let render = |seen: &[paint::Rgb], stable: bool| -> Result<_, String> {
+            let mut out = format!("survey: {rows} rows x {cols} columns of {tw:.0} x {th:.0} units, at full detail\n");
+            let mut views = Vec::new();
+            for r in 0..rows {
+                for k in 0..cols {
+                    let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
+                    let mut a = args.to_vec();
+                    a.extend(["--crop".to_string(), crop.clone()]);
+                    let v = look::View::parse(&a)?;
+                    let (w, h, png) = look::render_pixels(c.window(), &v, seen)?;
+                    let p = if stable { display::new_look(&session_dir(&self.name), &png)? } else { new_look(&session_dir(&self.name), &png)? };
+                    out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
+                    views.push((v, p));
+                }
             }
+            Ok((out, views))
+        };
+        if let Some(pool) = &self.display && view.display_eligible() {
+            let mut reply = None;
+            pool.submit(|| {
+                let optics = c.prepare_optics();
+                let (out, views) = render(optics.color(), true)?;
+                let publication = display::Publication::new(views)?;
+                reply = Some(out);
+                Ok(Box::new(move |cancel| publication.render(optics, cancel)))
+            })?;
+            return Ok(reply.unwrap());
         }
+        let seen = match view.light {
+            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            None => c.seen(),
+        };
+        let (out, views) = render(&seen, false)?;
         drop(seen);
         look::companions(&c, &views);
         Ok(out)
@@ -1388,7 +1429,7 @@ impl Server {
         if !(log_path(&name).exists() || witness_path(&name).exists()) {
             return String::new();
         }
-        match Server::resume_as(name.clone(), Some(&self.s)) {
+        match Server::resume_as(name.clone(), Some(&self.s), self.display.clone()) {
             Ok(sc) => {
                 self.scratch = Some(Box::new(sc));
                 String::new()
@@ -1412,7 +1453,7 @@ impl Server {
         let name = scratch_name(&self.name);
         self.scratch = None;
         let aside = put_aside(&name)?;
-        let mut sc = Server::resume_as(name, Some(&self.s))?;
+        let mut sc = Server::resume_as(name, Some(&self.s), self.display.clone())?;
         sc.run_own(&src)?;
         self.scratch = Some(Box::new(sc));
         Ok(match aside {
@@ -1501,6 +1542,7 @@ impl Server {
             "close" => {
                 let note = self.save_log()?;
                 let live = self.save_live().unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));
+                if let Some(pool) = &self.display { pool.flush()?; }
                 Ok(format!("{note}{live}closed; the session is in {}\n", log_path(&self.name).display()))
             }
             o => Err(format!("unknown command {o:?}")),
@@ -1610,7 +1652,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
         Some((az, el)) => c.seen_lit(az, el, 1.0),
         None => c.seen(),
     };
-    let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let buf = output::rgb8_exact(&px, f.w);
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
@@ -1783,6 +1825,9 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if paint::engine7::stats() {
+            eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
+        }
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }

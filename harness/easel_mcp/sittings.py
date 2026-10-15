@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import io
 import json
+import math
 from pathlib import Path
 import re
 import time
@@ -10,6 +12,40 @@ from mcp import types
 
 from painting_chunks import WATERCOLOR_METHODS, WATERCOLOR_VERBS, count_painting_chunks
 from server import LOG_PAGE, LOG_SCRATCH_PAGE, READ_PAGE, REPLY_PAGE, Easel, page_of, studio_path, text_pages
+
+
+def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
+    """A PNG as pi's read tool gives it to the house painter (pi-coding-agent utils/image-resize-core.js):
+    within 2000x2000 and under 4.5 MiB of base64 it goes as it is; otherwise it is scaled to fit and sent as
+    PNG or JPEG (quality 80, then 85, 70, 55, 40), the first under the limit, shrinking by 0.75 until one is."""
+    from PIL import Image, ImageOps
+    image = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    original = image.size
+    if max(original) <= max_side and math.ceil(len(data) / 3) * 4 < max_bytes:
+        return [types.TextContent(type="text", text="Read image file [image/png]"),
+                types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(data).decode())]
+    width, height = original
+    if width > max_side:
+        width, height = max_side, math.floor(height * max_side / width + 0.5)
+    if height > max_side:
+        width, height = math.floor(width * max_side / height + 0.5), max_side
+    while True:
+        resized = image.resize((width, height), Image.LANCZOS)
+        for quality_step in [None, *dict.fromkeys((quality, 85, 70, 55, 40))]:
+            out = io.BytesIO()
+            if quality_step is None:
+                resized.save(out, "PNG")
+            else:
+                resized.convert("RGB").save(out, "JPEG", quality=quality_step)
+            encoded = base64.b64encode(out.getvalue()).decode()
+            if len(encoded) < max_bytes:
+                mime = "image/png" if quality_step is None else "image/jpeg"
+                note = (f"Read image file [{mime}]\n[Image: original {original[0]}x{original[1]}, displayed at {width}x{height}. "
+                        f"Multiply coordinates by {original[0] / width:.2f} to map to original image.]")
+                return [types.TextContent(type="text", text=note), types.ImageContent(type="image", mimeType=mime, data=encoded)]
+        if (width, height) == (1, 1):
+            raise ValueError("read: this image can't be made small enough to send")
+        width, height = max(1, math.floor(width * 0.75)), max(1, math.floor(height * 0.75))
 
 
 class SittingEasel(Easel):
@@ -43,6 +79,8 @@ class SittingEasel(Easel):
             if path is None or not path.is_file():
                 raise ValueError("read: the path must be a file in this studio")
             if path.suffix.lower() == ".png":
+                if self.page_bytes:
+                    return pi_image(path.read_bytes())
                 return [types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(path.read_bytes()).decode())]
             text = path.read_text()
             if self.page_bytes:

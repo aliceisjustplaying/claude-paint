@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp==1.30.0"]
+# dependencies = ["mcp==1.30.0", "Pillow==12.3.0"]
 # ///
 
 import argparse

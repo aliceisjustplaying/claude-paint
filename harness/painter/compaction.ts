@@ -26,7 +26,7 @@
  * were these.
  */
 import { type ExtensionAPI, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { buildSummary, HEADER } from "./summary.ts";
+import { buildSummary, CARRIES_OVER, HEADER } from "./summary.ts";
 
 export const DETAILS_TYPE = "claude-paint-painter-compaction";
 
@@ -50,6 +50,20 @@ function reserveFromEnv(): number {
 	const n = Number(v);
 	if (!(Number.isInteger(n) && n > 0)) throw new Error(`PAINTER_COMPACT_RESERVE=${v}: want a number of tokens`);
 	return n;
+}
+
+/**
+ * PAINTER_COMPACTION_NOTES=1 puts CARRIES_OVER (summary.ts) after the header of each summary: for a
+ * painter that is condensed often. Read once and removed from the environment.
+ */
+const SUMMARY_HEADER = notesFromEnv() ? `${HEADER}\n\n${CARRIES_OVER}` : HEADER;
+
+function notesFromEnv(): boolean {
+	const v = process.env.PAINTER_COMPACTION_NOTES;
+	delete process.env.PAINTER_COMPACTION_NOTES;
+	if (v === undefined) return false;
+	if (v !== "1") throw new Error(`PAINTER_COMPACTION_NOTES=${v}: want 1`);
+	return true;
 }
 
 /** Make pi's settings answer COMPACTION for every model. Returns false if pi's SettingsManager has changed shape. */
@@ -77,7 +91,7 @@ export default function painterCompaction(pi: ExtensionAPI) {
 		let summary: string;
 		let facts: Record<string, unknown> = {};
 		try {
-			({ summary, facts } = await buildSummary(ctx.cwd, branchEntries, signal));
+			({ summary, facts } = await buildSummary(ctx.cwd, branchEntries, signal, SUMMARY_HEADER));
 		} catch (error) {
 			// Never fall through to pi's default (LLM, "Next Steps") summarizer.
 			summary = `${HEADER}\n\nBRIEF.md and notes/journal.md are in the studio.`;

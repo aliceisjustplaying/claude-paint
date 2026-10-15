@@ -27,6 +27,7 @@ const LIVE: usize = 2400;
 fn replay(src: &Path, threads: Option<usize>, tag: &str, width: usize) -> (String, Vec<u8>) {
     let png = dir().join(format!("{tag}-{width}.png"));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+    cmd.env_remove("EASEL_WIDTH");
     cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", &width.to_string()]);
     if let Some(n) = threads {
         cmd.env("RAYON_NUM_THREADS", n.to_string());
@@ -37,6 +38,80 @@ fn replay(src: &Path, threads: Option<usize>, tag: &str, width: usize) -> (Strin
 }
 
 const CANVAS: &str = r#"canvas{size=440, aspect=1.6, linen=15, seed=7, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#;
+
+#[test]
+fn smaller_work_tiles_are_explicit_engine_five_only_and_thread_independent() {
+    let run = |tag: &str, engine: u32, flag: Option<&str>, threads: usize, coverage: f32| {
+        let src = dir().join(format!("small-tiles-{tag}.lua"));
+        let png = src.with_extension("png");
+        let program = format!(
+            r#"--@ engine {engine}
+--@ chunk 1
+{CANVAS}
+--@ chunk 2
+work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"cobalt blue", 1}}, {{"yellow ochre", 0.3}}, medium=0.3}}, angle=0, coverage={coverage}}})
+"#
+        );
+        std::fs::write(&src, program).unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+        cmd.env_remove("EASEL_WIDTH");
+        cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", "240"]);
+        cmd.env("RAYON_NUM_THREADS", threads.to_string()).env_remove("PAINT_SMALL_TILES");
+        if let Some(flag) = flag {
+            cmd.env("PAINT_SMALL_TILES", flag);
+        }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        std::fs::read(png).unwrap()
+    };
+    let legacy = run("default", 5, None, 1, 4.5);
+    assert_eq!(run("off", 5, Some("0"), 1, 4.5), legacy);
+    let small = run("one", 5, Some("1"), 1, 4.5);
+    assert_ne!(small, legacy, "dense passes must exercise the smaller tile path");
+    assert_eq!(run("four", 5, Some("1"), 4, 4.5), small);
+    assert_eq!(run("old-off", 4, None, 1, 4.5), run("old-on", 4, Some("1"), 1, 4.5));
+    assert_eq!(run("sparse-off", 5, None, 1, 0.02), run("sparse-on", 5, Some("1"), 1, 0.02));
+}
+
+#[test]
+fn quarter_work_tiles_are_dense_engine_five_only_and_thread_independent() {
+    let run = |engine: u32, coverage: f32, threads: usize, flag: Option<&str>, recorded: bool| {
+        let src = dir().join(format!("quarter-tiles-{engine}-{coverage}-{threads}-{}-{recorded}.lua", flag.unwrap_or("default")));
+        let png = src.with_extension("png");
+        let header = if recorded { "--@ work-tiles quarter\n" } else { "" };
+        std::fs::write(
+            &src,
+            format!(
+                r#"--@ engine {engine}
+{header}--@ chunk 1
+{CANVAS}
+--@ chunk 2
+work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"cobalt blue", 1}}, {{"yellow ochre", 0.3}}, medium=0.3}}, angle=0, coverage={coverage}}})
+"#
+            ),
+        )
+        .unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+        cmd.env_remove("EASEL_WIDTH");
+        cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", "240"]);
+        cmd.env("RAYON_NUM_THREADS", threads.to_string()).env_remove("PAINT_SMALL_TILES");
+        if let Some(flag) = flag {
+            cmd.env("PAINT_SMALL_TILES", flag);
+        }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        (out.stdout, std::fs::read(png).unwrap())
+    };
+    let quarter = run(5, 4.5, 1, Some("quarter"), false);
+    let legacy = run(5, 4.5, 1, None, false);
+    assert_ne!(quarter.1, legacy.1, "the dense pass must exercise quarter mode");
+    assert_eq!(run(5, 4.5, 4, Some("quarter"), false), quarter);
+    assert_eq!(run(4, 4.5, 1, None, false), run(4, 4.5, 1, Some("quarter"), false));
+    assert_eq!(run(5, 0.02, 1, None, false), run(5, 0.02, 1, Some("quarter"), false));
+    assert_eq!(run(5, 4.5, 1, None, true), quarter);
+    assert_eq!(run(5, 4.5, 4, None, true), quarter);
+    assert_eq!(run(5, 4.5, 1, Some("0"), true), legacy);
+}
 
 #[test]
 fn object_keyed_tables_replay_the_same_in_every_process() {
@@ -142,7 +217,7 @@ for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
     std::fs::write(&src, program).unwrap();
     let digests = |threads: &str, tag: &str| {
         let (png, txt) = (dir().join(format!("{tag}-{width}.png")), dir().join(format!("{tag}-{width}.txt")));
-        let out = Command::new(env!("CARGO_BIN_EXE_easel"))
+        let out = Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
             .args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--state-digest", txt.to_str().unwrap(), "--width", &width.to_string()])
             .env("RAYON_NUM_THREADS", threads)
             .output()
@@ -210,4 +285,3 @@ print(r, r.load, r.soaked, r.fold)
     assert!(p1 == p4 && p4 == p4b, "the pictures differ between replays");
     assert!(o1.contains("rag(width 91, load 0."), "{o1}");
 }
-

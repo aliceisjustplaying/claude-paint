@@ -54,7 +54,7 @@ def validate_timeout_scale(value):
 
 
 def timeout_scale():
-    """Validated override, or an affinity-based Linux scale; other platforms use 1."""
+    """Validated override, or a Linux scale retaining the four-core budget."""
     override = os.environ.get("SCRIPTS_TEST_TIMEOUT_SCALE")
     if override is not None:
         try:
@@ -67,7 +67,7 @@ def timeout_scale():
         cpus = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):
         cpus = os.cpu_count() or 1
-    return max(1.0, 16.0 / max(1, cpus))
+    return max(4.0, 16.0 / max(1, cpus))
 
 
 def now_iso():

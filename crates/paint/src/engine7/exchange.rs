@@ -7,7 +7,7 @@ use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Prop, mix_into};
 
-use super::window::{Capsule, SmoothRange, Window};
+use super::window::{Capsule, Plough, SmoothRange, Window};
 
 thread_local! {
     static SCRATCH: RefCell<Window> = const { RefCell::new(Window::new()) };
@@ -283,7 +283,10 @@ mod tests {
             *base = if i % 2 == 0 { 1.0 } else { 0.0 };
         }
         let mask = Mask::from_fn(c.f, |x, _| if x < 15.0 { 0.0 } else { 0.5 });
-        let tool = Tool::hog_flat(8.0);
+        let tool = Tool {
+            push: 0.0,
+            ..Tool::hog_flat(8.0)
+        };
         let mut b = hair(&tool, 0.03, 0.0);
         let sf = c.surf();
         let mut window = Window::new();
@@ -362,6 +365,242 @@ mod tests {
         assert!(empty.wet.vol.iter().all(|v| *v == 0.0));
         nonnegative(&c, &b);
         nonnegative(&empty, &clean);
+    }
+
+    #[test]
+    fn a_full_thinned_ceiling_rejects_deposit_without_spending_the_brush() {
+        let mut c = fixture();
+        let tool = Tool {
+            pickup: 0.0,
+            push: 0.0,
+            ..Tool::filbert(8.0)
+        };
+        let mut b = hair(&tool, 3.0, 7.0);
+        c.wet
+            .laid
+            .fill(crate::thinner::stroke_limit_um(0.7) / COAT_UM);
+        c.wet.laid_id.fill(1);
+        let mut window = Window::new();
+        let transfer = step(
+            &mut c,
+            &mut b,
+            &tool,
+            (25.0, 25.0),
+            (26.7, 25.3),
+            1.1,
+            None,
+            1,
+            &mut window,
+        );
+        assert_eq!(transfer.laid.paint, 0.0);
+        assert_eq!(transfer.laid.solvent, 0.0);
+        assert_eq!(b.vol, 3.0);
+        assert_eq!(b.solvent, 7.0);
+        assert!(c.wet.vol.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn oversized_contact_falls_back_before_mutating_any_material() {
+        let mut c = fixture();
+        wet_field(&mut c);
+        let mut legacy = c.clone();
+        let tool = Tool::filbert(80.0);
+        let mut b = hair(&tool, 6.0, 2.0);
+        let mut legacy_b = b.clone();
+        let mut window = Window::new();
+        let mut scratch = Vec::new();
+        let mut bounds = None;
+        let result = unsafe {
+            run(
+                SegmentInput {
+                    surface: c.surf(),
+                    bristle: &mut b,
+                    tool: &tool,
+                    start: (48.0, 32.0),
+                    end: (49.0, 32.0),
+                    radius: 25.0,
+                    reach: 0.6,
+                    full: 10.0,
+                    deposit: None,
+                    exclusion: 1.0,
+                    clip: None,
+                    stroke_id: 1,
+                    limit: (0, 0, 96, 64),
+                },
+                &mut scratch,
+                &mut bounds,
+                &mut window,
+            )
+        };
+        unsafe {
+            crate::bristle::exchange_legacy(
+                legacy.surf(),
+                &mut legacy_b,
+                &tool,
+                (48.0, 32.0),
+                (49.0, 32.0),
+                25.0,
+                0.6,
+                10.0,
+                None,
+                1.0,
+                None,
+                1,
+                &mut Vec::new(),
+                &mut None,
+                (0, 0, 96, 64),
+            );
+        }
+        assert!(result.is_none());
+        assert_eq!(c.wet.vol, legacy.wet.vol);
+        assert_eq!(c.wet.lat, legacy.wet.lat);
+        assert_eq!(c.wet.solv, legacy.wet.solv);
+        assert_eq!(b.vol, legacy_b.vol);
+        assert_eq!(b.lat, legacy_b.lat);
+        assert_eq!(b.solvent, legacy_b.solvent);
+    }
+
+    #[test]
+    fn scalar_reference_stays_close_to_legacy_on_ordered_fixtures() {
+        for (tool, rb, solvent) in [
+            (Tool::filbert(8.0), 1.1, 0.0),
+            (Tool::badger(8.0), 1.1, 0.0),
+            (Tool::filbert(8.0), 1.1, 4.0),
+            (
+                Tool {
+                    point: 1.0,
+                    ..Tool::rigger(1.0)
+                },
+                0.04,
+                0.0,
+            ),
+        ] {
+            let mut c = fixture();
+            wet_field(&mut c);
+            let mut legacy = c.clone();
+            let mut b = hair(&tool, 3.0, solvent);
+            let mut legacy_b = b.clone();
+            let mut window = Window::new();
+            let mut scratch = Vec::new();
+            for id in 1..=80 {
+                let x = 20.0 + (id % 35) as f32;
+                let a = (x, 25.2);
+                let end = (x + 1.7, 25.5);
+                step(&mut c, &mut b, &tool, a, end, rb, None, id, &mut window);
+                unsafe {
+                    crate::bristle::exchange_legacy(
+                        legacy.surf(),
+                        &mut legacy_b,
+                        &tool,
+                        a,
+                        end,
+                        rb,
+                        0.6,
+                        10.0,
+                        None,
+                        1.0,
+                        None,
+                        id,
+                        &mut scratch,
+                        &mut None,
+                        (0, 0, 96, 64),
+                    );
+                }
+            }
+            for (a, b) in c.wet.vol.iter().zip(&legacy.wet.vol) {
+                near(*a as f64, *b as f64, 2e-5);
+            }
+            near(b.vol as f64, legacy_b.vol as f64, 2e-5);
+            for (a, b) in b.lat.iter().zip(legacy_b.lat) {
+                near(*a as f64, b as f64, 2e-5);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn exchange_ns_per_call() {
+        use std::hint::black_box;
+        use std::time::Instant;
+
+        let iterations = std::env::var("ENGINE7_BENCH_CALLS")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(100_000);
+        for (name, tool, rb, solvent, loaded) in [
+            ("wet-filbert", Tool::filbert(8.0), 1.1, 0.0, true),
+            ("clean-blender", Tool::badger(8.0), 1.1, 0.0, false),
+            ("thinned-filbert", Tool::filbert(8.0), 1.1, 4.0, true),
+            (
+                "hairline",
+                Tool {
+                    point: 1.0,
+                    ..Tool::rigger(1.0)
+                },
+                0.04,
+                0.0,
+                true,
+            ),
+        ] {
+            for engine in [5, 7] {
+                let mut c = fixture();
+                wet_field(&mut c);
+                let sf = c.surf();
+                let original = hair(&tool, if loaded { 3.0 } else { 0.0 }, solvent);
+                let mut scratch = Vec::with_capacity(128);
+                let mut bounds = None;
+                let started = Instant::now();
+                for id in 1..=iterations {
+                    let mut b = original.clone();
+                    let x = 20.0 + (id % 35) as f32;
+                    unsafe {
+                        if engine == 5 {
+                            crate::bristle::exchange_legacy(
+                                sf,
+                                &mut b,
+                                &tool,
+                                (x, 25.2),
+                                (x + 1.7, 25.5),
+                                rb,
+                                0.6,
+                                10.0,
+                                None,
+                                1.0,
+                                None,
+                                id,
+                                &mut scratch,
+                                &mut bounds,
+                                (0, 0, 96, 64),
+                            );
+                        } else {
+                            exchange(
+                                sf,
+                                &mut b,
+                                &tool,
+                                (x, 25.2),
+                                (x + 1.7, 25.5),
+                                rb,
+                                0.6,
+                                10.0,
+                                None,
+                                1.0,
+                                None,
+                                id,
+                                &mut scratch,
+                                &mut bounds,
+                                (0, 0, 96, 64),
+                            );
+                        }
+                    }
+                    black_box(b);
+                }
+                let ns = started.elapsed().as_nanos() as f64 / iterations as f64;
+                println!(
+                    "exchange-bench case={name} engine={engine} calls={iterations} ns_per_call={ns:.2}"
+                );
+                black_box(c);
+            }
+        }
     }
 }
 
@@ -535,7 +774,7 @@ pub(crate) unsafe fn run(
         .max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
-        window.reset((x0, y0, x1, y1), lim);
+        window.reset(lim, lim);
         let capsule = Capsule::new(a, b, rb, fine, dep.is_some());
         let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
         let contact_range = SmoothRange::new(th - give, th + 0.2);
@@ -585,24 +824,25 @@ pub(crate) unsafe fn run(
             travel
         };
         let touch = (contact.weight / contact.coverage.max(1e-6)).min(1.0);
-        let dep_total = match dep {
-            None => liquid * (1.0 - (-travel / tool.run).exp()) * touch,
-            Some(v) => v.min(liquid * 0.5) * touch,
-        };
-        let dep_total = if matches!(clip, Some(Clip::Fence { .. })) {
-            dep_total * (contact.fence_weight / contact.weight).min(1.0)
+        let fence = if matches!(clip, Some(Clip::Fence { .. })) {
+            (contact.fence_weight / contact.weight).min(1.0)
         } else {
-            dep_total
+            1.0
         };
-        let dep_total = if tack > 0.0 {
+        let dep_total = if liquid <= 0.0 {
+            0.0
+        } else if tack > 0.0 {
             let g = crate::drying::grab(tack) * crate::drying::stick(b.0, b.1, rb, br.seed, tack);
             let d = match dep {
                 None => liquid * (1.0 - (-travel * g / tool.run).exp()) * touch,
-                Some(_) => dep_total * g,
+                Some(v) => v.min(liquid * 0.5) * touch * fence * g,
             };
             d.min(liquid * 0.9)
         } else {
-            dep_total
+            match dep {
+                None => liquid * (1.0 - (-travel / tool.run).exp()) * touch * fence,
+                Some(v) => v.min(liquid * 0.5) * touch * fence,
+            }
         };
         let hair_radius = tool.hair_radius();
         let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
@@ -642,7 +882,7 @@ pub(crate) unsafe fn run(
         } else {
             2.0 * hair
         };
-        let spread = dep.is_none();
+        let plough = Plough::new((mx, my), (nx, ny), off, dep.is_none());
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
@@ -739,53 +979,26 @@ pub(crate) unsafe fn run(
                 let m = v * push_k * wt * fl;
                 if m > 1e-6 {
                     let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                    let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 {
-                        1.0
-                    } else {
-                        -1.0
-                    };
-                    let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
-                    let ty = py + (ny * side * 0.75 + my * 0.45) * off;
-                    let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
-                    let n_to = if spread {
-                        let (gx, gy) = (tx - 0.5, ty - 0.5);
-                        let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
-                        let (bx, by) = (gx.floor() + 0.5, gy.floor() + 0.5);
-                        to = [
-                            (bx, by, (1.0 - fx) * (1.0 - fy)),
-                            (bx + 1.0, by, fx * (1.0 - fy)),
-                            (bx, by + 1.0, (1.0 - fx) * fy),
-                            (bx + 1.0, by + 1.0, fx * fy),
-                        ];
-                        4
-                    } else {
-                        to[0] = (tx, ty, 1.0);
-                        1
-                    };
+                    let positive = (px - a.0) * nx + (py - a.1) * ny >= 0.0;
                     let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
-                    for &(tx, ty, share) in &to[..n_to] {
+                    for target in plough.on_side(positive) {
+                        let share = target.share;
                         if share <= 0.0 {
                             continue;
                         }
-                        let inside = tx >= ox as f32
-                            && ty >= oy as f32
-                            && (tx as usize) < w.min(ox + sf.w)
-                            && (ty as usize) < h.min(oy + sf.h);
+                        let (Some(tx), Some(ty)) = (
+                            x.checked_add_signed(target.x),
+                            y.checked_add_signed(target.y),
+                        ) else {
+                            continue;
+                        };
+                        let inside =
+                            tx >= ox && ty >= oy && tx < w.min(ox + sf.w) && ty < h.min(oy + sf.h);
                         debug_assert!(
-                            !inside
-                                || (tx >= lim.0 as f32
-                                    && ty >= lim.1 as f32
-                                    && (tx as usize) < lim.2
-                                    && (ty as usize) < lim.3),
+                            !inside || (tx >= lim.0 && ty >= lim.1 && tx < lim.2 && ty < lim.3),
                             "plough target outside the stroke footprint {lim:?}"
                         );
-                        if inside
-                            && tx >= lim.0 as f32
-                            && ty >= lim.1 as f32
-                            && (tx as usize) < lim.2
-                            && (ty as usize) < lim.3
-                        {
-                            let (tx, ty) = (tx as usize, ty as usize);
+                        if inside && tx >= lim.0 && ty >= lim.1 && tx < lim.2 && ty < lim.3 {
                             let j = (ty - oy) * bw_buf + tx - ox;
                             let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
                             let sol = if sf.solv.is_null() {

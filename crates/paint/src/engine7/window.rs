@@ -92,6 +92,69 @@ pub(crate) struct Capsule {
     hi: f32,
 }
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PloughTarget {
+    pub x: isize,
+    pub y: isize,
+    pub share: f32,
+}
+
+pub(crate) struct Plough {
+    sides: [[PloughTarget; 4]; 2],
+    count: usize,
+}
+
+impl Plough {
+    pub fn new(direction: (f32, f32), normal: (f32, f32), off: f32, spread: bool) -> Self {
+        let mut sides = [[PloughTarget::default(); 4]; 2];
+        for (targets, side) in sides.iter_mut().zip([-1.0, 1.0]) {
+            let dx = (normal.0 * side * 0.75 + direction.0 * 0.45) * off;
+            let dy = (normal.1 * side * 0.75 + direction.1 * 0.45) * off;
+            if spread {
+                let (x, y) = (dx.floor() as isize, dy.floor() as isize);
+                let (fx, fy) = (dx - dx.floor(), dy - dy.floor());
+                *targets = [
+                    PloughTarget {
+                        x,
+                        y,
+                        share: (1.0 - fx) * (1.0 - fy),
+                    },
+                    PloughTarget {
+                        x: x + 1,
+                        y,
+                        share: fx * (1.0 - fy),
+                    },
+                    PloughTarget {
+                        x,
+                        y: y + 1,
+                        share: (1.0 - fx) * fy,
+                    },
+                    PloughTarget {
+                        x: x + 1,
+                        y: y + 1,
+                        share: fx * fy,
+                    },
+                ];
+            } else {
+                targets[0] = PloughTarget {
+                    x: (dx + 0.5).floor() as isize,
+                    y: (dy + 0.5).floor() as isize,
+                    share: 1.0,
+                };
+            }
+        }
+        Self {
+            sides,
+            count: if spread { 4 } else { 1 },
+        }
+    }
+
+    #[inline]
+    pub fn on_side(&self, positive: bool) -> &[PloughTarget] {
+        &self.sides[usize::from(positive)][..self.count]
+    }
+}
+
 impl Capsule {
     pub fn new(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, touch: bool) -> Self {
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);

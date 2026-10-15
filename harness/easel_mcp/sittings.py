@@ -28,9 +28,9 @@ def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
                 types.ImageContent(type="image", mimeType=mime, data=base64.b64encode(data).decode())]
     width, height = original
     if width > max_side:
-        width, height = max_side, math.floor(height * max_side / width + 0.5)
+        width, height = max_side, max(1, math.floor(height * max_side / width + 0.5))
     if height > max_side:
-        width, height = math.floor(width * max_side / height + 0.5), max_side
+        width, height = max(1, math.floor(width * max_side / height + 0.5)), max_side
     while True:
         resized = image.resize((width, height), Image.LANCZOS)
         for quality_step in [None, *dict.fromkeys((quality, 85, 70, 55, 40))]:

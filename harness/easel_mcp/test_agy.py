@@ -161,6 +161,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 small = await session.call_tool("read", {"path": "notes/small.png"})
                 self.assertEqual(small.content[0].text, "Read image file [image/png]")
                 self.assertEqual(base64.b64decode(small.content[1].data), (self.studio / "notes/small.png").read_bytes())
+                Image.new("RGB", (5000, 1)).save(self.studio / "notes/strip.png")
+                self.assertIn("displayed at 2000x1.", (await session.call_tool("read", {"path": "notes/strip.png"})).content[0].text)
                 Image.new("RGB", (40, 30)).save(self.studio / "notes/jpeg-named.png", "JPEG")
                 self.assertEqual((await session.call_tool("read", {"path": "notes/jpeg-named.png"})).content[1].mimeType, "image/jpeg")
                 painted = await session.call_tool("paint", {"lua": "print('x')"})

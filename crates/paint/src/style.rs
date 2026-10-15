@@ -183,6 +183,7 @@ impl Style {
         use sha2::{Digest, Sha256};
         let c = c
             .with_engine(self.palette.engine)
+            .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         let cache = cache.filter(|_| self.ground.iter().any(|g| g.um > 0.0 && matches!(g.apply, Apply::Brush))).map(|(dir, build)| {
@@ -196,6 +197,9 @@ impl Style {
             key.update(seed.to_le_bytes());
             key.update(c.engine.to_le_bytes());
             key.update(c.engine.min(3).to_le_bytes());
+            if c.adaptive_sweep {
+                key.update(b"adaptive-sweep");
+            }
             for f in [c.f.scale, c.mm_per_unit, self.raw[0], self.raw[1], self.raw[2], self.linen.warp_per_cm, self.linen.weft_per_cm, self.linen.crown_um, self.linen.slubs] {
                 key.update(f.to_bits().to_le_bytes());
             }
@@ -216,7 +220,7 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached;
+                            return cached.with_quarter_tiles(self.palette.quarter_tiles);
                         }
                     }
                 }
@@ -240,15 +244,15 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c
+        c.with_quarter_tiles(self.palette.quarter_tiles)
     }
 
     /// A sheet of paper of this style's width, with its ground layers (if
     /// any) laid on it. Never from the ground cache (`prepare_cached`),
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
-        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_size_mm(self.width_mm).with_paper(paper);
-        self.ground_on(c, seed)
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles)
     }
 
     /// This style's ground layers laid on `c`, bottom first.

@@ -398,7 +398,7 @@ impl Canvas {
         if owed > 0.0 {
             self.hand_pass(owed);
         }
-        if self.hand_slice.is_some() && matches!(self.work_tile_mode().as_deref(), Some("1" | "quarter")) {
+        if self.hand_slice.is_some() && (matches!(self.work_tile_mode().as_deref(), Some("1" | "quarter")) || (self.engine == 5 && std::env::var("PAINT_COARSE_AGING").is_ok_and(|v| v == "1"))) {
             self.tally.clocked = self.tally.secs;
         }
         owed / 60.0

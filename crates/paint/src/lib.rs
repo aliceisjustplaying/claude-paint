@@ -94,6 +94,16 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
+///
+/// A switch rides on engine 5 without a number of its own (an easel log's
+/// head names it; a log without it replays as it was painted):
+/// - the drain switch (`Canvas::with_drain`, `--@ drain`): an absorbent
+///   ground drains paint as its pigment allows (`bristle::ground_drain`): to
+///   the oil left when the pigment packs, and below it only for pigments
+///   coarser than the ground's pores, the packed layer growing up from the
+///   ground while the surface keeps its oil, flow and gloss; a rag's smear
+///   is drained as a brush's paint is, and blotting stops at the drained
+///   floor (notes/research/pigment_oil.md).
 pub const ENGINE: u32 = 5;
 
 /// Hermite smoothstep.

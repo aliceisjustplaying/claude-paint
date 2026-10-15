@@ -717,6 +717,9 @@ pub struct Mixture {
     /// The oil's share of the pile's volume as ground (its tubes', by
     /// volume: `Paint::oil_volume`).
     pub oil_volume: f32,
+    /// Its palette's drain switch (`Palette::drain`): blotting draws no
+    /// further than its drained floor (`paint`).
+    pub drain: bool,
 }
 
 /// The box a painting is painted from when nothing names another.
@@ -836,6 +839,9 @@ pub struct Palette {
     /// The engine version paint from this box is painted with (`ENGINE`;
     /// a replay sets its log's). A canvas prepared by a `Style` takes it.
     pub engine: u32,
+    /// The drain switch (`Canvas::with_drain`; an easel log's `--@ drain`):
+    /// its piles blot no further than their drained floor (`Mixture::paint`).
+    pub drain: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -851,7 +857,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         // (its tubes ground by its box's colormen: a renamed palette's are
         // its box's, `named`; rebuilt from its tubes as they are now)
-        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
+        Palette { engine: self.engine, drain: self.drain, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -866,7 +872,7 @@ impl Palette {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, lat, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, drain: false, lat, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -876,7 +882,7 @@ impl Palette {
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
         // (ground by its box's colormen, as `clone` and `with`)
-        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, tubes) }
+        Palette { engine: self.engine, drain: self.drain, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -991,7 +997,7 @@ impl Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
         // (ground by its box's colormen: a renamed palette's are its box's, `named`)
-        Palette { engine: self.engine, name: self.name, ..Palette::new(self.stock, t) }
+        Palette { engine: self.engine, drain: self.drain, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -1039,7 +1045,7 @@ impl Palette {
         let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume }
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain }
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -1064,7 +1070,11 @@ impl Mixture {
     /// This mixture as paint on the brush, thinned with `medium` (0..1).
     pub fn paint(&self, medium: f32) -> Paint {
         // (a negative medium is oil drawn out of the paint, blotted: more
-        // pigment to the volume, stiffer; at most half its oil)
+        // pigment to the volume, stiffer; at most half its oil. With the
+        // drain switch no further than its drained floor: blotting paper
+        // draws the oil by capillarity as an absorbent ground does,
+        // `bristle::ground_drain`)
+        let medium = if self.drain { medium.max(self.floor.min(1.0) - 1.0) } else { medium };
         let k = (1.0 - medium).clamp(0.0, 1.5);
         // medium dilutes the pigment: K and S per coat fall with the pigment
         // concentration, the masstone stays; the paint flows (stiffness
@@ -1375,6 +1385,25 @@ mod tests {
             assert_eq!(p.pack[i], own.pack[i]);
         }
         assert_eq!(more.pack.len(), renamed.tubes.len() + 1);
+    }
+
+    /// With the drain switch, blotting paper draws a paint's oil no lower
+    /// than its drained floor, as an absorbent ground does: zinc white (fine,
+    /// its floor 0.73 of its oil) blotted by half keeps 0.73; lead white
+    /// (floor 0.39) is blotted the full half. Without it both blot by half.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn blotting_stops_at_the_drained_floor_with_the_drain_switch() {
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.drain = true;
+        let at = |pal: &Palette, n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (zinc, lead) = (at(&pal, "zinc white"), at(&pal, "lead white"));
+        let blotted = |pal: &Palette, i: usize| pal.pile(vec![(i, 1.0)]).paint(-0.5).oil;
+        assert!(pal.pack[zinc].1 > 0.5 && pal.pack[lead].1 < 0.5);
+        assert!((blotted(&pal, zinc) - pal.pack[zinc].1).abs() < 1e-6 && (blotted(&pal, lead) - 0.5).abs() < 1e-6);
+        assert!(pal.with(vec![]).drain && pal.clone().drain && pal.only(&["zinc white"]).drain, "a palette made from it keeps its switch");
+        pal.drain = false;
+        assert!((blotted(&pal, zinc) - 0.5).abs() < 1e-6 && (blotted(&pal, lead) - 0.5).abs() < 1e-6);
     }
 }
 

@@ -40,7 +40,7 @@ use rayon::prelude::*;
 
 thread_local! {
     static FILM_SCRATCH: std::cell::RefCell<[Vec<f32>; 5]> = std::cell::RefCell::new(Default::default());
-    static BAKE_SCRATCH: std::cell::RefCell<[Vec<f32>; 7]> = std::cell::RefCell::new(Default::default());
+    static BAKE_SCRATCH: std::cell::RefCell<[Vec<f32>; 8]> = std::cell::RefCell::new(Default::default());
 }
 
 /// Minutes to touch-dry for one lean 25 µm coat of average paint
@@ -257,6 +257,15 @@ impl Pace {
     fn set_rate(self, r: f32) -> f32 {
         if self == Pace::EVEN { r } else { r * self.set }
     }
+}
+
+/// How lean a film whose properties are `hd` dries, as the stiffness `rate`
+/// takes: its own, and with the drain switch (`drain`) its packed share as
+/// lean as stiff paste (packed on an absorbent ground, it holds only the
+/// oil its pigment packs with: `bristle::ground_drain`).
+#[inline]
+pub(crate) fn lean_of(drain: bool, hd: &crate::wet::Prop) -> f32 {
+    if drain { hd[1] + (1.0 - hd[1].clamp(0.0, 1.0)) * hd[7].clamp(0.0, 1.0) } else { hd[1] }
 }
 
 /// Cure gained per minute by an open film `vol` coats thick, of stiffness
@@ -491,7 +500,7 @@ impl Canvas {
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
-            let pace = Pace::of(self.engine);
+            let (pace, drain) = (Pace::of(self.engine), self.drain);
             let wet = &mut self.wet;
             let (vol, hide) = (&wet.vol, &wet.hide);
             wet.clock.px[y0 * w..y1 * w].par_chunks_mut(w).enumerate().for_each(|(j, row)| {
@@ -499,7 +508,7 @@ impl Canvas {
                     let i = (y0 + j) * w + x;
                     if vol[i] >= low {
                         let p = &mut row[x];
-                        p.cure = pace.age(p.cure, dt, rate(p.th, hide[i][1], hide[i][2]));
+                        p.cure = pace.age(p.cure, dt, rate(p.th, lean_of(drain, &hide[i]), hide[i][2]));
                     }
                 }
             });
@@ -647,7 +656,7 @@ impl Canvas {
             // `wait` would)
             let th = if self.wet.clock.px.is_empty() { self.film_thickness((x0, y0, x1, y1)) } else { Vec::new() };
             let bw = x1 - x0;
-            let pace = Pace::of(self.engine);
+            let (pace, drain) = (Pace::of(self.engine), self.drain);
             let (vol, hide, px) = (&self.wet.vol, &self.wet.hide, &self.wet.clock.px);
             left = (y0..y1)
                 .into_par_iter()
@@ -657,7 +666,7 @@ impl Canvas {
                         let i = y * w + x;
                         if vol[i] >= 1e-5 {
                             let (c, t) = px.get(i).map_or((0.0, th.get((y - y0) * bw + x - x0).copied().unwrap_or(0.0)), |p| (p.cure, p.th));
-                            m = m.max(pace.to_dry(c, rate(t, hide[i][1], hide[i][2])));
+                            m = m.max(pace.to_dry(c, rate(t, lean_of(drain, &hide[i]), hide[i][2])));
                         }
                     }
                     m
@@ -758,7 +767,7 @@ impl Canvas {
         BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, &mut s.borrow_mut()));
     }
 
-    fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 7]) {
+    fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 8]) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (x1, y1) = (x1.min(w), y1.min(h));
@@ -775,10 +784,17 @@ impl Canvas {
         }) {
             return;
         }
-        let [add, stiff, oil, sets, rates, cv, prev] = scratch;
+        let [add, stiff, oil, sets, rates, cv, prev, fluid] = scratch;
         for (v, fill) in [(&mut *add, 0.0), (&mut *stiff, 0.5), (&mut *oil, 1.0), (&mut *sets, SET_TIME)] {
             v.resize(ew * eh, fill);
             v.fill(fill);
+        }
+        // (the drain switch: the share of each film still fluid above its
+        // packed layer; without it the buffer stays empty)
+        let drain = self.drain;
+        if drain {
+            fluid.resize(ew * eh, 1.0);
+            fluid.fill(1.0);
         }
         // cure per minute of each film that bakes (for its tack afterwards)
         rates.resize(if all { 0 } else { ew * eh }, 0.0);
@@ -795,11 +811,20 @@ impl Canvas {
                     add[k] = v * COAT_UM;
                     stiff[k] = self.wet.hide[i][1];
                     oil[k] = self.wet.hide[i][4];
+                    if drain {
+                        // its surface is as rich as the paint above the
+                        // packed layer; its gloss reads that against the
+                        // pigment's packing (a paint at its packed oil is as
+                        // glossy as paint naming no tubes at `PACKED_OIL`)
+                        let hd = &self.wet.hide[i];
+                        oil[k] = crate::bristle::surface_oil(hd) * crate::wet::PACKED_OIL / hd[5].max(0.05);
+                        fluid[k] = 1.0 - hd[7].clamp(0.0, 1.0);
+                    }
                     if let Some(p) = cp.get(i) {
                         sets[k] = p.lev;
                     }
                     if !all && let Some(p) = cp.get(i) {
-                        rates[k] = pace.set_rate(rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]));
+                        rates[k] = pace.set_rate(rate(p.th, lean_of(drain, &self.wet.hide[i]), self.wet.hide[i][2]));
                     }
                     any = true;
                 }
@@ -821,7 +846,7 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
+        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4, drain.then_some(&fluid[..]));
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
         // an absorbent ground's pores

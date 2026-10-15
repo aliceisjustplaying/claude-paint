@@ -1348,14 +1348,16 @@ mod tests {
     fn engine7_log_reopens_and_rolls_back() {
         let mut s = with_engine(7);
         s.run(CANVAS).unwrap();
-        let before = state(&s);
+        let before = state(&s).0;
+        let clock = s.st.borrow().clock;
         assert!(s.run("wait(1); error('engine7 rollback')").is_err());
-        assert_eq!(state(&s), before);
+        assert!(state(&s).0 == before);
+        assert_eq!(s.st.borrow().clock, clock);
         s.run("wait(1)").unwrap();
         let program = s.program("t");
         assert_eq!(logged_engine(&program), Ok(7));
         let restored = replayed(&s);
-        assert_eq!(state(&restored), state(&s));
+        assert!(state(&restored) == state(&s));
         assert_eq!(restored.canvas().unwrap().engine(), 7);
         assert!(logged_engine("--@ engine 6\n--@ chunk 1\n").is_err());
     }

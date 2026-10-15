@@ -866,7 +866,8 @@ impl Canvas {
             [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
-        if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
+        let cached = self.engine == 7 && crate::engine7::features().contact_cache;
+        if !cached && self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
             let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
             base.resize(self.height.len(), 0.0);
             use rayon::prelude::*;
@@ -881,6 +882,7 @@ impl Canvas {
             });
             self.base = Some((self.surf_gen, base));
         }
+        let base = if cached { self.engine7_base() } else { self.base.as_ref().unwrap().1.as_ptr() };
         Surf {
             engine: self.engine,
             w: self.f.w,
@@ -897,7 +899,7 @@ impl Canvas {
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
             cover: self.wet.cover.as_mut_ptr(),
-            base: self.base.as_ref().unwrap().1.as_ptr(),
+            base,
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
             clump: self.engine >= 4,
@@ -1130,6 +1132,18 @@ pub(crate) unsafe fn drag_on(
     id: u32,
     scratch: &mut Vec<f32>,
 ) -> Bounds {
+    unsafe { drag_on_seeded(sf, held, g, clip, id, id, scratch) }
+}
+
+pub(crate) unsafe fn drag_on_seeded(
+    sf: Surf,
+    held: &mut Held,
+    g: &Gesture,
+    clip: Option<Clip<'_>>,
+    id: u32,
+    geometry_seed: u32,
+    scratch: &mut Vec<f32>,
+) -> Bounds {
     g.assert_valid();
     let mut bounds: Bounds = None;
     if g.pts.is_empty() {
@@ -1191,7 +1205,7 @@ pub(crate) unsafe fn drag_on(
         // the hand is never exact: the path drifts sideways a little and the
         // pressure breathes, both slowly along the stroke
         let lw = (tool.width * 2.5 + 6.0) * s;
-        let hs = id as u64 * 7919;
+        let hs = geometry_seed as u64 * 7919;
         let off = g.shake * (0.05 * tool.width + 0.12) * s * (wander(d / lw, hs + 1) + 0.5 * wander(d / (lw * 0.37), hs + 2));
         let (hx, hy) = (hx - dir.1 * off, hy + dir.0 * off);
         let u = if total > 0.0 { d / total } else { 0.5 };
@@ -1411,7 +1425,7 @@ unsafe fn exchange(
     lim: Rect,
 ) {
     unsafe {
-        if sf.engine == 7 {
+        if sf.engine == 7 && crate::engine7::features().kernel {
             crate::engine7::exchange::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim);
         } else {
             exchange_legacy(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim);

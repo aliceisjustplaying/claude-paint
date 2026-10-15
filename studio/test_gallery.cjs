@@ -202,6 +202,54 @@ async function ready(page, which, light) {
         assert.doesNotMatch(await page.locator('#cap2').textContent(), /unavailable/);
       }
       await selectLight('gallery');
+      await page.goto(url('normal')); await ready(page, 'img', 'gallery');
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'image', img:4, look:'', display_pending:true });
+        show(events.length - 1);
+      });
+      assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
+      assert.match(await page.locator('#cap').textContent(), /Gallery light/);
+      await selectLight('color'); await ready(page, 'img', 'color');
+      await page.waitForFunction(() => document.getElementById('img').dataset.picture === '4');
+      await selectLight('gallery'); await ready(page, 'img', 'gallery');
+      await page.waitForFunction(() => document.getElementById('img').dataset.picture === '0');
+      await shot(`pending-${stream ? 'stream' : 'normal'}-revision`);
+      await page.evaluate(() => {
+        Object.assign(events[events.length - 1], { display_pending:false, gallery:true, relief:true });
+        pictures();
+      });
+      await page.waitForFunction(() => document.getElementById('img').dataset.picture === '4');
+      await ready(page, 'img', 'gallery');
+      await shot(`complete-${stream ? 'stream' : 'normal'}-revision`);
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'image', img:3, look:'', display_pending:false, gallery:true, relief:true });
+        show(events.length - 1);
+      });
+      await page.waitForTimeout(1500);
+      assert.equal(await page.locator('#img').getAttribute('data-picture'), '4');
+      assert.equal(await page.locator('#img').getAttribute('data-light'), 'gallery');
+      await page.goto(url('normal')); await ready(page, 'img', 'gallery');
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'paint', scratch:true, new_scratch:true, code:'canvas{}', out:'ok' },
+          { ts:new Date().toISOString(), kind:'look', text:'scratch True' },
+          { ts:new Date().toISOString(), kind:'image', img:5, look:'scratch True', display_pending:true });
+        show(events.length - 1);
+      });
+      assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
+      await page.evaluate(() => {
+        Object.assign(events[events.length - 1], { display_pending:false, gallery:true, relief:true });
+        pictures();
+      });
+      await page.waitForFunction(() => document.getElementById('img').dataset.picture === '5');
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'paint', scratch:true, new_scratch:true, code:'canvas{}', out:'ok' },
+          { ts:new Date().toISOString(), kind:'look', text:'scratch True' },
+          { ts:new Date().toISOString(), kind:'image', img:6, look:'scratch True', display_pending:true });
+        show(events.length - 1);
+      });
+      assert.equal(await page.locator('#img').getAttribute('data-picture'), '5');
+      assert.equal(await page.locator('#img').getAttribute('data-light'), 'gallery');
+      await page.goto(url('normal')); await ready(page, 'img', 'gallery');
       fixtures.analytical = [...whole.slice(0, 4), e('look', { text:'mode value' }), e('image', { img:1, look:'mode value' })];
       let holdLit = false, holdColor = false;
       const held = [];

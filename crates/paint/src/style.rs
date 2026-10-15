@@ -216,7 +216,7 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached;
+                            return cached.with_quarter_tiles(self.palette.quarter_tiles);
                         }
                     }
                 }
@@ -260,7 +260,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c
+        c.with_quarter_tiles(self.palette.quarter_tiles)
     }
 }
 

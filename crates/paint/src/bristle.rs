@@ -1117,7 +1117,7 @@ fn limit(r: Option<Option<Rect>>) -> Rect {
 }
 
 fn sweep_step(tool: &Tool, g: &Gesture, path: &[(f32, f32)], arc: &[f32], scale: f32, base: f32, adaptive: bool) -> f32 {
-    if !adaptive {
+    if !adaptive || tool.width * scale <= 4.0 * base {
         return base;
     }
     let total = arc.last().copied().unwrap_or(0.0);
@@ -1327,7 +1327,7 @@ mod sweep_tests {
         let g = Gesture::line((0.0, 0.0), (100.0, 0.0)).ramps(0.0, 0.0).shake(0.0);
         assert_eq!(step(&Tool::hog_flat(40.0), &g, false), 1.25);
         assert_eq!(step(&Tool::hog_flat(40.0), &g, true), 5.0);
-        assert_eq!(step(&Tool::rigger(1.0), &g, true), 2.5);
+        assert_eq!(step(&Tool::rigger(1.0), &g, true), 1.25);
         assert_eq!(step(&Tool::hog_flat(8.0), &g, true), 4.0);
     }
 

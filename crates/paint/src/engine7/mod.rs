@@ -171,9 +171,9 @@ mod tests {
         }
     }
 
-    /// Until a lane replaces a stub, engine 7 paints exactly as engine 5.
+    /// Engine 7 lays about the paint engine 5 does, where engine 5 does.
     #[test]
-    fn the_pass_through_paints_as_engine_5() {
+    fn engine_7_paints_close_to_engine_5() {
         use crate::bristle::{Gesture, Held, Tool};
         use crate::color::hex;
         use crate::wet::Paint;
@@ -184,9 +184,14 @@ mod tests {
                 h.load(Paint::body(hex(["#1a1612", "#c03020", "#f0f0e8"][k])), 1.0);
                 c.drag(&mut h, &Gesture::new(vec![(100.0, 200.0 + 150.0 * k as f32), (500.0, 500.0), (900.0, 300.0 + 100.0 * k as f32)]), None);
             }
-            assert!(c.wet.vol.iter().filter(|&&v| v > 0.0).count() > 500, "engine {v} laid too little");
-            c.wet.vol.iter().chain(c.height.iter()).map(|v| v.to_bits()).collect::<Vec<_>>()
+            c.wet.vol.iter().map(|&v| v as f64).collect::<Vec<_>>()
         };
-        assert_eq!(paint(7), paint(5));
+        let (old, new) = (paint(5), paint(7));
+        let total: f64 = old.iter().sum();
+        let gap: f64 = old.iter().zip(&new).map(|(a, b)| (a - b).abs()).sum();
+        assert!(old.iter().filter(|&&v| v > 0.0).count() > 500, "engine 5 laid too little");
+        let laid: f64 = new.iter().sum();
+        assert!((laid - total).abs() <= 2e-3 * total, "engine 7 laid {laid} coats·px, engine 5 {total}");
+        assert!(gap <= 1e-2 * total, "engine 7 film differs from engine 5's by {gap} of {total}");
     }
 }

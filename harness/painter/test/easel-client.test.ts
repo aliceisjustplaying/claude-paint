@@ -4,7 +4,49 @@ import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+
+test("painting headers set the waits before the new-painting width", async () => {
+	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
+ touch polled
+ echo 'rebuilding from the log (0 of 1 chunks)'
+ exit 0
+fi
+sleep 0.1
+echo ok`);
+	const logs = join(studio, "paintings", "lua");
+	mkdirSync(logs, { recursive: true });
+	const log = join(logs, "painting.lua");
+	const width = join(studio, "bin", "width");
+	const normal = { ...WAIT_MS };
+	const wide = { ...WIDE_WAIT_MS };
+	try {
+		for (const configured of [undefined, "2400", "4800"]) {
+			if (configured === undefined) rmSync(width, { force: true });
+			else writeFileSync(width, configured);
+			for (const [header, expected] of [
+				[undefined, configured === "4800"],
+				["--@ width 4800\n--@ chunk 1\n", true],
+				["--@ chunk 1\n--@ width 4800\n", false],
+				["--@ width 2400\n--@ chunk 1\n", false],
+				["--@ sketch\n--@ width 4800\n--@ chunk 1\n", false],
+			] as const) {
+				if (header === undefined) rmSync(log, { force: true });
+				else writeFileSync(log, header);
+				assert.equal(wideStudio(studio), expected, `${configured}: ${header}`);
+			}
+			writeFileSync(log, "--@ engine 7\n--@ width 4800\n--@ chunk 1\n");
+			rmSync(join(studio, "polled"), { force: true });
+			WAIT_MS.do = WAIT_MS.rebuild = 10;
+			WIDE_WAIT_MS.do = WIDE_WAIT_MS.rebuild = 2000;
+			assert.equal(await atEasel(studio, ["do", "-"], "print(1)"), "ok");
+		}
+	} finally {
+		Object.assign(WAIT_MS, normal);
+		Object.assign(WIDE_WAIT_MS, wide);
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
 
 test("reading a studio directory lists its files and subdirectories in order", () => {
 	const studio = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));

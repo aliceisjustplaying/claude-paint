@@ -17,9 +17,10 @@ Two phases. The build steps run first, as one lockrun job of 600 s, then the
 other steps as a second job of 600 s (the plan: builds and final check
 batches, ten minutes each); the second runs only if every build passed. One
 summary covers both, with each phase's limit, exit, verdict and time.
-On Linux these budgets and each step's limit scale by max(1, 16 / available
-CPUs), giving 4-vCPU VMs four times the base budget and 8-vCPU VMs twice.
-macOS keeps the base limits. SCRIPTS_TEST_TIMEOUT_SCALE (1 to 16) overrides
+On Linux these budgets and each step's limit scale by max(4, 16 / available
+CPUs), retaining at least the four-vCPU budgets on larger machines: these
+checks do not speed up in proportion to CPU count. macOS keeps the base limits.
+SCRIPTS_TEST_TIMEOUT_SCALE (1 to 16) overrides
 the scale on either platform; summaries record it. Every limit stays finite.
 test_candidate runs the two phases itself (`--phase build`, `--phase check`)
 under its pinned lockrun.

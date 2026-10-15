@@ -150,8 +150,8 @@ pub(crate) unsafe fn exchange(
     bounds: &mut Bounds,
     lim: Rect,
 ) {
-    let side = |lo: f32, hi: f32| ((hi + rb + 1.0).ceil() - (lo - rb - 1.0).floor()).max(0.0) as usize;
-    if side(a.0.min(b.0), a.0.max(b.0)) * side(a.1.min(b.1), a.1.max(b.1)) > window::CAPACITY {
+    // (the capsule's rectangle is at most |b − a| + 2·rb + 4 pixels a side)
+    if ((b.0 - a.0).abs() + 2.0 * rb + 4.0) * ((b.1 - a.1).abs() + 2.0 * rb + 4.0) > window::CAPACITY as f32 {
         unsafe { crate::bristle::exchange(sf, br, tool, a, b, rb, reach, full, dep, excl, clip, id, wts, bounds, lim) };
         return;
     }
@@ -172,10 +172,10 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let (ox, oy, bw_buf) = (sf.ox, sf.oy, sf.w);
         let s = sf.scale;
         let px_area = 1.0 / (s * s);
-        let cx0 = ((a.0.min(b.0) - rb - 1.0).floor().max(0.0)) as usize;
-        let cy0 = ((a.1.min(b.1) - rb - 1.0).floor().max(0.0)) as usize;
-        let cx1 = ((a.0.max(b.0) + rb + 1.0).ceil().max(0.0) as usize).min(w);
-        let cy1 = ((a.1.max(b.1) + rb + 1.0).ceil().max(0.0) as usize).min(h);
+        let cx0 = (floor(a.0.min(b.0) - rb - 1.0).max(0.0)) as usize;
+        let cy0 = (floor(a.1.min(b.1) - rb - 1.0).max(0.0)) as usize;
+        let cx1 = ((-floor(-(a.0.max(b.0) + rb + 1.0))).max(0.0) as usize).min(w);
+        let cy1 = ((-floor(-(a.1.max(b.1) + rb + 1.0))).max(0.0) as usize).min(h);
         let none = AcceptedTransfer::default();
         if cx1 <= cx0 || cy1 <= cy0 {
             return none;
@@ -245,7 +245,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         // bilinear share one pixel further)
         let (lx, ly) = (ox.max(lim.0), oy.max(lim.1));
         let (hx, hy) = (w.min(ox + sf.w).min(lim.2), h.min(oy + sf.h).min(lim.3));
-        let pad = off.ceil() as usize + 2;
+        let pad = off as usize + 3;
         let interior = (x0.saturating_sub(pad).max(lx), y0.saturating_sub(pad).max(ly), (x1 + pad).min(hx), (y1 + pad).min(hy));
         win.begin((x0, y0, x1, y1), interior);
         let (lx, ly, hx, hy) = (interior.0 as isize, interior.1 as isize, interior.2 as isize, interior.3 as isize);
@@ -350,7 +350,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             let clump_u = tool.hair_radius() * (1.0 + 4.0 * stiffen * stiffen);
             let bands = (tool.width / (2.0 * clump_u)).clamp(2.0, 48.0);
             let u = (br.rx.clamp(-1.0, 1.0) + 1.0) * 0.5 * bands;
-            let (b0, f) = (u.floor(), u - u.floor());
+            let b0 = floor(u);
+            let f = u - b0;
             let h0 = crate::rng::hash2(b0 as i64, id as i64, 0x51C0);
             let h1 = crate::rng::hash2(b0 as i64 + 1, id as i64, 0x51C0);
             let band = h0 + (h1 - h0) * crate::smoothstep(0.0, 1.0, f);
@@ -883,23 +884,32 @@ mod tests {
             })
             .collect();
         let (mut all5, mut all7, mut all_calls) = (0.0f64, 0.0f64, 0u64);
-        for (name, tool, load) in tools {
-            let mut secs = [0.0f64; 2];
+        let only = std::env::var("E7_BENCH_TOOL").unwrap_or_default();
+        for (name, tool, load) in tools.into_iter().filter(|t| t.0.contains(only.as_str())) {
+            // the fastest of three rounds, engines alternating
+            let mut secs = [f64::MAX; 2];
             let mut calls = 0u64;
-            for (e, engine) in [5u32, 7].into_iter().enumerate() {
-                let mut c = base.clone().with_engine(engine);
-                let mut h = Held::new(tool.clone(), 1).with_engine(engine);
-                let c0 = super::super::window::with(|w| w.generation);
-                for g in &strokes {
-                    if load > 0.0 {
-                        h.load(Paint::body(hex("#e8c020")), load);
+            for _ in 0..3 {
+                let engines = std::env::var("E7_BENCH_ENGINES").unwrap_or("57".into());
+                for (e, engine) in [5u32, 7].into_iter().enumerate().filter(|(_, v)| engines.contains(&v.to_string())) {
+                    let mut c = base.clone().with_engine(engine);
+                    let mut h = Held::new(tool.clone(), 1).with_engine(engine);
+                    // (a clone rebuilds its contact surface on first use: not timed)
+                    c.surf();
+                    let c0 = super::super::window::with(|w| w.generation);
+                    let mut t_all = 0.0f64;
+                    for g in &strokes {
+                        if load > 0.0 {
+                            h.load(Paint::body(hex("#e8c020")), load);
+                        }
+                        let t = std::time::Instant::now();
+                        c.drag(&mut h, g, None);
+                        t_all += t.elapsed().as_secs_f64();
                     }
-                    let t = std::time::Instant::now();
-                    c.drag(&mut h, g, None);
-                    secs[e] += t.elapsed().as_secs_f64();
-                }
-                if engine == 7 {
-                    calls = super::super::window::with(|w| w.generation)- c0;
+                    secs[e] = secs[e].min(t_all);
+                    if engine == 7 {
+                        calls = super::super::window::with(|w| w.generation) - c0;
+                    }
                 }
             }
             eprintln!(
@@ -913,5 +923,62 @@ mod tests {
             all_calls += calls;
         }
         eprintln!("{:>20}: {all_calls:>8} calls, engine 5 {:>7.1} ns/call, engine 7 {:>7.1} ns/call, {:.2}x (drag time, geometry included)", "all", all5 * 1e9 / all_calls as f64, all7 * 1e9 / all_calls as f64, all5 / all7);
+    }
+
+    /// Gallery-light renders (seen_lit(115, 55, 1)) of the fixtures, engine 5
+    /// left and engine 7 right, into `E7_RENDER_DIR`.
+    /// `E7_RENDER_DIR=dir cargo test --release -p paint --lib engine7::exchange::tests::renders -- --ignored`
+    #[test]
+    #[ignore]
+    fn renders() {
+        let dir = std::path::PathBuf::from(std::env::var("E7_RENDER_DIR").expect("E7_RENDER_DIR"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let save = |name: &str, a: &Canvas, b: &Canvas| {
+            let (w, h) = (a.f.w, a.f.h);
+            let (la, lb) = (a.seen_lit(115.0, 55.0, 1.0), b.seen_lit(115.0, 55.0, 1.0));
+            let gap = 8;
+            let mut buf = vec![255u8; (2 * w + gap) * h * 3];
+            for y in 0..h {
+                for x in 0..w {
+                    for (k, img) in [&la, &lb].into_iter().enumerate() {
+                        let o = (y * (2 * w + gap) + x + k * (w + gap)) * 3;
+                        for c in 0..3 {
+                            buf[o + c] = (crate::color::linear_to_srgb(img[y * w + x][c]) * 255.0).round() as u8;
+                        }
+                    }
+                }
+            }
+            image::save_buffer(dir.join(format!("{name}.png")), &buf, (2 * w + gap) as u32, h as u32, image::ColorType::Rgb8).unwrap();
+        };
+        let pulls: Vec<Gesture> = (0..3).map(|k| Gesture::line((380.0, 330.0 + 40.0 * k as f32), (760.0, 330.0 + 40.0 * k as f32)).pressure(0.5, 0.5)).collect();
+        let ((c5, _), (c7, _)) = both(&two_films, || Held::new(Tool::badger(90.0), 3), &pulls, None);
+        save("blender-on-wet", &c5, &c7);
+        let blue = |c: &mut Canvas| film(c, (0.0, 0.0, 1000.0, 800.0), Paint::body(hex(BLUE)), 1.0);
+        let drags: Vec<Gesture> = (0..4).map(|k| Gesture::new(vec![(150.0, 200.0 + 90.0 * k as f32), (450.0, 230.0 + 90.0 * k as f32), (850.0, 190.0 + 90.0 * k as f32)])).collect();
+        let yellow = || {
+            let mut h = Held::new(Tool::filbert(60.0), 11);
+            h.load(Paint::body(hex("#e8c020")), 1.0);
+            h
+        };
+        let ((c5, _), (c7, _)) = both(&blue, yellow, &drags, None);
+        save("two-color-wet-drag", &c5, &c7);
+        let skims: Vec<Gesture> = (0..3).map(|k| Gesture::line((150.0, 250.0 + 120.0 * k as f32), (850.0, 270.0 + 120.0 * k as f32)).pressure(0.15, 0.15)).collect();
+        let scumble = || {
+            let mut h = Held::new(Tool::hog_flat(60.0), 5);
+            h.load(Paint::scumble(hex("#e0d8c0")), 0.06);
+            h
+        };
+        let dark = |c: &mut Canvas| *c = Canvas::new(400, 1.25, hex("#3a3020")).with_size_mm(150.0).with_engine(c.engine()).with_linen(crate::surface::Linen::fine(3));
+        let ((c5, _), (c7, _)) = both(&dark, scumble, &skims, None);
+        save("dry-scumble", &c5, &c7);
+        let lines: Vec<Gesture> = (0..3).map(|k| Gesture::new(vec![(200.0, 200.0 + 150.0 * k as f32), (500.0, 260.0 + 150.0 * k as f32), (800.0, 210.0 + 150.0 * k as f32)]).pressure(0.25, 0.1)).collect();
+        let wet = |c: &mut Canvas| film(c, (0.0, 0.0, 1000.0, 800.0), Paint::body(hex("#d8d0c0")), 0.6);
+        let sable = || {
+            let mut h = Held::new(Tool { point: 1.0, ..Tool::round_sable(12.0) }, 7);
+            h.load(Paint::body(hex("#302018")), 1.0);
+            h
+        };
+        let ((c5, _), (c7, _)) = both(&wet, sable, &lines, None);
+        save("hairlines-on-wet", &c5, &c7);
     }
 }

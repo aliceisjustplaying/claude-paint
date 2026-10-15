@@ -14,11 +14,11 @@ fn base(tag: &str) -> PathBuf {
     d
 }
 
-/// A copy of the easel in `<dir>/bin`, with `bin/box` holding `name` (if any).
+/// A hard link to the easel in `<dir>/bin`, with `bin/box` holding `name` (if any).
 fn easel_in(dir: &Path, name: Option<&str>) -> PathBuf {
     std::fs::create_dir_all(dir.join("bin")).unwrap();
     let e = dir.join("bin/easel");
-    std::fs::copy(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
+    std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
     if let Some(n) = name {
         std::fs::write(dir.join("bin/box"), format!("{n}\n")).unwrap();
     }

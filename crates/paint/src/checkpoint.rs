@@ -630,7 +630,7 @@ mod tests {
                 wrong_engine[flag - 4] = 4;
                 assert!(load(wrong_engine).is_err());
                 let mut unknown_flag = selected.clone();
-                unknown_flag[flag] |= 4;
+                unknown_flag[flag] |= 8;
                 assert!(load(unknown_flag).is_err());
             } else {
                 assert_eq!(selected, legacy);

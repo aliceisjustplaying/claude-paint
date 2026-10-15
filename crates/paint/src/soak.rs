@@ -323,15 +323,19 @@ mod tests {
         let p = load(saved(&Canvas::new_window(8, 1.0, [0.5; 3], None).with_engine(3))).unwrap();
         assert!(&saved(&p)[..8] == b"PAINTCK9" && p.soak.is_none());
         // New engines retain both cloth state and the extended material arrays.
-        let mut material = on(40, Fabric::cotton_duck()).with_engine(4);
-        material.wet.vol[0] = 0.5;
-        material.wet.hide[0] = [0.8, 0.6, 1.1, 0.2, 0.7, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0];
-        material.gloss[0] = 0.4;
-        material.absorb[0] = 0.3;
-        let bytes = saved(&material);
-        assert_eq!(&bytes[..8], b"PAINTC12");
-        let resumed = load(bytes.clone()).unwrap();
-        assert!(saved(&resumed) == bytes && resumed.wet.hide[0] == material.wet.hide[0], "raw material state must round-trip without loss");
+        // (with the drain switch, version 14 with its soak section after the
+        // drain section, and the packing kept)
+        for (drain, magic) in [(false, b"PAINTC12"), (true, b"PAINTC14")] {
+            let mut material = on(40, Fabric::cotton_duck()).with_engine(4).with_drain(drain);
+            material.wet.vol[0] = 0.5;
+            material.wet.hide[0] = if drain { [0.8, 0.6, 1.1, 0.2, 0.7, 0.5, 0.3, 0.2, 0.6, 0.3] } else { [0.8, 0.6, 1.1, 0.2, 0.7, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0] };
+            material.gloss[0] = 0.4;
+            material.absorb[0] = 0.3;
+            let bytes = saved(&material);
+            assert_eq!(&bytes[..8], magic);
+            let resumed = load(bytes.clone()).unwrap();
+            assert!(saved(&resumed) == bytes && resumed.wet.hide[0] == material.wet.hide[0] && resumed.soak.is_some() && resumed.drain == drain, "drain {drain}: raw material state must round-trip without loss");
+        }
     }
 
     #[test]

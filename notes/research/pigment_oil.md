@@ -5,9 +5,11 @@ A sourced note on how much oil a tube of each pigment held in each period,
 how much of it the pigment keeps when it packs, and how far an absorbent
 ground drains it: the data and rules behind each tube's packing
 (`palette::PIGMENT_OIL`, `palette::Period`, `palette::tube_packing`), which
-every paint carries (`Paint::packed`, `Paint::floor`, `Paint::oil_volume`).
-Nothing reads it yet: the easel's absorbent ground still draws engine 4's
-fixed share of oil (`bristle::OIL_SHARE`, §6), so no painting changes. Source
+every paint carries (`Paint::packed`, `Paint::floor`, `Paint::oil_volume`),
+and behind the drain switch's absorbent ground that reads it
+(`Canvas::with_drain`, an easel log's `--@ drain`; `bristle::ground_drain`).
+Without the switch the ground draws engine 4's fixed share of oil
+(`bristle::OIL_SHARE`, §6), so a painting begun before it is unchanged. Source
 keys are in brackets; the sources are listed at the end. **est.** marks an
 estimate, with its basis.
 
@@ -30,7 +32,8 @@ estimate, with its basis.
   with linseed oil's γ/μ (0.75 m/s) [STR] **est.**; a film in bodied or
   gelled medium could take minutes to hours (front time t = ηΔh²/2kP with
   permeabilities 10⁻¹⁸–10⁻¹⁵ m² from Kozeny–Carman and measured calcium
-  carbonate compacts [GANE]) **est.**
+  carbonate compacts [GANE]) **est.** The drain switch drains a film at
+  once, as it is laid.
 - **Thick paint stays glossy.** "The more thinly painted areas tend to be
   more matte, as if the ground drew some of the medium out of the lower
   paint layers, but in more thickly painted areas … this effect is less
@@ -75,6 +78,12 @@ estimate, with its basis.
 - A pile's packed and drained oil are its tubes', weighted by the oil each
   brings; its oil by volume is its tubes', by volume. Medium and blotting
   leave them as they are: they are the pigment's.
+- Blotting paper draws the oil by capillarity as the ground does, so with
+  the drain switch a blotted paint keeps at least its drained floor.
+- Gloss reads a film's surface oil against its packing: a paint at its
+  packed oil is as glossy as engine 4's paint naming no tubes at 0.7 of its
+  oil, so paint naming no tubes looks as it did in engine 4 **est.** A film
+  drained through dries semi-matte at its packed oil and matte below it.
 
 ## 3. Each pigment
 
@@ -319,10 +328,9 @@ oil content (`palette::BOX_GRIND`); its other tubes take its period's (§4).
 
 ## 6. Not modeled, and open
 
-- The absorbent ground of engines 4 and 5 takes every tube paint as 40%
-  oil by volume (`bristle::OIL_SHARE`), leaner than real tube paint; each
-  paint carries its tubes' own (§2, `Paint::oil_volume`), which nothing
-  reads yet.
+- Without the drain switch the absorbent ground takes every tube paint as
+  40% oil by volume (`bristle::OIL_SHARE`), leaner than real tube paint;
+  with it, each tube's own (§2, `Paint::oil_volume`).
 - The slow tail (oil diffusing through the cake over hours, a half-dry
   underlayer as a weak absorber) and the next-day sinking-in Hareux
   describes [HAR] are not modeled; nor is drying's roughening of a film

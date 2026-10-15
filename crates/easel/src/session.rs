@@ -28,6 +28,14 @@ pub const ENGINE_MARK: &str = "--@ engine";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
+/// The drain switch, in the head of a session file: a painting whose log
+/// has it is painted with an absorbent ground that drains paint as its
+/// pigment packs, and blotting that stops at the drained floor (paint's
+/// `Canvas::with_drain`). A new painting has it; a log without it was
+/// painted before the drain and replays as it was painted. It names no
+/// engine of its own: it rides on engine 5 and later (`box_for`), and the
+/// box carries it (`Palette::drain`).
+pub const DRAIN_MARK: &str = "--@ drain";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -195,6 +203,16 @@ impl Session {
         let mut s = Self::with_box(width, tubes)?;
         s.replay = true;
         Ok(s)
+    }
+
+    /// Set the drain switch (`DRAIN_MARK`) on the box this session paints
+    /// from (tests: a new painting's is on and a replay's is its log's,
+    /// both set by `box_for`). Set before the first chunk runs.
+    #[cfg(test)]
+    pub fn with_drain(self, on: bool) -> Self {
+        debug_assert!(self.log.is_empty(), "the drain switch is set before the first chunk");
+        Rc::make_mut(&mut self.st.borrow_mut().tubes).drain = on;
+        self
     }
 
     /// The box this session paints from.
@@ -398,6 +416,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().tubes.drain {
+            let _ = writeln!(s, "{DRAIN_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -897,6 +918,12 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+/// Whether a session file's head has the drain switch (a `DRAIN_MARK` line
+/// before the first chunk).
+pub fn logged_drain(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == DRAIN_MARK)
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -938,13 +965,20 @@ fn box_list() -> String {
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
 /// engine version the painting is painted with: a new one the current
-/// (`paint::ENGINE`), an existing one its log's (`logged_engine`).
+/// (`paint::ENGINE`), an existing one its log's (`logged_engine`); and the
+/// drain switch (`DRAIN_MARK`): a new one's on, an existing one's its log's.
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+        let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
+        b.drain = true;
+        return Ok(b);
     };
     let engine = logged_engine(text)?;
+    let drain = logged_drain(text);
+    if drain && engine < 5 {
+        return Err(format!("the log's {DRAIN_MARK} line (the drain switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
         return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
@@ -960,6 +994,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let mut b = find_box(name)?;
     b.engine = engine;
+    b.drain = drain;
     Ok(b)
 }
 
@@ -2022,6 +2057,55 @@ mod tests {
             let bits = |c: &Canvas| c.seen().iter().flat_map(|p| p.map(f32::to_bits)).collect::<Vec<_>>();
             assert!(bits(&ca) == bits(&cb), "{call}\nwritten back as {src}: another canvas");
             assert_eq!(a.st.borrow().setup, b.st.borrow().setup, "{src}");
+        }
+    }
+
+    /// The drain switch is read from a log's head only, needs engine 5, and
+    /// rides on the box: a log with it replays, rebuilds and checkpoints the
+    /// same draining canvas (version 14), its brushes printing the paint's
+    /// packing; a log without it is as before (no mark, version 11, five
+    /// properties printed). A new painting's box has it.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_drain_switch_comes_from_the_log_s_head() {
+        assert!(logged_drain(&format!("{ENGINE_MARK} 5\n  {DRAIN_MARK}  \n{MARK} 1\n")));
+        assert!(!logged_drain(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{DRAIN_MARK}\n")));
+        assert!(!logged_drain(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}-ish\n{MARK} 1\n")));
+        let e = box_for(Some(&format!("{ENGINE_MARK} 4\n{DRAIN_MARK}\n{MARK} 1\n"))).unwrap_err();
+        assert!(e.contains(DRAIN_MARK), "{e}");
+        assert!(box_for(Some(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}\n{MARK} 1\n"))).unwrap().drain);
+        assert!(!box_for(Some(&format!("{ENGINE_MARK} 5\n{MARK} 1\n"))).unwrap().drain);
+        assert!(box_for(None).map(|b| b.drain).unwrap_or(true), "a new painting's box drains");
+        let strokes = r#"b = brush("flat", 24)
+            b:load(pile{{"raw umber", 1}}, 0.8)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(30)"#;
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        for drain in [false, true] {
+            let mut live = Session::new(96).unwrap().with_drain(drain);
+            live.run(CANVAS).unwrap();
+            live.run(strokes).unwrap();
+            assert_eq!(live.canvas().unwrap().drain(), drain);
+            let log = live.program("drain");
+            assert_eq!(log.contains(&format!("{ENGINE_MARK} {}\n{DRAIN_MARK}\n\n{MARK} 1\n", paint::ENGINE)), drain, "{log}");
+            assert_eq!(logged_drain(&log), drain);
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let bytes = state(&live);
+            assert_eq!(&bytes[..8], if drain { b"PAINTC14" } else { b"PAINTC11" });
+            assert!(state(&replay) == bytes && replay.program("drain") == log, "drain {drain}: the replay is the painting");
+            let brushes = live.st.borrow_mut().live_brushes();
+            let held = format!("{:?}", brushes[0].borrow());
+            let hide = held.split("hide: [").nth(1).and_then(|h| h.split(']').next()).unwrap();
+            assert_eq!(hide.matches(',').count(), if drain { 9 } else { 4 }, "drain {drain}: {hide}");
+            live.rebuild().unwrap();
+            assert!(state(&live) == bytes && live.program("drain") == log, "drain {drain}: the rebuild is the painting");
         }
     }
 

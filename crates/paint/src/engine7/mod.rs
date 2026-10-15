@@ -128,11 +128,11 @@ mod tests {
         use crate::color::hex;
         use crate::wet::Paint;
         let paint = |v: u32| {
-            let mut c = crate::canvas::Canvas::new(160, 1.0, hex("#e8e0d0")).with_size_mm(200.0).with_engine(v);
-            for (k, tool) in [Tool::hog_flat(12.0), Tool::filbert(8.0), Tool { point: 1.0, ..Tool::round_sable(4.0) }].into_iter().enumerate() {
+            let mut c = crate::canvas::Canvas::new(240, 1.0, hex("#e8e0d0")).with_size_mm(200.0).with_engine(v);
+            for (k, tool) in [Tool::hog_flat(60.0), Tool::filbert(45.0), Tool { point: 1.0, ..Tool::round_sable(25.0) }].into_iter().enumerate() {
                 let mut h = Held::new(tool, 3 + k as u64).with_engine(v);
                 h.load(Paint::body(hex(["#1a1612", "#c03020", "#f0f0e8"][k])), 1.0);
-                c.drag(&mut h, &Gesture::new(vec![(20.0, 40.0 + 30.0 * k as f32), (90.0, 70.0), (140.0, 30.0 + 20.0 * k as f32)]), None);
+                c.drag(&mut h, &Gesture::new(vec![(100.0, 200.0 + 150.0 * k as f32), (500.0, 500.0), (900.0, 300.0 + 100.0 * k as f32)]), None);
             }
             assert!(c.wet.vol.iter().filter(|&&v| v > 0.0).count() > 500, "engine {v} laid too little");
             c.wet.vol.iter().chain(c.height.iter()).map(|v| v.to_bits()).collect::<Vec<_>>()

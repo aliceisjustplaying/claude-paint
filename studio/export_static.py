@@ -59,8 +59,9 @@ def working_studios():
         pids = [parts[0] for row in ps.stdout.splitlines()
                 if len(parts := row.split()) == 2 and os.path.basename(parts[1]) == "pi"]
         args = subprocess.run(["ps", "-wwAo", "args="], capture_output=True, text=True, check=True, timeout=10)
-        agy = {os.path.basename(argv[argv.index("--studio") + 1]) for argv in map(str.split, args.stdout.splitlines())
-               if "--agy" in argv and "--studio" in argv[:-1] and any(a.endswith("/bin/mcp/server.py") for a in argv)}
+        agy = {os.path.basename(m.group(1)) for row in map(str.strip, args.stdout.splitlines())
+               if re.search(r"(?:^| )--agy(?: |$)", row)
+               and (m := re.search(r"/bin/mcp/server\.py .*?--studio (.+?)(?: --|$)", row))}
         lsof = shutil.which("lsof") or "/usr/sbin/lsof"
         if not pids:
             return agy

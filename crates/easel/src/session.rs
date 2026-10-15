@@ -403,6 +403,9 @@ impl Session {
         if self.st.borrow().tubes.quarter_tiles {
             let _ = writeln!(s, "{TILES_MARK} quarter");
         }
+        if self.st.borrow().tubes.adaptive_sweep {
+            let _ = writeln!(s, "--@ adaptive-sweep");
+        }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
         }
@@ -964,9 +967,14 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.quarter_tiles = b.engine == 5;
+        b.adaptive_sweep = b.engine == 5;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
+    let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
+    if adaptive_sweep && engine != 5 {
+        return Err("the log's adaptive sweep switch requires engine 5".into());
+    }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
         return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
@@ -983,6 +991,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let mut b = find_box(name)?;
     b.engine = engine;
     b.quarter_tiles = logged_quarter_tiles(text)?;
+    b.adaptive_sweep = adaptive_sweep;
     Ok(b)
 }
 
@@ -1041,6 +1050,76 @@ pub fn root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(tube_box)]
+    fn adaptive_sweep_header_is_recorded_and_replays_and_rebuilds_exactly() {
+        let mut old_state = None;
+        for enabled in [false, true] {
+            let mut tubes = if enabled { box_for(None).unwrap() } else { Palette::tube_box() };
+            assert_eq!(tubes.adaptive_sweep, enabled);
+            assert_eq!(tubes.clone().adaptive_sweep, enabled);
+            assert_eq!(tubes.only(&["lead white"]).adaptive_sweep, enabled);
+            assert_eq!(tubes.with(Vec::new()).adaptive_sweep, enabled);
+            tubes.engine = 5;
+            let mut live = Session::with_box(240, tubes).unwrap();
+            live.run(CANVAS).unwrap();
+            live.run(r#"b = brush("flat", 40); b:load(pile{{"cobalt blue", 1}}, 0.9); b:stroke({{100, 300}, {850, 320}})"#).unwrap();
+            assert_eq!(live.canvas().unwrap().adaptive_sweep(), enabled);
+            let text = live.program("adaptive");
+            assert_eq!(text.contains("--@ adaptive-sweep\n"), enabled);
+            let mut replay = Session::replay_with(240, box_for(Some(&text)).unwrap()).unwrap();
+            for chunk in parse_program(&text) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(state(&live), state(&replay));
+            assert_eq!(text, replay.program("adaptive"));
+            let before = state(&live);
+            live.rebuild().unwrap();
+            assert_eq!(state(&live), before);
+            if enabled {
+                assert_ne!(old_state.as_ref().unwrap(), &before);
+            } else {
+                old_state = Some(before);
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_sweep_only_reads_the_log_header_and_requires_engine_5() {
+        let log = |text: &str| format!("--@ box {}\n{text}", Palette::fallback_box());
+        for text in [
+            "--@ engine 5\n--@ chunk 1\n--@ adaptive-sweep\n",
+            "--@ engine 5\n--@ adaptive-sweep-off\n--@ chunk 1\n",
+            "--@ engine 5\n--@ chunk 1\nprint('--@ adaptive-sweep')\n",
+        ] {
+            assert!(!box_for(Some(&log(text))).unwrap().adaptive_sweep);
+        }
+        assert!(box_for(Some(&log("--@ engine 5\n  --@ adaptive-sweep  \n--@ chunk 1\n"))).unwrap().adaptive_sweep);
+        for engine in [1, 4, 7] {
+            assert!(box_for(Some(&log(&format!("--@ engine {engine}\n--@ adaptive-sweep\n--@ chunk 1\n")))).is_err());
+        }
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn adaptive_sweep_ground_cache_keeps_selected_primer_and_flag() {
+        let path = std::env::temp_dir().join(format!("adaptive-ground-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        for enabled in [false, true, false] {
+            let mut tubes = Palette::tube_box();
+            tubes.adaptive_sweep = enabled;
+            let sty = Style::oil_with(tubes);
+            let c = sty.prepare_cached(64, 1.25, 7, &path, "adaptive-test");
+            assert_eq!(c.adaptive_sweep(), enabled);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let mut expected = Vec::new();
+            sty.prepare(64, 1.25, 7).write_state(&mut expected, "").unwrap();
+            assert_eq!(expected, bytes);
+        }
+        std::fs::remove_dir_all(path).unwrap();
+    }
 
     #[test]
     #[cfg(tube_box)]

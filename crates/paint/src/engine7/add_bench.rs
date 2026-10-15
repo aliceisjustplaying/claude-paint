@@ -76,6 +76,8 @@ impl Bufs {
             solv: std::ptr::null_mut(),
             laid: std::ptr::null_mut(),
             laid_id: std::ptr::null_mut(),
+            sweep_spacing: None,
+            adaptive_sweep: false,
             e7: false,
         }
     }

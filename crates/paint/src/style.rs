@@ -183,6 +183,7 @@ impl Style {
         use sha2::{Digest, Sha256};
         let mut c = c
             .with_engine(self.palette.engine)
+            .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         let cache = cache.filter(|_| self.ground.iter().any(|g| g.um > 0.0 && matches!(g.apply, Apply::Brush))).map(|(dir, build)| {
@@ -196,6 +197,9 @@ impl Style {
             key.update(seed.to_le_bytes());
             key.update(c.engine.to_le_bytes());
             key.update(c.engine.min(3).to_le_bytes());
+            if c.adaptive_sweep {
+                key.update(b"adaptive-sweep");
+            }
             for f in [c.f.scale, c.mm_per_unit, self.raw[0], self.raw[1], self.raw[2], self.linen.warp_per_cm, self.linen.weft_per_cm, self.linen.crown_um, self.linen.slubs] {
                 key.update(f.to_bits().to_le_bytes());
             }

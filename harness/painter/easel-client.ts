@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { readdirSync, realpathSync, renameSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -18,12 +18,22 @@ export interface Ran {
 }
 
 /** Tool budgets include opening, except advancing log rebuilds get a separate stall budget.
- * A chunk may run 10 minutes at 2400 px and 40 at 4800 (the easel's own limit, scaled with
- * the painting's pixels: session::chunk_limit_for); `do` waits a fifth longer than
- * the longest (the easel checks its limit between Lua instructions, and saves after);
- * a rebuild may go that long between two chunks replayed, and ten minutes more (the easel's own stall).
+ * A chunk may run 10 minutes (the easel's own limit).
  */
-export const WAIT_MS = { do: 48 * 60_000, other: 3 * 60_000, rebuild: 50 * 60_000 };
+export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_000 };
+/** A studio whose bin/width says 4800: a chunk may run 40 minutes there (the limit scales with the
+ * painting's pixels: session::chunk_limit_for), so `do` waits that and a fifth more, and a rebuild's
+ * stall is the easel's own (the limit and ten minutes). */
+export const WIDE_WAIT_MS = { do: 48 * 60_000, rebuild: 50 * 60_000 };
+
+/** Whether the studio paints at 4800 px (its bin/width, as the easel reads it). */
+export function wideStudio(studio: string): boolean {
+	try {
+		return readFileSync(join(studio, "bin", "width"), "utf8").trim() === "4800";
+	} catch {
+		return false;
+	}
+}
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
 export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
@@ -87,7 +97,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 			total = n;
 			if (!rebuilding || k > completed) {
 				completed = k;
-				progressDeadline = Date.now() + WAIT_MS.rebuild;
+				progressDeadline = Date.now() + (wideStudio(studio) ? WIDE_WAIT_MS.rebuild : WAIT_MS.rebuild);
 			}
 			rebuilding = true;
 			if (Date.now() >= progressDeadline) throw new Error("the easel rebuild stalled without progress");
@@ -105,7 +115,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
-	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
+	const wait = args[0] === "do" ? (wideStudio(studio) ? WIDE_WAIT_MS.do : WAIT_MS.do) : WAIT_MS.other;
 	let deadline = Date.now() + wait;
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
 	const r = await step(studio, args, input, signal, deadline);

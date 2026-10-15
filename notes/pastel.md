@@ -14,7 +14,8 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
 - **The engine** (`paint::pastel`): `Stick` (its section, length, worn
   facets, hardness, wear coefficient and dry color), `Canvas::stick_stroke`
   (a stroke along points, each with its force, pose and speed),
-  `Canvas::fix_pastel`, `Canvas::rub` (the finger) and `Canvas::feel`;
+  `Canvas::fix_pastel`, `Canvas::rub` (the finger), `Canvas::rub_area`
+  (the finger over an area) and `Canvas::feel`;
   `paint::sheet`, a paper mask (`Canvas::lay_sheet`, `lift_sheet`) and
   where a stick held up would touch (`Canvas::stick_contact`).
 - **The drawing it lays in.** Pastel shares the drawing pencils and chalk
@@ -48,6 +49,10 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
   to the lower right, at 80 mm/s.
 - `smudge(pts, {force=1, pad=, speed=40})`: a finger (or a stump, `pad`
   mm²) drawn along a path.
+- `smudge(mask, {force=, pad=, speed=, angle=30, passes=2,
+  pattern="circles"|"strokes"})`: a fingertip (or a stump) worked over an
+  area (below, "Area smudging"); `angle`, `passes` and `pattern` only with
+  a mask.
 - `fix(mask)` binds pastel as well as the drawing.
 - `feel(x, y)`: what a fingertip feels there, in words.
 - `lay_sheet(mask, {grammage=120, tone=})`, `lift_sheet()`: a sheet of
@@ -98,9 +103,11 @@ tagged measured, derived or estimated).
 - **Fixative**: loose becomes bound (a crust filed at half the rate of
   paper); the particles' scattering falls by the share the resin wets
   (Kubelka–Munk: K/S rises), the coverage floor is set.
-- **The finger** (`Canvas::rub`): a pad (135 mm² × F^0.4) picks up 20% of
-  the loose pastel under it per pass and lays 25% of what it carries, as
-  grains a third as thick (pressed in, they cover more).
+- **The finger** (`Canvas::rub`): a pad (135 mm² × F^0.4 up to 2 N, then
+  hardly growing, as F^0.14) picks up 22% of the loose pastel under it per
+  pass (a fingertip's skin less as it loads, to a third) and lays 40% of
+  what it carries, as grains a third as thick (pressed in, they cover
+  more). Sources: research/pastel_blending.md.
 - **Dry color** (`dry::dry_color`, `Palette::dry_color`): two-constant
   Kubelka–Munk from each tube's oil masstone (K/S) and oil scattering, the
   scattering raised to its dry value by the Mie ratio for the pigment's
@@ -112,7 +119,8 @@ tagged measured, derived or estimated).
 
 Estimates in use (no measurement of pastel itself exists): σp from 30 MPa
 (hard) to 2 MPa (very soft), K from 0.01 to 0.06, particle thickness 6 µm,
-crust roughness 3 µm, crust wear 0.5, the finger's 20%/25%, the felt's cells
+crust roughness 3 µm, crust wear 0.5, the finger's 40% lay-down and what
+skin holds, the felt's cells
 (0.8 mm, 20 µm), the resin wetting 15% of the particles. The research notes
 end with bench measurements that would replace them.
 
@@ -284,3 +292,76 @@ Learned while painting:
   micro-roughness (0.3–2 µm for lean paint, as the research gives), so
   pastel over a heavy essence lay-in fills its tooth in one light pass.
   Keep essence thin where pastel will go, or leave the paper bare.
+
+## Area smudging
+
+`smudge(mask, {...})` (`Canvas::rub_area`) is a painter working a finger or
+a stump over a passage. It is not a blur: it is `rub`'s pad driven along
+the paths a hand takes over the mask. The numbers, and which are measured,
+are in research/pastel_blending.md (§6); each is a named constant in
+`pastel.rs` citing its source.
+
+- **The finger** (`rub`, path and area alike). The contact is a fingertip's
+  135 mm² at 1 N growing as F^0.4 up to 2 N, then as 178·(F/2)^0.14 (Liu
+  2018 measured the leveling off; Tomlinson 2009 a plateau at 2–5.5 N);
+  a stump's is its `pad` mm². Per pass under the pad it picks up 22% of the
+  loose pastel (Amaral 2022, a skin-like pad sliding on a porous surface,
+  independent of force); a fingertip's skin picks up less as it loads, to a
+  third once it holds 0.45 mg/cm² (Rodes 2001; Ferguson 2009's soil on
+  skin, for pastel an estimate); it lays 40% of its load (0.3–0.5, an
+  estimate). This changed path smudges too: before, 20% and 25%, no
+  loading, and the contact growing as F^0.4 at any force.
+- **The tool decides the defaults**: a pad of at most 60 mm² is a stump.
+  A fingertip presses 0.6 N (tactile exploration: 0.49–0.64 N measured)
+  and works in loose circles 15 mm across at 2 turns a second (≈ 94 mm/s
+  round, inside the measured 30–100 mm/s) drifting along its lane at
+  10 mm/s (practitioners' "loose circular movements"; the numbers are
+  estimates). A stump presses 1 N and rubs straight strokes there and back along each lane
+  at 40 mm/s (estimates); in circles, 5 mm ones. `pattern=` overrides;
+  `speed=` is the speed along a stroke or round a circle (a fingertip's
+  straight strokes: 80 mm/s, measured exploration speed).
+- **Lanes** run across the mask's bounding box at `angle` (degrees: 0 to
+  the right, 90 down the canvas; 30 by default, an estimate), half the
+  width a lane sweeps apart (the full pad's, and in circles the circle's
+  diameter too: research §6.6, at least two contacts a traverse); circles
+  go lane after lane, back and forth, and run a radius past the box's ends;
+  strokes rub each lane there and back before the next (Orme 2017, Sousa &
+  Buchanan 1999), the hand time counting both legs. Two passes, the second
+  turned 90° (a stump rubbed one way, then across: Sousa & Buchanan 1999).
+- **Force follows the mask**: the pad presses `force` × the mask's value
+  under its center and is lifted where the mask is below a trace (0.04, as
+  `hatch{graded=}`) or the force below 0.05 N (`rub`'s floor). A
+  fingertip's lighter touch is a smaller pad on lanes spaced for the full
+  one, so with straight strokes a soft edge moves about 0.6 of what the
+  middle does. **In circles a soft-edged mask softens the blend only through
+  the contact's size, which changes little** (F^0.4): pick-up doesn't depend
+  on force (Amaral 2022), and the circles' contacts overlap, so the edge
+  moves nearly as much as the middle. With a stump (its pad fixed) only
+  where the finger lifts. For a blend that fades out, use
+  `pattern="strokes"` or a smaller mask.
+- **One finger**: the pad starts clean and carries what it picks up from
+  piece to piece and pass to pass; what it still holds at the end goes with
+  it (`Rubbed::carried_mm3`). Each placement is `rub`'s, a step of half the
+  pad's radius on (the radius at the force there).
+- **Hand time**: the time along each piece (a stroke at its speed; circles
+  at the drift), each piece's landing and lift (50 ms and 40 ms; `rub`
+  counts neither), between pieces of one lane the hand going on in the
+  air, and to the next lane a straight move at `speed`; the easel adds
+  0.5 s a call, as for a path. A 3 × 3 cm square takes a fingertip about
+  43 s (two passes in circles), a 4 mm² stump about 99 s, a fingertip in
+  strokes about 12 s.
+- **Contacts** (pad passages over a point, each weighted by the chord it
+  crosses, in the middle of a 3 × 3 cm square): a fingertip in circles
+  about 8.6 a traverse, 17 over two passes; a stump in strokes about 3.3 a
+  traverse (each point lies under two lanes, each rubbed there and back),
+  6.6 over two passes (a fingertip in strokes 3.2 and 6.4): all inside
+  research §6.7's 5–20.
+- **Bounded work**: at most 20 000 pieces, 10⁹ pixel visits under the pad
+  and 5 × 10⁷ mask samples planning the lanes; past that it refuses with a
+  plain message and does nothing. Not physics: the time a call may take.
+- Deterministic: no random numbers; the lanes are planned on the whole
+  canvas, so a crop render rubs the same.
+
+Not modeled (research §6): two fingers, the little finger, the palm's heel,
+tortillon, chamois; the ridge/valley split of pick-up; skin oil and
+moisture; a least load below which blending does nothing.

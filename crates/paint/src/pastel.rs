@@ -1,5 +1,5 @@
 //! Pastel as a stick. Sources: notes/research/pastel_stick_tribology.md,
-//! paper_surface.md, dry_pigment_optics.md.
+//! paper_surface.md, dry_pigment_optics.md, pastel_blending.md (the finger).
 //!
 //! - **The stick is a solid**: a round stick, a square one or a pencil's
 //!   sharpened core, cut by the facets it has worn. Held at an altitude
@@ -39,7 +39,10 @@
 //!   facet, and rolled or tilted it cuts a new, sharp-edged one.
 //! - **The finger** (`Canvas::rub`) picks up loose pastel and lays it down
 //!   along its path, pressing it into the pores (fine grains cover more
-//!   per volume); it doesn't move bound pastel.
+//!   per volume); it doesn't move bound pastel. Over an area
+//!   (`Canvas::rub_area`) it is driven along lanes that cover a mask, in
+//!   loose circles (a fingertip) or straight strokes (a stump), pressing
+//!   the force × the mask (sources: pastel_blending.md).
 //!
 //! Numbers marked as estimates in the research notes are the defaults here;
 //! none of them is a measurement of pastel itself (none was found).
@@ -723,25 +726,19 @@ impl Canvas {
     }
 
     /// A finger (or a stump) drawn along `path` (units) pressing `force` N:
-    /// its pad (a contact of about 135 mm² at 1 N, growing as F^0.4; a stump
-    /// of a few mm²: `pad_mm2`) picks up a share of the loose pastel it
-    /// passes over and lays a share of what it carries down again, as fine
-    /// grains pressed into the pores (they cover more for their volume).
-    /// Bound pastel stays. Returns the hand time (s).
+    /// its pad (a fingertip's contact, `finger_mm2`: 135 mm² at 1 N, growing
+    /// as F^0.4 up to 2 N and hardly at all past it; a stump of a few mm²:
+    /// `pad_mm2`) picks up a share of the loose pastel it passes over (less
+    /// as a fingertip's skin loads) and lays a share of what it carries down
+    /// again, as fine grains pressed into the pores (they cover more for
+    /// their volume). Bound pastel stays. Returns the hand time (s).
     pub fn rub(&mut self, path: &[(f32, f32)], force: f32, pad_mm2: Option<f32>, speed: f32) -> f32 {
         if path.len() < 2 {
             return 0.0;
         }
-        let f = self.f;
         let mmu = self.mm_per_unit;
-        let px = self.px_mm();
-        let area = pad_mm2.unwrap_or(135.0 * force.max(0.05).powf(0.4));
+        let area = pad_area(force, pad_mm2);
         let r_mm = (area / std::f32::consts::PI).sqrt();
-        // what the pad carries: volume (µm·mm²) and its mean color
-        let (mut load, mut col) = (0.0f32, [0.0f32; 3]);
-        // per pass under the pad: a share picked up, a share of the load laid
-        // (skin picks up 10–30 % a pass: estimates)
-        let (pick, lay) = (0.2f32, 0.25f32);
         let mut secs = 0.0;
         let mut last = (path[0].0 * mmu, path[0].1 * mmu);
         // (nothing drawn: nothing to move, only the hand's time along the path)
@@ -749,15 +746,10 @@ impl Canvas {
             let len: f32 = path.windows(2).map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt() * mmu).sum();
             return len / speed.max(1.0);
         }
-        let mut moved = false;
-        self.drawing_mut();
-        let film = std::mem::take(&mut self.film);
-        let mut pxs = std::mem::take(&mut self.px);
-        {
-            let wet: Vec<bool> = self.wet.vol.iter().map(|&v| v > 1e-5).collect();
-            // (the sheet, where it lies, keeps the finger off the picture)
-            let shv: Option<Vec<bool>> = self.sheet.as_ref().map(|s| s.over.clone());
-            let d = self.drawing_mut();
+        // (the pad starts clean, and what it still carries at the end goes
+        // with the finger)
+        let mut pad = Pad::new(area, pad_mm2.is_none());
+        self.rubbing(|r| {
             for w in path.windows(2) {
                 let (a, b) = ((w[0].0 * mmu, w[0].1 * mmu), (w[1].0 * mmu, w[1].1 * mmu));
                 let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
@@ -767,73 +759,158 @@ impl Canvas {
                     let c = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
                     secs += ((c.0 - last.0).powi(2) + (c.1 - last.1).powi(2)).sqrt() / speed.max(1.0);
                     last = c;
-                    let (x0, x1) = (((c.0 - r_mm) / px).floor().max(f.x0 as f32) as usize, (((c.0 + r_mm) / px).ceil() as usize).min(f.x0 + f.w));
-                    let (y0, y1) = (((c.1 - r_mm) / px).floor().max(f.y0 as f32) as usize, (((c.1 + r_mm) / px).ceil() as usize).min(f.y0 + f.h));
-                    let mut under = Vec::new();
-                    for y in y0..y1 {
-                        for x in x0..x1 {
-                            let (wx, wy) = ((x as f32 + 0.5) * px, (y as f32 + 0.5) * px);
-                            if (wx - c.0).powi(2) + (wy - c.1).powi(2) <= r_mm * r_mm {
-                                if !shv.as_ref().is_some_and(|s| s[(y - f.y0) * f.w + (x - f.x0)]) {
-                                    under.push((y - f.y0) * f.w + (x - f.x0));
-                                }
-                            }
-                        }
-                    }
-                    if under.is_empty() {
-                        continue;
-                    }
-                    let a_px = px * px;
-                    // pick up from the loose pastel under the pad: a step of half
-                    // its radius is a quarter of a pass over a point
-                    let share = 0.25;
-                    for &i in &under {
-                        let cell = &mut d.cells[i];
-                        if cell.loose <= 0.0 || wet[i] || film[i] > cell.film + 1e-4 {
-                            continue;
-                        }
-                        let take = cell.loose * pick * share;
-                        let total = load + take * a_px;
-                        for q in 0..3 {
-                            col[q] = (col[q] * load + cell.r[q] * take * a_px) / total.max(1e-9);
-                        }
-                        load = total;
-                        cell.loose -= take;
-                        moved |= take > 0.0;
-                    }
-                    // lay a share of the load over the pad, as fine grains
-                    let give = load * lay * share;
-                    if give <= 0.0 {
-                        continue;
-                    }
-                    let per = give / (under.len() as f32 * a_px);
-                    for &i in &under {
-                        let cell = &mut d.cells[i];
-                        if wet[i] {
-                            continue;
-                        }
-                        if cell.film < 0.0 || film[i] > cell.film + 1e-4 {
-                            *cell = Cell { film: film[i], ..Cell::default() };
-                        }
-                        // fine grains: a third of a stroke's particles' thickness
-                        let q = 1.0 - (-per / (PARTICLE_UM / 3.0)).exp();
-                        let under_px = uncover(pxs[i], cell.a, cell.r);
-                        let old = cell.a * (1.0 - q);
-                        let wsum = old + q;
-                        cell.r = [0, 1, 2].map(|k| ((old * cell.r[k] + q * col[k]) / wsum.max(1e-6)).clamp(0.0, 1.0));
-                        cell.a = (cell.a + (1.0 - cell.a) * q).min(0.995);
-                        cell.loose += per;
-                        pxs[i] = cover(under_px, cell.a, cell.r);
-                    }
-                    load -= give;
+                    r.press(&mut pad, c, r_mm);
                 }
             }
+        });
+        secs
+    }
+
+    /// A finger or a stump worked over an area (`m` above a trace): along
+    /// lanes across the mask at `angle_deg`, `SMUDGE_LANE` of the width a
+    /// lane sweeps apart (the full pad's, plus a circle's), either in loose
+    /// circles drifting along each lane, lane after lane back and forth (a
+    /// fingertip's default), or in straight strokes there and back along
+    /// each lane (a stump's: Orme 2017, Sousa & Buchanan 1999 [P]); each
+    /// further pass turned by `SMUDGE_CROSS_DEG`. The pad
+    /// presses the force × the mask's value under its center (a soft edge is
+    /// a lighter touch: with a fingertip, a smaller pad) and is lifted where
+    /// that falls below `SMUDGE_MIN_FORCE` or the mask ends; each piece the
+    /// finger is down for is `rub`'s pad, a step of half its radius on. One
+    /// finger does it all: what it picks up it carries on. Refused (nothing
+    /// done) when the mask is not this canvas's, a number is out of range,
+    /// or the work is too large. Defaults and their sources: the `SMUDGE_*`,
+    /// `FINGER_*` and `STUMP_*` constants (notes/research/pastel_blending.md).
+    pub fn rub_area(&mut self, m: &crate::Mask, o: AreaRub) -> Result<Rubbed, String> {
+        let whole = self.f.whole();
+        if m.f.w != whole.w || m.f.h != whole.h || m.data.len() != whole.w * whole.h {
+            return Err("smudge: the mask is not this canvas's".into());
+        }
+        if o.pad_mm2.is_some_and(|p| !(p.is_finite() && (0.5..=400.0).contains(&p))) {
+            return Err("smudge: pad is the contact in mm² (0.5 to 400)".into());
+        }
+        let stump = o.pad_mm2.is_some_and(|p| p <= STUMP_MAX_MM2);
+        let force = o.force.unwrap_or(if stump { STUMP_FORCE } else { FINGER_FORCE });
+        if !(force.is_finite() && (SMUDGE_MIN_FORCE..=10.0).contains(&force)) {
+            return Err(format!("smudge: force is newtons ({SMUDGE_MIN_FORCE} to 10)"));
+        }
+        let pattern = o.pattern.unwrap_or(if stump { Pattern::Strokes } else { Pattern::Circles });
+        let circle_mm = if stump { STUMP_CIRCLE_MM } else { FINGER_CIRCLE_MM };
+        let speed = o.speed.unwrap_or(match pattern {
+            Pattern::Circles => std::f32::consts::PI * circle_mm * SMUDGE_CIRCLE_HZ,
+            Pattern::Strokes if stump => STUMP_SPEED,
+            Pattern::Strokes => FINGER_SPEED,
+        });
+        if !(speed.is_finite() && speed > 0.0) {
+            return Err("smudge: speed is mm/s, a number above 0".into());
+        }
+        let angle_deg = o.angle_deg.unwrap_or(SMUDGE_ANGLE_DEG);
+        if !angle_deg.is_finite() || angle_deg.abs() > 360.0 {
+            return Err("smudge: angle is degrees (-360 to 360)".into());
+        }
+        let passes = o.passes.unwrap_or(SMUDGE_PASSES);
+        if !(1..=SMUDGE_MAX_PASSES).contains(&passes) {
+            return Err(format!("smudge: passes is a whole number, 1 to {SMUDGE_MAX_PASSES}"));
+        }
+        let mmu = self.mm_per_unit;
+        let px = self.px_mm();
+        let pi = std::f32::consts::PI;
+        let pad_mm2 = o.pad_mm2;
+        let full_area = pad_area(force, pad_mm2);
+        let r_full = (full_area / pi).sqrt();
+        let speed = speed.max(1.0);
+        // the lanes: straight strokes run at the hand's speed; circles drift
+        // along the lane at SMUDGE_DRIFT while the pad goes round at `speed`
+        let (radius, drift) = match pattern {
+            Pattern::Strokes => (0.0, speed),
+            Pattern::Circles => (0.5 * circle_mm, SMUDGE_DRIFT),
+        };
+        // a lane sweeps the pad's width, and in circles the circle's too
+        let plan = Plan { spacing: (2.0 * r_full + 2.0 * radius) * SMUDGE_LANE / mmu, angle_deg, passes, radius: radius / mmu, turns: if radius > 0.0 { speed / radius * mmu / drift } else { 0.0 } };
+        // the finger is down where the mask is above a trace and presses at
+        // least the least force a pad is modeled at
+        let down = |v: f32| v > SMUDGE_TRACE && force * v >= SMUDGE_MIN_FORCE;
+        let (lanes, pieces) = area_lanes(m, &plan, down)?;
+        // the work: pad placements (every half radius, the lightest touch's
+        // the closest) times the pixels under the full pad
+        let lightest = force * SMUDGE_TRACE.max(SMUDGE_MIN_FORCE / force);
+        let r_lo = (pad_area(lightest, pad_mm2) / pi).sqrt();
+        let len_mm: f32 = pieces.iter().map(|p| (p.s1 - p.s0) * lanes[p.lane].max_rate() * mmu).sum();
+        let visits = (len_mm / (0.5 * r_lo) + pieces.len() as f32) * (pi * r_full * r_full / (px * px)).max(1.0);
+        if pieces.len() > SMUDGE_MAX_STROKES || visits > SMUDGE_MAX_VISITS {
+            return Err(format!(
+                "smudge: too much to rub in one go ({} strokes over {:.0} mm); smudge a smaller mask, with fewer passes or a larger pad",
+                pieces.len(),
+                len_mm
+            ));
+        }
+        let at = |p: (f32, f32)| {
+            let f = force * m.sample(p.0, p.1);
+            (pad_area(f, pad_mm2) / pi).sqrt()
+        };
+        // the hand: each piece lands and lifts (`rub` counts only the
+        // sliding); between pieces of one lane the hand keeps its motion in
+        // the air, and to the next lane it moves straight at `speed`
+        let walk = |press: &mut dyn FnMut((f32, f32), f32)| -> f32 {
+            let mut secs = 0.0f32;
+            let mut prev: Option<&Piece> = None;
+            for p in &pieces {
+                let lane = &lanes[p.lane];
+                if let Some(q) = prev {
+                    secs += if q.lane == p.lane {
+                        (p.s0 - q.s1).abs() * mmu / drift
+                    } else {
+                        let (a, b) = (lanes[q.lane].at(q.s1), lane.at(p.s0));
+                        ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt() * mmu / speed
+                    };
+                }
+                prev = Some(p);
+                secs += LAND_S + LIFT_S;
+                let mut s = p.s0;
+                while s < p.s1 {
+                    // a step of half the pad's radius along the path
+                    let ds = 0.5 * at(lane.at(s)) / mmu / lane.rate(s);
+                    let ds = if ds >= p.s1 - s { p.s1 - s } else { ds };
+                    s = if ds >= p.s1 - s { p.s1 } else { s + ds };
+                    secs += ds * mmu / drift;
+                    let c = lane.at(s);
+                    press((c.0 * mmu, c.1 * mmu), at(c));
+                }
+            }
+            secs
+        };
+        if self.drawing.is_none() {
+            return Ok(Rubbed { secs: walk(&mut |_, _| {}), strokes: pieces.len(), carried_mm3: 0.0, pattern });
+        }
+        let mut pad = Pad::new(full_area, pad_mm2.is_none());
+        let secs = self.rubbing(|r| walk(&mut |c, r_mm| r.press(&mut pad, c, r_mm)));
+        Ok(Rubbed { secs, strokes: pieces.len(), carried_mm3: pad.load * 1e-3, pattern })
+    }
+
+    /// Run `go` with the drawing open for a finger: the pixels and films
+    /// taken out of the canvas while it works, and the layout marked a stick
+    /// drawing's if it moved any pastel.
+    fn rubbing<R>(&mut self, go: impl FnOnce(&mut Rubbing) -> R) -> R {
+        let f = self.f;
+        let px = self.px_mm();
+        self.drawing_mut();
+        let film = std::mem::take(&mut self.film);
+        let mut pxs = std::mem::take(&mut self.px);
+        let out;
+        {
+            let wet: Vec<bool> = self.wet.vol.iter().map(|&v| v > 1e-5).collect();
+            // (the sheet, where it lies, keeps the finger off the picture)
+            let shv: Option<Vec<bool>> = self.sheet.as_ref().map(|s| s.over.clone());
+            let d = self.drawing.as_deref_mut().expect("drawing_mut made it");
+            let mut r = Rubbing { d, f, px, wet: &wet, sheet: shv.as_deref(), film: &film, pxs: &mut pxs, moved: false };
+            out = go(&mut r);
             // (a stick drawing's layout once the finger has moved its pastel)
-            d.sticks |= moved;
+            let moved = r.moved;
+            r.d.sticks |= moved;
         }
         self.px = pxs;
         self.film = film;
-        secs
+        out
     }
 
     /// What a fingertip feels at canvas point (x, y): the surface (paper,
@@ -879,6 +956,401 @@ impl Canvas {
         }
         out
     }
+}
+
+// ---------------------------------------------------------------- the finger
+//
+// Sources: notes/research/pastel_blending.md (cited by its section; [M]
+// measured, [S] a standard's or vendor's parameter, [P] a practitioner's
+// or museum's statement, [E] an estimate) and pastel_stick_tribology.md §6.
+
+/// A fingertip's contact at 1 N, mm² (Dzidek et al. 2017: 124–151 [M];
+/// Liu et al. 2018 on paper 107 [M], within the spread between people,
+/// Tomlinson 2009 [M]: blending §2.1), growing with the force as
+/// F^`FINGER_EXP` (Liu 2018: 0.42 below 2 N; consensus 0.36–0.42 [M]).
+pub const FINGER_MM2: f32 = 135.0;
+pub const FINGER_EXP: f32 = 0.4;
+/// Past this force (N) the contact hardly grows: as F^`FINGER_EXP_HIGH`
+/// (Liu 2018: 0.14 at 3–24 N [M]; Tomlinson 2009: a plateau at 2.0–5.5 N
+/// [M]: blending §2.1), from the area at the knee (178 mm²), so the law is
+/// continuous; 223 mm² at 10 N.
+pub const FINGER_KNEE_N: f32 = 2.0;
+pub const FINGER_EXP_HIGH: f32 = 0.14;
+/// The least force the finger's pad is modeled at, N (`rub` floors the
+/// force here). An area smudge lifts the finger where its graded force
+/// falls below it.
+pub const SMUDGE_MIN_FORCE: f32 = 0.05;
+/// The share of the loose pastel under the pad picked up per pass: a soft,
+/// oily skin-like pad sliding over a porous surface took 22.2 ± 2.3 % of a
+/// dry residue a contact, with no dependence on force or dwell (Amaral et
+/// al. 2022 [M]: blending §3.1, §6.8).
+const PICK: f32 = 0.22;
+/// As a fingertip's skin loads, its pick-up falls to about a third
+/// (consecutive presses cut transfer about 3×: Rodes et al. 2001 [M],
+/// abstract only: blending §3.1).
+const PICK_LOADED: f32 = 1.0 / 3.0;
+/// What skin holds when loaded, as pastel µm over its contact: 0.45 mg/cm²
+/// (soil on skin 0.21–0.74 mg/cm², Ferguson et al. 2009 [M]; for pastel
+/// [E]) at 1250 kg/m³ (a crumb's, `sheet.rs`). A stump's paper: no data;
+/// it is not loaded this way.
+const SKIN_HOLDS_UM: f32 = 0.45e-2 / 1.25 * 1e3;
+/// The share of the pad's load laid down per pass (0.3–0.5 [E], from Sousa
+/// & Buchanan 1999's blender, which lays 0.5 and keeps part: blending §6.8).
+const LAY: f32 = 0.4;
+
+/// `smudge` along a path: its defaults, N and mm/s (estimates, kept as
+/// they were; an area takes the research's below).
+pub const SMUDGE_PATH_FORCE: f32 = 1.0;
+pub const SMUDGE_PATH_SPEED: f32 = 40.0;
+
+/// A pad of at most this (mm²) is a stump: rigid, its contact set by its
+/// shape (flank 10–60 mm², point 1–5 [E]: blending §2.5, §6.2).
+pub const STUMP_MAX_MM2: f32 = 60.0;
+/// The hand's force on a fingertip working an area, N: tactile exploration
+/// at 0.49–0.64 N (Smith et al. 2002 [M]), blending "light" (Orme 2017 [P]);
+/// 0.3–1 N [E] (blending §2.2, §6.3).
+pub const FINGER_FORCE: f32 = 0.6;
+/// A stump's, N: 0.5–2 [E], on pen forces of 0.8–3.2 N [M] (§2.2, §6.3).
+pub const STUMP_FORCE: f32 = 1.0;
+/// A fingertip's straight strokes, mm/s: free exploration at 77–86 mm/s
+/// (Smith et al. 2002 [M]; finger 30–100 [E]: §2.3, §6.4).
+pub const FINGER_SPEED: f32 = 80.0;
+/// A stump's, mm/s: 20–60 [E] (§6.4).
+pub const STUMP_SPEED: f32 = 40.0;
+/// Loose circles: a fingertip's 15 mm across (10–20 [E]), a stump's 5 mm
+/// (small circles for detail, 3–8 [E]), at 2 turns a second (1.5–3 [E]);
+/// "loose circular movements" for a first blend, "small circular
+/// movements" for detail (Orme 2017 [P]; Caran d'Ache [P]: §1.2, §6.5). A
+/// fingertip goes round at π × 15 × 2 ≈ 94 mm/s, inside the measured
+/// 30–100 mm/s.
+pub const FINGER_CIRCLE_MM: f32 = 15.0;
+pub const STUMP_CIRCLE_MM: f32 = 5.0;
+pub const SMUDGE_CIRCLE_HZ: f32 = 2.0;
+/// The circles drift along their lane at this, mm/s (5–20 [E]: §2.3, §6.5).
+pub const SMUDGE_DRIFT: f32 = 10.0;
+/// Lanes are this share of the width a lane sweeps apart (the full pad's
+/// width; in circles, plus the circle's diameter), so a point gets at least
+/// two contacts a traverse (≤ 0.5 [E]: §6.6).
+pub const SMUDGE_LANE: f32 = 0.5;
+/// Passes over the area (1–3 [E]; a stump rubbed one way then across,
+/// Sousa & Buchanan 1999 [P]: §1.2, §6.7).
+pub const SMUDGE_PASSES: u32 = 2;
+/// Each further pass is turned by this, degrees (the second at about 90°
+/// to the first: Sousa & Buchanan 1999 [P]; perpendicular at color
+/// junctions [P]: §6.7).
+pub const SMUDGE_CROSS_DEG: f32 = 90.0;
+/// The first pass's lanes run at this angle, degrees (0 to the right, 90
+/// down the canvas, as a stick's azimuth). No source: an estimate [E]
+/// (practitioners pull along the form: give `angle=`).
+pub const SMUDGE_ANGLE_DEG: f32 = 30.0;
+
+/// Where an area smudge's pad goes down: where the mask is above this (a
+/// trace, as graded hatching: `graphite::hatch_marks_graded`).
+pub const SMUDGE_TRACE: f32 = 0.04;
+/// Most passes an area smudge takes.
+pub const SMUDGE_MAX_PASSES: u32 = 8;
+/// The work an area smudge may do (not physics: a bound on time, as
+/// `Knife::check_path` bounds a path): pieces the finger is down for,
+/// pixels under the pad summed over its placements, and mask samples
+/// planning the lanes.
+pub const SMUDGE_MAX_STROKES: usize = 20_000;
+pub const SMUDGE_MAX_VISITS: f32 = 1.0e9;
+pub const SMUDGE_MAX_SAMPLES: f64 = 5.0e7;
+
+/// How a pad works an area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pattern {
+    /// Loose circles drifting along each lane (a fingertip's default).
+    Circles,
+    /// Straight strokes there and back along each lane (a stump's
+    /// default: rubbed back and forth, Orme 2017, Sousa & Buchanan 1999
+    /// [P]: blending §1.2).
+    Strokes,
+}
+
+/// An area smudge's settings: any left out take the defaults above (by
+/// the tool: a `pad_mm2` at most `STUMP_MAX_MM2` is a stump).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AreaRub {
+    pub force: Option<f32>,
+    pub pad_mm2: Option<f32>,
+    /// mm/s: along a stroke, or round a circle.
+    pub speed: Option<f32>,
+    pub angle_deg: Option<f32>,
+    pub passes: Option<u32>,
+    pub pattern: Option<Pattern>,
+}
+
+/// What an area smudge did.
+#[derive(Clone, Copy, Debug)]
+pub struct Rubbed {
+    /// Hand time, s.
+    pub secs: f32,
+    /// Pieces the finger was down for.
+    pub strokes: usize,
+    /// Pastel still on the finger at the end, mm³ (it goes with it).
+    pub carried_mm3: f32,
+    pub pattern: Pattern,
+}
+
+/// The pad's contact at `force` N, mm²: a fingertip's, or a stump's `pad`.
+fn pad_area(force: f32, pad: Option<f32>) -> f32 {
+    pad.unwrap_or_else(|| {
+        if force <= FINGER_KNEE_N {
+            FINGER_MM2 * force.max(SMUDGE_MIN_FORCE).powf(FINGER_EXP)
+        } else {
+            FINGER_MM2 * FINGER_KNEE_N.powf(FINGER_EXP) * (force / FINGER_KNEE_N).powf(FINGER_EXP_HIGH)
+        }
+    })
+}
+
+/// What a finger's pad carries: volume (µm·mm²) and its mean color, and
+/// what its skin holds when loaded (µm·mm²; 0 for a stump).
+#[derive(Clone, Copy, Default)]
+struct Pad {
+    load: f32,
+    col: [f32; 3],
+    holds: f32,
+}
+
+impl Pad {
+    /// A clean pad of `area` mm², skin (`skin`) or a stump's paper.
+    fn new(area: f32, skin: bool) -> Pad {
+        Pad { holds: if skin { SKIN_HOLDS_UM * area } else { 0.0 }, ..Pad::default() }
+    }
+}
+
+/// The drawing open for a finger (`Canvas::rubbing`).
+struct Rubbing<'a> {
+    d: &'a mut crate::graphite::Drawing,
+    f: crate::Frame,
+    px: f32,
+    wet: &'a [bool],
+    sheet: Option<&'a [bool]>,
+    film: &'a [f32],
+    pxs: &'a mut [Rgb],
+    moved: bool,
+}
+
+impl Rubbing<'_> {
+    /// The pad (radius `r_mm`) at `c` (mm), a step of half its radius on:
+    /// it picks up from the loose pastel under it (a skin pad less as it
+    /// loads) and lays a share of its load over it, as fine grains.
+    fn press(&mut self, pad: &mut Pad, c: (f32, f32), r_mm: f32) {
+        let (f, px) = (self.f, self.px);
+        let (x0, x1) = (((c.0 - r_mm) / px).floor().max(f.x0 as f32) as usize, (((c.0 + r_mm) / px).ceil() as usize).min(f.x0 + f.w));
+        let (y0, y1) = (((c.1 - r_mm) / px).floor().max(f.y0 as f32) as usize, (((c.1 + r_mm) / px).ceil() as usize).min(f.y0 + f.h));
+        let mut under = Vec::new();
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let (wx, wy) = ((x as f32 + 0.5) * px, (y as f32 + 0.5) * px);
+                if (wx - c.0).powi(2) + (wy - c.1).powi(2) <= r_mm * r_mm {
+                    if !self.sheet.is_some_and(|s| s[(y - f.y0) * f.w + (x - f.x0)]) {
+                        under.push((y - f.y0) * f.w + (x - f.x0));
+                    }
+                }
+            }
+        }
+        if under.is_empty() {
+            return;
+        }
+        let a_px = px * px;
+        // pick up from the loose pastel under the pad: a step of half
+        // its radius is a quarter of a pass over a point
+        let share = 0.25;
+        let pick = if pad.holds > 0.0 { PICK * (1.0 - (1.0 - PICK_LOADED) * (pad.load / pad.holds).min(1.0)) } else { PICK };
+        for &i in &under {
+            let cell = &mut self.d.cells[i];
+            if cell.loose <= 0.0 || self.wet[i] || self.film[i] > cell.film + 1e-4 {
+                continue;
+            }
+            let take = cell.loose * pick * share;
+            let total = pad.load + take * a_px;
+            for q in 0..3 {
+                pad.col[q] = (pad.col[q] * pad.load + cell.r[q] * take * a_px) / total.max(1e-9);
+            }
+            pad.load = total;
+            cell.loose -= take;
+            self.moved |= take > 0.0;
+        }
+        // lay a share of the load over the pad, as fine grains
+        let give = pad.load * LAY * share;
+        if give <= 0.0 {
+            return;
+        }
+        let per = give / (under.len() as f32 * a_px);
+        for &i in &under {
+            let cell = &mut self.d.cells[i];
+            if self.wet[i] {
+                continue;
+            }
+            if cell.film < 0.0 || self.film[i] > cell.film + 1e-4 {
+                *cell = Cell { film: self.film[i], ..Cell::default() };
+            }
+            // fine grains: a third of a stroke's particles' thickness
+            let q = 1.0 - (-per / (PARTICLE_UM / 3.0)).exp();
+            let under_px = uncover(self.pxs[i], cell.a, cell.r);
+            let old = cell.a * (1.0 - q);
+            let wsum = old + q;
+            cell.r = [0, 1, 2].map(|k| ((old * cell.r[k] + q * pad.col[k]) / wsum.max(1e-6)).clamp(0.0, 1.0));
+            cell.a = (cell.a + (1.0 - cell.a) * q).min(0.995);
+            cell.loose += per;
+            self.pxs[i] = cover(under_px, cell.a, cell.r);
+        }
+        pad.load -= give;
+    }
+}
+
+/// How the lanes of an area smudge are laid (units).
+struct Plan {
+    /// Between lanes.
+    spacing: f32,
+    angle_deg: f32,
+    passes: u32,
+    /// The circles' radius (0: straight strokes).
+    radius: f32,
+    /// The circles' turning, radians per unit the lane advances.
+    turns: f32,
+}
+
+/// One lane (units): the pad's center at `s` along it is `at(s)`, on a
+/// circle of `radius` turning `turns` radians per unit, or on the lane's
+/// line itself.
+struct Lane {
+    o: (f32, f32),
+    dir: (f32, f32),
+    nrm: (f32, f32),
+    radius: f32,
+    turns: f32,
+}
+
+impl Lane {
+    fn at(&self, s: f32) -> (f32, f32) {
+        let (c, n) = if self.radius > 0.0 {
+            let a = self.turns * s;
+            (s + self.radius * a.cos(), self.radius * a.sin())
+        } else {
+            (s, 0.0)
+        };
+        (self.o.0 + self.dir.0 * c + self.nrm.0 * n, self.o.1 + self.dir.1 * c + self.nrm.1 * n)
+    }
+    /// How fast the pad moves as the lane advances (units per unit).
+    fn rate(&self, s: f32) -> f32 {
+        if self.radius > 0.0 {
+            let (rk, a) = (self.radius * self.turns, self.turns * s);
+            ((1.0 - rk * a.sin()).powi(2) + (rk * a.cos()).powi(2)).sqrt().max(1e-3)
+        } else {
+            1.0
+        }
+    }
+    fn max_rate(&self) -> f32 {
+        1.0 + self.radius * self.turns
+    }
+}
+
+/// A piece of a lane the pad is down for, from `s0` to `s1`.
+struct Piece {
+    lane: usize,
+    s0: f32,
+    s1: f32,
+}
+
+/// The lanes of an area smudge over `m` (units, whole canvas) and the
+/// pieces of them the pad is down for: for each pass, lanes `spacing`
+/// apart at the pass's angle across the mask's bounding box (the first and
+/// last on its edges; circles run a radius past its ends), circles back
+/// and forth from lane to lane, strokes there and back along each lane,
+/// each cut where `down` stops holding for the mask's value under the
+/// pad's center (sampled every half pixel of the pad's path). Refused when
+/// the samples would be too many.
+fn area_lanes(m: &crate::Mask, p: &Plan, down: impl Fn(f32) -> bool) -> Result<(Vec<Lane>, Vec<Piece>), String> {
+    let f = m.f;
+    let (w, h) = (f.width(), f.height());
+    let half = 0.5 / f.scale;
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for (i, &v) in m.data.iter().enumerate() {
+        if v > SMUDGE_TRACE {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            x0 = x0.min(x - half);
+            y0 = y0.min(y - half);
+            x1 = x1.max(x + half);
+            y1 = y1.max(y + half);
+        }
+    }
+    let (mut lanes, mut pieces) = (Vec::new(), Vec::new());
+    if x0 > x1 {
+        return Ok((lanes, pieces));
+    }
+    let mut work = 0.0f64;
+    for k in 0..p.passes {
+        let th = (p.angle_deg + SMUDGE_CROSS_DEG * k as f32).to_radians();
+        let (ca, sa) = (th.cos(), th.sin());
+        let (mut u0, mut u1, mut v0, mut v1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+        for &(x, y) in &[(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            let (u, v) = (x * ca + y * sa, -x * sa + y * ca);
+            u0 = u0.min(u);
+            u1 = u1.max(u);
+            v0 = v0.min(v);
+            v1 = v1.max(v);
+        }
+        let (u0, u1) = (u0 - p.radius, u1 + p.radius);
+        let n = ((v1 - v0) / p.spacing.max(1e-3)).ceil().max(0.0) as usize + 1;
+        let len = u1 - u0;
+        let ds = half / (1.0 + p.radius * p.turns);
+        let samples = (len / ds).ceil() as usize + 1;
+        work += n as f64 * samples as f64;
+        if work > SMUDGE_MAX_SAMPLES {
+            return Err(format!("smudge: too much to rub in one go ({} lanes across the mask); smudge a smaller mask, with fewer passes or a larger pad", n * (k as usize + 1)));
+        }
+        let dv = if n > 1 { (v1 - v0) / (n - 1) as f32 } else { 0.0 };
+        let xy = |u: f32, v: f32| (u * ca - v * sa, u * sa + v * ca);
+        for li in 0..n {
+            let v = if n > 1 { v0 + dv * li as f32 } else { 0.5 * (v0 + v1) };
+            // circles: every other lane runs the other way; strokes: each
+            // lane is rubbed there and back, so the next starts where the
+            // last began
+            let there_and_back = p.radius <= 0.0;
+            let lane = if there_and_back || li % 2 == 0 {
+                Lane { o: xy(u0, v), dir: (ca, sa), nrm: (-sa, ca), radius: p.radius, turns: p.turns }
+            } else {
+                Lane { o: xy(u1, v), dir: (-ca, -sa), nrm: (sa, -ca), radius: p.radius, turns: p.turns }
+            };
+            let li = lanes.len();
+            let inside = |s: f32| {
+                let (x, y) = lane.at(s);
+                x >= 0.0 && y >= 0.0 && x < w && y < h && down(m.sample(x, y))
+            };
+            let mut run: Option<f32> = None;
+            for j in 0..=samples {
+                let s = (ds * j as f32).min(len);
+                let ins = j < samples && inside(s);
+                match (run, ins) {
+                    (None, true) => run = Some(s),
+                    (Some(a), false) => {
+                        let b = (s - ds).max(a);
+                        if b > a {
+                            pieces.push(Piece { lane: li, s0: a, s1: b });
+                        }
+                        run = None;
+                    }
+                    _ => {}
+                }
+            }
+            if there_and_back {
+                // the way back along the same line: the same pieces, from
+                // the far end
+                let back = Lane { o: lane.at(len), dir: (-lane.dir.0, -lane.dir.1), nrm: (-lane.nrm.0, -lane.nrm.1), radius: 0.0, turns: 0.0 };
+                let there: Vec<(f32, f32)> = pieces.iter().filter(|q| q.lane == li).map(|q| (q.s0, q.s1)).collect();
+                lanes.push(lane);
+                let bi = lanes.len();
+                pieces.extend(there.iter().rev().map(|&(s0, s1)| Piece { lane: bi, s0: len - s1, s1: len - s0 }));
+                lanes.push(back);
+            } else {
+                lanes.push(lane);
+            }
+        }
+    }
+    Ok((lanes, pieces))
 }
 
 /// A pigment's refractive index (mean of its principal indices), by tube
@@ -1116,5 +1588,192 @@ mod tests {
         assert!(fixed.drawing.as_ref().unwrap().cells.iter().zip(&fixed_before.cells).all(|(p, q)| p.bound == q.bound && p.loose == q.loose), "fixed pastel stays");
         let (on_erased, on_full) = (line(&mut c, &mut st.clone(), 500.0, 3.0, 55.0).volume_mm3, line(&mut kept, &mut st, 500.0, 3.0, 55.0).volume_mm3);
         assert!(on_erased > 1.2 * on_full, "an erased passage takes more: {on_erased} vs {on_full}");
+    }
+
+    // ------------------------------------------------ smudging an area
+
+    /// A small sheet (75 mm, 300 px: 0.25 mm a pixel) with two bands of
+    /// loose stick pastel touching at y = 400: red above, blue below, from
+    /// x = 150 to 850.
+    fn bands() -> Canvas {
+        let mut c = Canvas::new_window(300, 1.0, [0.55; 3], None).with_size_mm(75.0).with_paper(Paper::drawing(4));
+        let mut red = Stick::round([0.6, 0.04, 0.03], 0.8, 12.0);
+        let mut blue = Stick::round([0.03, 0.05, 0.6], 0.8, 12.0);
+        for k in 0..5 {
+            for (st, y) in [(&mut red, 305.0 + 20.0 * k as f32), (&mut blue, 405.0 + 20.0 * k as f32)] {
+                let pts = [StrokePoint { x: 150.0, y, pose: pose(3.0, 80.0), speed: 50.0 }, StrokePoint { x: 850.0, y, pose: pose(3.0, 80.0), speed: 50.0 }];
+                c.stick_stroke(st, &pts);
+            }
+        }
+        c
+    }
+
+    fn rect_mask(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> crate::Mask {
+        crate::Mask::from_fn(c.frame(), |x, y| if x >= x0 && x < x1 && y >= y0 && y < y1 { 1.0 } else { 0.0 })
+    }
+
+    /// The pastel in the tooth, loose and bound, µm·mm² (f64 sums).
+    fn tooth(c: &Canvas) -> (f64, f64) {
+        let a = (c.px_mm() * c.px_mm()) as f64;
+        let d = c.drawing.as_ref().unwrap();
+        (d.cells.iter().map(|c| c.loose as f64).sum::<f64>() * a, d.cells.iter().map(|c| c.bound as f64).sum::<f64>() * a)
+    }
+
+    /// An area smudge is the finger driven back and forth over the mask:
+    /// over two touching bands it carries each color into the other across
+    /// the boundary; pixels beyond the pad's reach from the mask are
+    /// untouched, bit for bit; the hand time is the walk's (the same on a
+    /// blank sheet), at least every stroke's landing and lift.
+    #[test]
+    fn an_area_smudge_carries_each_color_into_the_other_inside_the_mask() {
+        let mut c = bands();
+        let before = c.pixels().to_vec();
+        // the pastel's own color in the tooth near the boundary (the cells'
+        // flakes, weighted by what they cover: the paper and how much
+        // pastel lies there aside)
+        let hue = |c: &Canvas, y0: f32, y1: f32, g: fn(Rgb) -> f32| {
+            let f = c.window();
+            let d = c.drawing.as_ref().unwrap();
+            let (mut s, mut w) = (0.0f32, 0.0f32);
+            for (i, cell) in d.cells.iter().enumerate() {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                if (350.0..650.0).contains(&x) && (y0..y1).contains(&y) {
+                    s += cell.a * g(cell.r);
+                    w += cell.a;
+                }
+            }
+            s / w.max(1e-9)
+        };
+        let (blue, red): (fn(Rgb) -> f32, fn(Rgb) -> f32) = (|p| p[2] - p[0], |p| p[0] - p[2]);
+        // (inside each band, away from the boundary its crumbs already mix)
+        let (blue_in_red0, red_in_blue0) = (hue(&c, 320.0, 370.0, blue), hue(&c, 430.0, 480.0, red));
+        let m = rect_mask(&c, 300.0, 250.0, 700.0, 550.0);
+        let out = c.rub_area(&m, AreaRub::default()).unwrap();
+        assert_eq!(out.pattern, Pattern::Circles, "a fingertip works in circles");
+        let (blue_in_red1, red_in_blue1) = (hue(&c, 320.0, 370.0, blue), hue(&c, 430.0, 480.0, red));
+        assert!(blue_in_red1 > blue_in_red0 + 0.005, "blue carried into the red: {blue_in_red0} → {blue_in_red1}");
+        assert!(red_in_blue1 > red_in_blue0 + 0.005, "red carried into the blue: {red_in_blue0} → {red_in_blue1}");
+        // the pad's reach: its radius at the finger's force (5.9 mm at 0.6
+        // N, 79 units: its center stays on the mask) and a pixel
+        let reach = (pad_area(FINGER_FORCE, None) / std::f32::consts::PI).sqrt() / c.mm_per_unit + 2.0 / c.window().scale;
+        let f = c.window();
+        let (mut far, mut changed) = (0usize, 0usize);
+        for (i, (p, q)) in before.iter().zip(c.pixels()).enumerate() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            if x < 300.0 - reach || x > 700.0 + reach || y < 250.0 - reach || y > 550.0 + reach {
+                assert!(p == q, "touched beyond the pad's reach at ({x}, {y})");
+                far += 1;
+            } else if p != q {
+                changed += 1;
+            }
+        }
+        assert!(far > 10_000 && changed > 5_000, "{far} far, {changed} changed");
+        let blank = Canvas::new_window(300, 1.0, [0.55; 3], None).with_size_mm(75.0).with_paper(Paper::drawing(4)).rub_area(&m, AreaRub::default()).unwrap();
+        assert_eq!((blank.secs, blank.strokes), (out.secs, out.strokes), "the hand's walk doesn't depend on the pastel");
+        assert!(out.strokes >= 4 && out.secs > out.strokes as f32 * (LAND_S + LIFT_S), "{out:?}");
+    }
+
+    /// What the finger moves is conserved: the loose pastel in the tooth
+    /// before is what is in it after plus what the finger still carries
+    /// (carried from stroke to stroke, it leaves with the finger); bound
+    /// pastel is untouched.
+    #[test]
+    fn an_area_smudge_conserves_the_pastel_with_what_the_finger_carries() {
+        let mut c = bands();
+        let (l0, b0) = tooth(&c);
+        let m = rect_mask(&c, 300.0, 250.0, 700.0, 550.0);
+        let out = c.rub_area(&m, AreaRub { force: Some(2.0), ..AreaRub::default() }).unwrap();
+        let (l1, b1) = tooth(&c);
+        let carried = out.carried_mm3 as f64 * 1e3;
+        assert!(carried > 0.0 && l1 < l0, "the finger took some: {carried}");
+        assert!((l1 + carried - l0).abs() < 1e-4 * l0, "loose {l0} → {l1} + carried {carried}");
+        assert_eq!(b0, b1);
+        // a stump too
+        let (l0, _) = tooth(&c);
+        let out = c.rub_area(&m, AreaRub { pad_mm2: Some(4.0), angle_deg: Some(-20.0), passes: Some(1), ..AreaRub::default() }).unwrap();
+        assert_eq!(out.pattern, Pattern::Strokes, "a stump works in strokes");
+        let (l1, _) = tooth(&c);
+        let carried = out.carried_mm3 as f64 * 1e3;
+        assert!((l1 + carried - l0).abs() < 1e-4 * l0, "stump: loose {l0} → {l1} + carried {carried}");
+    }
+
+    /// Fixed pastel stays: over a fixed passage the finger finds nothing
+    /// loose, and nothing changes.
+    #[test]
+    fn an_area_smudge_leaves_fixed_pastel() {
+        let mut c = bands();
+        c.fix_pastel(None, 0.15);
+        let (px, cells) = (c.pixels().to_vec(), c.drawing.as_ref().unwrap().cells.iter().map(|c| (c.loose, c.bound, c.a)).collect::<Vec<_>>());
+        let out = c.rub_area(&rect_mask(&c, 300.0, 250.0, 700.0, 550.0), AreaRub { force: Some(3.0), ..AreaRub::default() }).unwrap();
+        assert!(out.carried_mm3 == 0.0 && out.strokes > 0);
+        assert!(c.pixels() == &px[..], "the pixels are as they were");
+        assert!(c.drawing.as_ref().unwrap().cells.iter().map(|c| (c.loose, c.bound, c.a)).collect::<Vec<_>>() == cells, "the tooth is as it was");
+    }
+
+    /// A soft-edged mask is a lighter touch at its edge: straight strokes
+    /// along the ramp (angle 90°, one pass) press the force × the mask's
+    /// value, a fingertip's pad shrinks with it while the lanes are spaced
+    /// for the full pad, and below the least force the finger lifts: at the
+    /// edge less loose pastel moves (is picked up or laid) than in the
+    /// middle. (In circles, whose many contacts overlap, the edge moves
+    /// nearly as much: pick-up hardly depends on force.)
+    #[test]
+    fn a_soft_edged_mask_moves_less_at_its_edge() {
+        let mut c = bands();
+        let before = c.drawing.as_ref().unwrap().cells.iter().map(|c| c.loose).collect::<Vec<_>>();
+        let m = crate::Mask::from_fn(c.frame(), |x, y| if (250.0..550.0).contains(&y) && x < 800.0 { ((x - 200.0) / 300.0).clamp(0.0, 1.0) } else { 0.0 });
+        let out = c.rub_area(&m, AreaRub { force: Some(1.0), angle_deg: Some(90.0), passes: Some(1), pattern: Some(Pattern::Strokes), ..AreaRub::default() }).unwrap();
+        assert!(out.strokes > 0);
+        let f = c.window();
+        let d = c.drawing.as_ref().unwrap();
+        let moved = |x0: f32, x1: f32| {
+            let (mut s, mut n) = (0.0f32, 0usize);
+            for (i, (p, q)) in before.iter().zip(&d.cells).enumerate() {
+                let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+                if x >= x0 && x < x1 && (320.0..480.0).contains(&y) {
+                    s += (q.loose - p).abs();
+                    n += 1;
+                }
+            }
+            s / n as f32
+        };
+        let (edge, middle) = (moved(230.0, 300.0), moved(600.0, 700.0));
+        assert!(middle > 0.0 && edge < 0.75 * middle, "edge (mask 0.1–0.33) {edge} µm, middle {middle} µm: {}", edge / middle);
+    }
+
+    /// Area smudges refuse what they can't do, plainly, and do nothing.
+    #[test]
+    fn an_area_smudge_refuses_bad_values() {
+        let mut c = bands();
+        let m = rect_mask(&c, 300.0, 250.0, 700.0, 550.0);
+        let px = c.pixels().to_vec();
+        let o = AreaRub::default();
+        for (r, want) in [
+            (c.clone().rub_area(&m, AreaRub { force: Some(f32::NAN), ..o }), "force"),
+            (c.clone().rub_area(&m, AreaRub { pad_mm2: Some(0.0), ..o }), "pad"),
+            (c.clone().rub_area(&m, AreaRub { speed: Some(0.0), ..o }), "speed"),
+            (c.clone().rub_area(&m, AreaRub { angle_deg: Some(f32::INFINITY), ..o }), "angle"),
+            (c.clone().rub_area(&m, AreaRub { passes: Some(0), ..o }), "passes"),
+            (c.clone().rub_area(&crate::Mask::full(crate::Frame::new(10, 10, 0.01)), o), "not this canvas's"),
+            // (a stump over the whole of a 2 m sheet, eight times)
+            (Canvas::new_window(300, 1.0, [0.55; 3], None).with_size_mm(2000.0).rub_area(&crate::Mask::full(c.frame()), AreaRub { pad_mm2: Some(0.5), passes: Some(8), ..o }), "too much"),
+        ] {
+            let e = r.unwrap_err();
+            assert!(e.contains(want), "{want}: {e}");
+        }
+        assert!(c.rub_area(&crate::Mask::empty(c.frame()), o).unwrap().strokes == 0);
+        assert!(c.pixels() == &px[..]);
+    }
+
+    /// A fingertip's contact: 135 mm² at 1 N growing as F^0.4 up to 2 N,
+    /// then hardly (F^0.14), with no step at the knee; a stump's is its own.
+    #[test]
+    fn the_finger_contact_levels_off_past_2_n() {
+        assert!((pad_area(1.0, None) - 135.0).abs() < 1e-3);
+        let knee = pad_area(2.0, None);
+        assert!((knee - 178.1).abs() < 0.1, "{knee}");
+        assert!((pad_area(2.0001, None) - knee).abs() < 0.01);
+        assert!((pad_area(10.0, None) - 223.1).abs() < 0.5, "{}", pad_area(10.0, None));
+        assert_eq!(pad_area(10.0, Some(4.0)), 4.0);
     }
 }

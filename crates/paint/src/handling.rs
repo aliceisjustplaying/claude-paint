@@ -446,8 +446,8 @@ impl Canvas {
     ///
     /// Strokes are planned up front, then grouped into passages (tiles), by
     /// default at least twice any stroke's reach on each axis. Engine 5 can
-    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`. The tiles are painted in
-    /// an order set by `Order` (2×2 checkerboard phases in shuffled order,
+    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`. The tiles
+    /// are painted in an order set by `Order` (2×2 checkerboard phases in shuffled order,
     /// or bands along a sweep), each with its own brush; tiles whose
     /// footprints don't overlap run in parallel (`sched::run_ordered`), with
     /// the same result as painting them one by one.

@@ -186,6 +186,27 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
+        let fine = tool.point > 0.0 && dep.is_none();
+        // the brush side of the plough, fixed for the contact
+        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
+        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
+        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
+        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
+        let off = if dep.is_some() {
+            rb + 1.0
+        } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
+            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
+        } else {
+            2.0 * hair
+        };
+        // the pixels its plough may reach on the whole canvas must fit the
+        // window (whatever a crop render holds of them, so a crop paints
+        // with the same kernel as the whole canvas)
+        let pad = off as usize + 3;
+        let (ex0, ey0, ex1, ey1) = (cx0.max(lim.0), cy0.max(lim.1), cx1.min(lim.2), cy1.min(lim.3));
+        if ex1 > ex0 && ey1 > ey0 && ((ex1 + pad).min(lim.2) - ex0.saturating_sub(pad).max(lim.0)) * ((ey1 + pad).min(lim.3) - ey0.saturating_sub(pad).max(lim.1)) > window::CAPACITY {
+            return None;
+        }
         let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
         let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
         if x1 <= x0 || y1 <= y0 {
@@ -220,7 +241,6 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         }
         let (mx, my) = if seg > 1e-4 { (dx / seg, dy / seg) } else { (0.0, 0.0) };
         let (nx, ny) = (-my, mx);
-        let fine = tool.point > 0.0 && dep.is_none();
         let liquid = if br.solvent > 0.0 { br.vol + br.solvent } else { br.vol };
         let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
         let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
@@ -230,29 +250,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
 
-        // the brush side of the plough, fixed for the contact
-        let ps = (br.hide[1] * (1.0 - br.hide[3]).powi(2)).clamp(0.0, 1.0);
-        let stiffen = ((ps - 0.4) / 0.6).clamp(0.0, 1.0);
-        let hair = if fine || dep.is_some() { rb } else { (tool.hair_radius() * s).min(rb) };
-        let push_k = tool.push * (seg / (2.0 * hair)).clamp(0.0, 1.0) * (hair / rb);
-        let off = if dep.is_some() {
-            rb + 1.0
-        } else if sf.clump && stiffen > 0.0 && !fine && br.rx.abs() > 0.7 {
-            (2.0 * tool.hair_radius() * s * (1.0 + 4.0 * stiffen * stiffen)).max(2.0 * hair).min(3.0)
-        } else {
-            2.0 * hair
-        };
         let spread = dep.is_none();
         // where ploughed paint may land: the crop window, the footprint, and
         // within reach of the capsule (a target is ≤ 0.875·off away, and a
         // bilinear share one pixel further)
         let (lx, ly) = (ox.max(lim.0), oy.max(lim.1));
         let (hx, hy) = (w.min(ox + sf.w).min(lim.2), h.min(oy + sf.h).min(lim.3));
-        let pad = off as usize + 3;
         let interior = (x0.saturating_sub(pad).max(lx), y0.saturating_sub(pad).max(ly), (x1 + pad).min(hx), (y1 + pad).min(hy));
-        if (interior.2 - interior.0) * (interior.3 - interior.1) > window::CAPACITY {
-            return None;
-        }
         win.begin((x0, y0, x1, y1), interior);
         let (lx, ly, hx, hy) = (interior.0 as isize, interior.1 as isize, interior.2 as isize, interior.3 as isize);
         // where a pixel's ploughed paint goes, on either side of the path:
@@ -625,15 +629,19 @@ mod tests {
     }
 
     /// A stationary dab whose capsule fits the window but whose plough
-    /// interior doesn't runs engine 5's exchange and leaves the window alone.
+    /// interior doesn't runs engine 5's exchange and leaves the window alone,
+    /// also in a crop render that holds only a window's worth of it.
     #[test]
     fn a_contact_whose_plough_overflows_the_window_falls_back() {
-        let run = |e7: bool| {
+        let run = |e7: bool, crop: bool| {
             let mut c = canvas(7);
             film(&mut c, (150.0, 150.0, 350.0, 350.0), Paint::body(hex("#3050a0")), 2.0);
             let mut held = Held::new(Tool::hog_flat(20.0), 1).with_engine(7);
             held.load(Paint::body(hex("#803020")), 1.0);
-            let (full, tool, sf, lim) = (held.full(), held.tool.clone(), c.surf(), (0, 0, c.f.w, c.f.h));
+            let (full, tool, mut sf, lim) = (held.full(), held.tool.clone(), c.surf(), (0, 0, c.f.w, c.f.h));
+            if crop {
+                (sf.ox, sf.oy, sf.w, sf.h) = (84, 84, 32, 32);
+            }
             let (mut wts, mut bounds) = (Vec::new(), None);
             let b = &mut held.bristles[0];
             let args = ((100.0, 100.0), (100.0, 100.0), 12.0, 0.8, full, Some(0.5), 1.0);
@@ -649,10 +657,11 @@ mod tests {
             let bits: Vec<u32> = c.wet.vol.iter().chain(c.wet.lat.iter().flatten()).map(|v| v.to_bits()).chain([b.vol.to_bits()]).collect();
             (contacts, bits, bounds)
         };
-        let (old, new) = (run(false), run(true));
+        let (old, new) = (run(false, false), run(true, false));
         assert!(old.2.is_some(), "the dab touched nothing");
         assert_eq!(new.0, 0, "engine 7 used its window");
         assert_eq!(new.1, old.1);
+        assert_eq!(run(true, true).0, 0, "engine 7 used its window in a crop");
     }
 
     /// How far apart two paintings' wet films are: the paint moved between

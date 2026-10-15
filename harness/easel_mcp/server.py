@@ -150,6 +150,13 @@ def image_limits():
 
 
 class Easel:
+    def wide(self):
+        """Whether the studio paints at 4800 px (its bin/width, as the easel reads it)."""
+        try:
+            return (self.studio / "bin/width").read_text().strip() == "4800"
+        except OSError:
+            return False
+
     def __init__(self, studio):
         self.studio = studio.resolve(strict=True)
         self.lock = asyncio.Lock()
@@ -206,8 +213,8 @@ class Easel:
                 total = n
                 if not rebuilding or k > completed:
                     completed = k
-                    # a chunk may take 40 minutes to replay at 4800 px: the easel's own stall is 50
-                    progress_deadline = time.monotonic() + 50 * 60
+                    # a chunk may take 40 minutes to replay at 4800 px: the easel's own stall is 50 there
+                    progress_deadline = time.monotonic() + (50 if self.wide() else 30) * 60
                 rebuilding = True
                 if time.monotonic() >= progress_deadline:
                     raise ValueError("the easel rebuild stalled without progress")
@@ -222,8 +229,9 @@ class Easel:
             args = ["open"]
 
     async def at(self, args, text=None):
-        # a chunk may run 10 minutes at 2400 px and 40 at 4800 (session::chunk_limit_for); a fifth more
-        wait = 48 * 60 if args[0] == "do" else 3 * 60
+        # a chunk may run 10 minutes, 40 in a studio whose bin/width says 4800
+        # (session::chunk_limit_for): a fifth more there; a watercolor studio has no width file
+        wait = (48 if self.wide() else 12) * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
         if await self.ensure_open(deadline):
             deadline = time.monotonic() + wait

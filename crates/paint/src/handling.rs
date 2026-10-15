@@ -972,7 +972,11 @@ impl Canvas {
 fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
     // footprints in whole-canvas pixels (a crop render plans the same tiles)
     let f = cv.f;
-    let rect = footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
+    let rect = if crate::engine7::active(cv.engine) {
+        crate::engine7::Footprint::planned(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
+    } else {
+        footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
+    };
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));

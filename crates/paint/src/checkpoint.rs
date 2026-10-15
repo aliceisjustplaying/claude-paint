@@ -462,7 +462,7 @@ impl Canvas {
             1
         } else {
             match get_u64(r)? {
-                v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+                v if u32::try_from(v).is_ok_and(crate::supported_engine) => v as u32,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };

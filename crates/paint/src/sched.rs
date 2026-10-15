@@ -28,13 +28,26 @@ struct Ctx<'a, T, W> {
     pending: Vec<AtomicUsize>,
     out: Vec<Mutex<Option<T>>>,
     work: &'a W,
+    profile: bool,
+    active: AtomicUsize,
+    peak: AtomicUsize,
+    work_ns: std::sync::atomic::AtomicU64,
 }
 
 fn run<'a, 's, T: Send, W: Fn(usize) -> T + Sync>(c: &'a Ctx<'a, T, W>, s: &Scope<'s>, k: usize)
 where
     'a: 's,
 {
+    let start = c.profile.then(std::time::Instant::now);
+    if c.profile {
+        let active = c.active.fetch_add(1, Ordering::Relaxed) + 1;
+        c.peak.fetch_max(active, Ordering::Relaxed);
+    }
     let v = (c.work)(c.order[k]);
+    if let Some(start) = start {
+        c.work_ns.fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        c.active.fetch_sub(1, Ordering::Relaxed);
+    }
     *c.out[k].lock().unwrap() = Some(v);
     for &j in &c.succ[k] {
         // the last predecessor to finish starts it (AcqRel: j sees every
@@ -49,6 +62,8 @@ where
 /// where `rects[i]` bounds every pixel `work(i)` touches. Returns the
 /// results in `order`'s order.
 pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], rects: &[Option<Rect>], work: W) -> Vec<T> {
+    let start = std::time::Instant::now();
+    let profile = std::env::var_os("RENDER_SCHED_PROFILE").is_some();
     let n = order.len();
     let overlaps = |a: Rect, b: Rect| a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3;
     let r: Vec<Rect> = order.iter().map(|&i| rects[i].expect("tile without footprint")).collect();
@@ -79,14 +94,23 @@ pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], re
         pending: count.iter().map(|&c| AtomicUsize::new(c)).collect(),
         out: (0..n).map(|_| Mutex::new(None)).collect(),
         work: &work,
+        profile,
+        active: AtomicUsize::new(0),
+        peak: AtomicUsize::new(0),
+        work_ns: std::sync::atomic::AtomicU64::new(0),
     };
     let ready: Vec<usize> = (0..n).filter(|&k| count[k] == 0).collect();
+    let initial_ready = ready.len();
+    let prepare = start.elapsed().as_secs_f64();
     rayon::scope(|s| {
         for k in ready {
             let c = &ctx;
             s.spawn(move |s| run(c, s, k));
         }
     });
+    if profile {
+        eprintln!("PROFILE_SCHED,{n},{},{initial_ready},{},{:.6},{prepare:.6},{:.6}", count.iter().sum::<usize>(), ctx.peak.load(Ordering::Relaxed), ctx.work_ns.load(Ordering::Relaxed) as f64 / 1e9, start.elapsed().as_secs_f64());
+    }
     ctx.out.into_iter().map(|m| m.into_inner().unwrap().expect("tile never ran (dependency cycle?)")).collect()
 }
 

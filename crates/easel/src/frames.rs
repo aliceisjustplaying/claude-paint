@@ -142,20 +142,27 @@ impl Recorder {
     }
 
     fn try_write(&mut self, c: &Canvas, ticks: usize, kind: Kind) -> Result<(), String> {
+        let start = std::time::Instant::now();
         let f = c.window();
         let px = match self.light {
             Some((az, el)) => c.seen_lit(az, el, 1.0),
             None => c.seen(),
         };
+        let shaded = start.elapsed().as_secs_f64();
         let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+        let converted = start.elapsed().as_secs_f64();
         let img = image::RgbImage::from_raw(f.w as u32, f.h as u32, buf).ok_or("frame: bad buffer")?;
         let w = self.width.min(f.w as u32);
         let h = ((f.h as f64 * w as f64 / f.w as f64).round() as u32).max(1);
         let small = if w == f.w as u32 { img } else { image::imageops::thumbnail(&img, w, h) };
+        let resized = start.elapsed().as_secs_f64();
         self.written += 1;
         let name = format!("{:05}.png", self.written);
         let p = self.dir.join(&name);
         small.save(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        if std::env::var_os("RENDER_PROFILE").is_some() {
+            eprintln!("PROFILE_FRAME,{},{},{shaded:.6},{:.6},{:.6},{:.6}", self.written, self.hand, converted - shaded, resized - converted, start.elapsed().as_secs_f64() - resized);
+        }
         let kind = match kind {
             Kind::Tick => "tick",
             Kind::Chunk => "chunk",

@@ -30,6 +30,8 @@ mod form;
 #[cfg(feature = "replay")]
 mod frames;
 #[cfg(feature = "replay")]
+mod render_speed;
+#[cfg(feature = "replay")]
 mod legacy;
 mod look;
 mod save;
@@ -147,6 +149,8 @@ fn main() -> ExitCode {
         "serve" => serve(&rest),
         #[cfg(feature = "replay")]
         "run" => run(&rest),
+        #[cfg(feature = "replay")]
+        "render-speed" => render_speed::run(&rest),
         #[cfg(feature = "replay")]
         "render-checkpoint" => render_checkpoint(&rest),
         #[cfg(all(feature = "replay", feature = "state-store"))]
@@ -1767,6 +1771,9 @@ fn run(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
     let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
+    if std::env::var_os("RENDER_LIVE").is_some() {
+        s.set_replaying(false);
+    }
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();
@@ -1776,6 +1783,11 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if std::env::var("RENDER_CHECKPOINT_CHUNK").ok().and_then(|s| s.parse::<usize>().ok()) == Some(i + 1) {
+            if let Ok(path) = std::env::var("RENDER_CHECKPOINT_PATH") {
+                save::write(&s, &s.program(&stem), Path::new(&path))?;
+            }
+        }
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }

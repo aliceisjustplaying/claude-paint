@@ -551,15 +551,19 @@ impl Canvas {
     /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
         use rayon::prelude::*;
+        let profile = std::env::var_os("RENDER_PROFILE").is_some();
+        let start = std::time::Instant::now();
         // the room's light that fills the shadows: little where one low lamp
         // rakes across the picture in a dim room, much under a gallery's high
         // light, where walls and ceiling light the picture too
         let ambient = crate::lerp(0.3, 0.55, crate::smoothstep(10.0, 55.0, elevation));
         let base = self.seen();
+        let color_done = start.elapsed().as_secs_f64();
         let (w, h) = (self.f.w, self.f.h);
         let um_px = self.px_mm() * 1000.0;
         // the surface: dry height plus the wet film where paint is wet
         let surf = self.wet_surface();
+        let surface_done = start.elapsed().as_secs_f64();
         let (az, el) = (azimuth.to_radians(), elevation.clamp(3.0, 89.0).to_radians());
         // toward the light, in pixel axes (y runs down: light from the top is -y)
         let (lx, ly, lz) = (el.cos() * az.cos(), -el.cos() * az.sin(), el.sin());
@@ -585,7 +589,8 @@ impl Canvas {
             let hm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
             [v[0] / hm, v[1] / hm, v[2] / hm]
         };
-        (0..w * h)
+        let prepare_done = start.elapsed().as_secs_f64();
+        let result = (0..w * h)
             .into_par_iter()
             .map(|i| {
                 let (x, y) = ((i % w) as isize, (i / w) as isize);
@@ -625,7 +630,11 @@ impl Canvas {
                 let p = base[i];
                 [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
             })
-            .collect()
+            .collect();
+        if profile {
+            eprintln!("PROFILE_LIGHT,{w},{h},{azimuth},{elevation},{color_done:.6},{:.6},{:.6},{:.6},{steps}", surface_done - color_done, prepare_done - surface_done, start.elapsed().as_secs_f64() - prepare_done);
+        }
+        result
     }
 
     /// Save as an 8-bit sRGB PNG with triangular dither (prevents banding in

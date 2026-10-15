@@ -285,6 +285,9 @@ impl Canvas {
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
+        if std::env::var_os("RENDER_DRY_FAST").is_some() && self.engine >= 4 && wet.par_iter().all(|&v| v <= 0.0) {
+            return self.height.clone();
+        }
         if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }

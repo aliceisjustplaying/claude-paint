@@ -22,11 +22,11 @@ spec.loader.exec_module(merger)
 class TimeoutScaleTests(unittest.TestCase):
     def test_defaults(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(sys, "platform", "linux"):
-            for cpus, expected in ((1, 16), (4, 4), (8, 2), (16, 1), (32, 1)):
+            for cpus, expected in ((1, 16), (2, 8), (4, 4), (8, 4), (16, 4), (32, 4)):
                 with self.subTest(cpus=cpus), patch.object(os, "sched_getaffinity", return_value=set(range(cpus)), create=True):
                     self.assertEqual(safeguards.timeout_scale(), expected)
             with patch.object(os, "sched_getaffinity", side_effect=OSError, create=True), patch.object(os, "cpu_count", return_value=8):
-                self.assertEqual(safeguards.timeout_scale(), 2)
+                self.assertEqual(safeguards.timeout_scale(), 4)
             with patch.object(os, "sched_getaffinity", side_effect=AttributeError, create=True), patch.object(os, "cpu_count", return_value=None):
                 self.assertEqual(safeguards.timeout_scale(), 16)
         with patch.dict(os.environ, {}, clear=True), patch.object(sys, "platform", "darwin"):

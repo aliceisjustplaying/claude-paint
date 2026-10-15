@@ -198,7 +198,10 @@ impl Canvas {
             TileOrder::Default(_) | TileOrder::Quarter(_) if slice.is_some() => sweep_down(grid),
             TileOrder::Asked(o) | TileOrder::Default(o) | TileOrder::Quarter(o) => o,
         };
-        let batches = batches(&order, &secs, slice);
+        let batches = match (slice, self.hand_slice_secs()) {
+            (Some(limit), Some(base)) if limit > base => bounded_batches(&order, &secs, limit),
+            _ => batches(&order, &secs, slice),
+        };
         let n_batches = batches.len();
         let mut offsets = vec![0u32; ids.len()];
         for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
@@ -250,6 +253,20 @@ fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>
     for &t in order {
         let last = out.last_mut().unwrap();
         if last.1 >= slice {
+            out.push((vec![t], secs[t]));
+        } else {
+            last.0.push(t);
+            last.1 += secs[t];
+        }
+    }
+    out
+}
+
+fn bounded_batches(order: &[usize], secs: &[f64], limit: f64) -> Vec<(Vec<usize>, f64)> {
+    let mut out: Vec<(Vec<usize>, f64)> = vec![(Vec::new(), 0.0)];
+    for &t in order {
+        let last = out.last_mut().unwrap();
+        if !last.0.is_empty() && last.1 + secs[t] > limit {
             out.push((vec![t], secs[t]));
         } else {
             last.0.push(t);
@@ -336,6 +353,17 @@ mod tests {
             assert_eq!(visible.iter().map(|&(t, _)| t).collect::<Vec<_>>(), vec![2, 1]);
             assert_eq!(cropped, visible);
         }
+    }
+
+    #[test]
+    fn bounded_batches_keep_every_tile_and_second_without_overshooting() {
+        let secs = [30.0, 50.0, 0.0, 70.0, 10.0, 90.0];
+        let order = [5, 0, 1, 2, 3, 4];
+        let b = bounded_batches(&order, &secs, 100.0);
+        assert_eq!(b, vec![(vec![5], 90.0), (vec![0, 1, 2], 80.0), (vec![3, 4], 80.0)]);
+        assert_eq!(b.iter().map(|(_, s)| s).sum::<f64>(), 250.0);
+        assert_eq!(b.iter().flat_map(|(o, _)| o).copied().collect::<Vec<_>>(), order);
+        assert!(b.iter().all(|(_, s)| *s <= 100.0));
     }
 
     #[test]

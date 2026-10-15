@@ -541,6 +541,20 @@ mod tests {
         Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
     }
 
+    #[test]
+    fn adaptive_sweep_checkpoints_remain_readable_after_changing_engines() {
+        for engine in [1, 2, 3, 4, 5, 7] {
+            let c = Canvas::new_window(16, 1.0, [0.5; 3], None).with_adaptive_sweep(true).with_quarter_tiles(true).with_engine(engine);
+            assert_eq!(c.adaptive_sweep(), engine == 5);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let restored = load(bytes).unwrap();
+            assert_eq!(restored.engine(), engine);
+            assert_eq!(restored.adaptive_sweep(), engine == 5);
+            assert_eq!(restored.quarter_tiles(), engine == 5);
+        }
+    }
+
     fn rejected(b: Vec<u8>, what: &str) {
         match load(b) {
             Ok(_) => panic!("{what}: accepted"),

@@ -295,6 +295,7 @@ impl Canvas {
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
         self.quarter_tiles &= v == 5;
+        self.adaptive_sweep &= v == 5;
         self
     }
     pub fn engine(&self) -> u32 {

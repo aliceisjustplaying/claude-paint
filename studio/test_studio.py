@@ -502,7 +502,7 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
         ("ps", "-wwAo", "args="): "\n".join([
             f"/bin/uv run --no-project --script /Users/x/src/a/{agy}/bin/mcp/server.py --studio /Users/x/src/a/{agy}"
             " --sittings --agy --break-seconds 0 --sessions-root /Users/x/.pi/agent/sessions",
-            f"/env/bin/python /Users/x/src/a/{done}/bin/mcp/server.py --studio /Users/x/src/a/{done} --sittings --agy",
+            f"/env/bin/python /Users/x/Art Work/{done}/bin/mcp/server.py --studio /Users/x/Art Work/{done} --sittings --agy",
             "/env/bin/python /Users/x/work/watch.py --studio /Users/x/src/a/paint-studio-aaa111 --agy-dir /Users/x/.gemini",
             "/env/bin/python /Users/x/src/a/paint-studio-bbb222/bin/mcp/server.py --studio /Users/x/src/a/paint-studio-bbb222",
             "agy --agent easel-painter", ""]),

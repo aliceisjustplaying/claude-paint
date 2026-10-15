@@ -343,7 +343,7 @@ impl Canvas {
         if owed > 0.0 {
             self.hand_pass(owed);
         }
-        if self.engine == 5 && self.hand_slice.is_some() && std::env::var("PAINT_SMALL_TILES").is_ok_and(|v| matches!(v.as_str(), "1" | "quarter")) {
+        if self.hand_slice.is_some() && matches!(self.work_tile_mode().as_deref(), Some("1" | "quarter")) {
             self.tally.clocked = self.tally.secs;
         }
         owed / 60.0

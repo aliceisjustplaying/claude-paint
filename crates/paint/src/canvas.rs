@@ -233,6 +233,7 @@ pub struct Canvas {
     pub(crate) hand_slice: Option<f32>,
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
+    pub(crate) quarter_tiles: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -282,6 +283,7 @@ impl Canvas {
             tally: crate::tally::Tally::default(),
             hand_slice: None,
             engine: crate::ENGINE,
+            quarter_tiles: false,
             soak: None,
         }
     }
@@ -290,10 +292,27 @@ impl Canvas {
     /// paints as the version its painting was painted with.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
+        self.quarter_tiles &= v == 5;
         self
     }
     pub fn engine(&self) -> u32 {
         self.engine
+    }
+
+    pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {
+        self.quarter_tiles = enabled && self.engine == 5;
+        self
+    }
+
+    pub fn quarter_tiles(&self) -> bool {
+        self.quarter_tiles
+    }
+
+    pub(crate) fn work_tile_mode(&self) -> Option<String> {
+        if self.engine != 5 {
+            return None;
+        }
+        std::env::var("PAINT_SMALL_TILES").ok().or_else(|| self.quarter_tiles.then(|| "quarter".to_string()))
     }
 
     /// Physical width of the painting in mm (default 700).

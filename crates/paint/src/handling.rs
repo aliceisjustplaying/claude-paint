@@ -853,7 +853,7 @@ impl Canvas {
         let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
         let (mut tile_x, mut tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
         let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
-        let small_tiles = if self.engine == 5 { std::env::var("PAINT_SMALL_TILES").ok() } else { None };
+        let small_tiles = self.work_tile_mode();
         let mut quarter_tiles = false;
         if matches!(small_tiles.as_deref(), Some("1" | "quarter")) && plans.iter().all(|(_, _, _, p)| p.id.is_none()) {
             let mut counts = vec![0usize; tw * th];

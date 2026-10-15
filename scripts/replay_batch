@@ -94,21 +94,26 @@ def run(jobs, args):
             if pending and len(running) < args.jobs:
                 job = pending[0]
                 if sum(j["slots"] for j in running) + job["slots"] <= args.cpu_budget:
-                    job["out"].parent.mkdir(parents=True, exist_ok=True)
+                    pending.pop(0)
                     command = [str(clip), str(job["log"]), str(job["out"]), "--fps", str(args.fps),
                                "--light", args.light, "--encoder-threads", str(job["encoder"])]
                     if args.easel:
                         command.extend(["--easel", args.easel])
-                    job["stream"] = Path(f"{job['out']}.batch.log").open("x")
+                    stream = None
                     try:
-                        job["process"] = subprocess.Popen(command, stdout=job["stream"], stderr=subprocess.STDOUT,
+                        job["out"].parent.mkdir(parents=True, exist_ok=True)
+                        stream = Path(f"{job['out']}.batch.log").open("x")
+                        job["process"] = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT,
                                                           env={**os.environ, "RAYON_NUM_THREADS": str(job["workers"])},
                                                           start_new_session=True)
-                    except BaseException:
-                        job["stream"].close()
-                        raise
+                    except OSError as error:
+                        if stream is not None:
+                            stream.close()
+                        failed = True
+                        print(f"job {job['index']}: failed to start: {error}", file=sys.stderr, flush=True)
+                        continue
+                    job["stream"] = stream
                     job["start"] = time.monotonic()
-                    pending.pop(0)
                     running.append(job)
                     print(f"job {job['index']}: started, {job['workers']} render workers, {job['encoder']} encoder workers", flush=True)
                     continue

@@ -114,6 +114,19 @@ sys.exit(1 if log.read_text() == "fail" else 0)
         self.assertEqual([json.loads(line)[0] for line in self.events.read_text().splitlines()],
                          ["start", "end", "start", "end"])
 
+    def test_startup_error_does_not_cancel_other_jobs(self):
+        manifest, rows = self.manifest()
+        (self.root / "blocked").write_text("not a directory")
+        rows[1]["out"] = "blocked/clip.mp4"
+        manifest.write_text(json.dumps(rows))
+        result = self.run_batch(manifest, "--cpu-budget", "8", "--jobs", "2")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertTrue((self.root / "0.mp4").is_file())
+        self.assertTrue((self.root / "2.mp4").is_file())
+        self.assertIn("job 2: failed to start", result.stderr)
+        events = list(map(json.loads, self.events.read_text().splitlines()))
+        self.assertEqual(sum(kind == "end" for kind, *_ in events), 2)
+
     def test_cancel_stops_encoder_descendants(self):
         manifest, _ = self.manifest((4,), ["block"])
         process = subprocess.Popen(self.command(manifest), env={**os.environ, "EVENTS": str(self.events)},

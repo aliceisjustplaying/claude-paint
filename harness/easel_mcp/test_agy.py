@@ -1,9 +1,11 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp==1.30.0", "PyYAML==6.0.3"]
+# dependencies = ["mcp==1.30.0", "PyYAML==6.0.3", "Pillow==12.3.0"]
 # ///
 
 import asyncio
+import base64
+import io
 import importlib.machinery
 import importlib.util
 import json
@@ -149,6 +151,16 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(beyond.isError)
                 log, _ = await pages("log", {})
                 self.assertEqual(log, (self.studio / "log-output.txt").read_text().replace("--@ chunk 1", "--@ chunk").rstrip())
+                from PIL import Image
+                Image.effect_noise((2916, 1746), 64).convert("RGB").save(self.studio / "notes/photo.png")
+                photo = await session.call_tool("read", {"path": "notes/photo.png"})
+                self.assertEqual(photo.content[0].text, "Read image file [image/jpeg]\n[Image: original 2916x1746, displayed at 2000x1198. Multiply coordinates by 1.46 to map to original image.]")
+                self.assertEqual(photo.content[1].mimeType, "image/jpeg")
+                self.assertEqual(Image.open(io.BytesIO(base64.b64decode(photo.content[1].data))).size, (2000, 1198))
+                Image.new("RGB", (40, 30)).save(self.studio / "notes/small.png")
+                small = await session.call_tool("read", {"path": "notes/small.png"})
+                self.assertEqual(small.content[0].text, "Read image file [image/png]")
+                self.assertEqual(base64.b64decode(small.content[1].data), (self.studio / "notes/small.png").read_bytes())
                 painted = await session.call_tool("paint", {"lua": "print('x')"})
                 saved = painted.content[0].text.rsplit("\n", 1)[1]
                 self.assertTrue(saved.startswith("Reply saved in full to out/easel/replies/"))

@@ -16,7 +16,7 @@
 //! - `handling::finish_plan` sizes `work`'s stroke rectangles with
 //!   `Footprint::planned` instead of `bristle::footprint`.
 //! - `Canvas::surf` takes the brush contact surface from
-//!   `contact_cache::BaseCache` (wired when that cache lands).
+//!   `contact_cache::ContactCache::refresh`.
 //!
 //! Lane modules: `footprint` (STIL-67), `exchange` and `window` (STIL-68),
 //! `add` (STIL-69), `contact_cache` (STIL-70). The contracts are frozen in

@@ -973,7 +973,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     // footprints in whole-canvas pixels (a crop render plans the same tiles)
     let f = cv.f;
     let rect = if crate::engine7::active(cv.engine) {
-        crate::engine7::Footprint::planned(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
+        crate::engine7::Footprint::planned(tool, &pts, hd.shake, hd.orient, f.scale, f.full_w, f.full_h)
     } else {
         footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
     };

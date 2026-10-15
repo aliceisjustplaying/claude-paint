@@ -1147,7 +1147,8 @@ pub(crate) unsafe fn drag_on(
     // below a pixel (see `strip_cover`)
     let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
-    let step = rb.max(1.25);
+    let step_scale = std::env::var("RENDER_STEP_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite() && *v >= 1.0 && *v <= 4.0).unwrap_or(1.0);
+    let step = rb.max(1.25) * step_scale;
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));

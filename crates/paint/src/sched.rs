@@ -195,7 +195,22 @@ impl Canvas {
                 acc += ids[t];
             }
             let f = self.f;
-            let order: Vec<usize> = order.into_iter().filter(|&t| rects[t].is_some_and(|r| f.clip(r).is_some())).collect();
+            let mut order: Vec<usize> = order.into_iter().filter(|&t| rects[t].is_some_and(|r| f.clip(r).is_some())).collect();
+            if std::env::var_os("RENDER_REORDER").is_some() {
+                let mut groups: Vec<Vec<usize>> = Vec::new();
+                for t in order {
+                    let a = rects[t].unwrap();
+                    if let Some(group) = groups.iter_mut().find(|group| group.iter().all(|&u| {
+                        let b = rects[u].unwrap();
+                        !(a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3)
+                    })) {
+                        group.push(t);
+                    } else {
+                        groups.push(vec![t]);
+                    }
+                }
+                order = groups.into_iter().flatten().collect();
+            }
             if std::env::var_os("RENDER_STROKE_PROFILE").is_some() {
                 eprintln!("PROFILE_BATCH,{}", order.iter().map(usize::to_string).collect::<Vec<_>>().join(","));
             }

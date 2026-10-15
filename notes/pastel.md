@@ -172,6 +172,63 @@ undo-like conveniences. Paint's `sheet.rs`:
   it); a chunk must lift what it laid (session.rs), so chunk checkpoints
   never hold one (a save in between does: checkpoint version 15).
 
+## A dry brush and a knife on pastel
+
+The brush and the blade over loose pastel, each from measurements
+(notes/research/pastel_brushing.md, pastel_removal_air_blade.md §A3 and
+§B, paper_mechanics_and_transport.md §1 and §3). Paint's `sheet.rs`; the
+switch brings `b:dust` and `k:scrape{edge=}` (without it a brush has the
+methods it had and a scrape takes no `edge=`).
+
+- **Dry brush** (`b:dust`, `Canvas::dust_pastel`). Force is not the limit
+  (a tip pushes 10³–10⁶ times the rolling force of a particle): reach is.
+  Tip radius r (hog 50 µm, the research's 25–75) over inter-fiber gaps of
+  width w (the paper's fiber width) sinks h = r − √(r² − w²/4); with pores
+  of exponential depth (mean µ) filled from the bottom, the pastel deeper
+  than h is µ·e^(−h/µ), and that stays, with all fixed pastel. The tips'
+  band is the brush's mark width across and 2 mm along. A brush with paint
+  on it is refused.
+- **The brush fills** (`Held::pastel_mg`): it keeps what it lifts in
+  proportion to the room it has left (capacity 0.06 mg per mm³ of a 2 mm
+  loaded tip, width × 2 × 0.3·width: a fur brush's pile holds 5–7 % of its
+  volume in toner, a #8 hog some 2–10 mg); the rest is pushed 0.5 mm ahead
+  into the pores as crumbs (`lay_crumbs`, up to 100 µm: a bristle breaks
+  bigger agglomerates), the deeper hollows taking more, met again and swept
+  on, so it ends as a ridge where the brush lifts and a ghost behind. Over
+  a speckled passage it pushes what it lifts into the bare pores below its
+  reach: it smears more than it cleans (why pastels are not brushed).
+  `b:wipe(1)` empties it (`b:wipe()` takes 85 %). Only a brush that holds
+  some names `pastel_mg` in its text, so a brush that never brushed pastel
+  digests as before.
+- **The knife sinks** (`k:scrape`, `Canvas::scrape_pastel`; on paper). The
+  hand's 1–5 N by `pressure` bears along the blade's length (a 3 cm palette
+  knife presses lightly, a 2–3 mm edge hard). The edge (radius `edge`,
+  100 µm by default; a painting knife's 20–500, a scalpel's about 1) rests on
+  the highest point within 4 mm of steel flex and sinks into the sheet
+  (`edge_sink_um`): a Pasternak layer, p = σ(w/T) − (G_xz·T/3)w″, with Chen
+  et al.'s (2020) compression σ = 0.636(e^(13.54ε) − 1) MPa, T the caliper
+  and G_xz = 30 MPa (15–50 [E]; 16–127 measured in board), solved on a grid
+  with an active set for the contact and a bisection on the depth: 0.17–0.8
+  of the bed of springs at a knife's light loads. It takes the loose pastel
+  above that depth (35 % dropped as crumbs where it lifts, an estimate
+  within the research's 20–50 %; the rest carried off). A stiff blade rides
+  the paper's high spots and bridges its low ones, so a scrape is mottled.
+- **Burnish**: Chen's residual strain 0.49ε − 0.027 lowers the pixel's
+  height and its pore depth µ by the dent (the voids it closed), once per
+  pixel; a wide knife at a hand's force presses too lightly to set the
+  paper (the residual is 0 below ε ≈ 0.055).
+- **Nap**: drag per fiber crossed, μ·q·w_f (μ 0.3, w_f the fiber width),
+  past a joint's strength (3 mN; 1.1–6.5 measured) tears ends up; the tooth
+  there deepens up to 1.9× (1.3–2.5 [E]) with the excess.
+- **The scalpel**: past q = H·2R (fiber wall 350 MPa) the edge cuts,
+  shaving 12 µm (about a fiber layer, 10–15 [D]) a pass and taking the
+  pastel in it, fixed too. Otherwise fixed pastel stays: no wear law of
+  steel on bound pastel is known.
+
+Neither reaches pastel under the sheet or under paint, or where paint is
+wet. While a sheet lies, `b:dust` works (`time::verb_dry`); the knife, a
+wet-paint tool too, refuses.
+
 Learned while painting:
 
 - Pastel skips wet paint. Thick touches of blotted essence were still

@@ -18,7 +18,6 @@
 //! what one without them does.
 
 use paint::Canvas;
-use paint::color::linear_to_srgb;
 use std::cell::RefCell;
 use std::io::Write;
 use std::path::PathBuf;
@@ -147,11 +146,11 @@ impl Recorder {
             Some((az, el)) => c.seen_lit(az, el, 1.0),
             None => c.seen(),
         };
-        let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+        let buf = crate::output::rgb8(&px, f.w);
         let img = image::RgbImage::from_raw(f.w as u32, f.h as u32, buf).ok_or("frame: bad buffer")?;
         let w = self.width.min(f.w as u32);
         let h = ((f.h as f64 * w as f64 / f.w as f64).round() as u32).max(1);
-        let small = if w == f.w as u32 { img } else { image::imageops::thumbnail(&img, w, h) };
+        let small = if w == f.w as u32 { img } else { crate::output::thumbnail(&img, w, h) };
         self.written += 1;
         let name = format!("{:05}.png", self.written);
         let p = self.dir.join(&name);

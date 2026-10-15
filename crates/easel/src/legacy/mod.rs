@@ -128,6 +128,7 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
         "friedrich_early" => friedrich_early(palette_named(palname.as_deref().unwrap_or("friedrich_early"), engine, drain, oils)?),
         o => return err(format!("style {o:?}: friedrich or friedrich_early")),
     };
+    sty.palette.quarter_tiles = st.borrow().tubes.quarter_tiles;
     if let Some(mm) = num(&o, "size")? {
         if !(50.0..=5000.0).contains(&mm) {
             return err("size: the canvas width in mm, 50 to 5000");

@@ -202,7 +202,9 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     if oils {
         logged.push_str(&format!("{OILS_MARK}\n"));
     }
-    let tubes = crate::session::box_for(Some(&logged))?;
+    let mut tubes = crate::session::box_for(Some(&logged))?;
+    tubes.quarter_tiles = canvas.quarter_tiles();
+    tubes.adaptive_sweep = canvas.adaptive_sweep();
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;
     {

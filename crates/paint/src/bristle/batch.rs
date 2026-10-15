@@ -23,12 +23,14 @@ struct Sample {
 struct Cell {
     pixel: usize,
     sample: Sample,
+    weight: f32,
     allowance: f32,
     pickup: f32,
     deposit: f32,
     moves: [(usize, f32); 4],
 }
 
+#[derive(Default)]
 struct Plan {
     bristle: usize,
     phi: f32,
@@ -57,16 +59,20 @@ fn rectangle(c: &Contact, sf: Surf, lim: Rect) -> Rect {
     (x0, y0, x1.max(x0), y1.max(y0))
 }
 
-unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip: Option<Clip<'_>>, id: u32, lim: Rect) -> Plan {
+unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip: Option<Clip<'_>>, id: u32, lim: Rect, out: &mut Plan) {
     unsafe {
         let rect @ (x0, y0, x1, y1) = rectangle(c, sf, lim);
         let liquid = br.vol + br.solvent;
         let phi = if liquid > 0.0 { br.solvent / liquid } else { 0.0 };
         let exch = phi > 0.0 && crate::thinner::exchange();
         let cap = if phi > 0.0 && !exch { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
-        let mut out = Plan { bristle: c.bristle, phi, cap, cells: Vec::new(), bounds: None };
+        out.bristle = c.bristle;
+        out.phi = phi;
+        out.cap = cap;
+        out.cells.clear();
+        out.bounds = None;
         if x0 == x1 || y0 == y1 {
-            return out;
+            return;
         }
         let (dx, dy) = (c.b.0 - c.a.0, c.b.1 - c.a.1);
         let seg2 = dx * dx + dy * dy;
@@ -75,7 +81,6 @@ unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip
         let (nx, ny) = (-my, mx);
         let th = 1.0 - c.reach.max(WET_REACH * smoothstep(0.1, 0.8, liquid / full)) * 1.6;
         let give = 0.15 + 0.45 * (1.0 - tool.stiffness).clamp(0.0, 1.0);
-        let mut weighted = Vec::with_capacity((x1 - x0) * (y1 - y0));
         let (mut sum_w, mut sum_cov, mut sum_tack, mut sum_k) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
         for y in y0..y1 {
             for x in x0..x1 {
@@ -102,12 +107,13 @@ unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip
                     sum_tack += wt * crate::drying::feel(*sf.vol.add(i), p.cure, p.sub).1;
                 }
                 if wt > 0.0 {
-                    weighted.push((x, y, i, wt));
+                    out.cells.push(Cell { pixel: i, sample: sample(sf, i), weight: wt, allowance: 0.0, pickup: 0.0, deposit: 0.0, moves: [(i, 0.0); 4] });
                 }
             }
         }
         if sum_w <= 1e-6 {
-            return out;
+            out.cells.clear();
+            return;
         }
         let touch = (sum_w / sum_cov.max(1e-6)).min(1.0);
         let travel = (seg / sf.scale).max(c.rb / sf.scale * 0.5);
@@ -142,9 +148,9 @@ unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip
         } else {
             2.0 * hair
         };
-        out.cells.reserve(weighted.len());
-        for (x, y, i, wt) in weighted {
-            let sample = sample(sf, i);
+        for cell in &mut out.cells {
+            let (i, wt, sample) = (cell.pixel, cell.weight, cell.sample);
+            let (x, y) = (i % sf.w + sf.ox, i / sf.w + sf.oy);
             let fl = crate::drying::fluid(sample.cure);
             let floor = if *sf.touched.add(i) == id { *sf.floor.add(i) } else { sample.vol * (1.0 - tool.pickup * fl) };
             let allowance = if exch { sample.vol } else { (sample.vol - floor).max(0.0) };
@@ -171,11 +177,13 @@ unsafe fn plan(sf: Surf, br: &Bristle, tool: &Tool, c: &Contact, full: f32, clip
                     }
                 }
             }
-            out.cells.push(Cell { pixel: i, sample, allowance, pickup, deposit: dep_per_w * wt, moves });
+            cell.allowance = allowance;
+            cell.pickup = pickup;
+            cell.deposit = dep_per_w * wt;
+            cell.moves = moves;
         }
         let pad = (off + 2.0) as usize;
         out.bounds = Some((rect.0.saturating_sub(pad).max(sf.ox), rect.1.saturating_sub(pad).max(sf.oy), (rect.2 + pad).min(sf.ox + sf.w), (rect.3 + pad).min(sf.oy + sf.h)));
-        out
     }
 }
 
@@ -203,7 +211,7 @@ fn reserve(used: &mut f32, cap: f32, volume: f32) -> f32 {
 #[derive(Clone, Copy)]
 enum Origin {
     Brush(usize),
-    Canvas(Sample),
+    Canvas(usize, usize),
 }
 
 struct Incoming {
@@ -213,13 +221,35 @@ struct Incoming {
     origin: Origin,
 }
 
-unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan], id: u32, bounds: &mut Bounds) {
+#[derive(Default)]
+pub(super) struct Scratch {
+    plans: Vec<Plan>,
+    merge: MergeScratch,
+}
+
+type Pickup = (f64, [f64; LAT], [f64; 5], f64, f64);
+
+#[derive(Default)]
+struct MergeScratch {
+    budgets: Vec<Budget>,
+    incoming: Vec<Incoming>,
+    deposited: Vec<f64>,
+    picked: Vec<Pickup>,
+    #[cfg(test)]
+    timings: [u64; 5],
+}
+
+unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan], id: u32, bounds: &mut Bounds, scratch: &mut MergeScratch) {
     unsafe {
         let Some(rect) = plans.iter().filter_map(|p| p.bounds).reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3))) else { return };
         let bw = rect.2 - rect.0;
         let local = |i: usize| (i / sf.w + sf.oy - rect.1) * bw + i % sf.w + sf.ox - rect.0;
-        let mut budgets: Vec<Budget> = (0..bw * (rect.3 - rect.1)).map(|_| Budget::default()).collect();
-        let mut incoming = Vec::new();
+        let MergeScratch { budgets, incoming, deposited, picked, #[cfg(test)] timings } = scratch;
+        #[cfg(test)]
+        let mut at = std::time::Instant::now();
+        budgets.resize_with(bw * (rect.3 - rect.1), Budget::default);
+        budgets.fill_with(Budget::default);
+        incoming.clear();
         for p in plans {
             for c in &p.cells {
                 let b = &mut budgets[local(c.pixel)];
@@ -231,10 +261,14 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
             }
         }
         let area = 1.0 / (sf.scale * sf.scale);
-        let mut deposited = vec![0.0f64; bristles.len()];
-        let mut picked = vec![(0.0f64, [0.0f64; LAT], [0.0f64; 5], 0.0f64, 0.0f64); bristles.len()];
-        for p in plans {
-            for c in &p.cells {
+        deposited.resize(bristles.len(), 0.0);
+        deposited.fill(0.0);
+        picked.resize_with(bristles.len(), Pickup::default);
+        picked.fill_with(Pickup::default);
+        #[cfg(test)]
+        { timings[0] += at.elapsed().as_nanos() as u64; at = std::time::Instant::now(); }
+        for (pi, p) in plans.iter().enumerate() {
+            for (ci, c) in p.cells.iter().enumerate() {
                 let b = &budgets[local(c.pixel)];
                 let pickup_scale = if b.pickup > 0.0 { (b.allowance as f64 / b.pickup).min(1.0) } else { 1.0 };
                 let outgoing = b.pickup * pickup_scale + b.moved;
@@ -244,13 +278,15 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
                 let b = &mut budgets[local(c.pixel)];
                 b.removed += pickup as f64;
                 b.solvent_removed += solvent as f64;
-                let got = &mut picked[p.bristle];
-                let v = pickup as f64 * area as f64;
-                got.0 += v;
-                for k in 0..LAT { got.1[k] += c.sample.lat[k] as f64 * v; }
-                for k in 0..5 { got.2[k] += c.sample.hide[k] as f64 * v; }
-                got.3 += c.sample.cure as f64 * v;
-                got.4 += solvent as f64 * area as f64;
+                if pickup > 0.0 {
+                    let got = &mut picked[p.bristle];
+                    let v = pickup as f64 * area as f64;
+                    got.0 += v;
+                    for k in 0..LAT { got.1[k] += c.sample.lat[k] as f64 * v; }
+                    for k in 0..5 { got.2[k] += c.sample.hide[k] as f64 * v; }
+                    got.3 += c.sample.cure as f64 * v;
+                    got.4 += solvent as f64 * area as f64;
+                }
                 let accept = |budgets: &mut [Budget], pixel: usize, amount: f32, cap: f32| {
                     let b = &mut budgets[local(pixel)];
                     if !b.initialized {
@@ -259,7 +295,7 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
                     }
                     reserve(&mut b.used, cap, amount)
                 };
-                let d = accept(&mut budgets, c.pixel, c.deposit, p.cap);
+                let d = accept(budgets, c.pixel, c.deposit, p.cap);
                 if d > 0.0 {
                     deposited[p.bristle] += d as f64 * area as f64;
                     incoming.push(Incoming { pixel: c.pixel, volume: d * (1.0 - p.phi), solvent: d * p.phi, origin: Origin::Brush(p.bristle) });
@@ -268,16 +304,19 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
                     let m = (requested as f64 * scale) as f32;
                     let ms = if c.sample.vol > 0.0 { c.sample.solvent * m / c.sample.vol } else { 0.0 };
                     if m <= 0.0 { continue }
-                    let accepted = accept(&mut budgets, dest, m + ms, p.cap);
+                    let accepted = accept(budgets, dest, m + ms, p.cap);
+                    if accepted <= 0.0 { continue }
                     let f = accepted / (m + ms);
                     let (m, ms) = (m * f, ms * f);
                     let b = &mut budgets[local(c.pixel)];
                     b.removed += m as f64;
                     b.solvent_removed += ms as f64;
-                    incoming.push(Incoming { pixel: dest, volume: m, solvent: ms, origin: Origin::Canvas(c.sample) });
+                    incoming.push(Incoming { pixel: dest, volume: m, solvent: ms, origin: Origin::Canvas(pi, ci) });
                 }
             }
         }
+        #[cfg(test)]
+        { timings[1] += at.elapsed().as_nanos() as u64; at = std::time::Instant::now(); }
         for (j, b) in budgets.iter().enumerate() {
             let (x, y) = (rect.0 + j % bw, rect.1 + j / bw);
             let i = (y - sf.oy) * sf.w + x - sf.ox;
@@ -297,16 +336,23 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
                 *sf.laid.add(i) = b.used;
             }
         }
-        for e in incoming {
+        #[cfg(test)]
+        { timings[2] += at.elapsed().as_nanos() as u64; at = std::time::Instant::now(); }
+        for e in incoming.iter() {
             let (lat, hide, cure) = match e.origin {
                 Origin::Brush(bi) => (bristles[bi].lat, bristles[bi].hide, bristles[bi].cure),
-                Origin::Canvas(s) => (s.lat, s.hide, s.cure),
+                Origin::Canvas(pi, ci) => {
+                    let s = plans[pi].cells[ci].sample;
+                    (s.lat, s.hide, s.cure)
+                }
             };
             sf.add(e.pixel, e.volume, &lat, hide, cure);
             if !sf.solv.is_null() { *sf.solv.add(e.pixel) += e.solvent * COAT_UM; }
             *sf.cover.add(e.pixel) = 1.0;
             if matches!(e.origin, Origin::Brush(_)) { *sf.stroke.add(e.pixel) = id; }
         }
+        #[cfg(test)]
+        { timings[3] += at.elapsed().as_nanos() as u64; at = std::time::Instant::now(); }
         for (i, b) in bristles.iter_mut().enumerate() {
             let liquid = b.vol + b.solvent;
             let gone = (deposited[i] as f32).min(liquid);
@@ -322,11 +368,13 @@ unsafe fn merge(sf: Surf, bristles: &mut [Bristle], tool: &Tool, plans: &[Plan],
                 mix_into(&mut b.vol, &mut b.lat, &mut b.hide, got.0 as f32, &lat, hide);
             }
         }
+        #[cfg(test)]
+        { timings[4] += at.elapsed().as_nanos() as u64; }
         grow(bounds, rect.0, rect.1, rect.2, rect.3);
     }
 }
 
-pub(super) unsafe fn stamp(sf: Surf, bristles: &mut [Bristle], tool: &Tool, contacts: &[Contact], full: f32, clip: Option<Clip<'_>>, id: u32, bounds: &mut Bounds, lim: Rect) -> bool {
+pub(super) unsafe fn stamp(sf: Surf, bristles: &mut [Bristle], tool: &Tool, contacts: &[Contact], full: f32, clip: Option<Clip<'_>>, id: u32, bounds: &mut Bounds, lim: Rect, scratch: &mut Scratch) -> bool {
     if sf.ox != 0 || sf.oy != 0 || sf.w != sf.fw || sf.h != sf.fh || contacts.len() < 8 {
         return false;
     }
@@ -335,8 +383,9 @@ pub(super) unsafe fn stamp(sf: Surf, bristles: &mut [Bristle], tool: &Tool, cont
         return false;
     }
     unsafe {
-        let plans: Vec<_> = contacts.par_iter().map(|c| plan(sf, &bristles[c.bristle], tool, c, full, clip, id, lim)).collect();
-        merge(sf, bristles, tool, &plans, id, bounds);
+        scratch.plans.resize_with(contacts.len(), Plan::default);
+        contacts.par_iter().zip(scratch.plans.par_iter_mut()).for_each(|(c, out)| plan(sf, &bristles[c.bristle], tool, c, full, clip, id, lim, out));
+        merge(sf, bristles, tool, &scratch.plans, id, bounds, &mut scratch.merge);
     }
     true
 }
@@ -393,7 +442,7 @@ mod tests {
         let sf = c.surf();
         let tool = h.tool.clone();
         let full = h.full();
-        assert!(unsafe { stamp(sf, &mut h.bristles, &tool, contacts, full, clip, id, &mut None, (0, 0, sf.w, sf.h)) });
+        assert!(unsafe { stamp(sf, &mut h.bristles, &tool, contacts, full, clip, id, &mut None, (0, 0, sf.w, sf.h), &mut Scratch::default()) });
     }
 
     fn close(a: f64, b: f64) {
@@ -451,6 +500,35 @@ mod tests {
     }
 
     #[test]
+    fn mask_edge_blocks_outgoing_plough_transfers() {
+        let (mut c, mut h, contacts) = fixture(0.6, 0.2);
+        let mask = Mask::from_fn(c.f, |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        let before = (c.wet.vol.clone(), c.wet.lat.clone(), c.wet.solv.clone());
+        run(&mut c, &mut h, &contacts, Some(Clip::Mask(&mask)), 1);
+        for i in 0..c.wet.vol.len() {
+            if i % c.f.w >= c.f.w / 2 {
+                assert_eq!((c.wet.vol[i], c.wet.lat[i], c.wet.solv[i]), (before.0[i], before.1[i], before.2[i]));
+            }
+        }
+    }
+
+    #[test]
+    fn volatile_load_conserves_nonvolatile_body() {
+        let (mut c, mut h, contacts) = fixture(0.0, 0.2);
+        h.tool.pickup = 0.0;
+        h.tool.push = 0.0;
+        for b in &mut h.bristles { b.hide[3] = 0.6; }
+        let body = |c: &Canvas, h: &Held| {
+            let area = 1.0 / (c.f.scale as f64).powi(2);
+            c.wet.vol.iter().zip(&c.wet.hide).map(|(&v, h)| v as f64 * (1.0 - h[3] as f64) * area).sum::<f64>()
+                + h.bristles.iter().map(|b| b.vol as f64 * (1.0 - b.hide[3] as f64)).sum::<f64>()
+        };
+        let before = body(&c, &h);
+        run(&mut c, &mut h, &contacts, None, 1);
+        close(before, body(&c, &h));
+    }
+
+    #[test]
     fn tiny_contacts_stay_serial_without_mutation() {
         let (mut c, mut h, _) = fixture(0.0, 0.2);
         let contacts: Vec<_> = (0..h.bristles.len()).map(|bristle| Contact { bristle, a: (64.0, 64.0), b: (65.0, 64.0), rb: 0.55, reach: 0.9 }).collect();
@@ -458,7 +536,46 @@ mod tests {
         let sf = c.surf();
         let full = h.full();
         let tool = h.tool.clone();
-        assert!(!unsafe { stamp(sf, &mut h.bristles, &tool, &contacts, full, None, 1, &mut None, (0, 0, sf.w, sf.h)) });
+        assert!(!unsafe { stamp(sf, &mut h.bristles, &tool, &contacts, full, None, 1, &mut None, (0, 0, sf.w, sf.h), &mut Scratch::default()) });
         assert_eq!(before, totals(&c, &h));
+    }
+
+    #[test]
+    #[ignore]
+    fn pilot_phases() {
+        for (thinner, workers) in [(0.0, 1), (0.0, 4), (0.6, 1), (0.6, 4)] {
+            let pool = rayon::ThreadPoolBuilder::new().num_threads(workers).build().unwrap();
+            pool.install(|| {
+                let (mut c, mut h, contacts) = fixture(thinner, 0.2);
+                let sf = c.surf();
+                let tool = h.tool.clone();
+                let full = h.full();
+                let lim = (0, 0, sf.w, sf.h);
+                let mut planning = std::time::Duration::ZERO;
+                let mut merging = std::time::Duration::ZERO;
+                let mut scratch = Scratch::default();
+                scratch.plans.resize_with(contacts.len(), Plan::default);
+                for _ in 0..100 {
+                    let start = std::time::Instant::now();
+                    contacts.par_iter().zip(scratch.plans.par_iter_mut()).for_each(|(ct, out)| unsafe { plan(sf, &h.bristles[ct.bristle], &tool, ct, full, None, 1, lim, out) });
+                    planning += start.elapsed();
+                    let start = std::time::Instant::now();
+                    unsafe { merge(sf, &mut h.bristles, &tool, &scratch.plans, 1, &mut None, &mut scratch.merge) };
+                    merging += start.elapsed();
+                }
+                println!("PILOT thinner={thinner} workers={workers} planning={:.6} merging={:.6}", planning.as_secs_f64(), merging.as_secs_f64());
+                println!("PILOT thinner={thinner} workers={workers} merge_ns={:?}", scratch.merge.timings);
+                let (mut c, mut h, contacts) = fixture(thinner, 0.2);
+                let sf = c.surf();
+                let mut scratch = Vec::new();
+                let start = std::time::Instant::now();
+                for _ in 0..100 {
+                    for ct in &contacts {
+                        unsafe { exchange(sf, &mut h.bristles[ct.bristle], &tool, ct.a, ct.b, ct.rb, ct.reach, full, None, 1.0, None, 1, &mut scratch, &mut None, lim) };
+                    }
+                }
+                println!("PILOT thinner={thinner} workers={workers} serial={:.6}", start.elapsed().as_secs_f64());
+            });
+        }
     }
 }

@@ -1190,6 +1190,7 @@ pub(crate) unsafe fn drag_on(
     let step = sweep_step(&tool, g, &path, &arc, s, rb.max(1.25), std::env::var("PAINT_ADAPTIVE_SWEEP").as_deref() == Ok("1"));
     let batch_exchange = sf.batch_exchange && tool.point == 0.0 && std::env::var_os("PAINT_PARALLEL_EXCHANGE").is_some_and(|v| v == "1");
     let mut batch_contacts = Vec::with_capacity(if batch_exchange { held.bristles.len() } else { 0 });
+    let mut batch_scratch = batch::Scratch::default();
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
@@ -1305,7 +1306,7 @@ pub(crate) unsafe fn drag_on(
                 batch_contacts.push(batch::Contact { bristle: bi, a: b.prev[0].unwrap_or(cur), b: cur, rb, reach });
             }
         }
-        if batch_exchange && unsafe { batch::stamp(sf, &mut held.bristles, &tool, &batch_contacts, full, clip, id, &mut bounds, lim) } {
+        if batch_exchange && unsafe { batch::stamp(sf, &mut held.bristles, &tool, &batch_contacts, full, clip, id, &mut bounds, lim, &mut batch_scratch) } {
             for (bi, b) in held.bristles.iter_mut().enumerate() {
                 if let Some((cur, _)) = contact[bi] {
                     b.prev[0] = Some(cur);

@@ -28,7 +28,7 @@ fn easel_in(dir: &Path, name: Option<&str>) -> PathBuf {
 /// Run `exe` with EASEL_ROOT `root` and EASEL_BOX `env_box` (unset if None).
 fn run(exe: &Path, root: &Path, env_box: Option<&str>, args: &[&str]) -> Output {
     let mut c = Command::new(exe);
-    c.args(args).env("EASEL_ROOT", root).env("EASEL_SESSION", "p").env_remove("EASEL_BOX");
+    c.args(args).env("EASEL_ROOT", root).env("EASEL_SESSION", "p").env_remove("EASEL_BOX").env_remove("EASEL_WIDTH");
     if let Some(b) = env_box {
         c.env("EASEL_BOX", b);
     }
@@ -51,6 +51,7 @@ fn fails(exe: &Path, root: &Path, env_box: Option<&str>, args: &[&str]) -> Strin
 fn plain() -> PathBuf {
     let e = PathBuf::from(env!("CARGO_BIN_EXE_easel"));
     assert!(!e.with_file_name("box").exists(), "a box file next to the test's easel");
+    assert!(!e.with_file_name("width").exists(), "a width file next to the test's easel");
     e
 }
 
@@ -114,6 +115,24 @@ fn a_new_painting_takes_the_studio_box_and_every_replay_uses_it() {
 /// A log with no box line was painted from the default box (every log
 /// before round 20): it replays with it, and a studio set to another box
 /// refuses it. A new default painting's log names no box.
+/// A studio's `bin/width` sets a new painting's width as `bin/box` sets its box: the
+/// painting opens at it and its log names it. A width the easel can't paint is refused.
+#[test]
+fn a_new_painting_takes_the_studio_width() {
+    let dir = base("width");
+    let e = easel_in(&dir, None);
+    std::fs::write(dir.join("bin/width"), "4800\n").unwrap();
+    let _closing = Closing(e.clone(), dir.clone());
+    let opened = ok(&e, &dir, None, &["open", "p"]);
+    assert!(opened.contains("4800px"), "{opened}");
+    ok(&e, &dir, None, &["close"]);
+    let text = std::fs::read_to_string(dir.join("paintings/lua/p.lua")).unwrap();
+    assert!(text.lines().any(|l| l == "--@ width 4800"), "{text}");
+    std::fs::write(dir.join("bin/width"), "3000\n").unwrap();
+    let err = fails(&e, &dir, None, &["open", "q"]);
+    assert!(err.contains("bin/width says width \"3000\""), "{err}");
+}
+
 #[test]
 fn a_log_without_a_box_line_is_the_default_box() {
     let dir = base("default");

@@ -372,8 +372,9 @@ pub fn companions(c: &Canvas, views: &[(View, PathBuf)]) {
     if !views.iter().any(|(v, _)| v.display_eligible()) {
         return;
     }
+    let prepared = c.prepare_optics();
     for preset in DISPLAY_PRESETS {
-        let seen = c.seen_lit(preset.light.0, preset.light.1, 1.0);
+        let seen = prepared.seen_lit(preset.light.0, preset.light.1, 1.0);
         for (v, out) in views.iter().filter(|(v, _)| v.display_eligible()) {
             let result = (|| -> Result<(), String> {
                 let mut lit = v.clone();

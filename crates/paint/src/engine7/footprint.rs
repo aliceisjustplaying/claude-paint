@@ -6,7 +6,7 @@
 //!   that brush, gesture and stroke id (capsules, plough destinations and the
 //!   exchange's ±(rb + 1) reads), never clipped by a mask. It is a subset of
 //!   `conservative`. Pointed tools may fall back to the conservative bound.
-//! - `planned(tool, pts, shake, ..)` bounds `exact` for every brush of that
+//! - `planned(tool, pts, shake, orient, ..)` bounds `exact` for every brush of that
 //!   tool and every stroke id, before the brush that paints the stroke is
 //!   known: `work` schedules tiles by it, so it must be a true bound, never
 //!   an estimate.
@@ -14,7 +14,7 @@
 //! Stubs: all three return the legacy bound.
 
 use super::Rect;
-use crate::bristle::{Gesture, Held, Tool, footprint};
+use crate::bristle::{Gesture, Held, Orient, Tool, footprint};
 
 pub struct Footprint;
 
@@ -32,9 +32,10 @@ impl Footprint {
     }
 
     /// A bound on `exact` over every brush of `tool` and every stroke id, for
-    /// a stroke along `pts` (units) with hand shake `shake`: what `work`
-    /// schedules by. Same arguments as `bristle::footprint`.
-    pub fn planned(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Rect> {
+    /// a stroke along `pts` (units) with hand shake `shake`, held as `orient`,
+    /// at any pressure: what `work` schedules by.
+    pub fn planned(tool: &Tool, pts: &[(f32, f32)], shake: f32, orient: Orient, scale: f32, w: usize, h: usize) -> Option<Rect> {
+        let _ = orient;
         footprint(tool, pts, shake, scale, w, h)
     }
 }

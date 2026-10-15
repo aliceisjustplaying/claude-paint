@@ -220,6 +220,8 @@ pub struct Canvas {
     /// bristles feel.
     pub(crate) surf_gen: u64,
     pub(crate) base: Option<(u64, Vec<f32>)>,
+    /// Engine 7: `base`, cached block by block (`crate::engine7::contact_cache`).
+    pub(crate) e7_contact: crate::engine7::contact_cache::ContactCache,
     /// Loose graphite and chalk on the picture (None until something is
     /// drawn): `graphite`.
     pub(crate) drawing: Option<Box<crate::graphite::Drawing>>,
@@ -275,6 +277,7 @@ impl Canvas {
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
             base: None,
+            e7_contact: Default::default(),
             drawing: None,
             tally: crate::tally::Tally::default(),
             hand_slice: None,

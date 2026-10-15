@@ -867,7 +867,7 @@ impl Canvas {
             [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
-        if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
+        if !crate::engine7::active(self.engine) && self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
             let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
             base.resize(self.height.len(), 0.0);
             use rayon::prelude::*;
@@ -882,6 +882,12 @@ impl Canvas {
             });
             self.base = Some((self.surf_gen, base));
         }
+        let base = if crate::engine7::active(self.engine) {
+            let px_mm = self.px_mm();
+            self.e7_contact.refresh(&self.height, self.surf_gen, self.f.w, self.f.h, px_mm).as_ptr()
+        } else {
+            self.base.as_ref().unwrap().1.as_ptr()
+        };
         Surf {
             w: self.f.w,
             h: self.f.h,
@@ -897,7 +903,7 @@ impl Canvas {
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
             cover: self.wet.cover.as_mut_ptr(),
-            base: self.base.as_ref().unwrap().1.as_ptr(),
+            base,
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
             clump: self.engine >= 4,

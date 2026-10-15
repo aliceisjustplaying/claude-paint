@@ -6,9 +6,11 @@
 //! radius r/3, with r = 1.5 mm; `bristle::contact_level`). A pixel's level
 //! depends only on the height within `halo` = 1.5 r + r/3 px of it, so a
 //! height change in a rect stales only the blocks within that halo. Each
-//! stale run of blocks is rebuilt from a window of height grown by the halo,
+//! stale block is rebuilt from its own window of height grown by the halo,
 //! with the same edge rule as the whole-canvas pass at the canvas's edges,
-//! so a block's level is the whole-canvas level up to float rounding.
+//! so a block's level is the whole-canvas level up to float rounding, and
+//! the same bits however the cache got there (which blocks were stale with
+//! it, or a fresh cache after a restore).
 
 use rayon::prelude::*;
 
@@ -123,27 +125,12 @@ impl ContactCache {
             .collect()
     }
 
-    /// Rebuild every stale block, a run of stale blocks along a block row
-    /// at a time.
+    /// Rebuild every stale block.
     fn rebuild(&mut self, height: &[f32]) {
         let (w, h, b, bw) = (self.w, self.h, self.block, self.bw);
-        let mut runs = Vec::new();
-        for (by, row) in self.stale.chunks(bw).enumerate() {
-            let mut bx = 0;
-            while bx < bw {
-                if !row[bx] {
-                    bx += 1;
-                    continue;
-                }
-                let start = bx;
-                while bx < bw && row[bx] {
-                    bx += 1;
-                }
-                runs.push((start * b, by * b, (bx * b).min(w), ((by + 1) * b).min(h)));
-            }
-        }
+        let blocks: Vec<Rect> = (0..self.stale.len()).filter(|&k| self.stale[k]).map(|k| ((k % bw) * b, (k / bw) * b, ((k % bw + 1) * b).min(w), ((k / bw + 1) * b).min(h))).collect();
         let (rm, rb, hl) = (self.rm(), self.rb(), self.halo());
-        let levels: Vec<(Rect, Vec<f32>)> = runs.into_par_iter().map(|run| (run, level(height, w, h, run, rm, rb, hl))).collect();
+        let levels: Vec<(Rect, Vec<f32>)> = blocks.into_par_iter().map(|block| (block, level(height, w, h, block, rm, rb, hl))).collect();
         for ((x0, y0, x1, y1), lv) in levels {
             let rw = x1 - x0;
             for y in y0..y1 {
@@ -311,6 +298,28 @@ mod tests {
             }
             assert_eq!(c.refresh(&height, sites.len() as u64, w, h, px_mm).len(), w * h);
             assert_eq!(c.rebuilt, 0, "an unchanged generation rebuilds nothing");
+        }
+    }
+
+    /// A cache brought up to a height change by change holds bit for bit
+    /// the level a fresh one computes: it doesn't depend on its history (a
+    /// restored canvas starts with a fresh one).
+    #[test]
+    fn a_refreshed_cache_is_a_fresh_one() {
+        let px_mm = 200.0 / 2400.0;
+        let (w, h) = (900, 700);
+        let mut c = ContactCache::default();
+        let mut height = field(w, h, px_mm, (-100.0, -100.0));
+        c.refresh(&height, 0, w, h, px_mm);
+        let b = c.block;
+        for (k, &(x, y)) in [(b + 5, b + 9), (3 * b - 2, 2 * b + 1), (w - 7, 4)].iter().enumerate() {
+            let at = (x as f32 * px_mm, y as f32 * px_mm);
+            for (i, v) in height.iter_mut().enumerate() {
+                *v = v.max(relief((i % w) as f32 * px_mm, (i / w) as f32 * px_mm, at));
+            }
+            let bits = |l: &[f32]| l.iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+            let got = bits(c.refresh(&height, k as u64 + 1, w, h, px_mm));
+            assert_eq!(got, bits(ContactCache::default().refresh(&height, 0, w, h, px_mm)), "after the daub at {x},{y}");
         }
     }
 

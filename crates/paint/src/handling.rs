@@ -444,10 +444,12 @@ struct Plan {
 impl Canvas {
     /// Work the region `mask` with a simulated brush, stroke by stroke.
     ///
-    /// Strokes are planned up front, then grouped into passages (tiles) at
-    /// least twice any stroke's reach on each axis. The tiles are painted in
-    /// an order set by `Order` (2×2 checkerboard phases in shuffled order,
-    /// or bands along a sweep), each with its own brush; tiles whose
+    /// Strokes are planned up front, then grouped into passages (tiles), by
+    /// default at least twice any stroke's reach on each axis. Engine 5 can
+    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`, or quarter
+    /// dimensions and regrouped default order with `PAINT_SMALL_TILES=quarter`.
+    /// An explicit `Order` is kept (2×2 checkerboard phases in shuffled order,
+    /// or bands along a sweep), each tile with its own brush; tiles whose
     /// footprints don't overlap run in parallel (`sched::run_ordered`), with
     /// the same result as painting them one by one.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
@@ -843,13 +845,33 @@ impl Canvas {
     #[allow(clippy::too_many_arguments)]
     fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
-        // tiles are sized per axis from the footprints: tiles painted at the
+        // default tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
         // short tiles)
         let margin = 2.0 / f.scale;
-        let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
-        let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
+        let (mut tile_x, mut tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
+        let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        let small_tiles = self.work_tile_mode();
+        let mut quarter_tiles = false;
+        if matches!(small_tiles.as_deref(), Some("1" | "quarter")) && plans.iter().all(|(_, _, _, p)| p.id.is_none()) {
+            let mut counts = vec![0usize; tw * th];
+            for (cx, cy, rect, _) in &plans {
+                if rect.is_some() {
+                    let tx = ((*cx / tile_x) as usize).min(tw - 1);
+                    let ty = ((*cy / tile_y) as usize).min(th - 1);
+                    counts[ty * tw + tx] += 1;
+                }
+            }
+            let scale = if small_tiles.as_deref() == Some("quarter") { crate::sched::quarter_work_tile_scale(&counts) } else { crate::sched::work_tile_scale(&counts) };
+            if scale < 1.0 {
+                quarter_tiles = small_tiles.as_deref() == Some("quarter");
+                tile_x *= scale;
+                tile_y *= scale;
+                (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+            }
+        }
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", plans.len());
         }
@@ -911,7 +933,13 @@ impl Canvas {
         let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
         let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
-        let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
+        let order = if hd.order.is_some() {
+            TileOrder::Asked(order)
+        } else if quarter_tiles {
+            TileOrder::Quarter(order)
+        } else {
+            TileOrder::Default(order)
+        };
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
@@ -959,6 +987,9 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
+                if crate::engine7::stats() {
+                    crate::engine7::trace_stroke(&surf, &held, &g, id);
+                }
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
                 b = crate::sched::union(b, r);
             }
@@ -972,7 +1003,11 @@ impl Canvas {
 fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
     // footprints in whole-canvas pixels (a crop render plans the same tiles)
     let f = cv.f;
-    let rect = footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
+    let rect = if crate::engine7::active(cv.engine) {
+        crate::engine7::Footprint::planned(tool, &pts, hd.shake, hd.orient, f.scale, f.full_w, f.full_h)
+    } else {
+        footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
+    };
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
@@ -1401,6 +1436,62 @@ mod tests {
     use super::*;
 
     #[test]
+    fn fixed_id_fill_keeps_its_layout_and_paint_in_a_crop_with_small_tiles() {
+        const CHILD: &str = "PAINT_FILL_CROP_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let mut failures = String::new();
+            for mode in ["1", "quarter"] {
+                let out = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "handling::tests::fixed_id_fill_keeps_its_layout_and_paint_in_a_crop_with_small_tiles", "--nocapture"])
+                    .env(CHILD, "1")
+                    .env("PAINT_SMALL_TILES", mode)
+                    .env("RAYON_NUM_THREADS", "4")
+                    .output()
+                    .unwrap();
+                if !out.status.success() {
+                    failures.push_str(&format!("mode {mode}:\n{}\n{}\n", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)));
+                }
+            }
+            assert!(failures.is_empty(), "{failures}");
+            return;
+        }
+        let fill = |crop| {
+            let mut c = Canvas::new_window(500, 1.0, [0.8; 3], crop).with_engine(5);
+            let mask = Mask::from_fn(c.frame(), |x, y| {
+                if ((100.0..200.0).contains(&x) && (100.0..200.0).contains(&y)) || ((700.0..720.0).contains(&x) && (100.0..120.0).contains(&y)) { 1.0 } else { 0.0 }
+            });
+            let hd = Handling::new(Tool::filbert(8.0)).color(|_, _| [0.15, 0.3, 0.6]);
+            c.fill_gaps(&mask, &hd, 0, None, None, 3);
+            c
+        };
+        let whole = fill(None);
+        let crop = fill(Some(crate::canvas::Crop { units: [696.0, 96.0, 724.0, 124.0], margin: 48.0 }));
+        let (x0, y0, x1, y1) = crop.keep;
+        let mut painted = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = y * crop.f.w + x;
+                let j = crop.f.whole_index(i);
+                painted += (whole.wet.vol[j] > 0.0) as usize;
+                assert_eq!(crop.px[i], whole.px[j], "color at whole pixel {j}");
+                assert_eq!(crop.height[i], whole.height[j], "height at whole pixel {j}");
+                assert_eq!(crop.film[i], whole.film[j], "film at whole pixel {j}");
+                assert_eq!(crop.wet.vol[i], whole.wet.vol[j], "wet volume at whole pixel {j}");
+                assert_eq!(crop.wet.lat[i], whole.wet.lat[j], "wet color at whole pixel {j}");
+                assert_eq!(crop.wet.hide[i], whole.wet.hide[j], "wet properties at whole pixel {j}");
+                assert_eq!(crop.wet.stroke[i], whole.wet.stroke[j], "stroke at whole pixel {j}");
+                assert_eq!(crop.wet.touched[i], whole.wet.touched[j], "touch at whole pixel {j}");
+                assert_eq!(crop.wet.floor[i], whole.wet.floor[j], "floor at whole pixel {j}");
+                assert_eq!(crop.wet.cover[i], whole.wet.cover[j], "coverage at whole pixel {j}");
+                assert_eq!(crop.wet.solv[i], whole.wet.solv[j], "solvent at whole pixel {j}");
+                assert_eq!(crop.wet.laid[i], whole.wet.laid[j], "stroke volume at whole pixel {j}");
+                assert_eq!(crop.wet.laid_id[i], whole.wet.laid_id[j], "stroke volume id at whole pixel {j}");
+            }
+        }
+        assert!(painted > 20, "the kept region must exercise overlapping fill dabs");
+    }
+
+    #[test]
     #[cfg(tube_box)]
     fn filling_requires_explicit_opt_in() {
         let pal = Palette::tube_box();
@@ -1498,7 +1589,7 @@ mod tests {
             // the scheduler all tile work runs through (sched::run_ordered)
             let ord: Vec<usize> = ord.into_iter().filter(|&t| rects[t].is_some()).collect();
             let log = std::sync::Mutex::new(Vec::new());
-            let ran = crate::sched::run_ordered(&ord, &rects, |t| log.lock().unwrap().push(t));
+            let ran = crate::sched::run_ordered(&ord, &rects, None, |t| log.lock().unwrap().push(t));
             let log = log.into_inner().unwrap();
             let pos: Vec<usize> = (0..tw * th).map(|t| ord.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();
             let ran_at: Vec<usize> = (0..tw * th).map(|t| log.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();
@@ -1797,4 +1888,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

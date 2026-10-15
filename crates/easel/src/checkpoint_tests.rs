@@ -34,6 +34,36 @@ wait(30)
 }
 
 #[test]
+fn adaptive_sweep_checkpoint_restores_the_selection_and_continues_exactly() {
+    let temp = Temp::new("adaptive-sweep");
+    for (enabled, quarter) in [(false, false), (false, true), (true, false), (true, true)] {
+        let text = format!("--@ engine 5\n{}{}--@ chunk 1\ncanvas{{size=440, aspect=1.25, linen=15, seed=7, ground={{{{pile={{{{\"lead white\", 1}}}}, um=120, apply=\"knife\"}}}}}}\n", if quarter { "--@ work-tiles quarter\n" } else { "" }, if enabled { "--@ adaptive-sweep\n" } else { "" });
+        let mut live = Session::replay_with(160, session::box_for(Some(&text)).unwrap()).unwrap();
+        for chunk in parse_program(&text) {
+            live.run(&chunk).unwrap();
+        }
+        let path = temp.0.join("adaptive.ckpt");
+        save::write(&live, &text, &path).unwrap();
+        let mut restored = save::read(&path).unwrap().session;
+        assert_eq!(restored.canvas().unwrap().adaptive_sweep(), enabled);
+        assert_eq!(restored.canvas().unwrap().quarter_tiles(), quarter);
+        assert_eq!(restored.st.borrow().tubes.adaptive_sweep, enabled);
+        assert_eq!(restored.st.borrow().tubes.quarter_tiles, quarter);
+        assert_eq!(restored.st.borrow().style.as_ref().unwrap().palette.adaptive_sweep, enabled);
+        let chunk = r#"b = brush("flat", 40); b:load(pile{{"cobalt blue", 1}}, 0.9); b:stroke({{100, 300}, {850, 320}})"#;
+        live.run(chunk).unwrap();
+        restored.run(chunk).unwrap();
+        let saved = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        assert_eq!(saved(&live), saved(&restored));
+        assert_eq!(restored.program("adaptive").contains("--@ adaptive-sweep\n"), enabled);
+    }
+}
+
+#[test]
 fn checkpoint_render_matches_native_color_and_look_companions_for_every_engine() {
     let temp = Temp::new("parity");
     for engine in 1..=paint::ENGINE {

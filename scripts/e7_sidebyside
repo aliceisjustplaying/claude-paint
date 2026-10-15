@@ -1,0 +1,70 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["pillow>=10", "numpy>=1.26"]
+# ///
+"""Side-by-side engine 5 vs engine 7 renders, small enough for the drive.
+
+    scripts/e7_sidebyside A.png B.png --out DIR/name [--crop x,y[,size]]... [--width 1200]
+
+Writes <name>-overview.png (both images scaled to fit --width side by side,
+A left, B right), one <name>-crop<k>.png per --crop (a native-pixel square,
+default 420 px, from the same place in both) and prints the difference
+receipt: mean absolute difference per channel (of 255), the share of pixels
+that differ and the largest channel difference. A and B must be the same
+size (the same log replayed at the same width).
+"""
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageDraw
+
+GAP = 8
+
+
+def pair(a, b, labels):
+    w, h = a.size
+    out = Image.new("RGB", (2 * w + GAP, h + 22), "white")
+    out.paste(a, (0, 22))
+    out.paste(b, (w + GAP, 22))
+    d = ImageDraw.Draw(out)
+    d.text((4, 4), labels[0], fill="black")
+    d.text((w + GAP + 4, 4), labels[1], fill="black")
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("a")
+    ap.add_argument("b")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--crop", action="append", default=[])
+    ap.add_argument("--width", type=int, default=1200)
+    ap.add_argument("--labels", default="engine 5,engine 7")
+    args = ap.parse_args()
+    a, b = Image.open(args.a).convert("RGB"), Image.open(args.b).convert("RGB")
+    if a.size != b.size:
+        raise SystemExit(f"sizes differ: {a.size} vs {b.size}")
+    labels = args.labels.split(",")
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    half = (args.width - GAP) // 2
+    scale = half / a.width
+    small = (half, round(a.height * scale))
+    pair(a.resize(small, Image.LANCZOS), b.resize(small, Image.LANCZOS), labels).save(f"{out}-overview.png", optimize=True)
+    for k, c in enumerate(args.crop, 1):
+        v = [int(x) for x in c.split(",")]
+        x, y, s = v[0], v[1], v[2] if len(v) > 2 else 420
+        box = (x, y, min(x + s, a.width), min(y + s, a.height))
+        pair(a.crop(box), b.crop(box), [f"{labels[0]} {box}", f"{labels[1]}"]).save(f"{out}-crop{k}.png", optimize=True)
+    da, db = np.asarray(a, dtype=np.int16), np.asarray(b, dtype=np.int16)
+    diff = np.abs(da - db)
+    means = "/".join(f"{m:.2f}" for m in diff.reshape(-1, 3).mean(axis=0))
+    changed = (diff.max(axis=2) > 0).mean() * 100
+    print(f"{out.name}: mean abs diff R/G/B {means} of 255, {changed:.2f}% of pixels differ, max channel diff {int(diff.max())}, size {a.width}x{a.height}")
+
+
+if __name__ == "__main__":
+    main()

@@ -15,9 +15,10 @@ export const HEADER = "Earlier parts of this session were condensed.";
  */
 export const CARRIES_OVER =
 	"What follows is what carries over: BRIEF.md, your journal, your globals, the canvas clock and the canvas, " +
-	"then the latest part of the session. Nothing else from before is here. The studio's notes are still there " +
-	"to read, and `log` shows every chunk you have run. This happens again each time the session grows past the " +
-	"same size, and what you write in your journal with `note` comes through each time.";
+	"then the latest part of the session. Nothing else from before is here, including the message that opened this " +
+	"sitting. The studio's notes are still there to read, and paintings/lua/painting.lua holds the painting's chunks " +
+	"(`log` shows its latest part). This happens again each time the session grows this large, and what you write " +
+	"in your journal with `note` comes through each time.";
 
 const MAX_BRIEF_CHARS = 60_000;
 const MAX_JOURNAL_CHARS = 120_000;

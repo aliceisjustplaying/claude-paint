@@ -94,7 +94,7 @@ export default function painterCompaction(pi: ExtensionAPI) {
 			({ summary, facts } = await buildSummary(ctx.cwd, branchEntries, signal, SUMMARY_HEADER));
 		} catch (error) {
 			// Never fall through to pi's default (LLM, "Next Steps") summarizer.
-			summary = `${SUMMARY_HEADER}\n\nBRIEF.md and notes/journal.md are in the studio.`;
+			summary = `${HEADER}\n\nBRIEF.md and notes/journal.md are in the studio.`;
 			facts = { error: error instanceof Error ? error.message : String(error) };
 		}
 		return {

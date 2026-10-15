@@ -155,7 +155,7 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string; pose?: string; side?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette) {
 		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
@@ -167,6 +167,8 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	if (p.compare) a.push("--compare", p.compare);
 	if (p.hold) a.push("--hold", p.hold);
 	if (p.at) a.push("--at", p.at);
+	if (p.pose) a.push("--pose", p.pose);
+	if (p.side) a.push("--side", p.side);
 	if (p.crop) a.push("--crop", p.crop);
 	if (p.mode) a.push("--mode", p.mode);
 	if (p.light) a.push("--light", p.light);
@@ -183,7 +185,7 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 export function toolWords(t: string): string {
 	return t
 		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
-		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
+		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at|pose|side)\b/g, "$1");
 }
 
 /** Deliver a survey in order within the request budget, keeping every original tile on disk. */

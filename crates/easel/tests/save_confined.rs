@@ -35,7 +35,7 @@ impl Studio {
         #[cfg(not(feature = "replay"))]
         let binary = {
             let binary = root.join("bin/easel");
-            std::fs::copy(env!("CARGO_BIN_EXE_easel"), &binary).unwrap();
+            std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), &binary).unwrap();
             binary
         };
         let studio = Self {

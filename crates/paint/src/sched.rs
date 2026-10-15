@@ -40,6 +40,9 @@ where
         // the last predecessor to finish starts it (AcqRel: j sees every
         // predecessor's writes)
         if c.pending[j].fetch_sub(1, Ordering::AcqRel) == 1 {
+            if crate::engine7::stats() {
+                crate::engine7::tiles_ready(1);
+            }
             s.spawn(move |s| run(c, s, j));
         }
     }
@@ -81,6 +84,9 @@ pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], re
         work: &work,
     };
     let ready: Vec<usize> = (0..n).filter(|&k| count[k] == 0).collect();
+    if crate::engine7::stats() {
+        crate::engine7::tiles_ready(ready.len());
+    }
     rayon::scope(|s| {
         for k in ready {
             let c = &ctx;
@@ -177,7 +183,15 @@ impl Canvas {
             // tiles run in parallel wherever that can't change the result: a
             // tile starts once every earlier tile (in `order`) it overlaps is
             // done
-            let dirty = run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            let dirty = if crate::engine7::stats() {
+                crate::engine7::batch_start();
+                let t0 = std::time::Instant::now();
+                let out = run_ordered(&order, &rects, |t| crate::engine7::tile(|| paint(surf, t, first.wrapping_add(offsets[t]))));
+                crate::engine7::batch_end(order.len(), t0.elapsed().as_secs_f64(), out.iter().map(|o| o.1).sum());
+                out.into_iter().map(|o| o.0).fold(None, union)
+            } else {
+                run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union)
+            };
             if let Some((x0, y0, x1, y1)) = dirty {
                 self.wet.touch(x0, y0, x1, y1);
             }

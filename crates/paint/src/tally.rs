@@ -343,6 +343,9 @@ impl Canvas {
         if owed > 0.0 {
             self.hand_pass(owed);
         }
+        if self.hand_slice.is_some() && matches!(self.work_tile_mode().as_deref(), Some("1" | "quarter")) {
+            self.tally.clocked = self.tally.secs;
+        }
         owed / 60.0
     }
 

@@ -25,6 +25,7 @@ pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod pigment;
+pub mod prepared_optics;
 pub mod rng;
 #[cfg(feature = "render-snapshot")]
 pub mod render_snapshot;
@@ -34,6 +35,7 @@ pub mod soak;
 pub mod spectral;
 pub mod wet;
 pub mod bristle;
+pub mod engine7;
 pub mod handling;
 pub mod stipple;
 pub mod state_dump;
@@ -64,6 +66,7 @@ pub use form::{Form, Light, Relief, Sdf, Shade, Solid};
 pub use scene::{Spot, Sun, View, Water, World};
 pub use noise::Fbm;
 pub use pigment::Pigment;
+pub use prepared_optics::PreparedOptics;
 pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;
@@ -94,7 +97,18 @@ pub use shape::Shape;
 /// - 4: stiff paint holds its relief, hairs clump in it, films bridge the
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
+/// - 7 (opt-in, never the default): engine 5, with the parts `engine7`
+///   reimplements for speed. A log asks for it with `--@ engine 7`.
 pub const ENGINE: u32 = 5;
+
+/// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
+/// those before it, and the opt-in engine 7 (`engine7`). There is no engine 6.
+pub const SUPPORTED_ENGINES: [u32; 6] = [1, 2, 3, 4, 5, engine7::ENGINE];
+
+/// Whether engine version `v` is one this crate paints with.
+pub fn supported_engine(v: u32) -> bool {
+    SUPPORTED_ENGINES.contains(&v)
+}
 
 /// Hermite smoothstep.
 #[inline]

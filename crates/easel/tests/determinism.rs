@@ -73,14 +73,15 @@ work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"c
 
 #[test]
 fn quarter_work_tiles_are_dense_engine_five_only_and_thread_independent() {
-    let run = |engine: u32, coverage: f32, threads: usize, flag: Option<&str>| {
-        let src = dir().join(format!("quarter-tiles-{engine}-{coverage}-{threads}-{}.lua", flag.unwrap_or("default")));
+    let run = |engine: u32, coverage: f32, threads: usize, flag: Option<&str>, recorded: bool| {
+        let src = dir().join(format!("quarter-tiles-{engine}-{coverage}-{threads}-{}-{recorded}.lua", flag.unwrap_or("default")));
         let png = src.with_extension("png");
+        let header = if recorded { "--@ work-tiles quarter\n" } else { "" };
         std::fs::write(
             &src,
             format!(
                 r#"--@ engine {engine}
---@ chunk 1
+{header}--@ chunk 1
 {CANVAS}
 --@ chunk 2
 work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"cobalt blue", 1}}, {{"yellow ochre", 0.3}}, medium=0.3}}, angle=0, coverage={coverage}}})
@@ -98,11 +99,15 @@ work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"c
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
         (out.stdout, std::fs::read(png).unwrap())
     };
-    let quarter = run(5, 4.5, 1, Some("quarter"));
-    assert_ne!(quarter.1, run(5, 4.5, 1, None).1, "the dense pass must exercise quarter mode");
-    assert_eq!(run(5, 4.5, 4, Some("quarter")), quarter);
-    assert_eq!(run(4, 4.5, 1, None), run(4, 4.5, 1, Some("quarter")));
-    assert_eq!(run(5, 0.02, 1, None), run(5, 0.02, 1, Some("quarter")));
+    let quarter = run(5, 4.5, 1, Some("quarter"), false);
+    let legacy = run(5, 4.5, 1, None, false);
+    assert_ne!(quarter.1, legacy.1, "the dense pass must exercise quarter mode");
+    assert_eq!(run(5, 4.5, 4, Some("quarter"), false), quarter);
+    assert_eq!(run(4, 4.5, 1, None, false), run(4, 4.5, 1, Some("quarter"), false));
+    assert_eq!(run(5, 0.02, 1, None, false), run(5, 0.02, 1, Some("quarter"), false));
+    assert_eq!(run(5, 4.5, 1, None, true), quarter);
+    assert_eq!(run(5, 4.5, 4, None, true), quarter);
+    assert_eq!(run(5, 4.5, 1, Some("0"), true), legacy);
 }
 
 #[test]

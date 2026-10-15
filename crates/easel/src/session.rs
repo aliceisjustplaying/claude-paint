@@ -28,6 +28,7 @@ pub const ENGINE_MARK: &str = "--@ engine";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
+pub const TILES_MARK: &str = "--@ work-tiles";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -398,6 +399,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().tubes.quarter_tiles {
+            let _ = writeln!(s, "{TILES_MARK} quarter");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -897,6 +901,22 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+pub fn logged_quarter_tiles(text: &str) -> Result<bool, String> {
+    let mut found = false;
+    for l in text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)) {
+        if let Some(rest) = l.strip_prefix(TILES_MARK) {
+            if rest.strip_prefix(' ').map(str::trim) != Some("quarter") || found {
+                return Err(format!("the log's line {l:?} names no work tiles this easel has, or names them twice ({TILES_MARK} quarter, at most once)"));
+            }
+            found = true;
+        }
+    }
+    if found && logged_engine(text)? != 5 {
+        return Err(format!("the log asks for quarter work tiles ({TILES_MARK} quarter), but only engine 5 paints with them"));
+    }
+    Ok(found)
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -942,7 +962,9 @@ fn box_list() -> String {
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
-        return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
+        let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
+        b.quarter_tiles = b.engine == 5;
+        return Ok(b);
     };
     let engine = logged_engine(text)?;
     let logged = logged_box(text)?;
@@ -960,6 +982,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let mut b = find_box(name)?;
     b.engine = engine;
+    b.quarter_tiles = logged_quarter_tiles(text)?;
     Ok(b)
 }
 
@@ -1918,6 +1941,61 @@ mod tests {
         assert!(logged_engine(&format!("{ENGINE_MARK} 6
 {MARK} 1
 ")).is_err());
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn new_paintings_record_quarter_tiles_and_headerless_logs_keep_legacy_tiles() {
+        let mut s = Session::with_box(W, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        assert!(s.canvas().unwrap().quarter_tiles());
+        let program = s.program("t");
+        assert!(program.contains(&format!("{TILES_MARK} quarter\n")), "{program}");
+        assert_eq!(logged_quarter_tiles(&program), Ok(true));
+        assert_eq!(bits(&s), bits(&replayed(&s)));
+        s.rebuild().unwrap();
+        assert!(s.canvas().unwrap().quarter_tiles());
+        assert_eq!(s.program("t"), program);
+
+        let old = program.replace(&format!("{TILES_MARK} quarter\n"), "");
+        let mut legacy = Session::with_box(W, box_for(Some(&old)).unwrap()).unwrap();
+        for chunk in parse_program(&old) {
+            legacy.run(&chunk).unwrap();
+        }
+        assert!(!legacy.canvas().unwrap().quarter_tiles());
+        assert_eq!(legacy.program("t"), old);
+        assert_eq!(logged_quarter_tiles(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{TILES_MARK} quarter")), Ok(false));
+        for bad in ["--@ work-tiles", "--@ work-tiles half", "--@ work-tiles quarter\n--@ work-tiles quarter"] {
+            assert!(logged_quarter_tiles(&format!("{ENGINE_MARK} 5\n{bad}\n{MARK} 1")).is_err(), "{bad}");
+        }
+        for engine in [1, 4, 7] {
+            assert!(logged_quarter_tiles(&format!("{ENGINE_MARK} {engine}\n{TILES_MARK} quarter\n{MARK} 1")).is_err());
+        }
+    }
+
+    #[test]
+    #[cfg(all(tube_box, feature = "replay"))]
+    fn saved_sessions_keep_the_recorded_work_tiles() {
+        let path = std::env::temp_dir().join(format!("easel-work-tiles-{}.ckpt", std::process::id()));
+        for quarter in [false, true] {
+            let mut tubes = Palette::tube_box();
+            tubes.quarter_tiles = quarter;
+            let mut s = Session::with_box(W, tubes).unwrap();
+            s.run(CANVAS).unwrap();
+            let program = s.program("t");
+            crate::save::write(&s, &program, &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            assert_eq!(restored.canvas().unwrap().quarter_tiles(), quarter);
+            assert_eq!(restored.st.borrow().tubes.quarter_tiles, quarter);
+            assert_eq!(restored.st.borrow().style.as_ref().unwrap().palette.quarter_tiles, quarter);
+            restored.run("wait(0.1)").unwrap();
+            s.run("wait(0.1)").unwrap();
+            restored.run(CHUNKS[1]).unwrap();
+            s.run(CHUNKS[1]).unwrap();
+            assert_eq!(bits(&restored), bits(&s));
+            assert_eq!(logged_quarter_tiles(&restored.program("t")), Ok(quarter));
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     /// Paintings from before the engine version was recorded (no `--@ engine`

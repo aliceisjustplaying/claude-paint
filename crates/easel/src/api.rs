@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 #[path = "draw_pencil.rs"]
-mod draw_pencil;
+pub(crate) mod draw_pencil;
 #[path = "draw_rag.rs"]
 mod draw_rag;
 #[path = "draw_soak.rs"]
@@ -918,7 +918,7 @@ fn fmt_num(v: f32) -> String {
 /// Parts of tubes from `{{"lead white", 6}, {"smalt", 1}, ...}` (the table's
 /// array part): tube indices and fractions by volume summing to 1, and the
 /// parts as given.
-fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
+pub(crate) fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(usize, f32)>, Vec<(String, f32)>)> {
     let mut parts: Vec<(usize, f32)> = Vec::new();
     let mut given = Vec::new();
     for e in t.sequence_values::<Value>() {
@@ -2279,7 +2279,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 }
 
 /// The verbs the paper-and-pastel switch brings (`Studio::paper`): pastel
-/// sticks, the finger and `feel` (draw_pencil.rs `install_paper`). Run
+/// sticks, the finger, `feel` and the paper mask (draw_pencil.rs
+/// `install_paper`). Run
 /// once, after `install` and before the first chunk, when the switch is on.
 pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     draw_pencil::install_paper(lua, st)

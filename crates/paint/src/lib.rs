@@ -34,6 +34,7 @@ pub mod rng;
 pub mod render_snapshot;
 mod sched;
 pub mod shape;
+pub mod sheet;
 pub mod soak;
 pub mod spectral;
 pub mod wet;

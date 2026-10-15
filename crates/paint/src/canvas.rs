@@ -269,6 +269,8 @@ pub struct Canvas {
     /// The drain switch (`with_drain`): an absorbent ground drains paint as
     /// its pigment packs (`bristle::ground_drain`).
     pub(crate) drain: bool,
+    /// A sheet of paper laid over part of the picture (`sheet.rs`).
+    pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
 
 impl Canvas {
@@ -330,6 +332,7 @@ impl Canvas {
             receptive: None,
             soak: None,
             drain: false,
+            sheet: None,
         }
     }
 

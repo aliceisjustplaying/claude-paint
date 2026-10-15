@@ -57,6 +57,12 @@
         "at": {
           "type": "string"
         },
+        "pose": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string"
+        },
         "survey": {
           "type": "boolean"
         },

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# The engine 5 vs engine 7 worker matrix for a 16-vCPU box: r40's first 12
+# chunks, Cezanne's first 30 and the full r40, each at 1, 4, 8 and 16
+# workers, engine 5 then engine 7, one run at a time on one binary. Writes
+# one engine7-bench-v1 JSON per run under OUT and prints the table.
+#
+#   scripts/e7_hyper LOGS_DIR OUT_DIR [EASEL]
+#
+# LOGS_DIR holds HOPR1_finished.lua and CEZN1_finished.lua (the crew drive's
+# handoffs/e7-logs/). EASEL defaults to a release build of this checkout in
+# CARGO_TARGET_DIR (built here first, before anything is timed).
+set -euo pipefail
+
+logs=${1:?usage: e7_hyper LOGS_DIR OUT_DIR [EASEL]}
+out=${2:?usage: e7_hyper LOGS_DIR OUT_DIR [EASEL]}
+here=$(cd "$(dirname "$0")" && pwd)
+easel=${3:-}
+if [ -z "$easel" ]; then
+  target=${CARGO_TARGET_DIR:-$here/../target}
+  (cd "$here/.." && CARGO_TARGET_DIR=$target cargo build --release -p easel)
+  easel=$target/release/easel
+fi
+mkdir -p "$out"
+git -C "$here" rev-parse HEAD > "$out/revision"
+nproc > "$out/cpus" 2>/dev/null || sysctl -n hw.ncpu > "$out/cpus"
+
+run() {
+  local log=$1 chunks=$2 workers=$3 engine=$4
+  local args=(run "$logs/$log" --engine "$engine" --workers "$workers" --easel "$easel" --out "$out")
+  if [ "$chunks" != full ]; then args+=(--chunks "$chunks"); fi
+  "$here/e7_replay" "${args[@]}"
+}
+
+for job in HOPR1_finished.lua:12 CEZN1_finished.lua:30 HOPR1_finished.lua:full; do
+  for workers in 1 4 8 16; do
+    for engine in 5 7; do
+      run "${job%%:*}" "${job##*:}" "$workers" "$engine"
+    done
+  done
+done
+"$here/e7_replay" table "$out"/*.json | tee "$out/table.md"

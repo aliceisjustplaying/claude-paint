@@ -668,8 +668,9 @@ impl Canvas {
     /// A kneaded eraser pressed and rolled over `m` (coverage 0..1): lifts
     /// loose drawing (not fixed, not painted over) by up to `strength` 0..1
     /// of what is there, better from the tops of the tooth than from the
-    /// hollows, and never quite all of it. It lifts the guide too (see
-    /// `drawing_guide`), wherever it goes.
+    /// hollows, and never quite all of it. Loose stick pastel leaves the
+    /// tooth with what it lifts, so an erased passage takes pastel again. It
+    /// lifts the guide too (see `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
         self.check_mask(m);
         let Some(d) = self.drawing.as_mut() else { return };
@@ -702,6 +703,9 @@ impl Canvas {
             let reach = 1.0 - ((top - height[i]) / 10.0).clamp(0.0, 1.0);
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
             let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
+            // what it lifts leaves the tooth with it: the loose volume falls
+            // with the coverage taken (only a stick's pastel has any; c.a > 0)
+            c.loose *= a1 / c.a;
             let under = uncover(self.px[i], c.a, c.r);
             c.a = a1;
             self.px[i] = cover(under, c.a, c.r);

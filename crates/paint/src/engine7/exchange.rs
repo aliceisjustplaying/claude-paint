@@ -890,9 +890,12 @@ mod tests {
             let mut secs = [f64::MAX; 2];
             let mut calls = 0u64;
             for _ in 0..3 {
-                for (e, engine) in [5u32, 7].into_iter().enumerate() {
+                let engines = std::env::var("E7_BENCH_ENGINES").unwrap_or("57".into());
+                for (e, engine) in [5u32, 7].into_iter().enumerate().filter(|(_, v)| engines.contains(&v.to_string())) {
                     let mut c = base.clone().with_engine(engine);
                     let mut h = Held::new(tool.clone(), 1).with_engine(engine);
+                    // (a clone rebuilds its contact surface on first use: not timed)
+                    c.surf();
                     let c0 = super::super::window::with(|w| w.generation);
                     let mut t_all = 0.0f64;
                     for g in &strokes {

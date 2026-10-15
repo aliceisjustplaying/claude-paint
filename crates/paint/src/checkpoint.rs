@@ -97,6 +97,8 @@ const SOAK_V: u64 = 1;
 /// Marks the drain section ("DRAN"), and its version.
 const DRAIN_MARK: u64 = 0x4e415244;
 const DRAIN_V: u64 = 1;
+const QUARTER_TILES: u64 = 1 << 33;
+const ADAPTIVE_SWEEP: u64 = 1 << 34;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -341,7 +343,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64)?;
+        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -502,8 +504,11 @@ impl Canvas {
         c.engine = if version == 7 {
             1
         } else {
-            match get_u64(r)? {
-                v if (1..=crate::ENGINE as u64).contains(&v) => v as u32,
+            let word = get_u64(r)?;
+            c.quarter_tiles = word & QUARTER_TILES != 0;
+            c.adaptive_sweep = word & ADAPTIVE_SWEEP != 0;
+            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP)) {
+                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
@@ -610,6 +615,20 @@ mod tests {
         Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
     }
 
+    #[test]
+    fn adaptive_sweep_checkpoints_remain_readable_after_changing_engines() {
+        for engine in [1, 2, 3, 4, 5, 7] {
+            let c = Canvas::new_window(16, 1.0, [0.5; 3], None).with_adaptive_sweep(true).with_quarter_tiles(true).with_engine(engine);
+            assert_eq!(c.adaptive_sweep(), engine == 5);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let restored = load(bytes).unwrap();
+            assert_eq!(restored.engine(), engine);
+            assert_eq!(restored.adaptive_sweep(), engine == 5);
+            assert_eq!(restored.quarter_tiles(), engine == 5);
+        }
+    }
+
     fn rejected(b: Vec<u8>, what: &str) {
         match load(b) {
             Ok(_) => panic!("{what}: accepted"),
@@ -708,6 +727,40 @@ mod tests {
         c.write_state(&mut b, "x=1\n").unwrap();
         let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
         assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
+    }
+
+    #[test]
+    fn quarter_tiles_round_trip_without_changing_legacy_checkpoint_bytes() {
+        for engine in [1, 2, 3, 4, 5, 7] {
+            let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
+            let mut legacy = Vec::new();
+            c.write_state(&mut legacy, "").unwrap();
+            let restored = load(legacy.clone()).unwrap();
+            assert!(!restored.quarter_tiles());
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "").unwrap();
+            assert_eq!(again, legacy);
+            let mut selected = Vec::new();
+            c.with_quarter_tiles(true).write_state(&mut selected, "").unwrap();
+            assert_eq!(selected.len(), legacy.len());
+            let restored = load(selected.clone()).unwrap();
+            assert_eq!(restored.quarter_tiles(), engine == 5);
+            if engine == 5 {
+                assert_eq!(legacy.iter().zip(&selected).filter(|(a, b)| a != b).count(), 1);
+                let flag = legacy.iter().zip(&selected).position(|(a, b)| a != b).unwrap();
+                let mut wrong_engine = selected.clone();
+                wrong_engine[flag - 4] = 4;
+                assert!(load(wrong_engine).is_err());
+                let mut unknown_flag = selected.clone();
+                unknown_flag[flag] |= 8;
+                assert!(load(unknown_flag).is_err());
+            } else {
+                assert_eq!(selected, legacy);
+            }
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "").unwrap();
+            assert_eq!(again, selected);
+        }
     }
 
     /// A resumed canvas keeps its drawing: the deposit (so the

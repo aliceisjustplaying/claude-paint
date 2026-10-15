@@ -183,6 +183,7 @@ impl Style {
         use sha2::{Digest, Sha256};
         let mut c = c
             .with_engine(self.palette.engine)
+            .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
         let cache = cache.filter(|_| self.ground.iter().any(|g| g.um > 0.0 && matches!(g.apply, Apply::Brush))).map(|(dir, build)| {
@@ -196,6 +197,9 @@ impl Style {
             key.update(seed.to_le_bytes());
             key.update(c.engine.to_le_bytes());
             key.update(c.engine.min(3).to_le_bytes());
+            if c.adaptive_sweep {
+                key.update(b"adaptive-sweep");
+            }
             for f in [c.f.scale, c.mm_per_unit, self.raw[0], self.raw[1], self.raw[2], self.linen.warp_per_cm, self.linen.weft_per_cm, self.linen.crown_um, self.linen.slubs] {
                 key.update(f.to_bits().to_le_bytes());
             }
@@ -216,7 +220,9 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached;
+                            // (written with the drain switch on to keep the
+                            // paint's packing, below; prepared, it is off)
+                            return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles);
                         }
                     }
                 }
@@ -244,8 +250,15 @@ impl Style {
         }
         c.engine = engine;
         if let Some((path, key)) = cache {
+            // the cache keeps the paint's packing (`wet::Prop`'s last five),
+            // which only a draining canvas's checkpoint holds (version 14), so
+            // a ground read back is the ground just prepared, bit for bit (the
+            // caller sets the drain switch on either)
             let mut bytes = Vec::new();
-            if c.write_state(&mut bytes, &key).is_ok() {
+            c.drain = c.engine >= 4;
+            let written = c.write_state(&mut bytes, &key).is_ok();
+            c.drain = false;
+            if written {
                 use std::io::Write;
                 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
@@ -260,7 +273,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c
+        c.with_quarter_tiles(self.palette.quarter_tiles)
     }
 }
 

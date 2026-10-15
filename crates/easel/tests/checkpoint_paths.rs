@@ -32,7 +32,7 @@ impl Drop for Temp {
 }
 
 fn run(source: &str, out: &str, checkpoint: &str, extra: &[String]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_easel"))
+    Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
         .args(["run", source, "--width", "32", "--out", out, "--checkpoint-out", checkpoint])
         .args(extra)
         .env("RAYON_NUM_THREADS", "2")

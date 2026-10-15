@@ -150,6 +150,25 @@ def image_limits():
 
 
 class Easel:
+    def wide(self):
+        try:
+            wide = False
+            for line in (self.studio / "paintings/lua/painting.lua").read_text().splitlines():
+                head = line.strip()
+                if head.startswith("--@ chunk"):
+                    break
+                if head == "--@ sketch":
+                    return False
+                if re.fullmatch(r"--@ width\s+4800", head):
+                    wide = True
+            return wide
+        except FileNotFoundError:
+            pass
+        try:
+            return (self.studio / "bin/width").read_text().strip() == "4800"
+        except OSError:
+            return False
+
     def __init__(self, studio):
         self.studio = studio.resolve(strict=True)
         self.lock = asyncio.Lock()
@@ -206,7 +225,8 @@ class Easel:
                 total = n
                 if not rebuilding or k > completed:
                     completed = k
-                    progress_deadline = time.monotonic() + 30 * 60
+                    # a chunk may take 40 minutes to replay at 4800 px: the easel's own stall is 50 there
+                    progress_deadline = time.monotonic() + (50 if self.wide() else 30) * 60
                 rebuilding = True
                 if time.monotonic() >= progress_deadline:
                     raise ValueError("the easel rebuild stalled without progress")
@@ -221,7 +241,7 @@ class Easel:
             args = ["open"]
 
     async def at(self, args, text=None):
-        wait = 12 * 60 if args[0] == "do" else 3 * 60
+        wait = (48 if self.wide() else 12) * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
         if await self.ensure_open(deadline):
             deadline = time.monotonic() + wait

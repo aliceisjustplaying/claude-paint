@@ -27,6 +27,7 @@ const LIVE: usize = 2400;
 fn replay(src: &Path, threads: Option<usize>, tag: &str, width: usize) -> (String, Vec<u8>) {
     let png = dir().join(format!("{tag}-{width}.png"));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+    cmd.env_remove("EASEL_WIDTH");
     cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", &width.to_string()]);
     if let Some(n) = threads {
         cmd.env("RAYON_NUM_THREADS", n.to_string());
@@ -53,6 +54,7 @@ work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"c
         );
         std::fs::write(&src, program).unwrap();
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+        cmd.env_remove("EASEL_WIDTH");
         cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", "240"]);
         cmd.env("RAYON_NUM_THREADS", threads.to_string()).env_remove("PAINT_SMALL_TILES");
         if let Some(flag) = flag {
@@ -90,6 +92,7 @@ work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"c
         )
         .unwrap();
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+        cmd.env_remove("EASEL_WIDTH");
         cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", "240"]);
         cmd.env("RAYON_NUM_THREADS", threads.to_string()).env_remove("PAINT_SMALL_TILES");
         if let Some(flag) = flag {
@@ -214,7 +217,7 @@ for i = 1, 12 do b:stroke({{60 + 70 * i, 150}, {90 + 70 * i, 40}}) end
     std::fs::write(&src, program).unwrap();
     let digests = |threads: &str, tag: &str| {
         let (png, txt) = (dir().join(format!("{tag}-{width}.png")), dir().join(format!("{tag}-{width}.txt")));
-        let out = Command::new(env!("CARGO_BIN_EXE_easel"))
+        let out = Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
             .args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--state-digest", txt.to_str().unwrap(), "--width", &width.to_string()])
             .env("RAYON_NUM_THREADS", threads)
             .output()

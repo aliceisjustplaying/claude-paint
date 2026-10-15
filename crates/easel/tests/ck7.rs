@@ -19,7 +19,7 @@ fn historical_v7_native_color_is_png_byte_identical_without_replay() {
     std::fs::write(&raw, zstd::stream::decode_all(SAVE).unwrap()).unwrap();
     std::fs::write(&source, SOURCE).unwrap();
     for save in [&compressed, &raw] {
-        let result = Command::new(env!("CARGO_BIN_EXE_easel"))
+        let result = Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
             .args(["render-checkpoint", save.to_str().unwrap(), png.to_str().unwrap(), "--mode", "color", "--log", source.to_str().unwrap()])
             .env("RAYON_NUM_THREADS", "2")
             .output().unwrap();
@@ -27,7 +27,7 @@ fn historical_v7_native_color_is_png_byte_identical_without_replay() {
         assert_eq!(std::fs::read(&png).unwrap(), COLOR);
     }
     std::fs::remove_file(&source).unwrap();
-    let result = Command::new(env!("CARGO_BIN_EXE_easel"))
+    let result = Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
         .args(["render-checkpoint", compressed.to_str().unwrap(), png.to_str().unwrap(), "--mode", "color"])
         .env("RAYON_NUM_THREADS", "2")
         .output().unwrap();

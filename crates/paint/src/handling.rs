@@ -426,6 +426,7 @@ struct Plan {
     fresh: bool,
     /// Its stroke id, if fixed in advance (see `fill_gaps`); else the next.
     id: Option<u32>,
+    geometry_seed: Option<u32>,
     /// The paint color: which pile
     /// on the palette the dip comes from (`tally::Piles`).
     want: Rgb,
@@ -439,6 +440,17 @@ struct Plan {
     /// Graded color (`piles_at`): the second pile the brush picks a little
     /// up from, after its main pile (`want`), when it weighs enough.
     pickup: Option<Rgb>,
+}
+
+impl Plan {
+    fn gesture(&self, hd: &Handling, ramps: (f32, f32)) -> Gesture {
+        Gesture::new(self.pts.clone())
+            .pressure(self.pressure, self.pressure * self.fade)
+            .orient(hd.orient)
+            .ramps(ramps.0, ramps.1)
+            .shake(hd.shake)
+            .swell(self.swell.clone())
+    }
 }
 
 impl Canvas {
@@ -841,8 +853,28 @@ impl Canvas {
     /// between them (None for the fill and cut-in sub-passes: their time
     /// goes on the clock when the verb ends).
     #[allow(clippy::too_many_arguments)]
-    fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
+    fn run_plans(&mut self, mut plans: Vec<(f32, f32, Option<Rect>, Plan)>, (mut ex, mut ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
+        let exact = self.engine == 7 && crate::engine7::features().footprints && plans.iter().all(|p| p.3.id.is_none());
+        if exact {
+            (ex, ey) = (0.0, 0.0);
+            let held = Held::new(tool.clone(), seed ^ 0x5EED);
+            for (ordinal, (cx, cy, _, p)) in plans.iter_mut().enumerate() {
+                let geometry_seed = crate::engine7::stroke_seed(seed, 0, 0, ordinal as u64) as u32;
+                p.geometry_seed = Some(geometry_seed);
+                let fresh;
+                let brush = if p.fresh {
+                    fresh = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                    &fresh
+                } else {
+                    &held
+                };
+                let rect = crate::engine7::footprint::Footprint::exact(brush, &p.gesture(hd, ramps), geometry_seed, f.scale, f.full_w, f.full_h);
+                let reach = crate::engine7::footprint::Footprint::reach(rect, (*cx, *cy), f.scale);
+                ex = ex.max(reach.0);
+                ey = ey.max(reach.1);
+            }
+        }
         // tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
@@ -911,6 +943,19 @@ impl Canvas {
         let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
         let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
+        if exact {
+            for (ti, tile) in tiles.iter().enumerate() {
+                let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+                rects[ti] = None;
+                for p in tile {
+                    if p.fresh {
+                        held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                    }
+                    let rect = crate::engine7::footprint::Footprint::exact(&held, &p.gesture(hd, ramps), p.geometry_seed.unwrap(), f.scale, f.full_w, f.full_h);
+                    rects[ti] = crate::sched::union(rects[ti], rect);
+                }
+            }
+        }
         let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
@@ -944,12 +989,7 @@ impl Canvas {
                         }
                     }
                 }
-                let g = Gesture::new(p.pts.clone())
-                    .pressure(p.pressure, p.pressure * p.fade)
-                    .orient(hd.orient)
-                    .ramps(ramps.0, ramps.1)
-                    .shake(hd.shake)
-                    .swell(p.swell.clone());
+                let g = p.gesture(hd, ramps);
                 // SAFETY: every pixel this drag touches lies in its stroke
                 // footprint, inside this tile's rect; run_ordered never runs
                 // tiles with overlapping rects at once; `surf()` checked the
@@ -959,7 +999,7 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
-                let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                let r = unsafe { crate::bristle::drag_on_seeded(surf, &mut held, &g, clip, id, p.geometry_seed.unwrap_or(id), &mut scratch) };
                 b = crate::sched::union(b, r);
             }
             b
@@ -1034,7 +1074,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
             (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium).with_thinner(s2.thinner), s2.load * load_k, s2.pile.color)
         });
-        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want, dip2, tool: None, sized: false, pickup });
+        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, geometry_seed: None, want, dip2, tool: None, sized: false, pickup });
     }
     let target = (hd.color)(c.0, c.1);
     let lab = to_oklab(target);
@@ -1045,7 +1085,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     ]);
     let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false, pickup: None })
+    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, geometry_seed: None, want: target, dip2: None, tool: None, sized: false, pickup: None })
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled
@@ -1797,4 +1837,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

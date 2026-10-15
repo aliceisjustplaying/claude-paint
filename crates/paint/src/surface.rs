@@ -419,6 +419,7 @@ impl Canvas {
             }
         }
         self.surf_gen += 1;
+        self.engine7_height_changed(rect);
     }
 
     /// A thin fluid film (a glaze or varnish, `add` µm per pixel of the

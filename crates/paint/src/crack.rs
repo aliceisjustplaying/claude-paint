@@ -432,7 +432,7 @@ struct Builder {
     mark: Vec<u32>,
     best: Vec<(f32, V2)>,
     touched: Vec<u32>,
-    epoch: u32,
+    chords: Vec<(V2, V2, bool)>,
     /// Current strength factor (strength / mean stress).
     r: f32,
     /// Step limit per growth (fatigue pass).
@@ -449,6 +449,23 @@ pub(crate) struct Budget {
 
 thread_local! {
     static MEMORY_REFUSAL: std::cell::RefCell<Option<Option<String>>> = const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(any(test, feature = "test-memory-budget"))]
+thread_local! {
+    static TEST_MEMORY_RESERVED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(any(test, feature = "test-memory-budget"))]
+pub fn with_traction_memory_reserved_for_test<R>(bytes: usize, run: impl FnOnce() -> R) -> R {
+    struct Restore(usize);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_MEMORY_RESERVED.set(self.0);
+        }
+    }
+    let _restore = Restore(TEST_MEMORY_RESERVED.replace(bytes));
+    run()
 }
 
 pub fn guard_traction_memory<R>(run: impl FnOnce() -> R) -> Result<R, String> {
@@ -472,6 +489,8 @@ impl Budget {
         let mut budget = Self { limit: Some(limit), used: 0, size };
         if !size.iter().all(|v| v.is_finite() && *v > 0.0) { budget.refused(); }
         budget.charge::<u8>(1 << 20);
+        #[cfg(any(test, feature = "test-memory-budget"))]
+        budget.charge::<u8>(TEST_MEMORY_RESERVED.get());
         budget
     }
 
@@ -527,21 +546,21 @@ impl Budget {
 }
 
 impl Builder {
-    fn new(k: &Cracks, size: V2, pitch: V2, mut budget: Budget) -> Self {
+    fn new(k: &Cracks, size: V2, pitch: V2, mut budget: Budget, origin: V2, full_size: V2, grid: f32) -> Self {
         let s = k.island().max(0.2);
-        let (gc, gx, gy) = stress_grid(size, s);
+        let (gc, gx, gy) = stress_grid(size, s, grid);
         let seed = k.seed;
         // mean stress: isotropic shrinkage of the film, varying slowly
         let broad = Fbm::new(seed as u32 ^ 0x51, 3, 12.0 * s);
         let patchy_s = Fbm::new(seed as u32 ^ 0x52, 3, 2.5 * s);
-        let diag = (size[0] * size[0] + size[1] * size[1]).sqrt();
+        let diag = (full_size[0] * full_size[0] + full_size[1] * full_size[1]).sqrt();
         let zone = CORNER_ZONE * diag;
         let corners = k.corners;
         let vary = k.vary.clamp(0.0, 1.0);
         // uneven aging: the film shrank more here than there (drying,
         // humidity, restorations), over some centimeters
         let uneven = Fbm::new(seed as u32 ^ 0x54, 3, 60.0);
-        let bars = stretcher(size);
+        let bars = stretcher(full_size);
         let wob = Fbm::new(seed as u32 ^ 0x55, 2, 40.0);
         // patchy development: the ground's thickness and the size and paint
         // under it vary over several centimeters, so the film is tougher
@@ -552,7 +571,7 @@ impl Builder {
         // drifting ±25° over the canvas
         let grain = GRAIN * k.grain.clamp(0.0, 1.0);
         let drift = Fbm::new(seed as u32 ^ 0x57, 2, 180.0);
-        let along_x = size[0] >= size[1];
+        let along_x = full_size[0] >= full_size[1];
         let mut sig = Vec::new();
         let mut strength = Vec::new();
         let n = gx.checked_mul(gy).unwrap_or_else(|| budget.refused());
@@ -561,7 +580,7 @@ impl Builder {
         (0..n)
             .into_par_iter()
             .map(|i| {
-                let p = [(i % gx) as f32 * gc + 0.5 * gc, (i / gx) as f32 * gc + 0.5 * gc];
+                let p = [(i % gx) as f32 * gc + 0.5 * gc + origin[0], (i / gx) as f32 * gc + 0.5 * gc + origin[1]];
                 let mut m = 1.0 + 0.12 * broad.get(p[0], p[1]) + 0.3 * vary * uneven.get(p[0], p[1]);
                 let mut t = [m, m, 0.0];
                 if vary > 0.0 {
@@ -584,12 +603,12 @@ impl Builder {
                     t[2] += grain * m * s2;
                 }
                 if corners {
-                    for (cx, cy) in [(0.0, 0.0), (size[0], 0.0), (0.0, size[1]), (size[0], size[1])] {
+                    for (cx, cy) in [(0.0, 0.0), (full_size[0], 0.0), (0.0, full_size[1]), (full_size[0], full_size[1])] {
                         let d = sub(p, [cx, cy]);
                         let r = dot(d, d).sqrt();
                         if r < zone {
                             // tension along the diagonal
-                            let u = norm([size[0] * if cx > 0.0 { -1.0 } else { 1.0 }, size[1] * if cy > 0.0 { -1.0 } else { 1.0 }]);
+                            let u = norm([full_size[0] * if cx > 0.0 { -1.0 } else { 1.0 }, full_size[1] * if cy > 0.0 { -1.0 } else { 1.0 }]);
                             // the stretcher corner pulls the canvas along its
                             // diagonal: the stress there becomes nearly uniaxial
                             let f = 1.0 - crate::smoothstep(0.5 * zone, zone, r);
@@ -601,7 +620,7 @@ impl Builder {
                         }
                     }
                 }
-                let white = hash2((i % gx) as i64, (i / gx) as i64, seed ^ 0x53) - 0.5;
+                let white = hash2((i % gx) as i64 + (origin[0] / gc).round() as i64, (i / gx) as i64 + (origin[1] / gc).round() as i64, seed ^ 0x53) - 0.5;
                 let mut st = (STRENGTH_SD * (1.4 * patchy_s.get(p[0], p[1]) + 0.9 * white)).exp();
                 if patchy > 0.0 {
                     // skewed: most of the canvas cracks well, some passages
@@ -623,7 +642,7 @@ impl Builder {
         let iy = (size[1] / ic).ceil() as usize + 1;
         let cells = budget.filled(ix.checked_mul(iy).unwrap_or_else(|| budget.refused()), Vec::new());
         let mark = budget.filled(n, 0);
-        let best = budget.filled(n, (0.0, [0.0; 2]));
+        let best = Vec::new();
         Builder {
             budget,
             size,
@@ -648,7 +667,7 @@ impl Builder {
             mark,
             best,
             touched: Vec::new(),
-            epoch: 0,
+            chords: Vec::new(),
             r: R_FIRST,
             limit: None,
             seed,
@@ -678,12 +697,13 @@ impl Builder {
         (s, st)
     }
 
-    fn index_cells(&self, lo: V2, hi: V2) -> impl Iterator<Item = usize> + '_ {
+    fn index_cells(&self, lo: V2, hi: V2) -> impl Iterator<Item = usize> + use<> {
         let cx0 = ((lo[0] / self.ic).floor().max(0.0) as usize).min(self.ix - 1);
         let cy0 = ((lo[1] / self.ic).floor().max(0.0) as usize).min(self.iy - 1);
         let cx1 = ((hi[0] / self.ic).floor().max(0.0) as usize).min(self.ix - 1);
         let cy1 = ((hi[1] / self.ic).floor().max(0.0) as usize).min(self.iy - 1);
-        (cy0..=cy1).flat_map(move |y| (cx0..=cx1).map(move |x| y * self.ix + x))
+        let ix = self.ix;
+        (cy0..=cy1).flat_map(move |y| (cx0..=cx1).map(move |x| y * ix + x))
     }
 
     fn add_seg(&mut self, a: V2, b: V2, who: Who) {
@@ -691,18 +711,9 @@ impl Builder {
         self.budget.push(&mut self.segs, Seg { a, b, crack: who.crack, arm: who.arm, k: who.k });
         let lo = [a[0].min(b[0]), a[1].min(b[1])];
         let hi = [a[0].max(b[0]), a[1].max(b[1])];
-        let cs = self.collected_cells(lo, hi);
-        for c in cs {
+        for c in self.index_cells(lo, hi) {
             self.budget.push(&mut self.cells[c], id);
         }
-    }
-
-    fn collected_cells(&mut self, lo: V2, hi: V2) -> Vec<usize> {
-        let count = self.index_cells(lo, hi).count();
-        let mut cells = Vec::new();
-        self.budget.reserve(&mut cells, count);
-        cells.extend(self.index_cells(lo, hi));
-        cells
     }
 
     /// First place segment pq meets another crack: (point, crack).
@@ -875,9 +886,11 @@ impl Builder {
     /// Relax the stress around chords of crack just laid (`(a, b, tip)`;
     /// `tip`: b is a free tip, and the stress ahead of it is not relaxed).
     fn relax(&mut self, chords: &[(V2, V2, bool)]) {
-        self.epoch += 1;
-        let ep = self.epoch;
+        for &i in &self.touched {
+            self.mark[i as usize] = 0;
+        }
         self.touched.clear();
+        self.best.clear();
         let l = RELAX * self.s;
         let reach = RELAX_CUT * l;
         for &(a, b, free_tip) in chords {
@@ -906,19 +919,21 @@ impl Builder {
                         continue;
                     }
                     let i = y * self.gx + x;
-                    if self.mark[i] != ep {
-                        self.mark[i] = ep;
-                        self.best[i] = (dd, nrm);
+                    if self.mark[i] == 0 {
+                        self.mark[i] = self.best.len() as u32 + 1;
+                        self.budget.push(&mut self.best, (dd, nrm));
                         self.budget.push(&mut self.touched, i as u32);
-                    } else if dd < self.best[i].0 {
-                        self.best[i] = (dd, nrm);
+                    } else {
+                        let best = &mut self.best[self.mark[i] as usize - 1];
+                        if dd < best.0 {
+                            *best = (dd, nrm);
+                        }
                     }
                 }
             }
         }
-        for &i in &self.touched {
+        for (&i, &(d2, n)) in self.touched.iter().zip(&self.best) {
             let i = i as usize;
-            let (d2, n) = self.best[i];
             let r = relief(d2.sqrt(), l);
             if r <= 0.0 {
                 continue;
@@ -942,7 +957,8 @@ impl Builder {
     /// about half that: far cheaper, and the jags don't matter at that range.
     fn relax_arms(&mut self, grown: &[(usize, std::ops::Range<usize>)]) {
         let lc = 0.5 * RELAX_CUT * RELAX * self.s;
-        let mut chords = Vec::new();
+        let mut chords = std::mem::take(&mut self.chords);
+        chords.clear();
         for (ai, r) in grown {
             if r.is_empty() {
                 continue;
@@ -963,10 +979,14 @@ impl Builder {
             }
         }
         self.relax(&chords);
+        self.chords = chords;
     }
 
     fn ratio(&self, i: usize) -> f32 {
-        principal(self.sig[i]).0 / (self.r * self.strength[i])
+        let s = self.sig[i];
+        let m = 0.5 * (s[0] + s[1]);
+        let r = (0.25 * (s[0] - s[1]).powi(2) + s[2] * s[2]).sqrt();
+        (m + r) / (self.r * self.strength[i])
     }
 
     /// Start a crack at grid cell i: two arms back to back.
@@ -985,8 +1005,7 @@ impl Builder {
         let h = self.snap(h, self.weave);
         let crack = self.ncracks;
         self.ncracks += 1;
-        let mut grown = Vec::new();
-        for side in [1.0f32, -1.0] {
+        let grown = [1.0f32, -1.0].map(|side| {
             let ai = self.arms.len();
             let pts = self.budget.filled(1, p);
             self.budget.push(&mut self.arms, ArmState {
@@ -1001,8 +1020,8 @@ impl Builder {
                 rel: (0.0, 0.0),
             });
             let r = self.grow(ai);
-            self.budget.push(&mut grown, (ai, r));
-        }
+            (ai, r)
+        });
         // opening ≈ the stress the crack released, relative to the mean
         let (a, b) = (self.arms.len() - 2, self.arms.len() - 1);
         let rel = (self.arms[a].rel.0 + self.arms[b].rel.0) / (self.arms[a].rel.1 + self.arms[b].rel.1).max(1.0);
@@ -1012,6 +1031,7 @@ impl Builder {
     }
 
     fn run(mut self) -> (Network, Budget) {
+        let mut candidates = Vec::new();
         for g in 0..GENERATIONS {
             let f = g as f32 / (GENERATIONS - 1) as f32;
             self.r = R_FIRST * (R_LAST / R_FIRST).powf(f);
@@ -1025,12 +1045,12 @@ impl Builder {
                 }
             }
             // then new cracks, strongest stress / strength first
-            let mut candidates = Vec::new();
+            candidates.clear();
             for i in 0..self.gx * self.gy {
                 let q = self.ratio(i);
                 if q > 1.0 { self.budget.push(&mut candidates, (q.to_bits(), Reverse(i as u32))); }
             }
-            let mut heap = BinaryHeap::from(candidates);
+            let mut heap = BinaryHeap::from(std::mem::take(&mut candidates));
             while let Some((qb, Reverse(i))) = heap.pop() {
                 let i = i as usize;
                 let q = self.ratio(i);
@@ -1044,7 +1064,9 @@ impl Builder {
                 }
                 self.nucleate(i, g as u8);
             }
+            candidates = heap.into_vec();
         }
+        drop(candidates);
         self.fatigue();
         let mut arms = Vec::new();
         self.budget.reserve(&mut arms, self.arms.len());
@@ -1063,9 +1085,8 @@ impl Builder {
                 continue;
             }
             let pts = std::mem::take(&mut self.arms[ai].arm.pts);
+            let npts = pts.len();
             let mut keep = self.arms[ai].clone();
-            self.budget.reserve(&mut keep.arm.pts, pts.len());
-            keep.arm.pts.extend_from_slice(&pts);
             self.arms[ai].arm.pts = pts;
             let r = self.grow(ai);
             if !matches!(self.arms[ai].arm.end, End::Crack(_)) {
@@ -1074,14 +1095,15 @@ impl Builder {
                     let (a, b) = (self.segs[si].a, self.segs[si].b);
                     let lo = [a[0].min(b[0]), a[1].min(b[1])];
                     let hi = [a[0].max(b[0]), a[1].max(b[1])];
-                    let cs = self.collected_cells(lo, hi);
-                    for c in cs {
+                    for c in self.index_cells(lo, hi) {
                         if self.cells[c].last() == Some(&(si as u32)) {
                             self.cells[c].pop();
                         }
                     }
                     self.segs.pop();
                 }
+                keep.arm.pts = std::mem::take(&mut self.arms[ai].arm.pts);
+                keep.arm.pts.truncate(npts);
                 self.arms[ai] = keep;
             }
         }
@@ -1140,24 +1162,29 @@ impl Stretcher {
 /// Grow a crack network over a `size_mm` surface on linen of thread pitch
 /// `pitch_mm` (x: across the warp threads, y: across the weft).
 pub fn network(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2]) -> Network {
-    Builder::new(k, size_mm, pitch_mm, Budget::default()).run().0
+    Builder::new(k, size_mm, pitch_mm, Budget::default(), [0.0; 2], size_mm, GRID).run().0
 }
 
-fn stress_grid(size: V2, island: f32) -> (f32, usize, usize) {
-    let gc = island.max(0.2) * GRID;
+fn stress_grid(size: V2, island: f32, grid: f32) -> (f32, usize, usize) {
+    let gc = island.max(0.2) * grid;
     (gc, ((size[0] / gc).ceil() as usize).saturating_add(1), ((size[1] / gc).ceil() as usize).saturating_add(1))
 }
 
-pub(crate) fn check_network_grid(size: V2, island: f32, limit: usize) -> Result<(), String> {
+pub(crate) fn check_network_grid(size: V2, domain: V2, island: f32, grid: f32, limit: usize) -> Result<(), String> {
     let budget = Budget::limited(size, limit);
-    let (_, gx, gy) = stress_grid(size, island);
-    let per_cell = std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<f32>() + std::mem::size_of::<u32>() + std::mem::size_of::<(f32, V2)>();
-    let bytes = gx.checked_mul(gy).and_then(|n| n.checked_mul(per_cell)).and_then(|n| n.checked_add(budget.used));
+    let (_, gx, gy) = stress_grid(domain, island, grid);
+    let per_cell = std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<f32>() + std::mem::size_of::<u32>();
+    let ic = 0.25 * island.max(0.2);
+    let ix = ((domain[0] / ic).ceil() as usize).saturating_add(1);
+    let iy = ((domain[1] / ic).ceil() as usize).saturating_add(1);
+    let index_bytes = ix.checked_mul(iy).and_then(|n| n.checked_mul(std::mem::size_of::<Vec<u32>>()));
+    let bytes = gx.checked_mul(gy).and_then(|n| n.checked_mul(per_cell))
+        .and_then(|n| n.checked_add(index_bytes?)).and_then(|n| n.checked_add(budget.used));
     if bytes.is_some_and(|n| n <= limit) { Ok(()) } else { Err(budget.error()) }
 }
 
-pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], pitch_mm: [f32; 2], limit: usize) -> (Network, Budget) {
-    Builder::new(k, size_mm, pitch_mm, Budget::limited(size_mm, limit)).run()
+pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], origin_mm: [f32; 2], domain_mm: [f32; 2], pitch_mm: [f32; 2], grid: f32, limit: usize) -> (Network, Budget) {
+    Builder::new(k, domain_mm, pitch_mm, Budget::limited(size_mm, limit), origin_mm, size_mm, grid).run()
 }
 
 /// A crack segment for rasterizing: ends in mm and relative opening at each.

@@ -1057,7 +1057,9 @@ mod tests {
         };
         let before = state(&live);
         let log = live.program("memory-limit");
-        let error = live.run(r#"k = 42; canvas{size=5000, aspect=1, linen=15, seed=11, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap_err();
+        let error = paint::crack::with_traction_memory_reserved_for_test(1016 << 20, || {
+            live.run(r#"k = 42; canvas{size=5000, aspect=1, linen=15, seed=11, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap_err()
+        });
         assert!(error.contains("1024 MiB memory budget"), "{error}");
         assert_eq!(state(&live), before);
         assert_eq!(live.program("memory-limit"), log);
@@ -1097,7 +1099,10 @@ mod tests {
             };
             let before = state(&live);
             let log = live.program("caught-memory-limit");
-            let error = live.run(&format!("junk = 42; local ok = {call}; assert(not ok)")).unwrap_err();
+            let error = paint::crack::with_traction_memory_reserved_for_test(924 << 20, || {
+                assert!(prepared.check_traction_memory().is_ok());
+                live.run(&format!("junk = 42; local ok = {call}; assert(not ok)")).unwrap_err()
+            });
             assert!(error.contains("1024 MiB memory budget"), "{call}: {error}");
             assert_eq!(state(&live), before, "{call}");
             assert_eq!(live.program("caught-memory-limit"), log, "{call}");

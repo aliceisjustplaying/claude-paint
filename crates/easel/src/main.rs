@@ -32,6 +32,7 @@ mod frames;
 #[cfg(feature = "replay")]
 mod legacy;
 mod look;
+mod output;
 mod save;
 #[cfg(feature = "state-store")]
 mod painting_store;
@@ -49,6 +50,7 @@ mod thinner_measure;
 mod thinner_tests;
 
 use paint::Canvas;
+#[cfg(test)]
 use paint::color::linear_to_srgb;
 use session::{Session, parse_program, root};
 use std::io::{Read, Write};
@@ -1603,7 +1605,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
         Some((az, el)) => c.seen_lit(az, el, 1.0),
         None => c.seen(),
     };
-    let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let buf = output::rgb8_exact(&px, f.w);
     if let Some(d) = out.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }

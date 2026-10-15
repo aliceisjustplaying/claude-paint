@@ -1,4 +1,5 @@
 use image::ImageEncoder;
+#[cfg(test)]
 use paint::color::linear_to_srgb;
 use paint::render_snapshot::{RenderSnapshot, RENDERER};
 use serde::{Deserialize, Serialize};
@@ -136,13 +137,7 @@ fn png(snapshot: &RenderSnapshot, r: [usize; 4], light: Option<[u32; 3]>, writer
     let f = snapshot.frame();
     let lit = light.map(|bits| { let [az, el, strength] = bits.map(f32::from_bits); snapshot.lit(az, el, strength) });
     let pixels = lit.as_deref().unwrap_or(snapshot.color());
-    let mut bytes = Vec::with_capacity((r[2] - r[0]) * (r[3] - r[1]) * 3);
-    for y in r[1]..r[3] {
-        for x in r[0]..r[2] {
-            let p = pixels[(y - f.y0) * f.w + x - f.x0];
-            bytes.extend(p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8));
-        }
-    }
+    let bytes = crate::output::rgb8_exact_region(pixels, f.w, [r[0] - f.x0, r[1] - f.y0, r[2] - f.x0, r[3] - f.y0]);
     image::codecs::png::PngEncoder::new(writer).write_image(&bytes, (r[2] - r[0]) as u32, (r[3] - r[1]) as u32, image::ExtendedColorType::Rgb8).map_err(|e| invalid(e.to_string()))
 }
 

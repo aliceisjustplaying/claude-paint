@@ -49,6 +49,31 @@ impl Footprint {
     pub fn planned(tool: &Tool, pts: &[(f32, f32)], shake: f32, orient: Orient, scale: f32, w: usize, h: usize) -> Option<Rect> {
         within(bound(tool, pts, shake, orient, None, scale, w, h)?, footprint(tool, pts, shake, scale, w, h)?)
     }
+
+    /// How far (units, per axis) to size a covering pass's tiles for, from
+    /// its strokes' anchors (units) and planned footprints (pixels at
+    /// §scale§): the reach that all but the longest tenth of its strokes
+    /// stay within. A tile twice that wide runs beside its checkerboard
+    /// neighbors' neighbors; the few strokes reaching farther only make
+    /// their tile's rectangle overlap more, and §run_ordered§ keeps
+    /// overlapping tiles in order, so the result is the same however many
+    /// workers paint it. (The longest strokes, often carried in from a
+    /// region's edge, reach 1.6–2× as far as the rest: sized by them, a
+    /// pass's tiles are too big to run more than a few at once.)
+    pub fn tile_reach(strokes: impl IntoIterator<Item = ((f32, f32), Rect)>, scale: f32) -> (f32, f32) {
+        let (mut rx, mut ry): (Vec<f32>, Vec<f32>) = strokes
+            .into_iter()
+            .map(|((cx, cy), r)| {
+                let (px, py) = (cx * scale, cy * scale);
+                ((px - r.0 as f32).max(r.2 as f32 - px) / scale, (py - r.1 as f32).max(r.3 as f32 - py) / scale)
+            })
+            .unzip();
+        let at = |v: &mut Vec<f32>| {
+            v.sort_by(f32::total_cmp);
+            v.get(((v.len() as f32 * 0.9) as usize).min(v.len().saturating_sub(1))).copied().unwrap_or(0.0)
+        };
+        (at(&mut rx), at(&mut ry))
+    }
 }
 
 /// `r` cut to `c` (engine 5's `drag_on` clamps every access to `c`).
@@ -414,6 +439,30 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tiles_are_sized_for_all_but_the_longest_tenth() {
+        let strokes = (0..20).map(|k| ((100.0, 100.0), (100 - k, 90, 110 + 10 * k, 100 + k / 2)));
+        assert_eq!(Footprint::tile_reach(strokes, 1.0), (190.0, 10.0));
+        assert_eq!(Footprint::tile_reach([], 2.0), (0.0, 0.0));
+    }
+
+    /// An engine 7 covering pass paints the same on one worker as on four.
+    #[test]
+    fn work_paints_the_same_on_any_number_of_workers() {
+        use crate::handling::Handling;
+        use crate::mask::Mask;
+        let paint = |n: usize| {
+            rayon::ThreadPoolBuilder::new().num_threads(n).build().unwrap().install(|| {
+                let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_engine(7);
+                let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < 380.0 && (y - 500.0).abs() < 300.0 + 0.3 * x { 1.0 } else { 0.0 });
+                c.work(&m, &Handling::new(Tool::filbert(24.0)).color(|_, _| hex("#803020")).length(30.0, 300.0), 5);
+                c.work(&m, &Handling::new(Tool::hog_flat(12.0)).color(|x, _| if x < 450.0 { hex("#a9785a") } else { hex("#50607a") }).coverage(3.0), 6);
+                c.wet.vol.iter().chain(c.wet.cover.iter()).map(|v| v.to_bits()).collect::<Vec<_>>()
+            })
+        };
+        assert_eq!(paint(1), paint(4));
     }
 
     /// A 24 mm filbert's 30 mm stroke at 2400 px on a 900 mm canvas: the

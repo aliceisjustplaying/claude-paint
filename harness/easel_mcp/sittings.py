@@ -19,10 +19,11 @@ def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
     within 2000x2000 and under 4.5 MiB of base64 it goes as it is; otherwise it is scaled to fit and sent as
     PNG or JPEG (quality 80, then 85, 70, 55, 40), the first under the limit, shrinking by 0.75 until one is."""
     from PIL import Image, ImageOps
-    image = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    opened = Image.open(io.BytesIO(data))
+    image = ImageOps.exif_transpose(opened)
     original = image.size
     if max(original) <= max_side and math.ceil(len(data) / 3) * 4 < max_bytes:
-        mime = Image.MIME.get(image.format, "image/png")
+        mime = Image.MIME.get(opened.format, "image/png")
         return [types.TextContent(type="text", text=f"Read image file [{mime}]"),
                 types.ImageContent(type="image", mimeType=mime, data=base64.b64encode(data).decode())]
     width, height = original

@@ -443,7 +443,8 @@ impl Canvas {
             .collect();
         let order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
         let ids = plans.iter().map(|t| t.len() as u32).collect();
-        let pass = crate::sched::Pass { grid: (tw, th), order: crate::sched::TileOrder::Default(order), rects, secs: tile_secs, ids, slice: self.hand_slice_secs() };
+        let slice = self.covering_slice_secs(self.hand_slice_secs(), plans.iter().flatten().filter_map(|p| p.dip), &tile_secs);
+        let pass = crate::sched::Pass { grid: (tw, th), order: crate::sched::TileOrder::Default(order), rects, secs: tile_secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();

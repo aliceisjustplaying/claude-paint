@@ -848,6 +848,7 @@ impl Canvas {
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
         // short tiles)
         let margin = 2.0 / f.scale;
+        let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
         let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
         let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
         if std::env::var_os("PAINT_DEBUG").is_some() {

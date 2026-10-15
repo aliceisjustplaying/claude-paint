@@ -14,6 +14,7 @@ pub mod checkpoint;
 pub mod color;
 pub mod crack;
 pub mod drying;
+pub mod engine7;
 pub mod mask;
 pub mod noise;
 pub mod path;
@@ -97,6 +98,12 @@ pub use shape::Shape;
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 pub const ENGINE: u32 = 5;
+
+pub const SUPPORTED_ENGINES: &[u32] = &[1, 2, 3, 4, 5, 7];
+
+pub fn supports_engine(engine: u32) -> bool {
+    SUPPORTED_ENGINES.contains(&engine)
+}
 
 /// Hermite smoothstep.
 #[inline]

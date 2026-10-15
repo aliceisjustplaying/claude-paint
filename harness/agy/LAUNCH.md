@@ -6,7 +6,13 @@ This setup configures the official agy CLI for an approved studio. An operator s
 
 From the studio folder, `agy --agent easel-painter` starts the restricted painter. The operator picks Argon in agy's model picker before the first message. The exact Argon CLI selector and this account's access are unverified. The agent's tool list holds only `mcp_easel_paint`, `mcp_easel_look`, `mcp_easel_note`, `mcp_easel_status`, `mcp_easel_log`, `mcp_easel_read` and `mcp_easel_end_sitting`. It has no shell, web access, agy file writes or subagents. agy asks for approval of MCP tool calls, and its permission panel can grant the seven easel tools. No skip-permissions flag is used. The first session checks that agy accepts these MCP tool names before any painting.
 
-The launch message below is the house runner's `PAINTER_MSG`, copied word for word from `r38/r21_chains.py` lines 54–61. The painter reads BRIEF.md with the easel's read tool.
+agy attaches MCP tools only from the second turn, so the first message is this greeting and the launch message goes second:
+
+> Hi, welcome to the studio, it's good to have you here. A quick hello back is plenty for now.
+
+The setup starts the easel server with `--agy`. Every tool then carries `_meta` `{"antigravity/alwaysLoad": true}`, and text replies over 8,000 bytes come back in pages, because agy 1.3.5 cuts a text tool result over about 9.9 KB to its head and tail. `read` and `log` take a `page`. A longer `paint` or `end_sitting` reply is saved whole under `out/easel/replies/`, and its first page names the `read` call for the rest. Each page ends with one line naming the next call.
+
+The launch message below, sent second, is the house runner's `PAINTER_MSG`, copied word for word from `r38/r21_chains.py` lines 54–61. The painter reads BRIEF.md with the easel's read tool.
 
 > Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you give it one and a few sentences about the picture. At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, practical lessons to carry forward from what you observed and recipes that failed. Before retrying a failed recipe, identify what has changed and why that could address the observed failure. Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. Record what you observed and what remains uncertain.
 

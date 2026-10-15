@@ -62,6 +62,7 @@ def replay(args):
     receipt = {
         "schema": "engine7-bench-v1", "measured": True, "command": command,
         "env": {k: env[k] for k in ("RAYON_NUM_THREADS", "EASEL_ROOT", "EASEL_GROUND_CACHE")},
+        "engine7_switches": {k: env.get(k) for k in ("PAINT_ENGINE7_FOOTPRINTS", "PAINT_ENGINE7_KERNEL", "PAINT_ENGINE7_CACHE")},
         "source": str(source), "source_sha256": sha256(source),
         "painting": source.stem, "input_sha256": sha256(prepared), "revision": args.revision,
         "physical_width_mm": float(size[1]) if size else None, "backend": "auto",

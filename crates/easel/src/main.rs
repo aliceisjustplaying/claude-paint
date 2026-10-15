@@ -1818,6 +1818,9 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        if paint::engine7::stats() {
+            eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
+        }
         if let Some(f) = digests.as_mut() {
             f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
         }

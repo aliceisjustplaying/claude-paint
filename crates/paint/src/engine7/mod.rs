@@ -32,6 +32,8 @@ pub mod window;
 
 pub use footprint::Footprint;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 /// The engine version that selects engine 7.
 pub const ENGINE: u32 = 7;
 
@@ -50,6 +52,54 @@ pub fn active(v: u32) -> bool {
 pub fn stats() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("E7_STATS").is_some_and(|v| v == "1"))
+}
+
+/// Ready and running tiles of the pass being painted (`E7_STATS` only).
+pub(crate) static READY: AtomicUsize = AtomicUsize::new(0);
+static PEAK_READY: AtomicUsize = AtomicUsize::new(0);
+static RUNNING: AtomicUsize = AtomicUsize::new(0);
+static PEAK_RUNNING: AtomicUsize = AtomicUsize::new(0);
+static BATCH: AtomicUsize = AtomicUsize::new(0);
+
+/// `n` more tiles became ready to run (`E7_STATS` only).
+pub(crate) fn tiles_ready(n: usize) {
+    let now = READY.fetch_add(n, Ordering::Relaxed) + n;
+    PEAK_READY.fetch_max(now, Ordering::Relaxed);
+}
+
+/// Paint one tile with `work`, counted and timed (`E7_STATS` only): its
+/// result and seconds.
+pub(crate) fn tile<T>(work: impl FnOnce() -> T) -> (T, f64) {
+    READY.fetch_sub(1, Ordering::Relaxed);
+    let now = RUNNING.fetch_add(1, Ordering::Relaxed) + 1;
+    PEAK_RUNNING.fetch_max(now, Ordering::Relaxed);
+    let t = std::time::Instant::now();
+    let v = work();
+    let secs = t.elapsed().as_secs_f64();
+    RUNNING.fetch_sub(1, Ordering::Relaxed);
+    (v, secs)
+}
+
+/// Start counting a batch of a pass (`E7_STATS` only).
+pub(crate) fn batch_start() {
+    for a in [&READY, &PEAK_READY, &RUNNING, &PEAK_RUNNING] {
+        a.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Print the batch's `E7BATCH` line (`E7_STATS` only).
+pub(crate) fn batch_end(tiles: usize, wall: f64, tile_secs: f64) {
+    let b = BATCH.fetch_add(1, Ordering::Relaxed) + 1;
+    eprintln!("E7BATCH	{b}	{tiles}	{}	{}	{wall:.6}	{tile_secs:.6}", PEAK_READY.load(Ordering::Relaxed), PEAK_RUNNING.load(Ordering::Relaxed));
+}
+
+/// Print a `work` stroke's `E7NODE` line (`E7_STATS` only). Seeds and
+/// times per stroke aren't recorded yet: `-`.
+pub(crate) fn trace_stroke(sf: &crate::bristle::Surf, held: &crate::bristle::Held, g: &crate::bristle::Gesture, id: u32) {
+    let r = |r: Option<Rect>| r.map_or("-".to_string(), |(x0, y0, x1, y1)| format!("{x0},{y0},{x1},{y1}"));
+    let exact = Footprint::exact(held, g, id, sf.scale, sf.fw, sf.fh);
+    let conservative = Footprint::conservative(&held.tool, g, sf.scale, sf.fw, sf.fh);
+    eprintln!("E7NODE	{id}	-	-	-	{}	{}", r(exact), r(conservative));
 }
 
 /// A stroke's seed from its logical position in the log: the log's seed,

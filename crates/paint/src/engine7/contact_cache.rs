@@ -66,7 +66,21 @@ impl BaseCache {
 
     pub(crate) fn rebuild(&mut self, height: &[f32]) -> &[f32] {
         assert_eq!(height.len(), self.w * self.h);
-        if self.dirty.iter().all(|&dirty| dirty) {
+        let source_pixels: usize = self
+            .dirty
+            .iter()
+            .enumerate()
+            .filter(|(_, dirty)| **dirty)
+            .map(|(block, _)| {
+                let (x0, y0) = (block % self.cols * BLOCK, block / self.cols * BLOCK);
+                let (x1, y1) = ((x0 + BLOCK).min(self.w), (y0 + BLOCK).min(self.h));
+                let width = x1.saturating_add(self.halo).min(self.w) - x0.saturating_sub(self.halo);
+                let height =
+                    y1.saturating_add(self.halo).min(self.h) - y0.saturating_sub(self.halo);
+                width * height
+            })
+            .sum();
+        if source_pixels >= height.len() {
             let low = contact_level(height, self.w, self.h, self.r);
             self.base
                 .par_iter_mut()
@@ -122,6 +136,8 @@ mod tests {
     }
 
     fn assert_close(actual: &[f32], expected: &[f32]) {
+        assert_eq!(actual.len(), expected.len());
+        assert!(actual.iter().chain(expected).all(|value| value.is_finite()));
         let max_error = actual
             .iter()
             .zip(expected)
@@ -187,7 +203,7 @@ mod tests {
 
     #[test]
     fn shifting_mark_across_block_edges_does_not_change_contact() {
-        let (w, h) = (1027, 773);
+        let (w, h) = (1541, 1283);
         for mm in [50.0, 200.0, 730.0, 900.0, 5000.0] {
             let px_mm = mm / 2400.0;
             let mut contacts = Vec::new();

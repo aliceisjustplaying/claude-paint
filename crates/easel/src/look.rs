@@ -6,7 +6,9 @@
 //! drawing; it never touches the canvas.
 
 use image::ImageEncoder;
-use paint::color::{linear_to_srgb, luminance};
+use paint::color::luminance;
+#[cfg(test)]
+use paint::color::linear_to_srgb;
 use paint::{Canvas, Rgb};
 use std::path::{Path, PathBuf};
 
@@ -370,8 +372,9 @@ pub fn companions(c: &Canvas, views: &[(View, PathBuf)]) {
     if !views.iter().any(|(v, _)| v.display_eligible()) {
         return;
     }
+    let prepared = c.prepare_optics();
     for preset in DISPLAY_PRESETS {
-        let seen = c.seen_lit(preset.light.0, preset.light.1, 1.0);
+        let seen = prepared.seen_lit(preset.light.0, preset.light.1, 1.0);
         for (v, out) in views.iter().filter(|(v, _)| v.display_eligible()) {
             let result = (|| -> Result<(), String> {
                 let mut lit = v.clone();
@@ -430,7 +433,24 @@ pub fn render_pair(c: &Canvas, v: &View, seen: &[Rgb]) -> std::result::Result<((
 }
 
 pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::Result<(usize, usize, Vec<u8>), String> {
-    let f = c.window();
+    let own;
+    let px: &[Rgb] = match seen {
+        Some(px) => px,
+        None => {
+            own = match v.light {
+                Some((az, el)) => c.seen_lit(az, el, 1.0),
+                None => c.seen(),
+            };
+            &own
+        }
+    };
+    render_pixels(c.window(), v, px)
+}
+
+pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    if f.w.checked_mul(f.h) != Some(px.len()) {
+        return Err("look: optical pixels do not match the captured frame".into());
+    }
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
     let (x0, y0, x1, y1) = match v.crop {
@@ -462,40 +482,12 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
         return Err("look: canvas is empty".into());
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
-    let own;
-    let px: &[Rgb] = match seen {
-        Some(px) => px,
-        None => {
-            own = match v.light {
-                Some((az, el)) => c.seen_lit(az, el, 1.0),
-                None => c.seen(),
-            };
-            &own
-        }
-    };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
             let k = size as f32 / long as f32;
             let (ow, oh) = (((cw as f32 * k).round() as usize).max(1), ((ch as f32 * k).round() as usize).max(1));
-            let mut img = vec![[0.0f32; 3]; ow * oh];
-            for oy in 0..oh {
-                let (sy0, sy1) = (y0 + oy * ch / oh, (y0 + (oy + 1) * ch / oh).max(y0 + oy * ch / oh + 1));
-                for ox in 0..ow {
-                    let (sx0, sx1) = (x0 + ox * cw / ow, (x0 + (ox + 1) * cw / ow).max(x0 + ox * cw / ow + 1));
-                    let mut acc = [0.0f32; 3];
-                    for y in sy0..sy1 {
-                        for x in sx0..sx1 {
-                            let p = px[(y - wy0) * f.w + x - wx0];
-                            for q in 0..3 {
-                                acc[q] += p[q];
-                            }
-                        }
-                    }
-                    let n = ((sy1 - sy0) * (sx1 - sx0)) as f32;
-                    img[oy * ow + ox] = [acc[0] / n, acc[1] / n, acc[2] / n];
-                }
-            }
+            let img = crate::output::average_linear(px, f.w, [x0 - wx0, y0 - wy0, x1 - wx0, y1 - wy0], ow, oh);
             (ow, oh, img)
         } else {
             let img = (0..cw * ch).map(|i| px[(y0 - wy0 + i / cw) * f.w + x0 - wx0 + i % cw]).collect();
@@ -532,7 +524,7 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
         if let Some(step) = v.grid {
             draw_grid(&mut im, &map, step, fs)?;
         }
-        let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+        let buf = crate::output::rgb8(&im.px, ow);
         let mut png = Vec::new();
         image::codecs::png::PngEncoder::new(&mut png)
             .write_image(&buf, ow as u32, oh as u32, image::ExtendedColorType::Rgb8)
@@ -635,7 +627,7 @@ pub fn palette(rows: &[(String, String, paint::Paint)], ground: Rgb) -> std::res
         im.rect(col(3), cy0, col(3) + SW as i64, cy1, sw[4], 1.0);
         y += *rh as i64;
     }
-    let buf: Vec<u8> = im.px.iter().flat_map(|p| p.map(|c| (linear_to_srgb(c) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
+    let buf = crate::output::rgb8_exact(&im.px, w);
     let mut png = Vec::new();
     image::codecs::png::PngEncoder::new(&mut png).write_image(&buf, w as u32, h as u32, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
     Ok((w, h, png))

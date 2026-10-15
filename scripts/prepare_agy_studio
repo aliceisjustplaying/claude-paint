@@ -11,9 +11,10 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     studio = studio.expanduser().resolve(strict=True)
     if not re.fullmatch(r"paint-studio-[0-9a-f]+", studio.name):
         raise ValueError("the studio folder must be named paint-studio-<hex> for the viewer")
-    for path in ("BRIEF.md", "bin/easel"):
-        if not (studio / path).is_file():
-            raise ValueError(f"the prepared studio is missing {path}")
+    if not (studio / "BRIEF.md").is_file():
+        raise ValueError("the prepared studio is missing BRIEF.md")
+    if not ((studio / "bin/easel").is_file() or (studio / "bin/watercolor-studio").is_file()):
+        raise ValueError("the prepared studio is missing bin/easel or bin/watercolor-studio")
     if any(value is not None and (not math.isfinite(value) or value < 0) for value in (break_seconds, sitting_seconds)):
         raise ValueError("durations must be finite and nonnegative")
     uv = shutil.which("uv")

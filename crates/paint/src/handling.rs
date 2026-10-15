@@ -848,12 +848,16 @@ impl Canvas {
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
         // short tiles)
         let margin = 2.0 / f.scale;
-        let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
+        let tile_scale = std::env::var("RENDER_TILE_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite() && *v > 0.0 && *v <= 1.0).unwrap_or(1.0);
+        let (tile_x, tile_y) = (((2.0 * ex + margin).max(gap * 2.0)) * tile_scale, ((2.0 * ey + margin).max(gap * 2.0)) * tile_scale);
         let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", plans.len());
         }
         let mut tiles: Vec<Vec<Plan>> = (0..tw * th).map(|_| Vec::new()).collect();
+        let profile_strokes = std::env::var_os("RENDER_STROKE_PROFILE").is_some();
+        let mut stroke_rects = profile_strokes.then(|| vec![Vec::new(); tw * th]);
+        if profile_strokes { eprintln!("PROFILE_PASS,{tw},{th}"); }
         // pixel footprint of each tile: the union of its strokes'
         let mut rects: Vec<Option<Rect>> = vec![None; tw * th];
         for (cx, cy, rect, p) in plans {
@@ -862,6 +866,7 @@ impl Canvas {
             let t = ty * tw + tx;
             if let Some(r) = rect {
                 rects[t] = crate::sched::union(rects[t], Some(r));
+                if let Some(held) = &mut stroke_rects { held[t].push(r); }
                 tiles[t].push(p);
             }
         }
@@ -918,7 +923,7 @@ impl Canvas {
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
             let mut k = 0u32;
-            for p in tiles[ti].iter() {
+            for (stroke_index, p) in tiles[ti].iter().enumerate() {
                 let id = p.id.unwrap_or_else(|| {
                     k += 1;
                     first_id.wrapping_add(k - 1)
@@ -959,7 +964,12 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
+                let stroke_start = profile_strokes.then(std::time::Instant::now);
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
+                if let Some(start) = stroke_start {
+                    let rect = stroke_rects.as_ref().unwrap()[ti][stroke_index];
+                    eprintln!("PROFILE_STROKE,{ti},{stroke_index},{},{},{},{},{:.9}", rect.0,rect.1,rect.2,rect.3,start.elapsed().as_secs_f64());
+                }
                 b = crate::sched::union(b, r);
             }
             b
@@ -1797,4 +1807,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

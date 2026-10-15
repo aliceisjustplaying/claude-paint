@@ -22,6 +22,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
 pub(crate) type Rect = (usize, usize, usize, usize);
 
+/// Shrink dense work tiles toward 32 strokes per tile, never below half
+/// their legacy dimensions. The plan, not the worker count, sets the scale.
 pub(crate) fn work_tile_scale(strokes: &[usize]) -> f32 {
     let longest = strokes.iter().copied().max().unwrap_or(0).max(32);
     (32.0 / longest as f32).sqrt().max(0.5)

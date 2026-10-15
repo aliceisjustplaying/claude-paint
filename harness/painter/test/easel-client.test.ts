@@ -300,6 +300,22 @@ test("the easel gets the operator's RAYON_NUM_THREADS and nothing else of the pa
 	}
 });
 
+test("explicit display budgets reach the easel without forwarding unrelated variables", async () => {
+	const studio = stubStudio(`printf '%s %s %s\\n' "$EASEL_ASYNC_DISPLAY" "$EASEL_DISPLAY_THREADS" "$PAINTER_SECRET"`);
+	const saved = { ...process.env };
+	try {
+		process.env.EASEL_ASYNC_DISPLAY = "1";
+		process.env.EASEL_DISPLAY_THREADS = "2";
+		process.env.PAINTER_SECRET = "s";
+		assert.equal((await easel(studio, ["x"], undefined, undefined, 5000)).out, "1 2 \n");
+	} finally {
+		for (const key of ["EASEL_ASYNC_DISPLAY", "EASEL_DISPLAY_THREADS", "PAINTER_SECRET"]) {
+			if (saved[key] === undefined) delete process.env[key];
+			else process.env[key] = saved[key];
+		}
+	}
+});
+
 test("no reply counts the painter's work or times the machine", async () => {
 	const { paintReply, statusReply, logReply, hideCounters } = await import("../easel-client.ts");
 	const cases: [(t: string) => string, string, string][] = [
@@ -328,6 +344,20 @@ test("a look is renamed at random and shown without the machine's seconds", asyn
 	assert.equal(said, `${path} (1000x714)`);
 	assert.equal(readFileSync(join(s, path), "utf8"), "png");
 	assert.ok(!existsSync(join(s, "out", "look-0012.png")));
+});
+
+test("background display revisions keep their stable paths while pending or complete", async () => {
+	const { renameLook } = await import("../easel-client.ts");
+	const s = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(s, "out", ".display"), { recursive: true });
+	const path = "out/65c0681641604c1b93c51bdcfd66302e.png";
+	writeFileSync(join(s, path), "color");
+	for (const state of ["pending", "ready", "failed"]) {
+		writeFileSync(join(s, "out", ".display", basename(path)), state + "\n");
+		assert.deepEqual(renameLook(s, `${path} (1000x714, 0.04s)`), { path, said: `${path} (1000x714)` });
+		assert.deepEqual(renameLooks(s, `${path} (1000x714, 0.04s)`), { paths: [path], said: `${path} (1000x714)` });
+		assert.equal(readFileSync(join(s, path), "utf8"), "color");
+	}
 });
 
 test("every look a survey names is renamed, in order", async () => {

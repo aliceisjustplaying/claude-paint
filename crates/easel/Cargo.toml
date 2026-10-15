@@ -11,7 +11,7 @@ default = ["replay", "finish"]
 # painter build, `--no-default-features`) the studio is the directory above
 # the one holding the executable (<studio>/bin/easel) and it holds one
 # painting, "painting".
-replay = ["paint/hand-hook", "all-boxes", "dep:rayon", "dep:zstd"]
+replay = ["paint/hand-hook", "all-boxes", "dep:zstd"]
 # varnish{}, cracks{} and relief(): whole-picture finishing, applied after
 # the painter's session by scripts/finish_painting. Not in the painter build,
 # so finishing can't become the painter's way of ending.
@@ -46,8 +46,7 @@ paint = { path = "../paint", default-features = false }
 # private table layout; recheck it first (notes/easel.md "Lua internals
 # read directly").
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
-# the old logs' trees, sky and rocks (src/legacy; the replay build)
-rayon = { version = "1", optional = true }
+rayon = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 zstd = { version = "0.13", optional = true }
 sha2 = { version = "0.10", optional = true }

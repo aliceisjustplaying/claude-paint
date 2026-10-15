@@ -340,6 +340,49 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
 
 
+def test_background_companions_update_without_new_log_bytes(home, server):
+    _, studio, log = home
+    buf = io.BytesIO()
+    S.Image.new("RGB", (20, 16), (100, 80, 60)).save(buf, "PNG")
+    colour = buf.getvalue()
+    log.write_text(start(str(studio)) + look("old", colour))
+    second = log.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
+    path = "out/easel/painting/65c0681641604c1b93c51bdcfd66302e.png"
+    marker = studio / "out/easel/painting/.display" / os.path.basename(path)
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"pending\n")
+    rows = look("new", colour).splitlines()
+    result_row = json.loads(rows[1])
+    result_row["message"]["content"].insert(0, {"type": "text", "text": path + " (20x16)"})
+    second.write_text(start(str(studio)) + rows[0] + "\n" + line(result_row))
+    initial = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    index = next(i for i, event in enumerate(initial["events"]) if event.get("img") == 1)
+    assert initial["events"][index]["display_pending"] is True
+    assert S.glance([str(log), str(second)])["look"] == 0
+    for light in S.DISPLAY_LIGHTS:
+        companion = studio / "out/easel/painting" / ("." + light) / os.path.basename(path)
+        companion.parent.mkdir()
+        companion.write_bytes(colour)
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1")[0] == 404
+    query = f"/api/events?p={PAINTER}&since={initial['total']}&epoch={initial['epoch']}&u={initial['nupdates']}"
+    assert json.loads(server(query)[1])["updates"] == []
+    pending = marker.with_suffix(".part")
+    pending.write_bytes(b"ready\n")
+    pending.replace(marker)
+    updated = json.loads(server(query)[1])
+    assert updated["events"] == []
+    assert [i for i, _ in updated["updates"]] == [index]
+    event = updated["updates"][0][1]
+    assert event["img"] == 1
+    assert event["display_pending"] is False
+    assert all(event[light] for light in S.DISPLAY_LIGHTS)
+    assert S.glance([str(log), str(second)])["look"] == 1
+    for light in S.DISPLAY_LIGHTS:
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1") == (200, colour)
+    again = json.loads(server(query.rsplit("&u=", 1)[0] + f"&u={updated['nupdates']}")[1])
+    assert again["updates"] == []
+
+
 @pytest.mark.parametrize("light", S.DISPLAY_LIGHTS)
 def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server, light):
     import base64

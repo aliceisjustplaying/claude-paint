@@ -25,6 +25,7 @@ pub mod rag;
 pub mod scene;
 pub mod palette;
 pub mod pigment;
+pub mod prepared_optics;
 pub mod rng;
 #[cfg(feature = "render-snapshot")]
 pub mod render_snapshot;
@@ -64,6 +65,7 @@ pub use form::{Form, Light, Relief, Sdf, Shade, Solid};
 pub use scene::{Spot, Sun, View, Water, World};
 pub use noise::Fbm;
 pub use pigment::Pigment;
+pub use prepared_optics::PreparedOptics;
 pub use graphite::{Lead, Medium};
 pub use rng::Rng;
 pub use shape::Shape;

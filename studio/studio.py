@@ -338,12 +338,12 @@ def parse(path):
 
 def _parse(path):
     # changed: indices of events whose result came in after them, in arrival order (see stream())
-    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "lights": {light: {} for light in DISPLAY_LIGHTS}, "calls": {}, "changed": [], "cwd": ""})
+    c = _cache.setdefault(path, {"offset": 0, "events": [], "images": [], "lights": {light: {} for light in DISPLAY_LIGHTS}, "display": {}, "calls": {}, "changed": [], "cwd": ""})
     stat = os.stat(path)
     size = stat.st_size
     stamp = (stat.st_dev, stat.st_ino, stat.st_mtime_ns)
     if size < c["offset"] or c.get("stamp") and (stamp[:2] != c["stamp"][:2] or size <= c.get("size", 0) and stamp != c["stamp"]):
-        c.update(offset=0, events=[], images=[], lights={light: {} for light in DISPLAY_LIGHTS}, calls={}, changed=[], cwd="")
+        c.update(offset=0, events=[], images=[], lights={light: {} for light in DISPLAY_LIGHTS}, display={}, calls={}, changed=[], cwd="")
         c["generation"] = c.get("generation", 0) + 1
         c.pop("sig", None)
     c.update(stamp=stamp, size=size)
@@ -432,6 +432,9 @@ def _parse(path):
                             display_path = picture_paths[picture_n]
                     elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
                         display_path = src
+                    if display_path and display_status(c["cwd"], display_path) is not None:
+                        ev["display_pending"] = True
+                        c["display"][idx] = (len(c["events"]), display_path)
                     for light in DISPLAY_LIGHTS:
                         lit = display_companion_path(c["cwd"], display_path, light) if display_path else None
                         if lit:
@@ -453,6 +456,19 @@ def _parse(path):
                 if clock:
                     ev["clock"] = clock
                 c["events"].append(ev)
+    for idx, (event, display_path) in list(c["display"].items()):
+        status = display_status(c["cwd"], display_path)
+        if status == b"failed\n":
+            del c["display"][idx]
+            continue
+        paths = {light: display_companion_path(c["cwd"], display_path, light) for light in DISPLAY_LIGHTS}
+        if status == b"ready\n" and all(paths.values()):
+            for light, companion in paths.items():
+                c["lights"][light][idx] = (companion, None, None)
+                c["events"][event][light] = True
+            c["events"][event]["display_pending"] = False
+            c["changed"].append(event)
+            del c["display"][idx]
     if not any(e["kind"] == "look" for e in c["events"]):
         mark_whole(c, path)
     return c["events"], c["images"]
@@ -470,12 +486,28 @@ def session_lines(path, c):
             yield at, line
 
 
+def display_status(cwd, path):
+    if not cwd or not path:
+        return None
+    original = os.path.realpath(os.path.join(cwd, path))
+    if not original.startswith(os.path.realpath(cwd) + os.sep):
+        return None
+    marker = os.path.join(os.path.dirname(original), ".display", os.path.basename(original))
+    try:
+        with open(marker, "rb") as fh:
+            return fh.read(16)
+    except OSError:
+        return b"pending\n" if os.path.lexists(marker) else None
+
+
 def display_companion_path(cwd, path, light):
     if not cwd or light not in DISPLAY_LIGHTS:
         return None
     original = os.path.realpath(os.path.join(cwd, path))
     companion = os.path.realpath(os.path.join(os.path.dirname(original), "." + light, os.path.basename(original)))
     if not companion.startswith(os.path.realpath(cwd) + os.sep):
+        return None
+    if display_status(cwd, path) not in (None, b"ready\n"):
         return None
     try:
         with open(companion, "rb") as fh:
@@ -712,7 +744,7 @@ def _glance_file(path):
         g = _glances.get(path)
         size = os.path.getsize(path)
         if not g or size < g["offset"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "say": "", "cwd": "", "worked": False}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "cwd": "", "worked": False}
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -744,16 +776,29 @@ def _glance_file(path):
                                                        else None)
                 elif m.get("role") == "toolResult":
                     look, k = g["calls"].get(m.get("toolCallId")), 0
+                    paths = re.findall(r"^(.+\.png)(?: \(.*)?$", _text(content), re.MULTILINE)
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
-                            if look is None:
-                                g["last"] = (g["n"], at, k)
-                                g["last_version"] = hashlib.sha256(x["data"].encode()).hexdigest()
-                            elif look is not REFERENCE and is_whole(look):
-                                g["whole"] = (g["n"], at, k)
-                                g["whole_version"] = hashlib.sha256(x["data"].encode()).hexdigest()
+                            field = "last" if look is None else "whole" if look is not REFERENCE and is_whole(look) else None
+                            if field:
+                                version = hashlib.sha256(x["data"].encode()).hexdigest()
+                                display_path = paths[k] if k < len(paths) else ""
+                                candidate = (g["n"], at, k)
+                                if display_status(g["cwd"], display_path) is None:
+                                    g[field], g[field + "_version"] = candidate, version
+                                else:
+                                    g["pending"].append((field, candidate, version, display_path))
                             g["n"] += 1
                             k += 1
+        for pending in list(g["pending"]):
+            field, candidate, version, display_path = pending
+            status = display_status(g["cwd"], display_path)
+            if status == b"ready\n" and all(display_companion_path(g["cwd"], display_path, light) for light in DISPLAY_LIGHTS):
+                if g[field] is None or candidate[0] > g[field][0]:
+                    g[field], g[field + "_version"] = candidate, version
+                g["pending"].remove(pending)
+            elif status == b"failed\n":
+                g["pending"].remove(pending)
         return g
 
 
@@ -852,6 +897,8 @@ def stream(key, files):
             changed = _cache[f]["changed"]
             for j in changed[st["chg"][k]:]:
                 if j < seen:  # already sent without its result
+                    e = ev[j]
+                    st["events"][st["base"][k] + j] = dict(e, img=e["img"] + ioff) if e["kind"] == "image" else e
                     st["updates"].append(st["base"][k] + j)
             st["chg"][k] = len(changed)
             for e in ev[seen:n]:

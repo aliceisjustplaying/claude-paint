@@ -335,8 +335,8 @@ impl Canvas {
     }
 
     /// An opt-in covering slice, capped at four legacy slices and one hour.
-    /// The fastest possible open-film oxidation may advance by at most 0.01
-    /// per batch (at most 0.1 fluidity, since smoothstep's slope is <= 1.5/GEL).
+    /// The fastest possible open-film oxidation may advance by at most 0.02
+    /// per batch (at most 0.2 fluidity, since smoothstep's slope is <= 1.5/GEL).
     /// Only passes that stay wholly open under that upper bound qualify;
     /// persistent solvent, tacky layers and crops keep their original cadence. This is
     /// a local drying-lag bound, not a bound on final image differences.
@@ -376,7 +376,7 @@ impl Canvas {
         if cure as f64 + fastest * total / 60.0 >= (0.5 * GEL) as f64 {
             return slice;
         }
-        let bounded = (4.0 * slice).min(3600.0).min(60.0 * 0.01 / fastest);
+        let bounded = (4.0 * slice).min(3600.0).min(60.0 * 0.02 / fastest);
         let largest_tile = secs.iter().copied().fold(0.0f64, f64::max);
         if bounded >= slice + largest_tile { bounded } else { slice }
     }
@@ -471,13 +471,13 @@ mod tests {
         let secs = [300.0; 12];
         let paint = crate::wet::Paint::body(hex("#6f84a8"));
         let slow = c.bounded_slice_secs(900.0, [paint.with_drying(0.4)], &secs);
-        let fast = c.bounded_slice_secs(900.0, [paint.with_drying(2.4)], &secs);
+        let fast = c.bounded_slice_secs(900.0, [paint.with_drying(4.8)], &secs);
         assert_eq!(slow, 3600.0);
         assert!(fast > 900.0 && fast < slow, "slow {slow}, fast {fast}");
-        for (drying, slice) in [(0.4, slow), (2.4, fast)] {
+        for (drying, slice) in [(0.4, slow), (4.8, fast)] {
             let r = crate::drying::rate(0.0, 1.0, drying);
             let open = crate::drying::TOUCH_DRY_MIN / crate::drying::TOUCH_DRY_MIN_3 * crate::drying::GEL / crate::drying::OPEN_SHARE;
-            assert!(r as f64 * open as f64 * slice / 60.0 <= 0.010000001);
+            assert!(r as f64 * open as f64 * slice / 60.0 <= 0.020000001);
         }
         assert_eq!(c.bounded_slice_secs(900.0, [paint.with_drying(20.0)], &secs), 900.0);
         assert_eq!(c.bounded_slice_secs(900.0, [paint], &[240.0]), 900.0);

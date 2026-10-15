@@ -1,0 +1,373 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Verb-DAG width trace of a Lua log (scratch evidence for engine 7).
+
+    scripts/e7_trace record LOG --easel PATH [--width 2400] [--workers 4] --out DIR
+    scripts/e7_trace width DIR/<stem>.trace [--json OUT]
+
+record injects a Lua tracer at the top of chunk 1 (and a chunk marker at the
+top of every chunk) and replays the log once with easel run. The tracer
+wraps the verbs and the brush, knife, rag and pencil objects and prints one
+E7T line per call: the verb, the object it was called on, the piles it
+touched and its rough footprint in canvas units (a mask's box from a grid of
+mask:at samples, a gesture's point box). The replay's stdout holds the trace;
+its stderr the per-chunk seconds.
+
+width builds the DAG over the paint verbs in log order. An edge j -> i
+(j earlier) exists when the two
+  share a brush or tool object (the Held chain: brush edge),
+  touch the same pile (pile visits change the heap: palette edge),
+  overlap in footprint, a drying(x, y) query included (spatial edge),
+  sit either side of a wait() under global aging (time edge), or
+  sit either side of a chunk end in the live mode (observation edge).
+Each node's weight is its chunk's measured seconds split by a size proxy
+(mask box area for covering passes, path length times width for marks), so
+weights are inferred below the chunk. Width = total weight / critical path.
+"""
+
+import argparse
+import json
+import math
+from pathlib import Path
+import re
+import subprocess
+import os
+
+TRACER = r'''
+do
+  local P, fmt, cat = print, string.format, table.concat
+  local seq, nid = 0, 0
+  local ids = {}
+  local function oid(v)
+    local t = type(v)
+    if v == nil then return "-" end
+    if t == "string" then return "t:" .. v end
+    if t ~= "userdata" and t ~= "table" then return t end
+    local i = ids[v]
+    if not i then nid = nid + 1; i = nid; ids[v] = i end
+    return tostring(i)
+  end
+  local function emit(...)
+    seq = seq + 1
+    local t = {"E7T", seq, ...}
+    for k = 1, #t do t[k] = tostring(t[k]) end
+    P(cat(t, "\t"))
+  end
+  function __e7c(n) emit("chunk", n) end
+  local function mbox(m)
+    if type(m) ~= "userdata" or not W then return "-" end
+    local nx = 200
+    local ny = math.max(2, math.ceil(nx * H / W))
+    local dx, dy = W / nx, H / ny
+    local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+    for j = 0, ny - 1 do
+      local y = (j + 0.5) * dy
+      for i = 0, nx - 1 do
+        local x = (i + 0.5) * dx
+        if m:at(x, y) > 0.001 then
+          if x < x0 then x0 = x end
+          if x > x1 then x1 = x end
+          if y < y0 then y0 = y end
+          if y > y1 then y1 = y end
+        end
+      end
+    end
+    if x0 == math.huge then return "empty" end
+    return fmt("%.1f,%.1f,%.1f,%.1f", x0 - dx / 2, y0 - dy / 2, x1 + dx / 2, y1 + dy / 2)
+  end
+  local function pbox(pts)
+    if type(pts) ~= "table" then return "-", 0 end
+    local xs, ys = {}, {}
+    if type(pts[1]) == "table" then
+      for _, p in ipairs(pts) do xs[#xs + 1] = p[1]; ys[#ys + 1] = p[2] end
+    else
+      for k = 1, #pts - 1, 2 do xs[#xs + 1] = pts[k]; ys[#ys + 1] = pts[k + 1] end
+    end
+    if #xs == 0 then return "-", 0 end
+    local len = 0
+    for k = 2, #xs do len = len + math.sqrt((xs[k] - xs[k - 1]) ^ 2 + (ys[k] - ys[k - 1]) ^ 2) end
+    return fmt("%.1f,%.1f,%.1f,%.1f", math.min(table.unpack(xs)), math.min(table.unpack(ys)), math.max(table.unpack(xs)), math.max(table.unpack(ys))), len
+  end
+  local function piles(o)
+    if type(o) ~= "table" then return "-" end
+    local t = {}
+    if o.pile ~= nil then t[#t + 1] = oid(o.pile) end
+    if type(o.piles) == "table" then
+      for _, e in ipairs(o.piles) do if type(e) == "table" then t[#t + 1] = oid(e[1]) end end
+    end
+    return #t > 0 and cat(t, ",") or "-"
+  end
+  local MARKS = {stroke = true, gesture = true, touch = true, spatter = true, lay = true, scrape = true, rule = true, line = true, hatch = true, dab = true}
+  local function proxy(kind, obj)
+    local id = oid(obj)
+    local fns = {}
+    return setmetatable({}, {
+      __index = function(_, k)
+        local v = obj[k]
+        if type(v) ~= "function" then return v end
+        local f = fns[k]
+        if not f then
+          f = function(_, a, b, ...)
+            local w = 0
+            pcall(function() w = obj.width end)
+            if type(w) ~= "number" then w = 0 end
+            if k == "rule" then
+              local bx, len = pbox({a, b})
+              emit("m", kind .. ":" .. k, id, "-", bx, len, w, "-")
+            elseif k == "touch" then
+              emit("m", kind .. ":" .. k, id, "-", fmt("%.1f,%.1f,%.1f,%.1f", a, b, a, b), 0, w, "-")
+            elseif MARKS[k] then
+              local bx, len = pbox(a)
+              local clip = type(b) == "table" and b.clip ~= nil and mbox(b.clip) or "-"
+              emit("m", kind .. ":" .. k, id, "-", bx, len, w, clip)
+            elseif k == "load" or k == "reload" or k == "dip" then
+              emit("p", kind .. ":" .. k, id, oid(a), "-", 0, w, "-")
+            else
+              emit("q", kind .. ":" .. k, id, "-", "-", 0, w, "-")
+            end
+            return v(obj, a, b, ...)
+          end
+          fns[k] = f
+        end
+        return f
+      end,
+      __tostring = function() return tostring(obj) end,
+    })
+  end
+  for _, k in ipairs{"brush", "knife", "rag", "pencil", "chalk"} do
+    local f = rawget(_G, k)
+    if type(f) == "function" then
+      _G[k] = function(...)
+        local o = f(...)
+        emit("new", k, oid(o), "-", "-", 0, 0, "-")
+        return proxy(k, o)
+      end
+    end
+  end
+  for _, k in ipairs{"pile", "mix"} do
+    local f = rawget(_G, k)
+    _G[k] = function(t, ...)
+      local o = f(t, ...)
+      local src = {}
+      if type(t) == "table" then
+        for _, e in ipairs(t) do
+          local v = type(e) == "table" and e[1] or e
+          if type(v) == "userdata" then src[#src + 1] = oid(v) end
+        end
+      end
+      emit("p", k, oid(o), #src > 0 and cat(src, ",") or "-", "-", 0, 0, "-")
+      return o
+    end
+  end
+  for _, k in ipairs{"work", "blend", "stipple"} do
+    local f = rawget(_G, k)
+    _G[k] = function(m, o, ...)
+      local hand = type(o) == "table" and (o.hand or (o.blender and "blend")) or (k == "blend" and "blend" or "-")
+      local clip = type(o) == "table" and o.clip and "clip" or "-"
+      emit("w", k, tostring(hand), piles(o), mbox(m), 0, 0, clip)
+      return f(m, o, ...)
+    end
+  end
+  local wait0, drying0 = wait, drying
+  wait = function(m, ...) emit("t", "wait", "-", "-", "-", m, 0, "-") return wait0(m, ...) end
+  drying = function(x, y, ...) emit("o", "drying", "-", "-", fmt("%.1f,%.1f,%.1f,%.1f", x, y, x, y), 0, 0, "-") return drying0(x, y, ...) end
+  for _, k in ipairs{"erase", "fix", "lose", "soaked", "outline", "form", "terrain", "body_of", "world", "aerial", "drawing_guide", "varnish", "relief", "cracks", "palette"} do
+    local f = rawget(_G, k)
+    if type(f) == "function" then
+      _G[k] = function(a, ...)
+        emit("g", k, "-", "-", mbox(a), 0, 0, "-")
+        return f(a, ...)
+      end
+    end
+  end
+end
+__e7c(1)
+'''
+
+MARK = "--@ chunk"
+FINISHING = "--@ chunk (finishing)"
+CHUNK = re.compile(r"^\s*chunk\s+(\d+)\s+([0-9.]+)s\s*$")
+
+
+def record(args):
+    log = Path(args.log).resolve()
+    out = Path(args.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    lines, n = [], 0
+    for line in log.read_text().splitlines(keepends=True):
+        if line.strip().startswith(FINISHING):
+            break
+        lines.append(line)
+        if line.strip().startswith(MARK):
+            n += 1
+            lines.append(TRACER if n == 1 else f"__e7c({n})\n")
+    src = out / f"{log.stem}.traced.lua"
+    src.write_text("".join(lines))
+    trace, err = out / f"{log.stem}.trace", out / f"{log.stem}.trace.stderr"
+    env = dict(os.environ, RAYON_NUM_THREADS=str(args.workers))
+    cmd = [args.easel, "run", str(src), "--out", str(out / f"{log.stem}.traced.png"), "--width", str(args.width)]
+    with open(trace, "w") as o, open(err, "w") as e:
+        p = subprocess.run(cmd, env=env, stdout=o, stderr=e)
+    if p.returncode != 0:
+        raise SystemExit(f"easel exited {p.returncode}; see {err}")
+    print(f"{trace}: {sum(1 for l in trace.open() if l.startswith('E7T'))} trace lines, {n} chunks")
+
+
+# Rough reach of a covering pass beyond its mask (units), from style.rs's
+# stroke lengths (broad 80-220, body 20-60, detail 4-14 and clipped): inferred.
+HAND_REACH = {"broad": 75.0, "body": 20.0, "detail": 5.0, "hatch": 6.0, "glaze": 40.0, "scumble": 30.0, "blend": 20.0}
+CONSERVATIVE = 42.0  # STIL-59: ~100 px pad per side at 2400 px / 1000 units
+
+
+def box(s):
+    if s in ("-", "empty"):
+        return None
+    return tuple(float(v) for v in s.split(","))
+
+
+def nodes_of(trace_path):
+    lines = Path(trace_path).read_text().splitlines()
+    err = Path(str(trace_path) + ".stderr")
+    secs = {int(m.group(1)): float(m.group(2)) for m in map(CHUNK.match, err.read_text().splitlines()) if m}
+    nodes, chunk = [], 0
+    for l in lines:
+        if not l.startswith("E7T\t"):
+            continue
+        f = l.split("\t")[2:]
+        cls, name = f[0], f[1]
+        if cls == "chunk":
+            chunk = int(name)
+            continue
+        obj, piles, bx, length, w, clip = f[2], f[3], box(f[4]), float(f[5]), float(f[6]), f[7]
+        nd = {"chunk": chunk, "cls": cls, "name": name, "obj": obj, "piles": [] if piles == "-" else piles.split(","), "box": bx, "len": length, "w": w, "clip": clip}
+        if cls == "w":
+            nd["hand"] = obj
+            nd["obj"] = "-"
+            nd["piles"] = [] if piles == "-" else piles.split(",")
+        if cls == "p" and name in ("pile", "mix"):
+            nd["piles"] = [obj] + nd["piles"]
+            nd["obj"] = "-"
+        nodes.append(nd)
+    return nodes, secs
+
+
+def footprint(nd, mode, scale_units_per_mm):
+    b = nd["box"]
+    if b is None:
+        return None
+    if nd["cls"] == "w":
+        reach = HAND_REACH.get(nd["hand"], 30.0)
+        if nd["clip"] == "clip":
+            reach = min(reach, 8.0)
+    elif nd["cls"] == "m":
+        reach = nd["w"] * scale_units_per_mm
+        clipbox = box(nd["clip"]) if nd["clip"] != "-" else None
+        if clipbox:
+            b = (max(b[0], clipbox[0]), max(b[1], clipbox[1]), min(b[2], clipbox[2]), min(b[3], clipbox[3]))
+    elif nd["cls"] == "o":
+        reach = 3.0
+    else:
+        reach = 0.0
+    if mode == "conservative":
+        reach += CONSERVATIVE
+    return (b[0] - reach, b[1] - reach, b[2] + reach, b[3] + reach)
+
+
+def weight_proxy(nd, scale):
+    if nd["cls"] == "w" and nd["box"]:
+        b = nd["box"]
+        return max(b[2] - b[0], 1) * max(b[3] - b[1], 1)
+    if nd["cls"] == "m":
+        wu = max(nd["w"] * scale, 1.0)
+        return (nd["len"] + wu) * wu
+    if nd["cls"] == "g":
+        return 1.0
+    return 0.0
+
+
+def overlap(a, b):
+    return a is not None and b is not None and a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def analyse(nodes, secs, scale, mode, waits_global, chunk_barrier):
+    # weights: each chunk's measured seconds split by the size proxy; a chunk
+    # with no paint verb keeps its time in one serial node
+    proxies = [weight_proxy(n, scale) for n in nodes]
+    per_chunk = {}
+    for n, p in zip(nodes, proxies):
+        per_chunk[n["chunk"]] = per_chunk.get(n["chunk"], 0.0) + p
+    ws = []
+    for n, p in zip(nodes, proxies):
+        tot = per_chunk[n["chunk"]]
+        ws.append(secs.get(n["chunk"], 0.0) * p / tot if tot > 0 else 0.0)
+    extra = sum(t for c, t in secs.items() if per_chunk.get(c, 0.0) == 0)
+    fps = [footprint(n, mode, scale) for n in nodes]
+    finish = [0.0] * len(nodes)
+    last_barrier = 0.0
+    chunk_end = {}
+    for i, n in enumerate(nodes):
+        start = last_barrier
+        if chunk_barrier:
+            start = max(start, chunk_end.get(n["chunk"] - 1, 0.0))
+        for j in range(i - 1, -1, -1):
+            m = nodes[j]
+            if finish[j] <= start:
+                continue
+            dep = (n["obj"] != "-" and n["obj"] == m["obj"]) \
+                or (n["piles"] and m["piles"] and set(n["piles"]) & set(m["piles"])) \
+                or overlap(fps[i], fps[j]) \
+                or (n["cls"] == "g" or m["cls"] == "g") \
+                or (fps[i] is None and n["cls"] in ("w", "m")) or (fps[j] is None and m["cls"] in ("w", "m"))
+            if dep:
+                start = max(start, finish[j])
+        finish[i] = start + ws[i]
+        if n["cls"] == "t" and waits_global:
+            last_barrier = max(finish[: i + 1])
+            finish[i] = last_barrier
+        chunk_end[n["chunk"]] = max(chunk_end.get(n["chunk"], 0.0), finish[i], chunk_end.get(n["chunk"] - 1, 0.0) if chunk_barrier else 0.0)
+    total = sum(ws)
+    span = max(finish) if finish else 0.0
+    return {"total_s": round(total + extra, 2), "critical_s": round(span + extra, 2), "width": round((total + extra) / (span + extra), 3) if span + extra > 0 else None}
+
+
+def width(args):
+    nodes, secs = nodes_of(args.trace)
+    scale = args.units_per_mm
+    out = {"trace": args.trace, "nodes": len(nodes), "chunks": len(secs), "chunk_secs_total": round(sum(secs.values()), 2), "modes": {}}
+    for mode in ("mark", "conservative"):
+        for waits_global in (True, False):
+            for chunk_barrier in (True, False):
+                key = f"{mode}/{'wait-barrier' if waits_global else 'tile-aging'}/{'chunk-barrier' if chunk_barrier else 'replay'}"
+                out["modes"][key] = analyse(nodes, secs, scale, mode, waits_global, chunk_barrier)
+    counts = {}
+    for n in nodes:
+        counts[n["name"]] = counts.get(n["name"], 0) + 1
+    out["verbs"] = dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+    text = json.dumps(out, indent=1)
+    if args.json:
+        Path(args.json).write_text(text + "\n")
+    print(text)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("record")
+    r.add_argument("log")
+    r.add_argument("--easel", default=os.environ.get("EASEL", "easel"))
+    r.add_argument("--width", type=int, default=2400)
+    r.add_argument("--workers", type=int, default=4)
+    r.add_argument("--out", default="e7-trace")
+    w = sub.add_parser("width")
+    w.add_argument("trace")
+    w.add_argument("--units-per-mm", type=float, required=True, help="1000 / the canvas size in mm")
+    w.add_argument("--json")
+    args = ap.parse_args()
+    record(args) if args.cmd == "record" else width(args)
+
+
+if __name__ == "__main__":
+    main()

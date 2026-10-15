@@ -1,0 +1,169 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""Time an `easel run` replay of a Lua log through engine 5 or engine 7.
+
+    scripts/e7_replay run LOG --engine 7 --workers 4 [--chunks 12] [--easel PATH] [--out DIR]
+    scripts/e7_replay table DIR/*.json
+
+run replays LOG with RAYON_NUM_THREADS=--workers. The finishing chunk is
+always dropped (a replay ends on plain paint); --chunks K keeps only the
+first K chunks. Under --out it writes:
+
+    <name>.lua        the replayed program
+    <name>.png        the replay's gallery-lit image (easel run --gallery)
+    <name>.stderr     easel's stderr, verbatim
+    <name>.json       wall, CPU, CPU/wall, peak RSS, per-chunk seconds and,
+                      when easel prints E7BATCH lines (E7_STATS=1 is set),
+                      each batch's ready width
+
+<name> is <log stem>-e<engine>-w<workers>[-p<chunks>]. CPU and peak RSS are
+the child's rusage, so they hold on Linux and macOS alike. Engine 7 is asked
+for with "--engine 7" on easel's command line; engine 5 replays the log as
+it is.
+
+table folds .json results into one Markdown table.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import resource
+import subprocess
+import sys
+import time
+
+MARK = "--@ chunk"
+FINISHING = "--@ chunk (finishing)"
+CHUNK = re.compile(r"^\s*chunk\s+(\d+)\s+([0-9.]+)s\s*$")
+PAINTED = re.compile(r"painted in ([0-9.]+)s, total ([0-9.]+)s")
+BATCH = re.compile(r"^E7BATCH\t(.*)$")
+BATCH_FIELDS = ["chunk", "batch", "tiles", "peak_ready", "peak_inflight", "wall_s", "sum_tile_s"]
+
+
+def program(text, chunks):
+    """The log without its finishing chunk, cut to its first chunks chunks."""
+    out, seen = [], 0
+    for line in text.splitlines(keepends=True):
+        mark = line.strip()
+        if mark.startswith(FINISHING):
+            break
+        if mark.startswith(MARK):
+            seen += 1
+            if chunks is not None and seen > chunks:
+                break
+        out.append(line)
+    if seen == 0:
+        raise SystemExit("no chunks in the log")
+    if chunks is not None and seen < chunks:
+        raise SystemExit(f"the log has {seen} chunks, fewer than --chunks {chunks}")
+    return "".join(out), min(seen, chunks or seen)
+
+
+def batches(lines):
+    rows = []
+    for line in lines:
+        m = BATCH.match(line)
+        if m:
+            rows.append({k: float(v) for k, v in zip(BATCH_FIELDS, m.group(1).split("\t"))})
+    return rows
+
+
+def ready_width(rows):
+    """Peak ready width, and the tile-time-weighted mean of each batch's peak."""
+    if not rows:
+        return None
+    work = sum(r["sum_tile_s"] for r in rows)
+    return {
+        "peak": max(r["peak_ready"] for r in rows),
+        "weighted_mean": sum(r["peak_ready"] * r["sum_tile_s"] for r in rows) / work if work > 0 else None,
+        "batches": len(rows),
+    }
+
+
+def run(args):
+    log = Path(args.log).resolve()
+    text, n = program(log.read_text(), args.chunks)
+    name = f"{log.stem}-e{args.engine}-w{args.workers}" + (f"-p{args.chunks}" if args.chunks else "")
+    out = Path(args.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    src = out / f"{name}.lua"
+    src.write_text(text)
+    png, err = out / f"{name}.png", out / f"{name}.stderr"
+    cmd = [args.easel, "run", str(src), "--out", str(png), "--gallery"]
+    if args.engine != 5:
+        cmd += ["--engine", str(args.engine)]
+    env = dict(os.environ, RAYON_NUM_THREADS=str(args.workers), E7_STATS="1")
+    before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    t0 = time.monotonic()
+    with open(err, "w") as e:
+        p = subprocess.run(cmd, env=env, stdout=subprocess.DEVNULL, stderr=e)
+    wall = time.monotonic() - t0
+    after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    lines = err.read_text().splitlines()
+    if p.returncode != 0:
+        sys.stderr.write("\n".join(lines[-20:]) + "\n")
+        raise SystemExit(f"easel exited {p.returncode}: {' '.join(cmd)}")
+    per_chunk = [float(m.group(2)) for m in map(CHUNK.match, lines) if m]
+    painted = next((m for m in map(PAINTED.search, lines) if m), None)
+    cpu = (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
+    # ru_maxrss is KiB on Linux, bytes on macOS
+    rss = after.ru_maxrss * (1 if platform.system() == "Darwin" else 1024)
+    rows = batches(lines)
+    result = {
+        "log": log.name,
+        "engine": args.engine,
+        "workers": args.workers,
+        "chunks": n,
+        "host": platform.node(),
+        "machine": platform.machine(),
+        "cpus": os.cpu_count(),
+        "easel": args.easel,
+        "wall_s": round(wall, 3),
+        "paint_s": float(painted.group(1)) if painted else None,
+        "cpu_s": round(cpu, 3),
+        "cpu_per_wall": round(cpu / wall, 3),
+        "peak_rss_mib": round(rss / 2**20, 1),
+        "ready_width": ready_width(rows),
+        "per_chunk_s": per_chunk,
+        "batches": rows,
+        "png": str(png),
+    }
+    (out / f"{name}.json").write_text(json.dumps(result, indent=1) + "\n")
+    print(f"{name}: wall {wall:.1f}s, paint {result['paint_s']}s, CPU/wall {result['cpu_per_wall']}, peak RSS {result['peak_rss_mib']} MiB, {len(per_chunk)} chunks")
+
+
+def table(args):
+    rows = [json.loads(Path(p).read_text()) for p in args.results]
+    rows.sort(key=lambda r: (r["log"], r["chunks"], r["workers"], r["engine"]))
+    print("| Log | Chunks | Workers | Engine | Wall s | Paint s | CPU/wall | Peak RSS MiB | Ready width (peak / weighted) | Host |")
+    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |")
+    for r in rows:
+        w = r.get("ready_width")
+        width = f"{w['peak']:.0f} / {w['weighted_mean']:.2f}" if w and w.get("weighted_mean") is not None else "n/a"
+        print(f"| {r['log']} | {r['chunks']} | {r['workers']} | {r['engine']} | {r['wall_s']:.1f} | {r['paint_s'] or 0:.1f} | {r['cpu_per_wall']:.2f} | {r['peak_rss_mib']:.0f} | {width} | {r['host']} |")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run")
+    r.add_argument("log")
+    r.add_argument("--engine", type=int, choices=[5, 7], required=True)
+    r.add_argument("--workers", type=int, required=True)
+    r.add_argument("--chunks", type=int)
+    r.add_argument("--easel", default=os.environ.get("EASEL", "easel"))
+    r.add_argument("--out", default="e7-replays")
+    t = sub.add_parser("table")
+    t.add_argument("results", nargs="+")
+    args = ap.parse_args()
+    run(args) if args.cmd == "run" else table(args)
+
+
+if __name__ == "__main__":
+    main()

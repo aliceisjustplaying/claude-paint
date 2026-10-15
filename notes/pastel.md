@@ -30,9 +30,9 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
   `r, g, b`, `lift`, `floor`, `film`, `loose`, `bound`), flag 2.
 - **The switch.** The Lua verbs are the paper-and-pastel switch's (a
   `--@ paper` line in the log's head, as for `canvas{paper=}`): a painting
-  begun since has `pastel`, `smudge`, `feel`, `lay_sheet` and `lift_sheet`,
-  and can hold a stick up in a look; an older one replays with none of
-  them, its globals as they were.
+  begun since has `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`,
+  `blow` and `tap`, and can hold a stick up in a look; an older one replays
+  with none of them, its globals as they were.
 
 ## Lua
 
@@ -53,6 +53,9 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
 - `lay_sheet(mask, {grammage=120, tone=})`, `lift_sheet()`: a sheet of
   paper laid over the mask to keep it clean, and taken away with what it
   caught; laid and lifted within one chunk.
+- `blow(x, y, {distance=50, speed=12, nozzle=8})`: a puff of air at the
+  picture; `tap({g=100})`: the board's edge struck on the table. Each
+  returns the volume that left the picture, mm³.
 - `easel look --hold <stick> --at x,y [--pose force,alt,azimuth[,roll] |
   --side direction]`: where the stick held there would touch.
 
@@ -228,6 +231,49 @@ methods it had and a scrape takes no `edge=`).
 Neither reaches pastel under the sheet or under paint, or where paint is
 wet. While a sheet lies, `b:dust` works (`time::verb_dry`); the knife, a
 wet-paint tool too, refuses.
+
+## Blowing and tapping
+
+Loose pastel shed by air and by a knock, each from measurements
+(notes/research/pastel_removal_air_blade.md §A1–A2,
+paper_mechanics_and_transport.md §4). Paint's `sheet.rs`
+(`Canvas::blow_pastel`, `Canvas::tap_pastel`); the switch brings `blow`
+and `tap`.
+
+- **blow(x, y, {distance, speed, nozzle})**: Phares et al.'s peak wall shear
+  of an impinging jet, τ = 44.6ρU²Re^(−½)(h/d)^(−2) (h/d ≥ 6), on a ring at
+  0.09h, rising linearly inside it and falling as r^(−2.3) outside (a radial
+  wall jet). Heaped loose crumbs go past Shao & Lu's threshold for 100 µm
+  crumbs of 1250 kg/m³ (~0.21 m/s), on a ramp from 0.8 to 1.25 times it
+  (adhesion varies, the shear fluctuates); in the pores the shear dies as
+  exp(−4.21 z/w) (Moffatt), w the fiber width, so the fine grains (Shao &
+  Lu at 5 µm, ~0.8 m/s) go down to z = (w/2.1)·ln(u*/u*t). Fixed pastel
+  stays.
+- **Blown crumbs** (paper_mechanics_and_transport.md §4): lifted heaped
+  crumbs go out in their direction (48 sectors). 80 % roll (70–90 % [E]):
+  a crumb set going at its threshold stops where u* (∝ r^(−1.15)) falls
+  under 0.6–0.85 of it, 1.15–1.56 times that radius, and the thresholds'
+  spread (0.8–1.25) makes a broad ring. 20 % hop: they leave the tooth as
+  Jia & Wang's (2020) aerodynamically lifted grains do (about 15°, at 0.13 +
+  0.95 u* m/s) and fly through the near-wall wind with their drag, landing
+  millimeters to centimeters out; a hop short of its crumb's stop rolls on.
+  The fine grains (1–20 µm) settle from the wall jet by size along 10 cm
+  (Wood's deposition velocity plus settling: ~0 % at 1–2 µm to ~25 % at
+  20 µm); the rest are carried off. Each sector's bin, a pixel wide, lays
+  its deposit over the pixels in it (where it runs past the picture's edge,
+  only its share of area on the picture). On the paper mask, crumbs go with
+  it; on wet paint, they are lost in it. `blow` returns what left the
+  picture.
+- **tap({g})**: crumbs heaped on the tooth with m·a > F_adh fall (F_adh 50
+  nN, crumbs 1250 kg/m³: at 100 g, d_c ≈ 43 µm; at 1 g, ~200 µm); with
+  crumb sizes P(A) ∝ A^(−3/2) up to 300 µm the falling share of the heap is
+  (A_max − A_c)/(A_max − A_min). Pore-held grains and fixed pastel stay.
+
+Neither reaches pastel under the sheet or under paint, or where paint is
+wet. Both work while a sheet lies (`time::verb_dry`).
+
+Not modeled: a vertical easel (rolled crumbs falling off), the hops'
+lateral scatter, and the cloud settling back after the puff.
 
 Learned while painting:
 

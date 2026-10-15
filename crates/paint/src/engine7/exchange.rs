@@ -248,7 +248,24 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let pad = off.ceil() as usize + 2;
         let interior = (x0.saturating_sub(pad).max(lx), y0.saturating_sub(pad).max(ly), (x1 + pad).min(hx), (y1 + pad).min(hy));
         win.begin((x0, y0, x1, y1), interior);
-        let (lxf, lyf, hxf, hyf) = (interior.0 as f32, interior.1 as f32, interior.2 as f32, interior.3 as f32);
+        let (lx, ly, hx, hy) = (interior.0 as isize, interior.1 as isize, interior.2 as isize, interior.3 as isize);
+        // where a pixel's ploughed paint goes, on either side of the path:
+        // a fixed offset from it (outward and ahead by `off`), so the same
+        // whole-pixel steps and bilinear shares for every pixel on that side
+        // (a fixed deposit's plough takes the one pixel under the target)
+        let mut throw = [[(0isize, 0isize, 0.0f32); 4]; 2];
+        for (t, sgn) in throw.iter_mut().zip([1.0f32, -1.0]) {
+            let (ddx, ddy) = ((nx * sgn * 0.75 + mx * 0.45) * off, (ny * sgn * 0.75 + my * 0.45) * off);
+            if spread {
+                let (fgx, fgy) = (floor(ddx), floor(ddy));
+                let (fx, fy) = (ddx - fgx, ddy - fgy);
+                let (bx, by) = (fgx as isize, fgy as isize);
+                *t = [(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1, by, fx * (1.0 - fy)), (bx, by + 1, (1.0 - fx) * fy), (bx + 1, by + 1, fx * fy)];
+            } else {
+                t[0] = (floor(0.5 + ddx) as isize, floor(0.5 + ddy) as isize, 1.0);
+            }
+        }
+        let n_to = if spread { 4 } else { 1 };
 
         // pass 1: contact weights, into the window's contact list
         let r_out = rb + 0.5;
@@ -417,21 +434,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 continue;
             }
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let side = if (px - a.0) * nx + (py - a.1) * ny >= 0.0 { 1.0 } else { -1.0 };
-            let tx = px + (nx * side * 0.75 + mx * 0.45) * off;
-            let ty = py + (ny * side * 0.75 + my * 0.45) * off;
-            let mut to = [(0.0f32, 0.0f32, 0.0f32); 4];
-            let n_to = if spread {
-                let (gx, gy) = (tx - 0.5, ty - 0.5);
-                let (fgx, fgy) = (floor(gx), floor(gy));
-                let (fx, fy) = (gx - fgx, gy - fgy);
-                let (bx, by) = (fgx + 0.5, fgy + 0.5);
-                to = [(bx, by, (1.0 - fx) * (1.0 - fy)), (bx + 1.0, by, fx * (1.0 - fy)), (bx, by + 1.0, (1.0 - fx) * fy), (bx + 1.0, by + 1.0, fx * fy)];
-                4
-            } else {
-                to[0] = (tx, ty, 1.0);
-                1
-            };
+            let to = &throw[((px - a.0) * nx + (py - a.1) * ny < 0.0) as usize][..n_to];
             // the source's paint per coat moved: its color, cure, the cover
             // it brings (fine tools) and its solvent (µm), in the film's
             // proportions (m ≤ v, so these never move more than is there)
@@ -440,15 +443,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             src[COVER] = if fine { *sf.cover.add(i) / v.max(1e-9) } else { 0.0 };
             src[SOLV] = if sol_um > 0.0 && v > 0.0 { sol_um / v } else { 0.0 };
             let mut out_m = 0.0f32;
-            for &(tx, ty, sh) in &to[..n_to] {
-                if sh <= 0.0 || !(tx >= lxf && ty >= lyf && tx < hxf && ty < hyf) {
+            for &(ddx, ddy, sh) in to {
+                let (tx, ty) = (x as isize + ddx, y as isize + ddy);
+                if sh <= 0.0 || (ddx == 0 && ddy == 0) || tx < lx || ty < ly || tx >= hx || ty >= hy {
                     continue;
                 }
                 let (tx, ty) = (tx as usize, ty as usize);
                 let j = (ty - oy) * bw_buf + tx - ox;
-                if j == i {
-                    continue;
-                }
                 let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0));
                 let mut mm = m * sh * c.k;
                 if capped && mm > 0.0 {

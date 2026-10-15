@@ -245,6 +245,11 @@ impl Pace {
         if dt <= to_gel { c + dt * r * self.open } else { GEL + (dt - to_gel) * r * self.set }
     }
 
+    /// Minutes until gel; a film past gel returns its time since crossing.
+    fn to_gel(self, c: f32, r: f32) -> f32 {
+        (GEL - c) / (r * if c < GEL { self.open } else { self.set })
+    }
+
     /// Minutes until an open film of cure `c` and rate `r` is touch-dry.
     fn to_dry(self, c: f32, r: f32) -> f32 {
         if self == Pace::EVEN || c >= GEL {
@@ -254,7 +259,7 @@ impl Pace {
     }
 
     /// Cure per minute of a set film whose open film's rate was `r`.
-    fn set_rate(self, r: f32) -> f32 {
+    pub(crate) fn set_rate(self, r: f32) -> f32 {
         if self == Pace::EVEN { r } else { r * self.set }
     }
 }
@@ -444,7 +449,7 @@ impl Canvas {
             // minute and to the wait's end
             let minute = (aged.floor() + 1.0).min(end);
             if next == minute {
-                self.age_from((next - aged) as f32, true);
+                self.age_from((next - aged) as f32, true, next);
                 aged = next;
             }
             self.spread((next - t) as f32, &mut solvent);
@@ -452,7 +457,7 @@ impl Canvas {
             self.wet.clock.now = t;
             if solvent.is_empty() {
                 if end > aged {
-                    self.age_from((end - aged) as f32, true);
+                    self.age_from((end - aged) as f32, true, end);
                 }
                 break;
             }
@@ -475,12 +480,12 @@ impl Canvas {
     /// The open films age by `dt` minutes where they lie (the body of
     /// `wait`, without moving the clock).
     fn age(&mut self, dt: f32) {
-        self.age_from(dt, false);
+        self.age_from(dt, false, self.wet.clock.now + dt as f64);
     }
 
     /// `age`; with `flow` (`wait_on_grid`), a film under the bare
     /// threshold that holds any paint keeps its cure and dries too.
-    fn age_from(&mut self, dt: f32, flow: bool) {
+    fn age_from(&mut self, dt: f32, flow: bool, now: f64) {
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
@@ -488,6 +493,27 @@ impl Canvas {
         self.absorb_with(flow);
         let low = if flow { f32::MIN_POSITIVE } else { 1e-5 };
         let w = self.f.w;
+        // Capture gel dates before a large interval magnifies f32 cure.
+        // The extra scan and all traction state are confined to opted-in canvases.
+        let mut dates = Vec::new();
+        if self.traction_enabled && let Some((x0, y0, x1, y1)) = self.wet.dirty {
+            let pace = Pace::of(self.engine);
+            let start = now - dt as f64;
+            for y in y0..y1.min(self.f.h) {
+                for x in x0..x1.min(w) {
+                    let i = y * w + x;
+                    if self.wet.vol[i] < low { continue; }
+                    let p = self.wet.clock.px[i];
+                    let r = rate(p.th, self.wet.hide[i][1], self.wet.hide[i][2]);
+                    if pace.age(p.cure, dt, r) >= GEL {
+                        // age() can round to GEL one ULP before to_gel().
+                        // A film already baked cannot have a future gel date.
+                        let set_at = (start + pace.to_gel(p.cure, r) as f64).clamp(0.0, now);
+                        dates.push((i, [set_at, start + pace.to_dry(p.cure, r) as f64]));
+                    }
+                }
+            }
+        }
         // age the open films
         if let Some((x0, y0, x1, y1)) = self.wet.dirty {
             let (x1, y1) = (x1.min(w), y1.min(self.f.h));
@@ -527,7 +553,8 @@ impl Canvas {
             }
         }
         // films past the gel point level and set
-        self.bake(false);
+        self.bake(false, now, &dates);
+        if self.traction_enabled { self.traction_open(now); }
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -635,6 +662,10 @@ impl Canvas {
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_out_solvent();
         }
+        // Traction needs substrate history even on the first dry().
+        if self.traction_enabled && self.wet.clock.px.is_empty() {
+            self.wet.clock.px = vec![Px::FRESH; self.f.w * self.f.h];
+        }
         if !self.wet.clock.px.is_empty() {
             self.absorb();
         }
@@ -664,6 +695,27 @@ impl Canvas {
                 })
                 .reduce(|| 0.0, f32::max);
         }
+        if self.traction_enabled {
+            if let Some((x0, y0, x1, y1)) = self.wet.clock.tacky {
+                let w = self.f.w;
+                for y in y0..y1 {
+                    for p in &self.wet.clock.px[y * w + x0..y * w + x1] {
+                        if p.sub < 1.0 { left = left.max((1.0 - p.sub) / p.srate.max(1e-9)); }
+                    }
+                }
+            }
+            self.age(left);
+            // dry() promises touch-dry, including the final f32 roundoff.
+            if let Some((x0, y0, x1, y1)) = self.wet.clock.tacky.take() {
+                let w = self.f.w;
+                for y in y0..y1 {
+                    for p in &mut self.wet.clock.px[y * w + x0..y * w + x1] { p.sub = 1.0; }
+                }
+            }
+            self.bake(true, self.wet.clock.now + left as f64, &[]);
+            self.wet.clock.now += left as f64;
+            return;
+        }
         if let Some((x0, y0, x1, y1)) = self.wet.clock.tacky.take() {
             let w = self.f.w;
             for y in y0..y1 {
@@ -675,7 +727,7 @@ impl Canvas {
                 }
             }
         }
-        self.bake(true);
+        self.bake(true, self.wet.clock.now + left as f64, &[]);
         self.wet.clock.now += left as f64;
     }
 
@@ -697,6 +749,10 @@ impl Canvas {
         };
         let w = self.f.w;
         let (x1, y1) = (x1.min(w), y1.min(self.f.h));
+        if self.traction_enabled {
+            // A fresh coat covers the opening surface immediately, before gel.
+            self.traction.cracks.retain(|c| self.wet.vol[c.index()] < 1e-5);
+        }
         let mark = self.wet.clock.mark;
         // a worked film's thickness is judged afresh over the paint that's
         // wet around it now; an untouched one keeps its own (see `Px::th`)
@@ -754,11 +810,11 @@ impl Canvas {
 
     /// Level and bake open films into the dry picture: every film (`all`,
     /// clearing the wet layer's residue too) or those past the gel point.
-    fn bake(&mut self, all: bool) {
-        BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, &mut s.borrow_mut()));
+    fn bake(&mut self, all: bool, now: f64, dates: &[(usize, [f64; 2])]) {
+        BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, now, dates, &mut s.borrow_mut()));
     }
 
-    fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 7]) {
+    fn bake_with_scratch(&mut self, all: bool, now: f64, dates: &[(usize, [f64; 2])], scratch: &mut [Vec<f32>; 7]) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (x1, y1) = (x1.min(w), y1.min(h));
@@ -821,7 +877,15 @@ impl Canvas {
             }
             return;
         }
+        // Leveling can bridge the old relief. Cracks must expose the actual
+        // undercoat, including its height before that bridging.
+        let under_height = if self.traction_enabled {
+            (ex.1..ex.3).flat_map(|y| self.height[y * w + ex.0..y * w + ex.2].iter().copied()).collect::<Vec<_>>()
+        } else { Vec::new() };
         let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4);
+        let cracks = if self.traction_enabled {
+            self.traction_before(ex, &add, &t, &under_height, now, dates)
+        } else { Vec::new() };
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
         // an absorbent ground's pores
@@ -901,6 +965,7 @@ impl Canvas {
                 }
             });
         self.clear_bare_solvent(ex);
+        self.traction_set(cracks);
         let wet = &mut self.wet;
         if wet.clock.px.is_empty() {
             return;

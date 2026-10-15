@@ -138,7 +138,8 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
     }
     let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
     let width = st.borrow().width;
-    let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+    let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_traction(st.borrow().traction);
+    c.check_traction_memory().map_err(mlua::Error::runtime)?;
     let h = c.height();
     let pal = Pal(Rc::new(sty.palette.clone()));
     {

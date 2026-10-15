@@ -43,6 +43,7 @@ pub mod hand;
 pub mod outline;
 pub mod surface;
 pub mod thinner;
+mod traction;
 
 pub use canvas::{Canvas, Crop, Frame, set_crop};
 pub use crack::Cracks;

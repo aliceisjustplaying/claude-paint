@@ -53,3 +53,6 @@ zstd = { version = "0.13", optional = true }
 sha2 = { version = "0.10", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+paint = { path = "../paint", default-features = false, features = ["test-memory-budget"] }

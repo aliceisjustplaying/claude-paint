@@ -34,6 +34,32 @@ wait(30)
 }
 
 #[test]
+fn traction_checkpoint_restores_the_session_flag_and_continues_exactly() {
+    let temp = Temp::new("traction");
+    let mut live = Session::new(96).unwrap().with_traction(true);
+    for chunk in parse_program(&program(5)) {
+        live.run(&chunk).unwrap();
+    }
+    let log = live.program("traction");
+    let checkpoint = temp.0.join("traction.ckpt");
+    save::write(&live, &log, &checkpoint).unwrap();
+    assert_eq!(&std::fs::read(&checkpoint).unwrap()[..8], b"PAINTC13");
+    let mut restored = save::read(&checkpoint).unwrap().session;
+    assert!(restored.st.borrow().traction);
+    assert!(restored.canvas().unwrap().traction_enabled());
+    let state = |s: &Session| {
+        let mut bytes = Vec::new();
+        s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+        bytes
+    };
+    assert_eq!(state(&live), state(&restored));
+    live.run("wait(86400)").unwrap();
+    restored.run("wait(86400)").unwrap();
+    assert_eq!(state(&live), state(&restored));
+    assert!(restored.program("traction").contains("--@ engine 5\n--@ traction\n"));
+}
+
+#[test]
 fn checkpoint_render_matches_native_color_and_look_companions_for_every_engine() {
     let temp = Temp::new("parity");
     for engine in 1..=paint::ENGINE {

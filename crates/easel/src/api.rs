@@ -35,6 +35,7 @@ pub const FIELD_STEP: f32 = 2.0;
 
 pub struct Studio {
     pub width: usize,
+    pub traction: bool,
     pub canvas: Option<Canvas>,
     pub style: Option<Rc<Style>>,
     /// Arguments `canvas{}` was called with (for status).
@@ -72,7 +73,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
+        Studio { width, traction: false, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -1757,7 +1758,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
-                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_traction(st.borrow().traction);
+                c.check_traction_memory().map_err(mlua::Error::runtime)?;
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }

@@ -209,6 +209,11 @@ impl Session {
         self.replay = on;
     }
 
+    pub fn with_traction(self, enabled: bool) -> Self {
+        self.st.borrow_mut().traction = enabled;
+        self
+    }
+
     fn snap(&mut self) -> mlua::Result<Snap> {
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
@@ -282,6 +287,7 @@ impl Session {
             (s.width, (*s.tubes).clone())
         };
         let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+        fresh.st.borrow_mut().traction = self.st.borrow().traction;
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -321,15 +327,17 @@ impl Session {
         // prelude.lua's check, putting its hand time on the clock and reading the globals it
         // left. A failure anywhere in it is a failed chunk, rolled back below.
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            // through prelude.lua's guard: an error value is shown without its address
-            guard.call::<()>(chunk.into_function()?)?;
-            check.call::<()>(())?;
-            // the hand time the chunk spent goes on the clock before it ends
-            if self.inject("flush").is_err() {
-                panic!("injected failure: flush");
-            }
-            crate::time::flush(&self.st, true);
-            self.next_globals(n as usize)
+            paint::crack::guard_traction_memory(|| {
+                // through prelude.lua's guard: an error value is shown without its address
+                guard.call::<()>(chunk.into_function()?)?;
+                check.call::<()>(())?;
+                // the hand time the chunk spent goes on the clock before it ends
+                if self.inject("flush").is_err() {
+                    panic!("injected failure: flush");
+                }
+                crate::time::flush(&self.st, true);
+                self.next_globals(n as usize)
+            }).map_err(mlua::Error::runtime)?
         }));
         self.deadline.set(None);
         let secs = t0.elapsed().as_secs_f64();
@@ -398,6 +406,9 @@ impl Session {
         let engine = self.st.borrow().tubes.engine;
         if engine != 1 {
             let _ = writeln!(s, "{ENGINE_MARK} {engine}");
+        }
+        if self.st.borrow().traction {
+            let _ = writeln!(s, "--@ traction");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -897,6 +908,10 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+pub fn logged_traction(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ traction")
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -945,6 +960,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()));
     };
     let engine = logged_engine(text)?;
+    if logged_traction(text) && engine != 5 {
+        return Err("the log's traction switch requires engine 5".into());
+    }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
         return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
@@ -1018,6 +1036,138 @@ pub fn root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traction_is_only_read_from_the_log_header() {
+        assert!(!logged_traction("--@ engine 5\n--@ chunk 1\n--@ traction\n"));
+        assert!(logged_traction("--@ engine 5\n  --@ traction  \n--@ chunk 1\n"));
+        assert!(!logged_traction("--@ engine 5\n--@ traction-off\n--@ chunk 1\n"));
+        assert!(!logged_traction("--@ engine 5\n--@ chunk 1\nprint('--@ traction')\n"));
+        assert!(box_for(Some("--@ engine 4\n--@ traction\n--@ chunk 1\n")).is_err());
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn a_traction_memory_refusal_rolls_back_the_live_chunk() {
+        let mut live = Session::new(80).unwrap().with_traction(true);
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            if let Some(c) = s.canvas() { c.write_state(&mut bytes, "").unwrap(); }
+            bytes
+        };
+        let before = state(&live);
+        let log = live.program("memory-limit");
+        let error = paint::crack::with_traction_memory_reserved_for_test(1016 << 20, || {
+            live.run(r#"k = 42; canvas{size=5000, aspect=1, linen=15, seed=11, ground={{pile={{"lead white", 1}}, um=80, apply="knife"}}}"#).unwrap_err()
+        });
+        assert!(error.contains("1024 MiB memory budget"), "{error}");
+        assert_eq!(state(&live), before);
+        assert_eq!(live.program("memory-limit"), log);
+        assert!(live.lua.globals().get::<Value>("k").unwrap().is_nil());
+        live.run(CANVAS).unwrap();
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn lua_cannot_keep_partial_state_by_catching_a_traction_memory_panic() {
+        let mut prepared = Canvas::new(80, 1.0, [0.1; 3]).with_size_mm(80.0).with_traction(true);
+        let mut knife = paint::bristle::Knife::new(800.0);
+        knife.load(paint::wet::Paint::body([0.1; 3]).with_stiff(0.3).with_drying(0.5), 1.0);
+        prepared.knife(&mut knife, &[(100.0, 500.0), (900.0, 500.0)], (0.3, 0.3), None, true, 0.0);
+        prepared.dry();
+        knife.wipe();
+        knife.load(paint::wet::Paint::body([0.9; 3]).with_stiff(0.8).with_drying(2.0), 1.0);
+        prepared.knife(&mut knife, &[(100.0, 500.0), (900.0, 500.0)], (0.9, 0.9), None, true, 0.0);
+        let prepared = prepared.with_size_mm(700.0);
+        assert!(prepared.check_traction_memory().is_ok());
+        for call in ["pcall(refuse_traction)", "xpcall(refuse_traction, tostring)"] {
+            let mut live = Session::new(80).unwrap().with_traction(true);
+            live.run(CANVAS).unwrap();
+            let st = live.st.clone();
+            let c = prepared.clone();
+            let refuse = live.lua.create_function(move |_, ()| {
+                let mut st = st.borrow_mut();
+                st.canvas = Some(c.clone());
+                st.canvas.as_mut().unwrap().wait(60.0 * 24.0 * 60.0);
+                Ok(())
+            }).unwrap();
+            live.lua.globals().set("refuse_traction", refuse).unwrap();
+            let state = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            let before = state(&live);
+            let log = live.program("caught-memory-limit");
+            let error = paint::crack::with_traction_memory_reserved_for_test(924 << 20, || {
+                assert!(prepared.check_traction_memory().is_ok());
+                live.run(&format!("junk = 42; local ok = {call}; assert(not ok)")).unwrap_err()
+            });
+            assert!(error.contains("1024 MiB memory budget"), "{call}: {error}");
+            assert_eq!(state(&live), before, "{call}");
+            assert_eq!(live.program("caught-memory-limit"), log, "{call}");
+            assert!(live.lua.globals().get::<Value>("junk").unwrap().is_nil());
+            live.run("assert(junk == nil)").unwrap();
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "replay", tube_box))]
+    fn legacy_canvas_keeps_the_header_traction_flag() {
+        for traction in [false, true] {
+            let mut live = Session::new(96).unwrap().with_traction(traction);
+            live.run(r#"canvas{style="friedrich", aspect=5, size=300, seed=11}"#).unwrap();
+            assert_eq!(live.canvas().unwrap().traction_enabled(), traction);
+            let log = live.program("legacy-traction");
+            assert_eq!(logged_traction(&log), traction);
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_traction(logged_traction(&log));
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let state = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            let bytes = state(&live);
+            assert_eq!(&bytes[..8], if traction { b"PAINTC13" } else { b"PAINTC11" });
+            assert_eq!(state(&replay), bytes);
+            let (restored, _) = Canvas::read_state(&mut std::io::Cursor::new(bytes)).unwrap();
+            assert_eq!(restored.traction_enabled(), traction);
+        }
+    }
+
+    #[test]
+    #[cfg(tube_box)]
+    fn traction_header_replays_and_rebuilds_the_live_state() {
+        let mut live = Session::new(96).unwrap().with_traction(true);
+        live.run(CANVAS).unwrap();
+        live.run(r#"b = brush("flat", 24)
+            b:load(pile{{"raw umber", 1}}, 0.8)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(1440)
+            b:load(pile{{"lead white", 1}}, 0.6)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(86400)"#).unwrap();
+        let log = live.program("traction");
+        assert!(log.contains("--@ engine 5\n--@ traction\n\n--@ chunk 1\n"));
+        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_traction(logged_traction(&log));
+        for chunk in parse_program(&log) {
+            replay.run(&chunk).unwrap();
+        }
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        assert!(live.canvas().unwrap().traction_enabled());
+        assert_eq!(state(&replay), state(&live));
+        assert_eq!(replay.program("traction"), log);
+        let before = state(&live);
+        live.rebuild().unwrap();
+        assert_eq!(state(&live), before);
+        assert_eq!(live.program("traction"), log);
+    }
 
     #[test]
     #[cfg(tube_box)]

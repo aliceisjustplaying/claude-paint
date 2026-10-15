@@ -267,3 +267,53 @@ fn bench() {
     println!("median of {reps}: replay without the blend {:.1} ms, engine 5 {:.1} ms, engine 7 {:.1} ms", tt * 1e3, t5 * 1e3, t7 * 1e3);
     println!("ns per add (replay without the blend subtracted): engine 5 {:.2}, engine 7 {:.2}, speedup {:.3}x", ns(t5), ns(t7), ns(t5) / ns(t7));
 }
+
+/// Every branch engine 5's `add` has (lean paint, a film too thin to
+/// cure, an absorbent ground, no drying state, engine 1's deferred cure)
+/// ends bit for bit where `Surf::add` leaves it.
+#[test]
+fn same_film_as_engine_5() {
+    let n = 64;
+    let mut x = 0x9E37_79B9u32;
+    let mut rnd = move || {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        (x >> 8) as f32 / (1u32 << 24) as f32
+    };
+    for flags in 0..16u8 {
+        let b = Bufs {
+            vol: (0..n).map(|k| if k % 7 == 0 { 0.0 } else { rnd() * 2.0 }).collect(),
+            lat: (0..n).map(|_| std::array::from_fn(|_| rnd())).collect(),
+            hide: (0..n).map(|_| std::array::from_fn(|_| rnd())).collect(),
+            dry: if flags & 4 != 0 { (0..n).map(|_| Px { cure: rnd(), ..Px::FRESH }).collect() } else { vec![] },
+            absorb: if flags & 8 != 0 { (0..n).map(|k| if k % 3 == 0 { 0.0 } else { rnd() * 0.3 }).collect() } else { vec![] },
+            lean: flags & 1 != 0,
+            cure_now: flags & 2 != 0,
+        };
+        let recs: Vec<Rec> = (0..4 * n)
+            .map(|k| Rec {
+                kind: if k % 5 == 4 { 1 } else { 0 },
+                site: (k % 3) as u8,
+                canvas: 0,
+                i: (k * 7) % n,
+                call: (k / 8) as u32,
+                v: if k % 11 == 0 { 0.0 } else if k % 13 == 0 { 1e-7 } else { rnd() * 0.5 },
+                lat: std::array::from_fn(|_| rnd()),
+                hide: std::array::from_fn(|j| if j == 3 && k % 2 == 0 { 0.0 } else { rnd() }),
+                cure: rnd(),
+                pre: [0.0; 15],
+            })
+            .map(|mut r| {
+                if r.kind == 1 {
+                    r.v = r.v.min(0.01);
+                }
+                r
+            })
+            .collect();
+        let (mut e5, mut e7) = (vec![b.clone()], vec![b.clone()]);
+        run_e5(&recs, &mut e5);
+        run_e7(&recs, &mut e7);
+        assert!(same(&e5, &e7), "flags {flags:04b}");
+    }
+}

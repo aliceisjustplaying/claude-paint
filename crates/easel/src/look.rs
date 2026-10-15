@@ -417,7 +417,24 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
 /// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
 /// tiles) light it once.
 pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::Result<(usize, usize, Vec<u8>), String> {
-    let f = c.window();
+    let own;
+    let px: &[Rgb] = match seen {
+        Some(px) => px,
+        None => {
+            own = match v.light {
+                Some((az, el)) => c.seen_lit(az, el, 1.0),
+                None => c.seen(),
+            };
+            &own
+        }
+    };
+    render_pixels(c.window(), v, px)
+}
+
+pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    if f.w.checked_mul(f.h) != Some(px.len()) {
+        return Err("look: optical pixels do not match the captured frame".into());
+    }
     // crop: units -> whole-canvas pixels -> pixels of the held window
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
     let (x0, y0, x1, y1) = match v.crop {
@@ -449,17 +466,6 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
         return Err("look: canvas is empty".into());
     }
     let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
-    let own;
-    let px: &[Rgb] = match seen {
-        Some(px) => px,
-        None => {
-            own = match v.light {
-                Some((az, el)) => c.seen_lit(az, el, 1.0),
-                None => c.seen(),
-            };
-            &own
-        }
-    };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {

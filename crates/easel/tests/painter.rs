@@ -157,7 +157,7 @@ fn the_studio_box_file_sets_the_box() {
     std::fs::create_dir_all(dir.join("bin")).unwrap();
     let e = dir.join("bin/easel");
     std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), &e).unwrap();
-    let run = |args: &[&str]| Command::new(&e).args(args).current_dir(&dir).env_remove("EASEL_BOX").output().unwrap();
+    let run = |args: &[&str]| Command::new(&e).args(args).current_dir(&dir).env_remove("EASEL_BOX").env_remove("EASEL_WIDTH").output().unwrap();
     let usage = String::from_utf8(run(&["help"]).stdout).unwrap();
     assert!(usage.contains("easel tubes"), "{usage}");
 

@@ -16,7 +16,7 @@ import unittest
 from functools import wraps
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from io import StringIO
 
 from mcp import ClientSession, StdioServerParameters
@@ -101,6 +101,38 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    async def test_painting_header_sets_chunk_and_rebuild_waits(self):
+        loader = SourceFileLoader("width_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        log = self.studio / "paintings/lua/painting.lua"
+        log.parent.mkdir(parents=True)
+        width = self.studio / "bin/width"
+        for configured in (None, "2400", "4800"):
+            if configured is None:
+                width.unlink(missing_ok=True)
+            else:
+                width.write_text(configured)
+            for header, wide in (
+                (None, configured == "4800"),
+                ("--@ width 4800\n--@ chunk 1\n", True),
+                ("--@ chunk 1\n--@ width 4800\n", False),
+                ("--@ width 2400\n--@ chunk 1\n", False),
+                ("--@ sketch\n--@ width 4800\n--@ chunk 1\n", False),
+            ):
+                with self.subTest(configured=configured, header=header):
+                    if header is None:
+                        log.unlink(missing_ok=True)
+                    else:
+                        log.write_text(header)
+                    self.assertEqual(easel.wide(), wide)
+                    step = AsyncMock(side_effect=[(0, "rebuilding from the log (0 of 1 chunks)"), (0, "ready"), (0, "ok")])
+                    with patch.object(easel, "step", step), patch.object(module.time, "monotonic", return_value=100), patch.object(module.asyncio, "sleep", AsyncMock()):
+                        self.assertEqual(await easel.at(["do", "-"], "print(1)"), "ok")
+                    wait = (48 if wide else 12) * 60
+                    self.assertEqual([call.args[2] for call in step.await_args_list], [100 + wait, 100 + (50 if wide else 30) * 60, 100 + wait])
 
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))

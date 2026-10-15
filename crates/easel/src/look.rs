@@ -19,7 +19,7 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
-    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops stay 1:1.
+    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops are shown at `LOOK_SCALE` px a unit (a 2400 px canvas's own).
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
@@ -347,7 +347,10 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<
     Ok(())
 }
 
-/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops stay native, at most 1200 px per side.
+/// The pixels to a canvas unit a crop is shown at (the 2400 px canvas's own).
+const LOOK_SCALE: f32 = 2.4;
+
+/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops are shown at `LOOK_SCALE`, at most 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {
     let (w, h, png) = render(c, v)?;
     if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -451,13 +454,16 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
     };
     let (cw, ch) = (x1 - x0, y1 - y0);
     let long = cw.max(ch);
-    if v.crop.is_some() && (cw > 1200 || ch > 1200) {
-        let units = 1200.0 / f.scale;
+    // a crop is shown at LOOK_SCALE px to a unit whatever the canvas's own width:
+    // a painting begun at 4800 px looks to its painter as one begun at 2400 does
+    let shown = |n: usize| if f.scale > LOOK_SCALE { ((n as f32 * LOOK_SCALE / f.scale).round() as usize).max(1) } else { n };
+    if v.crop.is_some() && (shown(cw) > 1200 || shown(ch) > 1200) {
+        let units = 1200.0 / f.scale.min(LOOK_SCALE);
         let side = (units / 2.0).floor().max(1.0);
         let a = wx0 as f32 / f.scale;
         let b = wy0 as f32 / f.scale;
         return Err(format!(
-            "--crop exceeds 1200 pixels per side (crops stay 1:1); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
+            "--crop exceeds 1200 pixels per side (a crop is shown at 2.4 pixels a unit); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
             a + side,
             b + side
         ));
@@ -465,7 +471,7 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
     if long == 0 || cw == 0 || ch == 0 {
         return Err("look: canvas is empty".into());
     }
-    let mut size = if v.crop.is_some() { long } else { v.size.unwrap_or(1000).clamp(1, 1600) };
+    let mut size = if v.crop.is_some() { shown(long) } else { v.size.unwrap_or(1000).clamp(1, 1600) };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {

@@ -1506,7 +1506,7 @@ mod tests {
             // the scheduler all tile work runs through (sched::run_ordered)
             let ord: Vec<usize> = ord.into_iter().filter(|&t| rects[t].is_some()).collect();
             let log = std::sync::Mutex::new(Vec::new());
-            let ran = crate::sched::run_ordered(&ord, &rects, |t| log.lock().unwrap().push(t));
+            let ran = crate::sched::run_ordered(&ord, &rects, None, |t| log.lock().unwrap().push(t));
             let log = log.into_inner().unwrap();
             let pos: Vec<usize> = (0..tw * th).map(|t| ord.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();
             let ran_at: Vec<usize> = (0..tw * th).map(|t| log.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();

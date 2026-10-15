@@ -921,4 +921,61 @@ mod tests {
         }
         eprintln!("{:>20}: {all_calls:>8} calls, engine 5 {:>7.1} ns/call, engine 7 {:>7.1} ns/call, {:.2}x (drag time, geometry included)", "all", all5 * 1e9 / all_calls as f64, all7 * 1e9 / all_calls as f64, all5 / all7);
     }
+
+    /// Gallery-light renders (seen_lit(115, 55, 1)) of the fixtures, engine 5
+    /// left and engine 7 right, into `E7_RENDER_DIR`.
+    /// `E7_RENDER_DIR=dir cargo test --release -p paint --lib engine7::exchange::tests::renders -- --ignored`
+    #[test]
+    #[ignore]
+    fn renders() {
+        let dir = std::path::PathBuf::from(std::env::var("E7_RENDER_DIR").expect("E7_RENDER_DIR"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let save = |name: &str, a: &Canvas, b: &Canvas| {
+            let (w, h) = (a.f.w, a.f.h);
+            let (la, lb) = (a.seen_lit(115.0, 55.0, 1.0), b.seen_lit(115.0, 55.0, 1.0));
+            let gap = 8;
+            let mut buf = vec![255u8; (2 * w + gap) * h * 3];
+            for y in 0..h {
+                for x in 0..w {
+                    for (k, img) in [&la, &lb].into_iter().enumerate() {
+                        let o = (y * (2 * w + gap) + x + k * (w + gap)) * 3;
+                        for c in 0..3 {
+                            buf[o + c] = (crate::color::linear_to_srgb(img[y * w + x][c]) * 255.0).round() as u8;
+                        }
+                    }
+                }
+            }
+            image::save_buffer(dir.join(format!("{name}.png")), &buf, (2 * w + gap) as u32, h as u32, image::ColorType::Rgb8).unwrap();
+        };
+        let pulls: Vec<Gesture> = (0..3).map(|k| Gesture::line((380.0, 330.0 + 40.0 * k as f32), (760.0, 330.0 + 40.0 * k as f32)).pressure(0.5, 0.5)).collect();
+        let ((c5, _), (c7, _)) = both(&two_films, || Held::new(Tool::badger(90.0), 3), &pulls, None);
+        save("blender-on-wet", &c5, &c7);
+        let blue = |c: &mut Canvas| film(c, (0.0, 0.0, 1000.0, 800.0), Paint::body(hex(BLUE)), 1.0);
+        let drags: Vec<Gesture> = (0..4).map(|k| Gesture::new(vec![(150.0, 200.0 + 90.0 * k as f32), (450.0, 230.0 + 90.0 * k as f32), (850.0, 190.0 + 90.0 * k as f32)])).collect();
+        let yellow = || {
+            let mut h = Held::new(Tool::filbert(60.0), 11);
+            h.load(Paint::body(hex("#e8c020")), 1.0);
+            h
+        };
+        let ((c5, _), (c7, _)) = both(&blue, yellow, &drags, None);
+        save("two-color-wet-drag", &c5, &c7);
+        let skims: Vec<Gesture> = (0..3).map(|k| Gesture::line((150.0, 250.0 + 120.0 * k as f32), (850.0, 270.0 + 120.0 * k as f32)).pressure(0.15, 0.15)).collect();
+        let scumble = || {
+            let mut h = Held::new(Tool::hog_flat(60.0), 5);
+            h.load(Paint::scumble(hex("#e0d8c0")), 0.06);
+            h
+        };
+        let dark = |c: &mut Canvas| *c = Canvas::new(400, 1.25, hex("#3a3020")).with_size_mm(150.0).with_engine(c.engine()).with_linen(crate::surface::Linen::fine(3));
+        let ((c5, _), (c7, _)) = both(&dark, scumble, &skims, None);
+        save("dry-scumble", &c5, &c7);
+        let lines: Vec<Gesture> = (0..3).map(|k| Gesture::new(vec![(200.0, 200.0 + 150.0 * k as f32), (500.0, 260.0 + 150.0 * k as f32), (800.0, 210.0 + 150.0 * k as f32)]).pressure(0.25, 0.1)).collect();
+        let wet = |c: &mut Canvas| film(c, (0.0, 0.0, 1000.0, 800.0), Paint::body(hex("#d8d0c0")), 0.6);
+        let sable = || {
+            let mut h = Held::new(Tool { point: 1.0, ..Tool::round_sable(12.0) }, 7);
+            h.load(Paint::body(hex("#302018")), 1.0);
+            h
+        };
+        let ((c5, _), (c7, _)) = both(&wet, sable, &lines, None);
+        save("hairlines-on-wet", &c5, &c7);
+    }
 }

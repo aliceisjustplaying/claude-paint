@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { CARRIES_OVER, HEADER } from "../summary.ts";
 
 const HERE = join(import.meta.dirname, "..");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -61,17 +62,29 @@ test("a first sitting's message is left as it is", () => {
 	assert.deepEqual(requests[0].filter((m) => m.role === "user").map((m) => [m.text, m.images]), [["Your brief is in BRIEF.md.", 0]]);
 });
 
-test("after a compaction the painter sees the canvas as it was when the summary was written", () => {
+/** The first request after a compaction, and the index of the summary in it. */
+function compacted(extra: Record<string, string> = {}): { after: Requests[number]; i: number } {
 	// a long answer puts the session over the (lowered) compaction point; the next prompt compacts first
 	// (two long turns: pi keeps the last 20K tokens as they are, so the first is what gets summarized)
-	const env = { PAINTER_COMPACT_RESERVE: "170000" };
+	const env = { PAINTER_COMPACT_RESERVE: "170000", ...extra };
 	const first = run({ ...env, FAUX_SCRIPT: "long" }, "paint");
 	run({ ...env, FAUX_SCRIPT: "long" }, "more", first.at, ["--continue"]);
 	const { requests } = run(env, "go on", first.at, ["--continue"]);
 	const after = requests[0];
 	const i = after.findIndex((m) => m.text.startsWith("The conversation history before this point was compacted") || m.text.includes("Earlier parts of this session were condensed."));
 	assert.ok(i >= 0, JSON.stringify(after.map((m) => [m.role, m.text.slice(0, 60)])));
+	return { after, i };
+}
+
+test("after a compaction the painter sees the canvas as it was when the summary was written", () => {
+	const { after, i } = compacted();
+	assert.doesNotMatch(after[i].text, /What follows is what carries over/);
 	assert.match(after[i].text, /The whole canvas as it was when this was written: out\/easel\/painting\/[0-9a-f-]{36}\.png/);
 	assert.match(after[i + 1].text, /^The canvas as it was when this was written \(out\/easel\/painting\/[0-9a-f-]{36}\.png\):/);
 	assert.equal(after[i + 1].images, 1);
+});
+
+test("with PAINTER_COMPACTION_NOTES=1 the summary says what carries over, right after its header", () => {
+	const { after, i } = compacted({ PAINTER_COMPACTION_NOTES: "1" });
+	assert.ok(after[i].text.includes(`${HEADER}\n\n${CARRIES_OVER}\n\n## BRIEF.md`), after[i].text.slice(0, 800));
 });

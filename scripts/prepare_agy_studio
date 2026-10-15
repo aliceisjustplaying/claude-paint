@@ -32,7 +32,7 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
     sessions_root = sessions_root.expanduser().resolve()
     args = ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(studio),
-            "--sittings", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
+            "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
     if sitting_seconds is not None:
         args += ["--sitting-seconds", str(sitting_seconds)]
     config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": {}}}}

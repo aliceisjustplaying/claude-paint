@@ -22,6 +22,10 @@ profile, M3 Pro, `notes/speed/timing/`), unless marked otherwise.
 | `paint --lib sheet::tests::a_dry_brush_lifts_what_its_tips_reach` | correctness: a dry brush over dense pastel lifts what its tips reach and leaves a ghost, lifts nothing over fixed pastel, and a finer tip reaches deeper | 151 s (Linux x86_64, 4 vCPU, test profile) | slow: its two dense passages are some 600 stick strokes first; no smaller form is claimed equivalent |
 | `paint --lib sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper` | correctness: a knife scraping dense pastel takes the loose pastel and presses the paper's peaks lower, fixed pastel staying | 127 s (as above) | slow: a dense passage of stick strokes first |
 | `paint --lib sheet::tests::a_scalpel_cuts_a_knife_does_not` | correctness: a scalpel's edge cuts the paper's fibers and takes even fixed pastel; a palette knife at the same hand doesn't | 131 s (as above) | slow: a dense passage of stick strokes first |
+| `paint --lib sheet::tests::a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth` | correctness: a puff moves the loose heap and a hard one takes the top of the tooth | 273 s (as above) | slow: a dense passage of stick strokes first |
+| `paint --lib sheet::tests::a_tap_sheds_crumbs_not_the_tooth` | correctness: a knock sheds the loose crumbs, not the pastel held in the tooth | 203 s (as above) | slow: a dense passage of stick strokes first |
+| `paint --lib sheet::tests::a_blow_accounts_for_every_crumb` | conservation: what a puff lays and a mask catches never exceeds what it lifts (center, a mask, a corner, a 5 mm puff) | 53 s (as above) | slow: four puffs over a dense passage |
+| `paint --lib sheet::tests::blown_crumbs_settle_in_a_ring` | correctness: blown crumbs roll to the ring the jet's stopping radius sets | 53 s (as above) | slow: puffs over a dense passage |
 
 ### Never run: they replay whole paintings
 

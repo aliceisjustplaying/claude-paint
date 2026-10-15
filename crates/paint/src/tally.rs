@@ -338,7 +338,7 @@ impl Canvas {
     /// The fastest possible open-film oxidation may advance by at most 0.01
     /// per batch (at most 0.1 fluidity, since smoothstep's slope is <= 1.5/GEL).
     /// Only passes that stay wholly open under that upper bound qualify;
-    /// solvent, tacky layers and crops keep their original cadence. This is
+    /// persistent solvent, tacky layers and crops keep their original cadence. This is
     /// a local drying-lag bound, not a bound on final image differences.
     fn bounded_slice_secs(&self, slice: f64, paints: impl IntoIterator<Item = crate::wet::Paint>, secs: &[f64]) -> f64 {
         use crate::drying::{GEL, OPEN_SHARE, TOUCH_DRY_MIN, TOUCH_DRY_MIN_3, rate};
@@ -349,7 +349,7 @@ impl Canvas {
         }
         let mut drying = 0.01f32;
         for paint in paints {
-            if paint.thinner > 0.0 || paint.solvent > 0.0 || !paint.drying.is_finite() {
+            if paint.thinner > 0.0 || !paint.drying.is_finite() {
                 return slice;
             }
             drying = drying.max(paint.drying);
@@ -490,7 +490,7 @@ mod tests {
         let secs = [300.0; 12];
         let paint = crate::wet::Paint::body(hex("#6f84a8"));
         assert_eq!(c.bounded_slice_secs(900.0, [paint.with_thinner(0.1)], &secs), 900.0);
-        assert_eq!(c.bounded_slice_secs(900.0, [crate::wet::Paint { solvent: 0.1, ..paint }], &secs), 900.0);
+        assert!(c.bounded_slice_secs(900.0, [crate::wet::Paint { solvent: 0.1, ..paint }], &secs) > 900.0);
         c.wet.touch(0, 0, 1, 1);
         c.wet.vol[0] = 1.0;
         c.wet.hide[0] = paint.prop();

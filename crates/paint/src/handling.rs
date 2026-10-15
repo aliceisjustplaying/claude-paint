@@ -444,8 +444,9 @@ struct Plan {
 impl Canvas {
     /// Work the region `mask` with a simulated brush, stroke by stroke.
     ///
-    /// Strokes are planned up front, then grouped into passages (tiles) at
-    /// least twice any stroke's reach on each axis. The tiles are painted in
+    /// Strokes are planned up front, then grouped into passages (tiles), by
+    /// default at least twice any stroke's reach on each axis. Engine 5 can
+    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`. The tiles are painted in
     /// an order set by `Order` (2×2 checkerboard phases in shuffled order,
     /// or bands along a sweep), each with its own brush; tiles whose
     /// footprints don't overlap run in parallel (`sched::run_ordered`), with
@@ -843,14 +844,30 @@ impl Canvas {
     #[allow(clippy::too_many_arguments)]
     fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
-        // tiles are sized per axis from the footprints: tiles painted at the
+        // default tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
         // short tiles)
         let margin = 2.0 / f.scale;
         let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
-        let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
-        let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        let (mut tile_x, mut tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
+        let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        if self.engine == 5 && std::env::var("PAINT_SMALL_TILES").is_ok_and(|v| v == "1") {
+            let mut counts = vec![0usize; tw * th];
+            for (cx, cy, rect, _) in &plans {
+                if rect.is_some() {
+                    let tx = ((*cx / tile_x) as usize).min(tw - 1);
+                    let ty = ((*cy / tile_y) as usize).min(th - 1);
+                    counts[ty * tw + tx] += 1;
+                }
+            }
+            let scale = crate::sched::work_tile_scale(&counts);
+            if scale < 1.0 {
+                tile_x *= scale;
+                tile_y *= scale;
+                (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+            }
+        }
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", plans.len());
         }
@@ -1805,4 +1822,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

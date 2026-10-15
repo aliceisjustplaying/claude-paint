@@ -22,6 +22,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
 pub(crate) type Rect = (usize, usize, usize, usize);
 
+pub(crate) fn work_tile_scale(strokes: &[usize]) -> f32 {
+    let longest = strokes.iter().copied().max().unwrap_or(0).max(32);
+    (32.0 / longest as f32).sqrt().max(0.5)
+}
+
 struct Ctx<'a, T, W> {
     order: &'a [usize],
     succ: Vec<Vec<usize>>,
@@ -227,6 +232,17 @@ fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smaller_work_tiles_adapt_to_the_longest_chain_within_half_size() {
+        for counts in [&[][..], &[0, 0], &[1, 32, 9]] {
+            assert_eq!(work_tile_scale(counts), 1.0);
+        }
+        assert_eq!(work_tile_scale(&[0, 64, 1]), 0.5f32.sqrt());
+        for longest in [128, 1024, usize::MAX] {
+            assert_eq!(work_tile_scale(&[1, longest]), 0.5);
+        }
+    }
 
     #[test]
     fn batches_cut_the_order_by_hand_time() {

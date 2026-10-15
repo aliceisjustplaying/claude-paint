@@ -15,7 +15,7 @@ impl Temp {
         Self(dir)
     }
     fn command(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env("EASEL_STATE_SESSION", "sketch-output").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap()
+        Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env("EASEL_STATE_SESSION", "sketch-output").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap()
     }
 }
 

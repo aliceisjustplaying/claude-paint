@@ -161,25 +161,31 @@ def analyze(path, output):
     for i in reversed(range(len(events))):
         for j in successors[i]:
             reach[i] |= (1 << j) | reach[j]
-    matched = {}
+    def antichain(nodes):
+        mask = sum(1 << i for i in nodes)
+        matched = {}
 
-    def augment(i, visited):
-        bits = reach[i]
-        while bits:
-            bit = bits & -bits
-            bits ^= bit
-            j = bit.bit_length() - 1
-            if j in visited:
-                continue
-            visited.add(j)
-            if j not in matched or augment(matched[j], visited):
-                matched[j] = i
-                return True
-        return False
+        def augment(i, visited):
+            bits = reach[i] & mask
+            while bits:
+                bit = bits & -bits
+                bits ^= bit
+                j = bit.bit_length() - 1
+                if j in visited:
+                    continue
+                visited.add(j)
+                if j not in matched or augment(matched[j], visited):
+                    matched[j] = i
+                    return True
+            return False
 
-    for i in range(len(events)):
-        augment(i, set())
-    width = len(events) - len(matched)
+        for i in nodes:
+            augment(i, set())
+        return len(nodes) - len(matched)
+
+    width = antichain(range(len(events)))
+    paint_nodes = [e["id"] for e in events if e["kind"] in ["marks", "pass"]]
+    paint_width = antichain(paint_nodes)
     all_footprints = [f for event in events for f in event["footprints"]]
     area = lambda rect: (rect[2] - rect[0]) * (rect[3] - rect[1]) if rect else 0
     conservative_area = sum(area(f["conservative"]) for f in all_footprints)
@@ -187,6 +193,8 @@ def analyze(path, output):
     result = {"boundary": "whole synchronous verb graph with current global time joins; known exact spatial edges included, unsupported spatial edges omitted, so width is an optimistic upper bound",
               "exact_footprints": bool(all_footprints), "events": events, "edges": edges,
               "ready_width_upper_bound": width,
+              "paint_ready_width_upper_bound": paint_width,
+              "paint_nodes": len(paint_nodes),
               "asap_max_ready": max(map(len, levels)),
               "mean_level_width": len(events) / len(levels),
               "traced_wall_s": total, "weighted_span_s": max(span),

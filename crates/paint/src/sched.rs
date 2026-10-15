@@ -22,6 +22,33 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
 pub(crate) type Rect = (usize, usize, usize, usize);
 
+/// Shrink dense work tiles toward 32 strokes per tile, never below half
+/// their legacy dimensions. The plan, not the worker count, sets the scale.
+pub(crate) fn work_tile_scale(strokes: &[usize]) -> f32 {
+    let longest = strokes.iter().copied().max().unwrap_or(0).max(32);
+    (32.0 / longest as f32).sqrt().max(0.5)
+}
+
+pub(crate) fn quarter_work_tile_scale(strokes: &[usize]) -> f32 {
+    if strokes.iter().any(|&n| n > 32) { 0.25 } else { 1.0 }
+}
+
+fn disjoint_groups(order: &[usize], rects: &[Option<Rect>]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for &t in order {
+        let Some(a) = rects[t] else { continue };
+        if let Some(group) = groups.iter_mut().find(|group| group.iter().all(|&u| {
+            let b = rects[u].unwrap();
+            !(a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3)
+        })) {
+            group.push(t);
+        } else {
+            groups.push(vec![t]);
+        }
+    }
+    groups
+}
+
 struct Ctx<'a, T, W> {
     order: &'a [usize],
     succ: Vec<Vec<usize>>,
@@ -125,6 +152,9 @@ pub(crate) enum TileOrder {
     /// The verb's default (checkerboard phases that let tiles run in
     /// parallel): with hand time on, a sweep down instead.
     Default(Vec<usize>),
+    /// Dense quarter-sized work tiles: keep the default hand-time batches,
+    /// then regroup each whole-canvas batch into disjoint footprint groups.
+    Quarter(Vec<usize>),
 }
 
 /// The tiles of a covering pass, planned and counted, ready to paint.
@@ -163,9 +193,10 @@ impl Canvas {
     /// handed out, so it paints with the same ids as the whole canvas.
     pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
         let Pass { grid, order, rects, secs, ids, slice } = pass;
+        let regroup = matches!(order, TileOrder::Quarter(_));
         let order = match order {
-            TileOrder::Default(_) if slice.is_some() => sweep_down(grid),
-            TileOrder::Asked(o) | TileOrder::Default(o) => o,
+            TileOrder::Default(_) | TileOrder::Quarter(_) if slice.is_some() => sweep_down(grid),
+            TileOrder::Asked(o) | TileOrder::Default(o) | TileOrder::Quarter(o) => o,
         };
         let batches = batches(&order, &secs, slice);
         let n_batches = batches.len();
@@ -180,6 +211,7 @@ impl Canvas {
                 offsets[t] = acc;
                 acc += ids[t];
             }
+            let order = if regroup { disjoint_groups(&order, &rects).into_iter().flatten().collect() } else { order };
             let f = self.f;
             let order: Vec<usize> = order.into_iter().filter(|&t| rects[t].is_some_and(|r| f.clip(r).is_some())).collect();
             if std::env::var_os("PAINT_DEBUG").is_some() {
@@ -230,6 +262,81 @@ fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smaller_work_tiles_adapt_to_the_longest_chain_within_half_size() {
+        for counts in [&[][..], &[0, 0], &[1, 32, 9]] {
+            assert_eq!(work_tile_scale(counts), 1.0);
+        }
+        assert_eq!(work_tile_scale(&[0, 64, 1]), 0.5f32.sqrt());
+        for longest in [128, 1024, usize::MAX] {
+            assert_eq!(work_tile_scale(&[1, longest]), 0.5);
+        }
+    }
+
+    #[test]
+    fn quarter_work_tiles_only_shrink_dense_legacy_tiles_and_stop_at_quarter_size() {
+        for counts in [&[][..], &[0, 0], &[1, 32, 9]] {
+            assert_eq!(quarter_work_tile_scale(counts), 1.0);
+        }
+        for longest in [33, 64, 128, 1024, usize::MAX] {
+            assert_eq!(quarter_work_tile_scale(&[1, longest]), 0.25);
+        }
+    }
+
+    #[test]
+    fn regrouping_is_deterministic_and_each_group_is_disjoint() {
+        let rects = [Some((0, 0, 10, 10)), Some((5, 0, 15, 10)), Some((10, 0, 20, 10)), Some((0, 10, 20, 20)), None];
+        let order = [0, 1, 2, 3, 4];
+        let groups = disjoint_groups(&order, &rects);
+        assert_eq!(groups, vec![vec![0, 2, 3], vec![1]]);
+        assert_eq!(disjoint_groups(&order, &rects), groups);
+        let mut members: Vec<_> = groups.iter().flatten().copied().collect();
+        members.sort_unstable();
+        assert_eq!(members, vec![0, 1, 2, 3]);
+        for group in &groups {
+            for (i, &t) in group.iter().enumerate() {
+                for &u in &group[i + 1..] {
+                    if let (Some(a), Some(b)) = (rects[t], rects[u]) {
+                        assert!(!(a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3));
+                    }
+                }
+            }
+        }
+    }
+
+    fn paint_order(order: TileOrder, rects: Vec<Option<Rect>>, crop: Option<crate::canvas::Crop>, slice: Option<f64>) -> Vec<(usize, u32)> {
+        let mut c = Canvas::new_window(100, 1.0, [0.5; 3], crop);
+        let log = Mutex::new(Vec::new());
+        let n = rects.len();
+        c.paint_pass(Pass { grid: (n, 1), order, rects, secs: vec![1.0; n], ids: vec![1; n], slice }, |_, t, id| {
+            log.lock().unwrap().push((t, id));
+            None
+        });
+        log.into_inner().unwrap()
+    }
+
+    #[test]
+    fn an_explicit_tile_order_is_kept_with_and_without_hand_time() {
+        let rects = vec![Some((0, 0, 10, 10)), Some((5, 0, 15, 10)), Some((10, 0, 20, 10))];
+        for slice in [None, Some(100.0)] {
+            let log = paint_order(TileOrder::Asked(vec![0, 1, 2]), rects.clone(), None, slice);
+            assert_eq!(log.iter().map(|&(t, _)| t).collect::<Vec<_>>(), vec![0, 1, 2]);
+        }
+    }
+
+    #[test]
+    fn quarter_regrouping_precedes_crop_selection_and_preserves_ids() {
+        let rects = vec![Some((0, 0, 10, 10)), Some((5, 0, 15, 10)), Some((10, 0, 20, 10))];
+        let crop = crate::canvas::Crop { units: [100.0, 0.0, 1000.0, 1000.0], margin: 0.0 };
+        for slice in [None, Some(100.0)] {
+            let full = paint_order(TileOrder::Quarter(vec![0, 1, 2]), rects.clone(), None, slice);
+            let cropped = paint_order(TileOrder::Quarter(vec![0, 1, 2]), rects.clone(), Some(crop), slice);
+            let visible: Vec<_> = full.into_iter().filter(|&(t, _)| t != 0).collect();
+            assert_eq!(visible.iter().map(|&(t, _)| t).collect::<Vec<_>>(), vec![2, 1]);
+            assert_eq!(cropped, visible);
+        }
+    }
 
     #[test]
     fn batches_cut_the_order_by_hand_time() {

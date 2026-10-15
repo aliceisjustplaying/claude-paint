@@ -22,8 +22,9 @@ def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
     image = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
     original = image.size
     if max(original) <= max_side and math.ceil(len(data) / 3) * 4 < max_bytes:
-        return [types.TextContent(type="text", text="Read image file [image/png]"),
-                types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(data).decode())]
+        mime = Image.MIME.get(image.format, "image/png")
+        return [types.TextContent(type="text", text=f"Read image file [{mime}]"),
+                types.ImageContent(type="image", mimeType=mime, data=base64.b64encode(data).decode())]
     width, height = original
     if width > max_side:
         width, height = max_side, math.floor(height * max_side / width + 0.5)

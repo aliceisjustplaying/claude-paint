@@ -177,7 +177,10 @@ mod tests {
                 let rects = if k % 2 == 0 { &disjoint } else { &chain };
                 s.spawn(move |_| {
                     let order: Vec<usize> = (0..rects.len()).collect();
-                    crate::sched::run_ordered(&order, rects, Some(st), |_| std::thread::sleep(std::time::Duration::from_millis(2)));
+                    crate::sched::run_ordered(&order, rects, Some(st), |_| {
+                        assert!(st.ready.load(Ordering::Relaxed) >= 1, "a running tile no longer counts as ready");
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                    });
                 });
             }
         });
@@ -189,6 +192,38 @@ mod tests {
             assert!((1..=want).contains(&get(&st.peak_running)), "batch {k}");
             assert!(st.tile_ns.load(Ordering::Relaxed) > 0);
         }
+    }
+
+    /// A saved and restored engine 7 canvas paints on exactly as the one
+    /// that never stopped, after strokes that rebuilt only part of its
+    /// contact cache.
+    #[test]
+    fn a_restored_canvas_paints_on_as_the_original() {
+        use crate::bristle::{Gesture, Held, Tool};
+        use crate::canvas::Canvas;
+        use crate::color::hex;
+        use crate::wet::Paint;
+        let stroke = |c: &mut Canvas, a: (f32, f32), b: (f32, f32), p: f32, load: f32, seed: u64| {
+            let mut h = Held::new(Tool::filbert(36.0), seed).with_engine(7);
+            h.load(Paint::body(hex("#704030")), load);
+            c.drag(&mut h, &Gesture::line(a, b).pressure(p, p), None);
+        };
+        let state = |c: &Canvas| {
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let mut c = Canvas::new(600, 1.4, hex("#d8d0c0")).with_size_mm(200.0).with_linen(crate::surface::Linen::fine(3)).with_engine(7);
+        for k in 0..4 {
+            stroke(&mut c, (330.0, 320.0), (370.0, 330.0), 0.8, 1.0, 10 + k);
+            c.dry();
+        }
+        stroke(&mut c, (210.0, 350.0), (770.0, 375.0), 0.15, 0.1, 20);
+        let (mut d, _) = Canvas::read_state(&mut std::io::Cursor::new(state(&c))).unwrap();
+        for cv in [&mut c, &mut d] {
+            stroke(cv, (210.0, 230.0), (770.0, 255.0), 0.12, 0.03, 40);
+        }
+        assert!(state(&c) == state(&d), "the restored canvas painted differently");
     }
 
     #[test]

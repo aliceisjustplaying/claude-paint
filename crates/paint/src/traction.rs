@@ -19,6 +19,9 @@ const FINEST_MM: f32 = 1.6;
 const LAST_GEN: u8 = 4;
 const GAP_MAX: f32 = 0.2;
 const NETWORK_MEMORY_BUDGET: usize = 1024 << 20;
+const NETWORK_TILE_MM: f32 = 300.0;
+const NETWORK_HALO_MM: f32 = 16.0;
+const NETWORK_GRID: f32 = 0.25;
 const MARK: u64 = 0x4e4f_4954_4341_5254; // TRACTION
 const SECTION_V: u64 = 1;
 
@@ -315,6 +318,8 @@ fn gens_for(t_um: f32) -> u8 {
 #[derive(Debug)]
 pub(crate) struct DryNet {
     size_mm: [f32; 2],
+    tile: [usize; 2],
+    origin_mm: [f32; 2],
     seed: u64,
     /// Segments: ends (mm), relative opening at each end, generation.
     segs: Vec<([f32; 2], [f32; 2], f32, f32, u8)>,
@@ -325,7 +330,7 @@ pub(crate) struct DryNet {
 }
 
 impl DryNet {
-    fn new(size_mm: [f32; 2], seed: u64) -> DryNet {
+    fn new(size_mm: [f32; 2], seed: u64, tile: [usize; 2]) -> DryNet {
         use crate::crack::{Cracks, End, network_with_budget};
         let k = Cracks {
             island_mm: Some(FINEST_MM),
@@ -334,7 +339,9 @@ impl DryNet {
             grain: 0.0,
             ..Cracks::aged(seed)
         };
-        let (net, mut budget) = network_with_budget(&k, size_mm, [0.7, 0.7], NETWORK_MEMORY_BUDGET);
+        let origin_mm = tile.map(|i| (i as f32 * NETWORK_TILE_MM - NETWORK_HALO_MM).max(0.0));
+        let tile_mm = std::array::from_fn(|i| (((tile[i] + 1) as f32 * NETWORK_TILE_MM + NETWORK_HALO_MM).min(size_mm[i]) - origin_mm[i]).max(0.0));
+        let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, NETWORK_MEMORY_BUDGET);
         let mut segs = Vec::new();
         for a in &net.arms {
             let n = a.pts.len();
@@ -360,7 +367,7 @@ impl DryNet {
             }
         }
         let cell = 2.0f32;
-        let (cols, rows) = (((size_mm[0] / cell).ceil() as usize).max(1), ((size_mm[1] / cell).ceil() as usize).max(1));
+        let (cols, rows) = (((tile_mm[0] / cell).ceil() as usize).max(1), ((tile_mm[1] / cell).ceil() as usize).max(1));
         let mut cells = budget.filled(cols * rows, Vec::new());
         for (si, &(a, b, ..)) in segs.iter().enumerate() {
             let (x0, x1) = (
@@ -381,6 +388,8 @@ impl DryNet {
         }
         DryNet {
             size_mm,
+            tile,
+            origin_mm,
             seed,
             segs,
             cell,
@@ -393,6 +402,7 @@ impl DryNet {
     /// The nearest crack of generation at most `gmax` to `p` (mm), within a
     /// cell: its distance (mm) and its opening there; None if none is near.
     fn nearest(&self, p: [f32; 2], gmax: u8) -> Option<(f32, f32)> {
+        let p = [p[0] - self.origin_mm[0], p[1] - self.origin_mm[1]];
         let (cx, cy) = ((p[0] / self.cell).floor() as isize, (p[1] / self.cell).floor() as isize);
         let mut best: Option<(f32, f32)> = None;
         for dy in -1..=1 {
@@ -422,8 +432,14 @@ impl DryNet {
 
 /// The cache of a canvas's `DryNet` (equal whatever it holds: it is made
 /// again alike).
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct NetCache(pub Option<std::sync::Arc<DryNet>>);
+
+impl Clone for NetCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
 
 impl PartialEq for NetCache {
     fn eq(&self, _: &Self) -> bool {
@@ -436,20 +452,22 @@ impl Canvas {
         if !self.traction_enabled { return Ok(()); }
         let pm = self.px_mm();
         let size = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
-        crate::crack::check_network_grid(size, FINEST_MM, NETWORK_MEMORY_BUDGET)
+        crate::crack::check_network_grid(size, size.map(|v| v.min(NETWORK_TILE_MM + 2.0 * NETWORK_HALO_MM)), FINEST_MM, NETWORK_GRID, NETWORK_MEMORY_BUDGET)
     }
 
-    fn traction_net(&mut self) -> std::sync::Arc<DryNet> {
+    fn traction_net(&mut self, tile: [usize; 2]) -> std::sync::Arc<DryNet> {
         let pm = self.px_mm();
         let size_mm = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
         let seed = self.linen.map_or(11, |l| l.seed) ^ 0x0d3f_ec75 ^ 0xc4ac;
         if let Some(ref net) = self.traction.net.0
             && net.size_mm == size_mm
             && net.seed == seed
+            && net.tile == tile
         {
             return net.clone();
         }
-        let net = std::sync::Arc::new(DryNet::new(size_mm, seed));
+        self.traction.net.0 = None;
+        let net = std::sync::Arc::new(DryNet::new(size_mm, seed, tile));
         self.traction.net.0 = Some(net.clone());
         net
     }
@@ -524,10 +542,18 @@ impl Canvas {
         if found.is_empty() {
             return found;
         }
-        let net = self.traction_net();
         let (pm, ox, oy) = (self.px_mm(), self.f.x0, self.f.y0);
-        found
-            .into_par_iter()
+        let tile_of = |c: &CrackPx| {
+            (((c.i / w + oy) as f32 * pm / NETWORK_TILE_MM) as usize, ((c.i % w + ox) as f32 * pm / NETWORK_TILE_MM) as usize)
+        };
+        found.sort_unstable_by_key(tile_of);
+        let mut result = Vec::new();
+        for pixels in found.chunk_by(|a, b| tile_of(a) == tile_of(b)) {
+            let (ty, tx) = tile_of(&pixels[0]);
+            let net = self.traction_net([tx, ty]);
+            let sampled: Vec<_> = pixels
+            .par_iter()
+            .copied()
             .filter_map(|mut c| {
                 // Temporary fields hold thickness and severity until geometry lookup.
                 let gmax = gens_for(c.d_mm);
@@ -541,7 +567,10 @@ impl Canvas {
                     c
                 })
             })
-            .collect()
+            .collect();
+            result.extend(sampled);
+        }
+        result
     }
 
     pub(crate) fn traction_set(&mut self, mut new: Vec<CrackPx>) {

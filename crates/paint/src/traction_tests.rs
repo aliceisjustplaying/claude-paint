@@ -11,7 +11,7 @@ const PAINTED: [f32; 4] = [100.0, 100.0, 900.0, 900.0];
 fn budgeted_network_keeps_the_unbounded_arm_geometry() {
     let k = crate::crack::Cracks { island_mm: Some(FINEST_MM), ground_um: Some(300.0), corners: false, grain: 0.0, ..crate::crack::Cracks::aged(11) };
     let original = crate::crack::network(&k, [80.0; 2], [0.7; 2]);
-    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.7; 2], NETWORK_MEMORY_BUDGET);
+    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.0; 2], [80.0; 2], [0.7; 2], 1.0 / 6.0, NETWORK_MEMORY_BUDGET);
     assert_eq!(original.size_mm, bounded.size_mm);
     assert_eq!(original.arms.len(), bounded.arms.len());
     for (a, b) in original.arms.iter().zip(&bounded.arms) {
@@ -23,7 +23,9 @@ fn budgeted_network_keeps_the_unbounded_arm_geometry() {
 #[test]
 fn oversized_physical_canvases_refuse_traction_before_allocating_the_grid() {
     let mut c = prepared(80, true, false).with_size_mm(5000.0);
-    let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.wait(60.0 * DAY))).unwrap_err();
+    let error = crate::crack::with_traction_memory_reserved_for_test(1016 << 20, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.wait(60.0 * DAY))).unwrap_err()
+    });
     let message = error.downcast_ref::<String>().unwrap();
     assert!(message.contains("5000 × 5000 mm"), "{message}");
     assert!(message.contains("1024 MiB memory budget"), "{message}");
@@ -34,7 +36,7 @@ fn oversized_physical_canvases_refuse_traction_before_allocating_the_grid() {
 fn memory_preflight_uses_the_whole_physical_canvas_even_for_a_small_crop() {
     let crop = Crop { units: [450.0, 450.0, 550.0, 550.0], margin: 0.0 };
     let c = canvas(80, true, Some(crop)).with_size_mm(5000.0);
-    let error = c.check_traction_memory().unwrap_err();
+    let error = crate::crack::with_traction_memory_reserved_for_test(1016 << 20, || c.check_traction_memory().unwrap_err());
     assert!(error.contains("5000 × 5000 mm"), "{error}");
     assert!(c.with_traction(false).check_traction_memory().is_ok());
 }
@@ -42,9 +44,9 @@ fn memory_preflight_uses_the_whole_physical_canvas_even_for_a_small_crop() {
 #[test]
 fn catching_a_memory_panic_does_not_hide_it_from_the_chunk_guard() {
     let mut c = prepared(80, true, false).with_size_mm(5000.0);
-    let error = crate::crack::guard_traction_memory(|| {
+    let error = crate::crack::with_traction_memory_reserved_for_test(1016 << 20, || crate::crack::guard_traction_memory(|| {
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.wait(60.0 * DAY))).is_err());
-    }).unwrap_err();
+    }).unwrap_err());
     assert!(error.contains("1024 MiB memory budget"), "{error}");
     assert!(crate::crack::guard_traction_memory(|| ()).is_ok());
 }
@@ -291,21 +293,52 @@ fn crop_uses_the_whole_canvas_crack_coordinates() {
 #[test]
 fn network_cache_tracks_physical_size_and_support_seed() {
     let mut c = canvas(120, true, None);
-    let first = c.traction_net();
+    let first = c.traction_net([0, 0]);
     let mut wider = c.clone().with_size_mm(120.0);
-    let resized = wider.traction_net();
+    let resized = wider.traction_net([0, 0]);
     assert!(!std::sync::Arc::ptr_eq(&first, &resized));
     assert_eq!(resized.size_mm, [120.0; 2]);
     let mut linen = c.with_linen(crate::surface::Linen::fine(51));
-    let reseeded = linen.traction_net();
+    let reseeded = linen.traction_net([0, 0]);
     assert!(!std::sync::Arc::ptr_eq(&first, &reseeded));
     assert_ne!(first.seed, reseeded.seed);
     let (mut resumed, _) = Canvas::read_state(&mut Cursor::new(saved(&wider))).unwrap();
-    let restored = resumed.traction_net();
+    let restored = resumed.traction_net([0, 0]);
     assert_eq!(resized.size_mm, restored.size_mm);
     assert_eq!(resized.seed, restored.seed);
     for point in [[10.0, 15.0], [59.0, 83.0], [111.0, 105.0]] {
         assert_eq!(resized.nearest(point, 4), restored.nearest(point, 4));
+    }
+}
+
+#[test]
+fn canvas_snapshots_do_not_pin_an_evicted_crack_region() {
+    let mut c = canvas(80, true, None);
+    let cached = std::sync::Arc::downgrade(&c.traction_net([0, 0]));
+    let snapshot = c.clone();
+    assert!(snapshot.traction.net.0.is_none());
+    c.traction.net.0 = None;
+    assert!(cached.upgrade().is_none());
+}
+
+#[test]
+fn large_canvas_regions_match_a_restored_crop() {
+    let crop = Crop { units: [400.0, 400.0, 600.0, 600.0], margin: 0.0 };
+    let mut whole = canvas(96, true, None).with_size_mm(640.0);
+    let mut window = canvas(96, true, Some(crop)).with_size_mm(640.0);
+    assert!(whole.clone().with_size_mm(5000.0).check_traction_memory().is_ok());
+    for c in [&mut whole, &mut window] {
+        film(c, undercoat(), 200.0, PAINTED, 1);
+        c.dry();
+        film(c, topcoat(), 25.0, PAINTED, 2);
+    }
+    let (mut window, _) = Canvas::read_state(&mut Cursor::new(saved(&window))).unwrap();
+    whole.wait(60.0 * DAY);
+    window.wait(60.0 * DAY);
+    assert!(!window.traction.cracks.is_empty());
+    assert_eq!(window.traction.net.0.as_ref().unwrap().tile, [1, 1]);
+    for i in 0..window.px.len() {
+        assert_eq!(Surface::capture(&window, i), Surface::capture(&whole, window.f.whole_index(i)), "crop pixel {i}");
     }
 }
 

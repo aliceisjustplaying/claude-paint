@@ -52,7 +52,6 @@ impl Bufs {
     }
 
     fn surf(&mut self) -> Surf {
-        let null = std::ptr::null_mut();
         Surf {
             w: self.vol.len(),
             h: 1,
@@ -64,19 +63,19 @@ impl Bufs {
             vol: self.vol.as_mut_ptr(),
             lat: self.lat.as_mut_ptr(),
             hide: self.hide.as_mut_ptr(),
-            stroke: null as *mut u32,
-            touched: null as *mut u32,
-            floor: null as *mut f32,
-            cover: null as *mut f32,
+            stroke: std::ptr::null_mut(),
+            touched: std::ptr::null_mut(),
+            floor: std::ptr::null_mut(),
+            cover: std::ptr::null_mut(),
             base: std::ptr::null(),
             dry: if self.dry.is_empty() { std::ptr::null_mut() } else { self.dry.as_mut_ptr() },
             cure_now: self.cure_now,
             clump: true,
             lean: self.lean,
             absorb: if self.absorb.is_empty() { std::ptr::null_mut() } else { self.absorb.as_mut_ptr() },
-            solv: null as *mut f32,
-            laid: null as *mut f32,
-            laid_id: null as *mut u32,
+            solv: std::ptr::null_mut(),
+            laid: std::ptr::null_mut(),
+            laid_id: std::ptr::null_mut(),
             e7: false,
         }
     }
@@ -291,24 +290,14 @@ fn same_film_as_engine_5() {
             lean: flags & 1 != 0,
             cure_now: flags & 2 != 0,
         };
+        // (a call's deposits all lay its brush's paint, as in `exchange`)
+        let paint: Vec<(Latent, Prop, f32)> = (0..n).map(|c| (std::array::from_fn(|_| rnd()), std::array::from_fn(|j| if j == 3 && c % 2 == 0 { 0.0 } else { rnd() }), rnd())).collect();
         let recs: Vec<Rec> = (0..4 * n)
-            .map(|k| Rec {
-                kind: if k % 5 == 4 { 1 } else { 0 },
-                site: (k % 3) as u8,
-                canvas: 0,
-                i: (k * 7) % n,
-                call: (k / 8) as u32,
-                v: if k % 11 == 0 { 0.0 } else if k % 13 == 0 { 1e-7 } else { rnd() * 0.5 },
-                lat: std::array::from_fn(|_| rnd()),
-                hide: std::array::from_fn(|j| if j == 3 && k % 2 == 0 { 0.0 } else { rnd() }),
-                cure: rnd(),
-                pre: [0.0; 15],
-            })
-            .map(|mut r| {
-                if r.kind == 1 {
-                    r.v = r.v.min(0.01);
-                }
-                r
+            .map(|k| {
+                let (kind, site, call) = (if k % 5 == 4 { 1 } else { 0 }, (k % 3) as u8, k / 8);
+                let (lat, hide, cure) = if site == 1 { paint[call] } else { paint[(k * 5 + 3) % n] };
+                let v = if k % 11 == 0 { 0.0 } else if k % 13 == 0 { 1e-7 } else { rnd() * 0.5 };
+                Rec { kind, site, canvas: 0, i: (k * 7) % n, call: call as u32, v: if kind == 1 { v.min(0.01) } else { v }, lat, hide, cure, pre: [0.0; 15] }
             })
             .collect();
         let (mut e5, mut e7) = (vec![b.clone()], vec![b.clone()]);

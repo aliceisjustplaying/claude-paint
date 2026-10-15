@@ -765,6 +765,8 @@ pub(crate) struct Surf {
     pub(crate) solv: *mut f32,
     pub(crate) laid: *mut f32,
     pub(crate) laid_id: *mut u32,
+    pub(crate) sweep_spacing: Option<f32>,
+    pub(crate) adaptive_sweep: bool,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
 }
@@ -912,6 +914,8 @@ impl Canvas {
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
+            sweep_spacing: None,
+            adaptive_sweep: self.adaptive_sweep,
             e7: crate::engine7::active(self.engine),
         }
     }
@@ -1125,6 +1129,49 @@ fn limit(r: Option<Option<Rect>>) -> Rect {
     r.flatten().unwrap_or((0, 0, 0, 0))
 }
 
+fn sweep_step(tool: &Tool, g: &Gesture, path: &[(f32, f32)], arc: &[f32], scale: f32, base: f32, adaptive: bool) -> f32 {
+    if !adaptive || tool.width * scale <= 4.0 * base {
+        return base;
+    }
+    let total = arc.last().copied().unwrap_or(0.0);
+    if total <= 0.0 {
+        return base;
+    }
+    let mut curvature = 0.0f32;
+    let mut previous: Option<((f32, f32), f32)> = None;
+    for (i, pair) in path.windows(2).enumerate() {
+        let len = arc[i + 1] - arc[i];
+        if len <= 1e-3 {
+            continue;
+        }
+        let dir = ((pair[1].0 - pair[0].0) / len, (pair[1].1 - pair[0].1) / len);
+        if let Some((last, last_len)) = previous {
+            let turn = ((dir.0 - last.0).powi(2) + (dir.1 - last.1).powi(2)).sqrt();
+            curvature = curvature.max(turn / (0.5 * (len + last_len)));
+        }
+        previous = Some((dir, len));
+    }
+    let samples = ((total / base).ceil() as usize).max(1);
+    let mut pressure_change = 0.0f32;
+    let mut previous_pressure = g.pressure_at(0.0).clamp(0.0, 1.0);
+    let mut peak_pressure = previous_pressure;
+    for i in 1..=samples {
+        let pressure = g.pressure_at((i as f32 * base).min(total) / total).clamp(0.0, 1.0);
+        pressure_change = pressure_change.max((pressure - previous_pressure).abs());
+        peak_pressure = peak_pressure.max(pressure);
+        previous_pressure = pressure;
+    }
+    let width_limit = tool.width * scale / (2.0 * base);
+    let curve_limit = 0.25 / (curvature * base).max(1e-6);
+    let pressure_limit = 0.08 / pressure_change.max(1e-6);
+    let step = base * width_limit.min(curve_limit).min(pressure_limit).clamp(2.0, 4.0);
+    let contacts = ((total / step).ceil() as usize).max(1);
+    let sampled_peak = (0..=contacts)
+        .map(|i| g.pressure_at((i as f32 * step).min(total) / total).clamp(0.0, 1.0))
+        .fold(0.0f32, f32::max);
+    if sampled_peak < 0.5 * peak_pressure { base } else { step }
+}
+
 /// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`, and
 /// `held.tool` must pass `Tool::validate`. (Defense in depth: every pixel
 /// access is clamped to that footprint, and debug builds assert that the
@@ -1138,6 +1185,7 @@ pub(crate) unsafe fn drag_on(
     scratch: &mut Vec<f32>,
 ) -> Bounds {
     g.assert_valid();
+    let mut sf = sf;
     let mut bounds: Bounds = None;
     if g.pts.is_empty() {
         return bounds;
@@ -1156,7 +1204,8 @@ pub(crate) unsafe fn drag_on(
     // below a pixel (see `strip_cover`)
     let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
-    let step = rb.max(1.25);
+    let step = sweep_step(&tool, g, &path, &arc, s, rb.max(1.25), !sf.e7 && sf.adaptive_sweep);
+    sf.sweep_spacing = if step > rb.max(1.25) { Some(rb.max(1.25)) } else { None };
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
@@ -1290,6 +1339,87 @@ pub(crate) unsafe fn drag_on(
 /// crop window (where there is no canvas to feel).
 pub(crate) const GHOST_TOUCH: f32 = 0.8;
 
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    #[test]
+    fn adaptive_sweep_is_selected_per_canvas_and_keeps_engine_7_legacy() {
+        for engine in [1, 4, 5, 7] {
+            for enabled in [false, true] {
+                let mut c = Canvas::new_window(16, 1.0, [0.5; 3], None).with_engine(engine).with_adaptive_sweep(enabled);
+                let sf = c.surf();
+                assert_eq!(sf.adaptive_sweep && !sf.e7, enabled && engine == 5);
+            }
+        }
+    }
+
+    fn step(tool: &Tool, g: &Gesture, adaptive: bool) -> f32 {
+        let path = densify(&g.pts);
+        let arc = crate::path::arclen(&path);
+        sweep_step(tool, g, &path, &arc, 1.0, 1.25, adaptive)
+    }
+
+    #[test]
+    fn adaptive_sweep_is_opt_in_and_bounded_by_tool_width() {
+        let g = Gesture::line((0.0, 0.0), (100.0, 0.0)).ramps(0.0, 0.0).shake(0.0);
+        assert_eq!(step(&Tool::hog_flat(40.0), &g, false), 1.25);
+        assert_eq!(step(&Tool::hog_flat(40.0), &g, true), 5.0);
+        assert_eq!(step(&Tool::rigger(1.0), &g, true), 1.25);
+        assert_eq!(step(&Tool::hog_flat(8.0), &g, true), 4.0);
+    }
+
+    #[test]
+    fn adaptive_sweep_shortens_for_curvature_and_pressure_changes() {
+        let tool = Tool::hog_flat(40.0);
+        let straight = Gesture::line((0.0, 0.0), (100.0, 0.0)).ramps(0.0, 0.0);
+        let curve = Gesture::new(vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]).ramps(0.0, 0.0);
+        let ramp = Gesture::line((0.0, 0.0), (10.0, 0.0)).pressure(0.0, 1.0).ramps(0.0, 0.0);
+        let attack = straight.clone().ramps(0.02, 0.02);
+        let swell = straight.clone().swell(vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]);
+        for g in [&curve, &ramp, &attack, &swell] {
+            let shorter = step(&tool, g, true);
+            assert!((2.5..5.0).contains(&shorter), "{g:?}: {shorter}");
+        }
+    }
+
+    #[test]
+    fn adaptive_sweep_handles_stationary_and_repeated_points() {
+        let tool = Tool::round_sable(12.0);
+        let stationary = Gesture::line((4.0, 4.0), (4.0, 4.0));
+        let repeated = Gesture::new(vec![(0.0, 0.0), (0.0, 0.0), (100.0, 0.0)]);
+        assert_eq!(step(&tool, &stationary, true), 1.25);
+        assert!((2.5..=5.0).contains(&step(&tool, &repeated, true)));
+    }
+
+    #[test]
+    fn adaptive_sweep_does_not_skip_interior_pressure_peaks() {
+        let tool = Tool::hog_flat(40.0);
+        let short = Gesture::line((100.0, 100.0), (102.0, 100.0)).ramps(0.0, 0.0).shake(0.0).swell(vec![0.0, 1.0, 0.0]);
+        let repeated = Gesture::line((100.0, 100.0), (200.0, 100.0)).ramps(0.0, 0.0).shake(0.0)
+            .swell((0..=80).map(|i| (i % 2) as f32).collect());
+        for g in [&short, &repeated] {
+            assert_eq!(step(&tool, g, true), step(&tool, g, false));
+        }
+    }
+
+    #[test]
+    fn adaptive_pickup_accumulates_legacy_passes_without_exceeding_the_film() {
+        for rate in [0.0, 0.001, 0.03, 0.2, 0.7, 1.0] {
+            assert_eq!(pickup_fraction(rate, 1.0), rate);
+            let mut left = 1.0;
+            for n in 1..=4 {
+                left *= 1.0 - rate;
+                let fraction = pickup_fraction(rate, n as f32);
+                assert!((fraction - (1.0 - left)).abs() < 1e-6);
+                assert!((0.0..=1.0).contains(&fraction));
+            }
+        }
+        assert_eq!(pickup_fraction(1.5, 2.5), 1.0);
+        assert_eq!(pickup_fraction(-0.5, 2.5), 0.0);
+    }
+}
+
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.
 pub(crate) fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
@@ -1400,6 +1530,11 @@ pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     (a + (b - a) * f) * 2.0 - 1.0
 }
 
+fn pickup_fraction(rate: f32, passes: f32) -> f32 {
+    let rate = rate.clamp(0.0, 1.0);
+    if passes <= 1.0 { rate } else { 1.0 - (1.0 - rate).powf(passes) }
+}
+
 /// Paint exchange between one bristle and the canvas along the capsule
 /// swept from `a` to `b` (pixels). A moving bristle deposits in proportion
 /// to the distance it travels; `dep` instead fixes the volume (units² ×
@@ -1439,6 +1574,7 @@ pub(crate) unsafe fn exchange(
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
+        let pickup_passes = sf.sweep_spacing.map_or(1.0, |spacing| (seg / spacing).max(1.0));
         // a crop render holds only a window of the canvas: clip to it
         let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
         let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
@@ -1673,7 +1809,12 @@ pub(crate) unsafe fn exchange(
                     *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
                 }
                 if v > 1e-6 {
-                    let take = if exch {
+                    let take = if pickup_passes > 1.0 {
+                        let own = if !exch && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                        let rate = tool.pickup * wt * hunger * own * fl;
+                        let take = v * pickup_fraction(rate, pickup_passes);
+                        if exch { take.min(v) } else { take.min((v - *sf.floor.add(i)).max(0.0)) }
+                    } else if exch {
                         (v * tool.pickup * wt * hunger * fl).min(v)
                     } else {
                         let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };

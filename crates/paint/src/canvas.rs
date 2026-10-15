@@ -234,6 +234,7 @@ pub struct Canvas {
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
+    pub(crate) adaptive_sweep: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -284,6 +285,7 @@ impl Canvas {
             hand_slice: None,
             engine: crate::ENGINE,
             quarter_tiles: false,
+            adaptive_sweep: false,
             soak: None,
         }
     }
@@ -293,6 +295,7 @@ impl Canvas {
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
         self.quarter_tiles &= v == 5;
+        self.adaptive_sweep &= v == 5;
         self
     }
     pub fn engine(&self) -> u32 {
@@ -313,6 +316,15 @@ impl Canvas {
             return None;
         }
         std::env::var("PAINT_SMALL_TILES").ok().or_else(|| self.quarter_tiles.then(|| "quarter".to_string()))
+    }
+
+    pub fn with_adaptive_sweep(mut self, enabled: bool) -> Self {
+        self.adaptive_sweep = enabled && self.engine == 5;
+        self
+    }
+
+    pub fn adaptive_sweep(&self) -> bool {
+        self.adaptive_sweep
     }
 
     /// Physical width of the painting in mm (default 700).

@@ -78,6 +78,7 @@ const MAGIC12: &[u8; 8] = b"PAINTC12";
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
 const QUARTER_TILES: u64 = 1 << 33;
+const ADAPTIVE_SWEEP: u64 = 1 << 34;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -312,7 +313,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -464,8 +465,9 @@ impl Canvas {
         } else {
             let word = get_u64(r)?;
             c.quarter_tiles = word & QUARTER_TILES != 0;
-            match u32::try_from(word & !QUARTER_TILES) {
-                Ok(v) if crate::supported_engine(v) && (!c.quarter_tiles || v == 5) => v,
+            c.adaptive_sweep = word & ADAPTIVE_SWEEP != 0;
+            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP)) {
+                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
@@ -537,6 +539,20 @@ mod tests {
 
     fn load(b: Vec<u8>) -> io::Result<Canvas> {
         Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
+    }
+
+    #[test]
+    fn adaptive_sweep_checkpoints_remain_readable_after_changing_engines() {
+        for engine in [1, 2, 3, 4, 5, 7] {
+            let c = Canvas::new_window(16, 1.0, [0.5; 3], None).with_adaptive_sweep(true).with_quarter_tiles(true).with_engine(engine);
+            assert_eq!(c.adaptive_sweep(), engine == 5);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let restored = load(bytes).unwrap();
+            assert_eq!(restored.engine(), engine);
+            assert_eq!(restored.adaptive_sweep(), engine == 5);
+            assert_eq!(restored.quarter_tiles(), engine == 5);
+        }
     }
 
     fn rejected(b: Vec<u8>, what: &str) {
@@ -614,7 +630,7 @@ mod tests {
                 wrong_engine[flag - 4] = 4;
                 assert!(load(wrong_engine).is_err());
                 let mut unknown_flag = selected.clone();
-                unknown_flag[flag] |= 4;
+                unknown_flag[flag] |= 8;
                 assert!(load(unknown_flag).is_err());
             } else {
                 assert_eq!(selected, legacy);

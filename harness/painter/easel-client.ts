@@ -4,7 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
-import { readdirSync, realpathSync, renameSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -21,6 +21,28 @@ export interface Ran {
  * A chunk may run 10 minutes (the easel's own limit).
  */
 export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_000 };
+export const WIDE_WAIT_MS = { do: 48 * 60_000, rebuild: 50 * 60_000 };
+
+export function wideStudio(studio: string): boolean {
+	try {
+		const lines = readFileSync(join(studio, "paintings", "lua", "painting.lua"), "utf8").split("\n");
+		let wide = false;
+		for (const line of lines) {
+			const head = line.trim();
+			if (head.startsWith("--@ chunk")) break;
+			if (head === "--@ sketch") return false;
+			if (/^--@ width\s+4800$/.test(head)) wide = true;
+		}
+		return wide;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+	try {
+		return readFileSync(join(studio, "bin", "width"), "utf8").trim() === "4800";
+	} catch {
+		return false;
+	}
+}
 
 /** Run the studio's easel client with `args`, `input` on stdin; stdout and stderr together, in order. */
 export function easel(studio: string, args: string[], input?: string, signal?: AbortSignal, waitMs?: number): Promise<Ran> {
@@ -29,6 +51,9 @@ export function easel(studio: string, args: string[], input?: string, signal?: A
 		const env: Record<string, string> = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
 		// the operator's thread budget, as an easel the runner opened gets it
 		if (process.env.RAYON_NUM_THREADS !== undefined) env.RAYON_NUM_THREADS = process.env.RAYON_NUM_THREADS;
+		for (const key of ["EASEL_ASYNC_DISPLAY", "EASEL_DISPLAY_THREADS"]) {
+			if (process.env[key] !== undefined) env[key] = process.env[key];
+		}
 		// its own process group: a timeout or an abort stops it and anything it started
 		const p = spawn(join(studio, "bin", "easel"), args, { cwd: studio, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
 		const kill = () => {
@@ -81,7 +106,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 			total = n;
 			if (!rebuilding || k > completed) {
 				completed = k;
-				progressDeadline = Date.now() + WAIT_MS.rebuild;
+				progressDeadline = Date.now() + (wideStudio(studio) ? WIDE_WAIT_MS.rebuild : WAIT_MS.rebuild);
 			}
 			rebuilding = true;
 			if (Date.now() >= progressDeadline) throw new Error("the easel rebuild stalled without progress");
@@ -99,7 +124,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
-	const wait = args[0] === "do" ? WAIT_MS.do : WAIT_MS.other;
+	const wait = args[0] === "do" ? (wideStudio(studio) ? WIDE_WAIT_MS.do : WAIT_MS.do) : WAIT_MS.other;
 	let deadline = Date.now() + wait;
 	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
 	const r = await step(studio, args, input, signal, deadline);
@@ -266,9 +291,12 @@ export function renameLooks(studio: string, said: string): { said: string; paths
 		// (the whole path, to its last ".png": a folder's name may hold one too)
 		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
 		if (!m || !isFile(resolve(studio, m[1]))) return line;
-		const path = join(dirname(m[1]), `${randomUUID()}.png`);
-		renameSync(resolve(studio, m[1]), resolve(studio, path));
-		renameCompanions(studio, m[1], path);
+		const stable = isFile(resolve(studio, dirname(m[1]), ".display", basename(m[1])));
+		const path = stable ? m[1] : join(dirname(m[1]), `${randomUUID()}.png`);
+		if (!stable) {
+			renameSync(resolve(studio, m[1]), resolve(studio, path));
+			renameCompanions(studio, m[1], path);
+		}
 		paths.push(path);
 		// (without the machine's seconds, as `renameLook`)
 		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
@@ -285,9 +313,12 @@ export function renameLook(studio: string, said: string): { said: string; path: 
 	const lines = said.split("\n");
 	const m = /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(lines[lines.length - 1]);
 	if (!m) return { said, path: lines[lines.length - 1].replace(/ \(.*\)$/, "") };
-	const path = join(dirname(m[1]), `${randomUUID()}.png`);
-	renameSync(resolve(studio, m[1]), resolve(studio, path));
-	renameCompanions(studio, m[1], path);
+	const stable = isFile(resolve(studio, dirname(m[1]), ".display", basename(m[1])));
+	const path = stable ? m[1] : join(dirname(m[1]), `${randomUUID()}.png`);
+	if (!stable) {
+		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		renameCompanions(studio, m[1], path);
+	}
 	lines[lines.length - 1] = m[2] ? `${path} (${m[2]})` : path;
 	return { said: lines.join("\n"), path };
 }

@@ -326,6 +326,61 @@ impl Canvas {
         self.hand_slice.map(|m| m as f64 * 60.0)
     }
 
+    pub(crate) fn covering_slice_secs(&self, slice: Option<f64>, paints: impl IntoIterator<Item = crate::wet::Paint>, secs: &[f64]) -> Option<f64> {
+        if std::env::var("PAINT_COARSE_AGING").is_ok_and(|v| v == "1") {
+            slice.map(|s| self.bounded_slice_secs(s, paints, secs))
+        } else {
+            slice
+        }
+    }
+
+    /// An opt-in covering slice, capped at four legacy slices and one hour.
+    /// The fastest possible open-film oxidation may advance by at most 0.02
+    /// per batch (at most 0.2 fluidity, since smoothstep's slope is <= 1.5/GEL).
+    /// Only passes that stay wholly open under that upper bound qualify;
+    /// persistent solvent, tacky layers and crops keep their original cadence. This is
+    /// a local drying-lag bound, not a bound on final image differences.
+    fn bounded_slice_secs(&self, slice: f64, paints: impl IntoIterator<Item = crate::wet::Paint>, secs: &[f64]) -> f64 {
+        use crate::drying::{GEL, OPEN_SHARE, TOUCH_DRY_MIN, TOUCH_DRY_MIN_3, rate};
+
+        let total: f64 = secs.iter().sum();
+        if self.engine != 5 || self.f.w != self.f.full_w || self.f.h != self.f.full_h || total <= slice || !total.is_finite() || self.wet.clock.tacky.is_some() || self.wet.has_solvent(self.f.w) {
+            return slice;
+        }
+        let mut drying = 0.01f32;
+        for paint in paints {
+            if paint.thinner > 0.0 || !paint.drying.is_finite() {
+                return slice;
+            }
+            drying = drying.max(paint.drying);
+        }
+        let mut cure = 0.0f32;
+        if let Some((x0, y0, x1, y1)) = self.wet.dirty {
+            for y in y0..y1.min(self.f.h) {
+                for x in x0..x1.min(self.f.w) {
+                    let i = y * self.f.w + x;
+                    if self.wet.vol[i] <= 0.0 {
+                        continue;
+                    }
+                    let c = self.wet.clock.px.get(i).map_or(0.0, |p| p.cure);
+                    let d = self.wet.hide[i][2];
+                    if !c.is_finite() || !d.is_finite() || c >= 0.5 * GEL {
+                        return slice;
+                    }
+                    cure = cure.max(c);
+                    drying = drying.max(d);
+                }
+            }
+        }
+        let fastest = rate(0.0, 1.0, drying) as f64 * (TOUCH_DRY_MIN / TOUCH_DRY_MIN_3 * GEL / OPEN_SHARE) as f64;
+        if cure as f64 + fastest * total / 60.0 >= (0.5 * GEL) as f64 {
+            return slice;
+        }
+        let bounded = (4.0 * slice).min(3600.0).min(60.0 * 0.02 / fastest);
+        let largest_tile = secs.iter().copied().fold(0.0f64, f64::max);
+        if bounded >= slice + largest_tile { bounded } else { slice }
+    }
+
     /// Hand time counted but not yet on the clock (s); 0 with hand time off.
     pub fn hand_owed_secs(&self) -> f64 {
         if self.hand_slice.is_none() { 0.0 } else { (self.tally.secs - self.tally.clocked).max(0.0) }
@@ -342,6 +397,9 @@ impl Canvas {
         let owed = self.hand_owed_secs();
         if owed > 0.0 {
             self.hand_pass(owed);
+        }
+        if self.hand_slice.is_some() && (matches!(self.work_tile_mode().as_deref(), Some("1" | "quarter")) || (self.engine == 5 && std::env::var("PAINT_COARSE_AGING").is_ok_and(|v| v == "1"))) {
+            self.tally.clocked = self.tally.secs;
         }
         owed / 60.0
     }
@@ -405,6 +463,52 @@ mod tests {
 
     fn px_bits(c: &Canvas) -> Vec<u32> {
         c.pixels().iter().flat_map(|p| p.map(f32::to_bits)).chain(c.height.iter().map(|v| v.to_bits())).collect()
+    }
+
+    #[test]
+    fn coarse_slices_bound_open_film_aging_by_material_rate() {
+        let c = Canvas::new(40, 1.0, hex("#c8b89a")).with_engine(5);
+        let secs = [300.0; 12];
+        let paint = crate::wet::Paint::body(hex("#6f84a8"));
+        let slow = c.bounded_slice_secs(900.0, [paint.with_drying(0.4)], &secs);
+        let fast = c.bounded_slice_secs(900.0, [paint.with_drying(4.8)], &secs);
+        assert_eq!(slow, 3600.0);
+        assert!(fast > 900.0 && fast < slow, "slow {slow}, fast {fast}");
+        for (drying, slice) in [(0.4, slow), (4.8, fast)] {
+            let r = crate::drying::rate(0.0, 1.0, drying);
+            let open = crate::drying::TOUCH_DRY_MIN / crate::drying::TOUCH_DRY_MIN_3 * crate::drying::GEL / crate::drying::OPEN_SHARE;
+            assert!(r as f64 * open as f64 * slice / 60.0 <= 0.020000001);
+        }
+        assert_eq!(c.bounded_slice_secs(900.0, [paint.with_drying(20.0)], &secs), 900.0);
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &[240.0]), 900.0);
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &[3600.0, 3600.0]), 900.0);
+    }
+
+    #[test]
+    fn coarse_slices_keep_legacy_cadence_for_sensitive_materials() {
+        let mut c = Canvas::new(40, 1.0, hex("#c8b89a")).with_engine(5);
+        let secs = [300.0; 12];
+        let paint = crate::wet::Paint::body(hex("#6f84a8"));
+        assert_eq!(c.bounded_slice_secs(900.0, [paint.with_thinner(0.1)], &secs), 900.0);
+        assert!(c.bounded_slice_secs(900.0, [crate::wet::Paint { solvent: 0.1, ..paint }], &secs) > 900.0);
+        c.wet.touch(0, 0, 1, 1);
+        c.wet.vol[0] = 1.0;
+        c.wet.hide[0] = paint.prop();
+        c.wet.clock.px = vec![crate::drying::Px::FRESH; c.f.w * c.f.h];
+        c.wet.clock.px[0].cure = 0.5 * crate::drying::GEL;
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &secs), 900.0);
+        c.wet.clock.px[0].cure = 0.0;
+        c.wet.clock.tacky = Some((0, 0, 1, 1));
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &secs), 900.0);
+        c.wet.clock.tacky = None;
+        c.wet.solv = vec![0.0; c.f.w * c.f.h];
+        c.wet.solv[0] = 1.0;
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &secs), 900.0);
+        c.wet.solv[0] = 0.0;
+        c.engine = 4;
+        assert_eq!(c.bounded_slice_secs(900.0, [paint], &secs), 900.0);
+        let cropped = Canvas::new_window(40, 1.0, hex("#c8b89a"), Some(Crop { units: [100.0, 100.0, 500.0, 500.0], margin: 0.0 })).with_engine(5);
+        assert_eq!(cropped.bounded_slice_secs(900.0, [paint], &secs), 900.0);
     }
 
     #[test]

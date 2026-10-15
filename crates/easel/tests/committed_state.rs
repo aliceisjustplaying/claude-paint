@@ -17,7 +17,7 @@ impl Temp {
     fn file(&self, name: &str) -> String { self.0.join(name).to_str().unwrap().to_string() }
     fn command(&self, args: &[&str], name: Option<&str>, budget: Option<&str>) -> Output {
         let mut command = Command::new(env!("CARGO_BIN_EXE_easel"));
-        command.args(args).env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env_remove("EASEL_STATE_SESSION").env_remove("EASEL_STATE_DISK_MIB").env_remove("EASEL_SESSION");
+        command.args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env_remove("EASEL_STATE_SESSION").env_remove("EASEL_STATE_DISK_MIB").env_remove("EASEL_SESSION");
         if let Some(name) = name { command.env("EASEL_STATE_SESSION", name); }
         if let Some(budget) = budget { command.env("EASEL_STATE_DISK_MIB", budget); }
         command.output().unwrap()

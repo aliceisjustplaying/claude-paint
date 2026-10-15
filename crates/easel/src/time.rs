@@ -94,7 +94,9 @@ pub(crate) fn flush(st: &S, force: bool) {
     s.clock = c.clock() - s.clock0;
 }
 
-/// Hand time on: the paint ages while the hand works.
+/// Hand time on: the paint ages while the hand works. The engine's opt-in
+/// `PAINT_COARSE_AGING=1` bounds longer covering slices by material change;
+/// the mark grain, verb flushes and chunk-end flush are unchanged.
 pub fn start(c: &mut paint::Canvas) {
     c.set_hand_time(Some(SLICE_MIN));
     #[cfg(feature = "replay")]

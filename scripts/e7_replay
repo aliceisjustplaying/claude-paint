@@ -5,7 +5,7 @@
 # ///
 """Time an `easel run` replay of a Lua log through engine 5 or engine 7.
 
-    scripts/e7_replay run LOG --engine 7 --workers 4 [--chunks 12] [--easel PATH] [--out DIR]
+    scripts/e7_replay run LOG --engine 7 --workers 4 [--chunks 12] [--width PX] [--easel PATH] [--out DIR]
     scripts/e7_replay table DIR/*.json
 
 run replays LOG with RAYON_NUM_THREADS=--workers. The finishing chunk is
@@ -96,6 +96,8 @@ def run(args):
     src.write_text(text)
     png, err = out / f"{name}.png", out / f"{name}.stderr"
     cmd = [args.easel, "run", str(src), "--out", str(png), "--gallery"]
+    if args.width:
+        cmd += ["--width", str(args.width)]
     if args.engine != 5:
         cmd += ["--engine", str(args.engine)]
     env = dict(os.environ, RAYON_NUM_THREADS=str(args.workers), E7_STATS="1")
@@ -157,6 +159,7 @@ def main():
     r.add_argument("--engine", type=int, choices=[5, 7], required=True)
     r.add_argument("--workers", type=int, required=True)
     r.add_argument("--chunks", type=int)
+    r.add_argument("--width", type=int, help="replay width in px (default: the width the log was painted at)")
     r.add_argument("--easel", default=os.environ.get("EASEL", "easel"))
     r.add_argument("--out", default="e7-replays")
     t = sub.add_parser("table")

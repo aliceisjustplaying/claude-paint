@@ -129,7 +129,7 @@ sys.exit(1 if log.read_text() == "fail" else 0)
 
     def test_cancel_stops_encoder_descendants(self):
         manifest, _ = self.manifest((4,), ["block"])
-        process = subprocess.Popen(self.command(manifest), env={**os.environ, "EVENTS": str(self.events)},
+        process = subprocess.Popen(self.command(manifest, "--cpu-budget", "4"), env={**os.environ, "EVENTS": str(self.events)},
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: process.poll() is None and process.kill())
         pidfile = self.root / "0.mp4.pid"

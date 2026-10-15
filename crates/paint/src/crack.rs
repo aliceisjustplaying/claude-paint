@@ -485,7 +485,7 @@ pub fn guard_traction_memory<R>(run: impl FnOnce() -> R) -> Result<R, String> {
 }
 
 impl Budget {
-    fn limited(size: V2, limit: usize) -> Self {
+    pub(crate) fn limited(size: V2, limit: usize) -> Self {
         let mut budget = Self { limit: Some(limit), used: 0, size };
         if !size.iter().all(|v| v.is_finite() && *v > 0.0) { budget.refused(); }
         budget.charge::<u8>(1 << 20);
@@ -494,13 +494,17 @@ impl Budget {
         budget
     }
 
+    pub(crate) fn used(&self) -> usize {
+        self.used
+    }
+
     fn error(&self) -> String {
         let [width_mm, height_mm] = self.size;
         let budget_mib = self.limit.unwrap() / (1 << 20);
         format!("This {width_mm} × {height_mm} mm canvas is too large for an automatic traction-crack network within the {budget_mib} MiB memory budget, so no cracks were added.")
     }
 
-    fn refused(&self) -> ! {
+    pub(crate) fn refused(&self) -> ! {
         let error = self.error();
         MEMORY_REFUSAL.with(|slot| {
             if let Some(refusal) = slot.borrow_mut().as_mut() {
@@ -1183,8 +1187,8 @@ pub(crate) fn check_network_grid(size: V2, domain: V2, island: f32, grid: f32, l
     if bytes.is_some_and(|n| n <= limit) { Ok(()) } else { Err(budget.error()) }
 }
 
-pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], origin_mm: [f32; 2], domain_mm: [f32; 2], pitch_mm: [f32; 2], grid: f32, limit: usize) -> (Network, Budget) {
-    Builder::new(k, domain_mm, pitch_mm, Budget::limited(size_mm, limit), origin_mm, size_mm, grid).run()
+pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], origin_mm: [f32; 2], domain_mm: [f32; 2], pitch_mm: [f32; 2], grid: f32, budget: Budget) -> (Network, Budget) {
+    Builder::new(k, domain_mm, pitch_mm, budget, origin_mm, size_mm, grid).run()
 }
 
 /// A crack segment for rasterizing: ends in mm and relative opening at each.

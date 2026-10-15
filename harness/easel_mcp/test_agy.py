@@ -87,6 +87,58 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         results = [event["message"] for event in events if event.get("message", {}).get("role") == "toolResult"]
         self.assertTrue(any(any(item["type"] == "image" for item in result["content"]) for result in results))
 
+    async def test_agy_pages_long_text(self):
+        binary = self.studio / "bin/easel"
+        binary.write_text(binary.read_text().replace('elif command == "do":\n    text = sys.stdin.read()\n', 'elif command == "do":\n    text = sys.stdin.read()\n    if (root / "do-output.txt").exists():\n        print((root / "do-output.txt").read_text())\n', 1))
+        guide = "".join(f"line {i}: wet paint é → ✓ {'x' * (i % 90)}\n" for i in range(900)) + "y" * 20000 + "\nno newline at the end"
+        (self.studio / "notes/guide.md").write_text(guide)
+        (self.studio / "notes/short.md").write_text("short\n")
+        (self.studio / "log-output.txt").write_text("--@ chunk 1\n" + "dab(b, 1, 1)\n" * 1500)
+        (self.studio / "do-output.txt").write_text("printed\n" * 2000)
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(self.studio),
+            "--sessions-root", str(Path(self.temp.name) / "recorded"), "--sittings", "--agy"])
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools = {tool.name: tool for tool in (await session.list_tools()).tools}
+                self.assertTrue(all(tool.meta == {"antigravity/alwaysLoad": True} for tool in tools.values()))
+                self.assertIn("page", tools["read"].inputSchema["properties"])
+                self.assertIn("page", tools["log"].inputSchema["properties"])
+
+                async def pages(tool, args):
+                    texts, page = [], 1
+                    while True:
+                        result = await session.call_tool(tool, dict(args, page=page) if page > 1 else args)
+                        self.assertFalse(result.isError, result.content[0].text)
+                        text = result.content[0].text
+                        self.assertLessEqual(len(text.encode()), 8200)
+                        body, line = text.rsplit("\n", 1)
+                        texts.append(body)
+                        if line.endswith("the last page."):
+                            return "".join(texts), line
+                        self.assertIn(f'"page": {page + 1}}}', line)
+                        page += 1
+
+                whole, last = await pages("read", {"path": "notes/guide.md"})
+                self.assertEqual(whole, guide)
+                self.assertEqual(whole.encode(), (self.studio / "notes/guide.md").read_bytes())
+                first = (await session.call_tool("read", {"path": "notes/guide.md"})).content[0].text
+                self.assertTrue(first.endswith('call read with {"path": "notes/guide.md", "page": 2}'))
+                self.assertEqual((await session.call_tool("read", {"path": "notes/short.md"})).content[0].text, "short\n")
+                beyond = await session.call_tool("read", {"path": "notes/guide.md", "page": 99})
+                self.assertTrue(beyond.isError)
+                log, _ = await pages("log", {})
+                self.assertEqual(log, (self.studio / "log-output.txt").read_text().replace("--@ chunk 1", "--@ chunk").rstrip())
+                painted = await session.call_tool("paint", {"lua": "print('x')"})
+                saved = painted.content[0].text.rsplit("\n", 1)[1]
+                self.assertTrue(saved.startswith("Reply saved in full to out/easel/replies/"))
+                path = saved.split(" to ", 1)[1].split(". Page 1", 1)[0]
+                full = (self.studio / path).read_text()
+                self.assertIn("printed\n" * 2000, full)
+                self.assertTrue(painted.content[0].text.startswith("printed\n"))
+                rest, _ = await pages("read", {"path": path})
+                self.assertEqual(rest, full)
+
     def test_allowlist_configuration_parses(self):
         repo = SERVER.parents[2]
         script = repo / "scripts/prepare_agy_studio"
@@ -98,6 +150,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         config = json.loads((self.studio / ".agents/mcp_config.json").read_text())
         self.assertEqual(set(config["mcpServers"]), {"easel"})
         self.assertIn("--sittings", config["mcpServers"]["easel"]["args"])
+        self.assertIn("--agy", config["mcpServers"]["easel"]["args"])
         metadata = json.loads((self.studio / ".agents/recording.json").read_text())
         self.assertIn(str((Path(self.temp.name) / "sessions").resolve()), config["mcpServers"]["easel"]["args"])
         self.assertTrue(metadata["output"].endswith("--mcp-src-a-paint-studio-abcd--/agy.jsonl"))

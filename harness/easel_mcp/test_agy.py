@@ -1,9 +1,11 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp==1.30.0", "PyYAML==6.0.3"]
+# dependencies = ["mcp==1.30.0", "PyYAML==6.0.3", "Pillow==12.3.0"]
 # ///
 
 import asyncio
+import base64
+import io
 import importlib.machinery
 import importlib.util
 import json
@@ -19,6 +21,26 @@ import yaml
 
 from test_protocol import FAKE, PNG, SERVER
 from painting_chunks import classify
+
+WATERCOLOR_FAKE = '''#!{python}
+import base64, sys
+from pathlib import Path
+command, root, rest = sys.argv[3], Path(sys.argv[4]), sys.argv[5:]
+sources = root / "sources.txt"
+if command == "run":
+    text = sys.stdin.read()
+    seen = sources.read_text().split("\\0") if sources.exists() else []
+    if text in seen:
+        print("this exact chunk already ran; submit a new continuation chunk")
+        sys.exit(1)
+    sources.write_text("\\0".join(seen + [text]))
+    print("day 1, 09:00\\nok")
+elif command == "status":
+    print("watercolor: 1x1 cells\\nday 1, 09:00")
+elif command == "render":
+    (root / rest[0]).write_bytes(base64.b64decode("{png}"))
+    print(rest[0] + " (1x1)")
+'''
 
 
 class AgyTests(unittest.IsolatedAsyncioTestCase):
@@ -129,6 +151,20 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(beyond.isError)
                 log, _ = await pages("log", {})
                 self.assertEqual(log, (self.studio / "log-output.txt").read_text().replace("--@ chunk 1", "--@ chunk").rstrip())
+                from PIL import Image
+                Image.effect_noise((2916, 1746), 64).convert("RGB").save(self.studio / "notes/photo.png")
+                photo = await session.call_tool("read", {"path": "notes/photo.png"})
+                self.assertEqual(photo.content[0].text, "Read image file [image/jpeg]\n[Image: original 2916x1746, displayed at 2000x1198. Multiply coordinates by 1.46 to map to original image.]")
+                self.assertEqual(photo.content[1].mimeType, "image/jpeg")
+                self.assertEqual(Image.open(io.BytesIO(base64.b64decode(photo.content[1].data))).size, (2000, 1198))
+                Image.new("RGB", (40, 30)).save(self.studio / "notes/small.png")
+                small = await session.call_tool("read", {"path": "notes/small.png"})
+                self.assertEqual(small.content[0].text, "Read image file [image/png]")
+                self.assertEqual(base64.b64decode(small.content[1].data), (self.studio / "notes/small.png").read_bytes())
+                Image.new("RGB", (5000, 1)).save(self.studio / "notes/strip.png")
+                self.assertIn("displayed at 2000x1.", (await session.call_tool("read", {"path": "notes/strip.png"})).content[0].text)
+                Image.new("RGB", (40, 30)).save(self.studio / "notes/jpeg-named.png", "JPEG")
+                self.assertEqual((await session.call_tool("read", {"path": "notes/jpeg-named.png"})).content[1].mimeType, "image/jpeg")
                 painted = await session.call_tool("paint", {"lua": "print('x')"})
                 saved = painted.content[0].text.rsplit("\n", 1)[1]
                 self.assertTrue(saved.startswith("Reply saved in full to out/easel/replies/"))
@@ -138,6 +174,35 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(painted.content[0].text.startswith("printed\n"))
                 rest, _ = await pages("read", {"path": path})
                 self.assertEqual(rest, full)
+
+    async def test_watercolor_sittings(self):
+        (self.studio / "bin/easel").unlink()
+        binary = self.studio / "bin/watercolor-studio"
+        binary.write_text(WATERCOLOR_FAKE.format(python=sys.executable, png=PNG))
+        binary.chmod(0o755)
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(self.studio),
+            "--sessions-root", str(Path(self.temp.name) / "recorded"), "--sittings", "--agy"])
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                async def sitting(lua):
+                    self.assertFalse((await session.call_tool("paint", {"lua": lua})).isError)
+                    await session.call_tool("look", {"mode": "color"})
+                    await session.call_tool("look", {"crop": "0,0,1,1"})
+                    return (await session.call_tool("end_sitting", {})).content[0].text
+
+                self.assertIn("Painting clock: day 1, 09:00", await sitting("paper{}"))
+                self.assertIn("Sitting 3", await sitting("local b = brush{name='w'}\nb:wash{x=0, y=0, width=1, height=1}"))
+                self.assertIn("The painting is complete.", await sitting("print(clock())"))
+        self.assertNotIn("print(wait(0))", (self.studio / "sources.txt").read_text())
+        repo = SERVER.parents[2]
+        loader = importlib.machinery.SourceFileLoader("prepare_agy", str(repo / "scripts/prepare_agy_studio"))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        module.prepare(self.studio, Path(self.temp.name) / "sessions")
+        self.assertTrue((self.studio / ".agents/mcp_config.json").is_file())
 
     def test_allowlist_configuration_parses(self):
         repo = SERVER.parents[2]

@@ -586,9 +586,9 @@ fn open(args: &[String]) -> Result<(), String> {
     let mut shown = 0usize;
     let mut last_progress = Instant::now();
     // a chunk may take its whole limit to replay (session::chunk_limit_for, by the width its log
-    // names): no progress for that long, and ten minutes more, is a stall
+    // names): no progress for that long and ten minutes more, and never less than 30 minutes, is a stall
     let width = std::fs::read_to_string(log_path(&name)).ok().and_then(|t| session::logged_width(&t).ok()).unwrap_or(LIVE_WIDTH);
-    let stall = session::chunk_limit_for(width) + Duration::from_secs(600);
+    let stall = (session::chunk_limit_for(width) + Duration::from_secs(600)).max(Duration::from_secs(1800));
     loop {
         if let Some(lock) = try_lock(&name)? {
             if started {

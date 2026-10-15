@@ -13,7 +13,7 @@ impl Temp {
         Self(dir)
     }
     fn command(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap()
+        Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", &self.0).env("RAYON_NUM_THREADS", "2").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap()
     }
     fn path(&self, name: &str) -> String { self.0.join(name).to_string_lossy().into_owned() }
 }
@@ -89,7 +89,7 @@ fn snapshot_export_rejects_store_inode_aliases_and_failure_preserves_existing_ou
 #[test]
 fn snapshot_final_destinations_preserve_journals_aliases_formats_and_live_reopen() {
     let temp = Temp::new("final-destination");
-    let live = |args: &[&str]| Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env("EASEL_ROOT", &temp.0).env("RAYON_NUM_THREADS", "2").env("EASEL_STATE_SESSION", "sketch-snapshot").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap();
+    let live = |args: &[&str]| Command::new(env!("CARGO_BIN_EXE_easel")).args(args).env_remove("EASEL_WIDTH").env("EASEL_ROOT", &temp.0).env("RAYON_NUM_THREADS", "2").env("EASEL_STATE_SESSION", "sketch-snapshot").env_remove("EASEL_SESSION").env_remove("EASEL_STATE_DISK_MIB").output().unwrap();
     success(live(&["open", "sketch-snapshot"]));
     success(live(&["-s", "sketch-snapshot", "do", "canvas{size=100, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\",3}}, um=120, apply=\"knife\"}}}"]));
     let store = temp.path("out/easel/sketch-snapshot/state");

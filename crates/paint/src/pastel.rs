@@ -23,6 +23,9 @@
 //!   contact); the rest rides under the face and settles into the paper
 //!   under it within a crumb's size, along and beside the contact
 //!   (`lay_crumbs`). What is still carried at the lift drops there.
+//! - **A sheet laid on the picture** (`sheet.rs`) is a surface like any
+//!   other, raised by its caliper: what the stick lays and sheds over it
+//!   stays on it.
 //! - **The tooth fills.** Pastel in the tooth lies in the pores from the
 //!   bottom up; loose pastel is a third body the stick slides on without
 //!   abrading, so as the pores fill there is less paper left to file the
@@ -356,6 +359,12 @@ fn bearing(o: f32, mu: f32) -> f32 {
     if o <= 0.0 { 0.0 } else { 1.0 - (-o / mu.max(1e-3)).exp() }
 }
 
+/// The overlap left in the micro-relief at a pixel once the surface has
+/// given (`seat`'s second value): above 0 the stick touches there.
+pub(crate) fn seat_overlap(o: f32, mu: f32, k: f32, hard: f32) -> f32 {
+    seat(o, mu, k, hard).1
+}
+
 /// A pixel where the stick overlaps the surface by `o` µm: the surface
 /// gives (a Winkler spring, `k` MPa/µm) by u while the stick yields on the
 /// micro-asperities it meets (pressure `hard` × the material ratio at the
@@ -433,9 +442,11 @@ impl Canvas {
             }
         };
         // the crumbs riding under the face: volume (µm over a pixel) and where
-        // the face last was over the paper (pixels, their gaps µm, wet)
+        // the face last was over the paper (pixels, their gaps µm, wet) and
+        // over a sheet laid on it (pixels, gaps)
         let mut carried = 0.0f32;
         let mut last_bed: Vec<(usize, f32, bool)> = Vec::new();
+        let mut last_sheet_bed: Vec<(usize, f32)> = Vec::new();
         let settle = 1.0 - (-ds / SETTLE_MM).exp();
         // the crumbs' sizes: a power law in area, P(A) ∝ A^(-3/2) (measured
         // over four decades), its upper cut-off larger for a softer stick
@@ -462,6 +473,9 @@ impl Canvas {
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
             let wetv: Vec<bool> = under.iter().map(|&(i, _)| self.wet.vol[i] > 1e-5).collect();
+            // where a sheet lies, what lands is the sheet's
+            let onsheet: Vec<bool> = under.iter().map(|&(i, _)| self.sheet_over(i)).collect();
+            let mut caught: Vec<(usize, f32)> = Vec::new();
             let mut worn_um3 = 0.0f32;
             let mut wet_um3 = 0.0f32;
             {
@@ -474,6 +488,18 @@ impl Canvas {
                     // the overlap left in the micro-relief once the surface has given
                     let o = seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).1;
                     if o <= 0.0 {
+                        continue;
+                    }
+                    if onsheet[j] {
+                        // on the sheet: it files the stick as fresh paper does, and keeps what it gets
+                        let mut dv = ds_um * stick.wear * bearing(o, mu);
+                        if dv <= 0.0 {
+                            continue;
+                        }
+                        worn_um3 += dv;
+                        carried += dv * SHED;
+                        dv *= 1.0 - SHED;
+                        caught.push((i, dv));
                         continue;
                     }
                     let c = &mut d.cells[i];
@@ -512,26 +538,39 @@ impl Canvas {
                     laid = true;
                     pxs[i] = cover(under_px, c.a, c.r);
                 }
-                // the bed the crumbs can settle in: the paper under the face,
-                // not in contact, within a crumb's size of it
+                // the bed the crumbs can settle in: the paper (or the sheet)
+                // under the face, not in contact, within a crumb's size of it
                 last_bed.clear();
+                last_sheet_bed.clear();
                 for (j, &(i, b)) in under.iter().enumerate() {
                     let gap = b * 1000.0 - delta - surf[j].0;
                     if gap > 0.0 && gap < CRUMB_UM {
-                        last_bed.push((i, gap, wetv[j]));
+                        if onsheet[j] {
+                            last_sheet_bed.push((i, gap));
+                        } else {
+                            last_bed.push((i, gap, wetv[j]));
+                        }
                     }
                 }
-                let gp = last_bed.iter().map(|b| b.1).sum::<f32>();
+                let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
                 // (no bed under the face: the crumbs ride on to the next step)
-                let give = if gp > 0.0 { carried * settle } else { 0.0 };
+                let give = if gp + gs > 0.0 { carried * settle } else { 0.0 };
+                // (the share that falls on the sheet, by the beds' depths)
+                let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
-                laid |= give > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give, stick.color, &mut rng, crumb_max, px_um2);
+                laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
+                wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
+                for &(i, g) in &last_sheet_bed {
+                    caught.push((i, to_sheet * g / gs));
+                }
                 carried -= give;
                 d.sticks |= laid;
             }
             self.px = pxs;
             self.film = film;
+            if !caught.is_empty() {
+                self.sheet_catch(&caught, stick.color);
+            }
             // (µm of volume per area over mm² of pixel: 10⁻³ mm³)
             let worn_mm3 = worn_um3 * a_px_mm2 * 1e-3;
             out.volume_mm3 += worn_mm3 - wet_um3 * a_px_mm2 * 1e-3;
@@ -540,6 +579,15 @@ impl Canvas {
             let bmin = under.iter().map(|&(_, b)| b).fold(f32::MAX, f32::min);
             let face = under.iter().filter(|&&(_, b)| b - bmin < FACE_MM).count().max(1) as f32 * a_px_mm2;
             stick.wear_face(nb, -bmin, worn_mm3 / face);
+        }
+        if carried > 0.0 && !last_sheet_bed.is_empty() {
+            // lifted off over the sheet: its share of what the face still
+            // carried drops on it, by the beds' depths
+            let (gp, gs) = (last_bed.iter().map(|b| b.1).sum::<f32>(), last_sheet_bed.iter().map(|b| b.1).sum::<f32>());
+            let to_sheet = carried * gs / (gp + gs).max(1e-9);
+            let caught: Vec<(usize, f32)> = last_sheet_bed.iter().map(|&(i, g)| (i, to_sheet * g / gs.max(1e-9))).collect();
+            self.sheet_catch(&caught, stick.color);
+            carried -= to_sheet;
         }
         if carried > 0.0 && !last_bed.is_empty() {
             // lifted off: what the face still carried drops where it was
@@ -644,13 +692,6 @@ impl Canvas {
         Some(Seated { under, surf, delta, nb })
     }
 
-    /// The surface a stick comes down on at window pixel `i`: its height
-    /// (µm), its pores' mean depth (µm) and how stiffly it gives (MPa/µm).
-    #[inline]
-    pub(crate) fn surface_point(&self, i: usize) -> (f32, f32, f32) {
-        (self.height[i], self.micro_um(i), self.give_mpa_per_um(i))
-    }
-
     /// Fixative over `m` (coverage 0..1, or all): the loose
     /// pastel bound (a crust the next stroke files again), and darkened as
     /// the resin wets the particles: their scattering falls by the share
@@ -660,8 +701,10 @@ impl Canvas {
         let f = self.f;
         let w = wet.clamp(0.0, 1.0);
         let Some(d) = self.drawing.as_mut() else { return };
+        // (a sheet laid on the picture keeps the spray off what it covers)
+        let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
-            if m.is_some_and(|m| m.data[f.whole_index(i)] <= 0.5) || self.film[i] > c.film + 1e-4 {
+            if m.is_some_and(|m| m.data[f.whole_index(i)] <= 0.5) || self.film[i] > c.film + 1e-4 || sheet.is_some_and(|s| s.over[i]) {
                 continue;
             }
             c.floor = c.a;
@@ -713,6 +756,8 @@ impl Canvas {
         let mut pxs = std::mem::take(&mut self.px);
         {
             let wet: Vec<bool> = self.wet.vol.iter().map(|&v| v > 1e-5).collect();
+            // (the sheet, where it lies, keeps the finger off the picture)
+            let shv: Option<Vec<bool>> = self.sheet.as_ref().map(|s| s.over.clone());
             let d = self.drawing_mut();
             for w in path.windows(2) {
                 let (a, b) = ((w[0].0 * mmu, w[0].1 * mmu), (w[1].0 * mmu, w[1].1 * mmu));
@@ -730,7 +775,9 @@ impl Canvas {
                         for x in x0..x1 {
                             let (wx, wy) = ((x as f32 + 0.5) * px, (y as f32 + 0.5) * px);
                             if (wx - c.0).powi(2) + (wy - c.1).powi(2) <= r_mm * r_mm {
-                                under.push((y - f.y0) * f.w + (x - f.x0));
+                                if !shv.as_ref().is_some_and(|s| s[(y - f.y0) * f.w + (x - f.x0)]) {
+                                    under.push((y - f.y0) * f.w + (x - f.x0));
+                                }
                             }
                         }
                     }

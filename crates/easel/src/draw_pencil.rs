@@ -1,7 +1,7 @@
 //! Drawing in Lua: graphite pencils and black chalk on the ground, the
 //! kneaded eraser and fixative (engine: `paint::graphite`); with the
-//! paper-and-pastel switch, pastel sticks, the finger and `feel` too
-//! (`install_paper`; engine: `paint::pastel`).
+//! paper-and-pastel switch, pastel sticks, the finger, `feel` and a paper
+//! mask too (`install_paper`; engine: `paint::pastel`, `paint::sheet`).
 //!
 //! A pencil is a plain Lua table (`{grade="2B", kind="graphite", worn=0}`)
 //! with shared methods, so how far its point has worn is part of the Lua
@@ -165,7 +165,7 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
             }
         })
         .collect();
-    let laid = crate::time::verb(st, crate::time::Verb::Pass, |s| {
+    let laid = crate::time::verb_dry(st, crate::time::Verb::Pass, |s| {
         let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         let l = c.stick_stroke(&mut stick, &sp);
         c.tally_mut().secs += l.secs as f64 + 0.25;
@@ -696,7 +696,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if !(0.05..=10.0).contains(&force) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
                 return err("smudge: force is newtons (0.05 to 10); pad, the contact in mm² (a stump: 2–10; a fingertip: about 135 at 1 N)");
             }
-            crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
+            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
                 let radius = (pad.unwrap_or(135.0 * force.powf(0.4)) / std::f32::consts::PI).sqrt();
                 validate_pastel_path(c, &pts, Some(radius))?;
@@ -715,6 +715,48 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
                 let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
                 Ok(c.feel(x, y))
             })
+        })?)?;
+    }
+    // lay_sheet(mask, {grammage=120, tone=}): a sheet of paper laid over the
+    // mask to keep it clean (paint's sheet.rs); lift_sheet() takes it away
+    // with what it caught. It must be lifted in the chunk that laid it.
+    {
+        let st1 = st.clone();
+        g.set("lay_sheet", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, &["grammage", "tone"], "lay_sheet")?;
+            }
+            let m = mask_of(&a)?;
+            let grammage = o.as_ref().map(|o| num(o, "grammage")).transpose()?.flatten().unwrap_or(120.0);
+            if !(40.0..=400.0).contains(&grammage) {
+                return err("lay_sheet: grammage is g/m² (40 to 400; a mask is usually 80–160)");
+            }
+            let mut s = st1.borrow_mut();
+            let tone = match o.as_ref().map(|o| o.get::<Value>("tone")).transpose()?.unwrap_or(Value::Nil) {
+                Value::Nil => paint::hex("#ece6d8"),
+                Value::Table(t) => {
+                    let parts = crate::api::parts_of(&s.tubes, &t, "lay_sheet tone")?.0;
+                    s.tubes.dry_color(&parts)
+                }
+                v => return err(format!("lay_sheet: tone is parts of tubes, {{{{\"lead white\", 3}}, ...}}, not a {}", v.type_name())),
+            };
+            let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+            // the sheet's thickness and pores: a drawing paper of that grammage (paper.rs)
+            let paper = paint::paper::Paper { grammage, ..paint::paper::Paper::drawing(0) };
+            let mu = c.mean_micro_um().unwrap_or(8.0);
+            c.lay_sheet(&m, paper.caliper_um(), mu, tone).map_err(mlua::Error::runtime)?;
+            c.tally_mut().secs += 4.0;
+            Ok(())
+        })?)?;
+        let st1 = st.clone();
+        g.set("lift_sheet", lua.create_function(move |_, ()| {
+            let mut s = st1.borrow_mut();
+            let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+            if !c.lift_sheet() {
+                return err("lift_sheet: no sheet lies on the picture");
+            }
+            c.tally_mut().secs += 2.0;
+            Ok(())
         })?)?;
     }
     Ok(())
@@ -740,8 +782,8 @@ mod tests {
         (g.split_whitespace().map(str::to_string).collect(), m.trim().to_string())
     }
 
-    /// The paper-and-pastel switch brings `pastel`, `smudge` and `feel` and
-    /// the stick's methods, and nothing else: a session without it (an older
+    /// The paper-and-pastel switch brings `pastel`, `smudge`, `feel`,
+    /// `lay_sheet` and `lift_sheet` and the stick's methods, and nothing else: a session without it (an older
     /// log) has none of them, so its walk of the globals is as it was.
     #[test]
     fn pastel_comes_with_the_switch_and_only_with_it() {
@@ -756,7 +798,7 @@ mod tests {
         run(&mut on, CANVAS);
         let (g_on, m_on) = names(&mut on);
         let added: Vec<&String> = g_on.iter().filter(|n| !g_off.contains(n)).collect();
-        assert_eq!(added, ["feel", "pastel", "smudge"]);
+        assert_eq!(added, ["feel", "lay_sheet", "lift_sheet", "pastel", "smudge"]);
         assert!(g_off.iter().all(|n| g_on.contains(n)));
         assert_eq!(m_on, "function\tfunction\tfunction\tfunction\tfunction");
         // the easel's own: not the painting's
@@ -862,5 +904,33 @@ mod tests {
         };
         assert!(state(&r) == state(&s), "the log replays bit for bit");
         assert_eq!(run(&mut r, "print(p)"), run(&mut s, "print(p)"));
+    }
+
+    /// A paper mask: laid and lifted within one chunk (a chunk that ends
+    /// with it down fails); while it lies only the stick, the finger, the
+    /// eraser and fixative work (a pencil line is refused); what it covered
+    /// is clean once it is lifted, and the paper beside it took pastel.
+    #[test]
+    fn a_paper_mask_lies_for_the_dry_tools_within_a_chunk() {
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})"#);
+        let e = s.run("lay_sheet(rect(0, 0, 500, 800))").unwrap_err();
+        assert!(e.contains("the chunk ended with a sheet laid on the picture"), "{e}");
+        let e = s.run("lay_sheet(rect(0, 0, 500, 800)) pencil():line({{100, 100}, {300, 120}})").unwrap_err();
+        assert!(e.contains("a sheet of paper lies on the picture"), "{e}");
+        let e = s.run("lay_sheet(rect(0, 0, 500, 800)) lay_sheet(rect(0, 0, 500, 800))").unwrap_err();
+        assert!(e.contains("already lies"), "{e}");
+        assert!(s.run("lay_sheet(rect(0, 0, 500, 800), {grammage=10}) lift_sheet()").unwrap_err().contains("grammage"));
+        run(&mut s, r#"lay_sheet(rect(0, 0, 500, 800), {tone={{"lead white", 3}}})
+            for y = 380, 420, 10 do p:stroke({{100, y}, {900, y}}, {force=2.5, alt=55}) end
+            smudge({{100, 400}, {900, 400}})
+            erase(rect(0, 0, 200, 800))
+            fix()
+            lift_sheet()"#);
+        assert!(run(&mut s, "print(feel(250, 400))").starts_with("paper: the tooth open"));
+        let found = run(&mut s, "local found = '' for x = 600, 880, 20 do local f = feel(x, 400) if f:find('pastel', 1, true) then found = f end end print(found)");
+        assert!(found.starts_with("paper: pastel, fixed"), "{found}");
+        assert!(s.run("lift_sheet()").unwrap_err().contains("no sheet lies"));
     }
 }

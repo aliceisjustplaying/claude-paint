@@ -14,7 +14,9 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
 - **The engine** (`paint::pastel`): `Stick` (its section, length, worn
   facets, hardness, wear coefficient and dry color), `Canvas::stick_stroke`
   (a stroke along points, each with its force, pose and speed),
-  `Canvas::fix_pastel`, `Canvas::rub` (the finger) and `Canvas::feel`.
+  `Canvas::fix_pastel`, `Canvas::rub` (the finger) and `Canvas::feel`;
+  `paint::sheet`, a paper mask (`Canvas::lay_sheet`, `lift_sheet`) and
+  where a stick held up would touch (`Canvas::stick_contact`).
 - **The drawing it lays in.** Pastel shares the drawing pencils and chalk
   lay (`graphite::Drawing`): a dry deposit written into the dry picture,
   so paint laid later composites over it and seals it. A drawing cell's
@@ -28,8 +30,9 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
   `r, g, b`, `lift`, `floor`, `film`, `loose`, `bound`), flag 2.
 - **The switch.** The Lua verbs are the paper-and-pastel switch's (a
   `--@ paper` line in the log's head, as for `canvas{paper=}`): a painting
-  begun since has `pastel`, `smudge` and `feel`; an older one replays with
-  none of them, its globals as they were.
+  begun since has `pastel`, `smudge`, `feel`, `lay_sheet` and `lift_sheet`,
+  and can hold a stick up in a look; an older one replays with none of
+  them, its globals as they were.
 
 ## Lua
 
@@ -47,6 +50,11 @@ guide, under "Drawing: pencil, chalk, pastel and eraser".
   mm²) drawn along a path.
 - `fix(mask)` binds pastel as well as the drawing.
 - `feel(x, y)`: what a fingertip feels there, in words.
+- `lay_sheet(mask, {grammage=120, tone=})`, `lift_sheet()`: a sheet of
+  paper laid over the mask to keep it clean, and taken away with what it
+  caught; laid and lifted within one chunk.
+- `easel look --hold <stick> --at x,y [--pose force,alt,azimuth[,roll] |
+  --side direction]`: where the stick held there would touch.
 
 Also new, and for pencils as well: `hatch{graded=true}` (in the engine,
 `graphite::hatch_marks_graded`). The mask becomes a weight: strokes run
@@ -134,6 +142,35 @@ Two changes found while painting.
 
 Estimates in use: the 3 mm a crumb rides, the 150 µm bed, the cut-off's
 dependence on softness and force (within the measured 100–300 µm).
+
+## A paper mask, and a stick held up
+
+Tools only where each is a physical process modeled from the research, no
+undo-like conveniences. Paint's `sheet.rs`:
+
+- **Stick hold** (`look --hold <stick> --at x,y [--pose f,alt,az[,roll] |
+  --side dir]`, main.rs `stick_hold_look`). Reads only: no hand time,
+  nothing in the log. It calls the stroke's own seating
+  (`Canvas::seat_stick`, the arithmetic `stick_stroke` uses) through
+  `Canvas::stick_contact`: where the stick touches at that force (in its
+  color), where its face lies within a crumb's size of the surface (where
+  its crumbs would settle, tinted), and the rest of its low part as a light
+  shadow. Without `--pose` or `--side` it is held at 1.5 N, 60° up, its
+  upper end to the lower right; `--side` lays it flat across a stroke going
+  that way, at 2 N. Only with the paper-and-pastel switch is there a stick
+  to hold: without it `--pose` and `--side` are refused.
+- **Paper mask** (`lay_sheet(mask, {grammage=, tone=})`, `lift_sheet()`). A
+  raised surface `caliper` µm thick (the paper physics' caliper for that
+  grammage) with the support's mean pore depth: `Canvas::surface_point`
+  feeds the contact solver, so the stick bridges its edge by its own
+  geometry, and the edge it leaves is as sharp as the stick's angle and
+  force make it. What lands on it (contact deposit and crumbs, shared with
+  the paper beside it by the crumb bed's depths) is the sheet's
+  (`sheet_catch`), shown in the look and gone at the lift. The finger, the
+  eraser and fixative don't reach under it. Wet-paint and graphite verbs
+  refuse while it is down (`time::verb_dry` marks the verbs modeled for
+  it); a chunk must lift what it laid (session.rs), so chunk checkpoints
+  never hold one (a save in between does: checkpoint version 15).
 
 Learned while painting:
 

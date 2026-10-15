@@ -598,9 +598,27 @@ feel(x, y)                     -- what a fingertip feels there
 - Pastel skips wet paint, as graphite does; let the paint set first. Paint
   laid over pastel seals it, as it seals a drawing.
 
+```lua
+lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
+lift_sheet()                                              -- taken away, with what it caught
+```
+
+- **The sheet** keeps what it covers clean. It lies a paper's thickness
+  above the picture, so a stick rests on it like any surface; near its
+  edge the stick bridges from sheet to picture, and the edge left behind is
+  as sharp as the stick's angle and force make it (a stick laid flat leaves
+  a wider margin than its point). Strokes and crumbs that land on the sheet
+  stay on it; the finger, the eraser and fixative don't reach under it. Lay
+  and lift it in one chunk. While it is down, only pastel, the finger, the
+  eraser and fixative work: wet paint and graphite aren't modeled under a
+  sheet and refuse.
+- **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
+  `at: "x,y"` (see Looking).
+
 Pastel is there in a painting begun since it came, with paper (its log's
 head says `--@ paper`); an older painting replays as it was painted, and
-has no `pastel`, `smudge` or `feel`. The numbers (how hard a stick is, how
+has no `pastel`, `smudge`, `feel`, `lay_sheet` or `lift_sheet`, and no stick
+to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 
@@ -801,6 +819,7 @@ other option, and nothing on the canvas or the clock changes.
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `hold: "<a pastel stick>"`, `at: "x,y"`, `pose: "force,alt,azimuth"` or `side: "<direction>"` | (with pastel) the stick held there, seen from above over the passage (120 units around the point, or your `crop`): its low end as a light shadow, where it rests on the tooth at that force in its color, and the band where its crumbs would settle, tinted; `side` lays it flat across a stroke going that way; with neither, 1.5 N at 60°. The reply says how much it touches and how much its crumbs would reach, in mm². The stick can be a field of a table (`P.glow`). It shows where a stroke from there would lay, not what it would leave |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect

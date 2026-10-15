@@ -670,7 +670,8 @@ impl Canvas {
     /// of what is there, better from the tops of the tooth than from the
     /// hollows, and never quite all of it. Loose stick pastel leaves the
     /// tooth with what it lifts, so an erased passage takes pastel again. It
-    /// lifts the guide too (see `drawing_guide`), wherever it goes.
+    /// doesn't reach under a sheet laid on the picture. It lifts the guide
+    /// too (see `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
         self.check_mask(m);
         let Some(d) = self.drawing.as_mut() else { return };
@@ -689,7 +690,7 @@ impl Canvas {
         for i in 0..self.px.len() {
             let mv = m.data[f.whole_index(i)];
             let c = &mut d.cells[i];
-            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.vol[i] > 1e-5 {
+            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.vol[i] > 1e-5 || self.sheet.as_ref().is_some_and(|s| s.over[i]) {
                 continue;
             }
             let (x, y) = ((i % f.w) as isize, (i / f.w) as isize);
@@ -721,8 +722,10 @@ impl Canvas {
         }
         let f = self.f;
         let Some(d) = self.drawing.as_mut() else { return };
+        // (a sheet laid on the picture keeps the spray off what it covers)
+        let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
-            if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) {
+            if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) && !sheet.is_some_and(|s| s.over[i]) {
                 c.floor = c.a;
             }
         }

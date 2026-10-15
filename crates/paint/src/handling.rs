@@ -940,6 +940,7 @@ impl Canvas {
         } else {
             TileOrder::Default(order)
         };
+        let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.into_iter().chain(p.dip2.map(|(paint, _, _)| paint))), &secs);
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));

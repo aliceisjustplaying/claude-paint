@@ -307,7 +307,11 @@ impl Session {
         if self.stale {
             self.rebuild()?;
         }
+        let snapshot_start = Instant::now();
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
+        if !self.replay && std::env::var_os("RENDER_PROFILE").is_some() {
+            eprintln!("PROFILE_ROLLBACK,{},{:.6}", self.log.len() + 1, snapshot_start.elapsed().as_secs_f64());
+        }
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);

@@ -19,15 +19,17 @@ first K chunks. Under --out it writes:
                       when easel prints E7BATCH lines (E7_STATS=1 is set),
                       each batch's ready width
 
-<name> is <log stem>-e<engine>-w<workers>[-p<chunks>]. CPU and peak RSS are
-the child's rusage, so they hold on Linux and macOS alike. Engine 7 is asked
-for with "--engine 7" on easel's command line; engine 5 replays the log as
-it is.
+<name> is <log stem>-e<engine>-w<workers>[-p<chunks>]. The JSON record is
+the engine7-bench-v1 schema (handoffs/engine-next/CONTRACTS.md); unmeasured
+metrics are null. CPU and peak RSS are the child's rusage, so they hold on
+Linux and macOS alike. Engine 7 is asked for the way the contract says: the
+scratch copy's "--@ engine 5" head line becomes "--@ engine 7".
 
 table folds .json results into one Markdown table.
 """
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,6 +46,8 @@ CHUNK = re.compile(r"^\s*chunk\s+(\d+)\s+([0-9.]+)s\s*$")
 PAINTED = re.compile(r"painted in ([0-9.]+)s, total ([0-9.]+)s")
 BATCH = re.compile(r"^E7BATCH\t(.*)$")
 BATCH_FIELDS = ["chunk", "batch", "tiles", "peak_ready", "peak_inflight", "wall_s", "sum_tile_s"]
+ENGINE_LINE = re.compile(r"^--@ engine (\d+)\s*$", re.M)
+SIZE = re.compile(r"canvas\s*\{[^}]*?size\s*=\s*([0-9.]+)")
 
 
 def program(text, chunks):
@@ -76,19 +80,35 @@ def batches(lines):
 
 def ready_width(rows):
     """Peak ready width, and the tile-time-weighted mean of each batch's peak."""
-    if not rows:
-        return None
     work = sum(r["sum_tile_s"] for r in rows)
+    if not rows or work <= 0:
+        return None
     return {
-        "peak": max(r["peak_ready"] for r in rows),
-        "weighted_mean": sum(r["peak_ready"] * r["sum_tile_s"] for r in rows) / work if work > 0 else None,
-        "batches": len(rows),
+        "max": max(r["peak_ready"] for r in rows),
+        "mean": round(sum(r["peak_ready"] * r["sum_tile_s"] for r in rows) / work, 3),
+        "method": "E7BATCH peak_ready, weighted by summed tile seconds",
     }
+
+
+def with_engine(text, engine):
+    """The program with its head naming engine (only 5 -> 7 is a change)."""
+    head = text.split(MARK, 1)[0]
+    m = ENGINE_LINE.search(head)
+    logged = int(m.group(1)) if m else 1
+    if engine == logged:
+        return text
+    if (logged, engine) != (5, 7):
+        raise SystemExit(f"the log is engine {logged}; only an engine 5 log replays through engine 7")
+    return text[: m.start()] + "--@ engine 7" + text[m.end():]
 
 
 def run(args):
     log = Path(args.log).resolve()
-    text, n = program(log.read_text(), args.chunks)
+    raw = log.read_text()
+    text, n = program(raw, args.chunks)
+    text = with_engine(text, args.engine)
+    size = SIZE.search(text)
+    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent, capture_output=True, text=True).stdout.strip() or None
     name = f"{log.stem}-e{args.engine}-w{args.workers}" + (f"-p{args.chunks}" if args.chunks else "")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -98,8 +118,6 @@ def run(args):
     cmd = [args.easel, "run", str(src), "--out", str(png), "--gallery"]
     if args.width:
         cmd += ["--width", str(args.width)]
-    if args.engine != 5:
-        cmd += ["--engine", str(args.engine)]
     env = dict(os.environ, RAYON_NUM_THREADS=str(args.workers), E7_STATS="1")
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
     t0 = time.monotonic()
@@ -118,37 +136,43 @@ def run(args):
     rss = after.ru_maxrss * (1 if platform.system() == "Darwin" else 1024)
     rows = batches(lines)
     result = {
-        "log": log.name,
+        "schema": "engine7-bench-v1",
+        "painting": log.name,
+        "input_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+        "chunk_count": n,
+        "revision": revision,
         "engine": args.engine,
+        "width_px": args.width or 2400,
+        "physical_width_mm": float(size.group(1)) if size else None,
         "workers": args.workers,
-        "chunks": n,
+        "backend": args.backend,
+        "wall_s": round(wall, 3),
+        "paint_s": float(painted.group(1)) if painted else None,
+        "cpu_s": round(cpu, 3),
+        "cpu_over_wall": round(cpu / wall, 3),
+        "peak_rss_bytes": rss,
+        "ready_width": ready_width(rows),
+        "chunks": [{"index": i + 1, "wall_s": t} for i, t in enumerate(per_chunk)],
+        "batches": rows,
         "host": platform.node(),
         "machine": platform.machine(),
         "cpus": os.cpu_count(),
         "easel": args.easel,
-        "wall_s": round(wall, 3),
-        "paint_s": float(painted.group(1)) if painted else None,
-        "cpu_s": round(cpu, 3),
-        "cpu_per_wall": round(cpu / wall, 3),
-        "peak_rss_mib": round(rss / 2**20, 1),
-        "ready_width": ready_width(rows),
-        "per_chunk_s": per_chunk,
-        "batches": rows,
-        "png": str(png),
+        "render": {"png": str(png), "look": "gallery", "light": "easel run --gallery"},
     }
     (out / f"{name}.json").write_text(json.dumps(result, indent=1) + "\n")
-    print(f"{name}: wall {wall:.1f}s, paint {result['paint_s']}s, CPU/wall {result['cpu_per_wall']}, peak RSS {result['peak_rss_mib']} MiB, {len(per_chunk)} chunks")
+    print(f"{name}: wall {wall:.1f}s, paint {result['paint_s']}s, CPU/wall {result['cpu_over_wall']}, peak RSS {rss / 2**20:.0f} MiB, {len(per_chunk)} chunks, ready width {result['ready_width']}")
 
 
 def table(args):
     rows = [json.loads(Path(p).read_text()) for p in args.results]
-    rows.sort(key=lambda r: (r["log"], r["chunks"], r["workers"], r["engine"]))
-    print("| Log | Chunks | Workers | Engine | Wall s | Paint s | CPU/wall | Peak RSS MiB | Ready width (peak / weighted) | Host |")
-    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |")
+    rows.sort(key=lambda r: (r["painting"], r["chunk_count"], r["workers"], r["engine"]))
+    print("| Painting | Chunks | Workers | Engine | Wall s | CPU/wall | Peak RSS MiB | Ready width (max / mean) | Host |")
+    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |")
     for r in rows:
         w = r.get("ready_width")
-        width = f"{w['peak']:.0f} / {w['weighted_mean']:.2f}" if w and w.get("weighted_mean") is not None else "n/a"
-        print(f"| {r['log']} | {r['chunks']} | {r['workers']} | {r['engine']} | {r['wall_s']:.1f} | {r['paint_s'] or 0:.1f} | {r['cpu_per_wall']:.2f} | {r['peak_rss_mib']:.0f} | {width} | {r['host']} |")
+        width = f"{w['max']:.0f} / {w['mean']:.2f}" if w else "n/a"
+        print(f"| {r['painting']} | {r['chunk_count']} | {r['workers']} | {r['engine']} | {r['wall_s']:.1f} | {r['cpu_over_wall']:.2f} | {r['peak_rss_bytes'] / 2**20:.0f} | {width} | {r['host']} ({r['cpus']} CPU) |")
 
 
 def main():
@@ -161,6 +185,7 @@ def main():
     r.add_argument("--chunks", type=int)
     r.add_argument("--width", type=int, help="replay width in px (default: the width the log was painted at)")
     r.add_argument("--easel", default=os.environ.get("EASEL", "easel"))
+    r.add_argument("--backend", default="scalar", help="recorded only: scalar, avx2 or neon")
     r.add_argument("--out", default="e7-replays")
     t = sub.add_parser("table")
     t.add_argument("results", nargs="+")

@@ -11,7 +11,8 @@ const PAINTED: [f32; 4] = [100.0, 100.0, 900.0, 900.0];
 fn budgeted_network_keeps_the_unbounded_arm_geometry() {
     let k = crate::crack::Cracks { island_mm: Some(FINEST_MM), ground_um: Some(300.0), corners: false, grain: 0.0, ..crate::crack::Cracks::aged(11) };
     let original = crate::crack::network(&k, [80.0; 2], [0.7; 2]);
-    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.0; 2], [80.0; 2], [0.7; 2], 1.0 / 6.0, NETWORK_MEMORY_BUDGET);
+    let budget = crate::crack::Budget::limited([80.0; 2], NETWORK_MEMORY_BUDGET);
+    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.0; 2], [80.0; 2], [0.7; 2], 1.0 / 6.0, budget);
     assert_eq!(original.size_mm, bounded.size_mm);
     assert_eq!(original.arms.len(), bounded.arms.len());
     for (a, b) in original.arms.iter().zip(&bounded.arms) {
@@ -293,17 +294,17 @@ fn crop_uses_the_whole_canvas_crack_coordinates() {
 #[test]
 fn network_cache_tracks_physical_size_and_support_seed() {
     let mut c = canvas(120, true, None);
-    let first = c.traction_net([0, 0]);
+    let first = c.traction_net([0, 0], 0);
     let mut wider = c.clone().with_size_mm(120.0);
-    let resized = wider.traction_net([0, 0]);
+    let resized = wider.traction_net([0, 0], 0);
     assert!(!std::sync::Arc::ptr_eq(&first, &resized));
     assert_eq!(resized.size_mm, [120.0; 2]);
     let mut linen = c.with_linen(crate::surface::Linen::fine(51));
-    let reseeded = linen.traction_net([0, 0]);
+    let reseeded = linen.traction_net([0, 0], 0);
     assert!(!std::sync::Arc::ptr_eq(&first, &reseeded));
     assert_ne!(first.seed, reseeded.seed);
     let (mut resumed, _) = Canvas::read_state(&mut Cursor::new(saved(&wider))).unwrap();
-    let restored = resumed.traction_net([0, 0]);
+    let restored = resumed.traction_net([0, 0], 0);
     assert_eq!(resized.size_mm, restored.size_mm);
     assert_eq!(resized.seed, restored.seed);
     for point in [[10.0, 15.0], [59.0, 83.0], [111.0, 105.0]] {
@@ -314,7 +315,7 @@ fn network_cache_tracks_physical_size_and_support_seed() {
 #[test]
 fn canvas_snapshots_do_not_pin_an_evicted_crack_region() {
     let mut c = canvas(80, true, None);
-    let cached = std::sync::Arc::downgrade(&c.traction_net([0, 0]));
+    let cached = std::sync::Arc::downgrade(&c.traction_net([0, 0], 0));
     let snapshot = c.clone();
     assert!(snapshot.traction.net.0.is_none());
     c.traction.net.0 = None;
@@ -340,6 +341,47 @@ fn large_canvas_regions_match_a_restored_crop() {
     for i in 0..window.px.len() {
         assert_eq!(Surface::capture(&window, i), Surface::capture(&whole, window.f.whole_index(i)), "crop pixel {i}");
     }
+}
+
+#[test]
+fn nearest_region_query_matches_a_full_segment_search() {
+    let mut c = canvas(80, true, None);
+    let net = c.traction_net([0, 0], 0);
+    let mut checked = 0;
+    for i in 0..160 {
+        let p = [80.0 * crate::rng::hash2(i, 0, 73), 80.0 * crate::rng::hash2(i, 1, 73)];
+        let gmax = (i % 5) as u8;
+        let reference = net.segs.iter().filter(|s| s.4 <= gmax).map(|&(a, b, wa, wb, _)| {
+            let ab = [b[0] - a[0], b[1] - a[1]];
+            let l2 = (ab[0] * ab[0] + ab[1] * ab[1]).max(1e-12);
+            let t = (((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2).clamp(0.0, 1.0);
+            let d = ((p[0] - a[0] - t * ab[0]).powi(2) + (p[1] - a[1] - t * ab[1]).powi(2)).sqrt();
+            (d, wa + (wb - wa) * t)
+        }).min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some(expected) = reference.filter(|p| p.0 < net.cell) {
+            let actual = net.nearest(p, gmax).unwrap();
+            assert!((actual.0 - expected.0).abs() < 1e-5, "distance at {p:?}: {actual:?} vs {expected:?}");
+            assert!((actual.1 - expected.1).abs() < 1e-5, "opening at {p:?}: {actual:?} vs {expected:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 50);
+}
+
+#[test]
+fn overlap_budget_is_independent_of_a_warm_region_cache() {
+    let mut warm = canvas(32, true, None).with_size_mm(640.0);
+    let patch = [100.0, 100.0, 200.0, 200.0];
+    film(&mut warm, undercoat(), 200.0, patch, 1);
+    warm.dry();
+    film(&mut warm, topcoat(), 25.0, patch, 2);
+    let cost = warm.traction_net([0, 0], 0).memory_cost;
+    let mut cold = warm.clone();
+    for c in [&mut warm, &mut cold] {
+        crate::crack::with_traction_memory_reserved_for_test(NETWORK_MEMORY_BUDGET - cost - (2 << 20), || c.wait(60.0 * DAY));
+    }
+    assert!(!warm.traction.cracks.is_empty());
+    assert_eq!(saved(&warm), saved(&cold));
 }
 
 #[test]

@@ -21,7 +21,9 @@ const GAP_MAX: f32 = 0.2;
 const NETWORK_MEMORY_BUDGET: usize = 1024 << 20;
 const NETWORK_TILE_MM: f32 = 300.0;
 const NETWORK_HALO_MM: f32 = 16.0;
-const NETWORK_GRID: f32 = 0.25;
+const NETWORK_GRID: f32 = 1.0 / 3.0;
+const NETWORK_BLEND_MM: f32 = 4.0;
+const NETWORK_EDGE_JITTER_MM: f32 = 8.0;
 const MARK: u64 = 0x4e4f_4954_4341_5254; // TRACTION
 const SECTION_V: u64 = 1;
 
@@ -320,6 +322,7 @@ pub(crate) struct DryNet {
     size_mm: [f32; 2],
     tile: [usize; 2],
     origin_mm: [f32; 2],
+    memory_cost: usize,
     seed: u64,
     /// Segments: ends (mm), relative opening at each end, generation.
     segs: Vec<([f32; 2], [f32; 2], f32, f32, u8)>,
@@ -330,7 +333,7 @@ pub(crate) struct DryNet {
 }
 
 impl DryNet {
-    fn new(size_mm: [f32; 2], seed: u64, tile: [usize; 2]) -> DryNet {
+    fn new(size_mm: [f32; 2], seed: u64, tile: [usize; 2], reserved: usize) -> DryNet {
         use crate::crack::{Cracks, End, network_with_budget};
         let k = Cracks {
             island_mm: Some(FINEST_MM),
@@ -341,7 +344,11 @@ impl DryNet {
         };
         let origin_mm = tile.map(|i| (i as f32 * NETWORK_TILE_MM - NETWORK_HALO_MM).max(0.0));
         let tile_mm = std::array::from_fn(|i| (((tile[i] + 1) as f32 * NETWORK_TILE_MM + NETWORK_HALO_MM).min(size_mm[i]) - origin_mm[i]).max(0.0));
-        let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, NETWORK_MEMORY_BUDGET);
+        let mut budget = crate::crack::Budget::limited(size_mm, NETWORK_MEMORY_BUDGET);
+        if reserved > budget.used() {
+            budget.charge::<u8>(reserved - budget.used());
+        }
+        let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, budget);
         let mut segs = Vec::new();
         for a in &net.arms {
             let n = a.pts.len();
@@ -390,6 +397,7 @@ impl DryNet {
             size_mm,
             tile,
             origin_mm,
+            memory_cost: budget.used() - reserved,
             seed,
             segs,
             cell,
@@ -405,28 +413,39 @@ impl DryNet {
         let p = [p[0] - self.origin_mm[0], p[1] - self.origin_mm[1]];
         let (cx, cy) = ((p[0] / self.cell).floor() as isize, (p[1] / self.cell).floor() as isize);
         let mut best: Option<(f32, f32)> = None;
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                let (x, y) = (cx + dx, cy + dy);
-                if x < 0 || y < 0 || x as usize >= self.cols || y as usize >= self.rows {
+        for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+            let (x, y) = (cx + dx, cy + dy);
+            if x < 0 || y < 0 || x as usize >= self.cols || y as usize >= self.rows {
+                continue;
+            }
+            let dx = (x as f32 * self.cell - p[0]).max(p[0] - (x + 1) as f32 * self.cell).max(0.0);
+            let dy = (y as f32 * self.cell - p[1]).max(p[1] - (y + 1) as f32 * self.cell).max(0.0);
+            if best.is_some_and(|b| dx * dx + dy * dy > b.0) {
+                continue;
+            }
+            for &si in &self.cells[y as usize * self.cols + x as usize] {
+                let (a, b, wa, wb, g) = self.segs[si as usize];
+                if g > gmax {
                     continue;
                 }
-                for &si in &self.cells[y as usize * self.cols + x as usize] {
-                    let (a, b, wa, wb, g) = self.segs[si as usize];
-                    if g > gmax {
-                        continue;
-                    }
-                    let ab = [b[0] - a[0], b[1] - a[1]];
-                    let l2 = (ab[0] * ab[0] + ab[1] * ab[1]).max(1e-12);
-                    let t = (((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2).clamp(0.0, 1.0);
-                    let d = ((p[0] - a[0] - t * ab[0]).powi(2) + (p[1] - a[1] - t * ab[1]).powi(2)).sqrt();
-                    if best.is_none_or(|bst| d < bst.0) {
-                        best = Some((d, wa + (wb - wa) * t));
-                    }
+                let ab = [b[0] - a[0], b[1] - a[1]];
+                let l2 = (ab[0] * ab[0] + ab[1] * ab[1]).max(1e-12);
+                let t = (((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2).clamp(0.0, 1.0);
+                let d = (p[0] - a[0] - t * ab[0]).powi(2) + (p[1] - a[1] - t * ab[1]).powi(2);
+                if best.is_none_or(|bst| d < bst.0) {
+                    best = Some((d, wa + (wb - wa) * t));
                 }
             }
         }
-        best
+        best.map(|(d, open)| (d.sqrt(), open))
+    }
+
+    fn sample(&self, c: &CrackPx, point: [f32; 2], weight: f32) -> (f32, f32) {
+        if weight <= 0.0 { return (f32::INFINITY, 0.0); }
+        let gmax = gens_for(c.d_mm);
+        let Some((d, open)) = self.nearest(point, gmax) else { return (f32::INFINITY, 0.0) };
+        let island = FINEST_MM * 1.6f32.powi((LAST_GEN - gmax) as i32);
+        (d, 0.5 * GAP_MAX * c.hw_mm * open * island * weight)
     }
 }
 
@@ -455,7 +474,7 @@ impl Canvas {
         crate::crack::check_network_grid(size, size.map(|v| v.min(NETWORK_TILE_MM + 2.0 * NETWORK_HALO_MM)), FINEST_MM, NETWORK_GRID, NETWORK_MEMORY_BUDGET)
     }
 
-    fn traction_net(&mut self, tile: [usize; 2]) -> std::sync::Arc<DryNet> {
+    fn traction_net(&mut self, tile: [usize; 2], reserved: usize) -> std::sync::Arc<DryNet> {
         let pm = self.px_mm();
         let size_mm = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
         let seed = self.linen.map_or(11, |l| l.seed) ^ 0x0d3f_ec75 ^ 0xc4ac;
@@ -464,10 +483,15 @@ impl Canvas {
             && net.seed == seed
             && net.tile == tile
         {
+            let mut budget = crate::crack::Budget::limited(size_mm, NETWORK_MEMORY_BUDGET);
+            if reserved > budget.used() {
+                budget.charge::<u8>(reserved - budget.used());
+            }
+            budget.charge::<u8>(net.memory_cost);
             return net.clone();
         }
         self.traction.net.0 = None;
-        let net = std::sync::Arc::new(DryNet::new(size_mm, seed, tile));
+        let net = std::sync::Arc::new(DryNet::new(size_mm, seed, tile, reserved));
         self.traction.net.0 = Some(net.clone());
         net
     }
@@ -543,34 +567,94 @@ impl Canvas {
             return found;
         }
         let (pm, ox, oy) = (self.px_mm(), self.f.x0, self.f.y0);
-        let tile_of = |c: &CrackPx| {
-            (((c.i / w + oy) as f32 * pm / NETWORK_TILE_MM) as usize, ((c.i % w + ox) as f32 * pm / NETWORK_TILE_MM) as usize)
-        };
-        found.sort_unstable_by_key(tile_of);
-        let mut result = Vec::new();
-        for pixels in found.chunk_by(|a, b| tile_of(a) == tile_of(b)) {
-            let (ty, tx) = tile_of(&pixels[0]);
-            let net = self.traction_net([tx, ty]);
-            let sampled: Vec<_> = pixels
-            .par_iter()
-            .copied()
-            .filter_map(|mut c| {
-                // Temporary fields hold thickness and severity until geometry lookup.
-                let gmax = gens_for(c.d_mm);
-                let point = [(c.i % w + ox) as f32 * pm, (c.i / w + oy) as f32 * pm];
-                let (d, open) = net.nearest(point, gmax)?;
-                let island = FINEST_MM * 1.6f32.powi((LAST_GEN - gmax) as i32);
-                let hw = 0.5 * GAP_MAX * c.hw_mm * open * island;
+        let size_mm = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
+        let counts = size_mm.map(|v| (v / NETWORK_TILE_MM).ceil().max(1.0) as usize);
+        let point_of = |c: &CrackPx| [(c.i % w + ox) as f32 * pm, (c.i / w + oy) as f32 * pm];
+        if counts == [1, 1] {
+            let net = self.traction_net([0, 0], 0);
+            return found.into_par_iter().filter_map(|mut c| {
+                let (d, hw) = net.sample(&c, point_of(&c), 1.0);
                 (d < hw + pm).then(|| {
                     c.d_mm = d;
                     c.hw_mm = hw;
                     c
                 })
-            })
-            .collect();
-            result.extend(sampled);
+            }).collect();
         }
-        result
+        let mut budget = crate::crack::Budget::limited(size_mm, NETWORK_MEMORY_BUDGET);
+        if found.len() > u32::MAX as usize || counts[0].checked_mul(counts[1]).is_none_or(|n| n > u32::MAX as usize) {
+            budget.refused();
+        }
+        let reach = NETWORK_BLEND_MM + NETWORK_EDGE_JITTER_MM;
+        let tiles_of = |c: &CrackPx| {
+            let p = point_of(c);
+            let lo = p.map(|v| ((v - reach) / NETWORK_TILE_MM).floor().max(0.0) as usize);
+            let hi = std::array::from_fn::<_, 2, _>(|i| (((p[i] + reach) / NETWORK_TILE_MM).floor() as usize).min(counts[i] - 1));
+            (lo, hi)
+        };
+        let n = found.iter().map(|c| {
+            let (lo, hi) = tiles_of(c);
+            (hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1)
+        }).sum();
+        let cache_cost = if let Some(net) = &self.traction.net.0 {
+            budget.charge::<u8>(net.memory_cost);
+            net.memory_cost + 64
+        } else { 0 };
+        let mut queries = Vec::new();
+        budget.reserve(&mut queries, n);
+        for (i, c) in found.iter().enumerate() {
+            let (lo, hi) = tiles_of(c);
+            for y in lo[1]..=hi[1] {
+                for x in lo[0]..=hi[0] {
+                    queries.push(((y * counts[0] + x) as u32, i as u32));
+                }
+            }
+        }
+        queries.sort_unstable();
+        let mut best = budget.filled(found.len(), (f32::INFINITY, 0.0));
+        let mut sampled = Vec::new();
+        let largest = queries.chunk_by(|a, b| a.0 == b.0).map(|q| q.len()).max().unwrap_or(0);
+        budget.reserve(&mut sampled, largest);
+        let reserved = budget.used() - cache_cost;
+        let coverage = |d: f32, hw: f32| (((d + 0.5 * pm).min(hw) - (d - 0.5 * pm).max(-hw)).max(0.0) / pm).min(1.0);
+        for pixels in queries.chunk_by(|a, b| a.0 == b.0) {
+            let id = pixels[0].0 as usize;
+            let tile = [id % counts[0], id / counts[0]];
+            let net = self.traction_net(tile, reserved);
+            let edge = crate::noise::Fbm::new(net.seed as u32 ^ 0x74ec, 2, 24.0);
+            pixels.par_iter().map(|&(_, i)| {
+                let c = &found[i as usize];
+                let point = point_of(c);
+                let weight = (0..2).map(|axis| {
+                    let start = tile[axis] as f32 * NETWORK_TILE_MM;
+                    let end = start + NETWORK_TILE_MM;
+                    let offset = |boundary| NETWORK_EDGE_JITTER_MM * edge.get(boundary + axis as f32 * 10000.0, point[1 - axis]).clamp(-1.0, 1.0);
+                    let left = if tile[axis] == 0 || point[axis] >= start + reach { 1.0 } else {
+                        let boundary = start + offset(start);
+                        smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
+                    };
+                    let right = if tile[axis] + 1 == counts[axis] || point[axis] <= end - reach { 1.0 } else {
+                        let boundary = end + offset(end);
+                        1.0 - smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
+                    };
+                    left * right
+                }).product::<f32>();
+                let (d, hw) = net.sample(c, point, weight);
+                (i, d, hw)
+            }).collect_into_vec(&mut sampled);
+            for &(i, d, hw) in &sampled {
+                let previous = &mut best[i as usize];
+                if coverage(d, hw) > coverage(previous.0, previous.1) {
+                    *previous = (d, hw);
+                }
+            }
+        }
+        for (c, (d, hw)) in found.iter_mut().zip(best) {
+            c.d_mm = d;
+            c.hw_mm = hw;
+        }
+        found.retain(|c| c.hw_mm > 0.0);
+        found
     }
 
     pub(crate) fn traction_set(&mut self, mut new: Vec<CrackPx>) {

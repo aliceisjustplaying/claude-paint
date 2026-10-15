@@ -25,6 +25,8 @@ use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 
+mod batch;
+
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
 /// lightly touches only peaks this much above their surroundings.
 const TOOTH_UM: f32 = 60.0;
@@ -726,6 +728,7 @@ impl Gesture {
 /// of the canvas can run in parallel (see `Canvas::work`).
 #[derive(Clone, Copy)]
 pub(crate) struct Surf {
+    batch_exchange: bool,
     /// The buffers' pixels: a window (origin `ox`, `oy`, size `w` × `h`) of
     /// the whole `fw` × `fh` canvas. Brush geometry works in whole-canvas
     /// pixels; only buffer indices are translated.
@@ -881,6 +884,7 @@ impl Canvas {
             self.base = Some((self.surf_gen, base));
         }
         Surf {
+            batch_exchange: self.engine == 5,
             w: self.f.w,
             h: self.f.h,
             ox: self.f.x0,
@@ -1148,6 +1152,8 @@ pub(crate) unsafe fn drag_on(
     let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
     let step = rb.max(1.25);
+    let batch_exchange = sf.batch_exchange && tool.point == 0.0 && std::env::var_os("PAINT_PARALLEL_EXCHANGE").is_some_and(|v| v == "1");
+    let mut batch_contacts = Vec::with_capacity(if batch_exchange { held.bristles.len() } else { 0 });
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
@@ -1255,6 +1261,22 @@ pub(crate) unsafe fn drag_on(
                 excl[order[k].1] = (0.5 * (lo + hi)).clamp((0.01 * rb).max(1e-4), half_max.max(rb));
                 shift[order[k].1] = (0.5 * (hi - lo)).clamp(-half_max, half_max);
             }
+        }
+        batch_contacts.clear();
+        if batch_exchange {
+            for (bi, b) in held.bristles.iter().enumerate() {
+                let Some((cur, reach)) = contact[bi] else { continue };
+                batch_contacts.push(batch::Contact { bristle: bi, a: b.prev[0].unwrap_or(cur), b: cur, rb, reach });
+            }
+        }
+        if batch_exchange && unsafe { batch::stamp(sf, &mut held.bristles, &tool, &batch_contacts, full, clip, id, &mut bounds, lim) } {
+            for (bi, b) in held.bristles.iter_mut().enumerate() {
+                if let Some((cur, _)) = contact[bi] {
+                    b.prev[0] = Some(cur);
+                }
+            }
+            feed(&mut held.bristles, feed_k);
+            continue;
         }
         for (bi, b) in held.bristles.iter_mut().enumerate() {
             let Some((cur, reach)) = contact[bi] else { continue };

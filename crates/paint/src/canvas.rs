@@ -552,6 +552,7 @@ impl Canvas {
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
         use rayon::prelude::*;
         let profile = std::env::var_os("RENDER_PROFILE").is_some();
+        let integer_power = std::env::var_os("RENDER_INTEGER_POWER").is_some();
         let start = std::time::Instant::now();
         // the room's light that fills the shadows: little where one low lamp
         // rakes across the picture in a dim room, much under a gallery's high
@@ -626,7 +627,17 @@ impl Canvas {
                 // sheen: wet oil shines, dry paint barely
                 let wet = (self.wet.vol[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                let power = if integer_power {
+                    let p2 = ndh * ndh;
+                    let p4 = p2 * p2;
+                    let p8 = p4 * p4;
+                    let p16 = p8 * p8;
+                    let p32 = p16 * p16;
+                    p32 * p8
+                } else {
+                    ndh.powf(40.0)
+                };
+                let spec = (0.02 + 0.10 * wet) * power * lit;
                 let p = base[i];
                 [(p[0] * shade + spec).max(0.0), (p[1] * shade + spec).max(0.0), (p[2] * shade + spec).max(0.0)]
             })

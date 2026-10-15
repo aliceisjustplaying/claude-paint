@@ -27,7 +27,7 @@ with args.result.with_suffix(".stdout").open("w") as stdout, args.result.with_su
 after = resource.getrusage(resource.RUSAGE_CHILDREN)
 result = {
     "command": command,
-    "environment": {k: os.environ[k] for k in ["RAYON_NUM_THREADS", "RENDER_PROFILE", "RENDER_DRY_FAST"] if k in os.environ},
+    "environment": {k: os.environ[k] for k in ["RAYON_NUM_THREADS", "RENDER_PROFILE", "RENDER_DRY_FAST", "RENDER_INTEGER_POWER", "RENDER_LIVE", "RENDER_SCHED_PROFILE", "RENDER_STROKE_PROFILE", "RENDER_TILE_SCALE", "RENDER_SLICE_FACTOR"] if k in os.environ},
     "wall_seconds": time.monotonic() - start,
     "user_seconds": after.ru_utime - before.ru_utime,
     "system_seconds": after.ru_stime - before.ru_stime,

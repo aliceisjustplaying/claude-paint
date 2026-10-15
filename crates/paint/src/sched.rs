@@ -175,6 +175,8 @@ impl Canvas {
     /// handed out, so it paints with the same ids as the whole canvas.
     pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
         let Pass { grid, order, rects, secs, ids, slice } = pass;
+        let slice_factor = std::env::var("RENDER_SLICE_FACTOR").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite() && *v >= 1.0 && *v <= 64.0).unwrap_or(1.0);
+        let slice = slice.map(|s| s * slice_factor);
         let order = match order {
             TileOrder::Default(_) if slice.is_some() => sweep_down(grid),
             TileOrder::Asked(o) | TileOrder::Default(o) => o,
@@ -194,6 +196,9 @@ impl Canvas {
             }
             let f = self.f;
             let order: Vec<usize> = order.into_iter().filter(|&t| rects[t].is_some_and(|r| f.clip(r).is_some())).collect();
+            if std::env::var_os("RENDER_STROKE_PROFILE").is_some() {
+                eprintln!("PROFILE_BATCH,{}", order.iter().map(usize::to_string).collect::<Vec<_>>().join(","));
+            }
             if std::env::var_os("PAINT_DEBUG").is_some() {
                 eprintln!("  {} tiles", order.len());
             }

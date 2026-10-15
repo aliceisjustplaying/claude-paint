@@ -151,7 +151,19 @@ def image_limits():
 
 class Easel:
     def wide(self):
-        """Whether the studio paints at 4800 px (its bin/width, as the easel reads it)."""
+        try:
+            wide = False
+            for line in (self.studio / "paintings/lua/painting.lua").read_text().splitlines():
+                head = line.strip()
+                if head.startswith("--@ chunk"):
+                    break
+                if head == "--@ sketch":
+                    return False
+                if re.fullmatch(r"--@ width\s+4800", head):
+                    wide = True
+            return wide
+        except FileNotFoundError:
+            pass
         try:
             return (self.studio / "bin/width").read_text().strip() == "4800"
         except OSError:
@@ -229,8 +241,6 @@ class Easel:
             args = ["open"]
 
     async def at(self, args, text=None):
-        # a chunk may run 10 minutes, 40 in a studio whose bin/width says 4800
-        # (session::chunk_limit_for): a fifth more there; a watercolor studio has no width file
         wait = (48 if self.wide() else 12) * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
         if await self.ensure_open(deadline):

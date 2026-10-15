@@ -2010,7 +2010,8 @@ mod tests {
     #[test]
     #[cfg(tube_box)]
     fn a_wide_session_names_its_width_in_its_head() {
-        let p = Session::new(4800).unwrap().program("t");
+        let p = Session::with_box(4800, box_for(None).unwrap()).unwrap().program("t");
+        assert!(p.contains(&format!("{ENGINE_MARK} 7\n")), "{p}");
         assert!(p.contains(&format!("{WIDTH_MARK} 4800\n")), "{p}");
         assert_eq!(logged_width(&p), Ok(4800));
         assert!(!Session::new(LEGACY_WIDTH).unwrap().program("t").contains(WIDTH_MARK));

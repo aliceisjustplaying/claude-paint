@@ -21,13 +21,22 @@ export interface Ran {
  * A chunk may run 10 minutes (the easel's own limit).
  */
 export const WAIT_MS = { do: 12 * 60_000, other: 3 * 60_000, rebuild: 30 * 60_000 };
-/** A studio whose bin/width says 4800: a chunk may run 40 minutes there (the limit scales with the
- * painting's pixels: session::chunk_limit_for), so `do` waits that and a fifth more, and a rebuild's
- * stall is the easel's own (the limit and ten minutes). */
 export const WIDE_WAIT_MS = { do: 48 * 60_000, rebuild: 50 * 60_000 };
 
-/** Whether the studio paints at 4800 px (its bin/width, as the easel reads it). */
 export function wideStudio(studio: string): boolean {
+	try {
+		const lines = readFileSync(join(studio, "paintings", "lua", "painting.lua"), "utf8").split("\n");
+		let wide = false;
+		for (const line of lines) {
+			const head = line.trim();
+			if (head.startsWith("--@ chunk")) break;
+			if (head === "--@ sketch") return false;
+			if (/^--@ width\s+4800$/.test(head)) wide = true;
+		}
+		return wide;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
 	try {
 		return readFileSync(join(studio, "bin", "width"), "utf8").trim() === "4800";
 	} catch {

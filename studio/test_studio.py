@@ -818,6 +818,34 @@ def test_runner_discovery_includes_non_gallery_runs_and_digit_ending_lanes(home,
     assert p["active"]
 
 
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_finished_painter_title_falls_back_to_the_runners_final_reply(home, server, monkeypatch, via):
+    tmp_path, studio, log = home
+    closing = "# *Winter Oak by the Bodden at Evening* (*Wintereiche am Bodden*)\n\nA solitary oak on a promontory."
+    log.write_text(start(str(studio)) + say(closing) + say("Of course, I'd be delighted to. Ask away."))
+    rd = tmp_path / "src/a/stillwet-runs/agy-fixture/run/ARGON"
+    rd.mkdir(parents=True)
+    (rd.parent / "studios.json").write_text(json.dumps({"ARGON1": PAINTER}))
+    (rd / "p1_final.txt").write_text(closing)
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+
+    def title():
+        S._lanes.update(at=0, map={})
+        if via == "live server":
+            entries = json.loads(server("/api/sessions")[1])
+        else:
+            out = tmp_path / "out"
+            assert export(tmp_path, out).returncode == 0
+            entries = json.loads((out / "data/sessions.json").read_text())
+        return next(s for s in entries if s.get("p") == PAINTER)["title"]
+
+    assert title() is None  # no runner outcome: the final reply isn't read
+    (rd / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "the painter is done"}))
+    assert title() == "Winter Oak by the Bodden at Evening"
+    log.write_text(start(str(studio)) + say(closing) + say("**The Blue Barn**\n\nA barn."))
+    assert title() == "The Blue Barn"  # a title in the session's own closing words wins
+
+
 def test_sittings_exclude_startup_only_crashes_but_keep_painting_and_final_review(home, server):
     tmp_path, studio, log = home
     log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))

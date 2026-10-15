@@ -10,7 +10,7 @@
 //! on the palette), the `canvas{}` setup and the style's relief (`relief()`
 //! reads it; the rest of the style is the box's oil style, which no finishing
 //! verb reads); and the chunk and call counters. The header also names the
-//! box and engine (and the drain switch, if on) and holds the log's FNV-1a hash and chunk count, so a save
+//! box and engine (and the drain and oils switches, if on) and holds the log's FNV-1a hash and chunk count, so a save
 //! is used only with the log it was written from.
 //!
 //! The header is plain `key=value` lines and holds no time or path: a replay
@@ -49,6 +49,9 @@ fn header(s: &Session, program: &str) -> String {
     kv("engine", st.tubes.engine.to_string());
     if st.tubes.drain {
         kv("drain", "1".to_string());
+    }
+    if st.tubes.oils {
+        kv("oils", "1".to_string());
     }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
@@ -149,7 +152,7 @@ fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, Str
 /// the log.
 #[cfg(feature = "replay")]
 pub fn read(path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK};
+    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, OILS_MARK};
     use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let input: Box<dyn std::io::Read> = if path.extension().is_some_and(|e| e == "zst") {
@@ -187,6 +190,17 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     }
     if drain {
         logged.push_str(&format!("{DRAIN_MARK}\n"));
+    }
+    let oils = match h.get("oils") {
+        None => false,
+        Some(&"1") => true,
+        Some(v) => return Err(format!("the save's oils={v:?} isn't 1")),
+    };
+    if oils != canvas.oils() {
+        return Err(format!("{}: the save's header and its canvas disagree on the oils switch", path.display()));
+    }
+    if oils {
+        logged.push_str(&format!("{OILS_MARK}\n"));
     }
     let tubes = crate::session::box_for(Some(&logged))?;
     let width: usize = parse(&h, "width")?;

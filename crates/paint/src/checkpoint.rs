@@ -72,6 +72,20 @@
 //! it is: a canvas without it is written as before, and a reader that
 //! doesn't know version 14 refuses a draining canvas instead of loading it
 //! without its packing. (Version 13 is left to the paper's section.)
+//!
+//! A canvas with the oils switch on (`Canvas::with_oils`, engine 4's
+//! materials and later) is version 16 (`PAINTC16`): version 11's bytes
+//! after the magic, then, after the solvent, the oils section: an `OILS`
+//! mark and the section's own version (1, `OILS_V`), a word saying what
+//! follows (0: nothing, the oils section is the file's last; 1: a raw
+//! canvas's soak section, which ends the file; 2: the drain section, as in
+//! version 14, which then says whether a soak section follows it), and the
+//! share of each buffer pixel's oil that is waxed (`crate::wet::Prop`'s
+//! last), one f32 each, row major. A drain section after it carries the wax
+//! too, and must agree. The section is there exactly when the switch is on:
+//! a canvas without it is written as before (version 11, 12 or 14), and a
+//! reader that doesn't know version 16 refuses it instead of loading it
+//! without its wax.
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -91,12 +105,18 @@ const MAGIC12: &[u8; 8] = b"PAINTC12";
 /// Version 11 with the drain section (`Canvas::with_drain`), and a raw
 /// canvas's soak section after it if there is one.
 const MAGIC14: &[u8; 8] = b"PAINTC14";
+/// Version 11 with the oils section (`Canvas::with_oils`), and after it the
+/// drain section and a raw canvas's soak section if there are.
+const MAGIC16: &[u8; 8] = b"PAINTC16";
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
 /// Marks the drain section ("DRAN"), and its version.
 const DRAIN_MARK: u64 = 0x4e415244;
 const DRAIN_V: u64 = 1;
+/// Marks the oils section ("OILS"), and its version.
+const OILS_MARK: u64 = 0x534c494f;
+const OILS_V: u64 = 1;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -199,7 +219,7 @@ pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
 }
 
-/// The format version (7–12 or 14) and the header. An engine-3 canvas in a
+/// The format version (7–12, 14 or 16) and the header. An engine-3 canvas in a
 /// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
 /// does) is refused here, before anything else is read.
 fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
@@ -213,6 +233,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
         m if m == MAGIC14 => 14,
+        m if m == MAGIC16 => 16,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -243,7 +264,12 @@ impl Canvas {
         if self.drain && self.engine < 4 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "the drain switch drains engine 4's oil: this canvas is set to an older engine"));
         }
+        // (the oils switch: version 16 holds version 11's bytes)
+        if self.oils && self.engine < 4 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "the oils switch's wax dulls engine 4's gloss: this canvas is set to an older engine"));
+        }
         let version = match (self.engine, self.soak.is_some()) {
+            _ if self.oils => 16,
             _ if self.drain => 14,
             (3, true) => 10,
             (3, false) => 9,
@@ -252,6 +278,7 @@ impl Canvas {
             _ => 8,
         };
         w.write_all(match version {
+            16 => MAGIC16,
             14 => MAGIC14,
             12 => MAGIC12,
             11 => MAGIC11,
@@ -356,9 +383,16 @@ impl Canvas {
                 put_all(w, std::iter::repeat_n(0.0f32, n))?;
             }
         }
-        // the drain section (version 14): whether a soak section follows,
-        // and the pigment's packing per pixel
-        if version == 14 {
+        // the oils section (version 16): what follows, and the wax per pixel
+        if version == 16 {
+            put_u64(w, OILS_MARK)?;
+            put_u64(w, OILS_V)?;
+            put_u64(w, if self.drain { 2 } else { u64::from(self.soak.is_some()) })?;
+            put_all(w, wt.hide.iter().map(|h| h[9]))?;
+        }
+        // the drain section (version 14, or after the oils section): whether
+        // a soak section follows, and the pigment's packing per pixel
+        if self.drain {
             put_u64(w, DRAIN_MARK)?;
             put_u64(w, DRAIN_V)?;
             put_u64(w, u64::from(self.soak.is_some()))?;
@@ -518,7 +552,7 @@ impl Canvas {
             }
         } else {
             if c.engine >= 4 {
-                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11, PAINTC12 or PAINTC14"));
+                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11, PAINTC12, PAINTC14 or PAINTC16"));
             }
             // (an older engine's canvas: an oil ground's gloss, nothing absorbent)
             c.gloss = vec![crate::canvas::OIL_GROUND_GLOSS; n];
@@ -539,11 +573,43 @@ impl Canvas {
             }
             (false, false) => {}
         }
-        // the drain section (version 14): the switch, the pigment's packing
-        // per pixel, and whether a soak section follows
-        let raw = match version {
-            10 | 12 => true,
-            14 => {
+        // the oils section (version 16): the switch, the wax per pixel, and
+        // what follows: nothing (0), a soak section (1) or a drain section (2)
+        let mut wax = None;
+        let follows = match version {
+            16 => {
+                if get_u64(r)? != OILS_MARK {
+                    return Err(bad("checkpoint oils mark is wrong"));
+                }
+                match get_u64(r)? {
+                    OILS_V => {}
+                    v => return Err(bad(&format!("checkpoint oils section is version {v}; this easel reads version {OILS_V} only"))),
+                }
+                let follows = match get_u64(r)? {
+                    f @ 0..=2 => f,
+                    _ => return Err(bad("checkpoint oils section's next-section word is invalid")),
+                };
+                let w = get_all(r, n)?;
+                if !w.iter().all(|v| v.is_finite()) {
+                    return Err(bad("checkpoint paint wax is invalid"));
+                }
+                for (h, &k) in c.wet.hide.iter_mut().zip(&w) {
+                    h[9] = k;
+                }
+                c.oils = true;
+                wax = Some(w);
+                follows
+            }
+            14 => 2,
+            10 | 12 => 1,
+            _ => 0,
+        };
+        // the drain section (version 14, or after the oils section): the
+        // switch, the pigment's packing per pixel, and whether a soak section
+        // follows
+        let raw = match follows {
+            1 => true,
+            2 => {
                 if get_u64(r)? != DRAIN_MARK {
                     return Err(bad("checkpoint drain mark is wrong"));
                 }
@@ -564,13 +630,22 @@ impl Canvas {
                 for (h, k) in c.wet.hide.iter_mut().zip(pack.as_chunks::<5>().0) {
                     h[5..].copy_from_slice(k);
                 }
+                // (the oils section's wax and the drain section's are one)
+                if wax.is_some_and(|w| w.iter().zip(&c.wet.hide).any(|(a, h)| a.to_bits() != h[9].to_bits())) {
+                    return Err(bad("checkpoint oils and drain sections disagree on the paint's wax"));
+                }
                 c.drain = true;
                 if !raw && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
             }
-            _ => false,
+            _ => {
+                if version == 16 && r.read(&mut [0u8; 1])? != 0 {
+                    return Err(bad("checkpoint has trailing data"));
+                }
+                false
+            }
         };
         // raw formats go on with the soak section, which ends the file
         if raw {
@@ -697,6 +772,60 @@ mod tests {
         b.push(0);
         assert!(load(b).is_err(), "trailing data");
         let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(3).with_drain(true);
+        assert!(c.write_state(&mut Vec::new(), "").is_err());
+    }
+
+    /// A canvas with the oils switch is written as version 16: version 11's
+    /// bytes, then the oils section (the wax per pixel), then the drain
+    /// section if it drains too; it keeps the switch and its paint's wax and
+    /// is rewritten as it was read. The section is refused with a wrong mark
+    /// or version, a next-section word that isn't 0, 1 or 2 or doesn't say
+    /// what follows, a non-finite wax, a wax the drain section's disagrees
+    /// with, or data after it; and the switch on a canvas before engine 4.
+    #[test]
+    fn the_oils_switch_has_its_own_format() {
+        let canvas = |oils: bool, drain: bool| {
+            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(5).with_oils(oils).with_drain(drain);
+            c.absorb.iter_mut().for_each(|a| *a = 0.3);
+            c.wet.vol[0] = 1.5;
+            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let (off, on, drain, both) = (canvas(false, false), canvas(true, false), canvas(false, true), canvas(true, true));
+        assert_eq!((&off[..8], &on[..8], &drain[..8], &both[..8]), (&b"PAINTC11"[..], &b"PAINTC16"[..], &b"PAINTC14"[..], &b"PAINTC16"[..]));
+        let (n, at) = (4, off.len());
+        assert!(on[8..at] == off[8..] && on.len() == at + 24 + n * 4, "version 11's bytes, then the oils section");
+        assert!(both[8..at] == off[8..] && both[at + 24 + n * 4..] == drain[at..], "and the drain section after it");
+        let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
+        let d = load(on.clone()).unwrap();
+        assert!(d.oils && !d.drain && d.wet.hide[0] == [0.7, 0.6, 1.2, 0.4, 0.5, p, f, 0.0, q, 0.2], "{:?}", d.wet.hide[0]);
+        let e = load(both.clone()).unwrap();
+        assert!(e.oils && e.drain && e.wet.hide[0] == [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2]);
+        for (d, b) in [(d, &on), (e, &both)] {
+            let mut again = Vec::new();
+            d.write_state(&mut again, "").unwrap();
+            assert!(&again == b, "rewritten as it was read");
+        }
+        assert!(!load(off.clone()).unwrap().oils && !load(drain.clone()).unwrap().oils);
+        // (a wrong mark, version or word; a drain section said to follow
+        // that doesn't, or one that does said not to)
+        for (b, pos, v) in [(&on, at, 0u64), (&on, at + 8, 2), (&on, at + 16, 3), (&on, at + 16, 2), (&both, at + 16, 0)] {
+            let mut b = b.clone();
+            set(&mut b, pos, v);
+            assert!(load(b).is_err(), "byte {pos} = {v}");
+        }
+        let mut b = on.clone();
+        b[at + 24..at + 28].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(load(b).is_err(), "a NaN wax");
+        let mut b = both.clone();
+        b[at + 24..at + 28].copy_from_slice(&0.5f32.to_le_bytes());
+        assert!(load(b).is_err(), "the drain section's wax disagrees");
+        let mut b = on.clone();
+        b.push(0);
+        assert!(load(b).is_err(), "trailing data");
+        let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(3).with_oils(true);
         assert!(c.write_state(&mut Vec::new(), "").is_err());
     }
 

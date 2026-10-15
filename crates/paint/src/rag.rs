@@ -208,8 +208,9 @@ pub struct Mobile {
 impl std::fmt::Debug for Mobile {
     /// As derived, but the paint's properties without the pigment's packing
     /// (`Prop`'s last five) while it carries none: a rag on a canvas without
-    /// the drain switch, which lifts only the first five (`rag_contact`),
-    /// prints as it always did (`easel run --state-digest` hashes it).
+    /// the drain or oils switch, which lifts only the first five
+    /// (`rag_contact`), prints as it always did (`easel run --state-digest`
+    /// hashes it).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let n = if self.hide[5..].iter().all(|&v| v == 0.0) { 5 } else { self.hide.len() };
         f.debug_struct("Mobile")
@@ -636,9 +637,13 @@ impl Canvas {
                             got.lat[q] += l[q] * take;
                         }
                         // (without the drain switch the rag carries engine
-                        // 4's five properties; the packing is the drain's)
+                        // 4's five properties; the packing is the drain's,
+                        // the wax the oils switch's)
                         for q in 0..if self.drain { h.len() } else { 5 } {
                             got.hide[q] += h[q] * take;
+                        }
+                        if self.oils && !self.drain {
+                            got.hide[9] += h[9] * take;
                         }
                         if timed {
                             got.cure += self.wet.clock.px[i].cure * take;

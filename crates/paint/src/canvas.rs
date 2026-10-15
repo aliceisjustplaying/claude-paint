@@ -236,6 +236,9 @@ pub struct Canvas {
     /// The drain switch (`with_drain`): an absorbent ground drains paint as
     /// its pigment packs (`bristle::ground_drain`).
     pub(crate) drain: bool,
+    /// The oils switch (`with_oils`): paint carries its tubes' wax, which
+    /// dulls its gloss (`bake`).
+    pub(crate) oils: bool,
 }
 
 impl Canvas {
@@ -284,6 +287,7 @@ impl Canvas {
             engine: crate::ENGINE,
             soak: None,
             drain: false,
+            oils: false,
         }
     }
 
@@ -314,6 +318,21 @@ impl Canvas {
     /// The drain switch (`with_drain`).
     pub fn drain(&self) -> bool {
         self.drain
+    }
+
+    /// Turn on the oils switch (an easel log's `--@ oils`, engine 5 and
+    /// later): the tubes come in their colormen's oils, with their wax
+    /// (`palette::grind_of`, read by the box: `Palette::oils`), so a pile
+    /// dries at its oils' and wax's rate; on the canvas a film's wax dulls
+    /// its gloss as it bakes (`palette::WAX_MATTE`). Without it a painting
+    /// is as it always was. A checkpoint keeps it (version 16).
+    pub fn with_oils(mut self, on: bool) -> Self {
+        self.oils = on;
+        self
+    }
+    /// The oils switch (`with_oils`).
+    pub fn oils(&self) -> bool {
+        self.oils
     }
 
     /// Physical width of the painting in mm (default 700).

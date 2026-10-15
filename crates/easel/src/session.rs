@@ -36,6 +36,15 @@ pub const SKETCH_MARK: &str = "--@ sketch";
 /// engine of its own: it rides on engine 5 and later (`box_for`), and the
 /// box carries it (`Palette::drain`).
 pub const DRAIN_MARK: &str = "--@ drain";
+/// The oils switch, in the head of a session file: a painting whose log has
+/// it is painted with each box's tubes in their colormen's oils, some with
+/// wax (paint's `palette::grind_of`), which set how fast its piles dry and
+/// how matte their wax dries, and `pile{oil=}` regrinds relative to them. A
+/// new painting has it; a log without it was painted before the oils and
+/// replays as it was painted. Like the drain switch it names no engine of
+/// its own: it rides on engine 5 and later (`box_for`), and the box carries
+/// it (`Palette::oils`).
+pub const OILS_MARK: &str = "--@ oils";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -212,6 +221,16 @@ impl Session {
     pub fn with_drain(self, on: bool) -> Self {
         debug_assert!(self.log.is_empty(), "the drain switch is set before the first chunk");
         Rc::make_mut(&mut self.st.borrow_mut().tubes).drain = on;
+        self
+    }
+
+    /// Set the oils switch (`OILS_MARK`) on the box this session paints
+    /// from (tests: a new painting's is on and a replay's is its log's,
+    /// both set by `box_for`). Set before the first chunk runs.
+    #[cfg(test)]
+    pub fn with_oils(self, on: bool) -> Self {
+        debug_assert!(self.log.is_empty(), "the oils switch is set before the first chunk");
+        Rc::make_mut(&mut self.st.borrow_mut().tubes).oils = on;
         self
     }
 
@@ -419,6 +438,9 @@ impl Session {
         }
         if self.st.borrow().tubes.drain {
             let _ = writeln!(s, "{DRAIN_MARK}");
+        }
+        if self.st.borrow().tubes.oils {
+            let _ = writeln!(s, "{OILS_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -924,6 +946,12 @@ pub fn logged_drain(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == DRAIN_MARK)
 }
 
+/// Whether a session file's head has the oils switch (an `OILS_MARK` line
+/// before the first chunk).
+pub fn logged_oils(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == OILS_MARK)
+}
+
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
 /// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
@@ -966,18 +994,24 @@ fn box_list() -> String {
 /// box is configured too, it must be the same one. The box carries the
 /// engine version the painting is painted with: a new one the current
 /// (`paint::ENGINE`), an existing one its log's (`logged_engine`); and the
-/// drain switch (`DRAIN_MARK`): a new one's on, an existing one's its log's.
+/// drain and oils switches (`DRAIN_MARK`, `OILS_MARK`): a new one's on, an
+/// existing one's its log's.
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.drain = true;
+        b.oils = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
     let drain = logged_drain(text);
     if drain && engine < 5 {
         return Err(format!("the log's {DRAIN_MARK} line (the drain switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
+    let oils = logged_oils(text);
+    if oils && engine < 5 {
+        return Err(format!("the log's {OILS_MARK} line (the oils switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -995,6 +1029,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let mut b = find_box(name)?;
     b.engine = engine;
     b.drain = drain;
+    b.oils = oils;
     Ok(b)
 }
 
@@ -1057,17 +1092,22 @@ mod tests {
     #[test]
     #[cfg(tube_box)]
     fn palette_add_refreshes_recipe_and_dilutes_materials() {
-        let mut s = Session::new(48).unwrap();
-        s.run(CANVAS).unwrap();
-        s.run(r#"p = pile{{"lead white", 2}, oil="poppy", turps=0.6, thinner=0.4}
-            p = p:add{{"cobalt blue", 2}}
-            local parts = p:parts()
-            assert(#parts == 2 and parts[1][2] == 2 and parts[2][2] == 2)
-            assert(math.abs(p.thinner - 0.2) < 0.00001)
-            assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
-        let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
-        assert!((p.mix.solvent - 0.3).abs() < 1e-5);
-        assert!((p.mix.oil_rate - 0.8).abs() < 1e-5);
+        for oils in [false, true] {
+            let mut s = Session::new(48).unwrap().with_oils(oils);
+            s.run(CANVAS).unwrap();
+            s.run(r#"p = pile{{"lead white", 2}, oil="poppy", turps=0.6, thinner=0.4}
+                p = p:add{{"cobalt blue", 2}}
+                local parts = p:parts()
+                assert(#parts == 2 and parts[1][2] == 2 and parts[2][2] == 2)
+                assert(math.abs(p.thinner - 0.2) < 0.00001)
+                assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
+            let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
+            assert!((p.mix.solvent - 0.3).abs() < 1e-5);
+            // (half of it reground in poppy: with the oils switch against the
+            // box's own walnut-ground tubes, without it against linseed)
+            let poppy = if oils { paint::palette::POPPY_RATE / paint::palette::WALNUT_RATE } else { 0.6 };
+            assert!((p.mix.oil_rate - (poppy + 1.0) / 2.0).abs() < 1e-5, "oils {oils}: {}", p.mix.oil_rate);
+        }
     }
 
     #[test]
@@ -2109,6 +2149,74 @@ mod tests {
         }
     }
 
+    /// The oils switch is read from a log's head only, needs engine 5, and
+    /// rides on the box, apart from the drain switch: a log with it replays,
+    /// rebuilds and checkpoints the same canvas (version 16), its piles
+    /// drying at their tubes' oils and wax and its brushes printing the
+    /// paint's packing and wax; a log without it is as before (no mark,
+    /// version 11 or the drain's 14). A new painting's box has it.
+    #[test]
+    #[cfg(tube_box)]
+    fn the_oils_switch_comes_from_the_log_s_head() {
+        assert!(logged_oils(&format!("{ENGINE_MARK} 5\n  {OILS_MARK}  \n{MARK} 1\n")));
+        assert!(!logged_oils(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{OILS_MARK}\n")));
+        assert!(!logged_oils(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}\n{MARK} 1\n")));
+        let e = box_for(Some(&format!("{ENGINE_MARK} 4\n{OILS_MARK}\n{MARK} 1\n"))).unwrap_err();
+        assert!(e.contains(OILS_MARK), "{e}");
+        let b = box_for(Some(&format!("{ENGINE_MARK} 5\n{OILS_MARK}\n{MARK} 1\n"))).unwrap();
+        assert!(b.oils && !b.drain);
+        let b = box_for(Some(&format!("{ENGINE_MARK} 5\n{DRAIN_MARK}\n{MARK} 1\n"))).unwrap();
+        assert!(!b.oils && b.drain);
+        assert!(box_for(None).map(|b| b.oils).unwrap_or(true), "a new painting's box has its oils");
+        let strokes = r#"p = pile{{"raw umber", 1}}
+            b = brush("flat", 24)
+            b:load(p, 0.8)
+            b:stroke({{100, 200}, {900, 200}})
+            wait(30)"#;
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let mut drying = Vec::new();
+        for (oils, drain) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut live = Session::new(96).unwrap().with_oils(oils).with_drain(drain);
+            live.run(CANVAS).unwrap();
+            live.run(strokes).unwrap();
+            assert_eq!((live.canvas().unwrap().oils(), live.canvas().unwrap().drain()), (oils, drain));
+            let log = live.program("oils");
+            let head = format!("{ENGINE_MARK} {}\n{}{}\n{MARK} 1\n", paint::ENGINE, if drain { format!("{DRAIN_MARK}\n") } else { String::new() }, if oils { format!("{OILS_MARK}\n") } else { String::new() });
+            assert!(log.contains(&head), "{log}");
+            assert_eq!((logged_oils(&log), logged_drain(&log)), (oils, drain));
+            let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let bytes = state(&live);
+            assert_eq!(&bytes[..8], match (oils, drain) {
+                (true, _) => b"PAINTC16",
+                (false, true) => b"PAINTC14",
+                (false, false) => b"PAINTC11",
+            });
+            assert!(state(&replay) == bytes && replay.program("oils") == log, "oils {oils} drain {drain}: the replay is the painting");
+            let brushes = live.st.borrow_mut().live_brushes();
+            let held = format!("{:?}", brushes[0].borrow());
+            let hide = held.split("hide: [").nth(1).and_then(|h| h.split(']').next()).unwrap();
+            assert_eq!(hide.matches(',').count(), if oils || drain { 9 } else { 4 }, "oils {oils} drain {drain}: {hide}");
+            let p = match &live.globals["p"].0 {
+                Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.clone(),
+                o => panic!("p is {o:?}"),
+            };
+            drying.push(p.drying);
+            live.rebuild().unwrap();
+            assert!(state(&live) == bytes && live.program("oils") == log, "oils {oils} drain {drain}: the rebuild is the painting");
+        }
+        // (the default box's raw umber is walnut-ground: it dries at 0.70 of
+        // its pigment's rate with the switch, whatever the drain)
+        let w = paint::palette::WALNUT_RATE;
+        assert!(drying[0] == drying[2] && drying[1] == drying[3] && (drying[1] - drying[0] * w).abs() < 1e-6, "{drying:?}");
+    }
+
     #[test]
     #[cfg(tube_box)]
     fn a_sketch_s_log_says_so() {
@@ -2162,21 +2270,42 @@ mod tests {
     }
 
     /// pile{oil=} grinds the paint in that oil: its drying rate against
-    /// linseed's (paint's oil_rate_scales_drying has what the rate does).
+    /// linseed's (paint's poppy_oil_dries_slower has what the rate does).
+    /// With the oils switch a pile naming no oil is in its tubes' own (the
+    /// default box's are walnut-ground), the rate is relative to theirs, and
+    /// `print(p)` names the oil it is in; without it, as before.
     #[test]
     #[cfg(tube_box)]
     fn a_pile_s_oil_sets_its_drying_rate() {
-        let mut s = Session::new(W).unwrap();
-        s.run(CANVAS).unwrap();
-        s.run(r#"pl = pile{{"lead white", 1}}; pli = pile{{"lead white", 1}, oil="linseed"}
-                 pw = pile{{"lead white", 1}, oil="walnut"}; pp = pile{{"lead white", 1}, oil="poppy"}"#).unwrap();
-        let rate = |n: &str| match &s.globals[n].0 {
-            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().mix.oil_rate,
-            o => panic!("{n} is {o:?}"),
-        };
-        assert_eq!([rate("pl"), rate("pli"), rate("pw"), rate("pp")], [1.0, 1.0, 0.8, 0.6]);
-        let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
-        assert!(e.contains("linseed"), "{e}");
+        use paint::palette::{POPPY_RATE, WALNUT_RATE};
+        for oils in [false, true] {
+            let mut s = Session::new(W).unwrap().with_oils(oils);
+            s.run(CANVAS).unwrap();
+            s.run(r#"pl = pile{{"lead white", 1}}; pli = pile{{"lead white", 1}, oil="linseed"}
+                     pw = pile{{"lead white", 1}, oil="walnut"}; pp = pile{{"lead white", 1}, oil="poppy"}"#).unwrap();
+            // (the oil it is in: its rate against linseed's, and what
+            // `print(p)` says)
+            let pile = |n: &str| match &s.globals[n].0 {
+                Value::UserData(u) => {
+                    let p = u.borrow::<api::PileU>().unwrap();
+                    (p.mix.oil_rate, p.mix.oil_rate * p.mix.tube_oil_rate, p.recipe())
+                }
+                o => panic!("{n} is {o:?}"),
+            };
+            if oils {
+                for (n, w, says) in [("pl", WALNUT_RATE, ""), ("pli", 1.0, ", in linseed oil"), ("pw", WALNUT_RATE, ""), ("pp", POPPY_RATE, ", in poppy oil")] {
+                    let (_, r, recipe) = pile(n);
+                    assert!((r - w).abs() < 1e-5, "{n}: {r} for {w}");
+                    assert!(recipe.ends_with(&format!("medium 0{says})")), "{n}: {recipe}");
+                }
+            } else {
+                assert_eq!([pile("pl").0, pile("pli").0, pile("pw").0, pile("pp").0], [1.0, 1.0, 0.8, 0.6]);
+                assert_eq!([pile("pl").1, pile("pp").1], [1.0, 0.6]);
+                assert!(pile("pp").2.ends_with("medium 0, in poppy oil)") && pile("pli").2.ends_with("medium 0)"), "{}", pile("pp").2);
+            }
+            let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
+            assert!(e.contains("linseed"), "{e}");
+        }
     }
 
     /// A gesture's points are checked before its curve is sampled (a point

@@ -95,8 +95,9 @@ pub use shape::Shape;
 ///   weave; solvent, oil, absorbent grounds and gloss (notes/engine-4.md).
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 ///
-/// A switch rides on engine 5 without a number of its own (an easel log's
-/// head names it; a log without it replays as it was painted):
+/// Switches ride on engine 5 without a number of their own (an easel log's
+/// head names each; a log without one replays as it was painted without
+/// it):
 /// - the drain switch (`Canvas::with_drain`, `--@ drain`): an absorbent
 ///   ground drains paint as its pigment allows (`bristle::ground_drain`): to
 ///   the oil left when the pigment packs, and below it only for pigments
@@ -104,6 +105,11 @@ pub use shape::Shape;
 ///   ground while the surface keeps its oil, flow and gloss; a rag's smear
 ///   is drained as a brush's paint is, and blotting stops at the drained
 ///   floor (notes/research/pigment_oil.md).
+/// - the oils switch (`Canvas::with_oils`, `Palette::oils`, `--@ oils`): each
+///   box's tubes come in the oils their colormen ground them in, some with
+///   wax (`palette::grind_of`): walnut and poppy dry slower than linseed, wax
+///   slower still and more matte, and `pile{oil=}` regrinds relative to the
+///   tubes' own oils (notes/research/pigment_oil.md §5).
 pub const ENGINE: u32 = 5;
 
 /// Hermite smoothstep.

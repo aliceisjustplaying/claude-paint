@@ -849,7 +849,9 @@ impl Canvas {
         let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4, drain.then_some(&fluid[..]));
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
-        // an absorbent ground's pores
+        // an absorbent ground's pores; with the oils switch its wax dulls it
+        // (`palette::WAX_MATTE`: the wet paint is as it was when it set)
+        let oils = self.oils;
         if self.engine >= 4 {
             for y in 0..ex.3 - ex.1 {
                 for x in 0..ew {
@@ -858,7 +860,10 @@ impl Canvas {
                         let i = (ex.1 + y) * w + ex.0 + x;
                         // (the film as it settled here, not as it was laid)
                         let coats = t[k].max(0.0) / COAT_UM;
-                        let g = smoothstep(0.15, 1.3, oil[k]);
+                        let mut g = smoothstep(0.15, 1.3, oil[k]);
+                        if oils {
+                            g *= 1.0 - crate::palette::WAX_MATTE * self.wet.hide[i][9].clamp(0.0, 1.0);
+                        }
                         self.gloss[i] += (g - self.gloss[i]) * smoothstep(0.05, 0.6, coats);
                         self.absorb[i] *= (-coats / 0.4).exp();
                     }

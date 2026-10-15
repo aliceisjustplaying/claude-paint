@@ -446,9 +446,10 @@ impl Canvas {
     ///
     /// Strokes are planned up front, then grouped into passages (tiles), by
     /// default at least twice any stroke's reach on each axis. Engine 5 can
-    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`. The tiles
-    /// are painted in an order set by `Order` (2×2 checkerboard phases in shuffled order,
-    /// or bands along a sweep), each with its own brush; tiles whose
+    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`, or quarter
+    /// dimensions and regrouped default order with `PAINT_SMALL_TILES=quarter`.
+    /// An explicit `Order` is kept (2×2 checkerboard phases in shuffled order,
+    /// or bands along a sweep), each tile with its own brush; tiles whose
     /// footprints don't overlap run in parallel (`sched::run_ordered`), with
     /// the same result as painting them one by one.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
@@ -852,7 +853,9 @@ impl Canvas {
         let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
         let (mut tile_x, mut tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
         let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
-        if self.engine == 5 && std::env::var("PAINT_SMALL_TILES").is_ok_and(|v| v == "1") {
+        let small_tiles = if self.engine == 5 { std::env::var("PAINT_SMALL_TILES").ok() } else { None };
+        let mut quarter_tiles = false;
+        if matches!(small_tiles.as_deref(), Some("1" | "quarter")) {
             let mut counts = vec![0usize; tw * th];
             for (cx, cy, rect, _) in &plans {
                 if rect.is_some() {
@@ -861,8 +864,9 @@ impl Canvas {
                     counts[ty * tw + tx] += 1;
                 }
             }
-            let scale = crate::sched::work_tile_scale(&counts);
+            let scale = if small_tiles.as_deref() == Some("quarter") { crate::sched::quarter_work_tile_scale(&counts) } else { crate::sched::work_tile_scale(&counts) };
             if scale < 1.0 {
+                quarter_tiles = small_tiles.as_deref() == Some("quarter");
                 tile_x *= scale;
                 tile_y *= scale;
                 (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
@@ -929,7 +933,13 @@ impl Canvas {
         let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
         let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
-        let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
+        let order = if hd.order.is_some() {
+            TileOrder::Asked(order)
+        } else if quarter_tiles {
+            TileOrder::Quarter(order)
+        } else {
+            TileOrder::Default(order)
+        };
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));

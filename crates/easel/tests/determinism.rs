@@ -72,6 +72,40 @@ work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"c
 }
 
 #[test]
+fn quarter_work_tiles_are_dense_engine_five_only_and_thread_independent() {
+    let run = |engine: u32, coverage: f32, threads: usize, flag: Option<&str>| {
+        let src = dir().join(format!("quarter-tiles-{engine}-{coverage}-{threads}-{}.lua", flag.unwrap_or("default")));
+        let png = src.with_extension("png");
+        std::fs::write(
+            &src,
+            format!(
+                r#"--@ engine {engine}
+--@ chunk 1
+{CANVAS}
+--@ chunk 2
+work(rect(0, 0, 1000, 470), {{hand="broad", pile=pile{{{{"lead white", 6}}, {{"cobalt blue", 1}}, {{"yellow ochre", 0.3}}, medium=0.3}}, angle=0, coverage={coverage}}})
+"#
+            ),
+        )
+        .unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_easel"));
+        cmd.args(["run", src.to_str().unwrap(), "--out", png.to_str().unwrap(), "--width", "240"]);
+        cmd.env("RAYON_NUM_THREADS", threads.to_string()).env_remove("PAINT_SMALL_TILES");
+        if let Some(flag) = flag {
+            cmd.env("PAINT_SMALL_TILES", flag);
+        }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        (out.stdout, std::fs::read(png).unwrap())
+    };
+    let quarter = run(5, 4.5, 1, Some("quarter"));
+    assert_ne!(quarter.1, run(5, 4.5, 1, None).1, "the dense pass must exercise quarter mode");
+    assert_eq!(run(5, 4.5, 4, Some("quarter")), quarter);
+    assert_eq!(run(4, 4.5, 1, None), run(4, 4.5, 1, Some("quarter")));
+    assert_eq!(run(5, 0.02, 1, None), run(5, 0.02, 1, Some("quarter")));
+}
+
+#[test]
 fn object_keyed_tables_replay_the_same_in_every_process() {
     let program = format!(
         r#"

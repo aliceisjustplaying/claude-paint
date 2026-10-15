@@ -29,6 +29,9 @@ export function easel(studio: string, args: string[], input?: string, signal?: A
 		const env: Record<string, string> = { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" };
 		// the operator's thread budget, as an easel the runner opened gets it
 		if (process.env.RAYON_NUM_THREADS !== undefined) env.RAYON_NUM_THREADS = process.env.RAYON_NUM_THREADS;
+		for (const key of ["EASEL_ASYNC_DISPLAY", "EASEL_DISPLAY_THREADS"]) {
+			if (process.env[key] !== undefined) env[key] = process.env[key];
+		}
 		// its own process group: a timeout or an abort stops it and anything it started
 		const p = spawn(join(studio, "bin", "easel"), args, { cwd: studio, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
 		const kill = () => {
@@ -266,9 +269,12 @@ export function renameLooks(studio: string, said: string): { said: string; paths
 		// (the whole path, to its last ".png": a folder's name may hold one too)
 		const m = /^(.+\.png)( \(\d+x\d+.*)?$/.exec(line);
 		if (!m || !isFile(resolve(studio, m[1]))) return line;
-		const path = join(dirname(m[1]), `${randomUUID()}.png`);
-		renameSync(resolve(studio, m[1]), resolve(studio, path));
-		renameCompanions(studio, m[1], path);
+		const stable = isFile(resolve(studio, dirname(m[1]), ".display", basename(m[1])));
+		const path = stable ? m[1] : join(dirname(m[1]), `${randomUUID()}.png`);
+		if (!stable) {
+			renameSync(resolve(studio, m[1]), resolve(studio, path));
+			renameCompanions(studio, m[1], path);
+		}
 		paths.push(path);
 		// (without the machine's seconds, as `renameLook`)
 		return path + (m[2] ?? "").replace(/^ \((\d+x\d+), \d+(?:\.\d+)?s\)/, " ($1)");
@@ -285,9 +291,12 @@ export function renameLook(studio: string, said: string): { said: string; path: 
 	const lines = said.split("\n");
 	const m = /^(.*\.png)(?: \((\d+x\d+)(?:, \d+(?:\.\d+)?s)?\))?$/.exec(lines[lines.length - 1]);
 	if (!m) return { said, path: lines[lines.length - 1].replace(/ \(.*\)$/, "") };
-	const path = join(dirname(m[1]), `${randomUUID()}.png`);
-	renameSync(resolve(studio, m[1]), resolve(studio, path));
-	renameCompanions(studio, m[1], path);
+	const stable = isFile(resolve(studio, dirname(m[1]), ".display", basename(m[1])));
+	const path = stable ? m[1] : join(dirname(m[1]), `${randomUUID()}.png`);
+	if (!stable) {
+		renameSync(resolve(studio, m[1]), resolve(studio, path));
+		renameCompanions(studio, m[1], path);
+	}
 	lines[lines.length - 1] = m[2] ? `${path} (${m[2]})` : path;
 	return { said: lines.join("\n"), path };
 }

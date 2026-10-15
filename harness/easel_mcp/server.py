@@ -108,6 +108,9 @@ class Easel:
         env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "")}
         if "RAYON_NUM_THREADS" in os.environ:
             env["RAYON_NUM_THREADS"] = os.environ["RAYON_NUM_THREADS"]
+        for key in ("EASEL_ASYNC_DISPLAY", "EASEL_DISPLAY_THREADS"):
+            if key in os.environ:
+                env[key] = os.environ[key]
         binary = self.studio / "bin/easel"
         if (self.studio / "bin/watercolor-studio").is_file():
             binary = self.studio / "bin/watercolor-studio"
@@ -188,11 +191,13 @@ class Easel:
                 lines.append(line)
                 continue
             old = Path(match[1])
-            new = old.with_name(f"{uuid4()}.png")
-            source.rename(self.studio / new)
+            stable = (source.parent / ".display" / source.name).is_file()
+            new = old if stable else old.with_name(f"{uuid4()}.png")
+            if not stable:
+                source.rename(self.studio / new)
             for folder in (".gallery", ".relief"):
                 sibling = source.parent / folder / source.name
-                if sibling.is_file():
+                if not stable and sibling.is_file():
                     try:
                         sibling.rename(sibling.with_name(new.name))
                     except OSError as error:

@@ -235,22 +235,34 @@
     #speed, #pos { display:none } #togglecode { font-size:10px; padding:2px 7px }
     footer { padding:4px 8px calc(4px + env(safe-area-inset-bottom)) }
   }
-  /* phone, portrait (not the stream): the painting stays pinned at the top while everything else (close-up,
-     scratch canvas, palette, journal) scrolls and follows beneath it. The view pane dissolves so the painting can
-     stick to main. While the painter works on scratch, the painting is in the corner picture, so that one moves first and is pinned. */
+  /* phone, portrait (not the stream): the view pane stays pinned at the top of the one scrolling column and the journal
+     scrolls beneath it. The painting is big on the left; what goes with it (a close-up, the other canvas, the palette)
+     is small in a column on its right, so the journal is all that scrolls. The pane sticks as far above the top as the
+     display-light buttons are tall, so they scroll away. While the painter works on scratch, the corner picture holds
+     the painting: it takes the painting's place and the scratch canvas joins the column. */
   @media (max-width: 720px) and (min-height: 501px) and (orientation: portrait) {
-    body.pinpic main { position:relative; display:flex; flex-direction:column }
-    body.pinpic :is(#lighting, #whole, #other, #pal, #pip, #pband, #journal) { flex:none }
-    body.pinpic #lighting { order:-2 } body.pinpic #pip.painting { order:-1 }
-    body.pinpic #viewpane, body.pinpic #view, body.pinpic #viewpane:has(#pip:not([hidden])) { display:contents }
-    body.pinpic #whole { position:sticky; top:0; z-index:3; background:#070708; padding:4px 4px 3px; border-bottom:1px solid var(--line) }
-    body.pinpic #whole img { max-height:42dvh; object-fit:contain }
-    body.pinpic #lighting, body.pinpic #other, body.pinpic #pal, body.pinpic #pband { background:#070708 } body.pinpic #other, body.pinpic #pal { padding:4px }
-    body.pinpic #pip { margin:4px 8px 6px }
-    body.pinpic:has(#pip.painting:not([hidden])) #whole { position:relative; z-index:auto }
-    body.pinpic #pip.painting { position:sticky; top:0; z-index:3; margin:0; border:none; border-bottom:1px solid var(--line); border-radius:0; background:#070708; grid-template-columns:minmax(0,1fr); gap:3px; padding:4px 4px 3px }
-    body.pinpic #pip.painting img { width:100%; height:auto; max-height:42dvh; object-fit:contain }
-    body.pinpic #pip.painting figcaption { order:2; text-align:center; font-size:10.5px }
+    body.pinpic main { display:flex; flex-direction:column }
+    body.pinpic #journal { flex:none }
+    body.pinpic #viewpane, body.pinpic #viewpane:has(#pip:not([hidden])) { flex:none; position:sticky; top:-34px; z-index:3; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:34px repeat(4,auto) 1fr; column-gap:6px; align-items:start; padding:0 4px 4px; border-bottom:1px solid var(--line) }
+    body.pinpic #viewpane:has(#other:not([hidden]), #pal:not([hidden]), #pip:not([hidden]), #pband:not([hidden])) { grid-template-columns:minmax(0,1fr) 32% }
+    body.pinpic #view { display:contents }
+    body.pinpic #lighting { grid-column:1 / -1; grid-row:1; height:34px; padding:0 }
+    body.pinpic #whole, body.pinpic #pip.painting { grid-column:1; grid-row:2 / -1; margin:0; padding:0; border:none; border-radius:0; background:none; display:flex; flex-direction:column; gap:3px }
+    body.pinpic :is(#whole, #pip.painting) img { width:100%; height:auto; max-height:42dvh; object-fit:contain }
+    body.pinpic :is(#whole, #pip.painting) figcaption { order:2; text-align:center; font-size:10.5px }
+    body.pinpic :is(#other, #pal, #pip:not(.painting), #pband), body.pinpic:has(#pip.painting:not([hidden])) #whole { grid-column:2; grid-row:auto; min-width:0; margin:0 0 6px; padding:0; border:none; border-radius:0; background:none }
+    body.pinpic :is(#other, #pal, #pip:not(.painting)), body.pinpic:has(#pip.painting:not([hidden])) #whole { display:flex; flex-direction:column; align-items:stretch; gap:2px }
+    body.pinpic :is(#other, #pal, #pip:not(.painting)) .box, body.pinpic:has(#pip.painting:not([hidden])) #whole .box { flex:none; height:auto }
+    body.pinpic :is(#other, #pal, #pip:not(.painting)) img, body.pinpic:has(#pip.painting:not([hidden])) #whole img { position:relative; display:block; width:100%; height:auto; max-height:52px; object-fit:contain; object-position:center }
+    body.pinpic:has(#pip.painting:not([hidden])) #whole .box { min-height:48px } body.pinpic:has(#pip.painting:not([hidden])) #nopic { font-size:11px; padding:0 }
+    body.pinpic :is(#cap2, #cap3, #pip:not(.painting) figcaption), body.pinpic:has(#pip.painting:not([hidden])) #cap { order:2; font:600 10px/1.3 -apple-system,system-ui,sans-serif; color:var(--soft); text-align:left; white-space:normal; overflow-wrap:anywhere }
+    body.pinpic :is(#cap2, #cap3) b { display:inline; font-size:9.5px; margin-right:0 }
+    body.pinpic #pband:not(.expanded) { display:grid; grid-template-columns:repeat(auto-fill,minmax(12px,1fr)); gap:2px 3px }
+    body.pinpic #pband:not(.expanded) .palette-chip, body.pinpic #pband:not(.expanded) :is(canvas:first-child, .palette-swatch) { height:13px }
+    body.pinpic #pband .lbl { font-size:9.5px } body.pinpic #pband .palette-toggle { font-size:10.5px; line-height:18px }
+    body.pinpic #pband.expanded { grid-column:1 / -1; grid-template-columns:repeat(auto-fill,minmax(44px,1fr)); gap:2px 4px; margin:4px 0 0; padding-top:2px; border-top:1px solid var(--line) }
+    body.pinpic #pband.expanded .palette-chip { height:30px; gap:1px } body.pinpic #pband.expanded :is(canvas:first-child, .palette-swatch) { height:14px }
+    body.pinpic #pband.expanded .pile-name { height:12px } body.pinpic #pband.expanded span.pile-name { height:13px; font-size:9.5px; line-height:13px }
   }
 </style></head>
 <body class="nocode">

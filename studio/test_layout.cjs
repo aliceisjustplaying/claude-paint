@@ -39,7 +39,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type':type }); res.end(body);
 });
 
-const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], [440, 956], [375, 667], [874, 402]];
+const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [390, 844], [393, 852], [402, 874], [430, 932], [440, 956], [375, 667], [874, 402]];
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ channel:'chrome', headless:true });
@@ -61,6 +61,21 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
       await page.evaluate(() => { live = false; show(events.length - 1); });
       await page.waitForFunction(() => typingThought === null);
       await page.waitForFunction(() => ['img', 'img2', 'pipimg'].every(id => document.getElementById(id).complete && document.getElementById(id).naturalWidth > 0));
+      if (mobile && height > width && !stream && !baseline) {
+        for (const top of [0, 1e9]) {
+          await scroller.evaluate((el, t) => el.scrollTop = t, top);
+          const pinned = await page.evaluate(() => {
+            const main = document.querySelector('main').getBoundingClientRect(), pane = document.getElementById('viewpane').getBoundingClientRect();
+            const shown = ['whole', 'other', 'pal', 'pip', 'pband'].filter(id => !document.getElementById(id).hidden);
+            const loose = shown.filter(id => { const r = document.getElementById(id).getBoundingClientRect(); return r.top < main.top - 1 || r.bottom > pane.bottom + 1; });
+            return { shown, loose, share:(pane.bottom - main.top) / main.height, journalGap:document.getElementById('journal').getBoundingClientRect().top - pane.bottom };
+          });
+          assert.deepEqual(pinned.shown, ['whole', 'other', 'pip', 'pband'], label + ': the fixture shows a close-up, the scratch canvas and the palette');
+          assert.deepEqual(pinned.loose, [], label + ': the close-up, scratch canvas and palette stay pinned beside the painting');
+          assert(pinned.share <= 0.5, label + ': the pinned view leaves the transcript most of the column');
+          if (top === 0) assert(Math.abs(pinned.journalGap) <= 1, label + ': the transcript starts right under the pinned view');
+        }
+      }
       if (mobile) {
         if (baseline) await page.locator('.palette-toggle').evaluate(el => el.click());
         else await page.locator('.palette-toggle').click();

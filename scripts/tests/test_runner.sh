@@ -353,11 +353,17 @@ with patch.object(sys, "platform", "darwin"):
     runner = runpy.run_path(sys.argv[1])
     assert runner["timeout_scale"]() == 1.0
 with patch.object(sys, "platform", "linux"):
-    for cores, expected in [(4, 4.0), (8, 2.0), (32, 1.0)]:
+    for cores, expected in [(1, 16.0), (2, 8.0), (4, 4.0), (8, 4.0), (16, 4.0), (32, 4.0)]:
         with patch.object(os, "sched_getaffinity", return_value=set(range(cores)), create=True):
-            assert runner["timeout_scale"]() == expected
+            runner = runpy.run_path(sys.argv[1])
+            assert runner["timeout_scale"]() == expected, (cores, runner["timeout_scale"]())
+            assert runner["OUTER_LIMIT"] == 600 * expected
+            steps = runner["read_list"](os.path.join(runner["REPO"], "notes/speed/test_lists/all.tsv"))
+            limits = {s["name"]: s["limit"] for s in steps}
+            for name, base in [("cargo-test", 60), ("slow-thin-blend", 180), ("thinner-all", 300), ("finish-policy", 60)]:
+                assert limits[name] == base * expected
 PY
-ok "timeout scaling: explicit and Linux CPU defaults, unchanged Mac budgets, invalid scales refused"
+ok "timeout scaling: explicit and Linux four-core budget floor, unchanged Mac budgets, invalid scales refused"
 fi
 
 if want 20; then

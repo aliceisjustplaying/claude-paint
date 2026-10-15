@@ -448,7 +448,8 @@ mod tests {
         assert_eq!(Footprint::tile_reach([], 2.0), (0.0, 0.0));
     }
 
-    /// An engine 7 covering pass paints the same on one worker as on four.
+    /// An engine 7 covering pass leaves the same canvas state (its whole
+    /// checkpoint) on one worker as on four.
     #[test]
     fn work_paints_the_same_on_any_number_of_workers() {
         use crate::handling::Handling;
@@ -459,7 +460,9 @@ mod tests {
                 let m = Mask::from_fn(c.frame(), |x, y| if (x - 500.0).abs() < 380.0 && (y - 500.0).abs() < 300.0 + 0.3 * x { 1.0 } else { 0.0 });
                 c.work(&m, &Handling::new(Tool::filbert(24.0)).color(|_, _| hex("#803020")).length(30.0, 300.0), 5);
                 c.work(&m, &Handling::new(Tool::hog_flat(12.0)).color(|x, _| if x < 450.0 { hex("#a9785a") } else { hex("#50607a") }).coverage(3.0), 6);
-                c.wet.vol.iter().chain(c.wet.cover.iter()).map(|v| v.to_bits()).collect::<Vec<_>>()
+                let mut state = Vec::new();
+                c.write_state(&mut state, "").unwrap();
+                state
             })
         };
         assert_eq!(paint(1), paint(4));

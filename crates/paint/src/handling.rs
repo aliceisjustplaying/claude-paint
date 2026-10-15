@@ -959,6 +959,9 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
+                if crate::engine7::stats() {
+                    crate::engine7::trace_stroke(&surf, &held, &g, id);
+                }
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
                 b = crate::sched::union(b, r);
             }

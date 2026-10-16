@@ -74,6 +74,7 @@ def main():
     parser.add_argument("--interval", type=float, default=2)
     args = parser.parse_args()
     studio = args.studio.resolve(strict=True)
+    args.work, args.convert = args.work.resolve(), args.convert.resolve()
     recording = json.loads((studio / ".agents/recording.json").read_text())
     args.work.mkdir(parents=True, exist_ok=True)
     transcript = args.work / "transcript.jsonl"

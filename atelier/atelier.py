@@ -362,7 +362,7 @@ class Atelier:
             shutil.copy2(log, work / "painting.lua")
             manifest.update(finished=finished, sittings=sittings, canvas=canvas, check=result)
             write_json(work / "manifest.json", manifest)
-        self.history(f"{sid}: painting {n} hung as wall {number} ({result})")
+        self.history(f"{sid}: painting {n} hung as wall {number} ({result.split(':')[1].strip()} replay check)")
         self.commit(sid, n, work)
         return work
 

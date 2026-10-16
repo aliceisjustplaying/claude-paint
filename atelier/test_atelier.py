@@ -185,7 +185,7 @@ def test_finish_hangs_the_wall_carries_the_notebook_and_commits(world):
     assert not [f for f in committed if f.endswith(".png")]
     record = (world.data / "stillwet-runs/atelier/works/claude-opus-5-5-001/manifest.json").read_text()
     assert json.loads(record)["folder"] == "~/src/a/" + folder.name
-    assert "hung as wall 1 (check: ok)" in (world.root / "history.md").read_text()
+    assert "hung as wall 1 (ok replay check)" in (world.root / "history.md").read_text()
 
     second = world.start(OPUS, prepare=True)
     folder2 = Path(json.loads((second / "manifest.json").read_text())["folder"])

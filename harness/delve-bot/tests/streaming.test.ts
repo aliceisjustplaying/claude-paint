@@ -153,7 +153,7 @@ test("the stream's wall-clock limit stops the painter as a time limit and keeps 
 
 test("a live stream's wall-clock limit waits for the painter's own time stop", async t => {
   const f = await fixture(t, true);
-  f.config.streaming.maxSeconds = 4;
+  f.config.streaming.maxSeconds = 10;
   const result = await f.streaming.run(f.job, s => new Promise(resolve =>
     s.addEventListener("abort", () => setTimeout(() => resolve(s.reason), 1000), { once: true })));
   assert.equal(result, "time");

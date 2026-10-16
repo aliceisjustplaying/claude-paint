@@ -82,6 +82,20 @@ export class UsageMeter {
   }
 }
 
+/** Stops the studio's easel server (named in its session lock) and waits for it to exit; a server still replaying has no socket for `close`. */
+export async function stopServer(dir: string): Promise<void> {
+  let pid: number;
+  try {
+    pid = Number(readFileSync(join(dir, "out/easel/painting/lock"), "utf8").trim());
+    if (!readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(join(dir, "bin/easel"))) return;
+    process.kill(pid, "SIGTERM");
+  } catch { return; }
+  for (let waited = 0; existsSync(`/proc/${pid}`); waited += 100) {
+    if (waited === 10000) try { process.kill(pid, "SIGKILL"); } catch { /* gone */ }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
 export function overLimit(usage: Usage, studio: Config["studio"]): string | null {
   if (studio.maxInputTokens != null && usage.input >= studio.maxInputTokens) return "input_tokens";
   if (studio.maxOutputTokens != null && usage.output >= studio.maxOutputTokens) return "output_tokens";
@@ -147,10 +161,7 @@ export class HousePainter implements Painter {
     if (left() <= 0) return { stopped: "time" };
     try { await exec(join(dir, "bin/easel"), ["open"], { cwd: dir, env, timeout: Math.min(1800000, left()), maxBuffer: 64 * 1024 * 1024, signal }); }
     catch (error) {
-      try {
-        const pid = Number(readFileSync(join(dir, "out/easel/painting/lock"), "utf8").trim());
-        if (readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(join(dir, "bin/easel"))) process.kill(pid, "SIGTERM");
-      } catch { /* no server */ }
+      await stopServer(dir);
       if (signal.aborted) return { stopped: reason() };
       if (left() <= 0) return { stopped: "time" };
       throw error;
@@ -193,7 +204,7 @@ export class HousePainter implements Painter {
     const png = join(dir, "out/easel/painting/painting.png"), jpeg = join(sessions, "painting.jpg");
     rmSync(png, { force: true });
     try {
-      await exec(easel, ["open"], { cwd: dir, timeout: 1800000, maxBuffer: 64 * 1024 * 1024 });
+      await exec(easel, ["open"], { cwd: dir, timeout: 1800000, maxBuffer: 64 * 1024 * 1024 }).catch(async (error: unknown) => { await stopServer(dir); throw error; });
       await exec(easel, ["save"], { cwd: dir, timeout: 600000 });
     }
     finally { await exec(easel, ["close"], { cwd: dir, timeout: 60000 }).catch(() => {}); }

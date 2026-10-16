@@ -125,5 +125,39 @@
       },
       "required": []
     }
+  },
+  {
+    "name": "reference",
+    "description": "Search the studio's reference library after choosing a subject or technical question. Give query to find notes, then id to read a result. Text comes in pages; follow next_page until it is null.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Words to find in the reference text."
+        },
+        "id": {
+          "type": "string",
+          "description": "The id of a search result to read."
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The page to read, starting at 1."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reference_list",
+    "description": "List the studio's available references after choosing a subject or technical question. Read an entry with reference using its id.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
   }
 ]

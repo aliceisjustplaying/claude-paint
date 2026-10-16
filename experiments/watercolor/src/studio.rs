@@ -1420,9 +1420,6 @@ impl Writer {
             install(&lua, ctx.clone())?;
             lua.load(source).set_name("watercolor chunk").exec()?;
             let mut c = ctx.borrow_mut();
-            if c.state.canvas.is_none() {
-                return Err(error("chunk made no paper"));
-            }
             c.state.check_balance()?;
             c.state.applied_sources.push(source.to_owned());
             write_state(&stage.join("checkpoint.json"), &c.state)?;

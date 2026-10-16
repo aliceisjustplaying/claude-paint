@@ -14,6 +14,8 @@ painting chunk defines, and every alias it makes of a painting name, becomes a p
 for the chunks after it. It errs toward "paints": a chunk that only defines a helper around a
 verb counts, as does one that mentions a verb it doesn't call. A chunk that queries, mixes,
 loads, waits or defines masks and nothing else doesn't.
+
+On watercolor paper, `paper` and `drop` and the brush's `wash` and `lift` make marks too.
 """
 import re
 
@@ -21,6 +23,8 @@ VERBS = {"canvas", "work", "blend", "stipple", "lose", "erase", "fix",
          "varnish", "cracks", "relief"}   # finishing verbs of older builds (not in the painter build)
 METHODS = {"stroke", "gesture", "touch", "spatter", "paint", "sketch", "line", "rule", "hatch",
            "lay", "scrape", "wipe", "blot"}
+WATERCOLOR_VERBS = VERBS | {"paper", "drop"}
+WATERCOLOR_METHODS = METHODS | {"wash", "lift"}
 
 _CHUNK = re.compile(r"^--@ chunk (\d+)", re.M)
 # Long comments/strings first, then comments, then quoted strings (with escapes).
@@ -63,9 +67,9 @@ def split_chunks(source: str) -> list[tuple[int, str]]:
             for i, m in enumerate(marks)]
 
 
-def classify(source: str) -> list[tuple[int, bool]]:
+def classify(source: str, verbs=VERBS, marks=METHODS) -> list[tuple[int, bool]]:
     """(chunk number, paints) for each chunk of a log, in order."""
-    names, methods = set(VERBS), set(METHODS)
+    names, methods = set(verbs), set(marks)
     out = []
     for n, chunk in split_chunks(source):
         code = _code(chunk)
@@ -86,5 +90,5 @@ def classify(source: str) -> list[tuple[int, bool]]:
     return out
 
 
-def count_painting_chunks(source: str) -> int:
-    return sum(1 for _, paints in classify(source) if paints)
+def count_painting_chunks(source: str, verbs=VERBS, marks=METHODS) -> int:
+    return sum(1 for _, paints in classify(source, verbs, marks) if paints)

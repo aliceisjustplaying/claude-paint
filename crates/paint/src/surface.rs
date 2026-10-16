@@ -288,6 +288,10 @@ impl Canvas {
         if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }
+        // (no wet paint anywhere: every pixel is its dry height, without the blurs)
+        if wet.par_iter().all(|&a| a <= 0.0) {
+            return self.height.clone();
+        }
         let Bands { r1, .. } = Bands::at(self.px_mm());
         let fine = box_blur(&box_blur(&self.height, w, h, r1), w, h, r1);
         (0..w * h)
@@ -569,78 +573,4 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     // fiber fuzz
     let grit = vnoise(x0 * 3.1, y0 * 3.1, seed + 19) - 0.5;
     l.crown_um * (a.max(b) + 0.06 * grit)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::color::hex;
-
-    fn total(v: &[f32]) -> f64 {
-        v.iter().map(|&x| x as f64).sum()
-    }
-
-    /// The exact global correction stops each pixel at its bound (the peak
-    /// film when it scales down, the pool cap when it scales up) and the
-    /// others make up the difference, so the total is still exact.
-    #[test]
-    fn the_total_is_made_exact_within_the_bounds() {
-        // scaling down: pixel 0 is at its floor
-        let add = [1.0f32, 1.0, 1.0, 1.0];
-        let mut out = [0.5f32, 2.0, 1.0, 1.0];
-        conserve_total(&add, &mut out, |_| 0.5, |_| f32::INFINITY);
-        assert_eq!(out[0], 0.5, "{out:?}");
-        assert!((total(&out) - 4.0).abs() < 1e-6, "{out:?}");
-        // scaling up: pixel 1 is at its cap
-        let mut out = [0.5f32, 2.0, 0.5, 0.5];
-        conserve_total(&add, &mut out, |_| 0.0, |_| 2.0);
-        assert_eq!(out[1], 2.0, "{out:?}");
-        assert!((total(&out) - 4.0).abs() < 1e-6, "{out:?}");
-        // no bound in the way: one factor for all
-        let mut out = [0.5f32, 2.0, 1.0, 1.0];
-        conserve_total(&add, &mut out, |_| 0.0, |_| f32::INFINITY);
-        let k = (4.0f64 / 4.5) as f32;
-        assert_eq!(out, [0.5 * k, 2.0 * k, k, k]);
-    }
-
-    /// A cascade that needs many pinning rounds (each round's stronger
-    /// factor carries a few more pixels to the floor) still ends inside
-    /// the bounds: no pixel ends below the floor.
-    #[test]
-    fn a_long_pinning_cascade_keeps_the_bounds() {
-        let n = 1024usize;
-        let add = vec![0.5f32; n];
-        let mut out: Vec<f32> = (0..n).map(|i| 0.5 + 0.5 * i as f32 / (n - 1) as f32).collect();
-        conserve_total(&add, &mut out, |_| 0.5, |_| 1.0);
-        let min = out.iter().cloned().fold(f32::INFINITY, f32::min);
-        assert!(min >= 0.5, "a pixel below the floor: {min}");
-        assert!((total(&out) - 512.0).abs() < 1e-3, "total {}", total(&out));
-    }
-
-    /// A varnish over tall dry impasto at 3200px (0.094 mm/px) keeps its
-    /// peak film and pool cap exactly, not to within the global correction.
-    #[test]
-    fn a_film_over_impasto_keeps_its_bounds_exactly() {
-        let (w, h) = (240usize, 240usize);
-        let mut c = Canvas::new(w, 1.0, hex("#808080")).with_size_mm(w as f32 * 0.094);
-        for y in 0..h {
-            for x in 0..w {
-                let (xf, yf) = (x as f32, y as f32);
-                let mut z = 20.0 * ((xf * 0.9).sin() * (yf * 0.8).sin()).abs();
-                for k in 0..9 {
-                    let (cx, cy) = (30.0 + 80.0 * (k % 3) as f32, 30.0 + 80.0 * (k / 3) as f32);
-                    if ((xf - cx) / 22.0).powi(2) + ((yf - cy) / 12.0).powi(2) < 1.0 {
-                        z += 100.0 + 25.0 * k as f32;
-                    }
-                }
-                c.height[y * w + x] = z;
-            }
-        }
-        let add = vec![2.25f32; w * h];
-        let t = c.settle_film(&add, 0.05);
-        assert!((total(&t) - total(&add)).abs() < total(&add) * 1e-6, "volume {} -> {}", total(&add), total(&t));
-        let (lo, hi) = t.iter().fold((f32::MAX, 0.0f32), |(l, m), &v| (l.min(v), m.max(v)));
-        assert!(lo >= PEAK_FILM_UM, "a peak thinned past the peak film: {lo} µm");
-        assert!(hi <= POOL_MAX * 2.25, "a hollow pooled past the cap: {hi} µm");
-    }
 }

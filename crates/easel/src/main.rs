@@ -1101,6 +1101,13 @@ impl Server {
             #[cfg(feature = "state-store")] committed,
             #[cfg(feature = "state-store")] state_failed: false,
         };
+        // the paper-and-pastel switch: a log's own; a new painting's on, a scratch canvas's
+        // its painting's
+        let paper = match &text {
+            Some(text) => session::logged_paper(text),
+            None => like.is_none_or(|s| s.st.borrow().paper),
+        };
+        srv.s.set_paper(paper).map_err(|e| e.to_string())?;
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1404,6 +1411,7 @@ impl Server {
         self.ready()?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
+            paper: self.s.st.borrow().paper,
             tubes: self.s.tube_box(),
             chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
             live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
@@ -1853,7 +1861,7 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
-    let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
+    let mut s = Session::replay_with(width, tubes).and_then(|s| s.with_paper(session::logged_paper(&text))).map_err(|e| e.to_string())?;
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();

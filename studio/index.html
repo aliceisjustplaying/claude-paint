@@ -235,22 +235,26 @@
     #speed, #pos { display:none } #togglecode { font-size:10px; padding:2px 7px }
     footer { padding:4px 8px calc(4px + env(safe-area-inset-bottom)) }
   }
-  /* phone, portrait (not the stream): the painting stays pinned at the top while everything else (close-up,
-     scratch canvas, palette, journal) scrolls and follows beneath it. The view pane dissolves so the painting can
-     stick to main. While the painter works on scratch, the painting is in the corner picture, so that one moves first and is pinned. */
+  /* phone, portrait (not the stream): the view pane stays pinned at the top of the one scrolling column and the journal
+     scrolls beneath it. It holds what the desktop view holds, picked the same way: the big picture on the left (the
+     painting, or the scratch canvas while the painter works on it), the corner picture and a close-up small in a
+     column on its right, and the palette band across the bottom. The pane sticks as far above the top as the
+     display-light buttons are tall, so they scroll away. */
   @media (max-width: 720px) and (min-height: 501px) and (orientation: portrait) {
-    body.pinpic main { position:relative; display:flex; flex-direction:column }
-    body.pinpic :is(#lighting, #whole, #other, #pal, #pip, #pband, #journal) { flex:none }
-    body.pinpic #lighting { order:-2 } body.pinpic #pip.painting { order:-1 }
-    body.pinpic #viewpane, body.pinpic #view, body.pinpic #viewpane:has(#pip:not([hidden])) { display:contents }
-    body.pinpic #whole { position:sticky; top:0; z-index:3; background:#070708; padding:4px 4px 3px; border-bottom:1px solid var(--line) }
-    body.pinpic #whole img { max-height:42dvh; object-fit:contain }
-    body.pinpic #lighting, body.pinpic #other, body.pinpic #pal, body.pinpic #pband { background:#070708 } body.pinpic #other, body.pinpic #pal { padding:4px }
-    body.pinpic #pip { margin:4px 8px 6px }
-    body.pinpic:has(#pip.painting:not([hidden])) #whole { position:relative; z-index:auto }
-    body.pinpic #pip.painting { position:sticky; top:0; z-index:3; margin:0; border:none; border-bottom:1px solid var(--line); border-radius:0; background:#070708; grid-template-columns:minmax(0,1fr); gap:3px; padding:4px 4px 3px }
-    body.pinpic #pip.painting img { width:100%; height:auto; max-height:42dvh; object-fit:contain }
-    body.pinpic #pip.painting figcaption { order:2; text-align:center; font-size:10.5px }
+    body.pinpic main { display:flex; flex-direction:column }
+    body.pinpic #journal { flex:none }
+    body.pinpic #viewpane, body.pinpic #viewpane:has(#pip:not([hidden])) { flex:none; position:sticky; top:-34px; z-index:3; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:34px repeat(3,auto) 1fr; column-gap:6px; align-items:start; padding:0 4px; border-bottom:1px solid var(--line) }
+    body.pinpic #viewpane:has(#other:not([hidden]), #pal:not([hidden]), #pip:not([hidden])) { grid-template-columns:minmax(0,1fr) 32% }
+    body.pinpic #view { display:contents }
+    body.pinpic #lighting { grid-column:1 / -1; grid-row:1; height:34px; padding:0 }
+    body.pinpic #viewpane #view #whole { grid-column:1; grid-row:2 / -1; padding-bottom:4px; display:flex; flex-direction:column; gap:3px }
+    body.pinpic #whole img { max-height:36dvh; object-fit:contain }
+    body.pinpic #viewpane :is(#view #other, #view #pal, #pip) { grid-column:2; grid-row:auto; min-width:0; max-height:none; margin:0 0 6px; padding:0; border:none; border-radius:0; background:none; display:flex; flex-direction:column; align-items:stretch; gap:2px }
+    body.pinpic #viewpane :is(#view #other, #view #pal) .box { flex:none; height:auto }
+    body.pinpic #viewpane :is(#view #img2, #view #img3, #pipimg) { position:relative; display:block; width:100%; height:auto; max-height:52px; object-fit:contain; object-position:center }
+    body.pinpic #viewpane :is(#view #cap2, #view #cap3, #pipcap) { order:2; font:600 10px/1.3 -apple-system,system-ui,sans-serif; color:var(--soft); text-align:left; white-space:normal; overflow-wrap:anywhere }
+    body.pinpic #viewpane :is(#view #cap2, #view #cap3) b { display:inline; font-size:9.5px; margin-right:0 }
+    body.pinpic #viewpane #pband { grid-column:1 / -1; grid-row:auto; margin:0 -4px }
   }
 </style></head>
 <body class="nocode">
@@ -474,9 +478,10 @@ function displayPic(im, e, caption, label) {
   const lightName = displayLight, preset = DISPLAY_LIGHTS[lightName], url = preset.image && preset.image(e.img);
   const modes = ((e.look || '').match(/mode (.*?)(?=, (?:crop|size|grid|light|compare|hold|at|palette|survey|scratch) |$)/) || [])[1] || '';
   const eligible = !e.ref && !isPalette(e) && !/light|compare|hold/.test(e.look || '') && !modes.split(',').some(m => m.trim() && !['normal', 'color'].includes(m.trim()));
+  if (eligible && preset.image && e.display_pending) return;
   const lit = eligible && preset.image && e[lightName];
   const urls = [viewURL(e.img), imgURL(e.img), thumbURL(e.img)];
-  if (lit) urls.unshift(url);
+  if (lit) { if (e.display_pending === false) urls.length = 0; urls.unshift(url); }
   const describe = () => {
     if (im === $('img') && im.getAttribute('src') && im.dataset.loadedWant !== urls[0]) return;
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
@@ -568,7 +573,7 @@ async function poll() {
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];
-    for (let i = 0; i < events.length && i < r.events.length; i++) if (HOSTED ? JSON.stringify(r.events[i]) !== JSON.stringify(events[i]) : r.events[i].out !== events[i].out || r.events[i].err !== events[i].err || r.events[i].scratch_reset !== events[i].scratch_reset) ups.push([i, r.events[i]]);
+    for (let i = 0; i < events.length && i < r.events.length; i++) if (HOSTED ? JSON.stringify(r.events[i]) !== JSON.stringify(events[i]) : r.events[i].out !== events[i].out || r.events[i].err !== events[i].err || r.events[i].scratch_reset !== events[i].scratch_reset || r.events[i].display_pending !== events[i].display_pending || r.events[i].gallery !== events[i].gallery || r.events[i].relief !== events[i].relief) ups.push([i, r.events[i]]);
     r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
   epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext; if (r.web) WEB = r.web; if (r.nupdates !== undefined) nUpd = r.nupdates;
   for (const [i, e] of ups) if (i < events.length) { events[i] = e; invalidateReplay(i); }
@@ -1218,6 +1223,7 @@ function picturesAt(i, rest, sc = false) {
   let cur = -1, mine = -1, whole = -1, before = false, old = false;  // before: k is before the start of i's sitting (or turn)
   for (let k = i; k >= 0; k--) { const e = events[k];
     if (sc && scratchBoundary(e)) break;
+    if (e.kind === 'image' && e.display_pending && displayLight !== 'color') continue;
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
       if (!e.ref) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
@@ -1307,7 +1313,7 @@ function pictures() {
   let [w, o] = picturesAt(pos, rested, sc), previousScratch = false, awaitingScratch = false;
   if (sc && pendingScratch) {
     for (let k = pos; k >= 0; k--) { const e = events[k];
-      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e)) { w = k; o = -1; previousScratch = true; break; }
+      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e) && (!e.display_pending || displayLight === 'color')) { w = k; o = -1; previousScratch = true; break; }
     }
     if (!previousScratch) { [w, o] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
   }

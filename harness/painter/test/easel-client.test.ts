@@ -4,7 +4,49 @@ import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+
+test("painting headers set the waits before the new-painting width", async () => {
+	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
+ touch polled
+ echo 'rebuilding from the log (0 of 1 chunks)'
+ exit 0
+fi
+sleep 0.1
+echo ok`);
+	const logs = join(studio, "paintings", "lua");
+	mkdirSync(logs, { recursive: true });
+	const log = join(logs, "painting.lua");
+	const width = join(studio, "bin", "width");
+	const normal = { ...WAIT_MS };
+	const wide = { ...WIDE_WAIT_MS };
+	try {
+		for (const configured of [undefined, "2400", "4800"]) {
+			if (configured === undefined) rmSync(width, { force: true });
+			else writeFileSync(width, configured);
+			for (const [header, expected] of [
+				[undefined, configured === "4800"],
+				["--@ width 4800\n--@ chunk 1\n", true],
+				["--@ chunk 1\n--@ width 4800\n", false],
+				["--@ width 2400\n--@ chunk 1\n", false],
+				["--@ sketch\n--@ width 4800\n--@ chunk 1\n", false],
+			] as const) {
+				if (header === undefined) rmSync(log, { force: true });
+				else writeFileSync(log, header);
+				assert.equal(wideStudio(studio), expected, `${configured}: ${header}`);
+			}
+			writeFileSync(log, "--@ engine 7\n--@ width 4800\n--@ chunk 1\n");
+			rmSync(join(studio, "polled"), { force: true });
+			WAIT_MS.do = WAIT_MS.rebuild = 10;
+			WIDE_WAIT_MS.do = WIDE_WAIT_MS.rebuild = 2000;
+			assert.equal(await atEasel(studio, ["do", "-"], "print(1)"), "ok");
+		}
+	} finally {
+		Object.assign(WAIT_MS, normal);
+		Object.assign(WIDE_WAIT_MS, wide);
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
 
 test("reading a studio directory lists its files and subdirectories in order", () => {
 	const studio = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
@@ -298,6 +340,22 @@ test("the easel gets the operator's RAYON_NUM_THREADS and nothing else of the pa
 	}
 });
 
+test("explicit display budgets reach the easel without forwarding unrelated variables", async () => {
+	const studio = stubStudio(`printf '%s %s %s\\n' "$EASEL_ASYNC_DISPLAY" "$EASEL_DISPLAY_THREADS" "$PAINTER_SECRET"`);
+	const saved = { ...process.env };
+	try {
+		process.env.EASEL_ASYNC_DISPLAY = "1";
+		process.env.EASEL_DISPLAY_THREADS = "2";
+		process.env.PAINTER_SECRET = "s";
+		assert.equal((await easel(studio, ["x"], undefined, undefined, 5000)).out, "1 2 \n");
+	} finally {
+		for (const key of ["EASEL_ASYNC_DISPLAY", "EASEL_DISPLAY_THREADS", "PAINTER_SECRET"]) {
+			if (saved[key] === undefined) delete process.env[key];
+			else process.env[key] = saved[key];
+		}
+	}
+});
+
 test("no reply counts the painter's work or times the machine", async () => {
 	const { paintReply, statusReply, logReply, hideCounters } = await import("../easel-client.ts");
 	const cases: [(t: string) => string, string, string][] = [
@@ -326,6 +384,20 @@ test("a look is renamed at random and shown without the machine's seconds", asyn
 	assert.equal(said, `${path} (1000x714)`);
 	assert.equal(readFileSync(join(s, path), "utf8"), "png");
 	assert.ok(!existsSync(join(s, "out", "look-0012.png")));
+});
+
+test("background display revisions keep their stable paths while pending or complete", async () => {
+	const { renameLook } = await import("../easel-client.ts");
+	const s = mkdtempSync(join(tmpdir(), "studio-"));
+	mkdirSync(join(s, "out", ".display"), { recursive: true });
+	const path = "out/65c0681641604c1b93c51bdcfd66302e.png";
+	writeFileSync(join(s, path), "color");
+	for (const state of ["pending", "ready", "failed"]) {
+		writeFileSync(join(s, "out", ".display", basename(path)), state + "\n");
+		assert.deepEqual(renameLook(s, `${path} (1000x714, 0.04s)`), { path, said: `${path} (1000x714)` });
+		assert.deepEqual(renameLooks(s, `${path} (1000x714, 0.04s)`), { paths: [path], said: `${path} (1000x714)` });
+		assert.equal(readFileSync(join(s, path), "utf8"), "color");
+	}
 });
 
 test("every look a survey names is renamed, in order", async () => {

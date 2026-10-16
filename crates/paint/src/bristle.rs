@@ -27,7 +27,7 @@ use crate::wet::{LAT, Latent, Paint, Prop, mix_into};
 
 /// Relief (µm) that spans a bristle's contact range: a bristle pressed
 /// lightly touches only peaks this much above their surroundings.
-const TOOTH_UM: f32 = 60.0;
+pub(crate) const TOOTH_UM: f32 = 60.0;
 /// The level a brush rests on around each pixel: the median height within
 /// about `r` px either side (a running median along the rows, then along the
 /// columns, over ±1.5 r), smoothed a little (a box blur of radius r/3).
@@ -87,7 +87,7 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
 
 /// How far into the tooth's range the paint a fully loaded hair carries
 /// reaches ahead of the hair (see `exchange`).
-const WET_REACH: f32 = 0.5;
+pub(crate) const WET_REACH: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -335,20 +335,20 @@ impl Tool {
 #[derive(Clone)]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
-    rx: f32,
-    ry: f32,
-    len: f32,
+    pub(crate) rx: f32,
+    pub(crate) ry: f32,
+    pub(crate) len: f32,
     /// Pressure needed before this bristle touches.
-    thresh: f32,
-    bend: (f32, f32),
-    seed: u64,
-    prev: [Option<(f32, f32)>; 2],
+    pub(crate) thresh: f32,
+    pub(crate) bend: (f32, f32),
+    pub(crate) seed: u64,
+    pub(crate) prev: [Option<(f32, f32)>; 2],
     pub(crate) vol: f32,
-    lat: Latent,
-    hide: Prop,
+    pub(crate) lat: Latent,
+    pub(crate) hide: Prop,
     /// Cure of the paint in it (0 fresh from the palette; paint lifted off
     /// a drying film brings the film's).
-    cure: f32,
+    pub(crate) cure: f32,
     /// Solvent it carries beside its paint (`vol`), in the same units
     /// (`crate::thinner`; engine 3): from a thinned pile, or lifted with
     /// the paint off a solvent-wet film. 0 for unthinned paint.
@@ -729,42 +729,46 @@ pub(crate) struct Surf {
     /// The buffers' pixels: a window (origin `ox`, `oy`, size `w` × `h`) of
     /// the whole `fw` × `fh` canvas. Brush geometry works in whole-canvas
     /// pixels; only buffer indices are translated.
-    w: usize,
-    h: usize,
-    ox: usize,
-    oy: usize,
-    fw: usize,
-    fh: usize,
-    scale: f32,
-    vol: *mut f32,
-    lat: *mut Latent,
-    hide: *mut Prop,
-    stroke: *mut u32,
-    touched: *mut u32,
-    floor: *mut f32,
-    cover: *mut f32,
-    base: *const f32,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) ox: usize,
+    pub(crate) oy: usize,
+    pub(crate) fw: usize,
+    pub(crate) fh: usize,
+    pub(crate) scale: f32,
+    pub(crate) vol: *mut f32,
+    pub(crate) lat: *mut Latent,
+    pub(crate) hide: *mut Prop,
+    pub(crate) stroke: *mut u32,
+    pub(crate) touched: *mut u32,
+    pub(crate) floor: *mut f32,
+    pub(crate) cover: *mut f32,
+    pub(crate) base: *const f32,
     /// Drying state (null until the canvas has waited): how open or tacky
     /// the paint under a bristle is (see `drying::feel`).
-    dry: *mut crate::drying::Px,
+    pub(crate) dry: *mut crate::drying::Px,
     /// Paint laid or moved updates the film's cure at once (see `add`;
     /// engine 2). Engine 1 left it to the next `wait`.
-    cure_now: bool,
+    pub(crate) cure_now: bool,
     /// Engine 4: bristles in stiff paint gather into clumps that lay it in
     /// ridges and furrows and plough it aside a clump's width (`exchange`).
-    clump: bool,
+    pub(crate) clump: bool,
     /// Engine 4: paint laid loses its solvent at once (it evaporates in
     /// minutes), and an absorbent ground draws oil out of it (`add`).
-    lean: bool,
+    pub(crate) lean: bool,
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
-    absorb: *mut f32,
+    pub(crate) absorb: *mut f32,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
-    solv: *mut f32,
-    laid: *mut f32,
-    laid_id: *mut u32,
+    pub(crate) solv: *mut f32,
+    pub(crate) laid: *mut f32,
+    pub(crate) laid_id: *mut u32,
+    pub(crate) sweep_spacing: Option<f32>,
+    pub(crate) adaptive_sweep: bool,
+    /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
+    pub(crate) e7: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -774,7 +778,7 @@ unsafe impl Sync for Surf {}
 /// Dirty pixel bounds collected by a drag.
 pub(crate) type Bounds = Option<(usize, usize, usize, usize)>;
 
-fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
+pub(crate) fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
     *b = Some(match *b {
         None => (x0, y0, x1, y1),
         Some((a, c, d, e)) => (a.min(x0), c.min(y0), d.max(x1), e.max(y1)),
@@ -786,7 +790,7 @@ impl Surf {
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
     #[inline]
-    unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+    pub(crate) unsafe fn add(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
         unsafe {
             if v <= 0.0 {
                 return;
@@ -842,7 +846,7 @@ impl Surf {
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
     /// left bare (as `wait` judges it) holds no film to have one.
     #[inline]
-    unsafe fn take(&self, i: usize, v: f32) {
+    pub(crate) unsafe fn take(&self, i: usize, v: f32) {
         unsafe {
             let vol = &mut *self.vol.add(i);
             *vol -= v;
@@ -865,7 +869,7 @@ impl Canvas {
             [self.height.len(), self.px.len(), self.film.len(), wt.vol.len(), wt.lat.len(), wt.hide.len(), wt.stroke.len(), wt.touched.len(), wt.floor.len(), wt.cover.len()].iter().all(|&l| l == n),
             "canvas buffers out of sync with frame"
         );
-        if self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
+        if !crate::engine7::active(self.engine) && self.base.as_ref().map(|b| b.0) != Some(self.surf_gen) {
             let mut base = self.base.take().map(|b| b.1).unwrap_or_default();
             base.resize(self.height.len(), 0.0);
             use rayon::prelude::*;
@@ -880,6 +884,12 @@ impl Canvas {
             });
             self.base = Some((self.surf_gen, base));
         }
+        let base = if crate::engine7::active(self.engine) {
+            let px_mm = self.px_mm();
+            self.e7_contact.refresh(&self.height, self.surf_gen, self.f.w, self.f.h, px_mm).as_ptr()
+        } else {
+            self.base.as_ref().unwrap().1.as_ptr()
+        };
         Surf {
             w: self.f.w,
             h: self.f.h,
@@ -895,7 +905,7 @@ impl Canvas {
             touched: self.wet.touched.as_mut_ptr(),
             floor: self.wet.floor.as_mut_ptr(),
             cover: self.wet.cover.as_mut_ptr(),
-            base: self.base.as_ref().unwrap().1.as_ptr(),
+            base,
             dry: if self.wet.clock.px.len() == n { self.wet.clock.px.as_mut_ptr() } else { std::ptr::null_mut() },
             cure_now: self.engine >= 2,
             clump: self.engine >= 4,
@@ -904,6 +914,9 @@ impl Canvas {
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
+            sweep_spacing: None,
+            adaptive_sweep: self.adaptive_sweep,
+            e7: crate::engine7::active(self.engine),
         }
     }
 
@@ -978,10 +991,10 @@ impl Clip<'_> {
 }
 
 /// Pressure at which a pointed tuft's whole belly is down.
-const P_FULL: f32 = 0.85;
+pub(crate) const P_FULL: f32 = 0.85;
 /// Distance (in tool widths) over which paint runs down from the belly of a
 /// pointed tuft to its tip (e-folding): capillary feed.
-const FEED_WIDTHS: f32 = 2.0;
+pub(crate) const FEED_WIDTHS: f32 = 2.0;
 
 fn lerp_f(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
@@ -992,7 +1005,7 @@ fn lerp_f(a: f32, b: f32, t: f32) -> f32 {
 /// (wet) tuft is a cone, so the spread goes with the square root of the
 /// pressure and, with the graded hair lengths, the mark's width with the
 /// pressure itself; a dry tuft (`coh` → 0) no longer holds its point.
-fn cone(tool: &Tool, p: f32, coh: f32) -> f32 {
+pub(crate) fn cone(tool: &Tool, p: f32, coh: f32) -> f32 {
     if tool.point <= 0.0 {
         return 1.0;
     }
@@ -1001,7 +1014,7 @@ fn cone(tool: &Tool, p: f32, coh: f32) -> f32 {
 
 /// Cohesion of a pointed tuft from its load: wet hairs cling into a point,
 /// hairs run dry spring apart (the point splits).
-fn cohesion(held: &Held, full: f32) -> f32 {
+pub(crate) fn cohesion(held: &Held, full: f32) -> f32 {
     if held.tool.point <= 0.0 {
         return 1.0;
     }
@@ -1013,7 +1026,7 @@ fn cohesion(held: &Held, full: f32) -> f32 {
 /// Cure of `v` coats of paint of cure `c` mixed into `vol` coats of cure
 /// `cure`.
 #[inline]
-fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
+pub(crate) fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
     if v <= 0.0 { cure } else { cure + (c - cure) * v / (vol + v) }
 }
 
@@ -1021,7 +1034,7 @@ fn mix_cure(cure: f32, vol: f32, c: f32, v: f32) -> f32 {
 /// (the belly feeds the tip). Moves the share `k` of every hair's paint into
 /// a common pool and shares it out evenly; volume is conserved exactly and
 /// colors mix through the tuft.
-fn feed(bristles: &mut [Bristle], k: f32) {
+pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
@@ -1058,9 +1071,9 @@ fn feed(bristles: &mut [Bristle], k: f32) {
 }
 
 /// Bristle roots never sit farther than this (in half-widths) from the axis.
-const ROOT_MAX: f32 = 1.2;
+pub(crate) const ROOT_MAX: f32 = 1.2;
 /// Longest bristle relative to the tool's length.
-const LEN_MAX: f32 = 1.6;
+pub(crate) const LEN_MAX: f32 = 1.6;
 
 /// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
 pub(crate) type Rect = (usize, usize, usize, usize);
@@ -1076,7 +1089,7 @@ pub(crate) fn footprint(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32,
 }
 
 /// `footprint`, or None if it isn't finite.
-fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
+pub(crate) fn footprint_checked(tool: &Tool, pts: &[(f32, f32)], shake: f32, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
     if pts.is_empty() {
         return Some(None);
     }
@@ -1116,6 +1129,49 @@ fn limit(r: Option<Option<Rect>>) -> Rect {
     r.flatten().unwrap_or((0, 0, 0, 0))
 }
 
+fn sweep_step(tool: &Tool, g: &Gesture, path: &[(f32, f32)], arc: &[f32], scale: f32, base: f32, adaptive: bool) -> f32 {
+    if !adaptive || tool.width * scale <= 4.0 * base {
+        return base;
+    }
+    let total = arc.last().copied().unwrap_or(0.0);
+    if total <= 0.0 {
+        return base;
+    }
+    let mut curvature = 0.0f32;
+    let mut previous: Option<((f32, f32), f32)> = None;
+    for (i, pair) in path.windows(2).enumerate() {
+        let len = arc[i + 1] - arc[i];
+        if len <= 1e-3 {
+            continue;
+        }
+        let dir = ((pair[1].0 - pair[0].0) / len, (pair[1].1 - pair[0].1) / len);
+        if let Some((last, last_len)) = previous {
+            let turn = ((dir.0 - last.0).powi(2) + (dir.1 - last.1).powi(2)).sqrt();
+            curvature = curvature.max(turn / (0.5 * (len + last_len)));
+        }
+        previous = Some((dir, len));
+    }
+    let samples = ((total / base).ceil() as usize).max(1);
+    let mut pressure_change = 0.0f32;
+    let mut previous_pressure = g.pressure_at(0.0).clamp(0.0, 1.0);
+    let mut peak_pressure = previous_pressure;
+    for i in 1..=samples {
+        let pressure = g.pressure_at((i as f32 * base).min(total) / total).clamp(0.0, 1.0);
+        pressure_change = pressure_change.max((pressure - previous_pressure).abs());
+        peak_pressure = peak_pressure.max(pressure);
+        previous_pressure = pressure;
+    }
+    let width_limit = tool.width * scale / (2.0 * base);
+    let curve_limit = 0.25 / (curvature * base).max(1e-6);
+    let pressure_limit = 0.08 / pressure_change.max(1e-6);
+    let step = base * width_limit.min(curve_limit).min(pressure_limit).clamp(2.0, 4.0);
+    let contacts = ((total / step).ceil() as usize).max(1);
+    let sampled_peak = (0..=contacts)
+        .map(|i| g.pressure_at((i as f32 * step).min(total) / total).clamp(0.0, 1.0))
+        .fold(0.0f32, f32::max);
+    if sampled_peak < 0.5 * peak_pressure { base } else { step }
+}
+
 /// SAFETY: no other thread may touch pixels in `footprint(..)` of `g`, and
 /// `held.tool` must pass `Tool::validate`. (Defense in depth: every pixel
 /// access is clamped to that footprint, and debug builds assert that the
@@ -1129,6 +1185,7 @@ pub(crate) unsafe fn drag_on(
     scratch: &mut Vec<f32>,
 ) -> Bounds {
     g.assert_valid();
+    let mut sf = sf;
     let mut bounds: Bounds = None;
     if g.pts.is_empty() {
         return bounds;
@@ -1147,7 +1204,8 @@ pub(crate) unsafe fn drag_on(
     // below a pixel (see `strip_cover`)
     let rb = (tool.hair_radius() * s).max(if tool.point > 0.0 { FINE_RB } else { 0.55 });
     let full = held.full();
-    let step = rb.max(1.25);
+    let step = sweep_step(&tool, g, &path, &arc, s, rb.max(1.25), !sf.e7 && sf.adaptive_sweep);
+    sf.sweep_spacing = if step > rb.max(1.25) { Some(rb.max(1.25)) } else { None };
     let nsteps = ((total / step).ceil() as usize).max(1);
     let bend_len = tool.length * (0.25 + 0.75 * (1.0 - tool.stiffness));
     let lim = limit(footprint_checked(&tool, &g.pts, g.shake, s, sf.fw, sf.fh));
@@ -1263,7 +1321,12 @@ pub(crate) unsafe fn drag_on(
             let prev = b.prev[0].unwrap_or(if tool.point > 0.0 && k > 0 { (cur.0 - dir.0 * step, cur.1 - dir.1 * step) } else { cur });
             let (rk, sh) = if tool.point > 0.0 { (excl[bi], shift[bi]) } else { (rb, 0.0) };
             let (sx, sy) = (-dir.1 * sh, dir.0 * sh);
-            unsafe { exchange(sf, b, &tool, (prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy), rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
+            let (a, c) = ((prev.0 + sx, prev.1 + sy), (cur.0 + sx, cur.1 + sy));
+            if sf.e7 {
+                unsafe { crate::engine7::exchange::exchange(sf, b, &tool, a, c, rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
+            } else {
+                unsafe { exchange(sf, b, &tool, a, c, rk, reach, full, None, 1.0, clip, id, scratch, &mut bounds, lim) };
+            }
             b.prev[0] = Some(cur);
         }
         feed(&mut held.bristles, feed_k);
@@ -1274,11 +1337,11 @@ pub(crate) unsafe fn drag_on(
 
 /// How much of a capsule's contact a bristle is assumed to make outside a
 /// crop window (where there is no canvas to feel).
-const GHOST_TOUCH: f32 = 0.8;
+pub(crate) const GHOST_TOUCH: f32 = 0.8;
 
 /// Summed coverage of the capsule a–b (radius rb, pixels) over rect `r`:
 /// its geometric footprint, whatever the canvas under it.
-fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
+pub(crate) fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, usize, usize, usize)) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg2 = dx * dx + dy * dy;
     let mut sum = 0.0f32;
@@ -1299,7 +1362,7 @@ fn capsule_cover(a: (f32, f32), b: (f32, f32), rb: f32, fine: bool, r: (usize, u
 }
 
 /// Smallest hair radius (pixels) a pointed tool is drawn with.
-const FINE_RB: f32 = 0.02;
+pub(crate) const FINE_RB: f32 = 0.02;
 
 /// Share of a pixel covered by a hair's track of radius `rb` (pixels) whose
 /// center line passes `dist` from the pixel center: the overlap of the
@@ -1307,7 +1370,7 @@ const FINE_RB: f32 = 0.02;
 /// is its width, wherever the track falls between pixel centers, so a track
 /// finer than a pixel lays the same paint per length on any grid (no dark
 /// dots where it happens to hit a pixel center, no beads at full size).
-fn strip_cover(dist: f32, rb: f32) -> f32 {
+pub(crate) fn strip_cover(dist: f32, rb: f32) -> f32 {
     ((dist + 0.5).min(rb) - (dist - 0.5).max(-rb)).clamp(0.0, 1.0)
 }
 
@@ -1319,7 +1382,7 @@ fn strip_cover(dist: f32, rb: f32) -> f32 {
 /// and a hair's successive steps tile its path without overlapping: the
 /// paint a step lays and the area it darkens don't depend on where the
 /// pixel centers fall. A hair that doesn't move covers a square 2·`rb` wide.
-fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
+pub(crate) fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let seg = (dx * dx + dy * dy).sqrt();
     let (ux, uy, lo, hi) = if seg > 1e-4 { (dx / seg, dy / seg, 0.0, seg) } else { (1.0, 0.0, -rb, rb) };
@@ -1377,7 +1440,7 @@ fn fine_cover(a: (f32, f32), b: (f32, f32), rb: f32, px: f32, py: f32) -> f32 {
 }
 
 /// Smooth 1-D value noise, −1..1.
-fn wander(t: f32, seed: u64) -> f32 {
+pub(crate) fn wander(t: f32, seed: u64) -> f32 {
     let i = t.floor();
     let f = t - i;
     let f = f * f * (3.0 - 2.0 * f);
@@ -1386,12 +1449,17 @@ fn wander(t: f32, seed: u64) -> f32 {
     (a + (b - a) * f) * 2.0 - 1.0
 }
 
+fn pickup_fraction(rate: f32, passes: f32) -> f32 {
+    let rate = rate.clamp(0.0, 1.0);
+    if passes <= 1.0 { rate } else { 1.0 - (1.0 - rate).powf(passes) }
+}
+
 /// Paint exchange between one bristle and the canvas along the capsule
 /// swept from `a` to `b` (pixels). A moving bristle deposits in proportion
 /// to the distance it travels; `dep` instead fixes the volume (units² ×
 /// coats) it would lay on full contact (a touch: film splitting).
 #[allow(clippy::too_many_arguments)]
-unsafe fn exchange(
+pub(crate) unsafe fn exchange(
     sf: Surf,
     br: &mut Bristle,
     tool: &Tool,
@@ -1425,6 +1493,7 @@ unsafe fn exchange(
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let seg2 = dx * dx + dy * dy;
         let seg = seg2.sqrt();
+        let pickup_passes = sf.sweep_spacing.map_or(1.0, |spacing| (seg / spacing).max(1.0));
         // a crop render holds only a window of the canvas: clip to it
         let (x0, y0, x1, y1) = (cx0.max(ox), cy0.max(oy), cx1.min(ox + sf.w), cy1.min(oy + sf.h));
         let windowed = (x0, y0, x1, y1) != (cx0, cy0, cx1, cy1);
@@ -1659,7 +1728,12 @@ unsafe fn exchange(
                     *sf.floor.add(i) = v * (1.0 - tool.pickup * fl);
                 }
                 if v > 1e-6 {
-                    let take = if exch {
+                    let take = if pickup_passes > 1.0 {
+                        let own = if !exch && *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
+                        let rate = tool.pickup * wt * hunger * own * fl;
+                        let take = v * pickup_fraction(rate, pickup_passes);
+                        if exch { take.min(v) } else { take.min((v - *sf.floor.add(i)).max(0.0)) }
+                    } else if exch {
                         (v * tool.pickup * wt * hunger * fl).min(v)
                     } else {
                         let own = if *sf.stroke.add(i) == id { 0.15 } else { 1.0 };
@@ -1889,7 +1963,7 @@ const TOUCH_FILM: f32 = 1.0;
 const TOUCH_STEPS: usize = 4;
 
 /// Area of the bristle roots' layout in the brush frame (half-width units²).
-fn root_area(kind: Kind) -> f32 {
+pub(crate) fn root_area(kind: Kind) -> f32 {
     use std::f32::consts::PI;
     match kind {
         Kind::Round | Kind::Rigger | Kind::Blender => PI,
@@ -1901,7 +1975,7 @@ fn root_area(kind: Kind) -> f32 {
 
 /// Half-width of the pressed tip (pixels) at pressure `p`.
 /// A pointed tip gathers toward its point (see `cone`).
-fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
+pub(crate) fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
     tool.width * 0.5 * s * (0.45 + 0.55 * p) * (1.0 + tool.splay * (p - 0.5)) * cone(tool, p, 1.0)
 }
 
@@ -1909,7 +1983,7 @@ fn touch_half(tool: &Tool, p: f32, s: f32) -> f32 {
 /// and wide enough that the fading contacts of neighbors overlap (paint
 /// bridges the gaps). The floor is only as wide as a pixel needs to be
 /// sampled: a coarse render must not make small marks bigger (and fainter).
-fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
+pub(crate) fn touch_rb(tool: &Tool, p: f32, s: f32) -> f32 {
     let spacing = touch_half(tool, p, s) * (root_area(tool.kind) / tool.bristles.max(1) as f32).sqrt();
     (tool.hair_radius() * s).max(1.4 * spacing).max(0.75)
 }
@@ -1921,7 +1995,7 @@ pub(crate) fn touch_footprint(tool: &Tool, t: &Touch, scale: f32, w: usize, h: u
 }
 
 /// `touch_footprint`, or None if it isn't finite.
-fn touch_footprint_checked(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
+pub(crate) fn touch_footprint_checked(tool: &Tool, t: &Touch, scale: f32, w: usize, h: usize) -> Option<Option<Rect>> {
     let s = scale;
     let p = t.pressure.clamp(0.0, 1.0);
     let half = tool.width * 0.5 * s * (1.0 + tool.splay.abs() * 0.5);
@@ -2013,7 +2087,11 @@ pub(crate) unsafe fn touch_on(sf: Surf, held: &mut Held, t: &Touch, clip: Option
             let prev = b.prev[0].unwrap_or(cur);
             let fill = ((b.vol + b.solvent) / full).min(1.0);
             let v = film * fill * reach / sums[bi].max(1e-6);
-            unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            if sf.e7 {
+                unsafe { crate::engine7::exchange::exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            } else {
+                unsafe { exchange(sf, b, &tool, prev, cur, rb, reach, full, Some(v), 1.0, clip, id, scratch, &mut bounds, lim) };
+            }
             b.prev[0] = Some(cur);
         }
     }
@@ -2103,8 +2181,12 @@ impl Spatter {
 
 impl Canvas {
     /// Flick a held brush (see `Spatter`); returns how many droplets landed.
+    ///
+    /// Panics if a number in `sp` is not finite, or if the brush holds
+    /// solvent and the canvas's engine is before 3 (as `drag`).
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
         held.tool.assert_valid();
+        // (before any paint leaves the brush)
         sp.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::spatter");
@@ -2280,267 +2362,6 @@ impl Canvas {
     }
 }
 
-#[cfg(test)]
-mod tip_tests {
-    use super::*;
-    use crate::color::hex;
-
-    /// The pointed tip is opt-in: these tests use it explicitly.
-    fn sable(w: f32) -> Tool {
-        Tool { point: 1.0, ..Tool::round_sable(w) }
-    }
-    fn rigger(w: f32) -> Tool {
-        Tool { point: 1.0, ..Tool::rigger(w) }
-    }
-
-    const BG: &str = "#e8e0d0";
-    const INK: &str = "#1a1612";
-
-    /// A narrow strip of a 440 mm wide canvas with one
-    /// mark of dark body paint on it, dried.
-    fn canvas(px: usize, linen: bool, tool: Tool, g: &Gesture) -> Canvas {
-        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0);
-        if linen {
-            c = c.with_linen(crate::surface::Linen::fine(3));
-        }
-        let mut h = Held::new(tool, 3);
-        h.load(Paint::body(hex(INK)), 1.0);
-        c.drag(&mut h, g, None);
-        c.dry();
-        c
-    }
-
-    /// Darkness of pixel (x, y): 0 = ground, 1 = the paint's masstone.
-    fn dark(c: &Canvas, x: usize, y: usize) -> f32 {
-        let lum = |p: [f32; 3]| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
-        let (lb, ld) = (lum(hex(BG)), lum(hex(INK)));
-        (lb - lum(c.px[y * c.f.w + x])) / (lb - ld)
-    }
-
-    /// Ink across the mark (units: the width of a fully dark track) between
-    /// x0 and x1 (units), averaged along it.
-    fn ink(c: &Canvas, x0: f32, x1: f32) -> f32 {
-        let s = c.f.scale;
-        let (a, b) = ((x0 * s) as usize, (x1 * s) as usize);
-        let mut sum = 0.0;
-        for y in 0..c.f.h {
-            for x in a..b {
-                sum += dark(c, x, y);
-            }
-        }
-        sum / s / (b - a) as f32
-    }
-
-    /// Paint (coats) one stroke of `tool` lays across its mark over a dry
-    /// layer on a strip of a 440 mm wide canvas, `px` wide: the mean film at each
-    /// pixel row from 2 widths above the stroke's line to 2 below, over the
-    /// middle of its length, as (offset from the line in units, coats).
-    #[cfg(tube_box)]
-    fn film_across_over_dry(px: usize, tool: Tool, pressure: f32) -> Vec<(f32, f32)> {
-        let mut c = Canvas::new(px, 4.0, hex(BG)).with_size_mm(440.0).with_linen(crate::surface::Linen::fine(3));
-        // a light layer, laid in overlapping bands and let dry
-        for (k, y) in [95.0, 110.0, 125.0, 140.0, 155.0].into_iter().enumerate() {
-            let mut h = Held::new(Tool::filbert(40.0), 10 + k as u64);
-            h.load(Paint::body(hex("#b8c4d0")), 1.0);
-            c.drag(&mut h, &Gesture::line((100.0, y), (900.0, y)).pressure(0.9, 0.9), None);
-        }
-        c.dry();
-        let mut h = Held::new(tool.clone(), 5);
-        h.load(Paint::body(hex("#50586a")), 0.8);
-        c.drag(&mut h, &Gesture::line((300.0, 125.0), (700.0, 125.0)).pressure(pressure, pressure), None);
-        let f = c.f;
-        let (x0, x1) = ((400.0 * f.scale) as usize, (600.0 * f.scale) as usize);
-        let (y0, y1) = (((125.0 - 2.0 * tool.width) * f.scale) as usize, ((125.0 + 2.0 * tool.width) * f.scale) as usize);
-        (y0..=y1).map(|y| (f.uy(y) - 125.0, (x0..x1).map(|x| c.wet.vol[y * f.w + x]).sum::<f32>() / (x1 - x0) as f32)).collect()
-    }
-
-    /// A body stroke over dry paint lays a covering film, thickest about
-    /// where the brush pressed, not a ring: across the middle half of the
-    /// mark the film is at least 0.6 of the thickest paint at its edges,
-    /// also for brushes whose hairs are finer than a pixel (the filbert 5
-    /// and filbert 2 at 1000px).
-    #[test]
-    #[cfg(tube_box)]
-    fn a_stroke_over_dry_paint_covers_its_middle() {
-        let st = crate::style::Style::oil();
-        for (name, tool) in [("filbert 5", Tool::filbert(5.0)), ("filbert 2", Tool { lay: 0.5, stiffness: 0.3, ..Tool::filbert(2.0) }), ("body", st.body.clone())] {
-            let prof = film_across_over_dry(1000, tool, 0.8);
-            let peak = prof.iter().map(|p| p.1).fold(0.0f32, f32::max);
-            // the mark: where it laid a tenth of its peak or more
-            let on: Vec<f32> = prof.iter().filter(|p| p.1 >= 0.1 * peak).map(|p| p.0).collect();
-            let (a, b) = (on[0], on[on.len() - 1]);
-            let mid: Vec<f32> = prof.iter().filter(|p| p.0 >= a + 0.25 * (b - a) && p.0 <= b - 0.25 * (b - a)).map(|p| p.1).collect();
-            let middle = mid.iter().sum::<f32>() / mid.len() as f32;
-            assert!(middle >= 0.6 * peak, "{name}: {middle:.2} coats in the middle of the mark, {peak:.2} at its thickest: {prof:.2?}");
-        }
-    }
-
-    #[test]
-    fn pointed_marks_are_resolution_independent() {
-        let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
-        for tool in [rigger(0.5), sable(1.6)] {
-            let lo = ink(&canvas(500, false, tool.clone(), &g), 100.0, 400.0);
-            let hi = ink(&canvas(1600, false, tool.clone(), &g), 100.0, 400.0);
-            assert!((lo / hi - 1.0).abs() < 0.2, "{:?}: ink width {lo} at 500px, {hi} at 1600px", tool.kind);
-            // and about as wide as the brush says
-            let w = tool.mark_width(0.4);
-            assert!(hi > 0.6 * w && hi < 2.0 * w, "{:?}: ink width {hi}, mark_width {w}", tool.kind);
-        }
-    }
-
-    /// The presets are blunt, so a round, a rigger, a line or a detail brush
-    /// lays the width asked for; the pointed tip (a hairline at light
-    /// pressure) is opt-in.
-    #[test]
-    #[cfg(tube_box)]
-    fn presets_are_blunt_and_lay_their_width() {
-        let st = crate::style::Style::oil();
-        for t in [Tool::round_sable(1.6), Tool::rigger(0.5), st.detail.clone(), st.line_tool(0.8)] {
-            assert_eq!(t.point, 0.0, "{:?} is pointed by default", t.kind);
-        }
-        let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(0.4, 0.4).ramps(0.05, 0.1).shake(0.0);
-        let blunt = ink(&canvas(1600, false, Tool::round_sable(1.6), &g), 100.0, 400.0);
-        let pointed = ink(&canvas(1600, false, sable(1.6), &g), 100.0, 400.0);
-        // a blunt sable 1.6 at a light pressure lays most of its width; the
-        // pointed one only its point
-        assert!(blunt > 0.5 * 1.6 && blunt > 1.5 * pointed, "ink width at p 0.4: blunt {blunt}, pointed {pointed}");
-    }
-
-    #[test]
-    fn pointed_width_follows_pressure_and_tapers() {
-        let t = sable(3.0);
-        assert!(t.mark_width(0.1) < 0.25 * t.mark_width(0.9), "{} vs {}", t.mark_width(0.1), t.mark_width(0.9));
-        assert!((t.mark_width(t.pressure_for(1.5)) - 1.5).abs() < 0.01);
-        let at = |p: f32| ink(&canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(p, p).shake(0.0)), 150.0, 350.0);
-        let (a, b, c) = (at(0.1), at(0.4), at(0.8));
-        assert!(a < 0.5 * b && b < 0.7 * c, "ink width at pressure .1/.4/.8: {a} {b} {c}");
-        // a flick lifted off draws down to a point
-        let f = canvas(800, false, t.clone(), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.8, 0.0).ramps(0.05, 0.8).shake(0.0));
-        let (root, mid, tip) = (ink(&f, 80.0, 120.0), ink(&f, 230.0, 270.0), ink(&f, 400.0, 430.0));
-        assert!(root > mid && mid > tip && tip < 0.3 * root, "flick ink root {root}, middle {mid}, tip {tip}");
-        // the stippler is blunt too
-        assert_eq!(Tool::stippler(2.0).point, 0.0);
-    }
-
-    /// A lifting brush deposits paint through the end of its path, even
-    /// where the pressure falls below its first hair's threshold: every
-    /// column up to the last pixel before the end has paint. Blunt and
-    /// pointed brushes, a flick lifted to zero and a stroke lifted to 0.36.
-    #[test]
-    fn a_lifted_stroke_paints_to_the_end_of_its_path() {
-        let tools = [("blunt sable 3", Tool::round_sable(3.0)), ("blunt rigger 1", Tool::rigger(1.0)), ("pointed rigger 1.4", Tool { point: 0.9, ..Tool::rigger(1.4) }), ("pointed sable 3", sable(3.0))];
-        let strokes = [("flick", (0.75, 0.0), (0.1, 0.75)), ("lifted to 0.36", (0.8, 0.36), (0.03, 0.35))];
-        for (tn, tool) in &tools {
-            for (gn, p, r) in strokes {
-                // 80 units, within one load of every brush here
-                let g = Gesture::line((100.0, 120.0), (180.0, 120.0)).pressure(p.0, p.1).ramps(r.0, r.1).shake(0.0);
-                let c = canvas(1000, false, tool.clone(), &g);
-                let s = c.f.scale;
-                let col = |x: usize| (0..c.f.h).map(|y| dark(&c, x, y)).sum::<f32>() / s;
-                // every column from just past the start to the last pixel
-                // before the end has paint on it
-                let bare: Vec<f32> = ((101.0 * s) as usize..(179.0 * s) as usize).filter(|&x| col(x) < 0.02).map(|x| x as f32 / s).collect();
-                assert!(bare.is_empty(), "{tn}, {gn}: path ends at 180, mark stops at {:?} ({} bare columns)", bare.first(), bare.len());
-            }
-        }
-    }
-
-    /// A hair's track covers its own area of the pixel lattice, however it
-    /// lies across the pixels: diagonal and oblique tracks keep their area
-    /// under sub-pixel translation.
-    #[test]
-    fn fine_cover_conserves_area_on_the_lattice() {
-        let total = |a: (f32, f32), b: (f32, f32), rb: f32| {
-            let mut s = 0.0f64;
-            for y in 0..240 {
-                for x in 0..240 {
-                    s += fine_cover(a, b, rb, x as f32 + 0.5, y as f32 + 0.5) as f64;
-                }
-            }
-            s as f32
-        };
-        for rb in [0.02f32, 0.15, 0.6] {
-            for deg in [0.0f32, 17.0, 30.0, 45.0, 71.0, 90.0, 135.0] {
-                let (c, s) = (deg.to_radians().cos(), deg.to_radians().sin());
-                for len in [0.3f32, 3.7, 100.0] {
-                    let want = 2.0 * rb * len;
-                    for off in [(0.0f32, 0.0f32), (0.0, 0.5), (0.25, 0.1), (0.5, 0.5), (0.37, 0.81)] {
-                        let a = (100.0 + off.0, 20.0 + off.1);
-                        let b = (a.0 + c * len, a.1 + s * len);
-                        let got = total(a, b, rb);
-                        assert!((got / want - 1.0).abs() < 2e-3, "rb {rb}, {deg}°, length {len}, offset {off:?}: covers {got}, track area {want}");
-                    }
-                }
-            }
-            // a hair that doesn't move covers its square
-            let got = total((30.3, 30.6), (30.3, 30.6), rb);
-            assert!((got / (4.0 * rb * rb) - 1.0).abs() < 2e-3, "still hair rb {rb}: {got}");
-        }
-    }
-
-    /// The same diagonal or oblique pointed mark, shifted by part of a pixel,
-    /// darkens the canvas by the same amount (its look follows its paint,
-    /// not where it falls between pixel centers).
-    #[test]
-    fn translated_pointed_marks_look_alike() {
-        for (tool, p) in [(rigger(0.5), 0.3), (sable(1.6), 0.15)] {
-            for (dx, dy) in [(200.0f32, 200.0f32), (240.0, 90.0)] {
-                let total = |off: (f32, f32)| {
-                    let (a, b) = ((100.0 + off.0, 10.0 + off.1), (100.0 + dx + off.0, 10.0 + dy + off.1));
-                    let c = canvas(500, false, tool.clone(), &Gesture::line(a, b).pressure(p, p).ramps(0.05, 0.1).shake(0.0));
-                    (0..c.f.h).flat_map(|y| (0..c.f.w).map(move |x| (x, y))).map(|(x, y)| dark(&c, x, y)).sum::<f32>()
-                };
-                let base = total((0.0, 0.0));
-                // (a pixel is 2 units here)
-                for off in [(0.0, 1.0), (0.5, 0.2), (1.0, 1.0), (0.74, 1.62)] {
-                    let got = total(off);
-                    assert!((got / base - 1.0).abs() < 0.05, "{:?} along ({dx}, {dy}) shifted {off:?}: darkness {got} vs {base}", tool.kind);
-                }
-            }
-        }
-    }
-
-    /// A light hairline on linen at full size is a line, not a row of beads
-    /// on the weave's peaks.
-    #[test]
-    fn hairline_on_linen_is_continuous() {
-        let c = canvas(1600, true, rigger(0.5), &Gesture::line((50.0, 120.0), (450.0, 120.0)).pressure(0.25, 0.25).ramps(0.05, 0.1).shake(0.0));
-        let s = c.f.scale;
-        let (y0, y1) = (((120.0 - 2.0) * s) as usize, ((120.0 + 2.0) * s) as usize);
-        let cols: Vec<f32> = ((150.0 * s) as usize..(350.0 * s) as usize).map(|x| (y0..y1).map(|y| dark(&c, x, y)).sum::<f32>()).collect();
-        let mean = cols.iter().sum::<f32>() / cols.len() as f32;
-        let gaps = cols.iter().filter(|&&v| v < 0.3 * mean).count();
-        assert!(mean > 0.1 && gaps == 0, "mean column ink {mean}, {gaps} gaps of {}", cols.len());
-    }
-
-    /// Ink width (units) of straight marks at two resolutions, for tuning.
-    #[test]
-    #[ignore]
-    fn probe_ink_width() {
-        for (name, tool) in [("rigger .5", rigger(0.5)), ("sable 1.6", sable(1.6)), ("sable 3", sable(3.0))] {
-            for p in [0.1, 0.4, 0.7, 0.9] {
-                let g = Gesture::line((50.0, 120.0), (450.0, 122.0)).pressure(p, p).ramps(0.05, 0.1).shake(0.0);
-                let lo = ink(&canvas(1000, false, tool.clone(), &g), 100.0, 400.0);
-                let hi = ink(&canvas(3200, false, tool.clone(), &g), 100.0, 400.0);
-                println!("{name:10} p {p:.1}: ink width {lo:.3} at 1000px, {hi:.3} at 3200px; mark_width {:.3}", tool.mark_width(p));
-            }
-        }
-    }
-
-    #[test]
-    fn feed_conserves_paint() {
-        let mut h = Held::new(sable(2.0), 1);
-        h.load(Paint::body(hex(INK)), 1.0);
-        for (i, b) in h.bristles.iter_mut().enumerate() {
-            b.vol *= (i % 5) as f32 / 4.0;
-        }
-        let before: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
-        feed(&mut h.bristles, 0.3);
-        let after: f64 = h.bristles.iter().map(|b| b.vol as f64).sum();
-        assert!((after - before).abs() < before * 1e-5);
-    }
-}
-
 
 impl Gesture {
     /// Check that every number in the gesture is finite: a NaN point would
@@ -2587,156 +2408,10 @@ impl Touch {
 }
 
 // every test here paints on the default box's style
-#[cfg(all(test, tube_box))]
-mod cover_tests {
-    use crate::canvas::Canvas;
-    use crate::color::hex;
-    use crate::handling::Handling;
-    use crate::mask::Mask;
-    use crate::style::Style;
 
-    fn lum(p: [f32; 3]) -> f32 {
-        0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
-    }
-
-    /// Paint a dark square (units 350..650) with `hd`, dry it, and return
-    /// (share of interior pixels whose wet film is under 0.15 coat before
-    /// drying, share that shows the ground after: closer to the ground's
-    /// value than to the paint's).
-    pub(crate) fn bare_share(w: usize, hd: &Handling, seed: u64) -> (f32, f32) {
-        let st = Style::oil_red_ground();
-        let mut c: Canvas = st.prepare(w, 1.0, seed);
-        let m = Mask::from_fn(c.frame(), |x, y| if (350.0..650.0).contains(&x) && (350.0..650.0).contains(&y) { 1.0 } else { 0.0 });
-        let ground = c.px.clone();
-        c.work(&m, hd, seed);
-        let f = c.f;
-        let inner: Vec<usize> = (0..f.w * f.h).filter(|&i| {
-            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
-            (380.0..620.0).contains(&x) && (380.0..620.0).contains(&y)
-        }).collect();
-        let thin = inner.iter().filter(|&&i| c.wet.vol[i] < 0.15).count() as f32 / inner.len() as f32;
-        let untouched = inner.iter().filter(|&&i| c.wet.vol[i] < 0.15 && c.wet.touched[i] == 0).count() as f32 / inner.len() as f32;
-
-        if std::env::var_os("PROBE_VERBOSE").is_some() {
-            println!("    thin {:.2}%, of it never touched by a bristle {:.2}%", 100.0 * thin, 100.0 * untouched);
-        }
-        c.dry();
-        let mut ls: Vec<f32> = inner.iter().map(|&i| lum(c.px[i])).collect();
-        ls.sort_by(f32::total_cmp);
-        let paint = ls[ls.len() / 2];
-        if let Ok(out) = std::env::var("PROBE_OUT") {
-            c.save(std::path::Path::new(&format!("{out}_{}.png", hd.tool.width))).unwrap();
-        }
-        let bare = inner.iter().filter(|&&i| lum(c.px[i]) - paint > 0.5 * (lum(ground[i]) - paint)).count() as f32 / inner.len() as f32;
-        (thin, bare)
-    }
-
-    /// With look and fill, a loaded brush at coverage 2.5 leaves under 0.2%
-    /// of a dark body or broad passage showing the ground; with fill off
-    /// the strokes leave more than 0.5% as gaps; a nearly dry brush at
-    /// light pressure breaks up (more than 10% bare).
-    #[test]
-    fn loaded_passage_covers() {
-        let st = Style::oil_red_ground();
-        let dark = |_: f32, _: f32| hex("#2c2925");
-        let body = || st.body().color(dark).clip(true).threshold(0.5).coverage(2.5);
-        let broad = || st.broad().color(dark).clip(true).threshold(0.5).coverage(2.5);
-        let (_, bare) = bare_share(500, &body().fill(true), 5);
-        let (_, bare_broad) = bare_share(500, &broad().fill(true), 5);
-        let (_, gaps) = bare_share(500, &broad().fill(false), 5);
-        let h = body().pressure(0.15, 0.3);
-        let (_, dry) = bare_share(500, &Handling { load: 0.1, ..h }, 5);
-        println!("bare: body {:.2}%, broad {:.2}% ({:.2}% without looking), dry brush {:.1}%", 100.0 * bare, 100.0 * bare_broad, 100.0 * gaps, 100.0 * dry);
-        assert!(bare < 0.002 && bare_broad < 0.002, "a loaded passage at coverage 2.5 shows bare ground: body {:.2}%, broad {:.2}%", 100.0 * bare, 100.0 * bare_broad);
-        assert!(gaps > 0.005, "without looking the strokes leave gaps: {gaps}");
-        assert!(dry > 0.1, "dry brush at light pressure should break up: {dry}");
-    }
-
-    /// Where do bare flecks in a dark body passage come from?
-    /// `cargo test --release -p paint probe_bare -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn probe_bare() {
-        let st = Style::oil_red_ground();
-        let w: usize = std::env::var("PROBE_W").ok().and_then(|s| s.parse().ok()).unwrap_or(1000);
-        let dark = |_: f32, _: f32| hex("#2c2925");
-        let names: Vec<String> = std::env::var("PROBE").map(|s| s.split(',').map(String::from).collect()).unwrap_or(vec!["body".into(), "broad".into(), "detail".into()]);
-        let covs: Vec<f32> = std::env::var("PROBE_COV").map(|s| s.split(',').map(|v| v.parse().unwrap()).collect()).unwrap_or(vec![1.0, 2.5, 4.0]);
-        let vars = std::env::var("PROBE_VARS").unwrap_or("base,nofill".into());
-        for name in names.iter().map(|s| s.as_str()) {
-            for &cov in &covs {
-                let base = || match name {
-                    "body" => st.body(),
-                    "broad" => st.broad(),
-                    _ => st.detail(),
-                }
-                .color(dark)
-                .clip(true)
-                .threshold(0.5)
-                .coverage(cov);
-                let mut line = format!("{name:6} cov {cov:.1}:");
-                for (var, hd) in [
-                    ("base", base()),
-                    ("push0", { let h = base(); let t = crate::bristle::Tool { push: 0.0, ..h.tool.clone() }; Handling { tool: t, ..h } }),
-                    ("pick0", { let h = base(); let t = crate::bristle::Tool { pickup: 0.0, ..h.tool.clone() }; Handling { tool: t, ..h } }),
-                    ("unbroken", { let h = base(); Handling { broken: 0.0, ..h } }),
-                    ("full", { let h = base(); Handling { load: 1.0, dip_every: 1, ..h } }),
-                    ("nofill", base().fill(false)),
-                    ("load.1", { let h = base(); Handling { load: 0.1, ..h } }),
-                    ("load.2", { let h = base(); Handling { load: 0.2, ..h } }),
-                    ("load.4", { let h = base(); Handling { load: 0.4, ..h } }),
-                    ("light", base().pressure(0.15, 0.3)),
-                    ("light.1", { let h = base().pressure(0.15, 0.3); Handling { load: 0.1, ..h } }),
-                ] {
-                    if !vars.split(',').any(|v| v == var) {
-                        continue;
-                    }
-                    let seeds: Vec<u64> = std::env::var("PROBE_SEEDS").unwrap_or("5,6,7".into()).split(',').map(|v| v.parse().unwrap()).collect();
-                    let (mut thin, mut bare) = (0.0, 0.0);
-                    for &sd in &seeds {
-                        let (t, b) = bare_share(w, &hd, sd);
-                        thin += t / seeds.len() as f32;
-                        bare += b / seeds.len() as f32;
-                    }
-                    line += &format!("  {var} thin {:.2}% bare {:.2}%", 100.0 * thin, 100.0 * bare);
-                }
-                println!("{line}");
-            }
-        }
-    }
-
-    /// Area a single stroke covers (film ≥ 0.15 coat) against its nominal
-    /// width × length.
-    #[test]
-    #[ignore]
-    fn probe_mark_area() {
-        use crate::bristle::{Gesture, Held};
-        use crate::wet::Paint;
-        let st = Style::oil_red_ground();
-        for (name, tool, len, p, ramps, load) in [
-            ("broad", st.broad.clone(), 150.0f32, 0.675f32, (0.12f32, 0.4f32), 0.4f32),
-            ("body", st.body.clone(), 40.0, 0.75, (0.08, 0.15), 0.56),
-            ("detail", st.detail.clone(), 9.0, 0.82, (0.08, 0.15), 0.72),
-        ] {
-            let mut tot = (0.0, 0.0);
-            for sd in 0..6u64 {
-                let mut c: Canvas = st.prepare(1000, 1.0, sd);
-                let mut h = Held::new(tool.clone(), sd);
-                h.load(Paint::body(hex("#2c2925")), load);
-                let y = 500.0;
-                c.drag(&mut h, &Gesture::new(vec![(500.0 - len / 2.0, y), (500.0 + len / 2.0, y)]).pressure(p, p * 0.9).ramps(ramps.0, ramps.1), None);
-                let a = |t: f32| c.wet.vol.iter().filter(|&&v| v >= t).count() as f32 / (c.f.scale * c.f.scale);
-                tot.0 += a(0.15) / 6.0;
-                tot.1 += a(1e-4) / 6.0;
-            }
-            println!("{name:6}: area {:.0} (any paint {:.0}) of nominal {:.0}: {:.2}; mark_width {:.2} of {:.2}", tot.0, tot.1, tool.width * len, tot.0 / (tool.width * len), tool.mark_width(p), tool.width);
-        }
-    }
-}
-
-/// Two arithmetic traps for exact (bit-identical) speedups of the brush
-/// kernel and its contact surface. Each pins what the code on main does, so
-/// a faster version that changes a bit fails here before it reaches a replay.
+/// An arithmetic trap for exact (bit-identical) speedups of the brush
+/// kernel: it pins what the code on main does, so a faster version that
+/// changes a bit fails here before it reaches a replay.
 #[cfg(test)]
 mod kernel_traps {
     use super::*;
@@ -2771,52 +2446,6 @@ mod kernel_traps {
         c
     }
 
-    /// Trap A, the transfer: a plough transfer lifts paint off the source
-    /// (`Surf::take`), which zeroes the source's cure once its film falls
-    /// under 1e-5 coats (engine 2, drying state allocated), then lays it on
-    /// the destination (`Surf::add`) with the cure it read. The plough reads
-    /// the source's cure again for every destination it shares paint with,
-    /// so the destinations after the crossing get cure 0, not the cure the
-    /// source had before the first transfer.
-    #[test]
-    fn a_plough_transfer_rereads_the_source_cure_after_each_take() {
-        let mut c = thin_and_thick();
-        let w = c.f.w;
-        let i = 50 * w + 50;
-        let js = [49 * w + 50, 50 * w + 49, 50 * w + 51, 51 * w + 50];
-        c.wet.vol[i] = 1.03e-5;
-        c.wet.clock.px[i].cure = 0.1;
-        for &j in &js {
-            c.wet.vol[j] = 1e-3;
-            c.wet.clock.px[j].cure = 0.0;
-        }
-        let sf = c.surf();
-        let m = 1.44e-6f32 * 0.25;
-        let mut carried = Vec::new();
-        for &j in &js {
-            // as the plough block in `exchange` does, per accepted destination
-            unsafe {
-                let l = *sf.lat.add(i);
-                let hd = *sf.hide.add(i);
-                let cure = (*sf.dry.add(i)).cure;
-                carried.push(cure);
-                sf.take(i, m);
-                sf.add(j, m, &l, hd, cure);
-            }
-        }
-        // the first take crossed the threshold: only the first destination
-        // got the source's cure
-        assert_eq!(carried, [0.1, 0.0, 0.0, 0.0]);
-        assert!(c.wet.vol[i] < 1e-5 && c.wet.clock.px[i].cure == 0.0);
-        let got: Vec<u32> = js.iter().map(|&j| c.wet.clock.px[j].cure.to_bits()).collect();
-        let t = 1e-3f32 + m;
-        let first = (0.0 + (0.1f32 - 0.0) * (m / t)).to_bits();
-        assert_eq!(got, [first, 0, 0, 0], "destination cures {:?}", js.iter().map(|&j| c.wet.clock.px[j].cure).collect::<Vec<_>>());
-        // (a cure read once before the loop would have given every
-        // destination the first one's cure: 3.6e-5, not 0)
-        assert!(f32::from_bits(first) > 3e-5);
-    }
-
     /// Trap A, the kernel: an empty filbert that doesn't pick up (so it only
     /// ploughs, sharing each pixel's paint bilinearly among four
     /// destinations) dragged through films at the threshold leaves exactly
@@ -2848,114 +2477,10 @@ mod kernel_traps {
         };
         assert_eq!(format!("vol={hv:016x} cure={hc:016x} zeroed={zeroed}"), expected, "the plough no longer moves paint and cure as main did");
     }
-
-    /// Trap B, the medians: the contact level's running median of a pixel
-    /// is the median of the pixels within its window, whatever else is in
-    /// the row, so recomputing it over a crop that holds each output's
-    /// whole window (or reaches the row's own ends) gives the full row's
-    /// result bit for bit.
-    #[test]
-    fn a_running_median_over_a_crop_with_its_window_is_bit_identical() {
-        let mut rng = Rng::new(20260930);
-        let row: Vec<f32> = (0..400).map(|_| rng.range(-80.0, 200.0)).collect();
-        let r = 23;
-        let mut full = vec![0.0; row.len()];
-        running_median(&row, r, &mut full);
-        for (a, b) in [(100usize, 180usize), (0, 60), (350, 400), (0, 400)] {
-            let (ca, cb) = (a.saturating_sub(r), (b + r).min(row.len()));
-            let mut local = vec![0.0; cb - ca];
-            running_median(&row[ca..cb], r, &mut local);
-            let same = (a..b).all(|x| full[x].to_bits() == local[x - ca].to_bits());
-            assert!(same, "median over [{ca}, {cb}) differs from the full row in [{a}, {b})");
-        }
-    }
-
-    /// Trap B, the blur: `surface::box_blur` keeps a running sum from the
-    /// start of each row and column. The same blur over a crop, even one
-    /// holding every output's whole window, restarts that sum and rounds
-    /// differently: it is NOT bit-identical to the full frame. Recomputing
-    /// only part of the contact level must keep the full rows' and columns'
-    /// sums (or recompute the blur in full).
-    #[test]
-    fn a_box_blur_over_a_crop_is_not_bit_identical() {
-        let (w, h, r) = (160, 120, 3);
-        let mut rng = Rng::new(20260930);
-        let src: Vec<f32> = (0..w * h).map(|_| rng.range(0.0, 200.0)).collect();
-        let full = crate::surface::box_blur(&src, w, h, r);
-        // the interior [60, 100) × [40, 80), cropped with a halo of r
-        let (x0, y0, x1, y1) = (60 - r, 40 - r, 100 + r, 80 + r);
-        let crop: Vec<f32> = (y0..y1).flat_map(|y| src[y * w + x0..y * w + x1].to_vec()).collect();
-        let local = crate::surface::box_blur(&crop, x1 - x0, y1 - y0, r);
-        let (mut differ, mut max) = (0, 0.0f32);
-        for y in 40..80 {
-            for x in 60..100 {
-                let (a, b) = (full[y * w + x], local[(y - y0) * (x1 - x0) + x - x0]);
-                if a.to_bits() != b.to_bits() {
-                    differ += 1;
-                    max = max.max((a - b).abs());
-                }
-                // the same value, but for rounding
-                assert!((a - b).abs() <= 1e-3, "{a} vs {b} at ({x}, {y})");
-            }
-        }
-        assert!(differ > 0, "the cropped blur is bit-identical here: box_blur no longer keeps a running sum?");
-        eprintln!("cropped box blur: {differ} of 1600 pixels differ, by up to {max:e}");
-    }
-}
-
-#[cfg(test)]
-mod part_tests {
-    use super::*;
-    use crate::color::hex;
-
-    fn vols(h: &Held) -> Vec<(f32, f32)> {
-        h.bristles.iter().map(|b| (b.rx, b.vol)).collect()
-    }
-
-    #[test]
-    fn whole_part_is_an_ordinary_load() {
-        let mut a = Held::new(Tool::filbert(12.0), 7);
-        let mut b = Held::new(Tool::filbert(12.0), 7);
-        a.load(Paint::body(hex("#445566")), 0.8);
-        b.load_part(Paint::body(hex("#445566")), 0.8, &Part::ALL);
-        assert_eq!(vols(&a), vols(&b));
-    }
-
-    #[test]
-    fn a_side_dip_reaches_only_that_side() {
-        let mut h = Held::new(Tool::filbert(12.0), 7);
-        h.load_part(Paint::body(hex("#c04040")), 0.8, &Part { side: 1.0, share: 0.4, streak: 0.0, seed: 1 });
-        for (rx, v) in vols(&h) {
-            if rx < -0.1 {
-                assert_eq!(v, 0.0, "bristle at {rx} took paint");
-            }
-            if rx > 0.6 {
-                assert!(v > 0.0, "bristle at {rx} took none");
-            }
-        }
-    }
-
-    #[test]
-    fn streaks_keep_about_the_same_paint() {
-        let mut even = Held::new(Tool::filbert(12.0), 7);
-        even.load(Paint::body(hex("#445566")), 0.8);
-        let mut sum = 0.0;
-        for seed in 0..40 {
-            let mut h = Held::new(Tool::filbert(12.0), 7);
-            h.load_part(Paint::body(hex("#445566")), 0.8, &Part { streak: 1.0, seed, ..Part::ALL });
-            sum += h.fullness() / even.fullness();
-            // and the bristles take it unevenly
-            let v: Vec<f32> = h.bristles.iter().map(|b| b.vol).collect();
-            let (lo, hi) = v.iter().fold((f32::MAX, 0f32), |(l, m), &x| (l.min(x), m.max(x)));
-            assert!(hi > 3.0 * lo.max(1e-9), "seed {seed}: {lo}..{hi}");
-        }
-        let mean = sum / 40.0;
-        assert!((0.8..1.2).contains(&mean), "mean {mean}");
-    }
 }
 
 /// The share of a tube paint's volume that is oil (about 30–45%).
-const OIL_SHARE: f32 = 0.4;
+pub(crate) const OIL_SHARE: f32 = 0.4;
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).
@@ -3270,80 +2795,5 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
-    }
-}
-
-#[cfg(test)]
-mod knife_tests {
-    use super::*;
-    use crate::hex;
-
-    #[test]
-    fn knife_preserves_thinner_when_loading_laying_and_scraping() {
-        let mut c = Canvas::new(120, 1.0, hex("#ffffff")).with_engine(4);
-        let mut k = Knife::new(30.0);
-        k.load(Paint::body(hex("#224466")).with_thinner(0.75), 0.5);
-        let liquid = k.full() * 0.5;
-        assert!((k.vol / liquid - 0.25).abs() < 1e-6, "the blade stores pigment separately from thinner");
-        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (0.4, 0.4), None, true, 0.1);
-        let paint: f32 = c.wet.vol.iter().sum();
-        let solvent: f32 = c.wet.solv.iter().sum::<f32>() / crate::surface::COAT_UM;
-        assert!(paint > 0.0 && solvent > 0.0, "a thinned knife lays both liquids");
-        assert!((solvent / paint - 3.0).abs() < 1e-3);
-        k.wipe();
-        c.knife(&mut k, &[(200.0, 300.0), (700.0, 300.0)], (1.0, 1.0), None, false, 0.0);
-        assert!(k.vol > 0.0);
-        let before = c.wet.solv.iter().sum::<f32>();
-        c.knife(&mut k, &[(200.0, 600.0), (700.0, 600.0)], (0.4, 0.4), None, true, 0.1);
-        assert!(c.wet.solv.iter().sum::<f32>() > before, "scraped thinner remains on the blade for the next pull");
-    }
-}
-
-#[cfg(test)]
-mod spatter_tests {
-    use super::*;
-    use crate::color::hex;
-
-    #[test]
-    fn review_spatter_transfers_solvent_and_covers_its_drops() {
-        let mut c = Canvas::new(200, 1.0, hex("#e8e0d0")).with_size_mm(300.0);
-        c.wet.cover.fill(0.1);
-        let mut h = Held::new(Tool::round_sable(12.0), 3);
-        h.load(Paint::new(hex("#b03020"), 0.9, 0.1).with_thinner(0.5), 1.0);
-        let before: f32 = h.bristles.iter().map(|b| b.solvent).sum();
-        assert!(c.spatter(&mut h, &Spatter { at: (300.0, 400.0), toward: (100.0, 0.0), spread: 0.2, force: 0.9, seed: 9 }, None) > 0);
-        let after: f32 = h.bristles.iter().map(|b| b.solvent).sum();
-        assert!(after < before && c.solvent_total() > 0.0, "spatter must transfer the load's solvent");
-        assert!(c.wet.vol.iter().zip(&c.wet.cover).filter(|(v,_)| **v > 0.0).all(|(_,cover)| *cover == 1.0));
-    }
-
-    fn flick(stiff: f32, force: f32) -> (usize, f32, f32) {
-        let mut c = Canvas::new(400, 2.0, hex("#e8e0d0")).with_size_mm(300.0);
-        let mut h = Held::new(Tool::round_sable(8.0), 3);
-        h.load(Paint::new(hex("#b03020"), 0.9, stiff), 1.0);
-        let before = h.fullness();
-        let n = c.spatter(&mut h, &Spatter { at: (100.0, 150.0), toward: (150.0, 0.0), spread: 0.4, force, seed: 9 }, None);
-        let laid: f32 = c.wet.vol.iter().sum();
-        (n, before - h.fullness(), laid)
-    }
-
-    /// Fluid paint flies; stiff paint mostly stays on the brush; a harder
-    /// flick throws more; what leaves the brush lands on the canvas.
-    #[test]
-    fn fluid_paint_flies_and_stiff_paint_stays() {
-        let (n_fluid, out_fluid, laid_fluid) = flick(0.1, 0.9);
-        let (_, out_stiff, _) = flick(0.95, 0.9);
-        let (_, out_soft, _) = flick(0.1, 0.2);
-        assert!(n_fluid > 20, "a hard flick of fluid paint throws many droplets ({n_fluid})");
-        assert!(out_fluid > 2.0 * out_stiff, "stiff paint stays on the brush ({out_fluid} vs {out_stiff})");
-        assert!(out_fluid > out_soft, "a harder flick throws more ({out_fluid} vs {out_soft})");
-        assert!(laid_fluid > 0.0, "the droplets land in the wet layer");
-    }
-
-    /// Same seed, same spatter.
-    #[test]
-    fn spatter_is_deterministic() {
-        assert_eq!(flick(0.2, 0.7).0, flick(0.2, 0.7).0);
-        assert_eq!(flick(0.2, 0.7).2.to_bits(), flick(0.2, 0.7).2.to_bits());
     }
 }

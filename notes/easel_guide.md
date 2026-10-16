@@ -74,7 +74,7 @@ dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
 matte, a thin film shows the surface under it, a varnish makes all of it
 glossy. A matte surface scatters the light its first surface reflects back
 toward you, a faint veil of white over the colors that lifts the darks; a
-glossy one sends it away. The looks and the saved picture show it.
+glossy one sends it away. The looks show it.
 
 It sets `W` (1000) and `H` (`1000 / aspect`). The canvas is always 1000
 units wide, whatever its pixel width. The origin `(0, 0)` is the upper

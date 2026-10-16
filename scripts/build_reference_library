@@ -1,0 +1,50 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# ///
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import runpy
+import subprocess
+
+
+def build(manifest, read, strip):
+    entries = []
+    ids = set()
+    for item in manifest:
+        if item["id"] in ids:
+            raise ValueError("duplicate reference id: " + item["id"])
+        ids.add(item["id"])
+        source = read(item["source"])
+        if hashlib.sha256(source.encode()).hexdigest() != item["sha256"]:
+            raise ValueError("reference source changed; review its selected passages: " + item["source"])
+        lines = source.splitlines(keepends=True)
+        parts = []
+        for start, end in item["lines"]:
+            if not 1 <= start <= end <= len(lines):
+                raise ValueError("invalid reference range: " + item["id"])
+            parts.append("".join(lines[start - 1:end]))
+        entries.append({"id": item["id"], "title": item["title"], "keywords": item["keywords"],
+                        "text": strip("\n\n".join(parts))})
+    return entries
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Export the reviewed reference passages from a committed revision.")
+    parser.add_argument("dest", type=Path)
+    parser.add_argument("--ref", default="HEAD")
+    args = parser.parse_args()
+    repo = Path(__file__).resolve().parent.parent
+    def read(path):
+        return subprocess.check_output(["git", "-C", str(repo), "show", f"{args.ref}:{path}"]).decode()
+    manifest = json.loads(read("notes/reference-library/manifest.json"))
+    strip = runpy.run_path(str(repo / "scripts/strip_sources"))["strip"]
+    entries = build(manifest, read, strip)
+    args.dest.parent.mkdir(parents=True, exist_ok=True)
+    args.dest.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()

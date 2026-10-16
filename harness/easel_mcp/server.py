@@ -23,6 +23,8 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import anyio
 
+from references import reference, reference_list
+
 
 def hide_counters(text):
     text = re.sub(r'\[string "chunk \d+"\]', '[string "chunk"]', text)
@@ -299,6 +301,10 @@ class Easel:
         return f"revised in {path}\n"
 
     async def call(self, name, params):
+        if name in ("reference", "reference_list"):
+            lookup = reference if name == "reference" else reference_list
+            result = lookup(studio_path(self.studio, "notes/reference-library.json"), params)
+            return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
         scratch = params.get("scratch", False)
         on = ["--scratch"] if scratch else []
         tag = "[scratch canvas]\n" if scratch else ""

@@ -12,8 +12,9 @@ numbers are given where they were recovered. Each finding should be checked agai
 The two late paintings examined used lead white, cobalt blue, French
 ultramarine, cobalt violet, viridian, cadmium yellows, zinc and barium
 yellow, vermilion and madder lake; chrome yellow and emerald green are not
-found in them [TB28]. Yellow ochre is known only from a remark resting on
-other studies, not from analysis [TB28 p.63].
+found in them [TB28]. Yellow ochre was not found in them either; from other
+work, the same study reports that Monet used types of yellow ochre in the
+early twentieth century [TB28 p.63].
 Zinc white was identified in Pink Water Lilies [MM22].
 <!-- research: MM22 gives conflicting dates for Pink Water Lilies; see Sources. -->
 
@@ -46,8 +47,8 @@ Zinc white was identified in Pink Water Lilies [MM22].
 | barium (lemon) yellow and zinc yellow | used together, examined late paintings | [TB28] |
 | vermilion | Pink Water Lilies and examined late paintings | [MM22; TB28] |
 | madder lake | examined late paintings | [TB28] |
-| cochineal lake | found with madder in paintings of the period in one museum collection; not confirmed in Monet | [POZ] |
-| yellow ochre | known from a remark resting on other studies, not found by analysis | [TB28 p.63] |
+| cochineal lake | found with madder in paintings of the period in one museum collection; the one red lake analyzed in the late paintings is madder | [POZ; TB28] |
+| yellow ochre | not found in the examined late paintings; reported from another study for the early twentieth century | [TB28 p.63] |
 
 ## 5. Oils and handling
 
@@ -70,7 +71,7 @@ ultramarine → ultramarine blue; cobalt violet → cobalt violet; viridian →
 viridian; the cadmium yellows and orange → pale cadmium, cadmium yellow
 and deep cadmium (an inferred grade mapping); barium yellow →
 barium yellow; zinc yellow → zinc yellow; vermilion → vermilion; madder
-lake → rose madder; cochineal lake → carmine lake (a period cochineal proxy, not confirmed in Monet); yellow ochre → yellow
+lake → rose madder; cochineal lake → carmine lake (a period cochineal proxy; not found in the late paintings examined); yellow ochre → yellow
 ochre.
 
 Barium yellow and zinc yellow take their color from the measured color of

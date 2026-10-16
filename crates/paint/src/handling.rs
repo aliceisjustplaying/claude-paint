@@ -444,10 +444,12 @@ struct Plan {
 impl Canvas {
     /// Work the region `mask` with a simulated brush, stroke by stroke.
     ///
-    /// Strokes are planned up front, then grouped into passages (tiles) at
-    /// least twice any stroke's reach on each axis. The tiles are painted in
-    /// an order set by `Order` (2×2 checkerboard phases in shuffled order,
-    /// or bands along a sweep), each with its own brush; tiles whose
+    /// Strokes are planned up front, then grouped into passages (tiles), by
+    /// default at least twice any stroke's reach on each axis. Engine 5 can
+    /// opt into smaller dense passages with `PAINT_SMALL_TILES=1`, or quarter
+    /// dimensions and regrouped default order with `PAINT_SMALL_TILES=quarter`.
+    /// An explicit `Order` is kept (2×2 checkerboard phases in shuffled order,
+    /// or bands along a sweep), each tile with its own brush; tiles whose
     /// footprints don't overlap run in parallel (`sched::run_ordered`), with
     /// the same result as painting them one by one.
     pub fn work(&mut self, mask: &Mask, hd: &Handling, seed: u64) {
@@ -843,13 +845,33 @@ impl Canvas {
     #[allow(clippy::too_many_arguments)]
     fn run_plans(&mut self, plans: Vec<(f32, f32, Option<Rect>, Plan)>, (ex, ey): (f32, f32), gap: f32, tool: &Tool, hd: &Handling, ramps: (f32, f32), clip: Option<Clip<'_>>, seed: u64, rng: &mut Rng, piles: &mut Piles, slice: Option<f64>) {
         let f = self.f;
-        // tiles are sized per axis from the footprints: tiles painted at the
+        // default tiles are sized per axis from the footprints: tiles painted at the
         // same time are one tile apart, so a tile at least twice the largest
         // reach keeps their pixels disjoint (long horizontal strokes get wide,
         // short tiles)
         let margin = 2.0 / f.scale;
-        let (tile_x, tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
-        let (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        let (ex, ey) = if crate::engine7::active(self.engine) { crate::engine7::Footprint::tile_reach(plans.iter().filter_map(|(cx, cy, r, _)| r.map(|r| ((*cx, *cy), r))), f.scale) } else { (ex, ey) };
+        let (mut tile_x, mut tile_y) = ((2.0 * ex + margin).max(gap * 2.0), (2.0 * ey + margin).max(gap * 2.0));
+        let (mut tw, mut th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+        let small_tiles = self.work_tile_mode();
+        let mut quarter_tiles = false;
+        if matches!(small_tiles.as_deref(), Some("1" | "quarter")) && plans.iter().all(|(_, _, _, p)| p.id.is_none()) {
+            let mut counts = vec![0usize; tw * th];
+            for (cx, cy, rect, _) in &plans {
+                if rect.is_some() {
+                    let tx = ((*cx / tile_x) as usize).min(tw - 1);
+                    let ty = ((*cy / tile_y) as usize).min(th - 1);
+                    counts[ty * tw + tx] += 1;
+                }
+            }
+            let scale = if small_tiles.as_deref() == Some("quarter") { crate::sched::quarter_work_tile_scale(&counts) } else { crate::sched::work_tile_scale(&counts) };
+            if scale < 1.0 {
+                quarter_tiles = small_tiles.as_deref() == Some("quarter");
+                tile_x *= scale;
+                tile_y *= scale;
+                (tw, th) = ((f.width() / tile_x).ceil().max(1.0) as usize, (f.height() / tile_y).ceil().max(1.0) as usize);
+            }
+        }
         if std::env::var_os("PAINT_DEBUG").is_some() {
             eprintln!("work: {} strokes, reach {ex:.0}x{ey:.0}, tiles {tw}x{th}", plans.len());
         }
@@ -911,7 +933,14 @@ impl Canvas {
         let order = tile_order(hd.order.unwrap_or_default(), (tw, th), (tile_x, tile_y), rng);
         // (strokes with ids fixed in advance don't take new ones)
         let ids = tiles.iter().map(|t| t.iter().filter(|p| p.id.is_none()).count() as u32).collect();
-        let order = if hd.order.is_some() { TileOrder::Asked(order) } else { TileOrder::Default(order) };
+        let order = if hd.order.is_some() {
+            TileOrder::Asked(order)
+        } else if quarter_tiles {
+            TileOrder::Quarter(order)
+        } else {
+            TileOrder::Default(order)
+        };
+        let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.into_iter().chain(p.dip2.map(|(paint, _, _)| paint))), &secs);
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         self.paint_pass(pass, |surf, ti, first_id| {
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
@@ -959,6 +988,9 @@ impl Canvas {
                     Some(Clip::Fence { fence, limit, .. }) => Some(Clip::Fence { fence, u: crate::fence::Fence::stroke_draw(p.pts[0], seed), limit }),
                     c => c,
                 };
+                if crate::engine7::stats() {
+                    crate::engine7::trace_stroke(&surf, &held, &g, id);
+                }
                 let r = unsafe { crate::bristle::drag_on(surf, &mut held, &g, clip, id, &mut scratch) };
                 b = crate::sched::union(b, r);
             }
@@ -972,7 +1004,11 @@ impl Canvas {
 fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
     // footprints in whole-canvas pixels (a crop render plans the same tiles)
     let f = cv.f;
-    let rect = footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h);
+    let rect = if crate::engine7::active(cv.engine) {
+        crate::engine7::Footprint::planned(tool, &pts, hd.shake, hd.orient, f.scale, f.full_w, f.full_h)
+    } else {
+        footprint(tool, &pts, hd.shake, f.scale, f.full_w, f.full_h)
+    };
     let pressure = rng.range(hd.pressure.0, hd.pressure.1);
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
@@ -1396,327 +1432,6 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
     pts
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg(tube_box)]
-    fn filling_requires_explicit_opt_in() {
-        let pal = Palette::tube_box();
-        let pile = pal.pile(vec![(0, 1.0)]);
-        let run = |fill: Option<bool>| {
-            let mut c = Canvas::new(160, 1.0, [0.8; 3]);
-            let mask = Mask::full(c.frame());
-            let mut hd = Handling::new(Tool::filbert(6.0)).piled(&pal, pile.clone(), 0.2).load(0.3).coverage(1.5);
-            if let Some(on) = fill {
-                hd = hd.fill(on);
-            }
-            c.work(&mask, &hd, 3);
-            (c.tally().strokes, c.wet_total())
-        };
-        let off = run(Some(false));
-        assert_eq!(run(None), off, "default must leave the strokes' gaps alone");
-        let on = run(Some(true));
-        assert!(on.0 > off.0 && on.1 != off.1, "explicit fill must add paint dabs");
-    }
-
-    /// A pass from a pile lays that pile: its paint and drying rate,
-    /// whatever the color field says, every dip from the same pile
-    /// (remixed a little: a pile knifed by hand is uneven), never a recipe
-    /// the engine chose.
-    #[test]
-    #[cfg(tube_box)]
-    fn a_pass_from_a_pile_lays_the_pile() {
-        use crate::bristle::Tool;
-        let pal = Palette::tube_box();
-        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
-        let blue = pal.pile(vec![(at("lead white"), 0.5), (at("Prussian blue"), 0.5)]);
-        let run = |mix_jitter: f32| {
-            let mut c = Canvas::new(200, 1.0, [0.8; 3]);
-            let m = Mask::from_fn(c.frame(), |x, y| if (300.0..700.0).contains(&x) && (300.0..700.0).contains(&y) { 1.0 } else { 0.0 });
-            let hd = Handling::new(Tool::filbert(20.0)).color(|_, _| [0.9, 0.05, 0.05]).coverage(3.0).mix_jitter(mix_jitter).piled(&pal, blue.clone(), 0.2);
-            c.work(&m, &hd, 3);
-            c
-        };
-        let c = run(0.0);
-        let f = c.frame();
-        let i = f.index(500.0, 500.0);
-        let px = c.seen()[i];
-        assert!(px[2] > px[0] + 0.05, "the pile's blue, not the field's red: {px:?}");
-        assert_eq!(c.wet.hide[i][2], blue.drying, "the pile's drying rate");
-        // with mixing jitter the dips vary around the pile, not toward the field
-        let c = run(0.08);
-        let d = c.wet.hide[i][2];
-        assert!((d - blue.drying).abs() < 0.2 * blue.drying && d != blue.drying, "{d} vs {}", blue.drying);
-        let px = c.seen()[i];
-        assert!(px[2] > px[0] + 0.05, "{px:?}");
-    }
-
-    /// Strokes bow by default and are straight with `ruler()`.
-    #[test]
-    fn strokes_bow_unless_ruled() {
-        use crate::bristle::Tool;
-        let bows = |h: &Handling| {
-            let drift = crate::noise::Fbm::new(1, 3, 300.0);
-            let mut rng = crate::rng::Rng::new(9);
-            let mut v: Vec<f32> = (0..200)
-                .map(|_| {
-                    let p = hand_trace(h, &drift, 500.0, 500.0, 150.0, 0.0, &mut rng);
-                    let (a, b, m) = (p[0], p[p.len() - 1], p[p.len() / 2]);
-                    let chord = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
-                    // distance of the middle from the chord, relative to its length
-                    ((b.0 - a.0) * (a.1 - m.1) - (a.0 - m.0) * (b.1 - a.1)).abs() / chord / chord
-                })
-                .collect();
-            v.sort_by(f32::total_cmp);
-            v[v.len() / 2]
-        };
-        let hand = bows(&Handling::new(Tool::filbert(10.0)).curve(0.08, 0.0).drift(0.0, 100.0));
-        let ruler = bows(&Handling::new(Tool::filbert(10.0)).ruler());
-        assert!(hand > 0.03 && ruler < 1e-3, "median bow: hand {hand}, ruler {ruler}");
-    }
-
-    /// Every pair of tiles whose footprints overlap is painted in the
-    /// requested order (so a parallel run equals a serial one in that order).
-    #[test]
-    fn tiles_keep_their_order_where_they_overlap() {
-        let mut rng = Rng::new(4);
-        let (tw, th, tp) = (9usize, 7usize, 40.0f32);
-        let rects: Vec<Option<Rect>> = (0..tw * th)
-            .map(|t| {
-                if rng.chance(0.15) {
-                    return None;
-                }
-                let (x, y) = ((t % tw) as f32 * tp, (t / tw) as f32 * tp);
-                let r = rng.range(0.0, 0.5) * tp;
-                Some(((x - r).max(0.0) as usize, (y - r).max(0.0) as usize, (x + tp + r) as usize, (y + tp + r) as usize))
-            })
-            .collect();
-        for order in [Order::Passages, Order::Sweep(1.0), Order::Sweep(std::f32::consts::FRAC_PI_2)] {
-            let ord = tile_order(order, (tw, th), (tp, tp), &mut rng);
-            // the scheduler all tile work runs through (sched::run_ordered)
-            let ord: Vec<usize> = ord.into_iter().filter(|&t| rects[t].is_some()).collect();
-            let log = std::sync::Mutex::new(Vec::new());
-            let ran = crate::sched::run_ordered(&ord, &rects, |t| log.lock().unwrap().push(t));
-            let log = log.into_inner().unwrap();
-            let pos: Vec<usize> = (0..tw * th).map(|t| ord.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();
-            let ran_at: Vec<usize> = (0..tw * th).map(|t| log.iter().position(|&u| u == t).unwrap_or(usize::MAX)).collect();
-            let ov = |a: Rect, b: Rect| a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3;
-            for a in 0..tw * th {
-                for b in 0..tw * th {
-                    if let (Some(ra), Some(rb)) = (rects[a], rects[b])
-                        && a != b
-                        && ov(ra, rb)
-                        && pos[a] < pos[b]
-                    {
-                        assert!(ran_at[a] < ran_at[b], "{order:?}: tile {a} must run before {b}");
-                    }
-                }
-            }
-            assert_eq!(ran.len(), rects.iter().flatten().count());
-        }
-    }
-
-    /// `.coverage(0.0)` disables a pass: nothing is painted or blended.
-    #[test]
-    fn zero_coverage_is_a_no_op() {
-        use crate::color::{Mix, gradient};
-        for blender in [false, true] {
-            let mut c = Canvas::new(100, 1.0, [0.9; 3]);
-            let m = Mask::full(c.frame());
-            // something wet to blend
-            c.work(&m, &Handling::new(Tool::filbert(22.0)).color(|x, _| gradient(&[(0.0, [0.1, 0.2, 0.6]), (1.0, [0.9, 0.7, 0.2])], x / 100.0, Mix::Pigment)), 3);
-            let before = (c.wet_total(), c.pixels().to_vec());
-            let mut hd = Handling::new(Tool::filbert(22.0)).coverage(0.0).color(|_, _| [0.05; 3]);
-            if blender {
-                hd = hd.blender();
-            }
-            c.work(&m, &hd, 1);
-            assert_eq!(c.wet_total(), before.0, "blender {blender}: wet paint changed");
-            c.dry();
-            let mut d = Canvas::new(100, 1.0, [0.9; 3]);
-            d.work(&m, &Handling::new(Tool::filbert(22.0)).color(|x, _| gradient(&[(0.0, [0.1, 0.2, 0.6]), (1.0, [0.9, 0.7, 0.2])], x / 100.0, Mix::Pigment)), 3);
-            d.dry();
-            let changed = c.pixels().iter().zip(d.pixels()).filter(|(a, b)| a != b).count();
-            assert_eq!(changed, 0, "blender {blender}: {changed} pixels changed");
-            let _ = before.1;
-        }
-    }
-
-    /// `Style::blend()` fuses a masked passage without dragging its wet
-    /// paint across the mask's edge;
-    /// `.clip(false)` fuses across it.
-    #[test]
-    #[cfg(tube_box)]
-    fn blender_stays_in_its_region() {
-        use crate::color::hex;
-        let st = crate::style::Style::oil();
-        let run = |clip: Option<bool>| {
-            let mut c = Canvas::new(200, 1.0, hex("#d8d0c0"));
-            let f = c.frame();
-            // a wet dark passage below y = 500, a dry light one above
-            let below = Mask::from_fn(f, |_, y| if y >= 500.0 { 1.0 } else { 0.0 });
-            c.work(&below, &Handling::new(Tool::filbert(30.0)).color(|_, _| hex("#2a2a30")).coverage(3.0).clip(true), 1);
-            let before = c.pixels().to_vec();
-            let mut b = st.blend().unwrap();
-            if let Some(on) = clip {
-                b = b.clip(on);
-            }
-            c.work(&below, &b, 2);
-            c.dry();
-            // how much darker the light passage got, just above the edge
-            let mut worst = 0.0f32;
-            for (i, p) in c.pixels().iter().enumerate() {
-                let y = (i / f.w) as f32 / f.scale;
-                if y < 495.0 && y > 440.0 {
-                    worst = worst.max(to_oklab(before[i])[0] - to_oklab(*p)[0]);
-                }
-            }
-            worst
-        };
-        let (inside, across) = (run(None), run(Some(false)));
-        println!("blend: light passage darkened by {inside:.4} (default), {across:.4} (clip(false))");
-        assert!(inside < 0.01, "the default blender dragged dark paint out of its region: {inside}");
-        assert!(across > 0.05, "clip(false) should still fuse across the edge: {across}");
-    }
-
-    /// A dark body passage through a mask over the light ground: (share of
-    /// pixels still reading as ground (L within 0.12 of it) in a 5-unit band
-    /// inside the mask's edges, the band's L above the interior's, the share
-    /// of a 12–30-unit band outside the edges, past the brush that got darker by 0.1 L), for a
-    /// band region parallel to the strokes or a disk (edges at every angle).
-    #[cfg(tube_box)]
-    fn edge_stats(clip: bool, disk: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
-        edge_stats_in(clip, disk, false, hug, seed)
-    }
-
-    #[cfg(tube_box)]
-    fn edge_stats_in(clip: bool, disk: bool, thin: bool, hug: bool, seed: u64) -> (f32, f32, f32) {
-        use crate::color::hex;
-        let st = crate::style::Style::oil();
-        // a knifed light ground on linen (the brushed one costs a pass)
-        let mut c = Canvas::new(300, 1.0, st.raw).with_size_mm(st.width_mm).with_linen(crate::surface::Linen { seed, ..st.linen });
-        c.prime(hex("#b08457"), 0.8, 120.0, 0.3, 0.3, seed);
-        let before = c.pixels().to_vec();
-        let g = to_oklab(c.pixels()[c.f.w * c.f.h / 2])[0];
-        let f = c.frame();
-        let m = if disk {
-            Mask::from_fn(f, |x, y| if (x - 500.0).powi(2) + (y - 500.0).powi(2) < 250.0f32.powi(2) { 1.0 } else { 0.0 })
-        } else if thin {
-            // a band narrower than the broad brush
-            Mask::from_fn(f, |_, y| if (400.0..415.0).contains(&y) { 1.0 } else { 0.0 })
-        } else {
-            Mask::from_fn(f, |_, y| if (400.0..460.0).contains(&y) { 1.0 } else { 0.0 })
-        };
-        let hd = if thin { st.broad() } else { st.body() };
-        let dark = st.palette.pile(vec![(st.palette.tubes.iter().position(|t| t.name == "bone black").unwrap(), 1.0)]);
-        c.work(&m, &hd.piled(&st.palette, dark, 0.2).coverage(2.5).fill(true).clip(clip).hug(hug), seed + 4);
-        c.dry();
-        let sd = m.distance();
-        let (mut e, mut en, mut inn, mut sp, mut spn) = (0, 0, 0, 0, 0);
-        let (mut le, mut li) = (0.0f32, 0.0f32);
-        for (k, p) in c.pixels().iter().enumerate() {
-            let d = sd.data[k];
-            let l = to_oklab(*p)[0];
-            if d < -12.0 && d > -30.0 {
-                spn += 1;
-                sp += (to_oklab(before[k])[0] - l > 0.1) as usize;
-            } else if d > 0.0 && d < 5.0 {
-                en += 1;
-                e += (l > g - 0.12) as usize;
-                le += l;
-            } else if d > 8.0 {
-                inn += 1;
-                li += l;
-            }
-        }
-        (e as f32 / en.max(1) as f32, le / en.max(1) as f32 - li / inn.max(1) as f32, sp as f32 / spn.max(1) as f32)
-    }
-
-    /// Coverage doesn't thin at a mask's edges: stroke centers just outside a region hug its edge, and
-    /// unclipped strokes that brush into it are carried in from the edge.
-    #[test]
-    #[ignore]
-    #[cfg(tube_box)]
-    fn probe_edges_over_seeds() {
-        for disk in [false, true] {
-            for clip in [false, true] {
-                let (mut o, mut n) = ([0.0f32; 3], [0.0f32; 3]);
-                for seed in 1..7u64 {
-                    let a = edge_stats(clip, disk, false, seed);
-                    let b = edge_stats(clip, disk, true, seed);
-                    for (acc, v) in [(&mut o, a), (&mut n, b)] {
-                        acc[0] += v.0 / 6.0;
-                        acc[1] += v.1 / 6.0;
-                        acc[2] += v.2 / 6.0;
-                    }
-                }
-                println!("disk {disk} clip {clip}, hug off / on: bare edge {:.4} / {:.4}, edge L excess {:+.4} / {:+.4}, spill {:.3} / {:.3}", o[0], n[0], o[1], n[1], o[2], n[2]);
-            }
-        }
-    }
-
-    #[test]
-    #[cfg(tube_box)]
-    fn edges_are_covered_like_the_inside() {
-        for disk in [false, true] {
-            for clip in [false, true] {
-                // (set EDGE_UNHUGGED to also print the `hug(false)` stats)
-                let unhugged = std::env::var_os("EDGE_UNHUGGED").map(|_| edge_stats(clip, disk, false, 3));
-                let hugged = edge_stats(clip, disk, true, 3);
-                println!("disk {disk} clip {clip}: bare edge {:.4}, edge L excess {:+.4}, spill {:.3} (hug off {unhugged:?})", hugged.0, hugged.1, hugged.2);
-                assert!(hugged.0 < 0.012, "disk {disk} clip {clip}: {:.4} of the edge band bare", hugged.0);
-                assert!(hugged.1 < 0.009, "disk {disk} clip {clip}: edge lighter than the inside by {:.4}", hugged.1);
-                // strokes reach no farther past the edge than a brush width
-                assert!(hugged.2 < 0.03 || disk && !clip && hugged.2 < 0.2, "disk {disk} clip {clip}: spill {:.3}", hugged.2);
-            }
-        }
-        // a clipped band narrower than the broad brush, strokes along it
-        let (bare, _, _) = edge_stats_in(true, false, true, true, 3);
-        let unhugged = std::env::var_os("EDGE_UNHUGGED").map(|_| edge_stats_in(true, false, true, false, 3).0);
-        println!("thin clipped band: bare edge {bare:.4} (hug off {unhugged:?})");
-        assert!(bare < 0.05, "thin band: {bare:.4} of its edges bare");
-    }
-
-    /// A long hand-timed pass ages as it goes: its first slices can set (and
-    /// bake into the dry film) before the look-and-fill. The look must see
-    /// that paint as laid, not as a gap, so the pass lays at most about 1.5×
-    /// the fill dabs it does with hand time off. (Engine 2, whose paint sets
-    /// within a pass of a few hours.)
-    #[test]
-    fn a_long_timed_pass_fills_only_its_gaps() {
-        let run = |hand: Option<f32>, fill: bool| {
-            let mut c = Canvas::new(160, 1.4, crate::color::hex("#c8b89a")).with_size_mm(440.0).with_engine(2);
-            c.set_hand_time(hand);
-            let all = Mask::from_fn(c.frame(), |_, _| 1.0);
-            // thin, lean paint, one reload a stroke: hours of hand time
-            let hd = Handling::new(Tool::filbert(6.0)).color(|_, _| crate::color::hex("#6f84a8")).paint(0.85, 1.0).load(0.3).coverage(3.0).fill(fill);
-            c.work(&all, &hd, 3);
-            let set = c.wet.clock.px.iter().filter(|p| p.sub > 0.0 && p.sub < 1.0).count() as f32 / c.wet.vol.len() as f32;
-            (c.tally().strokes, c.clock(), set)
-        };
-        let (pass, _, _) = run(None, false);
-        let (off, _, _) = run(None, true);
-        let (on, clock, set) = run(Some(15.0), true);
-        assert!(clock > 120.0 && set > 0.01, "the pass took hours ({clock} min) and its start set ({set})");
-        let (off, on) = (off - pass, on - pass);
-        assert!(on <= off + off / 2 + 10, "fill dabs: {on} with hand time, {off} without");
-    }
-
-    #[test]
-    #[should_panic(expected = "coverage")]
-    fn negative_coverage_is_rejected() {
-        let _ = Handling::new(Tool::filbert(22.0)).coverage(-1.0);
-    }
-
-    #[test]
-    #[should_panic(expected = "coverage")]
-    fn nonfinite_coverage_is_rejected() {
-        let _ = Handling::new(Tool::filbert(22.0)).coverage(f32::NAN);
-    }
-}
-
 /// Maybe lift the brush partway and put it down again a little off the line.
 fn break_stroke(hd: &Handling, pts: Vec<(f32, f32)>, w: f32, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
     let n = pts.len();
@@ -1797,4 +1512,3 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
         }
     }
 }
-

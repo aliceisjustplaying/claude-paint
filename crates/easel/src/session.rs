@@ -25,6 +25,9 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// A log's head line: its knife's paint laid on wet paint stays on top of it
+/// (`paint::Canvas::with_knife_skim`). Every new painting has it.
+pub const KNIFE_SKIM_MARK: &str = "--@ knife-skim";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
@@ -402,6 +405,9 @@ impl Session {
         }
         if self.st.borrow().tubes.adaptive_sweep {
             let _ = writeln!(s, "--@ adaptive-sweep");
+        }
+        if self.st.borrow().tubes.knife_skim {
+            let _ = writeln!(s, "{KNIFE_SKIM_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -991,12 +997,17 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
+        b.knife_skim = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
     let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
+    }
+    let knife_skim = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == KNIFE_SKIM_MARK);
+    if knife_skim && engine != paint::engine7::ENGINE {
+        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7"));
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -1015,6 +1026,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.engine = engine;
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
+    b.knife_skim = knife_skim;
     Ok(b)
 }
 

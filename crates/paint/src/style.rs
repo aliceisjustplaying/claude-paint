@@ -220,7 +220,10 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached.with_quarter_tiles(self.palette.quarter_tiles);
+                            // (written with the drain and oils switches on to
+                            // keep the paint's packing and wax, below;
+                            // prepared, they are off)
+                            return cached.with_drain(false).with_oils(false).with_quarter_tiles(self.palette.quarter_tiles);
                         }
                     }
                 }
@@ -248,8 +251,16 @@ impl Style {
         }
         c.engine = engine;
         if let Some((path, key)) = cache {
+            // the cache keeps the paint's packing and wax (`wet::Prop`'s last
+            // five), which only a checkpoint with the drain and oils switches
+            // holds (version 16 with the drain section), so a ground read
+            // back is the ground just prepared, bit for bit (the caller sets
+            // the switches on either)
             let mut bytes = Vec::new();
-            if c.write_state(&mut bytes, &key).is_ok() {
+            (c.drain, c.oils) = (c.engine >= 4, c.engine >= 4);
+            let written = c.write_state(&mut bytes, &key).is_ok();
+            (c.drain, c.oils) = (false, false);
+            if written {
                 use std::io::Write;
                 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));

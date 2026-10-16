@@ -237,6 +237,12 @@ pub struct Canvas {
     pub(crate) adaptive_sweep: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
+    /// The drain switch (`with_drain`): an absorbent ground drains paint as
+    /// its pigment packs (`bristle::ground_drain`).
+    pub(crate) drain: bool,
+    /// The oils switch (`with_oils`): paint carries its tubes' wax, which
+    /// dulls its gloss (`bake`).
+    pub(crate) oils: bool,
 }
 
 impl Canvas {
@@ -287,6 +293,8 @@ impl Canvas {
             quarter_tiles: false,
             adaptive_sweep: false,
             soak: None,
+            drain: false,
+            oils: false,
         }
     }
 
@@ -300,6 +308,40 @@ impl Canvas {
     }
     pub fn engine(&self) -> u32 {
         self.engine
+    }
+
+    /// Turn on the drain switch (an easel log's `--@ drain`, engine 5 and
+    /// later): an absorbent ground drains the film over it as its pigment
+    /// packs, to the oil left when the pigment packs and below it only for
+    /// pigments coarser than the ground's pores, the packed layer growing up
+    /// from the ground while the surface keeps its oil, flow and gloss
+    /// (`bristle::ground_drain`); paint comes off from the top down; a film's
+    /// gloss reads its surface's oil against its pigment's packing
+    /// (`bake`). Without it an absorbent ground draws oil from the paint
+    /// just laid, as engine 4 has it (`bristle::ground_draw`), and a painting
+    /// is as it always was. A checkpoint keeps it (version 14).
+    pub fn with_drain(mut self, on: bool) -> Self {
+        self.drain = on;
+        self
+    }
+    /// The drain switch (`with_drain`).
+    pub fn drain(&self) -> bool {
+        self.drain
+    }
+
+    /// Turn on the oils switch (an easel log's `--@ oils`, engine 5 and
+    /// later): the tubes come in their colormen's oils, with their wax
+    /// (`palette::grind_of`, read by the box: `Palette::oils`), so a pile
+    /// dries at its oils' and wax's rate; on the canvas a film's wax dulls
+    /// its gloss as it bakes (`palette::WAX_MATTE`). Without it a painting
+    /// is as it always was. A checkpoint keeps it (version 16).
+    pub fn with_oils(mut self, on: bool) -> Self {
+        self.oils = on;
+        self
+    }
+    /// The oils switch (`with_oils`).
+    pub fn oils(&self) -> bool {
+        self.oils
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {

@@ -13,7 +13,7 @@ use crate::color::{Rgb, hex, luminance};
 use crate::drying::drier;
 use crate::pigment::{hiding_of, scatter_for};
 use crate::rng::Rng;
-use crate::wet::Paint;
+use crate::wet::{DRAINED_FLOOR, OIL_VOLUME, PACKED_OIL, Paint};
 
 /// A tube (or hand-ground) paint.
 #[derive(Clone, Debug)]
@@ -46,11 +46,555 @@ pub struct Tube {
     /// The same in engine 3 (`drying::drier::engine3`): `drying` unless the
     /// tube's own source range called for another.
     pub drying_3: f32,
+    /// The pigment's oil absorption (g of oil per 100 g of pigment, the
+    /// stiff paste at its critical pigment volume), its density (g/cm³) and
+    /// the share of that packed oil it would keep when an absorbent ground
+    /// has drained all it can (`drain`: about 0.9 for pigments finer than a
+    /// chalk ground's pores, which stay saturated, 0.4–0.9 for those about
+    /// 1 µm, 0.1–0.3 for coarse ones, which let air in). notes/research/
+    /// pigment_oil.md gives each one's sources (`PIGMENT_OIL`).
+    pub oa: f32,
+    pub density: f32,
+    pub drain: f32,
 }
 
 fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
-    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying }
+    let (oa, density, drain) = pigment_oil(name);
+    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying, oa, density, drain }
 }
+
+/// Each pigment's oil absorption (g/100 g), density (g/cm³) and drained
+/// share (`Tube::drain`); notes/research/pigment_oil.md has the sources and
+/// which are estimates. A pigment not listed takes a fine one's.
+const PIGMENT_OIL: &[(&str, f32, f32, f32)] = &[
+    ("lead white", 10.0, 6.81, 0.6),
+    ("smalt", 25.0, 2.5, 0.15),
+    ("pale smalt", 30.0, 2.5, 0.25),
+    ("yellow ochre", 25.0, 2.8, 0.6),
+    ("red earth", 18.0, 4.0, 0.7),
+    ("vermilion", 10.0, 8.1, 0.5),
+    ("raw umber", 35.0, 2.68, 0.8),
+    ("bone black", 43.0, 2.64, 0.9),
+    ("cobalt blue", 22.0, 4.2, 0.6),
+    ("chrome yellow", 20.0, 6.0, 0.65),
+    ("Prussian blue", 45.0, 1.78, 0.95),
+    ("green earth", 50.0, 2.75, 0.6),
+    ("Rinmann's green", 28.0, 5.5, 0.6),
+    ("copper green", 25.0, 1.88, 0.3),
+    ("zinc white", 18.0, 5.66, 0.85),
+    ("lead-tin yellow", 20.0, 8.0, 0.5),
+    ("Naples yellow", 25.0, 6.6, 0.5),
+    ("lemon chrome", 24.0, 6.1, 0.85),
+    ("pale cadmium", 24.0, 4.6, 0.85),
+    ("deep cadmium", 20.0, 4.82, 0.6),
+    ("cadmium yellow", 22.0, 4.82, 0.75),
+    ("Indian yellow", 40.0, 1.7, 0.6),
+    ("Mars yellow", 32.5, 4.0, 0.9),
+    ("transparent oxide yellow", 48.0, 4.0, 0.95),
+    ("brown ochre", 25.0, 3.0, 0.6),
+    ("raw sienna", 46.0, 3.27, 0.9),
+    ("orange chrome", 11.0, 6.9, 0.4),
+    ("Mars orange", 42.0, 4.0, 0.9),
+    ("red lead", 9.0, 8.8, 0.5),
+    ("orange vermilion", 10.0, 8.1, 0.55),
+    ("Chinese vermilion", 10.0, 8.1, 0.3),
+    ("cadmium red", 20.0, 5.1, 0.9),
+    ("Mars red", 27.0, 5.0, 0.92),
+    ("Indian red", 20.0, 5.0, 0.75),
+    ("rose madder", 70.0, 2.0, 0.92),
+    ("permanent alizarin", 60.0, 1.5, 0.95),
+    ("magenta", 70.0, 2.0, 0.9),
+    ("burnt sienna", 28.0, 3.95, 0.8),
+    ("Mars brown", 24.0, 4.5, 0.9),
+    ("bone brown", 43.0, 2.6, 0.65),
+    // (asphaltum dissolves in the oil: no pigment bed to pack, the ground
+    // drinks it as it drinks oil)
+    ("bitumen", 0.0, 1.1, 0.0),
+    ("cerulean blue", 28.0, 4.7, 0.6),
+    ("ultramarine blue", 35.0, 2.35, 0.6),
+    ("ultramarine ash", 30.0, 2.6, 0.2),
+    ("Antwerp blue", 55.0, 1.95, 0.92),
+    ("viridian", 80.0, 3.2, 0.6),
+    ("emerald green", 13.0, 3.26, 0.2),
+    ("cobalt violet", 25.0, 3.8, 0.3),
+    ("strontium yellow", 22.0, 3.7, 0.55),
+    ("barium yellow", 18.0, 4.5, 0.75),
+    ("zinc yellow", 26.0, 3.45, 0.75),
+    ("carmine lake", 70.0, 2.0, 0.92),
+    ("yellow lake", 50.0, 2.4, 0.8),
+    ("vine black", 30.0, 1.4, 0.3),
+];
+
+fn pigment_oil(name: &str) -> (f32, f32, f32) {
+    PIGMENT_OIL.iter().find(|p| p.0 == name).map_or((25.0, 3.0, 0.9), |p| (p.1, p.2, p.3))
+}
+
+/// The oil a tube is ground in (the oils switch, `Palette::oils`). Its
+/// drying rate against linseed's (`Oil::rate`) sets how fast the tube's
+/// paint dries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Oil {
+    Linseed,
+    Walnut,
+    Poppy,
+}
+
+/// The oils switch: how fast paint ground in walnut and in poppy oil dries
+/// against linseed's, and the slowing of a tube's few per cent of wax
+/// (notes/research/pigment_oil.md §5). Poppy: titanium white in safflower
+/// oil (poppy's fatty acids) touch-dry in 8–10 days for 4–5 in refined
+/// linseed (Golden 2016), thin oil films 5 days for 3–4 (Eibner 1909
+/// p. 308), the bis-allylic sites of each oil 75 for 125. Walnut: Eibner's
+/// 5–6 days, its bis-allylic sites 87, its cure after gelation 0.64 of
+/// linseed's (DePolo et al. 2024). Wax: a linseed film with 5% wax dried in
+/// 8 days for 4, with 10% in 11 (Eibner p. 415), so 3–6% of the oil about
+/// 1.7×.
+pub const WALNUT_RATE: f32 = 0.70;
+pub const POPPY_RATE: f32 = 0.55;
+pub const WAX_RATE: f32 = 0.60;
+/// The oils switch: the share of its gloss a paint's wax takes away:
+/// beeswax gels oil at 3–5% and its crystallites roughen the surface
+/// ("stumpfes, speckiges Aussehen", Eibner p. 414; a "satiny sheen",
+/// Golden); no gloss measurement exists, about 0.8 of the gloss at 60° is
+/// an estimate below purpose-made matting waxes'.
+pub const WAX_MATTE: f32 = 0.2;
+
+impl Oil {
+    /// Drying rate against linseed's (the oils switch).
+    pub fn rate(self) -> f32 {
+        match self {
+            Oil::Linseed => 1.0,
+            Oil::Walnut => WALNUT_RATE,
+            Oil::Poppy => POPPY_RATE,
+        }
+    }
+}
+
+/// A painter's box as its colormen ground it, where the research found its
+/// own paint (notes/research/pigment_oil.md §5): the oil its tubes are
+/// ground in unless a tube says otherwise, and whether they hold wax (both
+/// read with the oils switch, `grind_of`), and tubes whose oil content (w,
+/// oil by weight) or oil differ from the box's period's (`period_of`).
+struct BoxGrind {
+    name: &'static str,
+    oil: Oil,
+    wax: bool,
+    tubes: &'static [(&'static str, Option<f32>, Option<Oil>)],
+}
+
+const BOX_GRIND: &[BoxGrind] = &[
+    // Friedrich bought his colors ground, in bladders, and mixed the blues
+    // he bought dry himself (Most et al. 2024 pp. 89–90; letter of 1821);
+    // walnut oil, no resin (Mills & White 1988). Bladder colors took more
+    // oil (Fernbach 1834): lead white 0.14 est., the others bought ground
+    // at its ratio, 1.63 × their oil absorption est.; cobalt blue mixed by
+    // him, 1.2 × est. (The default box and the named Friedrich box, which
+    // adds Naples yellow and rose madder, bought ground too.)
+    BoxGrind {
+        name: "tube box",
+        oil: Oil::Walnut,
+        wax: false,
+        tubes: &[
+            ("lead white", Some(0.14), None),
+            ("yellow ochre", Some(0.29), None),
+            ("vermilion", Some(0.14), None),
+            ("raw umber", Some(0.36), None),
+            ("bone black", Some(0.41), None),
+            ("cobalt blue", Some(0.21), None),
+            ("chrome yellow", Some(0.25), None),
+            ("Prussian blue", Some(0.42), None),
+            ("green earth", Some(0.45), None),
+            ("Naples yellow", Some(0.29), None),
+            ("rose madder", Some(0.53), None),
+        ],
+    },
+    // Inness's red earth is Venetian red (Uebele 1913 p. 231: 75 : 25);
+    // Antwerp blue as Church's Prussian blue est. (Uebele's 0.35 is a
+    // blanc-fixe imitation, too stiff for the alumina pigment)
+    BoxGrind { name: "inness", oil: Oil::Linseed, wax: false, tubes: &[("red earth", Some(0.25), None), ("Antwerp blue", Some(0.43), None)] },
+    // Sargent's surviving box (about 1884–88): British tubes, mostly
+    // Winsor & Newton (Hellen & Kilmurray 2016): W&N's 1901 figures (Church
+    // p. 66); viridian Parry & Coste's analyzed British tube; poppy in the
+    // white, linseed in the darks (Ridge & Townsend 1998); magenta and bone
+    // brown Roberson's (bought 1888, 1899) est.
+    BoxGrind {
+        name: "sargent",
+        oil: Oil::Linseed,
+        wax: false,
+        tubes: &[
+            ("lead white", None, Some(Oil::Poppy)),
+            ("zinc white", Some(0.187), Some(Oil::Poppy)),
+            ("lemon chrome", Some(0.359), None),
+            ("chrome yellow", Some(0.359), None),
+            ("cadmium yellow", Some(0.401), None),
+            ("yellow ochre", Some(0.387), None),
+            ("raw sienna", Some(0.706), None),
+            ("burnt sienna", Some(0.60), None),
+            ("bone black", Some(0.528), None),
+            ("cobalt blue", Some(0.474), None),
+            ("ultramarine blue", Some(0.301), None),
+            ("viridian", Some(0.50), None),
+            ("magenta", Some(0.50), None),
+            ("bone brown", Some(0.47), None),
+        ],
+    },
+    // Alma-Tadema's colors partly Belgian (Mommen, Blockx), no figures:
+    // the British average; viridian Parry & Coste's analyzed British tube;
+    // Blockx ground whites, blues and pale lakes in poppy (Blockx 1881
+    // pp. 11–12)
+    BoxGrind {
+        name: "alma-tadema",
+        oil: Oil::Linseed,
+        wax: false,
+        tubes: &[("lead white", None, Some(Oil::Poppy)), ("cobalt blue", None, Some(Oil::Poppy)), ("rose madder", None, Some(Oil::Poppy)), ("viridian", Some(0.50), None)],
+    },
+    // French tubes, 1869–1890s: true oil, a third more than British for most
+    // colors (Vibert 1891 pp. 116–117; Wurm and Horadam's waxed colors,
+    // Eibner 1909 pp. 403–406; three measured tubes, Salvant 2012), the
+    // whites as British; wax in all three tubes measured; poppy for whites,
+    // blues, violets and greens, linseed for darks, lakes, vermilion and the
+    // chromes (Vibert; Moreau-Vauthier 1912; Seurat's paints, NG Technical
+    // Bulletin 24). (Seurat's box is ground as this one, `box_grind`.)
+    BoxGrind {
+        name: "impressionist",
+        oil: Oil::Linseed,
+        wax: true,
+        tubes: &[
+            ("lead white", Some(0.13), Some(Oil::Poppy)),
+            ("zinc white", Some(0.19), Some(Oil::Poppy)),
+            ("yellow ochre", Some(0.43), Some(Oil::Poppy)),
+            ("raw sienna", Some(0.68), Some(Oil::Poppy)),
+            ("burnt sienna", Some(0.63), None),
+            ("red earth", Some(0.45), Some(Oil::Poppy)),
+            ("vermilion", Some(0.22), None),
+            ("red lead", Some(0.12), None),
+            ("bone black", Some(0.55), None),
+            ("vine black", Some(0.45), None),
+            ("cobalt blue", Some(0.55), Some(Oil::Poppy)),
+            ("ultramarine blue", Some(0.34), Some(Oil::Poppy)),
+            ("Prussian blue", Some(0.50), Some(Oil::Poppy)),
+            ("cerulean blue", Some(0.50), Some(Oil::Poppy)),
+            ("viridian", Some(0.50), Some(Oil::Poppy)),
+            ("emerald green", Some(0.19), Some(Oil::Poppy)),
+            ("cobalt violet", Some(0.36), Some(Oil::Poppy)),
+            ("chrome yellow", Some(0.33), None),
+            ("orange chrome", Some(0.30), None),
+            ("pale cadmium", Some(0.40), None),
+            ("cadmium yellow", Some(0.40), None),
+            ("deep cadmium", Some(0.40), None),
+            ("barium yellow", Some(0.34), None),
+            ("strontium yellow", Some(0.34), None),
+            ("zinc yellow", Some(0.34), None),
+            ("Naples yellow", Some(0.22), Some(Oil::Poppy)),
+            ("Indian yellow", Some(0.50), None),
+            ("yellow lake", Some(0.49), None),
+            ("rose madder", Some(0.57), None),
+            ("carmine lake", Some(0.50), None),
+        ],
+    },
+    // Late Monet's colors, hand-ground by Edouard: the French oil, no wax
+    // found; poppy in a green, a yellow, a red and a lilac, linseed in a
+    // white (Roy, NG Technical Bulletin 28, 2007)
+    BoxGrind {
+        name: "giverny",
+        oil: Oil::Poppy,
+        wax: false,
+        tubes: &[
+            ("lead white", Some(0.13), Some(Oil::Linseed)),
+            ("zinc white", Some(0.19), None),
+            ("yellow ochre", Some(0.43), None),
+            ("vermilion", Some(0.22), None),
+            ("cobalt blue", Some(0.55), None),
+            ("ultramarine blue", Some(0.34), None),
+            ("cobalt violet", Some(0.36), None),
+            ("viridian", Some(0.50), None),
+            ("pale cadmium", Some(0.40), None),
+            ("cadmium yellow", Some(0.40), None),
+            ("deep cadmium", Some(0.40), None),
+            ("barium yellow", Some(0.34), None),
+            ("zinc yellow", Some(0.34), None),
+            ("rose madder", Some(0.57), Some(Oil::Linseed)),
+            ("carmine lake", Some(0.50), Some(Oil::Linseed)),
+        ],
+    },
+    // Hopper's Winsor & Newton (his ledgers from 1945; "the maker is
+    // Winsor and Newton", 1959): W&N's 1901 figures (Church p. 66;
+    // Stockmeier's W&N light red 41.9%); its whites poppy-rich (a 1957 W&N
+    // flake white, Tate 2016)
+    BoxGrind {
+        name: "hopper",
+        oil: Oil::Linseed,
+        wax: false,
+        tubes: &[
+            ("lead white", Some(0.13), Some(Oil::Poppy)),
+            ("zinc white", None, Some(Oil::Poppy)),
+            ("yellow ochre", Some(0.39), None),
+            ("red earth", Some(0.41), None),
+            ("burnt sienna", Some(0.60), None),
+            ("bone black", Some(0.53), None),
+            ("cobalt blue", Some(0.47), None),
+        ],
+    },
+    // Tonn's Williamsburg, Old Holland and Michael Harding (his own posts):
+    // Williamsburg's flake white "moderate", its cerulean "moderate"
+    // (beeswax in all Williamsburg colors, amount unknown: not counted)
+    BoxGrind { name: "tonn", oil: Oil::Linseed, wax: false, tubes: &[("lead white", Some(0.15), None), ("cerulean blue", Some(0.28), None)] },
+];
+
+fn box_grind(box_name: &str) -> Option<&'static BoxGrind> {
+    let name = match box_name {
+        // (the named Friedrich box is the default box with two more tubes)
+        "friedrich" => "tube box",
+        // (Seurat painted, 1879–91, in the Paris colormen's tubes whose oil,
+        // oils and wax the impressionist box's figures are (his own paints
+        // among their sources, NG Technical Bulletin 24); his tubes are all
+        // among that box's. Cézanne's box, to 1906, takes its period's:
+        // nothing found gives his paint's oil, its oils or wax)
+        "seurat" => "impressionist",
+        n => n,
+    };
+    BOX_GRIND.iter().find(|b| b.name == name)
+}
+
+/// The oil a tube of `name` is ground in in the box `box_name`, and
+/// whether it holds wax (read with the oils switch): the box's, or linseed
+/// without wax (a box the research found no colormen for, as Cézanne's).
+pub fn grind_of(box_name: &str, name: &str) -> (Oil, bool) {
+    if box_name == "every" {
+        return every_source(name).map_or((Oil::Linseed, false), |b| grind_of(b, name));
+    }
+    box_grind(box_name).map_or((Oil::Linseed, false), |b| (b.tubes.iter().find(|t| t.0 == name).and_then(|t| t.2).unwrap_or(b.oil), b.wax))
+}
+
+/// The most of its oil a tube's paint keeps when its pigment packs: tube
+/// paint is a workable paste, so richer than its critical pigment volume,
+/// and makers grind it just richer (Golden's measured ultramarine keeps
+/// 0.75). Where a pigment's modern oil absorption against a period's oil
+/// says less (viridian, Naples yellow, carmine and Antwerp blue in the 19th
+/// century's tubes), the period's pigment took less oil than today's.
+const MAX_PACKED: f32 = 0.9;
+
+/// When a box's paint was made, which sets how much oil its tubes hold
+/// (`tube_oil`): ground by hand or bought in bladders before tubes (about
+/// 1800–1840), the 19th century's tube colors (about 1850–1925), the
+/// 20th century's (about 1925–1965), and today's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Period {
+    Bladder,
+    Tube19,
+    Tube20,
+    Modern,
+}
+
+/// A box's period: the default box and Friedrich's are the early 19th
+/// century's (smalt, verdigris, Rinmann's green); the painters' boxes their
+/// painters' working years. A palette of another name is a 19th-century tube box.
+pub fn period_of(box_name: &str) -> Period {
+    match box_name {
+        _ if Some(box_name) == default_box() => Period::Bladder,
+        "friedrich" => Period::Bladder,
+        "hopper" => Period::Tube20,
+        "tonn" => Period::Modern,
+        // (the every box: see `every_source`)
+        _ => Period::Tube19,
+    }
+}
+
+/// The every box holds every tube the studio has (round 31), so each is
+/// ground as the studio's research has it: the 19th century's tube colors
+/// for the 46 that period's tubes document; the others as the box whose
+/// research documents them grinds them: Friedrich's bladder colors
+/// (smalt, pale smalt, green earth, Rinmann's green, copper green) and
+/// Tonn's tubes of today (lead-tin yellow, transparent oxide yellow,
+/// permanent alizarin). None falls to the hand-grinding rule.
+fn every_source(name: &str) -> Option<&'static str> {
+    let has = |t: &[(&str, f32)]| t.iter().any(|e| e.0 == name);
+    if has(TUBE_OIL_19) {
+        None
+    } else if has(TUBE_OIL_BLADDER) {
+        Some("friedrich")
+    } else if has(TUBE_OIL_MODERN) {
+        Some("tonn")
+    } else if has(TUBE_OIL_20) {
+        Some("hopper")
+    } else {
+        None
+    }
+}
+
+/// The oil a tube of `name` holds, as a share of its weight, in `period`,
+/// and the oil absorption of what it is ground from (the pigment's, or an
+/// extended pigment's: `TUBE_OIL_20`'s cadmiums): notes/research/
+/// pigment_oil.md gives each one's source. One not listed is ground stiff,
+/// its oil 1.45 times its pigment's oil absorption (the early 19th
+/// century's rule for hand-ground paint, which Watin's lead white sets).
+fn tube_oil(box_name: &str, period: Period, name: &str, oa: f32) -> (f32, f32) {
+    if box_name == "every"
+        && let Some(b) = every_source(name)
+    {
+        return tube_oil(b, period_of(b), name, oa);
+    }
+    if let Some(w) = box_grind(box_name).and_then(|b| b.tubes.iter().find(|t| t.0 == name)).and_then(|t| t.1) {
+        return (w, oa);
+    }
+    let table: &[(&str, f32)] = match period {
+        Period::Bladder => TUBE_OIL_BLADDER,
+        Period::Tube19 => TUBE_OIL_19,
+        Period::Tube20 => TUBE_OIL_20,
+        Period::Modern => TUBE_OIL_MODERN,
+    };
+    let w = table.iter().find(|t| t.0 == name).map_or_else(|| 1.45 * oa / (100.0 + 1.45 * oa), |t| t.1);
+    let oa = match period {
+        Period::Tube20 => EXTENDED_20.iter().find(|t| t.0 == name).map_or(oa, |t| t.1),
+        _ => oa,
+    };
+    (w, oa)
+}
+
+/// A tube's oil when its pigment packs and when an absorbent ground has
+/// drained it, relative to the tube's own oil (`Paint::packed`,
+/// `Paint::floor`), and its oil's share of its volume. The pigment packs
+/// (its critical pigment volume) holding its oil absorption: `oa` g per
+/// 100 g against the tube's `w` (oil by weight), so the packed share is
+/// oa·(1 − w)/(100·w), at most `MAX_PACKED`. A pigment finer than the
+/// ground's pores keeps its packed layer saturated; a coarser one lets air
+/// in and drains further (`Tube::drain`).
+pub fn tube_packing(t: &Tube, box_name: &str) -> (f32, f32, f32) {
+    let (w, oa) = tube_oil(box_name, period_of(box_name), t.name, t.oa);
+    let packed = (oa * (1.0 - w) / (100.0 * w)).min(MAX_PACKED);
+    // oil (0.93 g/cm³) per volume of pigment, and its share of the paint
+    let r = w / (1.0 - w) * t.density / 0.93;
+    (packed, t.drain * packed, r / (1.0 + r))
+}
+
+/// About 1800–1840, ground by hand or in bladders (Watin 1823, Bouvier 1827,
+/// Field 1835; most from the rule above, which Watin's lead white sets).
+const TUBE_OIL_BLADDER: &[(&str, f32)] = &[
+    ("lead white", 0.125),
+    ("smalt", 0.23),
+    ("pale smalt", 0.265),
+    ("yellow ochre", 0.266),
+    ("red earth", 0.25),
+    ("vermilion", 0.107),
+    ("raw umber", 0.337),
+    ("bone black", 0.384),
+    ("cobalt blue", 0.242),
+    ("chrome yellow", 0.225),
+    ("Prussian blue", 0.395),
+    ("green earth", 0.42),
+    ("Rinmann's green", 0.289),
+    ("copper green", 0.266),
+];
+
+/// About 1850–1925, artists' tube colors (Church 1915, Roberson's and
+/// Winsor & Newton's of 1901; Uebele 1913; Stockmeier's and Parry & Coste's
+/// analyses). French makers ground in more poppy oil with wax for the same
+/// body, so their paint takes the same effective share.
+const TUBE_OIL_19: &[(&str, f32)] = &[
+    ("lead white", 0.134),
+    ("zinc white", 0.173),
+    ("lemon chrome", 0.309),
+    ("chrome yellow", 0.309),
+    ("orange chrome", 0.175),
+    ("barium yellow", 0.28),
+    ("strontium yellow", 0.28),
+    ("zinc yellow", 0.28),
+    ("pale cadmium", 0.336),
+    ("cadmium yellow", 0.336),
+    ("deep cadmium", 0.336),
+    ("Naples yellow", 0.145),
+    ("Indian yellow", 0.44),
+    ("yellow lake", 0.42),
+    ("yellow ochre", 0.379),
+    ("brown ochre", 0.379),
+    ("raw sienna", 0.651),
+    ("Mars yellow", 0.30),
+    ("Mars orange", 0.32),
+    ("Mars red", 0.25),
+    ("Mars brown", 0.27),
+    ("red lead", 0.095),
+    ("vermilion", 0.187),
+    ("orange vermilion", 0.187),
+    ("Chinese vermilion", 0.187),
+    ("cadmium red", 0.25),
+    ("red earth", 0.41),
+    ("Indian red", 0.25),
+    ("rose madder", 0.507),
+    ("carmine lake", 0.40),
+    ("magenta", 0.45),
+    ("burnt sienna", 0.59),
+    ("raw umber", 0.49),
+    ("bone brown", 0.498),
+    ("bitumen", 0.559),
+    ("bone black", 0.498),
+    // (Uebele's own figure: vine black grinds with only 35–40% oil)
+    ("vine black", 0.40),
+    ("cobalt blue", 0.404),
+    ("cerulean blue", 0.45),
+    ("ultramarine blue", 0.277),
+    ("ultramarine ash", 0.35),
+    ("Prussian blue", 0.428),
+    ("Antwerp blue", 0.35),
+    ("viridian", 0.351),
+    ("emerald green", 0.15),
+    ("cobalt violet", 0.30),
+];
+
+/// About 1920–1965: no maker's tube was analyzed for its oil, so these are
+/// the period's recipes for artists' tube colors (Uebele 1913) and pastes
+/// ground in raw linseed (Ingalls' table in Gardner 1927), with the 1942
+/// standard's zinc white (CS98-42) and Mayer's lead white paste (1960).
+/// Makers' stearate (from about 1930) and fillers (from about 1940) raise
+/// the oil some more; nothing measures how much.
+const TUBE_OIL_20: &[(&str, f32)] = &[
+    ("lead white", 0.11),
+    ("zinc white", 0.18),
+    // cadmium-barium (cadmium lithopone), as most of the period's cadmiums
+    // were (Mayer 1970; barium sulfate in a 1963 tube, Tate 2016)
+    ("pale cadmium", 0.22),
+    ("cadmium yellow", 0.22),
+    // (an estimate: Ingalls gives no deep cadmium lithopone)
+    ("deep cadmium", 0.20),
+    ("yellow ochre", 0.30),
+    ("red earth", 0.22),
+    ("burnt sienna", 0.55),
+    ("bone black", 0.47),
+    // (an estimate: nothing found for the period)
+    ("cerulean blue", 0.40),
+    ("cobalt blue", 0.60),
+    ("ultramarine blue", 0.30),
+    // (Ingalls' 50% pigment; Uebele's 65:35 is stiffer than the pigment's
+    // oil absorption allows)
+    ("viridian", 0.50),
+];
+
+/// The oil absorption of the 20th century's extended cadmiums: about 40%
+/// cadmium sulfide to 60% barium sulfate (oil absorption 12, Ingalls'
+/// blanc fixe paste), by weight among the solids.
+const EXTENDED_20: &[(&str, f32)] = &[("pale cadmium", 16.8), ("cadmium yellow", 16.0), ("deep cadmium", 15.2)];
+
+/// Today's artists' oil colors: Golden's measured oil (pigment volume
+/// 46% for ultramarine), Mecklenburg's reference paints, Rublev's lead
+/// white, and Williamsburg's 2023 ranking of oil by volume, read as pigment
+/// volume 47% (low), 40% (moderate), 31% (medium) and 22% (high), which
+/// Golden's ultramarine and cobalt blue set. Lead-tin yellow and cerulean
+/// are estimates.
+const TUBE_OIL_MODERN: &[(&str, f32)] = &[
+    ("lead white", 0.13),
+    ("lead-tin yellow", 0.18),
+    ("cadmium yellow", 0.20),
+    ("yellow ochre", 0.28),
+    ("transparent oxide yellow", 0.45),
+    ("cadmium red", 0.20),
+    ("permanent alizarin", 0.60),
+    ("burnt sienna", 0.28),
+    ("raw umber", 0.34),
+    ("bone black", 0.44),
+    ("ultramarine blue", 0.32),
+    ("cerulean blue", 0.40),
+    ("green earth", 0.38),
+    ("cobalt violet", 0.25),
+];
 
 impl Tube {
     /// This tube drying at `rate` in engine 3 (`Tube::drying_3`).
@@ -248,8 +792,44 @@ pub struct Mixture {
     /// (engine 4, see `Paint::solvent`).
     pub solvent: f32,
     /// The drying of the oil the paint is ground in, relative to linseed
-    /// (1): walnut about 0.8, poppy about 0.6 (it also yellows least).
+    /// (1): walnut about 0.8, poppy about 0.6 (it also yellows least). With
+    /// the oils switch 1: each part dries in the oil it is in (`grind`,
+    /// counted in `drying`).
     pub oil_rate: f32,
+    /// The pile's oil when its pigment packs and when an absorbent ground
+    /// has drained it, relative to its own (`Paint::packed`,
+    /// `Paint::floor`): its tubes', weighted by the oil each brings.
+    pub packed: f32,
+    pub floor: f32,
+    /// The oil's share of the pile's volume as ground (its tubes', by
+    /// volume: `Paint::oil_volume`).
+    pub oil_volume: f32,
+    /// Its palette's drain switch (`Palette::drain`): blotting draws no
+    /// further than its drained floor (`paint`).
+    pub drain: bool,
+    /// Its palette's oils switch (`Palette::oils`): its tubes come in their
+    /// colormen's oils, with their wax, and each part keeps the oil it is in
+    /// (`grind`).
+    pub oils: bool,
+    /// With the oils switch, the oil each part is in, aligned with `parts`
+    /// (empty without): how fast that oil dries against linseed, its wax
+    /// counted (`Oil::rate`, `WAX_RATE`), and the share of the part's oil
+    /// that is waxed. As its tube comes (`Palette::own_grind`); in another
+    /// oil reground (`Palette::reground`); by volume where piles in
+    /// different oils are knifed together (`Knifed`). `drying` and `wax` are
+    /// made from it, part by part, whenever the mixture is made again (as
+    /// `Palette::remix` jitters its proportions).
+    pub grind: Vec<(f32, f32)>,
+    /// With the oils switch, whether every part is as its tube comes
+    /// (`grind`); true without.
+    pub tubes_come: bool,
+    /// Its pigments' own drying, by volume, without the oils they are ground
+    /// in or their wax (`Tube::drying`; `drying` itself without the oils
+    /// switch): paint all in one oil dries at this times the oil's rate.
+    pub pigment_drying: f32,
+    /// With the oils switch, the share of its oil that is waxed, its parts'
+    /// by the oil each brings (`grind`; 0 without).
+    pub wax: f32,
 }
 
 /// The box a painting is painted from when nothing names another.
@@ -369,16 +949,34 @@ pub struct Palette {
     /// The engine version paint from this box is painted with (`ENGINE`;
     /// a replay sets its log's). A canvas prepared by a `Style` takes it.
     pub engine: u32,
+    /// The drain switch (`Canvas::with_drain`; an easel log's `--@ drain`):
+    /// its piles blot no further than their drained floor (`Mixture::paint`).
+    pub drain: bool,
+    /// The oils switch (an easel log's `--@ oils`): its tubes come in their
+    /// colormen's oils, with their wax (`grind`), which set how fast its
+    /// piles dry and how matte their wax dries (`Canvas::with_oils`).
+    pub oils: bool,
     pub quarter_tiles: bool,
     pub adaptive_sweep: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
+    /// Each tube's packed oil, drained floor and oil share by volume, in
+    /// its box's period (`tube_packing`).
+    pack: Vec<(f32, f32, f32)>,
+    /// Each tube's oil and whether it holds wax, in its box (`grind_of`;
+    /// read with the oils switch).
+    grind: Vec<(Oil, bool)>,
+    /// The box whose colormen ground its tubes (`pack`, `grind`): its own
+    /// name, kept when it is renamed (`named`).
+    stock: &'static str,
 }
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, self.tubes.clone()) }
+        // (its tubes ground by its box's colormen: a renamed palette's are
+        // its box's, `named`; rebuilt from its tubes as they are now)
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, name: self.name, ..Palette::new(self.stock, self.tubes.clone()) }
     }
 }
 
@@ -392,7 +990,9 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, lat, scat }
+        let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
+        let grind = tubes.iter().map(|t| grind_of(name, t.name)).collect();
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, oils: false, lat, scat, pack, grind, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -401,7 +1001,8 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, tubes) }
+        // (ground by its box's colormen, as `clone` and `with`)
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, name: self.name, ..Palette::new(self.stock, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -515,12 +1116,25 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, t) }
+        // (ground by its box's colormen: a renamed palette's are its box's, `named`)
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, drain: self.drain, oils: self.oils, name: self.name, ..Palette::new(self.stock, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
     pub fn drying_of(&self, t: &Tube) -> f32 {
         if self.engine >= 3 { t.drying_3 } else { t.drying }
+    }
+
+    /// How fast this box's tube `i` dries: its pigment's rate (`drying_of`),
+    /// and with the oils switch the oil it is ground in and its wax
+    /// (`grind_of`).
+    fn rate_of(&self, i: usize) -> f32 {
+        let d = self.drying_of(&self.tubes[i]);
+        if !self.oils {
+            return d;
+        }
+        let (oil, wax) = self.grind[i];
+        d * oil.rate() * if wax { WAX_RATE } else { 1.0 }
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
@@ -549,10 +1163,67 @@ impl Palette {
         self.mixture(parts)
     }
 
+    /// The oils switch: the pile of these parts, each in the oil given for it
+    /// (`Mixture::grind`, aligned with `parts`). Without the switch, `pile`.
+    pub fn pile_ground(&self, parts: Vec<(usize, f32)>, grind: Vec<(f32, f32)>) -> Mixture {
+        if !self.oils {
+            return self.mixture(parts);
+        }
+        debug_assert_eq!(parts.len(), grind.len());
+        self.mixture_in(parts, Some(grind))
+    }
+
+    /// The oils switch: the pile `m` with every pigment ground again in
+    /// `oil`, which has no wax, in place of the oils and wax its tubes came
+    /// in (its solvent kept).
+    pub fn reground(&self, m: &Mixture, oil: Oil) -> Mixture {
+        Mixture { solvent: m.solvent, ..self.pile_ground(m.parts.clone(), vec![(oil.rate(), 0.0); m.parts.len()]) }
+    }
+
+    /// The oils switch: the oil tube `i` comes in (`Mixture::grind`): its
+    /// oil's drying against linseed's with its wax counted, and the share of
+    /// its oil that is waxed.
+    pub fn own_grind(&self, i: usize) -> (f32, f32) {
+        let (oil, wax) = self.grind[i];
+        if wax { (oil.rate() * WAX_RATE, 1.0) } else { (oil.rate(), 0.0) }
+    }
+
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
+        self.mixture_in(parts, None)
+    }
+
+    /// The pile of these parts; with the oils switch each in the oil given
+    /// for it (`Mixture::grind`), or as its tube comes.
+    fn mixture_in(&self, parts: Vec<(usize, f32)>, grind: Option<Vec<(f32, f32)>>) -> Mixture {
         let (color, scatter, stiff) = self.eval(&parts);
-        let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0 }
+        // (the oils switch: each part dries in the oil it is in, and its oil
+        // is waxed as that oil is)
+        let oils = self.oils;
+        let grind: Vec<(f32, f32)> = if oils { grind.unwrap_or_else(|| parts.iter().map(|&(i, _)| self.own_grind(i)).collect()) } else { Vec::new() };
+        let drying = if oils {
+            parts.iter().zip(&grind).map(|(&(i, f), g)| self.drying_of(&self.tubes[i]) * g.0 * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9)
+        } else {
+            parts.iter().map(|&(i, f)| self.rate_of(i) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9)
+        };
+        let pigment_drying = if oils { parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9) } else { drying };
+        let waxed: f32 = parts.iter().zip(&grind).map(|(&(i, f), g)| f * self.pack[i].2 * g.1).sum();
+        let tubes_come = parts.iter().zip(&grind).all(|(&(i, _), g)| {
+            let o = self.own_grind(i);
+            (o.0 - g.0).abs() <= 1e-6 && (o.1 - g.1).abs() <= 1e-6
+        });
+        // each tube's share of the pile's oil: its volume times its oil share
+        let (mut oil, mut packed, mut floor) = (0.0, 0.0, 0.0);
+        for &(i, f) in &parts {
+            let (p, fl, o) = self.pack[i];
+            oil += f * o;
+            packed += f * o * p;
+            floor += f * o * fl;
+        }
+        let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
+        let total: f32 = parts.iter().map(|p| p.1).sum();
+        let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
+        let wax = if oils && oil > 1e-9 { waxed / oil } else { 0.0 };
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, oils, grind, tubes_come, pigment_drying, wax }
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -564,6 +1235,11 @@ impl Palette {
         let mut parts: Vec<(usize, f32)> = m.parts.iter().map(|&(i, f)| (i, (f * (1.0 + rng.normal() * amount)).max(0.0))).collect();
         let s: f32 = parts.iter().map(|p| p.1).sum();
         parts.iter_mut().for_each(|p| p.1 /= s.max(1e-9));
+        // (the oils switch: each part still in the oil it is in, `grind`; its
+        // drying and wax made again from the new proportions)
+        if self.oils && m.grind.len() == m.parts.len() {
+            return Mixture { solvent: m.solvent, oil_rate: m.oil_rate, ..self.mixture_in(parts, Some(m.grind.clone())) };
+        }
         Mixture { solvent: m.solvent, oil_rate: m.oil_rate, ..self.mixture(parts) }
     }
 
@@ -577,7 +1253,11 @@ impl Mixture {
     /// This mixture as paint on the brush, thinned with `medium` (0..1).
     pub fn paint(&self, medium: f32) -> Paint {
         // (a negative medium is oil drawn out of the paint, blotted: more
-        // pigment to the volume, stiffer; at most half its oil)
+        // pigment to the volume, stiffer; at most half its oil. With the
+        // drain switch no further than its drained floor: blotting paper
+        // draws the oil by capillarity as an absorbent ground does,
+        // `bristle::ground_drain`)
+        let medium = if self.drain { medium.max(self.floor.min(1.0) - 1.0) } else { medium };
         let k = (1.0 - medium).clamp(0.0, 1.5);
         // medium dilutes the pigment: K and S per coat fall with the pigment
         // concentration, the masstone stays; the paint flows (stiffness
@@ -586,7 +1266,9 @@ impl Mixture {
         let p = Paint::km(self.color, self.scatter * k.max(1e-3), (self.stiff * k * k).min(1.0));
         // its oil relative to tube paint: medium adds oil, blotting draws
         // that share of it out (blot 0.5 leaves half)
-        Paint { solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, ..p }
+        // (packed and drained oil stay the pigment's: medium and blotting
+        // change only how much more or less the paint holds)
+        Paint { solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, wax: self.wax, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying
@@ -594,5 +1276,327 @@ impl Mixture {
     /// model already counts (a fat film stays open longer).
     pub fn laid(&self, medium: f32) -> Paint {
         self.paint(medium).with_drying(self.drying * self.oil_rate)
+    }
+
+    /// How fast it dries as it is now: its tubes' drying (`drying`) times
+    /// its oil's (`oil_rate`), as `laid` lays it.
+    pub fn rate(&self) -> f32 {
+        self.drying * self.oil_rate
+    }
+}
+
+/// The oils switch: piles (`Mixture`s) knifed together, or tube paint knifed
+/// into a heap, tube by tube: each tube's volume and the oil it is in by
+/// volume (`Mixture::grind`), so each part keeps the oil it is in.
+#[derive(Clone, Debug, Default)]
+pub struct Knifed(Vec<(usize, f32, f32, f32)>);
+
+impl Knifed {
+    /// `v` of tube `i` in the oil `g` (`Mixture::grind`).
+    pub fn part(&mut self, i: usize, v: f32, g: (f32, f32)) {
+        match self.0.iter_mut().find(|e| e.0 == i) {
+            Some(e) => {
+                e.1 += v;
+                e.2 += v * g.0;
+                e.3 += v * g.1;
+            }
+            None => self.0.push((i, v, v * g.0, v * g.1)),
+        }
+    }
+
+    /// The pile `m`, `k` of each of its parts.
+    pub fn pile(&mut self, m: &Mixture, k: f32) {
+        for (&(i, f), &g) in m.parts.iter().zip(&m.grind) {
+            self.part(i, f * k, g);
+        }
+    }
+
+    /// The oil each of `parts` is in (`Mixture::grind`, for
+    /// `Palette::pile_ground`): its tube's, by volume; as its tube comes
+    /// where none was knifed in.
+    pub fn grind(&self, pal: &Palette, parts: &[(usize, f32)]) -> Vec<(f32, f32)> {
+        parts.iter().map(|&(i, _)| self.0.iter().find(|e| e.0 == i && e.1 > 0.0).map_or_else(|| pal.own_grind(i), |e| (e.2 / e.1, e.3 / e.1))).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each box's tubes hold their own oil: the default box's lead white is
+    /// bladder paint (0.14 oil: packed at 10·0.86/14 of it, drained to 0.6
+    /// of that), Hopper's cobalt blue is Winsor & Newton's (22·0.53/47),
+    /// Alma-Tadema's Naples yellow is held to `MAX_PACKED`, Tonn's lead white
+    /// is Williamsburg's flake white (0.15), and a box without its own
+    /// figure takes its period's (Hopper's cadmiums).
+    #[test]
+    #[cfg(any(tube_box, feature = "box-hopper", feature = "box-alma-tadema", feature = "box-tonn"))]
+    fn tubes_hold_their_periods_oil() {
+        let packing = |b: &str, name: &str| {
+            let pal = Palette::named_box(b).unwrap();
+            let i = pal.tubes.iter().position(|t| t.name == name).unwrap();
+            (pal.pack[i].0, pal.pack[i].1)
+        };
+        let near = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0).abs() < 1e-4 && (a.1 - b.1).abs() < 1e-4;
+        #[cfg(tube_box)]
+        {
+            assert_eq!(period_of(DEFAULT_BOX), Period::Bladder);
+            let lw = packing(DEFAULT_BOX, "lead white");
+            assert!(near(lw, (8.6 / 14.0, 0.6 * 8.6 / 14.0)), "{lw:?}");
+        }
+        #[cfg(feature = "box-hopper")]
+        {
+            assert_eq!(period_of("hopper"), Period::Tube20);
+            let cb = packing("hopper", "cobalt blue");
+            assert!(near(cb, (22.0 * 0.53 / 47.0, 0.6 * 22.0 * 0.53 / 47.0)), "{cb:?}");
+            // its cadmiums are extended with barium sulfate
+            let cy = packing("hopper", "cadmium yellow");
+            assert!(near(cy, (16.0 * 0.78 / 22.0, 0.75 * 16.0 * 0.78 / 22.0)), "{cy:?}");
+        }
+        #[cfg(feature = "box-alma-tadema")]
+        {
+            assert_eq!(period_of("alma-tadema"), Period::Tube19);
+            assert!(near(packing("alma-tadema", "Naples yellow"), (MAX_PACKED, 0.5 * MAX_PACKED)));
+        }
+        #[cfg(feature = "box-tonn")]
+        {
+            assert_eq!(period_of("tonn"), Period::Modern);
+            let lw = packing("tonn", "lead white");
+            assert!(near(lw, (10.0 * 0.85 / 15.0, 0.6 * 10.0 * 0.85 / 15.0)), "{lw:?}");
+        }
+    }
+
+    /// Seurat's tubes are the impressionist box's French tubes, in their
+    /// oils and wax; Cézanne's, with no figures of their own, are the 19th
+    /// century's tube colors, in linseed without wax (`box_grind`,
+    /// `grind_of`).
+    #[test]
+    #[cfg(any(feature = "box-seurat", feature = "box-cezanne"))]
+    fn seurat_s_tubes_are_french_and_cezanne_s_their_period_s() {
+        #[cfg(feature = "box-seurat")]
+        {
+            let pal = Palette::named_box("seurat").unwrap();
+            for (t, &pack) in pal.tubes.iter().zip(&pal.pack) {
+                let w = box_grind("impressionist").unwrap().tubes.iter().find(|e| e.0 == t.name).and_then(|e| e.1);
+                assert_eq!(Some(tube_oil("seurat", period_of("seurat"), t.name, t.oa).0), w, "{}", t.name);
+                assert_eq!(pack, tube_packing(t, "impressionist"), "{}", t.name);
+                assert_eq!(grind_of("seurat", t.name), grind_of("impressionist", t.name), "{}", t.name);
+            }
+            assert_eq!(pal.grind[pal.tubes.iter().position(|t| t.name == "cobalt blue").unwrap()], (Oil::Poppy, true));
+        }
+        #[cfg(feature = "box-cezanne")]
+        {
+            assert!(box_grind("cezanne").is_none());
+            let pal = Palette::named_box("cezanne").unwrap();
+            for t in &pal.tubes {
+                let w = TUBE_OIL_19.iter().find(|e| e.0 == t.name).map(|e| e.1);
+                assert_eq!(Some(tube_oil("cezanne", period_of("cezanne"), t.name, t.oa).0), w, "{}", t.name);
+                assert_eq!(grind_of("cezanne", t.name), (Oil::Linseed, false), "{}", t.name);
+            }
+        }
+    }
+
+    /// A pile's packed and drained oil are its tubes', weighted by the oil
+    /// each brings (lead white is a stiff paste, burnt sienna an oily one,
+    /// so half and half packs nearer the sienna's); medium and blotting
+    /// leave them as they are (they are the pigment's). Its oil by volume
+    /// is its tubes', by volume.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn a_piles_packing_is_its_tubes_by_their_oil() {
+        let pal = Palette::named_box("sargent").unwrap();
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (w, s) = (at("lead white"), at("burnt sienna"));
+        let m = pal.pile(vec![(w, 0.5), (s, 0.5)]);
+        let ((pw, fw, ow), (ps, fs, os)) = (pal.pack[w], pal.pack[s]);
+        assert!(os > ow, "burnt sienna is the oilier paint: {os} {ow}");
+        let want = ((pw * ow + ps * os) / (ow + os), (fw * ow + fs * os) / (ow + os));
+        assert!((m.packed - want.0).abs() < 1e-5 && (m.floor - want.1).abs() < 1e-5, "{} {} vs {want:?}", m.packed, m.floor);
+        assert!(m.packed < 0.5 * (pw + ps), "{} {pw} {ps}", m.packed);
+        assert!((m.oil_volume - 0.5 * (ow + os)).abs() < 1e-6 && m.paint(0.3).oil_volume == m.oil_volume, "{}", m.oil_volume);
+        for medium in [-0.3, 0.0, 0.5] {
+            let p = m.paint(medium);
+            assert_eq!((p.packed, p.floor), (m.packed, m.floor));
+        }
+    }
+
+    /// The every box's tubes are each ground as the studio's research has
+    /// them: a 19th-century tube color as that period's, smalt as
+    /// Friedrich's bladder color (in walnut), a quinacridone as Tonn's tube
+    /// of today; none by the hand-grinding rule.
+    #[test]
+    #[cfg(feature = "box-every")]
+    fn the_every_box_grinds_each_tube_as_its_research_has_it() {
+        let every = Palette::named_box("every").unwrap();
+        assert_eq!(every.tubes.len(), 54);
+        for t in &every.tubes {
+            let src = every_source(t.name);
+            let documented = [TUBE_OIL_19, TUBE_OIL_BLADDER, TUBE_OIL_MODERN, TUBE_OIL_20].iter().any(|tab| tab.iter().any(|e| e.0 == t.name));
+            assert!(documented, "{}: no period documents it", t.name);
+            let (w, _) = tube_oil("every", period_of("every"), t.name, t.oa);
+            match src {
+                None => assert_eq!(w, TUBE_OIL_19.iter().find(|e| e.0 == t.name).unwrap().1, "{}", t.name),
+                Some(b) => assert_eq!(w, tube_oil(b, period_of(b), t.name, t.oa).0, "{}", t.name),
+            }
+        }
+        assert_eq!(every_source("smalt"), Some("friedrich"));
+        assert_eq!(grind_of("every", "smalt"), grind_of("friedrich", "smalt"));
+        assert_eq!(grind_of("every", "smalt"), (Oil::Walnut, false));
+        assert_eq!(every_source("permanent alizarin"), Some("tonn"));
+        assert_eq!(grind_of("every", "vermilion"), (Oil::Linseed, false));
+    }
+
+    /// Renamed, cloned, cut down or with a tube more, a palette's tubes are
+    /// still ground by its box's colormen (a box's own figures are not a
+    /// name's: "a study" would be a 19th-century tube box).
+    #[test]
+    #[cfg(feature = "box-impressionist")]
+    fn a_renamed_palette_keeps_its_box_s_packing() {
+        let own = Palette::named_box("impressionist").unwrap();
+        let i = own.tubes.iter().position(|t| t.name == "cobalt blue").unwrap();
+        assert_ne!(own.pack[i], tube_packing(&own.tubes[i], "a study"), "the box's own figure differs from its period's");
+        let renamed = Palette::named_box("impressionist").unwrap().named("a study");
+        let more = renamed.with(vec![renamed.tubes[0].clone()]);
+        let few = renamed.only(&["cobalt blue"]);
+        assert_eq!((few.name, few.pack[0]), ("a study", own.pack[i]));
+        for p in [renamed.clone(), more.clone()] {
+            assert_eq!(p.name, "a study");
+            assert_eq!(p.pack[i], own.pack[i]);
+        }
+        assert_eq!(more.pack.len(), renamed.tubes.len() + 1);
+    }
+
+    /// With the oils switch each box's tubes come in their colormen's oils,
+    /// with their wax: Friedrich's in walnut, the Impressionists' cobalt in
+    /// poppy and waxed, late Monet's lead white in linseed and unwaxed,
+    /// Sargent's zinc white in poppy; a pile dries at its tubes' oils and wax
+    /// and carries the share of its oil that is waxed. Without the switch it
+    /// dries at its pigments' rates alone (`pigment_drying` is `drying`) and
+    /// carries no wax. A palette made from it keeps the switch and its box's
+    /// grind.
+    #[test]
+    #[cfg(feature = "all-boxes")]
+    fn tubes_come_in_their_colormen_s_oils() {
+        assert_eq!(grind_of(DEFAULT_BOX, "lead white"), (Oil::Walnut, false));
+        assert_eq!((grind_of("friedrich", "rose madder"), period_of("friedrich")), ((Oil::Walnut, false), Period::Bladder));
+        assert_eq!(grind_of("impressionist", "cobalt blue"), (Oil::Poppy, true));
+        assert_eq!(grind_of("impressionist", "vermilion"), (Oil::Linseed, true));
+        assert_eq!(grind_of("giverny", "lead white"), (Oil::Linseed, false));
+        assert_eq!(grind_of("giverny", "cobalt blue"), (Oil::Poppy, false));
+        assert_eq!(grind_of("sargent", "zinc white"), (Oil::Poppy, false));
+        assert_eq!(grind_of("inness", "cobalt blue"), (Oil::Linseed, false));
+        let mut pal = Palette::named_box("impressionist").unwrap();
+        let i = pal.tubes.iter().position(|t| t.name == "cobalt blue").unwrap();
+        let own = pal.drying_of(&pal.tubes[i]);
+        let m = pal.pile(vec![(i, 1.0)]);
+        assert!(!m.oils && m.drying == own && m.pigment_drying == own && m.wax == 0.0 && m.laid(0.0).wax == 0.0, "without the switch");
+        pal.oils = true;
+        let m = pal.pile(vec![(i, 1.0)]);
+        assert!(m.oils && (m.drying - own * POPPY_RATE * WAX_RATE).abs() < 1e-6 && m.pigment_drying == own && (m.wax - 1.0).abs() < 1e-6, "{} {} {}", m.drying, m.pigment_drying, m.wax);
+        assert_eq!(m.laid(0.0).wax, 1.0);
+        // (half cobalt, half vermilion by volume: wax in both, each pigment
+        // drying in its own oil, by volume; the wax share by oil)
+        let v = pal.tubes.iter().position(|t| t.name == "vermilion").unwrap();
+        let m = pal.pile(vec![(i, 0.5), (v, 0.5)]);
+        let ov = pal.drying_of(&pal.tubes[v]);
+        assert!((m.pigment_drying - (own + ov) / 2.0).abs() < 1e-6 && (m.drying - (own * POPPY_RATE + ov) * WAX_RATE / 2.0).abs() < 1e-6 && (m.wax - 1.0).abs() < 1e-6);
+        // renamed, cloned or with a tube more, its tubes are still its box's
+        let renamed = pal.named("a study");
+        let more = renamed.with(vec![renamed.tubes[0].clone()]);
+        let few = renamed.only(&["cobalt blue"]);
+        assert_eq!((few.name, few.grind[0], few.oils), ("a study", (Oil::Poppy, true), true));
+        for p in [renamed.clone(), more.clone()] {
+            assert_eq!((p.name, p.grind[i], p.oils), ("a study", (Oil::Poppy, true), true));
+        }
+        assert_eq!(more.grind.len(), renamed.tubes.len() + 1);
+    }
+
+    /// With the oils switch, paint ground again in an oil (`reground`) has
+    /// every pigment in that oil, without wax: the parts-weighted mean of
+    /// each pigment's own drying times the oil's rate, whatever oils its
+    /// tubes came in. Sargent's lead white comes in poppy, his vermilion in
+    /// linseed: half and half reground in linseed dries at the mean of the
+    /// two pigments' own rates, in poppy at that times POPPY_RATE. Piles
+    /// knifed together (`Knifed`) keep each part in the oil it is in.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn a_regrind_grinds_each_pigment_in_its_oil() {
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.oils = true;
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, v) = (at("lead white"), at("vermilion"));
+        assert_eq!((pal.grind[lw], pal.grind[v]), ((Oil::Poppy, false), (Oil::Linseed, false)));
+        let (dw, dv) = (pal.drying_of(&pal.tubes[lw]), pal.drying_of(&pal.tubes[v]));
+        let tubes = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
+        assert!((tubes.rate() - (dw * POPPY_RATE + dv) / 2.0).abs() < 1e-6 && tubes.tubes_come);
+        let linseed = pal.reground(&tubes, Oil::Linseed);
+        assert!((linseed.rate() - (dw + dv) / 2.0).abs() < 1e-6, "{} for {}", linseed.rate(), (dw + dv) / 2.0);
+        assert!((linseed.laid(0.0).drying - (dw + dv) / 2.0).abs() < 1e-6 && linseed.wax == 0.0 && !linseed.tubes_come && linseed.oil_rate == 1.0);
+        let poppy = pal.reground(&tubes, Oil::Poppy);
+        assert!((poppy.rate() - (dw + dv) / 2.0 * POPPY_RATE).abs() < 1e-6);
+        // (a quarter of the linseed pile and three quarters vermilion as it
+        // comes: each part in the oil it is in)
+        let mut k = Knifed::default();
+        k.pile(&linseed, 0.25);
+        k.pile(&pal.pile(vec![(v, 1.0)]), 0.75);
+        let parts = vec![(lw, 0.125), (v, 0.875)];
+        let knifed = pal.pile_ground(parts.clone(), k.grind(&pal, &parts));
+        assert!((knifed.rate() - ((dw + dv) / 2.0 + 3.0 * dv) / 4.0).abs() < 1e-6 && knifed.wax == 0.0, "{}", knifed.rate());
+        // (as their tubes come, piles knifed together are too)
+        let mut k = Knifed::default();
+        k.pile(&tubes, 1.0);
+        k.pile(&pal.pile(vec![(v, 1.0)]), 2.0);
+        assert!(pal.pile_ground(parts.clone(), k.grind(&pal, &parts)).tubes_come);
+        // (without the switch a pile dries at its pigments' rates, untouched)
+        pal.oils = false;
+        let m = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
+        assert!(m.pigment_drying == m.drying && m.grind.is_empty() && m.tubes_come && m.oil_rate == 1.0);
+    }
+
+    /// With the oils switch a dip jittered from a reground pile (`remix`)
+    /// keeps each part in the oil it is in and dries at its new
+    /// proportions: Sargent's lead white and vermilion reground in linseed,
+    /// in a dip whose jitter leaves no white, dries as vermilion in linseed;
+    /// every dip as its own parts in linseed.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn a_jittered_dip_dries_at_its_own_parts_in_their_oils() {
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.oils = true;
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, v) = (at("lead white"), at("vermilion"));
+        let (dw, dv) = (pal.drying_of(&pal.tubes[lw]), pal.drying_of(&pal.tubes[v]));
+        let linseed = pal.reground(&pal.pile(vec![(lw, 0.5), (v, 0.5)]), Oil::Linseed);
+        let mut clipped = 0;
+        for seed in 0..400 {
+            let dip = pal.remix(&linseed, 1.0, &mut Rng::new(seed));
+            let f = |i: usize| dip.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+            let want = (f(lw) * dw + f(v) * dv) / (f(lw) + f(v)).max(1e-9);
+            assert!((dip.laid(0.0).drying - want).abs() < 1e-5 && dip.wax == 0.0, "seed {seed}: {} for {want}", dip.laid(0.0).drying);
+            if f(lw) == 0.0 && f(v) > 0.0 {
+                clipped += 1;
+                assert!((dip.laid(0.0).drying - dv).abs() < 1e-6, "seed {seed}: {} for vermilion in linseed {dv}", dip.laid(0.0).drying);
+            }
+        }
+        assert!(clipped > 0, "no dip left out the white");
+    }
+
+    /// With the drain switch, blotting paper draws a paint's oil no lower
+    /// than its drained floor, as an absorbent ground does: zinc white (fine,
+    /// its floor 0.73 of its oil) blotted by half keeps 0.73; lead white
+    /// (floor 0.39) is blotted the full half. Without it both blot by half.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn blotting_stops_at_the_drained_floor_with_the_drain_switch() {
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.drain = true;
+        let at = |pal: &Palette, n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (zinc, lead) = (at(&pal, "zinc white"), at(&pal, "lead white"));
+        let blotted = |pal: &Palette, i: usize| pal.pile(vec![(i, 1.0)]).paint(-0.5).oil;
+        assert!(pal.pack[zinc].1 > 0.5 && pal.pack[lead].1 < 0.5);
+        assert!((blotted(&pal, zinc) - pal.pack[zinc].1).abs() < 1e-6 && (blotted(&pal, lead) - 0.5).abs() < 1e-6);
+        assert!(pal.with(vec![]).drain && pal.clone().drain && pal.only(&["zinc white"]).drain, "a palette made from it keeps its switch");
+        pal.drain = false;
+        assert!((blotted(&pal, zinc) - 0.5).abs() < 1e-6 && (blotted(&pal, lead) - 0.5).abs() < 1e-6);
     }
 }

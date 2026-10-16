@@ -21,7 +21,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
     let rows = heaps.len().div_ceil(COLS);
     let aspect = 1000.0 / (rows as f32 * CELL_H);
     // a light, neutral board, so colors are judged against no color
-    let mut c = Canvas::new(1600, aspect, hex("#d6d1c7")).with_size_mm(420.0).with_engine(tubes.engine);
+    let mut c = Canvas::new(1600, aspect, hex("#d6d1c7")).with_size_mm(420.0).with_engine(tubes.engine).with_drain(tubes.drain).with_oils(tubes.oils);
     // the dark stripes, laid and dried first
     let dark = Paint::body(hex("#0d0c0c"));
     for n in 0..heaps.len() {
@@ -37,9 +37,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
     let mut labels = Vec::new();
     for (n, h) in heaps.iter().enumerate() {
         let (cx, cy) = ((n % COLS) as f32 * CELL_W, (n / COLS) as f32 * CELL_H);
-        let mut mix = tubes.pile(h.fractions());
-        mix.solvent = h.solvent;
-        mix.oil_rate = h.oil_rate;
+        let mix = h.mixture(&tubes);
         let paint = mix.laid(h.medium);
         // the heap: a thick slab, the bead left standing where the knife lifts
         let mut k = Knife::new(46.0);

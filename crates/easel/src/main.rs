@@ -109,6 +109,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
+             [--hold <stick> --at x,y [--pose force,alt,azimuth[,roll] | --side direction]]   with paper and pastel: where a pastel stick held there would touch
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
@@ -128,6 +129,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
+             [--hold <stick> --at x,y [--pose force,alt,azimuth[,roll] | --side direction]]   with paper and pastel: where a pastel stick held there would touch
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
@@ -1008,6 +1010,70 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     Ok((w as usize, h as usize, out))
 }
 
+/// With the paper-and-pastel switch: a pastel stick held over the canvas
+/// (`look --hold <stick> --at x,y [--pose force,alt,azimuth[,roll] | --side
+/// direction]`): the passage at full detail with, seen from above, the
+/// stick's low part as a light shadow, the band where its crumbs would settle
+/// tinted with its color, and where it rests on the tooth at that force in
+/// its color: where a stroke from there would lay. `--side` lays it flat
+/// across a stroke going that way (degrees). Only reads: no hand time,
+/// nothing in the log, the canvas and its wear untouched.
+fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
+    use image::ImageEncoder;
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+        return Err("look --hold takes --at, --pose or --side, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+    }
+    let (stick, turned) = s.held_stick(name)?;
+    let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+    let (wu, hu) = (c.width(), c.height());
+    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
+        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
+    }
+    let half = 60.0f32;
+    let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
+    // (as `hold_look`: the point in the passage shown)
+    if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
+        return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
+    }
+    let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
+    let (_, _, png) = look::render(&c, &seen_as)?;
+    let mut img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
+    let p = paint::pastel::Pose { force: pose[0], alt: pose[1].to_radians(), az: pose[2].to_radians(), roll: (turned + pose[3]).to_radians() };
+    let cells = c.stick_contact(&stick, at.0, at.1, p);
+    let f = c.window();
+    // (the passage as rendered: a crop past the canvas's edge is clipped, as in `hold_look`)
+    let cx0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
+    let cy0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
+    let col = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as f32);
+    let (mut touch, mut bed) = (0usize, 0usize);
+    for &(i, k) in &cells {
+        let (x, y) = ((i % f.w + f.x0) as i64 - cx0, (i / f.w + f.y0) as i64 - cy0);
+        if x < 0 || y < 0 || x >= img.width() as i64 || y >= img.height() as i64 {
+            continue;
+        }
+        let q = img.get_pixel_mut(x as u32, y as u32);
+        let (share, to): (f32, [f32; 3]) = match k {
+            2 => (1.0, col),
+            1 => (0.45, col),
+            _ => (0.22, [20.0, 20.0, 20.0]),
+        };
+        for ch in 0..3 {
+            q[ch] = (q[ch] as f32 * (1.0 - share) + to[ch] * share).round() as u8;
+        }
+        match k {
+            2 => touch += 1,
+            1 => bed += 1,
+            _ => {}
+        }
+    }
+    let mm2 = c.px_mm() * c.px_mm();
+    let note = format!("touching {:.1} mm², crumbs settle over {:.1} mm² more", touch as f32 * mm2, bed as f32 * mm2);
+    let (w, h) = (img.width(), img.height());
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
+    Ok((w as usize, h as usize, out, note))
+}
+
 /// Write a look as `dir/look-NNNN.png`, NNNN one above the highest there, never over a file
 /// that exists (a pruned look or a stray look-prefixed file doesn't make it reuse a name).
 fn new_look(dir: &Path, png: &[u8]) -> Result<PathBuf, String> {
@@ -1101,6 +1167,13 @@ impl Server {
             #[cfg(feature = "state-store")] committed,
             #[cfg(feature = "state-store")] state_failed: false,
         };
+        // the paper-and-pastel switch: a log's own; a new painting's on, a scratch canvas's
+        // its painting's
+        let paper = match &text {
+            Some(text) => session::logged_paper(text),
+            None => like.is_none_or(|s| s.st.borrow().paper),
+        };
+        srv.s.set_paper(paper).map_err(|e| e.to_string())?;
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
@@ -1210,7 +1283,7 @@ impl Server {
             let p = new_look(&session_dir(&self.name), &png.2)?;
             return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
         }
-        let (mut hold, mut at) = (None::<String>, None::<String>);
+        let (mut hold, mut at, mut pose, mut side) = (None::<String>, None::<String>, None::<String>, None::<String>);
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {
@@ -1220,6 +1293,14 @@ impl Server {
                 }
                 "--at" => {
                     at = Some(args.get(i + 1).ok_or("--at needs a point on the canvas: x,y in units")?.clone());
+                    i += 1;
+                }
+                "--pose" => {
+                    pose = Some(args.get(i + 1).ok_or("--pose needs force,alt,azimuth[,roll] (N, degrees)")?.clone());
+                    i += 1;
+                }
+                "--side" => {
+                    side = Some(args.get(i + 1).ok_or("--side needs the stroke's direction in degrees")?.clone());
                     i += 1;
                 }
                 "--survey" => survey = true,
@@ -1234,6 +1315,14 @@ impl Server {
         if survey && compare.is_some() {
             return Err("look: --survey and --compare are two looks; ask for one".into());
         }
+        // (a pastel stick comes with the paper-and-pastel switch: without it there is none to hold)
+        let sticks = self.s.st.borrow().paper;
+        if (pose.is_some() || side.is_some()) && !sticks {
+            return Err(format!("look: --pose and --side hold a pastel stick, which needs the paper-and-pastel switch; this painting doesn't have it (its log's head has no {:?} line)", session::PAPER_MARK));
+        }
+        if (pose.is_some() || side.is_some()) && hold.is_none() {
+            return Err("look: --pose and --side hold a pastel stick: they go with --hold <stick> --at x,y".into());
+        }
         // --hold <pile> --at x,y: the loaded knife held up to the canvas (speculative: `hold_look`)
         if hold.is_some() || at.is_some() {
             let (Some(pile), Some(at)) = (hold, at) else { return Err("look: --hold <knife or pile> and --at x,y go together".into()) };
@@ -1246,6 +1335,40 @@ impl Server {
             }
             let v = look::View::parse(&rest)?;
             let t0 = Instant::now();
+            if sticks && self.s.held_stick(&pile).is_ok() {
+                let nums = |t: &str| -> Result<Vec<f32>, String> { t.split(',').map(|x| x.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("{t}: want numbers separated by commas")) };
+                let ps = match (&pose, &side) {
+                    (Some(_), Some(_)) => return Err("look --hold: --pose or --side, not both".into()),
+                    (Some(t), None) => {
+                        let n = nums(t)?;
+                        if !(3..=4).contains(&n.len()) {
+                            return Err("--pose force,alt,azimuth[,roll]: newtons and degrees".into());
+                        }
+                        [n[0], n[1], n[2], n.get(3).copied().unwrap_or(0.0)]
+                    }
+                    // laid flat across a stroke going that way (as p:side holds it)
+                    (None, Some(t)) => {
+                        let n = nums(t)?;
+                        if n.len() != 1 {
+                            return Err("--side: the stroke's direction, degrees".into());
+                        }
+                        [2.0, 0.0, n[0] + 90.0, 0.0]
+                    }
+                    (None, None) => [1.5, 60.0, 45.0, 0.0],
+                };
+                if !(0.0..=20.0).contains(&ps[0]) || !(0.0..=90.0).contains(&ps[1]) {
+                    return Err("--pose: force 0 to 20 N, alt 0 to 90 degrees".into());
+                }
+                if !(ps[2].is_finite() && ps[3].is_finite()) {
+                    return Err("--pose, --side: the azimuth, direction and roll are numbers (degrees)".into());
+                }
+                let (w, h, png, note) = stick_hold_look(&self.s, &pile, (p[0], p[1]), ps, &v)?;
+                let path = new_look(&session_dir(&self.name), &png)?;
+                return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held at {},{}: {note}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
+            }
+            if pose.is_some() || side.is_some() {
+                return Err(format!("look --hold {pile}: --pose and --side hold a pastel stick, not a knife or a pile"));
+            }
             let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
@@ -1404,6 +1527,7 @@ impl Server {
         self.ready()?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
+            paper: self.s.st.borrow().paper,
             tubes: self.s.tube_box(),
             chunks: self.s.log.iter().map(|c| c.src.clone()).collect(),
             live: self.s.canvas().map(|a| (bits(&a.seen()), bits_f(a.surface_um()))),
@@ -1853,7 +1977,7 @@ fn run(args: &[String]) -> Result<(), String> {
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
-    let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?;
+    let mut s = Session::replay_with(width, tubes).and_then(|s| s.with_paper(session::logged_paper(&text))).map_err(|e| e.to_string())?;
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     let t0 = Instant::now();
@@ -2126,4 +2250,45 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
     let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
     format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A pastel stick held up (with the paper-and-pastel switch) only reads, as the held
+    /// knife: the state digest, the log and the clock are as they were, and the stick's
+    /// wear in the Lua heap too. It tints the passage where the stick would touch and says
+    /// how much; laid on its side it touches more, and its face lies near the paper over
+    /// much more.
+    #[cfg(feature = "replay")]
+    #[test]
+    fn a_held_stick_shows_where_it_would_touch_and_changes_nothing() {
+        let mut s = Session::new(1000).unwrap().with_paper(true).unwrap();
+        s.run(r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200}}"#).unwrap();
+        s.run(r#"P = {glow = pastel(pile{{"vermilion", 1}}, {kind="soft"})}"#).unwrap();
+        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.st.borrow().clock);
+        let plain = look::View::default();
+        let at = (500.0, 400.0);
+        let (stick, turned) = s.held_stick("P.glow").unwrap();
+        assert_eq!(turned, 0.0);
+        let (w, h, png, note) = stick_hold_look(&s, "P.glow", at, [1.5, 60.0, 45.0, 0.0], &plain).unwrap();
+        let bare = look::render(&s.canvas().unwrap(), &look::View { crop: Some([at.0 - 60.0, at.1 - 60.0, at.0 + 60.0, at.1 + 60.0]), ..look::View::default() }).unwrap();
+        assert_eq!((w, h), (bare.0, bare.1));
+        let (held, bare) = (image::load_from_memory(&png).unwrap().to_rgb8(), image::load_from_memory(&bare.2).unwrap().to_rgb8());
+        // (the vermilion where it touches: redder than the paper)
+        let red = held.pixels().zip(bare.pixels()).filter(|(a, b)| a[0] as i32 - a[2] as i32 > b[0] as i32 - b[2] as i32 + 40).count();
+        assert!(red > 0, "the stick's contact shows in its color");
+        let touch = |note: &str| note.strip_prefix("touching ").and_then(|t| t.split(' ').next()).and_then(|t| t.parse::<f32>().ok()).unwrap();
+        assert!(touch(&note) > 0.0 && note.contains("crumbs settle over"), "{note}");
+        let (.., flat) = stick_hold_look(&s, "P.glow", at, [2.0, 0.0, 135.0, 0.0], &plain).unwrap();
+        // (laid flat, its face lies near the paper over much more: it rests on the highest fibers only)
+        let bed = |note: &str| note.split("settle over ").nth(1).and_then(|t| t.split(' ').next()).and_then(|t| t.parse::<f32>().ok()).unwrap();
+        assert!(touch(&flat) > touch(&note) && bed(&flat) > 3.0 * bed(&note), "on its side it covers more: {flat} vs {note}");
+        assert_eq!(before, (state_digest_line(&s, 2, 0.0), s.program("t"), s.st.borrow().clock));
+        assert_eq!(s.held_stick("P.glow").unwrap().0, stick, "no wear");
+        assert!(s.held_stick("nope").unwrap_err().contains("holds no pastel stick"));
+        assert!(stick_hold_look(&s, "P.glow", (1400.0, 400.0), [1.5, 60.0, 45.0, 0.0], &plain).unwrap_err().contains("not on the canvas"));
+        assert!(stick_hold_look(&s, "P.glow", at, [1.5, 60.0, 45.0, 0.0], &look::View { mirror: true, ..look::View::default() }).is_err());
+    }
 }

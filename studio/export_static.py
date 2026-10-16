@@ -4,7 +4,7 @@
 # ///
 """Export the studio viewer as static files, painters only and scrubbed as --public is.
 
-    uv run studio/export_static.py <out-dir> [--skip paint-studio-xxxxxx ...]
+    uv run studio/export_static.py <out-dir> [--skip paint-studio-xxxxxx ...] [--only-atelier | --skip-atelier]
 
 Writes <out>/index.html (the viewer, reading files instead of the live API), <out>/stream.css (its livestream
 layout, loaded with ?stream=1), <out>/data/sessions.json and,
@@ -21,6 +21,11 @@ The export owns <out>: it keeps a list of the files it wrote in <out>/.studio-ex
 deletes only the listed files it didn't write again. It won't write into a folder that has files and no list,
 except an export from before the list (index.html with the static switch, data/sessions.json, nothing else
 at the top), which it adopts, owning all of data/ as the old exporter did.
+
+The atelier's paintings are the folders its works name (~/src/a/stillwet-runs/atelier/works/*/run/studios.json and
+manifest.json). --skip-atelier leaves them out (the house export at /studio/). --only-atelier exports only them, as the
+viewer at /atelier/easel/: its links point there, and every script is a same-origin file (js/<hash>.js), because the
+atelier's pages allow no inline script.
 """
 import argparse, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
@@ -40,6 +45,7 @@ THUMB = (168, 120)  # the look-strip shows 81x58: twice that, for sharp screens
 VIEW = 1600         # the main view's copy, long side
 SITE = "https://stillwet.art"
 DEFAULT_IMAGE = {"url": SITE + "/img/og-card.jpg", "width": 1200, "height": 630}
+ATELIER = os.path.expanduser("~/src/a/stillwet-runs/atelier")
 # Keep the returned header's model names consistent with the interactive viewer.
 MODEL_NAMES = {
     "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
@@ -49,6 +55,27 @@ MODEL_NAMES = {
     "glm-5.3-flash": "GLM-5.3 Flash", "mimo-v2.6-pro": "MiMo v2.6 Pro",
     "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "kimi-k3": "Kimi K3", "space-bunny-free": "Space Bunny",
 }
+
+
+def atelier_folders():
+    """The painting folders of the atelier's works, by name: each work's run/studios.json, written at its start, and
+    its manifest's folder."""
+    folders = set()
+    for path in glob.glob(os.path.join(ATELIER, "works", "*", "run", "studios.json")):
+        try:
+            with open(path) as fh:
+                folders.update(v for v in json.load(fh).values() if isinstance(v, str))
+        except (OSError, ValueError, AttributeError):
+            continue
+    for path in glob.glob(os.path.join(ATELIER, "works", "*", "manifest.json")):
+        try:
+            with open(path) as fh:
+                folder = json.load(fh).get("folder")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(folder, str):
+            folders.add(os.path.basename(folder.rstrip("/")))
+    return folders
 
 
 def working_studios():
@@ -116,9 +143,9 @@ def featured(sessions):
     return max(completed, key=lambda s: s["completed_at"]) if completed else None
 
 
-def card_page(page, painter, homepage=False):
+def card_page(page, painter, homepage=False, root="/studio/"):
     """Metadata and the selected painter's first view in the returned HTML, escaped and scrubbed."""
-    url = SITE + "/studio/" + ("?p=" + quote(painter["p"], safe="") if painter and not homepage else "")
+    url = SITE + root + ("?p=" + quote(painter["p"], safe="") if painter and not homepage else "")
     image = (painter or {}).get("og_image") or DEFAULT_IMAGE
     title, description = "The studio · stillwet", "AI models painting in a simulation of oil paint. Watch every brushstroke and how the picture grows."
     if painter:
@@ -132,7 +159,7 @@ def card_page(page, painter, homepage=False):
         title = f"{name} · {model} · {state} · stillwet studio"
         description = f"{state}: {model} painting{subject} in a simulation of oil paint. Latest canvas snapshot; watch every brushstroke in the studio."
     esc = lambda value: html.escape(str(value), quote=True)
-    tags = [f"<title>{esc(title)}</title>", '<base href="/studio/">',
+    tags = [f"<title>{esc(title)}</title>", f'<base href="{esc(root)}">',
             f'<link rel="canonical" href="{esc(url)}">']
     for key, value in (("description", description), ("og:title", title), ("og:description", description),
                        ("og:type", "website"), ("og:url", url), ("og:image", image["url"]),
@@ -185,6 +212,16 @@ def card_page(page, painter, homepage=False):
         else:
             page = page.replace(b'<p id="nopic" hidden>', b'<p id="nopic">', 1)
     return page
+
+
+def external_scripts(page, out):
+    """Each inline script of page as a same-origin file, js/<hash of its code>.js, for a page whose policy allows
+    scripts from its own site only."""
+    def external(m):
+        name = "js/" + hashlib.sha256(m.group(1)).hexdigest()[:16] + ".js"
+        text(os.path.join(out, name), m.group(1))
+        return b'<script src="' + name.encode() + b'"></script>'
+    return re.sub(rb"<script>(.*?)</script>", external, page, flags=re.S)
 
 
 def palette_chips(data, names):
@@ -313,13 +350,18 @@ def text(path, data):
     write(path, body)
 
 
-def export(out, skip=(), only=None, live=False):
+def export(out, skip=(), only=None, live=False, atelier=None):
+    """atelier: None for every painter, "only" for the atelier's alone (the viewer at /atelier/easel/), "skip" for
+    every painter but the atelier's."""
     S.PUBLIC = True
     WRITTEN.clear()
     out = os.path.abspath(out)
     before = owned(out)
+    folders = atelier_folders() if atelier else set()
+    root = "/atelier/easel/" if atelier == "only" else "/studio/"
     ss = [{k: v for k, v in s.items() if k != "files"} for s in S.list_sessions()
-          if s.get("painter") and s["p"] not in skip and (only is None or s["p"] == only)]
+          if s.get("painter") and s["p"] not in skip and (only is None or s["p"] == only)
+          and (atelier is None or (s["p"] in folders) == (atelier == "only"))]
     if only is not None and len(ss) != 1:
         raise ValueError("the selected painter has no viewer session yet")
     runner_states(ss, working_studios(), time.time())
@@ -394,7 +436,7 @@ def export(out, skip=(), only=None, live=False):
                 data = fh.read()
             rel = f'data/{p}/v/{s["look"]}.jpg?v=' + hashlib.sha256(data).hexdigest()
             with Image.open(io.BytesIO(data)) as im:
-                s["og_image"] = {"url": SITE + "/studio/" + rel, "width": im.width, "height": im.height}
+                s["og_image"] = {"url": SITE + root + rel, "width": im.width, "height": im.height}
         text(os.path.join(out, "data", p, "events.json"),
              json.dumps({"events": ev, "total": len(ev), "epoch": st["epoch"], "sittings": s["sittings"], "imgext": exts, "web": web}))
         # the painting's source, as the live server's /api/file gives it
@@ -416,12 +458,20 @@ def export(out, skip=(), only=None, live=False):
         page = page.replace(b"window.STUDIO_STATIC = true;", b"window.STUDIO_STATIC = true;window.STUDIO_LIVE = true;")
         text(os.path.join(out, "index.html"), page)
     else:
-        text(os.path.join(out, "index.html"), card_page(page, featured(ss), homepage=True))
+        pages = {"index.html": card_page(page, featured(ss), homepage=True, root=root)}
         for s in ss:
-            text(inside(out, "share", s["p"] + ".html"), card_page(page, s))
+            pages[os.path.join("share", s["p"] + ".html")] = card_page(page, s, root=root)
+        for rel, body in pages.items():
+            text(inside(out, rel), external_scripts(body, out) if atelier == "only" else body)
     for asset in S.VIEWER_ASSETS:
         with open(os.path.join(S.HERE, asset), "rb") as fh:
             write(os.path.join(out, asset), fh.read())
+    stale = prune(out, before)
+    print(f"exported {len(ss)} painters, {n_img} images ({n_web} new web copies) to {out} ({stale} stale files removed)")
+
+
+def prune(out, before):
+    """Removes the files the last export listed and this one didn't write, lists this one's; returns how many it removed."""
     now = sorted(os.path.relpath(f, out) for f in WRITTEN)
     stale = 0
     for rel in set(before) - set(now):
@@ -435,15 +485,20 @@ def export(out, skip=(), only=None, live=False):
             os.rmdir(d); d = os.path.dirname(d)
     with open(os.path.join(out, MARKER), "w") as fh:
         fh.write("".join(r + "\n" for r in now))
-    print(f"exported {len(ss)} painters, {n_img} images ({n_web} new web copies) to {out} ({stale} stale files removed)")
+    return stale
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
     ap.add_argument("--skip", nargs="*", default=[], help="painter folders to leave out (test runs)")
+    which = ap.add_mutually_exclusive_group()
+    which.add_argument("--only-atelier", action="store_const", const="only", dest="atelier",
+                       help="only the atelier's paintings, as the viewer at /atelier/easel/")
+    which.add_argument("--skip-atelier", action="store_const", const="skip", dest="atelier",
+                       help="every painter but the atelier's")
     a = ap.parse_args()
-    export(a.out, skip=a.skip)
+    export(a.out, skip=a.skip, atelier=a.atelier)
 
 
 if __name__ == "__main__":

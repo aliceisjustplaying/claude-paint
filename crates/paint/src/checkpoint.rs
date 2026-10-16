@@ -43,7 +43,9 @@
 //! thickness (for craquelure fitted to the ground); each wet pixel's paint
 //! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
 //! every cell of the deposit (coverage, flake reflectance, lift, fixed
-//! floor, film when drawn) and the whole-canvas guide with its fixed floor;
+//! floor, film when drawn; with a pastel stick's pastel, flag 2, the
+//! reflectance in color and the pastel in the tooth, loose and bound) and
+//! the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
 //! aging its passes and owes the time it owed; and the engine version it is
@@ -58,6 +60,33 @@
 //! Every other canvas writes version 8 or 9 as before, so a reader that
 //! doesn't know version 10 refuses a raw canvas instead of loading it
 //! without its cloth. A section of any other version is refused too.
+//!
+//! A canvas on a sheet of paper (`crate::paper`) is version 13
+//! (`PAINTC13`): version 11's bytes after the magic, then the paper's
+//! section, which is the file's last: a `PAPR` mark and the section's own
+//! version (1, `PAPER_V`), the sheet's make (grammage, fiber length, width
+//! and thickness, coarseness, porosity, flocs and their size, pressing,
+//! calendering, absorbency and z modulus, one f32 each), its seed, its felt
+//! and laid wires (each a 0/1 flag, then its numbers), and the pores' mean
+//! depth per buffer pixel (`Canvas::micro`). The section is there exactly
+//! when the canvas has paper, whatever its engine: a canvas without paper
+//! is written as before, and a reader that doesn't know version 13 refuses
+//! a sheet instead of loading it as linen. A sheet of paper is engine 4's
+//! or later (its pores take oil as an absorbent ground does) and never a
+//! raw canvas.
+//!
+//! A canvas with a sheet of paper laid on the picture (`crate::sheet`, a
+//! mask) is version 15 (`PAINTC15`): the bytes of the version it would
+//! otherwise be (11, 12 or 13: its soak or paper section, if any, told by
+//! its mark), then the sheet's section, which is the file's last: a `SHET`
+//! mark and the section's own version (1, `SHEET_V`), its caliper, pore
+//! depth and tone (five f32), where it lies (one f32 per buffer pixel, 0 or
+//! 1), and the pastel caught on it (coverage, then color, per pixel). It is
+//! there exactly when a sheet lies on the picture: every other canvas is
+//! written as before, and a reader that doesn't know version 15 refuses the
+//! file instead of loading the picture without its mask. (The easel lifts
+//! a sheet within the chunk that laid it, so its chunk checkpoints never
+//! hold one.)
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -74,6 +103,16 @@ const MAGIC10: &[u8; 8] = b"PAINTC10";
 const MAGIC11: &[u8; 8] = b"PAINTC11";
 /// Engine 4 materials followed by the raw canvas's soak section.
 const MAGIC12: &[u8; 8] = b"PAINTC12";
+/// Version 11 followed by the paper's section (`crate::paper`).
+const MAGIC13: &[u8; 8] = b"PAINTC13";
+/// Marks the paper's section ("PAPR"), and its version.
+const PAPER_MARK: u64 = 0x52504150;
+const PAPER_V: u64 = 1;
+/// Version 11, 12 or 13 followed by the sheet's section (`crate::sheet`).
+const MAGIC15: &[u8; 8] = b"PAINTC15";
+/// Marks the sheet's section ("SHET"), and its version.
+const SHEET_MARK: u64 = 0x54454853;
+const SHEET_V: u64 = 1;
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
@@ -147,6 +186,11 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     if get_u64(r)? != SOAK_MARK {
         return Err(bad("checkpoint soak mark is wrong"));
     }
+    read_soak_body(r, n)
+}
+
+/// The soak section after its mark.
+fn read_soak_body(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     match get_u64(r)? {
         SOAK_V => {}
         v => return Err(bad(&format!("checkpoint soak section is version {v}; this easel reads version {SOAK_V} only"))),
@@ -176,12 +220,117 @@ fn read_soak(r: &mut impl Read, n: usize) -> io::Result<crate::soak::Soak> {
     Ok(crate::soak::Soak::new(fabric, t0, seed, weave))
 }
 
+fn write_paper(w: &mut impl Write, p: &crate::paper::Paper, micro: &[f32]) -> io::Result<()> {
+    put_u64(w, PAPER_MARK)?;
+    put_u64(w, PAPER_V)?;
+    for v in [p.grammage, p.fiber_mm, p.fiber_um, p.thick_um, p.coarseness, p.porosity, p.floc, p.floc_mm, p.press, p.calender, p.absorbent, p.z_mpa] {
+        put_f32(w, v)?;
+    }
+    put_u64(w, p.seed)?;
+    match p.felt {
+        None => put_u64(w, 0)?,
+        Some(f) => {
+            put_u64(w, 1)?;
+            put_f32(w, f.cell_mm)?;
+            put_f32(w, f.depth_um)?;
+        }
+    }
+    match p.laid {
+        None => put_u64(w, 0)?,
+        Some(l) => {
+            put_u64(w, 1)?;
+            put_f32(w, l.per_cm)?;
+            put_f32(w, l.chain_mm)?;
+            put_f32(w, l.deficit)?;
+        }
+    }
+    put_all(w, micro.iter().copied())
+}
+
+fn read_paper(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, Vec<f32>)> {
+    if get_u64(r)? != PAPER_MARK {
+        return Err(bad("checkpoint paper mark is wrong"));
+    }
+    read_paper_body(r, n)
+}
+
+/// The paper's section after its mark.
+fn read_paper_body(r: &mut impl Read, n: usize) -> io::Result<(crate::paper::Paper, Vec<f32>)> {
+    use crate::paper::{Felt, Laid, Paper};
+    match get_u64(r)? {
+        PAPER_V => {}
+        v => return Err(bad(&format!("checkpoint paper section is version {v}; this easel reads version {PAPER_V} only"))),
+    }
+    let mut v = [0.0f32; 12];
+    for x in v.iter_mut() {
+        *x = get_f32(r)?;
+    }
+    let seed = get_u64(r)?;
+    let felt = match get_u64(r)? {
+        0 => None,
+        1 => Some(Felt { cell_mm: get_f32(r)?, depth_um: get_f32(r)? }),
+        _ => return Err(bad("checkpoint paper felt flag is invalid")),
+    };
+    let laid = match get_u64(r)? {
+        0 => None,
+        1 => Some(Laid { per_cm: get_f32(r)?, chain_mm: get_f32(r)?, deficit: get_f32(r)? }),
+        _ => return Err(bad("checkpoint paper laid flag is invalid")),
+    };
+    let micro = get_all(r, n)?;
+    // (a corrupt file is an error here, not a panic or NaN pixels later)
+    let felt_ok = felt.is_none_or(|f| f.cell_mm.is_finite() && f.depth_um.is_finite());
+    let laid_ok = laid.is_none_or(|l| [l.per_cm, l.chain_mm, l.deficit].iter().all(|x| x.is_finite()));
+    if !(v.iter().all(|x| x.is_finite()) && felt_ok && laid_ok && micro.iter().all(|x| x.is_finite() && *x >= 0.0)) {
+        return Err(bad("checkpoint paper is invalid"));
+    }
+    let p = Paper {
+        grammage: v[0], fiber_mm: v[1], fiber_um: v[2], thick_um: v[3], coarseness: v[4], porosity: v[5],
+        floc: v[6], floc_mm: v[7], press: v[8], calender: v[9], absorbent: v[10], z_mpa: v[11], felt, laid, seed,
+    };
+    Ok((p, micro))
+}
+
+fn write_sheet(w: &mut impl Write, s: &crate::sheet::Sheet) -> io::Result<()> {
+    put_u64(w, SHEET_MARK)?;
+    put_u64(w, SHEET_V)?;
+    for v in [s.caliper_um, s.micro_um, s.tone[0], s.tone[1], s.tone[2]] {
+        put_f32(w, v)?;
+    }
+    put_all(w, s.over.iter().map(|&o| if o { 1.0 } else { 0.0 }))?;
+    put_all(w, s.a.iter().copied())?;
+    put_all(w, s.r.iter().flat_map(|c| *c))
+}
+
+/// The sheet's section after its mark.
+fn read_sheet_body(r: &mut impl Read, n: usize) -> io::Result<crate::sheet::Sheet> {
+    match get_u64(r)? {
+        SHEET_V => {}
+        v => return Err(bad(&format!("checkpoint sheet section is version {v}; this easel reads version {SHEET_V} only"))),
+    }
+    let mut v = [0.0f32; 5];
+    for x in v.iter_mut() {
+        *x = get_f32(r)?;
+    }
+    let over = get_all(r, n)?;
+    if !over.iter().all(|&o| o == 0.0 || o == 1.0) {
+        return Err(bad("checkpoint sheet mask is invalid"));
+    }
+    let over: Vec<bool> = over.into_iter().map(|o| o > 0.5).collect();
+    let a = get_all(r, n)?;
+    let rgb = get_all(r, n * 3)?;
+    if !v.iter().chain(&a).chain(&rgb).all(|x| x.is_finite()) {
+        return Err(bad("checkpoint sheet is invalid"));
+    }
+    let r = rgb.as_chunks::<3>().0.to_vec();
+    Ok(crate::sheet::Sheet { over, caliper_um: v[0], micro_um: v[1], tone: [v[2], v[3], v[4]], a, r })
+}
+
 /// Read just the header of a checkpoint (to validate it before loading).
 pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
 }
 
-/// The format version (7–12) and the header. An engine-3 canvas in a
+/// The format version (7–13, 15) and the header. An engine-3 canvas in a
 /// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
 /// does) is refused here, before anything else is read.
 fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
@@ -194,6 +343,8 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC10 => 10,
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
+        m if m == MAGIC13 => 13,
+        m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -220,7 +371,17 @@ impl Canvas {
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
         }
+        // (a sheet of paper: version 13 holds version 11's bytes)
+        if self.paper.is_some() && (self.engine < 4 || self.soak.is_some() || self.micro.len() != self.f.w * self.f.h) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a sheet of paper is engine 4's or later, on no raw cloth, with its pores laid (`with_paper`)"));
+        }
+        // (a sheet laid on the picture: version 15 holds version 11's bytes and on)
+        if self.sheet.is_some() && self.engine < 4 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "a sheet laid on the picture is engine 4's or later"));
+        }
         let version = match (self.engine, self.soak.is_some()) {
+            _ if self.sheet.is_some() => 15,
+            _ if self.paper.is_some() => 13,
             (3, true) => 10,
             (3, false) => 9,
             (4.., true) => 12,
@@ -228,6 +389,8 @@ impl Canvas {
             _ => 8,
         };
         w.write_all(match version {
+            15 => MAGIC15,
+            13 => MAGIC13,
             12 => MAGIC12,
             11 => MAGIC11,
             10 => MAGIC10,
@@ -298,7 +461,9 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                put_u64(w, 1)?;
+                // 1: graphite and chalk; 2: with a pastel stick's pastel, its
+                // cells in color with what lies in the tooth (graphite.rs)
+                put_u64(w, d.layout())?;
                 put_all(w, d.to_f32s())?;
             }
         }
@@ -331,6 +496,14 @@ impl Canvas {
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
             write_soak(w, s)?;
+        }
+        // a sheet of paper's section (version 13), last
+        if let Some(p) = &self.paper {
+            write_paper(w, p, &self.micro)?;
+        }
+        // a sheet laid on the picture (version 15), last
+        if let Some(s) = &self.sheet {
+            write_sheet(w, s)?;
         }
         Ok(())
     }
@@ -443,9 +616,9 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            1 => {
+            v @ (1 | 2) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
-                let d = crate::graphite::Drawing::from_f32s(n, whole, |k| get_all(r, k))?;
+                let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
             }
             _ => return Err(bad("checkpoint drawing flag is invalid")),
@@ -482,7 +655,7 @@ impl Canvas {
             }
         } else {
             if c.engine >= 4 {
-                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11 or PAINTC12"));
+                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11, PAINTC12, PAINTC13 or PAINTC15"));
             }
             // (an older engine's canvas: an oil ground's gloss, nothing absorbent)
             c.gloss = vec![crate::canvas::OIL_GROUND_GLOSS; n];
@@ -513,9 +686,224 @@ impl Canvas {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
+        // a sheet of paper's section, which ends the file
+        if version == 13 {
+            let (p, micro) = read_paper(r, n)?;
+            c.paper = Some(p);
+            c.micro = micro;
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
+        }
+        // a sheet on the picture: the soak or paper section if any, each by
+        // its mark, then the sheet's, which ends the file
+        if version == 15 {
+            let mut mark = get_u64(r)?;
+            if mark == SOAK_MARK {
+                if !c.f.is_whole() {
+                    return Err(bad("checkpoint soak is on a crop render"));
+                }
+                c.soak = Some(Box::new(read_soak_body(r, n)?));
+                mark = get_u64(r)?;
+            } else if mark == PAPER_MARK {
+                let (p, micro) = read_paper_body(r, n)?;
+                c.paper = Some(p);
+                c.micro = micro;
+                mark = get_u64(r)?;
+            }
+            if mark != SHEET_MARK {
+                return Err(bad("checkpoint sheet mark is wrong"));
+            }
+            c.sheet = Some(read_sheet_body(r, n)?);
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
+        }
         if version == 7 && r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("version-7 checkpoint has trailing data"));
         }
         Ok((c, header))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn set(b: &mut [u8], pos: usize, v: u64) {
+        b[pos..pos + 8].copy_from_slice(&v.to_le_bytes());
+    }
+
+    fn load(b: Vec<u8>) -> io::Result<Canvas> {
+        Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
+    }
+
+    fn rejected(b: Vec<u8>, what: &str) {
+        match load(b) {
+            Ok(_) => panic!("{what}: accepted"),
+            Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
+        }
+    }
+
+    /// A sheet of paper is written as version 13 and comes back bit for
+    /// bit (the sheet's make, its pores, its surface, matte face and
+    /// absorbency), and goes on taking a ground as it would have; without
+    /// the sheet (linen put in its place) the canvas is version 11 again.
+    /// The section is refused when it is cut short, followed by more, or
+    /// carries a wrong mark or a NaN, and a sheet is no engine-3 canvas.
+    #[test]
+    fn a_sheet_of_paper_survives_a_checkpoint() {
+        use crate::paper::{Laid, Paper};
+        let p = Paper { laid: Some(Laid { per_cm: 9.0, chain_mm: 24.0, deficit: 0.2 }), ..Paper::drawing(2) };
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(p);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert_eq!(&b[..8], b"PAINTC13");
+        let mut d = load(b.clone()).unwrap();
+        assert!(d.paper == c.paper && d.micro == c.micro && d.height == c.height && d.absorb == c.absorb && d.gloss == c.gloss && d.absorb_any);
+        let mut again = Vec::new();
+        d.write_state(&mut again, "").unwrap();
+        assert!(again == b, "rewritten as it was read");
+        for k in [&mut c, &mut d] {
+            k.prime([0.8, 0.78, 0.7], 0.6, 40.0, 0.3, 0.4, 5);
+            k.ground_finish(0.5);
+        }
+        assert!(d.pixels() == c.pixels() && d.height == c.height && d.absorb == c.absorb);
+        let mut linen = Vec::new();
+        c.clone().with_linen(Linen::fine(1)).write_state(&mut linen, "").unwrap();
+        assert_eq!(&linen[..8], b"PAINTC11");
+        let mut cut = b.clone();
+        cut.pop();
+        assert_eq!(load(cut).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
+        let mut trailing = b.clone();
+        trailing.push(0);
+        rejected(trailing, "trailing byte");
+        let n = c.f.w * c.f.h;
+        // (the section: mark, version, 12 numbers, seed, felt, laid, then the pores)
+        let section = b.len() - (8 + 8 + 12 * 4 + 8 + (8 + 2 * 4) + (8 + 3 * 4) + 4 * n);
+        let mut mark = b.clone();
+        set(&mut mark, section, 0);
+        rejected(mark, "paper mark");
+        let mut nan = b.clone();
+        let last = nan.len() - 4;
+        nan[last..].copy_from_slice(&f32::NAN.to_le_bytes());
+        rejected(nan, "a NaN pore");
+        let mut no_section = b[..section].to_vec();
+        no_section[..8].copy_from_slice(b"PAINTC11");
+        assert!(load(no_section.clone()).is_ok());
+        no_section[..8].copy_from_slice(b"PAINTC13");
+        assert_eq!(load(no_section).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
+        let e = c.clone().with_engine(3).write_state(&mut Vec::new(), "").unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    /// A sheet of paper with stick pastel in its tooth survives a
+    /// checkpoint bit for bit (the paper, its micro-roughness, the loose and
+    /// bound pastel), and goes on taking pastel as it would have; a drawing
+    /// with stick pastel is flag 2, and a corrupt one is refused.
+    #[test]
+    fn paper_and_stick_pastel_survive_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(crate::paper::Paper::drawing(2));
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(200.0));
+        c.fix_pastel(None, 0.15);
+        c.stick_stroke(&mut st, &line(260.0));
+        let d = c.drawing.as_ref().unwrap();
+        assert!(d.layout() == 2 && d.cells.iter().any(|c| c.loose > 0.0) && d.cells.iter().any(|c| c.bound > 0.0));
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b.clone())).unwrap();
+        assert!(r.pixels() == c.pixels() && r.height == c.height && r.micro == c.micro && r.paper == c.paper);
+        let mut again = Vec::new();
+        r.write_state(&mut again, "").unwrap();
+        assert!(again == b, "rewritten as it was read");
+        let mut st2 = st.clone();
+        c.stick_stroke(&mut st, &line(300.0));
+        r.stick_stroke(&mut st2, &line(300.0));
+        assert!(r.pixels() == c.pixels() && st == st2);
+        // a negative volume in the tooth is refused
+        c.drawing.as_mut().unwrap().cells[7].loose = -1.0;
+        let mut bad = Vec::new();
+        c.write_state(&mut bad, "").unwrap();
+        assert_eq!(Canvas::read_state(&mut Cursor::new(bad)).err().unwrap().kind(), io::ErrorKind::InvalidData);
+    }
+
+    /// A sheet of paper (version 13), and one with a sheet laid on it
+    /// (version 15), carry the recorded quarter tiles and adaptive sweep in
+    /// their engine word, as every other version does.
+    #[test]
+    fn a_sheet_of_paper_keeps_the_recorded_settings_in_its_engine_word() {
+        let c = Canvas::new_window(60, 1.5, [0.5; 3], None).with_engine(5).with_size_mm(120.0).with_paper(crate::paper::Paper::drawing(2)).with_quarter_tiles(true).with_adaptive_sweep(true);
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert_eq!(&b[..8], MAGIC13);
+        let r = load(b.clone()).unwrap();
+        assert!(r.quarter_tiles() && r.adaptive_sweep() && r.paper == c.paper);
+        let mut again = Vec::new();
+        r.write_state(&mut again, "").unwrap();
+        assert_eq!(again, b);
+        // and with a sheet laid on the picture (version 15)
+        let mut c = c;
+        let m = crate::mask::Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
+        let mut b = Vec::new();
+        c.write_state(&mut b, "").unwrap();
+        assert_eq!(&b[..8], MAGIC15);
+        let r = load(b.clone()).unwrap();
+        assert!(r.quarter_tiles() && r.adaptive_sweep() && r.sheet == c.sheet);
+        let mut again = Vec::new();
+        r.write_state(&mut again, "").unwrap();
+        assert_eq!(again, b);
+    }
+
+    /// A sheet of paper laid on the picture survives a checkpoint, with the
+    /// pastel caught on it: version 15, read back as written, on paper and
+    /// on linen alike; none laid (or lifted), none written, and the file is
+    /// what it was. A mask that isn't 0 or 1, or a wrong mark, is refused.
+    #[test]
+    fn a_laid_sheet_survives_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(crate::paper::Paper::drawing(2));
+        let bytes = |c: &Canvas| {
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let bare = bytes(&c);
+        assert_eq!(&bare[..8], b"PAINTC13");
+        assert!(load(bare.clone()).unwrap().sheet.is_none());
+        let m = crate::mask::Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+        c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
+        let mut st = Stick::round([0.7, 0.2, 0.1], 0.8, 12.0);
+        let pose = Pose { force: 2.0, alt: 1.0, az: 0.8, roll: 0.0 };
+        c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y: 300.0, pose, speed: 60.0 }, StrokePoint { x: 900.0, y: 300.0, pose, speed: 60.0 }]);
+        assert!(c.sheet.as_ref().unwrap().a.iter().any(|&a| a > 0.0), "the stroke caught on the sheet");
+        let b = bytes(&c);
+        assert_eq!(&b[..8], b"PAINTC15");
+        let r = load(b.clone()).unwrap();
+        assert!(r.sheet.is_some() && r.sheet == c.sheet && r.paper == c.paper && r.micro == c.micro && r.pixels() == c.pixels());
+        assert!(bytes(&r) == b, "rewritten as it was read");
+        // on linen: version 11's bytes, then the sheet
+        let mut linen = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0);
+        linen.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
+        let lb = bytes(&linen);
+        assert_eq!(&lb[..8], b"PAINTC15");
+        assert!(load(lb).unwrap().sheet == linen.sheet);
+        let n = c.f.w * c.f.h;
+        // (the section: mark, version, five numbers, the mask, its coverage and colors)
+        let section = b.len() - (8 + 8 + 5 * 4 + 4 * n + 4 * n + 12 * n);
+        let mut mark = b.clone();
+        set(&mut mark, section, 0);
+        rejected(mark, "sheet mark");
+        let mut half = b.clone();
+        let at = section + 8 + 8 + 5 * 4;
+        half[at..at + 4].copy_from_slice(&0.5f32.to_le_bytes());
+        rejected(half, "a mask of 0.5");
+        assert!(c.lift_sheet());
+        assert_eq!(&bytes(&c)[..8], b"PAINTC13");
     }
 }

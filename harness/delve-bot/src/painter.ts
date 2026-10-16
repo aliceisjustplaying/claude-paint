@@ -192,7 +192,10 @@ export class HousePainter implements Painter {
     const dir = this.studio(job), sessions = this.sessions(job), easel = join(dir, "bin/easel");
     const png = join(dir, "out/easel/painting/painting.png"), jpeg = join(sessions, "painting.jpg");
     rmSync(png, { force: true });
-    try { await exec(easel, ["save"], { cwd: dir, timeout: 600000 }); }
+    try {
+      await exec(easel, ["open"], { cwd: dir, timeout: 1800000, maxBuffer: 64 * 1024 * 1024 });
+      await exec(easel, ["save"], { cwd: dir, timeout: 600000 });
+    }
     finally { await exec(easel, ["close"], { cwd: dir, timeout: 60000 }).catch(() => {}); }
     const source = readFileSync(png);
     const s = this.config.studio, w = source.readUInt32BE(16), h = source.readUInt32BE(20);

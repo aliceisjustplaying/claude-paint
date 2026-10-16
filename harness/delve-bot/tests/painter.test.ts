@@ -106,6 +106,22 @@ test("a job already past its wall time never opens the easel or starts the paint
   assert.deepEqual(inStudio(f.studio), []);
 });
 
+test("a resumed job past its wall time still posts the canvas it already has", async t => {
+  const f = setup(t, "paint", c => { c.studio.maxWallSeconds = 600; });
+  assert.deepEqual(await f.painter.run(f.job, new AbortController().signal, Date.now()), { stopped: null });
+  await f.painter.finish(f.job, { stopped: null });
+  const asked = f.messages().length;
+  const run = await f.painter.run(f.job, new AbortController().signal, Date.now() - 601000);
+  assert.deepEqual(run, { stopped: "time" });
+  assert.equal(f.messages().length, asked);
+  const painting = await f.painter.finish(f.job, run);
+  assert.notEqual(painting, "dry");
+  if (painting === "dry") return;
+  assert.deepEqual([painting.width, painting.height], [1200, 900]);
+  assert.equal(painting.stopped, "time");
+  assert.deepEqual(inStudio(f.studio), []);
+});
+
 test("a job canceled while the easel opens never starts the painter", async t => {
   const f = setup(t, "paint");
   const controller = new AbortController();

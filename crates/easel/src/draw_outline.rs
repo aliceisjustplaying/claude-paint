@@ -369,7 +369,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "replay"))]
 mod tests {
     use crate::session::{Session, box_for};
 

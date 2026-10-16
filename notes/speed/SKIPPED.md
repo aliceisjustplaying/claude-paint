@@ -11,10 +11,11 @@ empty target and TIME_WARM once built.
 ## What it runs
 
 - paint, by exact name: `tests::{fixture_matches_golden, drag_conserves_paint,
-  dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
+  a_stroke_reaches_its_end, dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
   `drying::tests::checkpoint_mid_drying_resumes_exactly` and
   `noise::tests::worley_finds_the_true_nearest_features`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
+  `session::tests::a_gesture_keeps_its_width_to_its_last_point`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,
   `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` and
   `boxes::a_round_19_log_replays_as_before` (`#[ignore = "slow"]`, run by name:

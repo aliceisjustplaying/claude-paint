@@ -87,7 +87,7 @@ export class Streaming {
     this.config = config; this.env = env; this.fetcher = fetcher; this.log = log;
   }
   async stop(): Promise<void> {
-    for (const run of this.runs) run.controller.abort();
+    for (const run of this.runs) run.controller.abort("shutdown");
     await Promise.all([...this.runs].map(run => run.settled));
   }
   private track(): { controller: AbortController; settle: () => void } {
@@ -99,7 +99,11 @@ export class Streaming {
     if (!this.config.streaming.enabled) {
       const { controller, settle } = this.track();
       const poll = setInterval(() => { if (stopped(this.config, this.env) || canceled()) controller.abort(); }, 100);
-      try { return await work(controller.signal); } finally { clearInterval(poll); settle(); }
+      try {
+        const result = await work(controller.signal);
+        if (controller.signal.reason === "shutdown") throw new Error("interrupted_by_shutdown");
+        return result;
+      } finally { clearInterval(poll); settle(); }
     }
     const title = (JSON.parse(readFileSync(new URL("../assets/replies.json", import.meta.url), "utf8")) as Record<string, string>)["streamTitle"]!;
     if (active) throw new Error("stream_slot_busy");
@@ -112,7 +116,7 @@ export class Streaming {
     let grace: NodeJS.Timeout | undefined;
     const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => {
       const fail = () => reject(new Error("stream_canceled"));
-      if (controller.signal.reason === "time") grace = setTimeout(fail, 30000); else fail();
+      if (controller.signal.reason === "time") grace = setTimeout(fail, 10000); else fail();
     }, { once: true }));
     void abort.catch(() => {});
     const rkey = tid(), link = streamLink(this.config);
@@ -144,7 +148,9 @@ export class Streaming {
         if (created["uri"] !== `at://${this.config.did}/place.stream.livestream/${rkey}` || typeof created["cid"] !== "string") throw new Error("stream_create_mismatch");
       }
       controller.signal.throwIfAborted();
-      const result = await Promise.race([work(controller.signal), abort, ...(capture ? [capture.finished.then(() => { throw new Error("capture_ended"); })] : [])]);
+      const ended = capture && new Promise<never>((_, reject) => void capture!.finished.then(() => { throw new Error("capture_ended"); })
+        .catch((error: unknown) => { if (controller.signal.reason !== "time") reject(error); }));
+      const result = await Promise.race([work(controller.signal), abort, ...(ended ? [ended] : [])]);
       if (stopped(this.config, this.env) || canceled()) throw new Error("stream_canceled");
       return result;
     } catch { throw new Error("stream_job_failed_or_canceled"); }

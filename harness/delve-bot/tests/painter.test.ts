@@ -99,6 +99,13 @@ test("the runner stops the painter at its token and time limits, a stop or cance
   assert.ok(quiet.logs.some(log => JSON.stringify(log).includes('"reason":"time"')));
 });
 
+test("a job already past its wall time never opens the easel or starts the painter", async t => {
+  const f = setup(t, "paint", c => { c.studio.maxWallSeconds = 3; });
+  assert.deepEqual(await f.painter.run(f.job, new AbortController().signal, Date.now() - 4000), { stopped: "time" });
+  assert.equal(existsSync(join(dirname(f.config.database), "asked.jsonl")), false);
+  assert.deepEqual(inStudio(f.studio), []);
+});
+
 test("a job canceled while the easel opens never starts the painter", async t => {
   const f = setup(t, "paint");
   const controller = new AbortController();

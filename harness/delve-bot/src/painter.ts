@@ -143,13 +143,16 @@ export class HousePainter implements Painter {
     const env: Record<string, string> = { PATH: process.env["PATH"] ?? "/usr/bin:/bin", HOME: process.env["HOME"] ?? homedir(),
       ...(process.env["TMPDIR"] ? { TMPDIR: process.env["TMPDIR"] } : {}), ...(key ? { ANTHROPIC_API_KEY: key } : {}), ...this.launch.env };
     const reason = () => signal.reason === "time" ? "time" : "canceled";
-    try { await exec(join(dir, "bin/easel"), ["open"], { cwd: dir, env, timeout: 1800000, maxBuffer: 64 * 1024 * 1024, signal }); }
+    const wall = this.config.studio.maxWallSeconds, left = () => wall == null ? Infinity : wall * 1000 - (Date.now() - started);
+    if (left() <= 0) return { stopped: "time" };
+    try { await exec(join(dir, "bin/easel"), ["open"], { cwd: dir, env, timeout: Math.min(1800000, left()), maxBuffer: 64 * 1024 * 1024, signal }); }
     catch (error) {
       try {
         const pid = Number(readFileSync(join(dir, "out/easel/painting/lock"), "utf8").trim());
         if (readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(join(dir, "bin/easel"))) process.kill(pid, "SIGTERM");
       } catch { /* no server */ }
       if (signal.aborted) return { stopped: reason() };
+      if (left() <= 0) return { stopped: "time" };
       throw error;
     }
     if (signal.aborted) {

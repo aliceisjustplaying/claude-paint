@@ -1,0 +1,22 @@
+{
+  "acceptedStream": "On it! An AI painter is starting your oil painting now. You can watch it live at {streamUrl}, and I'll post the painting here when it's done.",
+  "doneStream": "Here's your painting! It was streamed live at {streamUrl}.",
+  "doneLimitStream": "Here's your painting. The painter hit its limit before finishing, so this is the canvas as it stood. It was streamed live at {streamUrl}.",
+  "acceptedStreamDry": "On it! This is a dry run, so no painter is starting and nothing is streaming at {streamUrl}.",
+  "doneStreamDry": "Dry run finished. No painting was made and nothing streamed at {streamUrl}.",
+  "streamTitle": "Stillwet painting a request live in oil",
+  "accepted": "On it! An AI painter is starting your oil painting now. I'll post it here when it's done.",
+  "queued": "Got it! You're at position {position} in line. An AI painter will start on it when one frees up, and I'll post the painting here when it's done.",
+  "declinedPolicy": "Sorry, I can't paint that. I stay away from real people, sexual content, hate and graphic gore.",
+  "declinedCheck": "Sorry, I couldn't check your request just now, so I can't paint it. It may go through if you ask again later.",
+  "declinedLimit": "Sorry, I've reached a painting limit for now, so I can't take this one.",
+  "declinedSize": "Sorry, that request is too long for me. A shorter one will fit.",
+  "declinedQueue": "Sorry, the line is full right now, so I can't take this one.",
+  "done": "Here's your oil painting!",
+  "doneLimit": "Here's your painting. The painter hit its limit before finishing, so this is the canvas as it stood.",
+  "doneDry": "Dry run finished. No painting was made.",
+  "failed": "Sorry, something went wrong on my end and there's no painting this time.",
+  "stopped": "Got it. I won't reply to you again, and any request of yours that's in progress or in line is canceled.",
+  "expired": "Sorry, no painter freed up in time, so your request has expired.",
+  "imageAlt": "An oil painting by an AI painter, made for this request."
+}

@@ -9,6 +9,7 @@
  * The summary holds only material from the studio, not a retelling of the conversation:
  *   - BRIEF.md, verbatim
  *   - notes/journal.md, verbatim but quoted line by line (the painter's own words)
+ *   - in an atelier studio, notebook.md, quoted the same way
  *   - the painting's Lua globals as the easel holds them (`easel globals`), so the painter's
  *     names keep working: name, the chunk that last assigned it, what it holds; bounded.
  *     If the easel can't answer, the summary says so.
@@ -26,7 +27,7 @@
  * were these.
  */
 import { type ExtensionAPI, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { buildSummary, CARRIES_OVER, HEADER } from "./summary.ts";
+import { buildSummary, CARRIES_OVER, fallbackSummary, HEADER } from "./summary.ts";
 
 export const DETAILS_TYPE = "claude-paint-painter-compaction";
 
@@ -94,7 +95,7 @@ export default function painterCompaction(pi: ExtensionAPI) {
 			({ summary, facts } = await buildSummary(ctx.cwd, branchEntries, signal, SUMMARY_HEADER));
 		} catch (error) {
 			// Never fall through to pi's default (LLM, "Next Steps") summarizer.
-			summary = `${HEADER}\n\nBRIEF.md and notes/journal.md are in the studio.`;
+			summary = fallbackSummary(ctx.cwd);
 			facts = { error: error instanceof Error ? error.message : String(error) };
 		}
 		return {

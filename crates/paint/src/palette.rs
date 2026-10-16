@@ -381,6 +381,9 @@ pub struct Palette {
     pub engine: u32,
     pub quarter_tiles: bool,
     pub adaptive_sweep: bool,
+    /// `body_of` joins a limb to the nearest other limb, and only when it
+    /// starts within its own width of it (`Outline::body`): new paintings.
+    pub limbs_join_nearest: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -388,7 +391,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -402,7 +405,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -411,7 +414,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -525,7 +528,7 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.

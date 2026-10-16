@@ -9,17 +9,18 @@ notebook and walls are copied in at start and carried home at finish.
     atelier.py [paths] start <studio> [--theme "<a few words>"] [--prepare]
     atelier.py [paths] finish <studio>
 
-start: under the studio's lock, refuses while the studio's last painting hasn't hung or free disk is under
+start: under the studio's lock and the admission lock every start takes, refuses while the studio's last painting hasn't hung or free disk is under
 DISK_FLOOR plus PER_PAINTING for each painting on an easel (this one included). Exports the house every-box studio
 (scripts/export_r16_studio every, 2400 px, from this checkout's HEAD), copies in notebook.md and the walls, writes
 BRIEF.md from texts/, the notebook's before-copy and works/<id>-<nnn>/ (manifest.json, BRIEF.md, run/studios.json).
 Opus: writes the launch agent (launch_agent()) and, without --prepare, loads it. Flash: configures agy
 (scripts/prepare_agy_studio) and writes HAND-LAUNCH.md beside the manifest; agy is started by hand.
 
-finish: once the painter is done (Opus: run/OPUS/p1_outcome.json "finished"; Flash: out/easel/sittings.json
-complete), under the machine-wide finishing lock: closes the easel, replays the log once (scripts/check_painting,
+finish: under the studio's lock, once the painter is done (Opus: run/OPUS/p1_outcome.json "finished"; Flash:
+out/easel/sittings.json complete and a reply after the completing end_sitting in the feed), under the machine-wide
+finishing lock: closes the easel, replays the log once (scripts/check_painting,
 which must pass), renders color from the session's save (scripts/finish_painting) and gallery and relief from the
-same save (easel render-checkpoint). Then under the studio's lock: copies the notebook home, hangs the wall
+same save (easel render-checkpoint). Then it copies the notebook home, hangs the wall
 (walls/<n>.png, 1000 px wide, and cards/<nnn>.json), rewrites walls/list.md, copies the journal and log, writes
 manifest.json last, appends to history.md and commits the text records to the local stillwet-runs-data clone
 (no push), under the records lock.
@@ -143,6 +144,34 @@ def house():
     return module
 
 
+def closing_reply(feed):
+    """An agy painter's closing reply: its last text, with no tool call, after the end_sitting result that said the
+    painting is complete (out/easel/sittings.json is complete before that result reaches the feed); None until then."""
+    try:
+        events = [json.loads(line) for line in feed.read_text(errors="replace").splitlines() if line.strip()]
+    except (OSError, ValueError):
+        return None
+    messages = [e.get("message") or {} for e in events if isinstance(e, dict)]
+    ends = {c.get("id") for m in messages if m.get("role") == "assistant" for c in m.get("content") or []
+            if isinstance(c, dict) and c.get("type") == "toolCall" and c.get("name") == "end_sitting"}
+    complete = [i for i, m in enumerate(messages) if m.get("role") == "toolResult" and m.get("toolCallId") in ends
+                and not m.get("isError") and any(c.get("type") == "text" and c.get("text", "").startswith("The painting is complete.")
+                                                 for c in m.get("content") or [] if isinstance(c, dict))]
+    if not complete:
+        return None
+    reply = None
+    for m in messages[complete[-1] + 1:]:
+        content = m.get("content") if m.get("role") == "assistant" else None
+        if not isinstance(content, list) or m.get("stopReason") in ("error", "aborted"):
+            continue
+        if any(isinstance(c, dict) and c.get("type") == "toolCall" for c in content):
+            reply = None
+            continue
+        said = "\n".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text").strip()
+        reply = said or reply
+    return reply
+
+
 def prepare_agy():
     loader = importlib.machinery.SourceFileLoader("prepare_agy_studio", str(REPO / "scripts/prepare_agy_studio"))
     module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
@@ -202,7 +231,8 @@ class Atelier:
     def start(self, sid, theme=None, prepare=False):
         info = STUDIOS[sid]
         home = self.home(sid)
-        with locked(home / "lock"):
+        # the studio's lock, then the admission lock that every start takes: the next start counts this painting
+        with locked(home / "lock"), locked(self.root / ".start-lock"):
             waiting = self.on_easel(sid)
             if waiting:
                 raise Refused(f"{sid}: painting {int(waiting[-1].name[-3:])} hasn't hung yet; the next one starts after its finish")
@@ -290,9 +320,10 @@ class Atelier:
         if state.get("complete") is not True:
             raise Refused(f"{sid}: the painting isn't complete ({folder / 'out/easel/sittings.json'})")
         records = json.loads((rd / "p1_sittings.json").read_text())
-        reply = (rd / "p1_final.txt").read_text() if (rd / "p1_final.txt").exists() else house().session_reply(records[-1]["sessions"])
+        reply = (rd / "p1_final.txt").read_text() if (rd / "p1_final.txt").exists() else closing_reply(Path(records[-1]["sessions"][-1]))
         if not reply:
-            raise Refused(f"{sid}: no closing reply in {records[-1]['sessions']}; {rd / 'p1_final.txt'} can hold it")
+            raise Refused(f"{sid}: no reply after the completing end_sitting in {records[-1]['sessions'][-1]} yet; "
+                          f"{rd / 'p1_final.txt'} can hold it")
         if records[-1].get("status") == "running":
             records[-1].update(status="completed", end=datetime.now().strftime("%F %T"), final=reply, final_file=str(rd / "p1_final.txt"))
             write_json(rd / "p1_sittings.json", records)
@@ -302,12 +333,20 @@ class Atelier:
         return reply, state["sitting"]
 
     def finish(self, sid):
+        """The studio's lock is held throughout, so a second finish of the same painting finds it hung; the
+        machine-wide finishing lock (taken only under a studio's lock) keeps replays and renders one at a time."""
+        with locked(self.home(sid) / "lock"):
+            waiting = self.on_easel(sid)
+            if not waiting:
+                raise Refused(f"{sid}: no painting on the easel")
+            work, number, result = self.hang(sid, waiting[-1])
+        self.history(f"{sid}: painting {int(work.name[-3:])} hung as wall {number} ({result.split(':')[1].strip()} replay check)")
+        self.commit(sid, int(work.name[-3:]), work)
+        return work
+
+    def hang(self, sid, work):
         from PIL import Image
         home = self.home(sid)
-        waiting = self.on_easel(sid)
-        if not waiting:
-            raise Refused(f"{sid}: no painting on the easel")
-        work = waiting[-1]
         manifest = json.loads((work / "manifest.json").read_text())
         folder, n = Path(manifest["folder"]), manifest["number"]
         rd = work / "run" / STUDIOS[sid]["lane"]
@@ -343,28 +382,25 @@ class Atelier:
             canvas = list(color.size)
             wall = color.convert("RGB").resize((WALL_WIDTH, round(color.height * WALL_WIDTH / color.width)), Image.LANCZOS)
 
-        with locked(home / "lock"):
-            notebook = (folder / "notebook.md").read_text() if (folder / "notebook.md").exists() else ""
-            write(home / "notebook" / f"{n:03d}-after.md", notebook)
-            write(home / "notebook.md", notebook)
-            if (folder / "out/easel/notebook-revisions.jsonl").exists():
-                write(home / "notebook" / f"{n:03d}-revisions.jsonl", (folder / "out/easel/notebook-revisions.jsonl").read_bytes())
-            number = len(self.cards(sid)) + 1
-            png = home / "walls" / f".{number}.png.tmp"
-            png.parent.mkdir(parents=True, exist_ok=True)
-            wall.save(png, "PNG")
-            png.replace(home / "walls" / f"{number}.png")
-            finished = now()
-            write_json(home / "cards" / f"{n:03d}.json", {"number": number, "title": title_of(reply), "words": reply,
-                                                          "folder": folder.name, "finished": finished})
-            write(home / "walls/list.md", render_walls(self.cards(sid)))
-            shutil.copy2(folder / "notes/journal.md", work / "journal.md")
-            shutil.copy2(log, work / "painting.lua")
-            manifest.update(finished=finished, sittings=sittings, canvas=canvas, check=result)
-            write_json(work / "manifest.json", manifest)
-        self.history(f"{sid}: painting {n} hung as wall {number} ({result.split(':')[1].strip()} replay check)")
-        self.commit(sid, n, work)
-        return work
+        notebook = (folder / "notebook.md").read_text() if (folder / "notebook.md").exists() else ""
+        write(home / "notebook" / f"{n:03d}-after.md", notebook)
+        write(home / "notebook.md", notebook)
+        if (folder / "out/easel/notebook-revisions.jsonl").exists():
+            write(home / "notebook" / f"{n:03d}-revisions.jsonl", (folder / "out/easel/notebook-revisions.jsonl").read_bytes())
+        number = len(self.cards(sid)) + 1
+        png = home / "walls" / f".{number}.png.tmp"
+        png.parent.mkdir(parents=True, exist_ok=True)
+        wall.save(png, "PNG")
+        png.replace(home / "walls" / f"{number}.png")
+        finished = now()
+        write_json(home / "cards" / f"{n:03d}.json", {"number": number, "title": title_of(reply), "words": reply,
+                                                      "folder": folder.name, "finished": finished})
+        write(home / "walls/list.md", render_walls(self.cards(sid)))
+        shutil.copy2(folder / "notes/journal.md", work / "journal.md")
+        shutil.copy2(log, work / "painting.lua")
+        manifest.update(finished=finished, sittings=sittings, canvas=canvas, check=result)
+        write_json(work / "manifest.json", manifest)
+        return work, number, result
 
     def commit(self, sid, n, work):
         """The painting's text records into the stillwet-runs-data clone, at their stillwet-runs paths, with the home

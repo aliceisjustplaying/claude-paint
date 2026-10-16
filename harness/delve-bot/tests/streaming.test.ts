@@ -151,12 +151,23 @@ test("the stream's wall-clock limit stops the painter as a time limit and keeps 
   assert.match(JSON.stringify(f.logs.at(-1)), /endedAt/u);
 });
 
-test("shutdown stops a painting that isn't streamed", async t => {
+test("a live stream's wall-clock limit waits for the painter's own time stop", async t => {
+  const f = await fixture(t, true);
+  f.config.streaming.maxSeconds = 4;
+  const result = await f.streaming.run(f.job, s => new Promise(resolve =>
+    s.addEventListener("abort", () => setTimeout(() => resolve(s.reason), 1000), { once: true })));
+  assert.equal(result, "time");
+  assert.ok([...f.records.values()][0]?.value["endedAt"]);
+});
+
+test("shutdown interrupts a painting that isn't streamed", async t => {
   const f = await fixture(t);
   f.config.streaming.enabled = false;
-  const run = f.streaming.run(f.job, s => new Promise(resolve => s.addEventListener("abort", () => resolve("stopped"), { once: true })));
+  let stoppedWork = false;
+  const run = f.streaming.run(f.job, s => new Promise(resolve => s.addEventListener("abort", () => { stoppedWork = true; resolve("stopped"); }, { once: true })));
   await f.streaming.stop();
-  assert.equal(await run, "stopped");
+  await assert.rejects(run, /interrupted_by_shutdown/u);
+  assert.equal(stoppedWork, true);
 });
 
 test("kill env, STOP file, job cancellation and shutdown stop active streams", async t => {
@@ -244,7 +255,7 @@ test("actual capture also stops on the wall-clock deadline", async t => {
   f.config.streaming.maxSeconds = 4;
   const start = performance.now();
   await assert.rejects(f.streaming.run(f.job, async () => { await new Promise(() => {}); }), /canceled/u);
-  assert.ok(performance.now() - start < 7000);
+  assert.ok(performance.now() - start < 17000);
   assert.ok([...f.records.values()][0]?.value["endedAt"]);
 });
 

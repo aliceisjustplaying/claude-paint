@@ -27,7 +27,7 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
         raise ValueError("the studio already has agy configuration")
     runtime.mkdir(parents=True, exist_ok=True)
     agents.mkdir(parents=True, exist_ok=True)
-    for name in ("server.py", "remote.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py"):
+    for name in ("server.py", "remote.py", "references.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py"):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     shutil.copy2(repo / "harness/agy/painter.md", agents / "easel-painter.md")
     shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")

@@ -4,7 +4,9 @@ This setup configures the official agy CLI for an approved studio. An operator s
 
 ## Start
 
-From the studio folder, `agy --agent easel-painter` starts the restricted painter. The operator picks Argon in agy's model picker before the first message. The exact Argon CLI selector and this account's access are unverified. The agent's tool list holds only `mcp_easel_paint`, `mcp_easel_look`, `mcp_easel_note`, `mcp_easel_status`, `mcp_easel_log`, `mcp_easel_read` and `mcp_easel_end_sitting`. It has no shell, web access, agy file writes or subagents. agy asks for approval of MCP tool calls, and its permission panel can grant the seven easel tools. No skip-permissions flag is used. The first session checks that agy accepts these MCP tool names before any painting.
+From the studio folder, `agy --agent easel-painter` starts the restricted painter. For Argon high, the installed CLI lists `gemini-4-argon-high`: `agy --agent easel-painter --model gemini-4-argon-high --effort high`. Account capacity is not verified by listing models.
+
+The agent has an empty built-in tool list and inherits the studio's MCP configuration, matching the working agy studios. Explicit `mcp_easel_*` names in the agent's tool list failed in earlier trials. The easel server supplies `paint`, `look`, `note`, `status`, `log`, `read`, `reference`, `reference_list` and `end_sitting` with alwaysLoad metadata. Shell execution, plugins and subagents remain disabled. Because customizations are inherited, global instructions such as `~/.gemini/GEMINI.md` can also reach the painter. The operator checks inherited instructions before launch; setup does not change global settings. agy asks for approval of MCP tool calls. No skip-permissions flag is used.
 
 agy attaches MCP tools only from the second turn, so the first message is this greeting and the launch message goes second:
 

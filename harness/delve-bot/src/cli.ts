@@ -82,18 +82,21 @@ async function run(config: Config): Promise<void> {
   const stop = () => controller.abort();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  let tick = Promise.resolve();
-  let ticking = false;
+  const pumps = new Set<Promise<void>>();
+  let flushed = Promise.resolve();
+  let flushing = false;
   const timer = setInterval(() => {
-    if (ticking) return;
-    ticking = true;
-    tick = engine.pump().then(() => engine.flush()).catch(() => console.error("worker_paused_after_error")).finally(() => { ticking = false; });
+    const pump: Promise<void> = engine.pump().catch(() => console.error("worker_paused_after_error")).finally(() => pumps.delete(pump));
+    pumps.add(pump);
+    if (flushing) return;
+    flushing = true;
+    flushed = engine.flush().catch(() => console.error("flush_paused_after_error")).finally(() => { flushing = false; });
   }, 1000);
   try { await consume(engine, controller.signal); }
   finally {
     clearInterval(timer);
     await engine.streaming.stop();
-    await tick;
+    await Promise.all([...pumps, flushed]);
     store.close(); closeSync(fd); unlinkSync(path);
     process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop);
   }

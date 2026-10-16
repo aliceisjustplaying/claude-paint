@@ -81,31 +81,39 @@ export class Streaming {
   readonly env: NodeJS.ProcessEnv;
   readonly fetcher: typeof fetch;
   readonly log: (value: object) => void;
-  private controller: AbortController | undefined;
-  private settled: Promise<void> = Promise.resolve();
+  private runs = new Set<{ controller: AbortController; settled: Promise<void> }>();
   constructor(config: Config, env: NodeJS.ProcessEnv = process.env, fetcher: typeof fetch = fetch,
     log: (value: object) => void = value => console.log(JSON.stringify(value))) {
     this.config = config; this.env = env; this.fetcher = fetcher; this.log = log;
   }
-  async stop(): Promise<void> { this.controller?.abort(); await this.settled; }
+  async stop(): Promise<void> {
+    for (const run of this.runs) run.controller.abort();
+    await Promise.all([...this.runs].map(run => run.settled));
+  }
+  private track(): { controller: AbortController; settle: () => void } {
+    const controller = new AbortController(), done = Promise.withResolvers<void>(), run = { controller, settled: done.promise };
+    this.runs.add(run);
+    return { controller, settle: () => { this.runs.delete(run); done.resolve(); } };
+  }
   async run<T>(job: Job, work: (signal: AbortSignal) => Promise<T>, canceled: () => boolean = () => false): Promise<T> {
     if (!this.config.streaming.enabled) {
-      const controller = new AbortController();
+      const { controller, settle } = this.track();
       const poll = setInterval(() => { if (stopped(this.config, this.env) || canceled()) controller.abort(); }, 100);
-      try { return await work(controller.signal); } finally { clearInterval(poll); }
+      try { return await work(controller.signal); } finally { clearInterval(poll); settle(); }
     }
     const title = (JSON.parse(readFileSync(new URL("../assets/replies.json", import.meta.url), "utf8")) as Record<string, string>)["streamTitle"]!;
     if (active) throw new Error("stream_slot_busy");
     if (stopped(this.config, this.env) || canceled()) throw new Error("stream_canceled");
     active = true;
-    const controller = new AbortController();
-    this.controller = controller;
-    const done = Promise.withResolvers<void>();
-    this.settled = done.promise;
+    const { controller, settle } = this.track();
     const limit = this.config.streaming.maxSeconds;
-    const timer = limit == null ? undefined : setTimeout(() => controller.abort(), limit * 1000);
+    const timer = limit == null ? undefined : setTimeout(() => controller.abort("time"), limit * 1000);
     const poll = setInterval(() => { if (stopped(this.config, this.env) || canceled()) controller.abort(); }, 100);
-    const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => reject(new Error("stream_canceled")), { once: true }));
+    let grace: NodeJS.Timeout | undefined;
+    const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => {
+      const fail = () => reject(new Error("stream_canceled"));
+      if (controller.signal.reason === "time") grace = setTimeout(fail, 30000); else fail();
+    }, { once: true }));
     void abort.catch(() => {});
     const rkey = tid(), link = streamLink(this.config);
     const record: LivestreamRecord = { $type: "place.stream.livestream", title,
@@ -141,14 +149,16 @@ export class Streaming {
       return result;
     } catch { throw new Error("stream_job_failed_or_canceled"); }
     finally {
-      clearTimeout(timer); clearInterval(poll);
+      clearTimeout(timer); clearTimeout(grace); clearInterval(poll);
       controller.abort();
       try {
         await capture?.stop();
         if (this.config.dryRun) this.log({ event: "stream_end_dry_run", method: "com.atproto.repo.putRecord",
           payload: { ...params, swapRecord: "[CURRENT_RECORD_CID]", record: { ...record, endedAt: new Date().toISOString() } } });
-        else if (attempted) await pds.end(rkey);
-      } finally { active = false; this.controller = undefined; done.resolve(); }
+        else if (attempted) {
+          try { await pds.login(); await pds.end(rkey); } catch { this.log({ event: "stream_end_failed", rkey }); }
+        }
+      } finally { active = false; settle(); }
     }
   }
 }

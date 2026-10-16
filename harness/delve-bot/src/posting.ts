@@ -39,7 +39,9 @@ export class Posting {
         headers: { "Content-Type": bytes ? "image/jpeg" : "application/json", ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) },
         ...(read ? {} : { body: bytes ? new Uint8Array(bytes) : JSON.stringify(payload) })
       });
-      return { status: response.status, value: await response.json() as unknown };
+      const value = await response.json() as unknown;
+      if (response.status === 401 || ["ExpiredToken", "InvalidToken"].includes((value as { error?: string }).error ?? "")) this.token = null;
+      return { status: response.status, value };
     } catch { throw new Error("pds_request_uncertain"); }
   }
 

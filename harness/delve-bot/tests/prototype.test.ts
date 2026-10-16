@@ -212,6 +212,18 @@ test("mock PDS exercises createSession, uploadBlob, createRecord and exact getRe
   assert.deepEqual(done.reply.root, done.reply.parent);
 });
 
+test("an expired session logs in again on the next flush", async t => {
+  const f = await fixture(t, c => { c.dryRun = false; });
+  await f.engine.intake(f.add(post()), NOW);
+  await f.engine.flush(NOW);
+  await f.engine.pump(NOW);
+  f.network.expireToken();
+  await assert.rejects(f.engine.flush(NOW + 3600000), /getRecord_failed/u);
+  await f.engine.flush(NOW + 3600001);
+  assert.deepEqual(f.store.intents().map(item => item.status), ["verified", "verified"]);
+  assert.equal(f.network.calls.filter(call => call.method === "com.atproto.server.createSession").length, 2);
+});
+
 test("uncertain create recovers after restart using the same frozen record key", async t => {
   const f = await fixture(t, c => { c.dryRun = false; });
   await f.engine.intake(f.add(post()), NOW);

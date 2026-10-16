@@ -36,7 +36,7 @@ export async function mockNetwork() {
   const records = new Map<string, { uri: string; cid: string; value: unknown }>();
   const calls: { method: string; verb: string }[] = [];
   const checks: { headers: Record<string, string | string[] | undefined>; body: Record<string, unknown> }[] = [];
-  let loseCreateResponse = false, mismatch = false, wrongDid = false, stopOnLogin: (() => void) | null = null;
+  let loseCreateResponse = false, mismatch = false, wrongDid = false, expire = false, stopOnLogin: (() => void) | null = null;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const method = url.pathname.split("/").at(-1) ?? "";
@@ -60,7 +60,8 @@ export async function mockNetwork() {
     else if (method === "com.atproto.server.createSession") {
       stopOnLogin?.();
       json({ did: wrongDid ? "did:plc:wrong" : loadConfig().did, accessJwt: "mock-only-access", refreshJwt: "mock-only-refresh" });
-    } else if (method === "com.atproto.repo.getRecord") {
+    } else if (expire && req.headers.authorization) { expire = false; json({ error: "ExpiredToken" }, 400); }
+    else if (method === "com.atproto.repo.getRecord") {
       const record = records.get(url.searchParams.get("rkey") ?? "");
       json(record ? { ...record, ...(mismatch ? { value: { text: "wrong" } } : {}) } : { error: "RecordNotFound" }, record ? 200 : 400);
     } else if (method === "com.atproto.repo.uploadBlob") json({ blob: paintingBlob(bytes, req.headers["content-type"] ?? "") });
@@ -80,6 +81,7 @@ export async function mockNetwork() {
     loseNextCreate() { loseCreateResponse = true; },
     mismatch(value: boolean) { mismatch = value; },
     wrongDid(value: boolean) { wrongDid = value; },
+    expireToken() { expire = true; },
     onLogin(fn: () => void) { stopOnLogin = fn; },
     async close() { server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   };

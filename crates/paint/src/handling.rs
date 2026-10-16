@@ -999,6 +999,45 @@ impl Canvas {
     }
 }
 
+/// Graded color (`Handling::piles_at`): the piles mixed by their weights
+/// here (each pile, its medium, its thinner and its weight, the weights
+/// summing to 1), and the medium and thinner mixed alike. With the oils
+/// switch each pile's part dries as that pile does, in the oil it is in
+/// (`palette::held_by`).
+pub(crate) fn graded_mix<'m>(pal: &Palette, ps: impl Iterator<Item = (&'m crate::palette::Mixture, f32, f32, f32)>) -> (crate::palette::Mixture, f32, f32) {
+    let mut parts: Vec<(usize, f32)> = Vec::new();
+    let (mut med, mut thinner, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    let mut held = Vec::new();
+    for (m, md, th, wk) in ps {
+        if wk <= 0.0 {
+            continue;
+        }
+        let ms: f32 = m.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+        for &(i, f) in &m.parts {
+            match parts.iter_mut().find(|p| p.0 == i) {
+                Some(p) => p.1 += wk * f / ms,
+                None => parts.push((i, wk * f / ms)),
+            }
+        }
+        med += wk * md;
+        thinner += wk * th;
+        solv += wk * m.solvent;
+        if pal.oils {
+            held.push((m, wk));
+        } else {
+            oilr += wk * m.oil_rate;
+        }
+    }
+    let mut mix = pal.pile(parts);
+    mix.solvent = solv;
+    if !pal.oils {
+        mix.oil_rate = oilr;
+    } else if let Some((rate, wax)) = crate::palette::held_by(&held) {
+        mix.held(rate, wax);
+    }
+    (mix, med, thinner)
+}
+
 /// Footprint and the per-stroke choices (pressure, fade, the pile of paint,
 /// the load) for a stroke along `pts` centered at `c`.
 fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<(f32, f32)>, rng: &mut Rng) -> (Option<Rect>, Plan) {
@@ -1020,8 +1059,6 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             if tot <= 1e-6 || !tot.is_finite() {
                 return None;
             }
-            let mut parts: Vec<(usize, f32)> = Vec::new();
-            let (mut med, mut thinner, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
             // the piles a painter goes to for this mix: the one that weighs
             // most, and the next if it weighs a fifth or more (picked up on
             // the brush, as a gradient is painted, not mixed afresh each time)
@@ -1029,28 +1066,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             order.sort_by(|&a, &b| w[b].total_cmp(&w[a]).then(a.cmp(&b)));
             let main = ps[order[0]].0.color;
             let next = order.get(1).filter(|&&k| w[k] / tot >= 0.2).map(|&k| ps[k].0.color);
-            for (k, (m, md, th, _)) in ps.iter().enumerate() {
-                let wk = w[k] / tot;
-                if wk <= 0.0 {
-                    continue;
-                }
-                let ms: f32 = m.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
-                for &(i, f) in &m.parts {
-                    match parts.iter_mut().find(|p| p.0 == i) {
-                        Some(p) => p.1 += wk * f / ms,
-                        None => parts.push((i, wk * f / ms)),
-                    }
-                }
-                med += wk * md;
-                thinner += wk * th;
-                solv += wk * m.solvent;
-                // (each pile's oil as it is: with the oils switch its regrind
-                // times its tubes' own oils, `Mixture::oil_rate`; 1 without)
-                oilr += wk * m.oil_rate * m.tube_oil_rate;
-            }
-            let mut mix = pal.pile(parts);
-            mix.solvent = solv;
-            mix.oil_rate = if pal.oils { oilr / mix.tube_oil_rate.max(1e-6) } else { oilr };
+            let (mix, med, thinner) = graded_mix(pal, ps.iter().enumerate().map(|(k, (m, md, th, _))| (m, *md, *th, w[k] / tot)));
             Some((mix, med, thinner, main, next))
         });
         let (pile, medium, thinner) = match &graded {
@@ -1437,6 +1453,38 @@ fn hand_trace(hd: &Handling, drift: &crate::noise::Fbm, cx: f32, cy: f32, len: f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Graded color mixes its piles by their weights: with the oils switch
+    /// each pile's part dries as that pile does, in the oil it is in (a pile
+    /// reground in linseed, one as its tubes come), and its wax follows the
+    /// oil each brings; without the switch the oil rates mix by weight, as
+    /// before.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn graded_piles_dry_part_by_part_in_their_oils() {
+        use crate::palette::{Oil, POPPY_RATE};
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.oils = true;
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, v, zw) = (at("lead white"), at("vermilion"), at("zinc white"));
+        let mut a = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
+        a.reground(Oil::Linseed);
+        let b = pal.pile(vec![(zw, 1.0)]);
+        let (dw, dv) = (pal.pile(vec![(lw, 1.0)]).pigment_drying, pal.pile(vec![(v, 1.0)]).pigment_drying);
+        let (m, med, th) = graded_mix(&pal, [(&a, 0.2, 0.0, 0.25), (&b, 0.0, 0.4, 0.75)].into_iter());
+        let want = 0.25 * (dw + dv) / 2.0 + 0.75 * b.pigment_drying * POPPY_RATE;
+        assert!((m.rate() - want).abs() < 1e-6 && (m.laid(0.0).drying - want).abs() < 1e-6, "{} for {want}", m.rate());
+        assert!((med - 0.05).abs() < 1e-6 && (th - 0.3).abs() < 1e-6);
+        // (as their tubes come, graded piles are as theirs come)
+        let (m, _, _) = graded_mix(&pal, [(&pal.pile(vec![(lw, 1.0)]), 0.0, 0.0, 0.5), (&b, 0.0, 0.0, 0.5)].into_iter());
+        assert!(m.as_tubes_come());
+        // (without the switch: the oil rates by weight)
+        pal.oils = false;
+        let (mut a, b) = (pal.pile(vec![(lw, 1.0)]), pal.pile(vec![(v, 1.0)]));
+        a.oil_rate = 0.6;
+        let (m, _, _) = graded_mix(&pal, [(&a, 0.0, 0.0, 0.25), (&b, 0.0, 0.0, 0.75)].into_iter());
+        assert_eq!(m.oil_rate, 0.25 * 0.6 + 0.75 * 1.0);
+    }
 
     #[test]
     fn fixed_id_fill_keeps_its_layout_and_paint_in_a_crop_with_small_tiles() {

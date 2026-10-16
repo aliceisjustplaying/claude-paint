@@ -797,8 +797,10 @@ pub struct Mixture {
     pub solvent: f32,
     /// The drying of the oil the paint is ground in, relative to linseed
     /// (1): walnut about 0.8, poppy about 0.6 (it also yellows least). With
-    /// the oils switch, relative to its tubes' own oil (`tube_oil_rate`):
-    /// paint reground in poppy is `POPPY_RATE / tube_oil_rate`.
+    /// the oils switch, how fast it dries against its tubes as they come
+    /// (`drying`, which counts their oils and wax): 1 as they come; paint
+    /// reground in an oil is each pigment's own drying in that oil, part by
+    /// part (`reground`, `held`).
     pub oil_rate: f32,
     /// The pile's oil when its pigment packs and when an absorbent ground
     /// has drained it, relative to its own (`Paint::packed`,
@@ -812,17 +814,21 @@ pub struct Mixture {
     /// further than its drained floor (`paint`).
     pub drain: bool,
     /// Its palette's oils switch (`Palette::oils`): its tubes come in their
-    /// colormen's oils, with their wax (`tube_oil_rate`, `wax`), and
-    /// `oil_rate` is relative to them.
+    /// colormen's oils, with their wax (`drying`, `wax`), and `oil_rate` is
+    /// relative to them.
     pub oils: bool,
-    /// With the oils switch, how fast its tubes' oils dry against linseed's,
-    /// by volume (`Oil::rate`; 1 without), which `drying` already counts.
-    /// `oil_rate` is relative to it with the switch: 1 is the paint as its
-    /// tubes come.
-    pub tube_oil_rate: f32,
-    /// With the oils switch, the share of its oil from waxed tubes
-    /// (`Paint::wax`; 0 without).
+    /// Its pigments' own drying, by volume, without the oils they are ground
+    /// in or their wax (`Tube::drying`; `drying` itself without the oils
+    /// switch): paint reground in an oil dries at this times the oil's rate
+    /// (`reground`).
+    pub pigment_drying: f32,
+    /// With the oils switch, the share of its oil from waxed tubes as they
+    /// come (0 without); `wax_kept` of it is still there.
     pub wax: f32,
+    /// With the oils switch, the share of its tubes' wax still in its oil
+    /// (`Paint::wax` is `wax` times this): 1 as they come, 0 reground in a
+    /// plain oil (`reground`, `held`).
+    pub wax_kept: f32,
 }
 
 /// The box a painting is painted from when nothing names another.
@@ -1162,7 +1168,7 @@ impl Palette {
         // (the oils switch: its tubes' oils, by volume, for `oil_rate`; the
         // share of its oil that is waxed)
         let oils = self.oils;
-        let tube_oil_rate = if oils { parts.iter().map(|&(i, f)| self.grind[i].0.rate() * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9) } else { 1.0 };
+        let pigment_drying = if oils { parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9) } else { drying };
         let waxed: f32 = parts.iter().filter(|&&(i, _)| self.grind[i].1).map(|&(i, f)| f * self.pack[i].2).sum();
         // each tube's share of the pile's oil: its volume times its oil share
         let (mut oil, mut packed, mut floor) = (0.0, 0.0, 0.0);
@@ -1176,7 +1182,7 @@ impl Palette {
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
         let wax = if oils && oil > 1e-9 { waxed / oil } else { 0.0 };
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, oils, tube_oil_rate, wax }
+        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, oils, pigment_drying, wax, wax_kept: 1.0 }
     }
 
     /// Jitter the proportions (relative sd `amount`) and remix, so repeated
@@ -1188,7 +1194,7 @@ impl Palette {
         let mut parts: Vec<(usize, f32)> = m.parts.iter().map(|&(i, f)| (i, (f * (1.0 + rng.normal() * amount)).max(0.0))).collect();
         let s: f32 = parts.iter().map(|p| p.1).sum();
         parts.iter_mut().for_each(|p| p.1 /= s.max(1e-9));
-        Mixture { solvent: m.solvent, oil_rate: m.oil_rate, ..self.mixture(parts) }
+        Mixture { solvent: m.solvent, oil_rate: m.oil_rate, wax_kept: m.wax_kept, ..self.mixture(parts) }
     }
 
     /// Human-readable recipe, e.g. "lead white 0.72 + yellow ochre 0.20 + raw umber 0.08".
@@ -1216,7 +1222,7 @@ impl Mixture {
         // that share of it out (blot 0.5 leaves half)
         // (packed and drained oil stay the pigment's: medium and blotting
         // change only how much more or less the paint holds)
-        Paint { solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, wax: self.wax, ..p }
+        Paint { solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, wax: self.wax * self.wax_kept, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying
@@ -1225,6 +1231,55 @@ impl Mixture {
     pub fn laid(&self, medium: f32) -> Paint {
         self.paint(medium).with_drying(self.drying * self.oil_rate)
     }
+
+    /// How fast it dries as it is now: its tubes' drying (`drying`) times
+    /// its oil's (`oil_rate`), as `laid` lays it.
+    pub fn rate(&self) -> f32 {
+        self.drying * self.oil_rate
+    }
+
+    /// The oils switch: every part of it ground again in `oil`, which has no
+    /// wax: each pigment's own drying (`pigment_drying`) in that oil, in
+    /// place of the oils and wax its tubes came in.
+    pub fn reground(&mut self, oil: Oil) {
+        self.oil_rate = self.pigment_drying * oil.rate() / self.drying.max(1e-9);
+        self.wax_kept = 0.0;
+    }
+
+    /// The oils switch: this pile, of its own tubes (`Palette::pile`), as
+    /// paint that dries at `rate` (`rate`) and whose oil is `wax` waxed
+    /// (`Paint::wax`): what knifing piles together, or tube paint into a
+    /// pile, leaves (`held_by`).
+    pub fn held(&mut self, rate: f32, wax: f32) {
+        self.oil_rate = rate / self.drying.max(1e-9);
+        self.wax_kept = if self.wax > 1e-9 { wax / self.wax } else { 1.0 };
+    }
+
+    /// Whether its paint is as its tubes come (oil and wax), with the oils
+    /// switch.
+    pub fn as_tubes_come(&self) -> bool {
+        (self.oil_rate - 1.0).abs() <= 1e-6 && (self.wax_kept - 1.0).abs() <= 1e-6
+    }
+}
+
+/// The oils switch: piles (`Mixture`s) knifed together by volume (each its
+/// share, > 0): how fast the paint dries, each pile's part at its own rate
+/// (`Mixture::rate`: each part keeps the oil it is in), and the share of its
+/// oil that is waxed, each pile's by the oil it brings; `None` when every
+/// pile is as its tubes come (then the mixture of their tubes is too).
+/// `Mixture::held` makes the knifed pile so.
+pub fn held_by(piles: &[(&Mixture, f32)]) -> Option<(f32, f32)> {
+    if piles.iter().all(|(m, _)| m.as_tubes_come()) {
+        return None;
+    }
+    let (mut rate, mut waxed, mut oil, mut sum) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    for &(m, w) in piles {
+        rate += m.rate() * w;
+        waxed += m.oil_volume * m.wax * m.wax_kept * w;
+        oil += m.oil_volume * w;
+        sum += w;
+    }
+    Some((rate / sum.max(1e-9), if oil > 1e-9 { waxed / oil } else { 0.0 }))
 }
 
 #[cfg(test)]
@@ -1530,7 +1585,7 @@ mod tests {
     /// poppy and waxed, late Monet's lead white in linseed and unwaxed,
     /// Sargent's zinc white in poppy; a pile dries at its tubes' oils and wax
     /// and carries the share of its oil that is waxed. Without the switch it
-    /// dries at its pigments' rates alone, its tubes' oil rate is 1 and it
+    /// dries at its pigments' rates alone (`pigment_drying` is `drying`) and
     /// carries no wax. A palette made from it keeps the switch and its box's
     /// grind.
     #[test]
@@ -1548,16 +1603,17 @@ mod tests {
         let i = pal.tubes.iter().position(|t| t.name == "cobalt blue").unwrap();
         let own = pal.drying_of(&pal.tubes[i]);
         let m = pal.pile(vec![(i, 1.0)]);
-        assert!(!m.oils && m.drying == own && m.tube_oil_rate == 1.0 && m.wax == 0.0 && m.laid(0.0).wax == 0.0, "without the switch");
+        assert!(!m.oils && m.drying == own && m.pigment_drying == own && m.wax == 0.0 && m.laid(0.0).wax == 0.0, "without the switch");
         pal.oils = true;
         let m = pal.pile(vec![(i, 1.0)]);
-        assert!(m.oils && (m.drying - own * POPPY_RATE * WAX_RATE).abs() < 1e-6 && (m.tube_oil_rate - POPPY_RATE).abs() < 1e-6 && (m.wax - 1.0).abs() < 1e-6, "{} {} {}", m.drying, m.tube_oil_rate, m.wax);
+        assert!(m.oils && (m.drying - own * POPPY_RATE * WAX_RATE).abs() < 1e-6 && m.pigment_drying == own && (m.wax - 1.0).abs() < 1e-6, "{} {} {}", m.drying, m.pigment_drying, m.wax);
         assert_eq!(m.laid(0.0).wax, 1.0);
-        // (half cobalt, half vermilion by volume: wax in both, the oil rate
-        // by volume, the wax share by oil)
+        // (half cobalt, half vermilion by volume: wax in both, each pigment
+        // drying in its own oil, by volume; the wax share by oil)
         let v = pal.tubes.iter().position(|t| t.name == "vermilion").unwrap();
         let m = pal.pile(vec![(i, 0.5), (v, 0.5)]);
-        assert!((m.tube_oil_rate - (POPPY_RATE + 1.0) / 2.0).abs() < 1e-6 && (m.wax - 1.0).abs() < 1e-6);
+        let ov = pal.drying_of(&pal.tubes[v]);
+        assert!((m.pigment_drying - (own + ov) / 2.0).abs() < 1e-6 && (m.drying - (own * POPPY_RATE + ov) * WAX_RATE / 2.0).abs() < 1e-6 && (m.wax - 1.0).abs() < 1e-6);
         // renamed, cloned or with a tube more, its tubes are still its box's
         let renamed = pal.named("a study");
         let more = renamed.with(vec![renamed.tubes[0].clone()]);
@@ -1567,6 +1623,48 @@ mod tests {
             assert_eq!((p.name, p.grind[i], p.oils), ("a study", (Oil::Poppy, true), true));
         }
         assert_eq!(more.grind.len(), renamed.tubes.len() + 1);
+    }
+
+    /// With the oils switch, paint ground again in an oil (`reground`) has
+    /// every pigment in that oil, without wax: the parts-weighted mean of
+    /// each pigment's own drying times the oil's rate, whatever oils its
+    /// tubes came in. Sargent's lead white comes in poppy, his vermilion in
+    /// linseed: half and half reground in linseed dries at the mean of the
+    /// two pigments' own rates (not their tubes' mean divided by their oils'
+    /// mean), in poppy at that times POPPY_RATE. Piles knifed together
+    /// (`held_by`) dry part by part as each pile does; piles as their tubes
+    /// come stay so.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn a_regrind_grinds_each_pigment_in_its_oil() {
+        let mut pal = Palette::named_box("sargent").unwrap();
+        pal.oils = true;
+        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
+        let (lw, v) = (at("lead white"), at("vermilion"));
+        assert_eq!((pal.grind[lw], pal.grind[v]), ((Oil::Poppy, false), (Oil::Linseed, false)));
+        let (dw, dv) = (pal.drying_of(&pal.tubes[lw]), pal.drying_of(&pal.tubes[v]));
+        let tubes = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
+        assert!((tubes.rate() - (dw * POPPY_RATE + dv) / 2.0).abs() < 1e-6 && tubes.as_tubes_come());
+        let mut linseed = tubes.clone();
+        linseed.reground(Oil::Linseed);
+        assert!((linseed.rate() - (dw + dv) / 2.0).abs() < 1e-6, "{} for {}", linseed.rate(), (dw + dv) / 2.0);
+        assert!((linseed.laid(0.0).drying - (dw + dv) / 2.0).abs() < 1e-6 && linseed.wax_kept == 0.0 && !linseed.as_tubes_come());
+        let mut poppy = tubes.clone();
+        poppy.reground(Oil::Poppy);
+        assert!((poppy.rate() - (dw + dv) / 2.0 * POPPY_RATE).abs() < 1e-6);
+        // (as its tubes come, a pile of them knifed together is too)
+        assert_eq!(held_by(&[(&tubes, 1.0), (&pal.pile(vec![(v, 1.0)]), 2.0)]), None);
+        // (a quarter of the linseed pile and three quarters vermilion as it
+        // comes: each part at its own rate)
+        let (rate, wax) = held_by(&[(&linseed, 1.0), (&pal.pile(vec![(v, 1.0)]), 3.0)]).unwrap();
+        assert!((rate - ((dw + dv) / 2.0 + 3.0 * dv) / 4.0).abs() < 1e-6 && wax == 0.0, "{rate}");
+        let mut knifed = pal.pile(vec![(lw, 0.125), (v, 0.875)]);
+        knifed.held(rate, wax);
+        assert!((knifed.rate() - rate).abs() < 1e-6);
+        // (without the switch a pile dries at its pigments' rates, untouched)
+        pal.oils = false;
+        let m = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
+        assert!(m.pigment_drying == m.drying && m.wax_kept == 1.0 && m.oil_rate == 1.0);
     }
 
     /// With the drain switch, blotting paper draws a paint's oil no lower

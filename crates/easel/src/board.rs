@@ -40,6 +40,9 @@ pub struct Heap {
     pub medium: f32,
     pub solvent: f32,
     pub oil_rate: f32,
+    /// With the oils switch, the share of its tubes' wax still in it
+    /// (`Mixture::wax_kept`): 1 as they come, 0 reground (`pile{oil=}`).
+    pub wax_kept: f32,
     pub thinner: f32,
     /// Paint other brushes left in it: (tube, volume).
     pub dirt: Vec<(usize, f32)>,
@@ -114,7 +117,7 @@ impl Board {
     pub fn knife(&mut self, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
+        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, wax_kept: 1.0, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
         if self.dirty > 0.0 && self.residue_amount > 0.0 {
             let v = SEEP * self.dirty * self.residue_amount;
             h.dirt = self.residue.iter().map(|&(i, f)| (i, f * v)).collect();

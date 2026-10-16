@@ -547,6 +547,7 @@ impl Session {
                     projected.mix = st.tubes.pile(h.fractions());
                     projected.mix.solvent = h.solvent;
                     projected.mix.oil_rate = h.oil_rate;
+                    projected.mix.wax_kept = h.wax_kept;
                     projected.medium = h.medium;
                     projected.thinner = projected.thinner.map(|_| h.thinner);
                 }
@@ -1246,10 +1247,16 @@ mod tests {
                 assert(tostring(p):find("cobalt blue 2", 1, true))"#).unwrap();
             let p = s.globals["p"].0.as_userdata().unwrap().borrow::<api::PileU>().unwrap();
             assert!((p.mix.solvent - 0.3).abs() < 1e-5);
-            // (half of it reground in poppy: with the oils switch against the
-            // box's own walnut-ground tubes, without it against linseed)
-            let poppy = if oils { paint::palette::POPPY_RATE / paint::palette::WALNUT_RATE } else { 0.6 };
-            assert!((p.mix.oil_rate - (poppy + 1.0) / 2.0).abs() < 1e-5, "oils {oils}: {}", p.mix.oil_rate);
+            // (half of it reground in poppy, half cobalt as its tube comes:
+            // with the oils switch each pigment dries in the oil it is in, the
+            // box's cobalt in walnut; without it the oil rates by volume)
+            if oils {
+                let own = |n: &str| p.mix.parts.iter().find(|q| s.st.borrow().tubes.tubes[q.0].name == n).map(|q| s.st.borrow().tubes.pile(vec![(q.0, 1.0)]).pigment_drying).unwrap();
+                let want = (own("lead white") * paint::palette::POPPY_RATE + own("cobalt blue") * paint::palette::WALNUT_RATE) / 2.0;
+                assert!((p.mix.rate() - want).abs() < 1e-5, "{} for {want}", p.mix.rate());
+            } else {
+                assert!((p.mix.oil_rate - (0.6 + 1.0) / 2.0).abs() < 1e-5, "{}", p.mix.oil_rate);
+            }
         }
     }
 
@@ -2628,7 +2635,7 @@ mod tests {
             let pile = |n: &str| match &s.globals[n].0 {
                 Value::UserData(u) => {
                     let p = u.borrow::<api::PileU>().unwrap();
-                    (p.mix.oil_rate, p.mix.oil_rate * p.mix.tube_oil_rate, p.recipe())
+                    (p.mix.oil_rate, p.mix.rate() / p.mix.pigment_drying, p.recipe())
                 }
                 o => panic!("{n} is {o:?}"),
             };
@@ -2640,12 +2647,79 @@ mod tests {
                 }
             } else {
                 assert_eq!([pile("pl").0, pile("pli").0, pile("pw").0, pile("pp").0], [1.0, 1.0, 0.8, 0.6]);
-                assert_eq!([pile("pl").1, pile("pp").1], [1.0, 0.6]);
+                assert!((pile("pl").1 - 1.0).abs() < 1e-6 && (pile("pp").1 - 0.6).abs() < 1e-6);
                 assert!(pile("pp").2.ends_with("medium 0, in poppy oil)") && pile("pli").2.ends_with("medium 0)"), "{}", pile("pp").2);
             }
             let e = s.run(r#"pile{{"lead white", 1}, oil="olive"}"#).unwrap_err();
             assert!(e.contains("linseed"), "{e}");
         }
+    }
+
+    /// With the oils switch, paint reground in an oil (`pile{oil=}`) has every
+    /// pigment in that oil, without wax, and keeps it however the piles are
+    /// knifed: Sargent's lead white (his tubes' in poppy) and vermilion (in
+    /// linseed) reground in linseed dry at the mean of the two pigments' own
+    /// rates, in poppy at that times POPPY_RATE, and as they come at their
+    /// tubes' own; tube paint knifed into a reground pile (`p:add`) comes in
+    /// its tube's oil, and piles in different oils knifed together (`mix{}`)
+    /// each dry in their own; the Impressionists' waxed tubes reground carry
+    /// no wax, and a waxed tube added brings its own.
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    #[cfg(feature = "box-impressionist")]
+    fn a_regrind_keeps_each_pigment_in_its_oil() {
+        use paint::palette::{POPPY_RATE, WALNUT_RATE, WAX_RATE};
+        let get = |s: &Session, n: &str| match &s.globals[n].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().current(),
+            o => panic!("{n} is {o:?}"),
+        };
+        let own = |s: &Session, n: &str| {
+            let st = s.st.borrow();
+            let i = st.tubes.tubes.iter().position(|t| t.name == n).unwrap();
+            st.tubes.pile(vec![(i, 1.0)])
+        };
+        let close = |p: &api::PileU, want: f32| assert!((p.mix.rate() - want).abs() < 1e-5 && (p.mix.laid(0.0).drying - want).abs() < 1e-5, "{}: {} for {want}", p.recipe(), p.mix.rate());
+        let mut s = Session::with_box(W, find_box("sargent").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"pn = pile{{"lead white", 1}, {"vermilion", 1}}
+                 pl = pile{{"lead white", 1}, {"vermilion", 1}, oil="linseed"}
+                 pp = pile{{"lead white", 1}, {"vermilion", 1}, oil="poppy"}
+                 pa = pile{{"vermilion", 1}, oil="walnut"}; pa = pa:add{{"zinc white", 1}}
+                 a = pile{{"lead white", 1}, oil="linseed"}; b = pile{{"vermilion", 1}, oil="poppy"}; c = pile{{"zinc white", 1}}
+                 m = mix{{a, 1}, {b, 3}}; mc = mix{{a, 1}, {c, 1}}; mn = mix{{pn, 1}, {c, 1}}"#)
+            .unwrap();
+        let (dw, dv, dz) = (own(&s, "lead white").pigment_drying, own(&s, "vermilion").pigment_drying, own(&s, "zinc white").pigment_drying);
+        eprintln!("sargent: lead white {dw}, vermilion {dv}: as they come {}, in linseed {}, in poppy {}", get(&s, "pn").mix.rate(), get(&s, "pl").mix.rate(), get(&s, "pp").mix.rate());
+        let pn = get(&s, "pn");
+        close(&pn, (dw * POPPY_RATE + dv) / 2.0);
+        assert!(pn.mix.oil_rate == 1.0 && pn.recipe().ends_with("medium 0)"), "{}", pn.recipe());
+        let pl = get(&s, "pl");
+        close(&pl, (dw + dv) / 2.0);
+        assert!(pl.recipe().ends_with(", in linseed oil)"), "{}", pl.recipe());
+        let pp = get(&s, "pp");
+        close(&pp, (dw + dv) / 2.0 * POPPY_RATE);
+        assert!(pp.recipe().ends_with(", in poppy oil)"), "{}", pp.recipe());
+        close(&get(&s, "pa"), (dv * WALNUT_RATE + dz * POPPY_RATE) / 2.0);
+        close(&get(&s, "m"), (dw + 3.0 * dv * POPPY_RATE) / 4.0);
+        close(&get(&s, "mc"), (dw + dz * POPPY_RATE) / 2.0);
+        let mn = get(&s, "mn");
+        close(&mn, ((dw * POPPY_RATE + dv) / 2.0 + dz * POPPY_RATE) / 2.0);
+        assert!(mn.mix.as_tubes_come(), "{}", mn.recipe());
+        // (wax: the Impressionists' cobalt comes in poppy with wax, their
+        // vermilion in linseed with wax)
+        let mut s = Session::with_box(W, find_box("impressionist").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"w = pile{{"cobalt blue", 1}, oil="poppy"}; t = pile{{"cobalt blue", 1}}"#).unwrap();
+        let (co, ve) = (own(&s, "cobalt blue"), own(&s, "vermilion"));
+        let (w0, t) = (get(&s, "w"), get(&s, "t"));
+        close(&w0, co.pigment_drying * POPPY_RATE);
+        close(&t, co.pigment_drying * POPPY_RATE * WAX_RATE);
+        assert!(w0.mix.laid(0.0).wax == 0.0 && t.mix.laid(0.0).wax == 1.0, "{} {}", w0.mix.laid(0.0).wax, t.mix.laid(0.0).wax);
+        s.run(r#"w = w:add{{"vermilion", 1}}"#).unwrap();
+        let w = get(&s, "w");
+        close(&w, (co.pigment_drying * POPPY_RATE + ve.pigment_drying * WAX_RATE) / 2.0);
+        let wax = ve.oil_volume / (co.oil_volume + ve.oil_volume);
+        assert!((w.mix.laid(0.0).wax - wax).abs() < 1e-5, "{} for {wax}", w.mix.laid(0.0).wax);
     }
 
     /// A gesture's points are checked before its curve is sampled (a point

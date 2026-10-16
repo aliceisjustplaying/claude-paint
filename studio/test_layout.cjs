@@ -39,7 +39,9 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type':type }); res.end(body);
 });
 
-const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], [440, 956], [375, 667], [874, 402]];
+const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [390, 844], [393, 852], [393, 631], [402, 874], [402, 653], [430, 932], [440, 956], [440, 735], [375, 667], [874, 402]];
+// 393x852: iPhone 15; 402x874: iPhone 17 and 17 Pro; 440x956: iPhone 17 Pro Max. 393x631, 402x653 and 440x735: the same phones
+// with Safari's toolbar showing (221 px of status bar and toolbar, measured on an iPhone 17 Pro screenshot)
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ channel:'chrome', headless:true });
@@ -57,10 +59,45 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
       await page.waitForFunction(() => ['img', 'pipimg'].every(id => document.getElementById(id).complete && document.getElementById(id).naturalWidth > 0));
       const scroller = page.locator(mobile ? 'main' : '#jbody');
       const gap = () => scroller.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
+      const pinnedView = async () => {
+        const views = [];
+        for (const top of [0, 1e9]) {
+          await scroller.evaluate((el, t) => el.scrollTop = t, top);
+          views.push(await page.evaluate(() => {
+            const main = document.querySelector('main').getBoundingClientRect(), pane = document.getElementById('viewpane').getBoundingClientRect();
+            const pinnedTop = Math.max(main.top, document.getElementById('lighting').getBoundingClientRect().bottom);
+            const shown = ['whole', 'other', 'pal', 'pip', 'pband'].filter(id => !document.getElementById(id).hidden);
+            const rects = shown.map(id => [id, document.getElementById(id).getBoundingClientRect()]);
+            const loose = rects.filter(([, r]) => r.top < main.top - 1 || r.bottom > pane.bottom + 1).map(([id]) => id);
+            const overlaps = rects.flatMap(([a, r], i) => rects.slice(i + 1).filter(([, q]) => r.left < q.right - 1 && q.left < r.right - 1 && r.top < q.bottom - 1 && q.top < r.bottom - 1).map(([b]) => a + '/' + b));
+            return { shown, loose, overlaps, share:(pane.bottom - pinnedTop) / main.height, journalGap:document.getElementById('journal').getBoundingClientRect().top - pane.bottom };
+          }));
+        }
+        return views;
+      };
+      const assertPinned = (views, what) => {
+        for (const view of views) {
+          assert.deepEqual(view.loose, [], label + ': ' + what + ' stay pinned in the view pane');
+          assert.deepEqual(view.overlaps, [], label + ': the pinned pictures and palette do not overlap');
+          assert(view.share <= 0.6, label + ': the pinned view leaves the transcript most of the column');
+        }
+        assert(Math.abs(views[0].journalGap) <= 1, label + ': the transcript starts right under the pinned view');
+      };
       if (!baseline) assert(await gap() <= 24, label + ': initial transcript shows the selected event');
       await page.evaluate(() => { live = false; show(events.length - 1); });
       await page.waitForFunction(() => typingThought === null);
       await page.waitForFunction(() => ['img', 'img2', 'pipimg'].every(id => document.getElementById(id).complete && document.getElementById(id).naturalWidth > 0));
+      if (mobile && height > width && !stream && !baseline) {
+        const views = await pinnedView();
+        assert.deepEqual(views[0].shown, ['whole', 'other', 'pip', 'pband'], label + ': the fixture shows a close-up, the scratch canvas and the palette');
+        assert.equal(await page.evaluate(() => document.getElementById('img').alt), 'the painting', label + ': the painting is the big picture');
+        assertPinned(views, 'the close-up, scratch canvas and palette');
+        await page.evaluate(() => { $('pband').hidden = true; $('pal').hidden = false; $('view').classList.add('pal'); $('img3').src = $('img').src; });  // palette()'s fallback when no chips can be read
+        await page.waitForFunction(() => document.getElementById('img3').complete && document.getElementById('img3').naturalWidth > 0);
+        assertPinned(await pinnedView(), 'the close-up, scratch canvas and palette picture');
+        await page.evaluate(() => { paletteURL = ''; palette(paletteAt(pos)); });
+        if (shots) { await scroller.evaluate(el => el.scrollTop = el.scrollHeight); await page.screenshot({ path:path.join(shots, label + '-painting-latest.png') }); }
+      }
       if (mobile) {
         if (baseline) await page.locator('.palette-toggle').evaluate(el => el.click());
         else await page.locator('.palette-toggle').click();
@@ -139,6 +176,10 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [393, 852], [402, 874], 
           });
           await appendThought(); await page.waitForFunction(() => typingThought === null);
           assert(await paintingOnScreen(), label + ': the painting stays on screen while the painter works on scratch');
+          assert.deepEqual(await page.evaluate(() => [document.getElementById('img').alt, document.getElementById('pip').className]), ['the scratch canvas', 'painting'],
+            label + ': as on the desktop, the scratch canvas is the big picture and the painting the small one');
+          assertPinned(await pinnedView(), 'the scratch canvas and the painting');
+          if (shots) { await scroller.evaluate(el => el.scrollTop = el.scrollHeight); await page.screenshot({ path:path.join(shots, label + '-scratch-latest.png') }); }
           await scroller.evaluate(el => el.scrollTop = 0);
           assert(await paintingOnScreen(), label + ': the painting is on top during scratch work, scrolled to the start');
           await scroller.evaluate(el => el.scrollTop = el.scrollHeight);

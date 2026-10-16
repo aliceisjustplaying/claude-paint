@@ -14,8 +14,8 @@ notes in your studio; don't use reference images or image models.
   notes/easel_guide.md explains them.
 - notebook.md is yours. It carries over from one painting to the next;
   `notebook` adds to it or revises it.
-- walls/ holds the paintings you finished before this one, with what you
-  said about each; walls/list.md names them.
+- walls/ holds the paintings you finished before this one; walls/list.md
+  lists them, each with what you said about it.
 - What you do here is public. People can watch you paint at
   stillwet.art/atelier: the canvas as it grows, your code, your thinking as
   your session records it, your journal, your notebook and your replies.

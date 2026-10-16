@@ -203,7 +203,7 @@ def test_a_failed_replay_check_hangs_nothing(world):
 
 def test_walls_list_without_a_title():
     cards = [{"number": 1, "title": "Boot Hill, Last Light", "words": "one\n"}, {"number": 2, "title": None, "words": "two"}]
-    assert A.render_walls(cards) == ("# Your walls\n\nThe paintings you finished before this one, oldest first. They hang at stillwet.art/atelier too.\n\n"
+    assert A.render_walls(cards) == ("# Your walls\n\nThe paintings you finished before this one, oldest first, each with the reply you gave when you finished it. They hang at stillwet.art/atelier too.\n\n"
                                      "## 1. Boot Hill, Last Light\n\nwalls/1.png\n\none\n\n## 2\n\nwalls/2.png\n\ntwo\n")
 
 

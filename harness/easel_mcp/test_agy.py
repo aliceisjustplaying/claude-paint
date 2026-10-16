@@ -204,12 +204,6 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         module.prepare(self.studio, Path(self.temp.name) / "sessions")
         self.assertTrue((self.studio / ".agents/mcp_config.json").is_file())
 
-    def test_completion_message_comes_from_its_file(self):
-        from sittings import SittingEasel
-        easel = SittingEasel(self.studio)
-        easel.state["sitting"] = 4
-        self.assertEqual(easel.completion()[0].text, "The painting is complete. Sitting 4 added no paint and had a whole-canvas look and a detail crop in normal color.\n\nYour journal (notes/journal.md):\nMy handoff, unchanged.\n")
-
     def test_allowlist_configuration_parses(self):
         repo = SERVER.parents[2]
         script = repo / "scripts/prepare_agy_studio"

@@ -12,7 +12,7 @@ import pytest
 import atelier as A
 import run as R
 
-OPUS, FLASH = "claude-opus-5-5", "gemini-3-8-flash"
+OPUS = "claude-opus-5-5"
 REPLY = "**Harbor at Dusk**\n\nA quay at low tide, its bollards dark against a green sky.\n"
 
 
@@ -64,21 +64,9 @@ def world(tmp_path, monkeypatch):
         return real(command, **options)
 
     monkeypatch.setattr(A, "run", fake)
-    atelier = A.Atelier(home / "src/a/stillwet-runs/atelier", home / "src/a", data, home / ".pi/agent/sessions")
+    atelier = A.Atelier(home / "src/a/stillwet-runs/atelier", home / "src/a", data)
     atelier.calls, atelier.state = calls, state
     return atelier
-
-
-def feed_lines(*steps):
-    """A pi-shaped viewer feed: a string is the painter's text, a pair is a tool call and its result."""
-    lines = []
-    for i, step in enumerate(steps):
-        if isinstance(step, str):
-            lines.append({"type": "message", "message": {"role": "assistant", "stopReason": "stop", "content": [{"type": "text", "text": step}]}})
-        else:
-            lines.append({"type": "message", "message": {"role": "assistant", "content": [{"type": "toolCall", "id": f"c{i}", "name": step[0], "arguments": {}}]}})
-            lines.append({"type": "message", "message": {"role": "toolResult", "toolCallId": f"c{i}", "isError": False, "content": [{"type": "text", "text": step[1]}]}})
-    return "".join(json.dumps(line) + "\n" for line in lines)
 
 
 def painted(atelier, sid, notebook="Glazes want a set underlayer.\n"):
@@ -93,15 +81,9 @@ def painted(atelier, sid, notebook="Glazes want a set underlayer.\n"):
     (folder / "out/easel/painting").mkdir()
     (folder / "out/easel/painting/live.ckpt").write_bytes(b"state")
     lane = work / "run" / A.STUDIOS[sid]["lane"]
-    if sid == OPUS:
-        (lane / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "status": "completed"}, {"sitting": 2, "status": "crashed"}, {"sitting": 2, "status": "completed"}]))
-        (lane / "p1_final.txt").write_text(REPLY)
-        (lane / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "the painter is done"}))
-    else:
-        (folder / "out/easel/sittings.json").write_text(json.dumps({"sitting": 3, "complete": True}))
-        feed = Path(json.loads((lane / "p1_sittings.json").read_text())[0]["sessions"][0])
-        feed.parent.mkdir(parents=True, exist_ok=True)
-        feed.write_text(feed_lines("Hello!", ("end_sitting", "Sitting 2\n..."), ("end_sitting", "The painting is complete. Sitting 3 added no paint."), REPLY.strip()))
+    (lane / "p1_sittings.json").write_text(json.dumps([{"sitting": 1, "status": "completed"}, {"sitting": 2, "status": "crashed"}, {"sitting": 2, "status": "completed"}]))
+    (lane / "p1_final.txt").write_text(REPLY)
+    (lane / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "the painter is done"}))
     return work, folder
 
 
@@ -123,54 +105,53 @@ def test_the_house_runner_is_r40s_as_stil_89_ran_it():
     assert hashlib.sha256(source).hexdigest() == "24e8f16af8a9214a410fa7673adfd0bac576d59df424571030f1de3ee98f08b9"
 
 
-def test_start_prepares_both_first_paintings(world):
-    opus = world.start(OPUS, prepare=True)
-    flash = world.start(FLASH, theme="a harbor at night", prepare=True)
-    assert [c[0] for c in world.calls if "launchctl" in c[0]] == []
-    for work, sid, lane in ((opus, OPUS, "OPUS"), (flash, FLASH, "FLASH")):
-        manifest = json.loads((work / "manifest.json").read_text())
-        folder = Path(manifest["folder"])
-        assert work.name == f"{sid}-001" and folder.parent == world.studios and folder.name.startswith("paint-studio-")
-        assert {k: manifest[k] for k in ("studio", "number", "width", "box", "harness")} == {"studio": sid, "number": 1, "width": 2400, "box": "every", "harness": A.STUDIOS[sid]["harness"]}
-        assert manifest["easel_sha256"] == hashlib.sha256(b"the painter's easel").hexdigest()
-        assert (folder / "notebook.md").read_text() == "" and list((folder / "walls").iterdir()) == []
-        assert (folder / "BRIEF.md").read_text() == (work / "BRIEF.md").read_text() == A.render_brief(folder, manifest["theme"])
-        assert (folder / "BRIEF.md").read_text().count("~/src/a/" + folder.name) == 1
-        assert json.loads((work / "run/studios.json").read_text()) == {f"{lane}1": folder.name}
-        assert (world.home(sid) / "notebook/001-before.md").read_text() == ""
-    assert json.loads((opus / "manifest.json").read_text())["theme"] is None
-    studios = json.loads((world.root / "studios.json").read_text())
-    assert studios[OPUS]["slug"] == OPUS and studios[FLASH]["model"] == "gemini-3.8-flash"
+def test_the_studios_come_from_studios_json():
+    assert list(A.STUDIOS) == [OPUS]
+    assert A.STUDIOS[OPUS] == {"id": OPUS, "name": "Claude Opus 5.5", "provider": "anthropic", "model": "claude-opus-5-5",
+                               "thinking": "xhigh", "harness": "pi", "lane": "OPUS"}
 
-    agent = plistlib.loads((opus / "launch.plist").read_bytes())
+
+def test_start_prepares_the_first_painting(world):
+    work = world.start(OPUS, theme="a harbor at night", prepare=True)
+    assert [c[0] for c in world.calls if "launchctl" in c[0]] == []
+    manifest = json.loads((work / "manifest.json").read_text())
+    folder = Path(manifest["folder"])
+    assert work.name == f"{OPUS}-001" and folder.parent == world.studios and folder.name.startswith("paint-studio-")
+    assert {k: manifest[k] for k in ("studio", "number", "width", "box", "harness", "theme")} == {
+        "studio": OPUS, "number": 1, "width": 2400, "box": "every", "harness": "pi", "theme": "a harbor at night"}
+    assert manifest["easel_sha256"] == hashlib.sha256(b"the painter's easel").hexdigest()
+    assert (folder / "notebook.md").read_text() == "" and list((folder / "walls").iterdir()) == []
+    assert (folder / "BRIEF.md").read_text() == (work / "BRIEF.md").read_text() == A.render_brief(folder, "a harbor at night")
+    assert (folder / "BRIEF.md").read_text().count("~/src/a/" + folder.name) == 1
+    assert json.loads((work / "run/studios.json").read_text()) == {"OPUS1": folder.name}
+    assert (world.home(OPUS) / "notebook/001-before.md").read_text() == ""
+    studios = json.loads((world.root / "studios.json").read_text())
+    assert studios[OPUS]["slug"] == OPUS and studios[OPUS]["model"] == "claude-opus-5-5"
+
+    agent = plistlib.loads((work / "launch.plist").read_bytes())
+    assert agent["Label"] == "art.stillwet.painter.atelier-opus"
     assert agent["ProcessType"] == "Interactive" and agent["EnvironmentVariables"]["RAYON_NUM_THREADS"] == "4"
     assert agent["ProgramArguments"][:2] == ["/usr/bin/caffeinate", "-i"] and agent["ProgramArguments"][-2:] == [OPUS, "1"]
     assert agent["ProgramArguments"][agent["ProgramArguments"].index("--root") + 1] == str(world.root)
+    assert agent["StandardOutPath"] == str(work / "run/runner.OPUS.out")
 
-    folder = Path(json.loads((flash / "manifest.json").read_text())["folder"])
-    assert (folder / ".agents/agents/easel-painter.md").read_bytes() == (A.TEXTS / "easel-painter.md").read_bytes()
-    assert (folder / "bin/mcp/sitting-message.txt").read_bytes() == (A.TEXTS / "sitting_message.md").read_bytes()
-    assert (folder / "bin/mcp/completion-message.txt").read_bytes() == (A.TEXTS / "completion_message.md").read_bytes()
-    assert not (folder / "LAUNCH.md").exists()
-    easel = json.loads((folder / ".agents/mcp_config.json").read_text())["mcpServers"]["easel"]
-    assert easel["env"] == {"RAYON_NUM_THREADS": "4"}
-    assert easel["args"][-1] == "--notebook" and ["--break-seconds", "0"] == easel["args"][easel["args"].index("--break-seconds"):][:2]
-    record = json.loads((flash / "run/FLASH/p1_sittings.json").read_text())
-    assert record[0]["status"] == "running" and record[0]["message"] == A.text("launch_message.md") and "start" not in record[0]
-    launch = (flash / "HAND-LAUNCH.md").read_text()
-    assert "> " + A.text("hello.md") + "\n" in launch and "> " + A.text("launch_message.md") + "\n" in launch
-    assert "@" not in launch.replace("mcp_easel", "")
-    assert "finish gemini-3-8-flash" in launch and str(world.root) in launch
+
+def second_studio(monkeypatch):
+    """A second studio in the list, as studios.json could hold one: starts count every studio's paintings."""
+    other = {**A.STUDIOS[OPUS], "id": "second", "lane": "SECOND"}
+    monkeypatch.setitem(A.STUDIOS, "second", other)
+    return "second"
 
 
 def test_one_painting_per_studio_and_the_disk_floor(world, monkeypatch):
     world.start(OPUS, prepare=True)
     with pytest.raises(A.Refused, match="painting 1 hasn't hung"):
         world.start(OPUS, prepare=True)
+    other = second_studio(monkeypatch)
     monkeypatch.setattr(A.shutil, "disk_usage", lambda path: type("U", (), {"free": 20 * 10**9})())
     with pytest.raises(A.Refused, match="under the 21 GB floor for 2 painting"):
-        world.start(FLASH, prepare=True)
-    assert len(world.works(FLASH)) == 0
+        world.start(other, prepare=True)
+    assert len(world.works(other)) == 0
 
 
 def test_finish_hangs_the_wall_carries_the_notebook_and_commits(world):
@@ -218,18 +199,6 @@ def test_a_failed_replay_check_hangs_nothing(world):
     assert len(world.on_easel(OPUS)) == 1
 
 
-def test_flash_finishes_from_the_feed_and_records_the_outcome(world):
-    world.start(FLASH, prepare=True)
-    work, folder = painted(world, FLASH)
-    world.finish(FLASH)
-    lane = work / "run/FLASH"
-    assert (lane / "p1_final.txt").read_text() == REPLY.strip()
-    assert json.loads((lane / "p1_outcome.json").read_text())["status"] == "finished"
-    assert json.loads((lane / "p1_sittings.json").read_text())[-1]["status"] == "completed"
-    assert json.loads((work / "manifest.json").read_text())["sittings"] == 3
-    assert json.loads((world.home(FLASH) / "cards/001.json").read_text())["title"] == "Harbor at Dusk"
-
-
 def test_walls_list_without_a_title():
     cards = [{"number": 1, "title": "Boot Hill, Last Light", "words": "one\n"}, {"number": 2, "title": None, "words": "two"}]
     assert A.render_walls(cards) == ("# Your walls\n\nThe paintings you finished before this one, oldest first. They hang at stillwet.art/atelier too.\n\n"
@@ -239,7 +208,7 @@ def test_walls_list_without_a_title():
 def test_run_configures_the_house_loop_with_the_atelier_texts(world, monkeypatch):
     work = world.start(OPUS, prepare=True)
     monkeypatch.setenv("PAINTER_COMPACTION_NOTES", "1")
-    house = R.configure(work)
+    house = R.configure(OPUS, work)
     assert "PAINTER_COMPACTION_NOTES" not in R.os.environ
     assert (house.PAINTER_MSG, house.SITTING_MESSAGE, house.CONTINUE_MESSAGE) == tuple(A.text(f"{m}_message.md") for m in ("launch", "sitting", "continue"))
     assert house.HARNESS[house.HARNESS.index("--system-prompt") + 1] == str(A.TEXTS / "system_prompt.md")
@@ -262,23 +231,10 @@ def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
         painted(world, OPUS)
         return [{}]
 
-    monkeypatch.setattr(R, "configure", lambda work, real=R.configure: type("H", (), {"paint": loop, "log": lambda self, m: None})())
-    assert R.paint(world, 1) == 0
+    monkeypatch.setattr(R, "configure", lambda sid, work: type("H", (), {"paint": loop, "log": lambda self, m: None})())
+    assert R.paint(world, OPUS, 1) == 0
     assert seen[0][0] == "OPUS" and seen[0][3] == world.root / "works/claude-opus-5-5-001/run/OPUS"
     assert (world.home(OPUS) / "cards/001.json").exists()
-
-
-def test_flash_waits_for_the_reply_after_the_completing_end_sitting(world):
-    work = world.start(FLASH, prepare=True)
-    _, folder = painted(world, FLASH)
-    feed = Path(json.loads((work / "run/FLASH/p1_sittings.json").read_text())[0]["sessions"][0])
-    feed.write_text(feed_lines("Hello!", "A sitting's handoff.", ("end_sitting", "The painting is complete. Sitting 3 added no paint.")))
-    with pytest.raises(A.Refused, match="no reply after the completing end_sitting"):
-        world.finish(FLASH)
-    assert not (work / "run/FLASH/p1_final.txt").exists() and len(world.on_easel(FLASH)) == 1
-    feed.write_text(feed.read_text() + feed_lines(("look", "a look"), "Done: Harbor at Dusk is how I'd title it."))
-    world.finish(FLASH)
-    assert (work / "run/FLASH/p1_final.txt").read_text() == "Done: Harbor at Dusk is how I'd title it."
 
 
 def test_two_finishes_at_once_hang_the_painting_once(world, monkeypatch):
@@ -315,6 +271,7 @@ def test_two_finishes_at_once_hang_the_painting_once(world, monkeypatch):
 def test_two_starts_at_once_share_the_disk_floor(world, monkeypatch):
     import threading
     import time
+    other = second_studio(monkeypatch)
     monkeypatch.setattr(A.shutil, "disk_usage", lambda path: type("U", (), {"free": 20 * 10**9})())
     fake = A.run
 
@@ -332,7 +289,7 @@ def test_two_starts_at_once_share_the_disk_floor(world, monkeypatch):
         except A.Refused as why:
             outcomes.append(str(why))
 
-    threads = [threading.Thread(target=start, args=(sid,)) for sid in (OPUS, FLASH)]
+    threads = [threading.Thread(target=start, args=(sid,)) for sid in (OPUS, other)]
     for thread in threads:
         thread.start()
     for thread in threads:

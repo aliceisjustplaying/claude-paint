@@ -298,34 +298,6 @@ class Easel:
         path.write_bytes((before[:at] + text + before[at + len(old):]).encode())
         return f"revised in {path}\n"
 
-    def write_notebook(self, text, old=None):
-        """The atelier's notebook (atelier/; harness/painter/notebook.ts): append after a blank line, or replace one passage."""
-        path = self.studio / "notebook.md"
-        before = path.read_bytes().decode() if path.exists() else ""
-        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        if old is None:
-            entry = text if text.endswith("\n") else text + "\n"
-            after = entry if before == "" else before + ("\n" if before.endswith("\n") else "\n\n") + entry
-            record = {"at": now, "added": text, "before": before}
-        else:
-            if not old.strip():
-                raise ValueError("notebook: `replaces` is empty; give the exact text of the passage to replace")
-            if not before:
-                raise ValueError("notebook: notebook.md has no entries yet")
-            at = before.find(old)
-            if at < 0:
-                raise ValueError("notebook: the passage given in `replaces` isn't in notebook.md (it has to match exactly)")
-            if before.find(old, at + 1) >= 0:
-                raise ValueError("notebook: the passage given in `replaces` is in notebook.md more than once; give more of it")
-            after = before[:at] + text + before[at + len(old):]
-            record = {"at": now, "replaced": old, "with": text, "before": before}
-        log = self.studio / "out/easel/notebook-revisions.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with log.open("a") as file:
-            file.write(json.dumps(record, ensure_ascii=False) + "\n")
-        path.write_bytes(after.encode())
-        return f"{'noted' if old is None else 'revised'} in {path}\n"
-
     async def call(self, name, params):
         scratch = params.get("scratch", False)
         on = ["--scratch"] if scratch else []
@@ -370,9 +342,7 @@ class Easel:
                     said += f"\nPartial survey: showing tiles 1–{count} of {len(images)} within the image budget. The remaining full-detail tiles have not been shown. Read each remaining file in a separate turn before assessing the whole canvas:\n" + "\n".join(paths[count:]) + "\n"
                 images = images[:count]
             return [types.TextContent(type="text", text=said), *images]
-        if name == "notebook":
-            said = self.write_notebook(params["text"], params.get("replaces"))
-        elif name == "note":
+        if name == "note":
             said = self.revise_journal(params["replaces"], params["text"]) if "replaces" in params else await self.at(["note", "-"], params["text"])
         elif name == "status":
             said = await self.at(["status", *on])
@@ -389,10 +359,8 @@ class Easel:
         return [types.TextContent(type="text", text=said)]
 
 
-def tool_definitions(studio, sittings=False, agy=False, notebook=False):
+def tool_definitions(studio, sittings=False, agy=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
-    if notebook:
-        definitions += json.loads(Path(__file__).with_name("notebook-tool.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
         for definition in definitions:
             if definition["name"] == "paint":
@@ -443,7 +411,6 @@ async def main():
     parser.add_argument("--break-seconds", type=float, default=0)
     parser.add_argument("--sitting-seconds", type=float)
     parser.add_argument("--agy", action="store_true", help="agy client: mark every tool alwaysLoad and page text replies over 8,000 bytes")
-    parser.add_argument("--notebook", action="store_true", help="an atelier studio: add the notebook tool (notebook.md)")
     args = parser.parse_args()
     if not args.studio:
         parser.error("set --studio or EASEL_ROOT to an exported studio")
@@ -463,7 +430,7 @@ async def main():
     if args.agy:
         easel.page_bytes = PAGE_BYTES
     server = Server("easel")
-    definitions = tool_definitions(easel.studio, args.sittings, args.agy, args.notebook)
+    definitions = tool_definitions(easel.studio, args.sittings, args.agy)
     meta = {"_meta": {"antigravity/alwaysLoad": True}} if args.agy else {}
 
     @server.list_tools()

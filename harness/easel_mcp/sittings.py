@@ -148,6 +148,4 @@ class SittingEasel(Easel):
         return path.read_text() if path.exists() else ""
 
     def completion(self):
-        message = Path(__file__).with_name("completion-message.txt").read_text().strip()
-        text = message.replace("{N}", str(self.state["sitting"])).replace("{JOURNAL}", self.journal())
-        return [types.TextContent(type="text", text=self.reply(text))]
+        return [types.TextContent(type="text", text=self.reply(f"The painting is complete. Sitting {self.state['sitting']} added no paint and had a whole-canvas look and a detail crop in normal color.\n\nYour journal (notes/journal.md):\n{self.journal()}"))]

@@ -1180,7 +1180,7 @@ mod tests {
     /// A dry brush over a dense passage lifts what its tips reach and leaves
     /// a ghost; over fixed pastel it lifts nothing; a finer tip reaches deeper.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_dry_brush_lifts_what_its_tips_reach"]
     fn a_dry_brush_lifts_what_its_tips_reach() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1241,7 +1241,7 @@ mod tests {
     /// tooth (the edge sinks deeper than the pores) and burnishes the paper:
     /// the peaks it pressed stay lower, their pores shallower. Fixed pastel stays.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper"]
     fn a_knife_takes_the_loose_pastel_and_burnishes_the_paper() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1278,7 +1278,7 @@ mod tests {
     /// 30–41 mm out), leaving the pores' filling (their fine grains need
     /// ~0.8 m/s); a hard blow from 5 cm also takes the top of the tooth.
     #[test]
-    #[ignore = "slow (about 4 minutes: stick strokes or puffs over a dense passage first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 4 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth"]
     fn a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1305,7 +1305,7 @@ mod tests {
     /// A tap sheds the heaped crumbs (a hard tap more than gravity) and never
     /// the grains in the pores.
     #[test]
-    #[ignore = "slow (about 3 minutes: stick strokes or puffs over a dense passage first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 3 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_tap_sheds_crumbs_not_the_tooth"]
     fn a_tap_sheds_crumbs_not_the_tooth() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1335,7 +1335,7 @@ mod tests {
     /// A scalpel (a 1 µm edge on a short length) cuts: it shaves the surface
     /// and takes even fixed pastel; a palette knife at the same hand doesn't.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_scalpel_cuts_a_knife_does_not"]
     fn a_scalpel_cuts_a_knife_does_not() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1390,7 +1390,7 @@ mod tests {
     /// Every crumb a puff lifts is somewhere after it: laid again on the
     /// picture, caught by the mask, or blown off it (what it returns).
     #[test]
-    #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_blow_accounts_for_every_crumb"]
     fn a_blow_accounts_for_every_crumb() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -1428,7 +1428,7 @@ mod tests {
 
     /// Blown crumbs roll out and settle in a ring past the cleared zone.
     #[test]
-    #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::blown_crumbs_settle_in_a_ring"]
     fn blown_crumbs_settle_in_a_ring() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);

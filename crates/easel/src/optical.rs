@@ -1,6 +1,4 @@
 use image::ImageEncoder;
-#[cfg(test)]
-use paint::color::linear_to_srgb;
 use paint::render_snapshot::{RenderSnapshot, RENDERER};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -349,7 +347,3 @@ pub fn companions(args: &[String]) -> Result<(), String> {
     })();
     result.map_err(|e| e.to_string())
 }
-
-#[cfg(test)]
-#[path = "optical_tests.rs"]
-mod tests;

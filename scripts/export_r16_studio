@@ -129,6 +129,12 @@ if [ "$profile" = watercolor ]; then
   for file in server.py tools.json remote.py http_server.py; do
     git -C "$repo" show "$branch:harness/easel_mcp/$file" > "$dest/bin/mcp/$file"
   done
+  if git -C "$repo" cat-file -e "$branch:harness/easel_mcp/references.py" 2>/dev/null; then
+    git -C "$repo" show "$branch:harness/easel_mcp/references.py" > "$dest/bin/mcp/references.py"
+  fi
+  if git -C "$repo" cat-file -e "$branch:notes/reference-library/manifest.json" 2>/dev/null; then
+    "$repo/scripts/build_reference_library" --ref "$branch" "$dest/notes/reference-library.json"
+  fi
   : > "$dest/notes/journal.md"
   echo watercolor > "$dest/bin/box"
   "$dest/bin/watercolor-studio" --box watercolor init "$dest"
@@ -200,6 +206,10 @@ for n in "$dest"/notes/research/*.md; do
   "$repo/scripts/strip_sources" "$n" < /dev/null || { echo "can't strip the sources from $n" >&2; exit 1; }
 done
 
+if git -C "$repo" cat-file -e "$branch:notes/reference-library/manifest.json" 2>/dev/null; then
+  "$repo/scripts/build_reference_library" --ref "$branch" "$dest/notes/reference-library.json"
+fi
+
 # the guide's tube table: the box of this studio's easel (it reads bin/box)
 guide=$dest/notes/easel_guide.md
 table_head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
@@ -262,8 +272,8 @@ E="$probe/bin/easel"
   "$E" open >/dev/null
   trap '"$E" close >/dev/null 2>&1 || true' EXIT
   # the first and the last tube in the studio's box
-  "$E" do 'local t = tubes(); canvas{size=300, aspect=1.25, linen=15, ground={{pile={{t[1], 1}}, um=80, apply="knife"}}}' >/dev/null
-  "$E" do 'local t = tubes(); b = brush("round", 4); b:load(pile{{t[#t], 1}}, 0.8); b:stroke({{200, 300}, {800, 320}})' >/dev/null
+  "$E" "do" 'local t = tubes(); canvas{size=300, aspect=1.25, linen=15, ground={{pile={{t[1], 1}}, um=80, apply="knife"}}}' >/dev/null
+  "$E" "do" 'local t = tubes(); b = brush("round", 4); b:load(pile{{t[#t], 1}}, 0.8); b:stroke({{200, 300}, {800, 320}})' >/dev/null
   "$E" look >/dev/null
   "$E" save >/dev/null
   "$E" close >/dev/null

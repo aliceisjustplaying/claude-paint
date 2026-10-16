@@ -139,9 +139,9 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## The palette
 
-- **Look at the board before the canvas.** `look --palette` shows each heap
-  thick and thinned over black: a chalky mix, a violet "gray", a glaze that
-  stains or one that hides show there, before they cost a passage.
+- **Look at the board before the canvas.** `look` with `palette: true` shows
+  each heap thick and thinned over black: a chalky mix, a violet "gray", a
+  glaze that stains or one that hides show there, before they cost a passage.
 - **Steer a mix by eye**: `p:add{}` a touch at a time, looking between
   additions.
 - **Matching a passage** for a repair: start from its recipe in the log and
@@ -309,9 +309,6 @@ does; this says how to use them. What you paint is yours to choose.
   campaigns; that is what lets the next one sit on top.
 
 ## Finishing
-
-- `save --gallery` (or `save --light az,el`) saves the picture lit on its
-  relief, as it would be seen on a wall; plain `save` is color only.
 
 - An unvarnished picture keeps its matte and glossy passages as painted.
   A varnish (where the easel has one) makes it all glossy: darks deepen.

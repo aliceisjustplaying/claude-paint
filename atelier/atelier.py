@@ -124,7 +124,7 @@ def title_of(reply):
 
 
 def house():
-    """The house runner (house/r21_chains.py, r40's, as STIL-89 ran it), with its helpers from notes/round24/runner."""
+    """The house runner (house/r21_chains.py, r40's, byte for byte), with its helpers from notes/round24/runner."""
     helpers = str(REPO / "notes/round24/runner")
     if helpers not in sys.path:
         sys.path.insert(0, helpers)
@@ -167,7 +167,7 @@ class Atelier:
 
     def launch_agent(self, sid, n, work):
         """A painting's launch agent: the house runner through run.py, one easel with four workers, at Interactive
-        priority (STIL-40: a chunk took 1,093 s as a default agent, 387 s as Interactive)."""
+        priority (measured: a chunk took 1,093 s as a default agent, 387 s as Interactive)."""
         uv = shutil.which("uv") or "uv"
         lane = STUDIOS[sid]["lane"]
         return {

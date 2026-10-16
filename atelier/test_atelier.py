@@ -101,7 +101,7 @@ def test_briefs_are_the_texts_as_section_5_renders_them(tmp_path, monkeypatch):
     assert "on this theme: a harbor at night. Within the theme" in themed.replace("\n", " ")
 
 
-def test_the_house_runner_is_r40s_as_stil_89_ran_it():
+def test_the_house_runner_is_r40s():
     source = (Path(__file__).with_name("house") / "r21_chains.py").read_bytes()
     assert hashlib.sha256(source).hexdigest() == "24e8f16af8a9214a410fa7673adfd0bac576d59df424571030f1de3ee98f08b9"
 

@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import atelier as A  # noqa: E402
 
-# as STIL-89's wrapper: nothing the painter's pi or easel reads comes from the launching environment
+# as the house wrapper does: nothing the painter's pi or easel reads comes from the launching environment
 INHERITED = ("EASEL_ROOT EASEL_SESSION EASEL_BOX EASEL_WIDTH PAINTER_SITTING_RECOVERY PAINTER_MAX_IMAGES PAINTER_MAX_IMAGE_MB "
              "PAINTER_INPUT_TPM PAINTER_LIMIT_PROBE_S PAINTER_LIMIT_GIVE_UP_H PAINTER_COMPACT_RESERVE PAINTER_COMPACTION_NOTES").split()
 TOOLS = "paint,look,note,status,log,read,notebook"

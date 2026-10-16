@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -132,7 +132,7 @@ export class HousePainter implements Painter {
       return { stopped: null };
     }
     if (!existsSync(dir)) {
-      cpSync(resolve(this.config.studio.template), dir, { recursive: true, verbatimSymlinks: true });
+      cpSync(realpathSync(this.config.studio.template), dir, { recursive: true, verbatimSymlinks: true });
       await exec("chmod", ["-R", "u+w", dir]);
     }
     writeFileSync(join(dir, "BRIEF.md"), job.brief);
@@ -142,7 +142,20 @@ export class HousePainter implements Painter {
     const key = this.env["ANTHROPIC_API_KEY"];
     const env: Record<string, string> = { PATH: process.env["PATH"] ?? "/usr/bin:/bin", HOME: process.env["HOME"] ?? homedir(),
       ...(process.env["TMPDIR"] ? { TMPDIR: process.env["TMPDIR"] } : {}), ...(key ? { ANTHROPIC_API_KEY: key } : {}), ...this.launch.env };
-    await exec(join(dir, "bin/easel"), ["open"], { cwd: dir, env, timeout: 1800000, maxBuffer: 64 * 1024 * 1024 });
+    const reason = () => signal.reason === "time" ? "time" : "canceled";
+    try { await exec(join(dir, "bin/easel"), ["open"], { cwd: dir, env, timeout: 1800000, maxBuffer: 64 * 1024 * 1024, signal }); }
+    catch (error) {
+      try {
+        const pid = Number(readFileSync(join(dir, "out/easel/painting/lock"), "utf8").trim());
+        if (readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(join(dir, "bin/easel"))) process.kill(pid, "SIGTERM");
+      } catch { /* no server */ }
+      if (signal.aborted) return { stopped: reason() };
+      throw error;
+    }
+    if (signal.aborted) {
+      await exec(join(dir, "bin/easel"), ["close"], { cwd: dir, env, timeout: 60000 }).catch(() => {});
+      return { stopped: reason() };
+    }
     const out = openSync(join(sessions, "reply.txt"), "w"), err = openSync(join(sessions, "stderr.txt"), "a");
     const child = spawn("pi", args, { cwd: dir, env, detached: true, stdio: ["ignore", out, err] });
     closeSync(out); closeSync(err);
@@ -156,7 +169,7 @@ export class HousePainter implements Painter {
       setTimeout(() => { try { process.kill(-child.pid!, "SIGKILL"); } catch { /* already gone */ } }, 5000).unref();
     };
     const check = () => {
-      if (signal.aborted) stop("canceled");
+      if (signal.aborted) stop(reason());
       else if (this.config.studio.maxWallSeconds != null && Date.now() - started >= this.config.studio.maxWallSeconds * 1000) stop("time");
       else { const reason = overLimit(meter.usage(), this.config.studio); if (reason) stop(reason); }
     };

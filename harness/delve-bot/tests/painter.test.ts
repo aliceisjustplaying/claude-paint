@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -53,7 +53,7 @@ function setup(t: { after(fn: () => void): void }, script: string, change: (conf
 test("the house painter paints a short test painting in a copy of a read-only house studio and hands back a fitted JPEG", async t => {
   const f = setup(t, "paint", c => {
     const readOnly = join(dirname(c.database), "template");
-    cpSync(c.studio.template, readOnly, { recursive: true });
+    cpSync(realpathSync(c.studio.template), readOnly, { recursive: true });
     execFileSync("chmod", ["-R", "a-w", readOnly]);
     c.studio.template = readOnly;
   });
@@ -97,6 +97,15 @@ test("the runner stops the painter at its token and time limits, a stop or cance
   assert.deepEqual(inStudio(quiet.studio), []);
   await assert.rejects(quiet.painter.finish(quiet.job, { stopped: "canceled" }));
   assert.ok(quiet.logs.some(log => JSON.stringify(log).includes('"reason":"time"')));
+});
+
+test("a job canceled while the easel opens never starts the painter", async t => {
+  const f = setup(t, "paint");
+  const controller = new AbortController();
+  controller.abort();
+  assert.deepEqual(await f.painter.run(f.job, controller.signal, Date.now()), { stopped: "canceled" });
+  assert.equal(existsSync(join(dirname(f.config.database), "asked.jsonl")), false);
+  assert.deepEqual(inStudio(f.studio), []);
 });
 
 test("usage counts every prompt token, output tokens and dollars across a painter's session files", t => {

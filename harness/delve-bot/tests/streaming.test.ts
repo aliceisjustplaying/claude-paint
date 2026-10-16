@@ -141,15 +141,22 @@ test("stream slot is reserved before awaiting work and released after failure", 
   assert.equal(f.logs.length, 4);
 });
 
-test("wall-clock limit stops a job even if work ignores cancellation", async t => {
+test("the stream's wall-clock limit stops the painter as a time limit and keeps its result", async t => {
   const f = await fixture(t);
   f.config.streaming.maxSeconds = 1;
   const start = performance.now();
-  let signal: AbortSignal | undefined;
-  await assert.rejects(f.streaming.run(f.job, async s => { signal = s; await new Promise(() => {}); }), /canceled/u);
-  assert.equal(signal?.aborted, true);
+  const result = await f.streaming.run(f.job, s => new Promise(resolve => s.addEventListener("abort", () => resolve(s.reason), { once: true })));
+  assert.equal(result, "time");
   assert.ok(performance.now() - start < 2500);
   assert.match(JSON.stringify(f.logs.at(-1)), /endedAt/u);
+});
+
+test("shutdown stops a painting that isn't streamed", async t => {
+  const f = await fixture(t);
+  f.config.streaming.enabled = false;
+  const run = f.streaming.run(f.job, s => new Promise(resolve => s.addEventListener("abort", () => resolve("stopped"), { once: true })));
+  await f.streaming.stop();
+  assert.equal(await run, "stopped");
 });
 
 test("kill env, STOP file, job cancellation and shutdown stop active streams", async t => {
@@ -241,10 +248,11 @@ test("actual capture also stops on the wall-clock deadline", async t => {
   assert.ok([...f.records.values()][0]?.value["endedAt"]);
 });
 
-test("failed end write is reported and doesn't hold the stream slot", async t => {
+test("failed end write is reported, keeps the painting and doesn't hold the stream slot", async t => {
   const f = await fixture(t, true);
   f.failPut();
-  await assert.rejects(f.streaming.run(f.job, async () => {}), /stream_pds_request_failed/u);
+  assert.equal(await f.streaming.run(f.job, async () => "painted"), "painted");
+  assert.ok(f.logs.some(log => JSON.stringify(log).includes("stream_end_failed")));
   assert.equal([...f.records.values()][0]?.value["endedAt"], undefined);
   f.config.dryRun = true;
   await f.streaming.run(f.job, async () => {});

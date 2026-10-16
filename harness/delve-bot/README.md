@@ -168,11 +168,11 @@ npm start          # the daemon (node src/cli.ts run [config.json])
 **Limits.**
 
 - One stream at a time, and streaming requires `caps.running` = 1.
-- `streaming.maxSeconds` is unset, so a stream lasts as long as its painting. Set, it ends the stream and stops the painter, counting startup as well as work; the maximum is 7200 s.
+- `streaming.maxSeconds` is unset, so a stream lasts as long as its painting. Set, it stops the painter as a time limit, counting startup as well as work, and the partial painting is posted with `doneLimit`; the maximum is 7200 s. A painter that hasn't stopped 30 s after the limit is dropped.
 - The defaults are 960x540 at 10 fps, with 1200 kbps video and 64 kbps audio. The ceilings are 1280x720 at 15 fps, with 1500 kbps video and 96 kbps audio.
 - Every 100 ms the code checks the kill switch (the env variable or the `killFile`) and whether the job was canceled.
 - A finished job, an error, a timeout, a kill or a shutdown ends capture before the record is ended. The encoder gets SIGTERM, then SIGKILL after 1 s if it's still running. Closing the browser takes time, and each mock PDS call can take up to 3 s, so there's no guarantee on how long stopping takes.
-- A failed cleanup is reported, but nothing makes finalization survive a crash. The record's `idleTimeoutSeconds: 30` helps the station clean up a dead stream, but it guarantees nothing locally.
+- Ending the record logs in again first, so a long painting's expired session doesn't block it. A failed end write is logged (`stream_end_failed`) and the painting is still posted. Nothing makes finalization survive a crash. The record's `idleTimeoutSeconds: 30` helps the station clean up a dead stream, but it guarantees nothing locally.
 
 **Record.** The record is created with `createRecord` in the bot DID's repo, in collection `place.stream.livestream`, with a TID record key. It carries:
 

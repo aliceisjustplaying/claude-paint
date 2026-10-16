@@ -19,7 +19,11 @@ export function readMessage(data: unknown, config: Config): IngestEvent | null {
 
 export async function consume(engine: Engine, signal: AbortSignal): Promise<void> {
   while (!signal.aborted) {
-    await engine.drain();
+    try { await engine.drain(); }
+    catch {
+      await delay(1000, undefined, { signal }).catch(() => {});
+      continue;
+    }
     const url = new URL(engine.config.jetstreamUrl);
     url.searchParams.set("wantedCollections", "town.delve.feed.post");
     url.searchParams.set("compress", "false");

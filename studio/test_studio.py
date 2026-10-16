@@ -525,6 +525,62 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
     assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
 
 
+@pytest.mark.parametrize("state,working,age,outcome,active", [
+    ('{"sitting":1,"complete":false}', True, 60, None, True),
+    ('{"sitting":1,"complete":true}', True, 60, None, False),
+    ('{"sitting":1,"complete":false}', False, 60, None, False),
+    ('{"sitting":1,"complete":false}', True, 1800, None, False),
+    ('{"sitting":1,"complete":false}', True, -1, None, False),
+    ('{"sitting":1,"complete":false}', True, 60, {"status": "finished"}, False),
+    (None, True, 60, None, False),
+    ('{"complete":', True, 60, None, False),
+    ('[]', True, 60, None, False),
+    ('{}', True, 60, None, False),
+])
+def test_native_sitting_activity_requires_process_and_recent_session(home, monkeypatch, state, working, age, outcome, active):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "RUNS", str(root / "no-runner" / "studios.json"))
+    if state is not None:
+        (studio / "out/easel").mkdir(parents=True)
+        (studio / "out/easel/sittings.json").write_text(state)
+    session = {"p": PAINTER, "mtime": 1000, "outcome": outcome}
+    E.runner_states([session], {PAINTER} if working else set(), 1000 + age)
+    assert session["active"] is active
+    assert session["completed_at"] == (1000 if outcome else None)
+
+
+def test_native_sitting_exports_an_untitled_painter_as_live_without_overriding_runner_state(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "working_studios", lambda: {PAINTER})
+    log.write_text(start(str(studio)) + line({"type": "model_change", "modelId": "gemini-4-argon-high"})
+                   + look("l1", png_of("blue")))
+    (studio / "out/easel").mkdir(parents=True)
+    (studio / "out/easel/sittings.json").write_text('{"sitting":1,"complete":false}')
+    out = root / "export"
+    monkeypatch.setattr(sys, "argv", ["export_static.py", str(out)])
+    E.WRITTEN.clear()
+    E.main()
+    session, = json.loads((out / "data/sessions.json").read_text())
+    assert session["active"] is True
+    assert session["title"] is None
+    assert session["model"] == "gemini-4-argon-high"
+    assert "Live" in metadata(out / "index.html")["og:title"]
+    assert "Untitled, in progress" in (out / "index.html").read_text()
+
+    (root / "run/ARGON").mkdir(parents=True)
+    (root / "run/studios.json").write_text(json.dumps({"ARGON1": PAINTER}))
+    (root / "run/ARGON/p1_sittings.json").write_text('[{"status":"finished"}]')
+    E.runner_states([session], {PAINTER}, session["mtime"])
+    assert session["active"] is False
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

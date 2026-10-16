@@ -100,8 +100,8 @@ def working_studios():
 
 
 def runner_states(sessions, working, now):
-    """Require a running sitting, a live painter in that studio and recent session activity. Completion
-    comes only from the runner outcome, never a title, quiet session or exported render."""
+    """Require a runner or native MCP sitting, a live painter in that studio and recent session activity.
+    Completion comes only from the runner outcome, never a title, quiet session or exported render."""
     records = {}
     for path in S.runner_paths():
         try:
@@ -125,6 +125,12 @@ def runner_states(sessions, working, now):
             continue
     for s in sessions:
         running, completed = records.get(s["p"], (False, 0))
+        if s["p"] not in records and s["p"] in working:
+            try:
+                with open(os.path.join(os.path.expanduser("~/src/a"), s["p"], "out/easel/sittings.json")) as fh:
+                    running = json.load(fh).get("complete") is False
+            except (OSError, ValueError, AttributeError, TypeError):
+                pass
         s["active"] = bool(not s.get("outcome") and running and s["p"] in working and 0 <= now - s["mtime"] < 1800)
         s["completed_at"] = (completed or s["mtime"]) if (s.get("outcome") or {}).get("status") == "finished" else None
 

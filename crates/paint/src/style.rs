@@ -181,7 +181,7 @@ impl Style {
 
     fn prepare_cached_on(&self, c: Canvas, seed: u64, cache: Option<(&std::path::Path, &str)>) -> Canvas {
         use sha2::{Digest, Sha256};
-        let mut c = c
+        let c = c
             .with_engine(self.palette.engine)
             .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
@@ -226,6 +226,37 @@ impl Style {
                 }
             }
         }
+        let c = self.ground_on(c, seed);
+        if let Some((path, key)) = cache {
+            let mut bytes = Vec::new();
+            if c.write_state(&mut bytes, &key).is_ok() {
+                use std::io::Write;
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+                let saved = (|| -> std::io::Result<()> {
+                    std::fs::create_dir_all(path.parent().unwrap())?;
+                    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+                    file.write_all(&Sha256::digest(&bytes))?;
+                    file.write_all(&bytes)?;
+                    drop(file);
+                    std::fs::rename(&temp, &path)
+                })();
+                if saved.is_err() { let _ = std::fs::remove_file(temp); }
+            }
+        }
+        c.with_quarter_tiles(self.palette.quarter_tiles)
+    }
+
+    /// A sheet of paper of this style's width, with its ground layers (if
+    /// any) laid on it. Never from the ground cache (`prepare_cached`),
+    /// whose key describes a linen support: a sheet is laid afresh.
+    pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles)
+    }
+
+    /// This style's ground layers laid on `c`, bottom first.
+    fn ground_on(&self, mut c: Canvas, seed: u64) -> Canvas {
         // the canvas is prepared alike in every engine: engine 4's stiffer
         // films and clumping hair are the painting's, not the primer's
         let engine = c.engine;
@@ -247,24 +278,7 @@ impl Style {
             c.ground_finish(g.absorbent);
         }
         c.engine = engine;
-        if let Some((path, key)) = cache {
-            let mut bytes = Vec::new();
-            if c.write_state(&mut bytes, &key).is_ok() {
-                use std::io::Write;
-                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-                let saved = (|| -> std::io::Result<()> {
-                    std::fs::create_dir_all(path.parent().unwrap())?;
-                    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
-                    file.write_all(&Sha256::digest(&bytes))?;
-                    file.write_all(&bytes)?;
-                    drop(file);
-                    std::fs::rename(&temp, &path)
-                })();
-                if saved.is_err() { let _ = std::fs::remove_file(temp); }
-            }
-        }
-        c.with_quarter_tiles(self.palette.quarter_tiles)
+        c
     }
 }
 

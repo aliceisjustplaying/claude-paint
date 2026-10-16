@@ -1439,7 +1439,7 @@ mod tests {
         let f = c.window();
         // bare paper beside the passage, out along its line, gained crumbs somewhere
         let gained = (0..before.len()).filter(|&i| {
-            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            let y = f.uy(i / f.w);
             (y < 400.0 || y > 600.0) && c.pixels()[i] != before[i]
         }).count();
         assert!(gained > 0, "crumbs landed on the bare paper round the passage");

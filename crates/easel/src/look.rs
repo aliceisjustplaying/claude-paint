@@ -414,9 +414,6 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
     render_seen(c, v, None)
 }
 
-/// `render`, from the canvas as already seen in the view's light (`seen`:
-/// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
-/// tiles) light it once.
 /// Two pictures of one view, `seen` (another picture of the canvas's
 /// pixels, as `render_seen` takes it) and the canvas itself, at the same
 /// output size: if the size budget shrinks either, both are rendered again
@@ -433,6 +430,9 @@ pub fn render_pair(c: &Canvas, v: &View, seen: &[Rgb]) -> std::result::Result<((
     }
 }
 
+/// `render`, from the canvas as already seen in the view's light (`seen`:
+/// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
+/// tiles) light it once.
 pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::Result<(usize, usize, Vec<u8>), String> {
     let own;
     let px: &[Rgb] = match seen {

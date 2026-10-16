@@ -3,7 +3,6 @@
  * painting to the next. `notebook` appends an entry after a blank line, with no stamp, or with `replaces` swaps
  * one passage that appears exactly once, as `note` does for the journal. Every call is kept, whole, in
  * out/easel/notebook-revisions.jsonl (time, what was added or replaced and with what, and the notebook before).
- * harness/easel_mcp/server.py does the same for agy.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

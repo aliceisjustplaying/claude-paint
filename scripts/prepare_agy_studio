@@ -7,12 +7,7 @@ import re
 import shutil
 
 
-def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None, agent=None, sitting_message=None,
-            completion_message=None, notebook=False, env=None):
-    """agent, sitting_message, completion_message: files that replace the house agent file
-    (harness/agy/painter.md) and end_sitting's messages (harness/easel_mcp/*-message.txt), as the atelier's
-    texts do. LAUNCH.md, which describes the house agent, goes into the studio only with the house agent file.
-    notebook: the easel server adds the notebook tool. env: the easel server's environment."""
+def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     studio = studio.expanduser().resolve(strict=True)
     if not re.fullmatch(r"paint-studio-[0-9a-f]+", studio.name):
         raise ValueError("the studio folder must be named paint-studio-<hex> for the viewer")
@@ -32,23 +27,16 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None, agent=
         raise ValueError("the studio already has agy configuration")
     runtime.mkdir(parents=True, exist_ok=True)
     agents.mkdir(parents=True, exist_ok=True)
-    for name in ("server.py", "remote.py", "tools.json", "notebook-tool.json", "sittings.py", "sitting-tools.json",
-                 "sitting-message.txt", "completion-message.txt", "painting_chunks.py"):
+    for name in ("server.py", "remote.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py"):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
-    for source, target in ((sitting_message, "sitting-message.txt"), (completion_message, "completion-message.txt")):
-        if source is not None:
-            shutil.copy2(source, runtime / target)
-    shutil.copy2(agent or repo / "harness/agy/painter.md", agents / "easel-painter.md")
-    if agent is None:
-        shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
+    shutil.copy2(repo / "harness/agy/painter.md", agents / "easel-painter.md")
+    shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
     sessions_root = sessions_root.expanduser().resolve()
     args = ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(studio),
             "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
     if sitting_seconds is not None:
         args += ["--sitting-seconds", str(sitting_seconds)]
-    if notebook:
-        args.append("--notebook")
-    config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": dict(env or {})}}}
+    config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": {}}}}
     (studio / ".agents/mcp_config.json").write_text(json.dumps(config, indent=2) + "\n")
     folder = "--" + str(studio).strip("/").replace("/", "-") + "--"
     if "-src-a-" not in folder:
@@ -65,16 +53,9 @@ def main():
     parser.add_argument("--sessions-root", required=True, type=Path)
     parser.add_argument("--break-seconds", type=float, default=0)
     parser.add_argument("--sitting-seconds", type=float)
-    parser.add_argument("--agent", type=Path, help="the agent file, instead of harness/agy/painter.md")
-    parser.add_argument("--sitting-message", type=Path, help="end_sitting's message for a new sitting")
-    parser.add_argument("--completion-message", type=Path, help="end_sitting's message when the painting is complete")
-    parser.add_argument("--notebook", action="store_true", help="add the notebook tool")
-    parser.add_argument("--rayon-threads", type=int, help="RAYON_NUM_THREADS for the easel")
     args = parser.parse_args()
-    env = {"RAYON_NUM_THREADS": str(args.rayon_threads)} if args.rayon_threads else None
     try:
-        config = prepare(args.studio, args.sessions_root, args.break_seconds, args.sitting_seconds, args.agent,
-                         args.sitting_message, args.completion_message, args.notebook, env)
+        config = prepare(args.studio, args.sessions_root, args.break_seconds, args.sitting_seconds)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     print(json.dumps(config, indent=2))

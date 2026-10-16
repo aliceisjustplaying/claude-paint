@@ -2,31 +2,28 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow"]
 # ///
-"""The atelier's painter side (SPEC.md sections 2 to 4): two studios, Claude Opus 5.5 (pi, the house runner
-through run.py) and Gemini 3.8 Flash (agy, started by hand). Each painting gets its own folder; the studio's
-notebook and walls are copied in at start and carried home at finish.
+"""The atelier's painter side (SPEC.md sections 2 to 4). Its studios are listed in studios.json (v1: Claude Opus 5.5);
+each paints through pi and the house runner (run.py). Each painting gets its own folder; the studio's notebook and
+walls are copied in at start and carried home at finish.
 
     atelier.py [paths] start <studio> [--theme "<a few words>"] [--prepare]
     atelier.py [paths] finish <studio>
 
-start: under the studio's lock and the admission lock every start takes, refuses while the studio's last painting hasn't hung or free disk is under
-DISK_FLOOR plus PER_PAINTING for each painting on an easel (this one included). Exports the house every-box studio
+start: under the studio's lock and the admission lock every start takes, refuses while the studio's last painting
+hasn't hung or free disk is under DISK_FLOOR plus PER_PAINTING for each painting on an easel (this one included). Exports the house every-box studio
 (scripts/export_r16_studio every, 2400 px, from this checkout's HEAD), copies in notebook.md and the walls, writes
 BRIEF.md from texts/, the notebook's before-copy and works/<id>-<nnn>/ (manifest.json, BRIEF.md, run/studios.json).
-Opus: writes the launch agent (launch_agent()) and, without --prepare, loads it. Flash: configures agy
-(scripts/prepare_agy_studio) and writes HAND-LAUNCH.md beside the manifest; agy is started by hand.
+Writes the launch agent (launch_agent()) and, without --prepare, loads it.
 
-finish: under the studio's lock, once the painter is done (Opus: run/OPUS/p1_outcome.json "finished"; Flash:
-out/easel/sittings.json complete and a reply after the completing end_sitting in the feed), under the machine-wide
-finishing lock: closes the easel, replays the log once (scripts/check_painting,
-which must pass), renders color from the session's save (scripts/finish_painting) and gallery and relief from the
+finish: under the studio's lock, once the painter is done (run/<lane>/p1_outcome.json "finished"), under the
+machine-wide finishing lock: closes the easel, replays the log once (scripts/check_painting, which must pass), renders color from the session's save (scripts/finish_painting) and gallery and relief from the
 same save (easel render-checkpoint). Then it copies the notebook home, hangs the wall
 (walls/<n>.png, 1000 px wide, and cards/<nnn>.json), rewrites walls/list.md, copies the journal and log, writes
 manifest.json last, appends to history.md and commits the text records to the local stillwet-runs-data clone
 (no push), under the records lock.
 
 Paths (defaults are the M3's): --root ~/src/a/stillwet-runs/atelier, --studios ~/src/a (painting folders),
---data ~/src/a/stillwet-runs-data (records go to <data>/stillwet-runs/atelier/...), --sessions ~/.pi/agent/sessions.
+--data ~/src/a/stillwet-runs-data (records go to <data>/stillwet-runs/atelier/...).
 """
 import argparse
 from contextlib import contextmanager
@@ -34,14 +31,12 @@ from datetime import datetime, timezone
 import fcntl
 import gzip
 import hashlib
-import importlib.machinery
 import importlib.util
 import json
 import os
 from pathlib import Path
 import plistlib
 import secrets
-import shlex
 import shutil
 import subprocess
 import sys
@@ -50,12 +45,7 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 TEXTS = HERE / "texts"
-STUDIOS = {
-    "claude-opus-5-5": {"name": "Claude Opus 5.5", "model": "claude-opus-5-5", "thinking": "xhigh", "harness": "pi", "lane": "OPUS"},
-    "gemini-3-8-flash": {"name": "Gemini 3.8 Flash", "model": "gemini-3.8-flash", "thinking": "high", "harness": "agy", "lane": "FLASH"},
-}
-AGY_MODEL = "Gemini 3.8 Flash (High)"
-LABEL = "art.stillwet.painter.atelier-opus"
+STUDIOS = {s["id"]: s for s in json.loads((HERE / "studios.json").read_text())}
 WIDTH, BOX = 2400, "every"
 DISK_FLOOR = 15 * 10**9
 PER_PAINTING = 3 * 10**9
@@ -144,48 +134,13 @@ def house():
     return module
 
 
-def closing_reply(feed):
-    """An agy painter's closing reply: its last text, with no tool call, after the end_sitting result that said the
-    painting is complete (out/easel/sittings.json is complete before that result reaches the feed); None until then."""
-    try:
-        events = [json.loads(line) for line in feed.read_text(errors="replace").splitlines() if line.strip()]
-    except (OSError, ValueError):
-        return None
-    messages = [e.get("message") or {} for e in events if isinstance(e, dict)]
-    ends = {c.get("id") for m in messages if m.get("role") == "assistant" for c in m.get("content") or []
-            if isinstance(c, dict) and c.get("type") == "toolCall" and c.get("name") == "end_sitting"}
-    complete = [i for i, m in enumerate(messages) if m.get("role") == "toolResult" and m.get("toolCallId") in ends
-                and not m.get("isError") and any(c.get("type") == "text" and c.get("text", "").startswith("The painting is complete.")
-                                                 for c in m.get("content") or [] if isinstance(c, dict))]
-    if not complete:
-        return None
-    reply = None
-    for m in messages[complete[-1] + 1:]:
-        content = m.get("content") if m.get("role") == "assistant" else None
-        if not isinstance(content, list) or m.get("stopReason") in ("error", "aborted"):
-            continue
-        if any(isinstance(c, dict) and c.get("type") == "toolCall" for c in content):
-            reply = None
-            continue
-        said = "\n".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text").strip()
-        reply = said or reply
-    return reply
-
-
-def prepare_agy():
-    loader = importlib.machinery.SourceFileLoader("prepare_agy_studio", str(REPO / "scripts/prepare_agy_studio"))
-    module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
-    loader.exec_module(module)
-    return module.prepare
-
-
 def run(command, **options):
     return subprocess.run([str(c) for c in command], stdin=subprocess.DEVNULL, **options)
 
 
 class Atelier:
-    def __init__(self, root, studios, data, sessions):
-        self.root, self.studios, self.data, self.sessions = (Path(p).expanduser().absolute() for p in (root, studios, data, sessions))
+    def __init__(self, root, studios, data):
+        self.root, self.studios, self.data = (Path(p).expanduser().absolute() for p in (root, studios, data))
 
     def home(self, sid):
         return self.root / "studios" / sid
@@ -208,14 +163,15 @@ class Atelier:
                 f.write(f"- {now()} {line}\n")
 
     def options(self):
-        return ["--root", self.root, "--studios", self.studios, "--data", self.data, "--sessions", self.sessions]
+        return ["--root", self.root, "--studios", self.studios, "--data", self.data]
 
     def launch_agent(self, sid, n, work):
-        """The Opus painting's launch agent: the house runner through run.py, one easel with four workers, at
-        Interactive priority (STIL-40: a chunk took 1,093 s as a default agent, 387 s as Interactive)."""
+        """A painting's launch agent: the house runner through run.py, one easel with four workers, at Interactive
+        priority (STIL-40: a chunk took 1,093 s as a default agent, 387 s as Interactive)."""
         uv = shutil.which("uv") or "uv"
+        lane = STUDIOS[sid]["lane"]
         return {
-            "Label": LABEL,
+            "Label": label(sid),
             "ProgramArguments": ["/usr/bin/caffeinate", "-i", uv, "run", "--script", str(HERE / "run.py"),
                                  *map(str, self.options()), sid, str(n)],
             "EnvironmentVariables": {"HOME": str(Path.home()), "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -224,8 +180,8 @@ class Atelier:
             "ProcessType": "Interactive",
             "KeepAlive": False,
             "RunAtLoad": True,
-            "StandardOutPath": str(work / "run/runner.OPUS.out"),
-            "StandardErrorPath": str(work / "run/runner.OPUS.err"),
+            "StandardOutPath": str(work / f"run/runner.{lane}.out"),
+            "StandardErrorPath": str(work / f"run/runner.{lane}.err"),
         }
 
     def start(self, sid, theme=None, prepare=False):
@@ -271,10 +227,7 @@ class Atelier:
                 "thinking": info["thinking"], "harness": info["harness"], "commit": commit,
                 "easel_sha256": hashlib.sha256((folder / "bin/easel").read_bytes()).hexdigest(),
                 "width": WIDTH, "box": BOX, "started": now()})
-            if info["harness"] == "agy":
-                self.prepare_flash(folder, work, rd, n)
-            else:
-                write(work / "launch.plist", plistlib.dumps(self.launch_agent(sid, n, work)))
+            write(work / "launch.plist", plistlib.dumps(self.launch_agent(sid, n, work)))
             with locked(self.root / ".git-lock"):
                 studios = json.loads((self.root / "studios.json").read_text()) if (self.root / "studios.json").exists() else {}
                 if sid not in studios:
@@ -282,55 +235,25 @@ class Atelier:
                                     "lane": info["lane"], "since": now()[:10], "slug": sid}
                     write_json(self.root / "studios.json", studios)
         self.history(f"{sid}: painting {n} prepared in {folder.name} ({f'theme: {theme}' if theme else 'free brief'}, {commit[:7]})")
-        if info["harness"] == "pi" and not prepare:
-            self.load(work)
-            self.history(f"{sid}: painting {n} launch agent {LABEL} loaded")
+        if not prepare:
+            self.load(sid, work)
+            self.history(f"{sid}: painting {n} launch agent {label(sid)} loaded")
         return work
 
-    def prepare_flash(self, folder, work, rd, n):
-        """agy's configuration in the studio, the pre-armed runner record and HAND-LAUNCH.md outside the studio."""
-        prepare_agy()(folder, self.sessions, agent=TEXTS / "easel-painter.md", sitting_message=TEXTS / "sitting_message.md",
-                      completion_message=TEXTS / "completion_message.md", notebook=True,
-                      env={"RAYON_NUM_THREADS": RAYON_THREADS})
-        feed = json.loads((folder / ".agents/recording.json").read_text())["output"]
-        write_json(rd / "p1_sittings.json", [{"sitting": 1, "part": 1, "status": "running", "chunks_before": 0,
-                                              "painting_before": 0, "message": text("launch_message.md"), "sessions": [feed]}])
-        finish = shlex.join(str(p) for p in ["uv", "run", "--script", HERE / "atelier.py", *self.options(), "finish", "gemini-3-8-flash"])
-        write(work / "HAND-LAUNCH.md", (HERE / "hand-launch.md").read_text()
-              .replace("@STUDIO@", str(folder)).replace("@FOLDER@", folder.name).replace("@NUMBER@", str(n))
-              .replace("@MODEL@", AGY_MODEL).replace("@FEED@", feed).replace("@FINAL@", str(rd / "p1_final.txt"))
-              .replace("@FINISH@", finish).replace("@HELLO@", text("hello.md")).replace("@LAUNCH@", text("launch_message.md")))
-
-    def load(self, work):
-        agent = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+    def load(self, sid, work):
+        agent = Path.home() / "Library/LaunchAgents" / f"{label(sid)}.plist"
         domain = f"gui/{os.getuid()}"
-        run(["launchctl", "bootout", f"{domain}/{LABEL}"], capture_output=True)
+        run(["launchctl", "bootout", f"{domain}/{label(sid)}"], capture_output=True)
         shutil.copy2(work / "launch.plist", agent)
         run(["launchctl", "bootstrap", domain, agent], check=True)
 
-    def reply_and_sittings(self, sid, work, folder, rd):
-        """The painter's closing reply and its number of sittings, once it is done; Refused before."""
-        if STUDIOS[sid]["harness"] == "pi":
-            outcome = json.loads((rd / "p1_outcome.json").read_text()) if (rd / "p1_outcome.json").exists() else {}
-            if outcome.get("status") != "finished":
-                raise Refused(f"{sid}: the painter isn't done ({outcome.get('reason') or 'no outcome yet'})")
-            sittings = json.loads((rd / "p1_sittings.json").read_text())
-            return (rd / "p1_final.txt").read_text(), len({s["sitting"] for s in sittings if s.get("status") == "completed"})
-        state = json.loads((folder / "out/easel/sittings.json").read_text()) if (folder / "out/easel/sittings.json").exists() else {}
-        if state.get("complete") is not True:
-            raise Refused(f"{sid}: the painting isn't complete ({folder / 'out/easel/sittings.json'})")
-        records = json.loads((rd / "p1_sittings.json").read_text())
-        reply = (rd / "p1_final.txt").read_text() if (rd / "p1_final.txt").exists() else closing_reply(Path(records[-1]["sessions"][-1]))
-        if not reply:
-            raise Refused(f"{sid}: no reply after the completing end_sitting in {records[-1]['sessions'][-1]} yet; "
-                          f"{rd / 'p1_final.txt'} can hold it")
-        if records[-1].get("status") == "running":
-            records[-1].update(status="completed", end=datetime.now().strftime("%F %T"), final=reply, final_file=str(rd / "p1_final.txt"))
-            write_json(rd / "p1_sittings.json", records)
-        write(rd / "p1_final.txt", reply)
-        reason = f"the painter is done: sitting {state['sitting']} added no paint and had a whole-canvas look and a detail crop"
-        write_json(rd / "p1_outcome.json", {"status": "finished", "reason": reason})
-        return reply, state["sitting"]
+    def reply_and_sittings(self, rd):
+        """The painter's closing reply and its number of sittings, once the runner says it is done; Refused before."""
+        outcome = json.loads((rd / "p1_outcome.json").read_text()) if (rd / "p1_outcome.json").exists() else {}
+        if outcome.get("status") != "finished":
+            raise Refused(f"{rd.parents[1].name}: the painter isn't done ({outcome.get('reason') or 'no outcome yet'})")
+        sittings = json.loads((rd / "p1_sittings.json").read_text())
+        return (rd / "p1_final.txt").read_text(), len({s["sitting"] for s in sittings if s.get("status") == "completed"})
 
     def finish(self, sid):
         """The studio's lock is held throughout, so a second finish of the same painting finds it hung; the
@@ -352,7 +275,7 @@ class Atelier:
         rd = work / "run" / STUDIOS[sid]["lane"]
         if run(["git", "-C", self.data, "rev-parse", "--is-inside-work-tree"], capture_output=True).returncode:
             raise Refused(f"{self.data} isn't a git clone of stillwet-runs-data")
-        reply, sittings = self.reply_and_sittings(sid, work, folder, rd)
+        reply, sittings = self.reply_and_sittings(rd)
         log = folder / "paintings/lua/painting.lua"
         final = work / "final"
         with locked(self.root / ".finish-lock"):
@@ -419,11 +342,14 @@ class Atelier:
             run(["git", "-C", self.data, "commit", "-q", "-m", f"atelier: {sid} painting {n} hangs"], check=True, capture_output=True)
 
 
+def label(sid):
+    return f"art.stillwet.painter.atelier-{STUDIOS[sid]['lane'].lower()}"
+
+
 def with_paths(ap):
     ap.add_argument("--root", default="~/src/a/stillwet-runs/atelier")
     ap.add_argument("--studios", default="~/src/a")
     ap.add_argument("--data", default="~/src/a/stillwet-runs-data")
-    ap.add_argument("--sessions", default="~/.pi/agent/sessions")
     return ap
 
 
@@ -441,7 +367,7 @@ def parser():
 
 def main(argv=None):
     a = parser().parse_args(argv)
-    atelier = Atelier(a.root, a.studios, a.data, a.sessions)
+    atelier = Atelier(a.root, a.studios, a.data)
     try:
         work = atelier.start(a.studio, a.theme, a.prepare) if a.command == "start" else atelier.finish(a.studio)
     except Refused as why:

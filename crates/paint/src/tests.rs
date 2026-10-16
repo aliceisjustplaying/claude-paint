@@ -900,6 +900,64 @@ fn wax_dries_more_matte() {
     assert_eq!(gloss(1.0, false), plain, "without the switch");
 }
 
+/// The drain switch: a stroke baked with packed edges beside a still-fluid
+/// center (`settle_for`'s `fluid`, as `bake` passes it, `1 − Prop[7]`): the
+/// packed edges keep the thickness they packed at, however the fluid
+/// center levels and is conserved beside them; a half-packed band keeps at
+/// least its packed layer and its liquid levels over it; the stroke's total
+/// is the paint laid. With nothing packed it bakes as without the switch.
+#[test]
+fn baking_leaves_packed_paint_where_it_packed() {
+    // (80 mm over 300 px over the weave, as `a_packed_film_follows_the_relief`)
+    let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+    let (w, h) = (c.f.w, c.f.h);
+    // across the stroke (x 100..200): packed through, half packed, fluid
+    let band = |x: usize| match x {
+        100..110 | 190..200 => Some((12.0f32, 0.0f32)),
+        110..120 | 180..190 => Some((20.0, 0.5)),
+        120..180 => Some((40.0, 1.0)),
+        _ => None,
+    };
+    let (mut add, mut fluid) = (vec![0.0f32; w * h], vec![1.0f32; w * h]);
+    for y in 100..200 {
+        for x in 0..w {
+            if let Some((a, f)) = band(x) {
+                add[y * w + x] = a;
+                fluid[y * w + x] = f;
+            }
+        }
+    }
+    let stiff = vec![0.0f32; w * h];
+    let sets = vec![crate::surface::SET_TIME; w * h];
+    let height = c.height.clone();
+    let t = c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, Some(&fluid));
+    let (mut lo, mut hi) = (f32::MAX, 0f32);
+    for y in 100..200 {
+        for x in 100..200 {
+            let i = y * w + x;
+            match band(x) {
+                Some((a, f)) if f == 0.0 => {
+                    assert!(t[i] == a, "a packed edge keeps its thickness: {} at ({x}, {y})", t[i]);
+                    // (and its surface follows the relief under it)
+                    assert!((c.height[i] - height[i] - a).abs() < 1e-3, "({x}, {y})");
+                }
+                Some((a, f)) if f < 1.0 => assert!(t[i] >= a * (1.0 - f), "a half-packed band keeps its packed layer: {} at ({x}, {y})", t[i]),
+                _ => (lo, hi) = (lo.min(t[i]), hi.max(t[i])),
+            }
+        }
+    }
+    assert!(hi - lo > 1.0, "the fluid center levels: {lo}..{hi}");
+    let (laid, kept): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), t.iter().map(|&v| v as f64).sum());
+    assert!(((kept - laid) / laid).abs() < 1e-5, "paint is conserved: {kept} of {laid}");
+    // with nothing packed: bit for bit as without the switch
+    let flat = |fl: Option<&[f32]>| {
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+        let t = c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, fl);
+        (t, c.height)
+    };
+    assert!(flat(Some(&vec![1.0; w * h])) == flat(None));
+}
+
 /// Poppy oil dries slower than linseed (walnut between).
 #[test]
 #[cfg(tube_box)]

@@ -92,7 +92,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
 				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
-				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
+				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
 				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({

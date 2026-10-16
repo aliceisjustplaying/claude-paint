@@ -50,6 +50,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.paper {
         kv("paper", "1".to_string());
     }
+    if st.tubes.limbs_join_nearest {
+        kv("limbs", "nearest".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -188,6 +191,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     let mut tubes = crate::session::box_for(Some(&logged))?;
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
+    tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?.with_paper(paper);
     {

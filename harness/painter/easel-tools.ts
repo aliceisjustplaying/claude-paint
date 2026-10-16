@@ -13,11 +13,41 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
+import { writeNotebook } from "./notebook.ts";
+import { reference, referenceList } from "./references.ts";
 import { atEasel, directoryListing, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
+	pi.registerTool({
+		...defineTool({
+			name: "reference_list",
+			label: "reference_list",
+			description: "List the studio's available references after choosing a subject or technical question. Read an entry with reference using its id.",
+			parameters: Type.Object({}, { additionalProperties: false, required: [] }),
+			async execute(_id, p) {
+				return text(JSON.stringify(referenceList(studio, p)));
+			},
+		}),
+		executionMode: "sequential",
+	});
+	pi.registerTool({
+		...defineTool({
+			name: "reference",
+			label: "reference",
+			description: "Search the studio's reference library after choosing a subject or technical question. Give query to find notes, then id to read a result. Text comes in pages; follow next_page until it is null.",
+			parameters: Type.Object({
+				query: Type.Optional(Type.String({ description: "Words to find in the reference text." })),
+				id: Type.Optional(Type.String({ description: "The id of a search result to read." })),
+				page: Type.Optional(Type.Integer({ minimum: 1, description: "The page to read, starting at 1." })),
+			}, { additionalProperties: false, required: [] }),
+			async execute(_id, p) {
+				return text(JSON.stringify(reference(studio, p)));
+			},
+		}),
+		executionMode: "sequential",
+	});
 	const scratch = Type.Optional(
 		Type.Boolean({
 			description:
@@ -119,6 +149,21 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			async execute(_id, p, signal) {
 				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
 				return text(await atEasel(studio, ["note", "-"], p.text, signal));
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	// the atelier's painters only (atelier/run.py lists it in --tools): notebook.md carries over between paintings
+	pi.registerTool({
+		...defineTool({
+			name: "notebook",
+			label: "notebook",
+			description: "Add to your notebook, notebook.md. It carries over from one painting to the next. " +
+				"To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
+			async execute(_id, p) {
+				return text(writeNotebook(studio, p.text, p.replaces));
 			},
 		}),
 		executionMode: "sequential",

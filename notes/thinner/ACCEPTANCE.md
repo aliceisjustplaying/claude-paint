@@ -20,67 +20,13 @@ rounds 4 and 5); no assertion or limit changed. The tests commit is named in
 
 ## How to run
 
-All in release builds (the baseline was made in release, and the iter
-build can change the last digits). One heavy job at a time, through the
-approved lock, with these limits:
-
-| command | runs | limit |
-|---|---|---|
-| `~/src/a/claude-paint-tools/lockrun --timeout 60 --owner <you> -- scripts/test_thinner_acceptance --quick` | check 2, check 13 (a) and (b), the sienna card's diagnostic, and every test that isn't slow | 60 s once built |
-| `~/src/a/claude-paint-tools/lockrun --timeout 300 --owner <you> -- scripts/test_thinner_acceptance --card` | check 1, check 13 (b) and the sienna card's diagnostic | 300 s |
-| `~/src/a/claude-paint-tools/lockrun --timeout 600 --owner <you> -- scripts/test_thinner_acceptance --all` | everything: the slow tests, the rag study's sheet and the card | 600 s (also a first build) |
-
-**What counts.** A test passes only if cargo exited 0 and printed
-`test NAME ... ok` for it. Each of these fails the run:
-
-- a test that is missing, filtered out, ignored or failed;
-- a cargo run that exits nonzero.
-
-So a skipped test never counts as passed, and a run that matches nothing
-fails. The slow tests are `#[ignore = "slow"]`, so an ordinary
-`cargo test` doesn't run them; the script runs them by exact name with
-`--ignored`. They are check 1, the check 8 card sweep, the check 10 gel
-and touch-dry comparison and the rag study. `--all` writes the rag
-study's sheet, `rag_study.png`, to `THINNER_RAG_STUDY_DIR` (default
-`notes/thinner`; set it so a candidate checkout stays clean) and fails if
-the file isn't written.
-
-**Check 13 (b)** and the sienna card's diagnostic run in every mode with
-`--show-output`, so their measured numbers are in the log. The diagnostic
-checks only its own fixture (below).
-
-**Exit codes:**
-
-- 0: every required test passed, printed as `PASSED`;
-- 1: anything failed;
-- 2: a usage error.
-
-**Dependencies:** cargo (rustc 1.97.1 here), bash 5 (the baseline's
-`run_scenes.sh` reads `EPOCHREALTIME`), python3 with only the standard
-library (the baseline's `state_compare.py`, and `scripts/thinner_dump_fields.py`)
-and xz (`old_files/paintck8_save_stroke.ckpt.xz`). Nothing comes from the
-speed branch beyond what the baseline commit brought; no inner lock is
-taken, so the outer lockrun can't deadlock.
-
-**The runner's own test:** `scripts/tests/thinner_acceptance_runner.sh`.
-It uses a fake cargo and a stub check 2 and builds nothing, about 1 s.
-These cases must exit 1:
-
-- ok lines from a cargo that exits nonzero;
-- a name missing, ignored or failed;
-- empty output;
-- 13 (b) failing (each mode) or not running;
-- the sienna card's diagnostic failing;
-- check 2 failing;
-- no rag sheet.
-
-Everything passing must exit 0 in all three modes, and a usage error
-exits 2. With `THINNER_RAG_STUDY_DIR` set, the sheet must land there and
-none in the checkout. It passes all 19 cases.
-`scripts/tests/thinner_dump_fields_test.py` tests check 2's field checker
-on tiny fake dumps (6 cases, all pass), and
-`scripts/tests/thinner_clock_restart_fake.py` is check 17's demonstration
-(below).
+`scripts/test` (the gate, `notes/speed/SKIPPED.md`) runs check 2
+(`scripts/thinner_check2`), check 13 (a)
+(`c13_every_pigment_value_is_af49348s`) and the physics tests
+`c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent` and
+`c09_the_solvent_evaporates_and_the_film_loses_its_volume`, in the test
+profile. Its own runner, `scripts/test_thinner_acceptance`, and that
+runner's self-test were removed with the old gate.
 
 Single tests, exactly:
 

@@ -713,7 +713,7 @@ mod tests {
     /// A dry brush over a dense passage lifts what its tips reach and leaves
     /// a ghost; over fixed pastel it lifts nothing; a finer tip reaches deeper.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_dry_brush_lifts_what_its_tips_reach"]
     fn a_dry_brush_lifts_what_its_tips_reach() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -774,7 +774,7 @@ mod tests {
     /// tooth (the edge sinks deeper than the pores) and burnishes the paper:
     /// the peaks it pressed stay lower, their pores shallower. Fixed pastel stays.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper"]
     fn a_knife_takes_the_loose_pastel_and_burnishes_the_paper() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
@@ -819,7 +819,7 @@ mod tests {
     /// A scalpel (a 1 µm edge on a short length) cuts: it shaves the surface
     /// and takes even fixed pastel; a palette knife at the same hand doesn't.
     #[test]
-    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run by name: notes/speed/test_lists/all.tsv slow-pastel-tools"]
+    #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_scalpel_cuts_a_knife_does_not"]
     fn a_scalpel_cuts_a_knife_does_not() {
         let mut c = drawing_paper();
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);

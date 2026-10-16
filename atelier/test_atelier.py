@@ -69,6 +69,18 @@ def world(tmp_path, monkeypatch):
     return atelier
 
 
+def feed_lines(*steps):
+    """A pi-shaped viewer feed: a string is the painter's text, a pair is a tool call and its result."""
+    lines = []
+    for i, step in enumerate(steps):
+        if isinstance(step, str):
+            lines.append({"type": "message", "message": {"role": "assistant", "stopReason": "stop", "content": [{"type": "text", "text": step}]}})
+        else:
+            lines.append({"type": "message", "message": {"role": "assistant", "content": [{"type": "toolCall", "id": f"c{i}", "name": step[0], "arguments": {}}]}})
+            lines.append({"type": "message", "message": {"role": "toolResult", "toolCallId": f"c{i}", "isError": False, "content": [{"type": "text", "text": step[1]}]}})
+    return "".join(json.dumps(line) + "\n" for line in lines)
+
+
 def painted(atelier, sid, notebook="Glazes want a set underlayer.\n"):
     """What a painter leaves: a log, a journal, its notebook, the session's save and the runner's outcome."""
     work = atelier.on_easel(sid)[-1]
@@ -89,7 +101,7 @@ def painted(atelier, sid, notebook="Glazes want a set underlayer.\n"):
         (folder / "out/easel/sittings.json").write_text(json.dumps({"sitting": 3, "complete": True}))
         feed = Path(json.loads((lane / "p1_sittings.json").read_text())[0]["sessions"][0])
         feed.parent.mkdir(parents=True, exist_ok=True)
-        feed.write_text(json.dumps({"type": "message", "message": {"role": "assistant", "stopReason": "stop", "content": [{"type": "text", "text": REPLY.strip()}]}}) + "\n")
+        feed.write_text(feed_lines("Hello!", ("end_sitting", "Sitting 2\n..."), ("end_sitting", "The painting is complete. Sitting 3 added no paint."), REPLY.strip()))
     return work, folder
 
 
@@ -254,3 +266,76 @@ def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
     assert R.paint(world, 1) == 0
     assert seen[0][0] == "OPUS" and seen[0][3] == world.root / "works/claude-opus-5-5-001/run/OPUS"
     assert (world.home(OPUS) / "cards/001.json").exists()
+
+
+def test_flash_waits_for_the_reply_after_the_completing_end_sitting(world):
+    work = world.start(FLASH, prepare=True)
+    _, folder = painted(world, FLASH)
+    feed = Path(json.loads((work / "run/FLASH/p1_sittings.json").read_text())[0]["sessions"][0])
+    feed.write_text(feed_lines("Hello!", "A sitting's handoff.", ("end_sitting", "The painting is complete. Sitting 3 added no paint.")))
+    with pytest.raises(A.Refused, match="no reply after the completing end_sitting"):
+        world.finish(FLASH)
+    assert not (work / "run/FLASH/p1_final.txt").exists() and len(world.on_easel(FLASH)) == 1
+    feed.write_text(feed.read_text() + feed_lines(("look", "a look"), "Done: Harbor at Dusk is how I'd title it."))
+    world.finish(FLASH)
+    assert (work / "run/FLASH/p1_final.txt").read_text() == "Done: Harbor at Dusk is how I'd title it."
+
+
+def test_two_finishes_at_once_hang_the_painting_once(world, monkeypatch):
+    import threading
+    import time
+    world.start(OPUS, prepare=True)
+    painted(world, OPUS)
+    fake = A.run
+
+    def slow(command, **options):
+        if Path(str(command[0])).name == "check_painting":
+            time.sleep(0.3)
+        return fake(command, **options)
+
+    monkeypatch.setattr(A, "run", slow)
+    outcomes = []
+
+    def finish():
+        try:
+            outcomes.append(world.finish(OPUS).name)
+        except A.Refused as why:
+            outcomes.append(str(why))
+
+    threads = [threading.Thread(target=finish) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(outcomes) == [f"{OPUS}-001", f"{OPUS}: no painting on the easel"]
+    assert [p.name for p in (world.home(OPUS) / "cards").iterdir()] == ["001.json"]
+    assert sorted(p.name for p in (world.home(OPUS) / "walls").glob("*.png")) == ["1.png"]
+
+
+def test_two_starts_at_once_share_the_disk_floor(world, monkeypatch):
+    import threading
+    import time
+    monkeypatch.setattr(A.shutil, "disk_usage", lambda path: type("U", (), {"free": 20 * 10**9})())
+    fake = A.run
+
+    def slow(command, **options):
+        if Path(str(command[0])).name == "export_r16_studio":
+            time.sleep(0.3)
+        return fake(command, **options)
+
+    monkeypatch.setattr(A, "run", slow)
+    outcomes = []
+
+    def start(sid):
+        try:
+            outcomes.append(world.start(sid, prepare=True).name)
+        except A.Refused as why:
+            outcomes.append(str(why))
+
+    threads = [threading.Thread(target=start, args=(sid,)) for sid in (OPUS, FLASH)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len([o for o in outcomes if "under the 21 GB floor for 2 painting" in o]) == 1
+    assert len(list(world.root.glob("works/*"))) == 1

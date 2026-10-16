@@ -2,7 +2,7 @@
 //!
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|edges|mirror] [--grid [step]] [--size N]
 //!   easel log | status | globals | save [path] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
@@ -105,7 +105,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -124,7 +124,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -962,7 +962,7 @@ const HOLD_HALF: f32 = 120.0;
 /// Only reads: no hand time, nothing in the log, the canvas and state untouched.
 fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>), String> {
     use image::ImageEncoder;
-    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
         return Err("look --hold takes --at, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (paint, blade, full) = s.held(name)?;

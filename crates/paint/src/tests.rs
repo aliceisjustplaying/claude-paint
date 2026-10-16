@@ -41,6 +41,30 @@ fn drag_conserves_paint() {
     }
 }
 
+/// A stroke's mark reaches the end of its path (engine 8, `crate::REACH_END`)
+/// however far its hairs trail behind the hand, so a limb drawn up to the
+/// point where it forks meets the forks drawn from there. Before engine 8 a
+/// rigger's mark stopped short of the end by its trail (4 px here).
+#[test]
+fn a_stroke_reaches_its_end() {
+    let rigger = Tool { point: 1.0, stiffness: 0.45, ..Tool::rigger(1.0) };
+    let pointed = Tool { point: 1.0, stiffness: 0.5, ..Tool::round_sable(1.6) };
+    for tool in [rigger, pointed, Tool::round_sable(3.0), Tool::filbert(6.0)] {
+        let mut c = Canvas::new(2400, 4.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3)).with_engine(crate::REACH_END);
+        let mut h = Held::new(tool.clone(), 5);
+        h.load(Paint::body(hex("#302820")), 0.6);
+        let (x, y0, y1) = (500.0f32, 200.0f32, 80.0f32);
+        c.drag(&mut h, &Gesture::new(vec![(x, y0), (x, (y0 + y1) * 0.5), (x, y1)]).pressure(0.8, 0.7).ramps(0.02, 0.0), None);
+        let (w, s) = (c.f.w, c.f.scale);
+        let band = ((x - 4.0) * s) as usize..((x + 4.0) * s) as usize;
+        let at = |y: usize| band.clone().map(|x| c.wet.vol[y * w + x]).fold(0.0f32, f32::max);
+        let body = at(((y0 + y1) * 0.5 * s) as usize);
+        let top = (0..c.f.h).find(|&y| at(y) > 0.05 * body).unwrap();
+        let short = top as f32 - y1 * s;
+        assert!(short <= 1.5, "{:?}: the mark ends {short} px short of its path's end", tool.kind);
+    }
+}
+
 #[test]
 fn dry_is_idempotent_and_clears_wet() {
     let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3));

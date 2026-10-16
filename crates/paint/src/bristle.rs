@@ -2824,3 +2824,44 @@ impl Canvas {
         }
     }
 }
+
+#[cfg(test)]
+mod knife_skim {
+    use super::*;
+    use crate::color::{hex, luminance};
+
+    /// The mean luminance of the middle of a light knife pull laid lightly
+    /// over dark knife paint, wet or dried first.
+    fn light_over_dark(skim: bool, dried: bool) -> f32 {
+        let mut c = Canvas::new(300, 1.0, hex("#e8e0d0")).with_engine(crate::engine7::ENGINE).with_knife_skim(skim);
+        let mut k = Knife::new(120.0);
+        for x in [350.0, 450.0, 550.0, 650.0] {
+            k.load(Paint::body(hex("#1c2430")), 1.0);
+            c.knife(&mut k, &[(x, 250.0), (x, 750.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+        }
+        if dried {
+            c.dry();
+        }
+        k.wipe();
+        k.load(Paint::body(hex("#f2ece0")), 1.0);
+        c.knife(&mut k, &[(500.0, 350.0), (500.0, 650.0)], (0.05, 0.05), Some(0.0), true, 0.1);
+        let (seen, w, s) = (c.seen(), c.f.w, c.f.scale);
+        let px = |u: f32| (u * s) as usize;
+        let lum: Vec<f32> = (px(420.0)..px(580.0)).flat_map(|y| (px(470.0)..px(530.0)).map(move |x| y * w + x)).map(|i| luminance(seen[i])).collect();
+        lum.iter().sum::<f32>() / lum.len() as f32
+    }
+
+    /// A loaded knife laid lightly on wet dark paint leaves its own color on
+    /// top, about as it does on the same paint dried. Without the skim (older
+    /// logs) it is stirred into the wet paint under it and goes gray.
+    #[test]
+    fn a_skimming_knife_keeps_its_light_on_wet_dark_paint() {
+        let dried = light_over_dark(true, true);
+        let wet = light_over_dark(true, false);
+        let stirred = light_over_dark(false, false);
+        assert_eq!(dried, light_over_dark(false, true), "a dried underlayer doesn't depend on the skim");
+        assert!(wet > 0.85 * dried, "on wet {wet}, on dried {dried}");
+        assert!(stirred < 0.6 * dried, "stirred in {stirred}, on dried {dried}");
+    }
+}
+

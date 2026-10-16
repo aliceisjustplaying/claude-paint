@@ -1118,6 +1118,32 @@ mod tests {
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
     }
 
+    /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and
+    /// its log's head says so; a replay of that log and a save of it skim
+    /// too, and a log without the line (every painting before it) doesn't.
+    /// Only engine 7 skims.
+    #[test]
+    fn new_paintings_record_the_knife_skim_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().knife_skim());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{KNIFE_SKIM_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.knife_skim());
+        for (log, skims) in [(text.clone(), true), (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().knife_skim(), skims);
+            assert_eq!(replay.program("p"), log);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
+    }
+
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
     /// names.
     fn replay_fixture(name: &str) -> (Session, String) {

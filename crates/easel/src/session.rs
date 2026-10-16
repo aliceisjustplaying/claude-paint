@@ -888,7 +888,7 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
             let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, or {}>)", paint::ENGINE, paint::engine7::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -984,13 +984,13 @@ fn box_list() -> String {
 /// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one engine 7,
+/// engine version the painting is painted with: a new one engine 8,
 /// an existing one its log's (`logged_engine`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
-        b.engine = paint::engine7::ENGINE;
+        b.engine = paint::REACH_END;
         return Ok(b);
     };
     let engine = logged_engine(text)?;

@@ -72,7 +72,7 @@ pub use rng::Rng;
 pub use shape::Shape;
 
 /// The default engine version for low-level canvases and palettes. The easel
-/// selects engine 7 for new paintings and records it in the log. A painting replays
+/// selects engine 8 for new paintings and records it in the log. A painting replays
 /// with the version it was painted with (its log's `--@ engine` line; a log
 /// without one is version 1), so a fix that changes what paint does never
 /// changes a past painting. Exception: engine-5 solvent waits were
@@ -100,11 +100,20 @@ pub use shape::Shape;
 /// - 5: knife-laid paint tears where it parts from the blade (`Canvas::knife`).
 /// - 7: engine 5, with the parts `engine7`
 ///   reimplements for speed. A log asks for it with `--@ engine 7`.
+/// - 8: engine 7, and a stroke's mark reaches the end of its path
+///   (`REACH_END`, `bristle::drag_on`).
 pub const ENGINE: u32 = 5;
 
+/// Engine 8: a brush stroke's mark reaches the end of its path. Before it
+/// the hairs trailing behind the hand left the canvas that far short of the
+/// end, so a stroke drawn up to a point (a limb to where it forks) stopped
+/// a few pixels before it.
+pub const REACH_END: u32 = 8;
+
 /// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
-/// those before it, and engine 7 (`engine7`). There is no engine 6.
-pub const SUPPORTED_ENGINES: [u32; 6] = [1, 2, 3, 4, 5, engine7::ENGINE];
+/// those before it, engine 7 (`engine7`) and engine 8 (`REACH_END`). There
+/// is no engine 6.
+pub const SUPPORTED_ENGINES: [u32; 7] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END];
 
 /// Whether engine version `v` is one this crate paints with.
 pub fn supported_engine(v: u32) -> bool {

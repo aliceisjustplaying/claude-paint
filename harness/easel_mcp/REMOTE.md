@@ -133,7 +133,7 @@ writer ownership, serialization, dropped clients, bounded retries, cache
 recovery, inline images, viewer ingestion and the configuration helpers:
 
 ```sh
-scripts/lockrun --timeout 60 -- uv run --no-project --script harness/easel_mcp/test_remote.py -v
+uv run --no-project --script harness/easel_mcp/test_remote.py -v
 ```
 
 The real-easel proof script works on Linux or macOS. It refuses a studio with
@@ -142,7 +142,7 @@ that the existing viewer code serves the same returned image. By default it
 starts an isolated loopback viewer and does not open a public tunnel:
 
 ```sh
-scripts/lockrun --timeout 120 -- uv run --no-project --script scripts/prove_remote_easel \
+uv run --no-project --script scripts/prove_remote_easel \
   --studio /path/to/empty/paint-studio-<hex> \
   --sessions-root ~/.capy/work/easel-mcp-remote-proof/sessions \
   --out ~/.capy/work/easel-mcp-remote-proof/output

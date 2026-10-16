@@ -144,8 +144,9 @@ def runner_key(path, key):
 
 
 def lanes():
-    """paint-studio-... -> (round, lane, painter number, painters in the lane, outcome), from the runners'
-    studio lists (reread every 30 s)."""
+    """paint-studio-... -> (round, lane, painter number, painters in the lane, outcome, the title in the closing
+    reply the runner copied to p<n>_final.txt once there is an outcome), from the runners' studio lists (reread
+    every 30 s)."""
     import time
     if time.time() - _lanes["at"] > 30:
         m = {}
@@ -181,7 +182,14 @@ def lanes():
                             outcome = {"status": "finished", "reason": reason.strip()}
                     except OSError:
                         pass
-                m[studio] = (rnd, lane, number, size, outcome)
+                title = None
+                if outcome:
+                    try:
+                        with open(os.path.join(rd, f"p{number}_final.txt"), errors="replace") as fh:
+                            title = title_of(fh.read())
+                    except OSError:
+                        pass
+                m[studio] = (rnd, lane, number, size, outcome, title)
         _lanes.update(at=time.time(), map=m)
     return _lanes["map"]
 
@@ -294,7 +302,7 @@ def list_sessions():
             for i in info:
                 if i["model"] and i["model"] not in models:
                     models.append(i["model"])
-            rnd, lane, n, size, outcome = lanes().get(name, ("", "", 0, 0, None))
+            rnd, lane, n, size, outcome, _ = lanes().get(name, ("", "", 0, 0, None, None))
             out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models),
                         "sittings": sum(_glance_file(f)["worked"] for f in fs),
                         "thinking": session_thinking(fs[-1]), **about_brief(name),
@@ -735,6 +743,12 @@ def title_of_closings(says):
     return next((t for t in map(title_of, reversed(says)) if t), None)
 
 
+def runner_title(painter):
+    """The title in a finished painter's closing reply as its runner recorded it, for a session that ends in later
+    words (an agy painter's interview after the painting); None without a runner outcome."""
+    return lanes().get(painter, (None,) * 6)[5]
+
+
 REFERENCE = object()  # in a glance's calls: a read of a reference picture
 _warm = None  # the server's first scan of every painter for the picker: set when done (None: scan on request)
 _glances = {}  # path -> what the picker needs from one session file, read incrementally without keeping images
@@ -1040,7 +1054,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 s["epoch"] = STREAM_EPOCH
                 if s.get("painter") and (_warm is None or _warm.is_set()):  # (until the first scan is done, without)  # the picker's picture and title (the static export has them in sessions.json)
                     g = glance(s["files"])
-                    s.update(look=g["look"], title=g["title"], thumb_version=g["version"])
+                    s.update(look=g["look"], title=g["title"] or runner_title(s["p"]), thumb_version=g["version"])
             if PUBLIC:
                 ss = [{k: v for k, v in s.items() if k != "files"} for s in ss if s.get("painter")]
             return self._send(200, json.dumps(ss).encode(), "application/json")

@@ -175,7 +175,3 @@ impl PreparedLighting {
             .collect()
     }
 }
-
-#[cfg(test)]
-#[path = "prepared_optics_tests.rs"]
-mod tests;

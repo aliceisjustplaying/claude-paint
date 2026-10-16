@@ -27,9 +27,7 @@ scripts/tests/baseline_state.sh
 # The test runner.
 scripts/test
 # The thinner acceptance tests, helpers, inputs and rules frozen at b2a0e14
-# (~/src/a/claude-paint-reviews/thinner-tests-APPROVED.md, 22 files). Most
-# don't exist on codex/speed yet: listed in advance, each needs approval when
-# it appears.
+# (~/src/a/claude-paint-reviews/thinner-tests-APPROVED.md), as far as they are left.
 crates/easel/tests/thinner/dump_solvent.lua
 crates/paint/tests/thinner/tubes_af49348.txt
 crates/paint/tests/thinner_physics.rs
@@ -37,7 +35,6 @@ crates/paint/tests/thinner_pigments.rs
 crates/paint/tests/thinner_support/mod.rs
 notes/thinner/ACCEPTANCE.md
 notes/thinner/DIAGNOSIS.md
-scripts/tests/thinner_clock_restart_fake.py
 scripts/tests/thinner_dump_fields_test.py
 scripts/thinner_check2
 scripts/thinner_dump_fields.py

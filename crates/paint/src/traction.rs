@@ -20,10 +20,12 @@ const LAST_GEN: u8 = 4;
 const GAP_MAX: f32 = 0.2;
 const NETWORK_MEMORY_BUDGET: usize = 1024 << 20;
 const NETWORK_TILE_MM: f32 = 300.0;
-const NETWORK_HALO_MM: f32 = 16.0;
+const NETWORK_HALO_MM: f32 = 32.0;
 const NETWORK_GRID: f32 = 1.0 / 3.0;
 const NETWORK_BLEND_MM: f32 = 4.0;
 const NETWORK_EDGE_JITTER_MM: f32 = 8.0;
+/// Most regions built at once (each gets an equal share of the budget).
+const NETWORK_PARALLEL: usize = 8;
 const MARK: u64 = 0x4e4f_4954_4341_5254; // TRACTION
 const SECTION_V: u64 = 1;
 
@@ -333,6 +335,15 @@ pub(crate) struct DryNet {
 }
 
 impl DryNet {
+    /// A budget with `reserved` bytes already spoken for.
+    fn budget(size_mm: [f32; 2], reserved: usize) -> crate::crack::Budget {
+        let mut budget = crate::crack::Budget::limited(size_mm, NETWORK_MEMORY_BUDGET);
+        if reserved > budget.used() {
+            budget.charge::<u8>(reserved - budget.used());
+        }
+        budget
+    }
+
     fn new(size_mm: [f32; 2], seed: u64, tile: [usize; 2], reserved: usize) -> DryNet {
         use crate::crack::{Cracks, End, network_with_budget};
         let k = Cracks {
@@ -342,13 +353,13 @@ impl DryNet {
             grain: 0.0,
             ..Cracks::aged(seed)
         };
-        let origin_mm = tile.map(|i| (i as f32 * NETWORK_TILE_MM - NETWORK_HALO_MM).max(0.0));
+        // The region starts on a whole-canvas stress cell, so its grid, flaws
+        // and strengths coincide with its neighbours' where they overlap.
+        let gc = k.island().max(0.2) * NETWORK_GRID;
+        let origin_mm = tile.map(|i| ((i as f32 * NETWORK_TILE_MM - NETWORK_HALO_MM).max(0.0) / gc).floor() * gc);
         let tile_mm = std::array::from_fn(|i| (((tile[i] + 1) as f32 * NETWORK_TILE_MM + NETWORK_HALO_MM).min(size_mm[i]) - origin_mm[i]).max(0.0));
-        let mut budget = crate::crack::Budget::limited(size_mm, NETWORK_MEMORY_BUDGET);
-        if reserved > budget.used() {
-            budget.charge::<u8>(reserved - budget.used());
-        }
-        let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, budget);
+        let budget = Self::budget(size_mm, reserved);
+        let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, budget, true);
         let mut segs = Vec::new();
         for a in &net.arms {
             let n = a.pts.len();
@@ -474,10 +485,14 @@ impl Canvas {
         crate::crack::check_network_grid(size, size.map(|v| v.min(NETWORK_TILE_MM + 2.0 * NETWORK_HALO_MM)), FINEST_MM, NETWORK_GRID, NETWORK_MEMORY_BUDGET)
     }
 
+    fn seed_of_traction(&self) -> u64 {
+        self.linen.map_or(11, |l| l.seed) ^ 0x0d3f_ec75 ^ 0xc4ac
+    }
+
     fn traction_net(&mut self, tile: [usize; 2], reserved: usize) -> std::sync::Arc<DryNet> {
         let pm = self.px_mm();
         let size_mm = [self.f.full_w as f32 * pm, self.f.full_h as f32 * pm];
-        let seed = self.linen.map_or(11, |l| l.seed) ^ 0x0d3f_ec75 ^ 0xc4ac;
+        let seed = self.seed_of_traction();
         if let Some(ref net) = self.traction.net.0
             && net.size_mm == size_mm
             && net.seed == seed
@@ -596,10 +611,13 @@ impl Canvas {
             let (lo, hi) = tiles_of(c);
             (hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1)
         }).sum();
-        let cache_cost = if let Some(net) = &self.traction.net.0 {
+        let seed = self.seed_of_traction();
+        // A warm cache is used if it holds a needed region, and dropped
+        // before any other region is built (as if it had not been there).
+        let cached = self.traction.net.0.take().filter(|net| net.size_mm == size_mm && net.seed == seed);
+        if let Some(net) = &cached {
             budget.charge::<u8>(net.memory_cost);
-            net.memory_cost + 64
-        } else { 0 };
+        }
         let mut queries = Vec::new();
         budget.reserve(&mut queries, n);
         for (i, c) in found.iter().enumerate() {
@@ -615,39 +633,99 @@ impl Canvas {
         let mut sampled = Vec::new();
         let largest = queries.chunk_by(|a, b| a.0 == b.0).map(|q| q.len()).max().unwrap_or(0);
         budget.reserve(&mut sampled, largest);
-        let reserved = budget.used() - cache_cost;
+        let reserved = budget.used() - cached.as_ref().map_or(0, |net| net.memory_cost + 64);
         let coverage = |d: f32, hw: f32| (((d + 0.5 * pm).min(hw) - (d - 0.5 * pm).max(-hw)).max(0.0) / pm).min(1.0);
-        for pixels in queries.chunk_by(|a, b| a.0 == b.0) {
-            let id = pixels[0].0 as usize;
-            let tile = [id % counts[0], id / counts[0]];
-            let net = self.traction_net(tile, reserved);
-            let edge = crate::noise::Fbm::new(net.seed as u32 ^ 0x74ec, 2, 24.0);
+        let edge = crate::noise::Fbm::new(seed as u32 ^ 0x74ec, 2, 24.0);
+        let weight_of = |tile: [usize; 2], point: [f32; 2]| (0..2).map(|axis| {
+            let start = tile[axis] as f32 * NETWORK_TILE_MM;
+            let end = start + NETWORK_TILE_MM;
+            let offset = |boundary| NETWORK_EDGE_JITTER_MM * edge.get(boundary + axis as f32 * 10000.0, point[1 - axis]).clamp(-1.0, 1.0);
+            let left = if tile[axis] == 0 || point[axis] >= start + reach { 1.0 } else {
+                let boundary = start + offset(start);
+                smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
+            };
+            let right = if tile[axis] + 1 == counts[axis] || point[axis] <= end - reach { 1.0 } else {
+                let boundary = end + offset(end);
+                1.0 - smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
+            };
+            left * right
+        }).product::<f32>();
+        let mut sample = |net: &DryNet, pixels: &[(u32, u32)], best: &mut Vec<(f32, f32)>| {
+            let tile = net.tile;
             pixels.par_iter().map(|&(_, i)| {
                 let c = &found[i as usize];
                 let point = point_of(c);
-                let weight = (0..2).map(|axis| {
-                    let start = tile[axis] as f32 * NETWORK_TILE_MM;
-                    let end = start + NETWORK_TILE_MM;
-                    let offset = |boundary| NETWORK_EDGE_JITTER_MM * edge.get(boundary + axis as f32 * 10000.0, point[1 - axis]).clamp(-1.0, 1.0);
-                    let left = if tile[axis] == 0 || point[axis] >= start + reach { 1.0 } else {
-                        let boundary = start + offset(start);
-                        smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
-                    };
-                    let right = if tile[axis] + 1 == counts[axis] || point[axis] <= end - reach { 1.0 } else {
-                        let boundary = end + offset(end);
-                        1.0 - smoothstep(boundary - NETWORK_BLEND_MM, boundary + NETWORK_BLEND_MM, point[axis])
-                    };
-                    left * right
-                }).product::<f32>();
+                // Relative to the strongest region here: a crack both regions
+                // agree on keeps its full width across the border, and only
+                // cracks one region alone has fade out.
+                let (lo, hi) = tiles_of(c);
+                let mut strongest = 0.0f32;
+                for y in lo[1]..=hi[1] {
+                    for x in lo[0]..=hi[0] {
+                        strongest = strongest.max(weight_of([x, y], point));
+                    }
+                }
+                let weight = (weight_of(tile, point) / strongest.max(1e-6)).min(1.0);
                 let (d, hw) = net.sample(c, point, weight);
                 (i, d, hw)
             }).collect_into_vec(&mut sampled);
             for &(i, d, hw) in &sampled {
                 let previous = &mut best[i as usize];
-                if coverage(d, hw) > coverage(previous.0, previous.1) {
+                // a total order, so the result is the same whatever order
+                // the regions are visited in
+                let (a, b) = (coverage(d, hw), coverage(previous.0, previous.1));
+                if a > b || (a == b && a > 0.0 && (hw > previous.1 || (hw == previous.1 && d < previous.0))) {
                     *previous = (d, hw);
                 }
             }
+        };
+        let mut groups: Vec<(usize, &[(u32, u32)])> = queries.chunk_by(|a, b| a.0 == b.0).map(|q| (q[0].0 as usize, q)).collect();
+        let tile_of = |id: usize| [id % counts[0], id / counts[0]];
+        if let Some(net) = cached {
+            if let Some(at) = groups.iter().position(|g| tile_of(g.0) == net.tile) {
+                sample(&net, groups.remove(at).1, &mut best);
+            }
+        }
+        // The regions are independent: build several at once, each within an
+        // equal share of what the budget has left. A region that does not fit
+        // its share is built again alone, so the result never depends on the
+        // batching, only whether it fits the whole budget does.
+        let mut cost = 0usize;
+        let mut last = None;
+        let mut rest = &groups[..];
+        while !rest.is_empty() {
+            let free = NETWORK_MEMORY_BUDGET.saturating_sub(reserved);
+            let batch = if cost == 0 { 1 } else { (free / (cost + cost / 8).max(1)).clamp(1, NETWORK_PARALLEL) }.min(rest.len());
+            let (now, later) = rest.split_at(batch);
+            rest = later;
+            last = None;
+            let nets: Vec<Option<DryNet>> = if batch == 1 {
+                vec![Some(DryNet::new(size_mm, seed, tile_of(now[0].0), reserved))]
+            } else {
+                let share = free / batch;
+                let charged = reserved + (batch - 1) * share;
+                now.par_iter().map(|g| {
+                    crate::crack::speculatively(|| DryNet::new(size_mm, seed, tile_of(g.0), charged)).ok()
+                }).collect()
+            };
+            let mut alive: usize = nets.iter().flatten().map(|net| net.memory_cost + 64).sum();
+            for (g, net) in now.iter().zip(nets) {
+                let net = match net {
+                    Some(net) => {
+                        alive -= net.memory_cost + 64;
+                        net
+                    }
+                    // the regions still held count against the rebuild
+                    None => DryNet::new(size_mm, seed, tile_of(g.0), reserved + alive),
+                };
+                cost = cost.max(net.memory_cost);
+                sample(&net, g.1, &mut best);
+                last = Some(net);
+            }
+        }
+        drop(sample);
+        if let Some(net) = last {
+            self.traction.net.0 = Some(std::sync::Arc::new(net));
         }
         for (c, (d, hw)) in found.iter_mut().zip(best) {
             c.d_mm = d;
@@ -701,3 +779,34 @@ impl Canvas {
 #[cfg(test)]
 #[path = "traction_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod seam_probe {
+    use super::*;
+
+    /// Share of crack length in the blend zone of a region border that the
+    /// neighbouring region reproduces within `tol` mm (EVAL_MM canvas).
+    #[test]
+    #[ignore]
+    fn region_overlap_agreement() {
+        let mm: f32 = std::env::var("EVAL_MM").ok().map_or(640.0, |v| v.parse().unwrap());
+        let size = [mm, mm];
+        let a = DryNet::new(size, 7, [0, 0], 0);
+        let b = DryNet::new(size, 7, [1, 0], 0);
+        let reach = NETWORK_BLEND_MM + NETWORK_EDGE_JITTER_MM;
+        for tol in [0.1f32, 0.3, 0.8] {
+            let agree = |p: &DryNet, q: &DryNet| {
+                let (mut tot, mut ok) = (0.0f32, 0.0f32);
+                for &(s0, s1, _, _, g) in &p.segs {
+                    let m = [0.5 * (s0[0] + s1[0]) + p.origin_mm[0], 0.5 * (s0[1] + s1[1]) + p.origin_mm[1]];
+                    if (m[0] - NETWORK_TILE_MM).abs() > reach || m[1] > NETWORK_TILE_MM - 20.0 || g > LAST_GEN { continue; }
+                    let l = ((s1[0] - s0[0]).powi(2) + (s1[1] - s0[1]).powi(2)).sqrt();
+                    tot += l;
+                    if q.nearest(m, LAST_GEN).is_some_and(|(d, _)| d < tol) { ok += l; }
+                }
+                ok / tot.max(1e-6)
+            };
+            println!("tol {tol} mm: A reproduced by B {:.3}, B by A {:.3}", agree(&a, &b), agree(&b, &a));
+        }
+    }
+}

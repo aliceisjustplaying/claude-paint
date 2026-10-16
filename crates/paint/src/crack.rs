@@ -438,6 +438,13 @@ struct Builder {
     /// Step limit per growth (fatigue pass).
     limit: Option<usize>,
     seed: u64,
+    /// The stress grid's offset in whole-canvas cells: every random draw
+    /// that starts or steers a crack is keyed by whole-canvas cell, so a
+    /// region and its neighbour make the same flaws where they overlap.
+    goff: [i64; 2],
+    /// Key each arm's random stream by its flaw rather than by how many
+    /// cracks came before it (traction regions; craquelure keeps its own).
+    flaw_keys: bool,
 }
 
 #[derive(Default)]
@@ -482,6 +489,21 @@ pub fn guard_traction_memory<R>(run: impl FnOnce() -> R) -> Result<R, String> {
         Some(error) => Err(error),
         None => Ok(result),
     }
+}
+
+/// Run a build that may be refused and then retried with more room: a
+/// refusal caught here is not recorded for `guard_traction_memory`, so a
+/// retry that succeeds leaves the chunk able to commit. (A refusal of the
+/// retry is recorded as usual.)
+pub(crate) fn speculatively<R>(run: impl FnOnce() -> R) -> std::thread::Result<R> {
+    struct Restore(Option<Option<String>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            MEMORY_REFUSAL.with(|slot| { *slot.borrow_mut() = self.0.take(); });
+        }
+    }
+    let _restore = Restore(MEMORY_REFUSAL.with(|slot| slot.replace(None)));
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run))
 }
 
 impl Budget {
@@ -578,6 +600,7 @@ impl Builder {
         let along_x = full_size[0] >= full_size[1];
         let mut sig = Vec::new();
         let mut strength = Vec::new();
+        let goff = origin.map(|o| (o / gc).round() as i64);
         let n = gx.checked_mul(gy).unwrap_or_else(|| budget.refused());
         budget.reserve(&mut sig, n);
         budget.reserve(&mut strength, n);
@@ -624,7 +647,7 @@ impl Builder {
                         }
                     }
                 }
-                let white = hash2((i % gx) as i64 + (origin[0] / gc).round() as i64, (i / gx) as i64 + (origin[1] / gc).round() as i64, seed ^ 0x53) - 0.5;
+                let white = hash2((i % gx) as i64 + goff[0], (i / gx) as i64 + goff[1], seed ^ 0x53) - 0.5;
                 let mut st = (STRENGTH_SD * (1.4 * patchy_s.get(p[0], p[1]) + 0.9 * white)).exp();
                 if patchy > 0.0 {
                     // skewed: most of the canvas cracks well, some passages
@@ -675,6 +698,8 @@ impl Builder {
             r: R_FIRST,
             limit: None,
             seed,
+            goff,
+            flaw_keys: false,
         }
     }
 
@@ -996,8 +1021,12 @@ impl Builder {
     /// Start a crack at grid cell i: two arms back to back.
     fn nucleate(&mut self, i: usize, generation: u8) {
         let (cx, cy) = (i % self.gx, i / self.gx);
-        let j = |k: u64| hash2(cx as i64, cy as i64, self.seed ^ k) - 0.5;
+        let (wx, wy) = (cx as i64 + self.goff[0], cy as i64 + self.goff[1]);
+        let j = |k: u64| hash2(wx, wy, self.seed ^ k) - 0.5;
         let p = [((cx as f32 + 0.5 + j(0x61)) * self.gc).clamp(0.0, self.size[0]), ((cy as f32 + 0.5 + j(0x62)) * self.gc).clamp(0.0, self.size[1])];
+        // the arms' random streams belong to the flaw (its whole-canvas cell
+        // and generation), not to how many cracks this region made before it
+        let flaw = ((wx as u64) << 32 ^ (wy as u64 & 0xffff_ffff)).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (generation as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
         let (s1, s2, e1) = principal(self.sig[i]);
         let conf = (s1 - s2) / (s1.abs() + s2.abs() + 1e-6);
         let mut h = if conf > 0.05 { perp(e1) } else { rot([1.0, 0.0], std::f32::consts::PI * (j(0x63) + 0.5)) };
@@ -1020,7 +1049,7 @@ impl Builder {
                 acc: [0.0; 2],
                 stair: ([0.0; 2], 0),
                 ideal: p,
-                rng: Rng::new(self.seed ^ ((crack as u64) << 1 | (side > 0.0) as u64).wrapping_mul(0x9E37_79B9)),
+                rng: Rng::new(self.seed ^ ((if self.flaw_keys { flaw } else { crack as u64 }) << 1 | (side > 0.0) as u64).wrapping_mul(0x9E37_79B9)),
                 rel: (0.0, 0.0),
             });
             let r = self.grow(ai);
@@ -1187,8 +1216,10 @@ pub(crate) fn check_network_grid(size: V2, domain: V2, island: f32, grid: f32, l
     if bytes.is_some_and(|n| n <= limit) { Ok(()) } else { Err(budget.error()) }
 }
 
-pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], origin_mm: [f32; 2], domain_mm: [f32; 2], pitch_mm: [f32; 2], grid: f32, budget: Budget) -> (Network, Budget) {
-    Builder::new(k, domain_mm, pitch_mm, budget, origin_mm, size_mm, grid).run()
+pub(crate) fn network_with_budget(k: &Cracks, size_mm: [f32; 2], origin_mm: [f32; 2], domain_mm: [f32; 2], pitch_mm: [f32; 2], grid: f32, budget: Budget, flaw_keys: bool) -> (Network, Budget) {
+    let mut b = Builder::new(k, domain_mm, pitch_mm, budget, origin_mm, size_mm, grid);
+    b.flaw_keys = flaw_keys;
+    b.run()
 }
 
 /// A crack segment for rasterizing: ends in mm and relative opening at each.

@@ -12,7 +12,7 @@ fn budgeted_network_keeps_the_unbounded_arm_geometry() {
     let k = crate::crack::Cracks { island_mm: Some(FINEST_MM), ground_um: Some(300.0), corners: false, grain: 0.0, ..crate::crack::Cracks::aged(11) };
     let original = crate::crack::network(&k, [80.0; 2], [0.7; 2]);
     let budget = crate::crack::Budget::limited([80.0; 2], NETWORK_MEMORY_BUDGET);
-    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.0; 2], [80.0; 2], [0.7; 2], 1.0 / 6.0, budget);
+    let (bounded, _) = crate::crack::network_with_budget(&k, [80.0; 2], [0.0; 2], [80.0; 2], [0.7; 2], 1.0 / 6.0, budget, false);
     assert_eq!(original.size_mm, bounded.size_mm);
     assert_eq!(original.arms.len(), bounded.arms.len());
     for (a, b) in original.arms.iter().zip(&bounded.arms) {
@@ -50,6 +50,16 @@ fn catching_a_memory_panic_does_not_hide_it_from_the_chunk_guard() {
     }).unwrap_err());
     assert!(error.contains("1024 MiB memory budget"), "{error}");
     assert!(crate::crack::guard_traction_memory(|| ()).is_ok());
+}
+
+#[test]
+fn a_refused_speculative_region_build_does_not_fail_the_chunk() {
+    let refuse = || -> () { crate::crack::Budget::limited([10.0; 2], 1).refused() };
+    let speculative = crate::crack::guard_traction_memory(|| assert!(crate::crack::speculatively(refuse).is_err()));
+    assert!(speculative.is_ok());
+    // a refusal caught any other way still fails the chunk
+    let caught = crate::crack::guard_traction_memory(|| assert!(std::panic::catch_unwind(refuse).is_err()));
+    assert!(caught.is_err());
 }
 
 fn canvas(px: usize, traction: bool, crop: Option<Crop>) -> Canvas {

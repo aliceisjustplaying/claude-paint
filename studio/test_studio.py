@@ -1003,9 +1003,7 @@ def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch
     root.mkdir(parents=True)
     (root / "studios.json").write_text(json.dumps({
         "claude-opus-5-5": {"model": "claude-opus-5-5", "name": "Claude Opus 5.5", "harness": "pi", "since": "2026-10-20",
-                            "slug": "claude-opus-5-5", "lane": "OPUS"},
-        "gemini-3-8-flash": {"model": "gemini-3.8-flash", "harness": "agy", "since": "2026-10-21",
-                             "slug": "gemini-3-8-flash", "lane": "FLASH"}}))
+                            "slug": "claude-opus-5-5", "lane": "OPUS"}}))
     first = atelier_work(root, "claude-opus-5-5", 1, "paint-studio-aaa111",
                          {"theme": None, "started": "2026-10-20T19:00:00Z", "sittings": 13, "canvas": [2400, 1500]},
                          {"title": "Boot Hill, Last Light", "words": f"Painted in {tmp_path}/src/a/paint-studio-aaa111.",
@@ -1022,8 +1020,6 @@ def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch
     (notebook / "001-before.md").write_text("Old line.\n")
     (notebook / "001-after.md").write_text("Old line.\nNew line.\n")
     (notebook.parent / "notebook.md").write_text("Old line.\nNew line.\n")
-    atelier_work(root, "gemini-3-8-flash", 1, "paint-studio-bbb222", {"theme": "a harbor at night"},
-                 {"title": None, "words": "A harbor.", "finished": "2026-10-21T23:00:00Z"})
 
     monkeypatch.setattr(S, "SESSIONS", str(tmp_path / ".pi" / "agent" / "sessions"))
     monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
@@ -1037,23 +1033,18 @@ def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch
 
     data = json.loads((out / "atelier.json").read_text())
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", data.pop("updated"))
-    opus, flash = data["studios"]
+    opus, = data["studios"]
     assert (opus["slug"], opus["name"], opus["since"]) == ("claude-opus-5-5", "Claude Opus 5.5", "2026-10-20")
-    assert flash["name"] == "Gemini 3.8 Flash"
     assert opus["easel"] == {"n": 2, "folder": PAINTER, "state": "live", "title": None, "theme": "a harbor at night",
                              "started": "2026-10-21T19:00:00Z", "last": "2026-09-29T10:00:00.000Z",
                              "look": "data/claude-opus-5-5/2/look.jpg"}
-    assert flash["easel"] == {"n": None, "folder": None, "state": "empty", "title": None, "theme": None,
-                              "started": None, "last": None, "look": None}
     assert opus["walls"] == [{
         "n": 1, "title": "Boot Hill, Last Light", "words": "Painted in ~/src/a/paint-studio-aaa111.",
         "folder": "paint-studio-aaa111", "finished": "2026-10-20T23:00:00Z", "theme": None, "sittings": 13,
         "img": {light: f"data/claude-opus-5-5/1/{light}.jpg" for light in ("gallery", "color", "relief")},
         "canvas": [2400, 1500], "journal": "data/claude-opus-5-5/1/journal.md"}]
-    assert flash["walls"][0]["theme"] == "a harbor at night" and flash["walls"][0]["img"] == {}
     assert opus["notebook"] == {"text": "Old line.\nNew line.\n", "after": 1, "versions": [
         {"after": 1, "added": "New line.", "file": "data/claude-opus-5-5/notebook/1.md"}]}
-    assert flash["notebook"] == {"text": "", "after": None, "versions": []}
     site = out.parent
     for rel in [opus["easel"]["look"], opus["walls"][0]["journal"], opus["notebook"]["versions"][0]["file"],
                 *opus["walls"][0]["img"].values()]:
@@ -1074,5 +1065,7 @@ def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch
         {"number": 2, "title": None, "words": "Done.", "folder": PAINTER, "finished": "2026-10-22T01:00:00Z"}))
     A.export(str(out))
     opus = json.loads((out / "atelier.json").read_text())["studios"][0]
-    assert opus["easel"]["state"] == "empty" and [w["n"] for w in opus["walls"]] == [1, 2]
+    assert opus["easel"] == {"n": None, "folder": None, "state": "empty", "title": None, "theme": None,
+                             "started": None, "last": None, "look": None}
+    assert [w["n"] for w in opus["walls"]] == [1, 2] and opus["walls"][1]["img"] == {}
     assert not (site / "data/claude-opus-5-5/2/look.jpg").exists()

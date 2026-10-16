@@ -9,6 +9,7 @@
   "scripts": {
     "check": "tsgo --noEmit",
     "test": "node --test tests/*.test.ts",
+    "live-check": "node --test tests/check.live.ts",
     "demo": "node src/cli.ts demo",
     "live-read": "node src/cli.ts live-read",
     "start": "node src/cli.ts run"

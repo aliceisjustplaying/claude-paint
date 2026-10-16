@@ -82,7 +82,7 @@ survey budgets, scratch options, compare confinement, journal revision,
 status, log, bare environment and errors:
 
 ```sh
-scripts/lockrun --timeout 60 -- uv run --no-project --script harness/easel_mcp/test_protocol.py -q
+uv run --no-project --script harness/easel_mcp/test_protocol.py -q
 ```
 
 An optional real-easel test copies a prepared studio's binaries and adapter
@@ -94,7 +94,7 @@ its own easel when finished. No model painter or painting replay is used.
 ```sh
 EASEL_MCP_STUDIO=/path/to/exported/studio \
 EASEL_MCP_PROOF=/path/to/proof-output \
-  scripts/lockrun --timeout 60 -- uv run --no-project --script harness/easel_mcp/test_protocol.py -q
+  uv run --no-project --script harness/easel_mcp/test_protocol.py -q
 ```
 
 The optional proof output contains the returned PNG, caption, successful

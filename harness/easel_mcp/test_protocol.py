@@ -185,7 +185,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_initialize_and_tool_wording(self):
         self.assertEqual(self.initialized.serverInfo.name, "easel")
         listed = await self.session.list_tools()
-        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log"])
+        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
         source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
         for tool in listed.tools:
             block = source.split(f'name: "{tool.name}"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
@@ -322,7 +322,7 @@ class PreparationTests(unittest.TestCase):
         self.repo = self.root / "repo"
         runtime = self.repo / "harness/easel_mcp"
         runtime.mkdir(parents=True)
-        for name in ("server.py", "tools.json"):
+        for name in ("server.py", "references.py", "tools.json"):
             shutil.copy2(SERVER.with_name(name), runtime / name)
         (self.repo / "scripts").mkdir()
         script = SERVER.parent.parent.parent / "scripts/prepare_capy_studio"

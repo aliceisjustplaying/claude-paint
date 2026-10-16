@@ -308,7 +308,7 @@ impl Canvas {
     fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
         let v = c.loose + c.bound;
         let keep = keep.max(c.bound).min(v);
-        let ex = v - keep;
+        let ex = (v - keep).min(c.loose);
         if ex <= 1e-6 {
             return 0.0;
         }
@@ -814,6 +814,24 @@ mod tests {
         let d = super::edge_sink_um(0.2, 100.0, 250.0);
         assert!(d > 9.0 && d < 18.0, "dent at 0.2 N/mm: {d} µm");
         assert!(super::edge_sink_um(0.5, 100.0, 250.0) > d, "deeper with load");
+    }
+
+    #[test]
+    fn removing_loose_pastel_over_fixed_pastel_keeps_a_readable_checkpoint() {
+        let mut c = Canvas::new_window(1, 1.0, [0.55; 3], None);
+        let cell = crate::graphite::Cell { a: 0.8, r: [0.1; 3], lift: 0.55, loose: 3e-6, bound: 32.0, ..crate::graphite::Cell::default() };
+        let mut px = crate::graphite::cover([0.55; 3], cell.a, cell.r);
+        let d = c.drawing_mut();
+        d.sticks = true;
+        d.cells[0] = cell;
+        let took = Canvas::take_loose(&mut d.cells[0], &mut px, cell.bound);
+        assert!(d.cells[0].loose >= 0.0, "remaining loose pastel: {}", d.cells[0].loose);
+        assert!(took <= cell.loose, "took {took} of {} loose", cell.loose);
+        assert_eq!(d.cells[0].bound, cell.bound);
+        c.px[0] = px;
+        let mut state = Vec::new();
+        c.write_state(&mut state, "").unwrap();
+        Canvas::read_state(&mut state.as_slice()).unwrap();
     }
 
     /// A scalpel (a 1 µm edge on a short length) cuts: it shaves the surface

@@ -17,14 +17,14 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/gate.XXXXXX")
 declare -A name_of=()
 stop() {
   trap - INT TERM
-  for p in "${!name_of[@]}"; do kill -TERM -- "-$p" 2>/dev/null; done
+  for p in "${!name_of[@]}"; do pkill -TERM -s "$p"; done
   wait
   rm -rf "$work"
   exit 130
 }
 trap stop INT TERM
 
-# launch NAME COMMAND: runs COMMAND in its own process group, output in $work/NAME.log
+# launch NAME COMMAND: runs COMMAND in its own session, output in $work/NAME.log
 launch() {
   mkdir -p "$work/$1.tmp"
   echo "$EPOCHREALTIME" >"$work/$1.t0"
@@ -32,13 +32,15 @@ launch() {
   name_of[$!]=$1
 }
 
-# reap: waits for one launched command and records its exit and wall time
+# reap: waits for one launched command, stops what it left running (a crashed test's easel
+# server) and records its exit and wall time
 reap() {
   local pid rc name
   wait -n -p pid
   rc=$?
   name=${name_of[$pid]}
   unset "name_of[$pid]"
+  pkill -KILL -s "$pid"
   echo "$rc" >"$work/$name.rc"
   awk -v a="$(cat "$work/$name.t0")" -v b="$EPOCHREALTIME" 'BEGIN { printf "%.1f", b - a }' >"$work/$name.secs"
 }

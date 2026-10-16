@@ -1297,11 +1297,12 @@ fn area_lanes(m: &crate::Mask, p: &Plan, down: impl Fn(f32) -> bool) -> Result<(
         let n = ((v1 - v0) / p.spacing.max(1e-3)).ceil().max(0.0) as usize + 1;
         let len = u1 - u0;
         let ds = half / (1.0 + p.radius * p.turns);
-        let samples = (len / ds).ceil() as usize + 1;
-        work += n as f64 * samples as f64;
+        let samples = (len / ds).ceil() as f64 + 1.0;
+        work += n as f64 * samples;
         if work > SMUDGE_MAX_SAMPLES {
             return Err(format!("smudge: too much to rub in one go ({} lanes across the mask); smudge a smaller mask, with fewer passes or a larger pad", n * (k as usize + 1)));
         }
+        let samples = samples as usize;
         let dv = if n > 1 { (v1 - v0) / (n - 1) as f32 } else { 0.0 };
         let xy = |u: f32, v: f32| (u * ca - v * sa, u * sa + v * ca);
         for li in 0..n {
@@ -1775,5 +1776,20 @@ mod tests {
         assert!((pad_area(2.0001, None) - knee).abs() < 0.01);
         assert!((pad_area(10.0, None) - 223.1).abs() < 0.5, "{}", pad_area(10.0, None));
         assert_eq!(pad_area(10.0, Some(4.0)), 4.0);
+    }
+
+    #[test]
+    fn an_area_smudge_refuses_excessive_finite_circle_speeds() {
+        let mut c = sheet();
+        let m = rect_mask(&c, 300.0, 250.0, 700.0, 550.0);
+        let mut before = Vec::new();
+        c.write_state(&mut before, "").unwrap();
+        for speed in [1e20, f32::MAX] {
+            let e = c.rub_area(&m, AreaRub { speed: Some(speed), ..AreaRub::default() }).unwrap_err();
+            assert!(e.contains("too much"), "{speed}: {e}");
+            let mut after = Vec::new();
+            c.write_state(&mut after, "").unwrap();
+            assert_eq!(before, after);
+        }
     }
 }

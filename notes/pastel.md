@@ -330,15 +330,17 @@ are in research/pastel_blending.md (§6); each is a named constant in
   turned 90° (a stump rubbed one way, then across: Sousa & Buchanan 1999).
 - **Force follows the mask**: the pad presses `force` × the mask's value
   under its center and is lifted where the mask is below a trace (0.04, as
-  `hatch{graded=}`) or the force below 0.05 N (`rub`'s floor). A
-  fingertip's lighter touch is a smaller pad on lanes spaced for the full
-  one, so with straight strokes a soft edge moves about 0.6 of what the
-  middle does. **In circles a soft-edged mask softens the blend only through
-  the contact's size, which changes little** (F^0.4): pick-up doesn't depend
-  on force (Amaral 2022), and the circles' contacts overlap, so the edge
-  moves nearly as much as the middle. With a stump (its pad fixed) only
-  where the finger lifts. For a blend that fades out, use
-  `pattern="strokes"` or a smaller mask.
+  `hatch{graded=}`) or the force below 0.05 N (`rub`'s floor). With `pad`
+  unset, a fingertip's lighter touch is a smaller pad on lanes spaced for
+  the full one, so with straight strokes a soft edge moves about 0.6 of
+  what the middle does. **In circles a soft-edged mask softens the blend
+  only through the contact's size, which changes little** (F^0.4): pick-up
+  doesn't depend on force (Amaral 2022), and the circles' contacts overlap,
+  so the edge moves nearly as much as the middle. A stump's pad stays the
+  same size at any force, so in either pattern a soft edge doesn't grade
+  its blend: it rubs as in the middle until the cutoff above, then lifts.
+  For a blend that fades out, leave `pad` unset and use `pattern="strokes"`
+  or a smaller mask.
 - **One finger**: the pad starts clean and carries what it picks up from
   piece to piece and pass to pass; what it still holds at the end goes with
   it (`Rubbed::carried_mm3`). Each placement is `rub`'s, a step of half the

@@ -542,11 +542,14 @@ feel(x, y)                     -- what a fingertip feels there
   1 N in straight strokes there and back along each lane
   (`pattern="circles"|"strokes"` overrides), two passes, the second across
   the first. It presses `force` × the mask and lifts where the mask fades
-  out; in circles a soft-edged mask softens the blend only through the
-  contact's size, which changes little, so for a blend that fades out use
-  `pattern="strokes"` or a smaller mask. It is the same finger as along a
-  path, not a blur: what it picks up it carries on. Sources and which
-  numbers are estimates: notes/research/pastel_blending.md.
+  out. With `pad` unset, a fingertip's contact shrinks under the lighter
+  touch, but in circles that softens the blend little, so for a blend that
+  fades out leave `pad` unset and use `pattern="strokes"` or a smaller
+  mask. A stump's pad stays the same size at any force, so a soft edge
+  doesn't grade its blend: it rubs as in the middle until the force falls
+  below 0.05 N (or the mask below 0.04), then lifts. It is the same finger
+  as along a path, not a blur: what it picks up it carries on. Sources and
+  which numbers are estimates: notes/research/pastel_blending.md.
 - **Color.** A stick is its pigments as they look dry: absorption as in oil,
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for

@@ -235,6 +235,9 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: a knife's paint laid on wet paint stays on top of it
+    /// (`Canvas::knife`).
+    pub(crate) knife_skim: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -286,6 +289,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            knife_skim: false,
             soak: None,
         }
     }
@@ -296,6 +300,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.knife_skim &= v == crate::engine7::ENGINE;
         self
     }
     pub fn engine(&self) -> u32 {
@@ -325,6 +330,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_knife_skim(mut self, enabled: bool) -> Self {
+        self.knife_skim = enabled && self.engine == crate::engine7::ENGINE;
+        self
+    }
+
+    pub fn knife_skim(&self) -> bool {
+        self.knife_skim
     }
 
     /// Physical width of the painting in mm (default 700).

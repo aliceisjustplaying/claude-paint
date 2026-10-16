@@ -646,14 +646,16 @@ const SOFT: Rgb = [0.03, 0.3, 1.0];
 const HARD_PX: f32 = 1.0;
 const SOFT_PX: f32 = 3.0;
 /// Lightness steps across an edge below `FAINT` aren't drawn; from `CLEAR` they're drawn at full strength.
-const FAINT: f32 = 0.05;
+const FAINT: f32 = 0.04;
 const CLEAR: f32 = 0.25;
 
 /// The edges view, measured on the look's own pixels, so an edge is hard or soft as it reads
 /// at the size it is shown. The picture's lightness is blurred twice (sd `s1` and `s2` px):
 /// across an edge whose change spans an sd of `w` px, the gradient's peak is
 /// step / sqrt(2π (w² + s²)), so the ratio of the two peaks gives `w` whatever the step,
-/// and the coarse peak gives the step whatever `w`. Each edge is drawn along the coarse
+/// and the coarse peak gives the step whatever `w`. The fine peak is the steepest within
+/// 3 px across the edge: a thin line's two edges are each as hard as a step's, though the
+/// coarse blur merges them into crests either side of it. Each edge is drawn along the coarse
 /// gradient's crest, 3 px wide, over the picture darkened to a dim gray: orange where it is
 /// hard, blue where it is soft, the stronger the larger the step.
 fn edges(img: &[Rgb], w: usize, h: usize) -> Vec<Rgb> {
@@ -665,7 +667,9 @@ fn edges(img: &[Rgb], w: usize, h: usize) -> Vec<Rgb> {
         ((at((x + 1).min(w - 1), y) - at(x.saturating_sub(1), y)) / 2.0, (at(x, (y + 1).min(h - 1)) - at(x, y.saturating_sub(1))) / 2.0)
     };
     let g: Vec<(f32, f32)> = (0..w * h).map(|i| grad(&coarse, i % w, i / w)).collect();
-    let mag = |x: i64, y: i64| if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 { 0.0 } else { g[y as usize * w + x as usize].0.hypot(g[y as usize * w + x as usize].1) };
+    let f: Vec<f32> = (0..w * h).map(|i| { let (x, y) = grad(&fine, i % w, i / w); x.hypot(y) }).collect();
+    let inside = |x: i64, y: i64| x >= 0 && y >= 0 && x < w as i64 && y < h as i64;
+    let mag = |x: i64, y: i64| if inside(x, y) { let (gx, gy) = g[y as usize * w + x as usize]; gx.hypot(gy) } else { 0.0 };
     let bg: Vec<Rgb> = img.iter().map(|p| [luminance(*p) * 0.12; 3]).collect();
     let mut out = bg.clone();
     let mut strength = vec![0.0f32; w * h];
@@ -682,8 +686,12 @@ fn edges(img: &[Rgb], w: usize, h: usize) -> Vec<Rgb> {
             if m < mag(xi + dx, yi + dy) || m <= mag(xi - dx, yi - dy) {
                 continue;
             }
-            let (fx, fy) = grad(&fine, x, y);
-            let r = fx.hypot(fy) / m;
+            let sharpest = (-3..=3)
+                .map(|k| ((xi as f32 + k as f32 * gx / m).round() as i64, (yi as f32 + k as f32 * gy / m).round() as i64))
+                .filter(|&(u, v)| inside(u, v))
+                .map(|(u, v)| f[v as usize * w + u as usize])
+                .fold(0.0, f32::max);
+            let r = sharpest / m;
             let width = if r > 1.0 { ((s2 * s2 - r * r * s1 * s1) / (r * r - 1.0)).max(0.0).sqrt() } else { f32::INFINITY };
             let wd = width.min(3.0 * s2);
             let step = m * (std::f32::consts::TAU * (wd * wd + s2 * s2)).sqrt();
@@ -797,6 +805,10 @@ mod tests {
         assert!(hard[0] > 200 && hard[2] < 60, "a sharp step is drawn hard: {hard:?}");
         let soft = edge_pixel(&edges_of(|x| 0.05 + 0.55 * ((x as f32 - 70.0) / 60.0).clamp(0.0, 1.0)));
         assert!(soft[2] > 200 && soft[0] < 60, "a 60 px ramp is drawn soft: {soft:?}");
+        // a thin dark line is two hard edges close together, not soft ones on either side
+        let line = edges_of(|x| if (99..102).contains(&x) { 0.05 } else { 0.6 });
+        assert!(line.pixels().all(|p| p[2] <= p[0]), "{:?}", line.pixels().find(|p| p[2] > p[0]));
+        assert!(edge_pixel(&line)[0] > 200);
         // a step too slight to see draws nothing: the picture stays a dim gray
         let faint = edges_of(|x| if x < 100 { 0.3 } else { 0.31 });
         assert!(faint.pixels().all(|p| p[0] == p[1] && p[1] == p[2] && p[0] < 110), "{:?}", edge_pixel(&faint));

@@ -1,4 +1,4 @@
-# Streamplace research — STIL-113
+# Streamplace research
 
 Read on October 16, 2026. Source checkout: `streamplace/streamplace` at `425f1beb2b8e6ee55edccc1533a15c8ed4c68714`. These are sourced protocol findings, not a successful live integration. No account, stream key or authenticated production request was used.
 

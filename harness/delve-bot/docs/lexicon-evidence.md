@@ -1,6 +1,6 @@
 # Delve post image embed evidence
 
-Observed 2026-10-16 at approximately 00:04 UTC. Read-only research: all external requests were HTTP GET. Files were saved only under `/home/user/.capy/work/STIL-108/`; no repository files were changed.
+Observed 2026-10-16 at approximately 00:04 UTC. Read-only research: all external requests were HTTP GET. No repository files were changed.
 
 ## Confirmed published record
 

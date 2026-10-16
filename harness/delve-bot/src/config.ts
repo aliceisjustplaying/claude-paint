@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { Type } from "typebox";
+import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import type { Config } from "./types.ts";
 
 const int = (minimum: number, maximum: number) => Type.Integer({ minimum, maximum });
+const cap = (value: TSchema) => Type.Optional(Type.Union([value, Type.Null()]));
 const did = Type.String({ pattern: "^did:[a-z]+:[A-Za-z0-9._:%-]+$" });
 const path = Type.String({ minLength: 1, maxLength: 1024 });
 const schema = Type.Object({
@@ -24,7 +25,7 @@ const schema = Type.Object({
   contentCheck: Type.Object({ model: Type.Literal("claude-opus-5-5"), timeoutSeconds: int(1, 120) }, { additionalProperties: false }),
   streaming: Type.Object({
     enabled: Type.Boolean(), includeLink: Type.Boolean(), concurrent: Type.Literal(1),
-    maxSeconds: int(1, 7200), width: int(64, 1280), height: int(64, 720),
+    maxSeconds: cap(int(1, 7200)), width: int(64, 1280), height: int(64, 720),
     fps: int(1, 15), videoKbps: int(64, 1500), audioKbps: int(32, 96),
     ingestUrl: Type.String({ pattern: "^(rtmps?|file)://" }),
     stationUrl: Type.String({ pattern: "^https://" }),
@@ -45,8 +46,8 @@ const schema = Type.Object({
     engine: Type.Literal(7), painterModel: Type.Literal("claude-opus-5-5"),
     thinking: Type.Union(["low", "medium", "high", "xhigh", "max"].map(level => Type.Literal(level))),
     template: path, root: Type.String({ pattern: "(^|/)src/a$", maxLength: 1024 }), sessions: path, harness: path,
-    maxWallSeconds: int(1, 14400), maxInputTokens: int(1, 1000000),
-    maxOutputTokens: int(1, 100000), maxCostUsd: Type.Number({ exclusiveMinimum: 0, maximum: 50 })
+    maxWallSeconds: cap(int(1, 14400)), maxInputTokens: cap(int(1, 1000000)),
+    maxOutputTokens: cap(int(1, 100000)), maxCostUsd: cap(Type.Number({ exclusiveMinimum: 0, maximum: 50 }))
   }, { additionalProperties: false })
 }, { additionalProperties: false });
 

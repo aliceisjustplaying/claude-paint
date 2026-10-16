@@ -21,7 +21,6 @@
     "enabled": false,
     "includeLink": false,
     "concurrent": 1,
-    "maxSeconds": 7200,
     "width": 960,
     "height": 540,
     "fps": 10,
@@ -64,10 +63,6 @@
     "template": "data/studio-template",
     "root": "data/src/a",
     "sessions": "data/sessions",
-    "harness": "../painter",
-    "maxWallSeconds": 7200,
-    "maxInputTokens": 500000,
-    "maxOutputTokens": 50000,
-    "maxCostUsd": 10
+    "harness": "../painter"
   }
 }

@@ -285,7 +285,7 @@ test("engine wraps work, uses optional Opus stream wording and never marks cance
   assert.equal(facet.features[0]?.uri, streamLink(f.config));
   await engine.pump(NOW);
   assert.equal(store.jobs()[0]?.status, "done");
-  assert.match(store.intents().find(intent => intent.id.endsWith("#done"))!.record, /no stream ran/u);
+  assert.match(store.intents().find(intent => intent.id.endsWith("#done"))!.record, /nothing streamed/u);
   const second = post("second", "did:plc:second"); f.network.threads.set(second.uri, [second]);
   await engine.intake(second, NOW);
   await assert.rejects(engine.pump(NOW, async () => { f.env["STILLWET_KILL_SWITCH"] = ""; await new Promise(() => {}); }), /canceled/u);

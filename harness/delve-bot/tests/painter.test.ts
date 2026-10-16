@@ -41,7 +41,10 @@ function setup(t: { after(fn: () => void): void }, script: string, change: (conf
     extensions: [resolve(import.meta.dirname, "fixtures/faux-painter.ts")], env: { FAUX_OUT: asked, FAUX_SCRIPT: script } });
   const item = post();
   const job = painterJob(item, { uri: item.uri, cid: item.cid }, "Paint a red stroke", config);
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => {
+    try { execFileSync(join(painter.studio(job), "bin/easel"), ["close"], { cwd: painter.studio(job), stdio: "ignore", timeout: 60000 }); } catch { /* no server */ }
+    rmSync(dir, { recursive: true, force: true });
+  });
   const messages = () => readFileSync(asked, "utf8").trim().split("\n").map(line => JSON.parse(line) as string);
   return { config, painter, job, logs, messages, studio: painter.studio(job), sessions: painter.sessions(job) };
 }
@@ -100,7 +103,8 @@ test("usage counts every prompt token, output tokens and dollars across a painte
   writeFileSync(join(dir, "b.jsonl"), line(0, 400000, 0, 10, 9.75));
   const usage = meter.usage();
   assert.deepEqual(usage, { input: 402400, output: 60, cost: 10 });
-  const studio = loadConfig().studio;
+  assert.equal(overLimit({ input: 1e9, output: 1e9, cost: 1e6 }, loadConfig().studio), null);
+  const studio = { ...loadConfig().studio, maxInputTokens: 500000, maxOutputTokens: 50000, maxCostUsd: 10 };
   assert.equal(overLimit(usage, studio), "cost");
   assert.equal(overLimit({ ...usage, input: 500000 }, studio), "input_tokens");
   assert.equal(overLimit({ input: 1, output: 50000, cost: 0 }, studio), "output_tokens");

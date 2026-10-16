@@ -102,7 +102,8 @@ export class Streaming {
     this.controller = controller;
     const done = Promise.withResolvers<void>();
     this.settled = done.promise;
-    const timer = setTimeout(() => controller.abort(), this.config.streaming.maxSeconds * 1000);
+    const limit = this.config.streaming.maxSeconds;
+    const timer = limit == null ? undefined : setTimeout(() => controller.abort(), limit * 1000);
     const poll = setInterval(() => { if (stopped(this.config, this.env) || canceled()) controller.abort(); }, 100);
     const abort = new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => reject(new Error("stream_canceled")), { once: true }));
     void abort.catch(() => {});

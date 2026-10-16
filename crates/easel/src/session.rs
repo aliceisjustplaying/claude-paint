@@ -1106,6 +1106,25 @@ mod tests {
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
     }
 
+    /// A gesture keeps the pressure its points ask for up to its last point
+    /// (engine 8): a limb drawn to where it forks keeps its width there, and
+    /// meets the forks drawn from it. Before engine 8 the last 5% of every
+    /// gesture lifted off, drawing the limb down to a dotted point short of
+    /// the fork.
+    #[test]
+    fn a_gesture_keeps_its_width_to_its_last_point() {
+        let text = "--@ engine 8\n";
+        let mut s = Session::replay_with(2400, box_for(Some(text)).unwrap()).unwrap();
+        s.run(r#"canvas{size=300, aspect=4, linen=16, seed=3, ground={{pile={{"lead white", 4}, {"yellow ochre", 0.3}}, um=80, apply="knife"}}}"#).unwrap();
+        s.run(r#"local b = brush{kind="round", width=1.6, point=1, stiffness=0.5}
+            b:load(pile{{"bone black", 1}, {"raw umber", 1}}, 0.6)
+            b:gesture({{500, 220, 0.8}, {500, 150, 0.8}, {500, 80, 0.8}})"#).unwrap();
+        let c = s.canvas().unwrap();
+        let across = |y: f32| (-20..=20).map(|k| c.wet_um(500.0 + k as f32 * 0.1, y)).fold(0.0f32, f32::max);
+        let (body, end) = (across(90.0), across(80.5));
+        assert!(end >= 0.5 * body, "0.5 units before its end the gesture lays {end} µm, against {body} µm 10 units before it");
+    }
+
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
     /// names.
     fn replay_fixture(name: &str) -> (Session, String) {

@@ -221,7 +221,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(metadata["output"].endswith("--mcp-src-a-paint-studio-abcd--/agy.jsonl"))
         frontmatter = (self.studio / ".agents/agents/easel-painter.md").read_text().split("---", 2)[1]
         agent = yaml.safe_load(frontmatter)
-        self.assertEqual(set(agent["tools"]), {"mcp_easel_" + tool for tool in ("paint", "look", "note", "status", "log", "read", "end_sitting")})
+        self.assertEqual(agent["tools"], [])
+        self.assertTrue(agent["inheritCustomizations"])
         self.assertEqual(agent["commandExecutionPolicy"], "off")
         self.assertFalse(agent["subagent"])
         self.assertEqual(agent["skills"], [])

@@ -126,6 +126,7 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
         "friedrich_early" => friedrich_early(palette_named(palname.as_deref().unwrap_or("friedrich_early"), engine)?),
         o => return err(format!("style {o:?}: friedrich or friedrich_early")),
     };
+    sty.palette.quarter_tiles = st.borrow().tubes.quarter_tiles;
     if let Some(mm) = num(&o, "size")? {
         if !(50.0..=5000.0).contains(&mm) {
             return err("size: the canvas width in mm, 50 to 5000");
@@ -1033,56 +1034,4 @@ pub fn world_method(lua: &Lua, key: &str) -> Result<Value> {
         _ => return Ok(Value::Nil),
     };
     Ok(Value::Function(f))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::session::{Session, box_for, parse_program};
-
-    /// Replay an old log to its end at a small width; the chunk that fails, if one does.
-    /// The six tests below replay whole paintings (20 to 38 chunks): no test command runs
-    /// them (the overnight plan of 2026-10-04 forbids painting replays in tests; see
-    /// notes/speed/SKIPPED.md for the coverage this leaves out).
-    fn replays(log: &str) {
-        let path = format!("{}/../../notes/{log}", env!("CARGO_MANIFEST_DIR"));
-        let text = std::fs::read_to_string(&path).unwrap();
-        let mut s = Session::replay_with(200, box_for(Some(&text)).unwrap()).unwrap();
-        for (i, c) in parse_program(&text).iter().enumerate() {
-            if let Err(e) = s.run(c) {
-                panic!("{log}: chunk {} failed:\n{e}", i + 1);
-            }
-        }
-        assert!(s.st.borrow().canvas.is_some());
-    }
-
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel3_free_replays() {
-        replays("amnesia3/easel3_free.lua");
-    }
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel3_green_replays() {
-        replays("amnesia3/easel3_green.lua");
-    }
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel3_near_replays() {
-        replays("amnesia3/easel3_near.lua");
-    }
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel4_free_replays() {
-        replays("amnesia4/easel4_free.lua");
-    }
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel4_green_replays() {
-        replays("amnesia4/easel4_green.lua");
-    }
-    #[test]
-    #[ignore = "replays whole paintings: never run"]
-    fn easel4_near_replays() {
-        replays("amnesia4/easel4_near.lua");
-    }
 }

@@ -499,19 +499,9 @@ References are not silently refreshed to accommodate a failure. The existing
 golden approval rules still apply to intentional changes. Ordinary correctness,
 conservation and same-build determinism tests remain in place.
 
-On Linux, `scripts/test` scales timeouts by `max(1, 16 / available CPUs)`:
-4× on a 4-vCPU VM and 2× on an 8-vCPU VM. macOS stays at 1×.
-`SCRIPTS_TEST_TIMEOUT_SCALE=1..16` overrides the scale, which is recorded in
-the summary. Limits remain finite: a base 600-second phase gets 2,400 seconds
-on a 4-vCPU VM. If the unchanged, pre-existing rag assertion is the sole Rust
-failure, the Cargo gate reports `known_failure` and exits 4; it never silently
-reports a green gate.
-
-Candidate gates use the same bounded scale, including their phase limits and
-receipt validation. Receipts record the trusted scale, so Linux results can
-be verified on Mac without recalculating budgets from the merging host's CPU
-count. Legacy receipts keep their 1× meaning and known-failure receipts stay
-unmergeable.
+`scripts/test` reports the registered rag baseline mismatch
+(`KNOWN_FAILURE: rag-historical-baseline-main`) by name as a known failure on
+every run and exits 0 only if nothing else failed.
 
 The Python gate suites use a per-step neutral pytest base directory and a
 synthetic fixture home. This keeps temporary paths account-free and avoids

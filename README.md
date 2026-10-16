@@ -12,8 +12,7 @@ knifed together from named tubes.
 
 ```sh
 cargo build --release -p easel        # the easel: target/release/easel
-scripts/test                          # the fast checks (about a minute once built)
-scripts/test --all                    # every required check (notes/speed/SKIPPED.md: what neither runs)
+scripts/test                          # the gate (notes/speed/SKIPPED.md: what it runs and what it doesn't)
 ```
 
 - `notes/easel_guide.md`: how to paint at the easel.
@@ -31,7 +30,7 @@ Install Rust, a C compiler, Python 3.10+, uv and Perl on the painter's
 machine. Prepare an exported studio with an approved house brief:
 
 ```sh
-scripts/lockrun --timeout 600 -- scripts/prepare_capy_studio hopper /path/to/studio \
+scripts/prepare_capy_studio hopper /path/to/studio \
   --brief /path/to/approved/BRIEF.md \
   --studio-notes /path/to/approved/studio_notes.md
 ```
@@ -84,8 +83,10 @@ write the existing studio viewer's event format and support durable call retries
   `studio/export_static.py`'s output from this checkout (`~/src/a/claude-paint`),
   exported and uploaded every minute by launchd (stillwet's `sync-studio.sh`).
 - Builder agents work from `notes/agent_brief_template.md`: the test
-  commands, the saved comparison results, the one-heavy-job rule
-  (`scripts/lockrun`) and the ban on painting replays in tests.
+  command, the saved comparison results, the one-heavy-job rule and the ban
+  on painting replays in tests.
+- CI on sakaki runs `scripts/test` on every pull request and push to main
+  (`.woodpecker/test.yaml`), beside the review (`.woodpecker/review.yaml`).
 - Working rules: never chain a commit or push after a merge in one command
   (a failed merge was once committed with conflict markers and pushed); create
   a worktree before spawning a subagent into it; a review subagent gets the

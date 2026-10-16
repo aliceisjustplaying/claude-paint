@@ -83,6 +83,23 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
                     await client.initialize()
                     yield client
 
+    async def call_done(self, client, name, arguments):
+        result = await client.call_tool(name, arguments)
+        pending = f"Call {arguments['call_id']} is still running. Retry this same call with the same call_id to get its result."
+        if not result.isError and len(result.content) == 1 and getattr(result.content[0], "text", None) == pending:
+            task = self.owner.tasks.get(arguments["call_id"])
+            if task is not None:
+                await asyncio.wait_for(asyncio.shield(task[1]), 5)
+            result = await client.call_tool(name, arguments)
+        return result
+
+    async def test_completed_call_retries_a_running_reply(self):
+        self.owner.response_wait = 0
+        async with self.client() as client:
+            result = await self.call_done(client, "paint", {"lua": "a", "call_id": "wait-1"})
+        self.assertEqual(result.content[0].text, "ok")
+        self.assertEqual(len(self.fake.calls), 1)
+
     async def test_bearer_auth_and_host_gate(self):
         async with httpx.AsyncClient() as http:
             for headers in ({}, {"Authorization": "Bearer wrong"}):
@@ -95,7 +112,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
     async def test_tools_require_call_id(self):
         async with self.client() as client:
             tools = await client.list_tools()
-            self.assertEqual([tool.name for tool in tools.tools], ["paint", "look", "note", "status", "log"])
+            self.assertEqual([tool.name for tool in tools.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
             for tool in tools.tools:
                 self.assertIn("call_id", tool.inputSchema["required"])
             result = await client.call_tool("paint", {"lua": "a"})
@@ -105,9 +122,9 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
     async def test_reconnect_returns_cached_result_once(self):
         arguments = {"lua": "a chunk", "call_id": "paint-1"}
         async with self.client() as client:
-            first = await client.call_tool("paint", arguments)
+            first = await self.call_done(client, "paint", arguments)
         async with self.client() as client:
-            second = await client.call_tool("paint", arguments)
+            second = await self.call_done(client, "paint", arguments)
             conflict = await client.call_tool("paint", dict(arguments, lua="a different chunk"))
         self.assertEqual(first.content, second.content)
         self.assertTrue(conflict.isError)
@@ -122,7 +139,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
             again = await client.call_tool("paint", arguments)
             self.assertIn("is still running", again.content[0].text)
             self.fake.gate.set()
-            done = await client.call_tool("paint", arguments)
+            done = await self.call_done(client, "paint", arguments)
             self.assertEqual(done.content[0].text, "ok")
         self.assertEqual(len(self.fake.calls), 1)
         self.assertNotIn("slow-1", self.owner.tasks)
@@ -133,7 +150,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
             await client.call_tool("paint", {"lua": "next", "call_id": "serial-2"})
             self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow"])
             self.fake.gate.set()
-            await client.call_tool("paint", {"lua": "next", "call_id": "serial-2"})
+            await self.call_done(client, "paint", {"lua": "next", "call_id": "serial-2"})
         self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow", "next"])
 
     async def test_dropped_client_does_not_cancel_chunk(self):
@@ -180,7 +197,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
         self.owner.max_completed = 2
         async with self.client() as client:
             for index in range(3):
-                await client.call_tool("paint", {"lua": "a", "call_id": f"count-{index}"})
+                await self.call_done(client, "paint", {"lua": "a", "call_id": f"count-{index}"})
             self.assertEqual(list(self.owner.completed), ["count-1", "count-2"])
             cached = await client.call_tool("paint", {"lua": "a", "call_id": "count-0"})
             self.assertEqual(cached.content[0].text, "ok")
@@ -207,14 +224,14 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
             self.fake.gate.set()
             await asyncio.gather(*work)
             await asyncio.sleep(0)
-            admitted = await client.call_tool("paint", extra)
+            admitted = await self.call_done(client, "paint", extra)
             self.assertEqual(admitted.content[0].text, "ok")
         self.assertEqual([args["lua"] for _, args in self.fake.calls], ["slow", "queued-0", "queued-1", "queued-2", "queued-3", "extra"])
 
     async def test_inline_image_and_verbatim_error(self):
         async with self.client() as client:
-            look = await client.call_tool("look", {"call_id": "look-1"})
-            error = await client.call_tool("paint", {"lua": "bad", "call_id": "error-1"})
+            look = await self.call_done(client, "look", {"call_id": "look-1"})
+            error = await self.call_done(client, "paint", {"lua": "bad", "call_id": "error-1"})
         self.assertEqual(look.content[1].mimeType, "image/png")
         self.assertEqual(base64.b64decode(look.content[1].data), base64.b64decode(PNG))
         self.assertTrue(error.isError)
@@ -237,8 +254,8 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
         url = f"http://127.0.0.1:{server.server_port}"
         try:
             async with self.client() as client:
-                await client.call_tool("paint", {"lua": "paint a mark", "call_id": "viewer-paint"})
-                await client.call_tool("look", {"call_id": "viewer-look"})
+                await self.call_done(client, "paint", {"lua": "paint a mark", "call_id": "viewer-paint"})
+                await self.call_done(client, "look", {"call_id": "viewer-look"})
             async with httpx.AsyncClient() as viewer_client:
                 sessions = (await viewer_client.get(url + "/api/sessions")).json()
                 self.assertTrue(sessions[0]["painter"])

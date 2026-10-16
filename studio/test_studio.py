@@ -340,6 +340,49 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
 
 
+def test_background_companions_update_without_new_log_bytes(home, server):
+    _, studio, log = home
+    buf = io.BytesIO()
+    S.Image.new("RGB", (20, 16), (100, 80, 60)).save(buf, "PNG")
+    colour = buf.getvalue()
+    log.write_text(start(str(studio)) + look("old", colour))
+    second = log.with_name("2026-09-30T10-00-00-000Z_s2.jsonl")
+    path = "out/easel/painting/65c0681641604c1b93c51bdcfd66302e.png"
+    marker = studio / "out/easel/painting/.display" / os.path.basename(path)
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"pending\n")
+    rows = look("new", colour).splitlines()
+    result_row = json.loads(rows[1])
+    result_row["message"]["content"].insert(0, {"type": "text", "text": path + " (20x16)"})
+    second.write_text(start(str(studio)) + rows[0] + "\n" + line(result_row))
+    initial = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    index = next(i for i, event in enumerate(initial["events"]) if event.get("img") == 1)
+    assert initial["events"][index]["display_pending"] is True
+    assert S.glance([str(log), str(second)])["look"] == 0
+    for light in S.DISPLAY_LIGHTS:
+        companion = studio / "out/easel/painting" / ("." + light) / os.path.basename(path)
+        companion.parent.mkdir()
+        companion.write_bytes(colour)
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1")[0] == 404
+    query = f"/api/events?p={PAINTER}&since={initial['total']}&epoch={initial['epoch']}&u={initial['nupdates']}"
+    assert json.loads(server(query)[1])["updates"] == []
+    pending = marker.with_suffix(".part")
+    pending.write_bytes(b"ready\n")
+    pending.replace(marker)
+    updated = json.loads(server(query)[1])
+    assert updated["events"] == []
+    assert [i for i, _ in updated["updates"]] == [index]
+    event = updated["updates"][0][1]
+    assert event["img"] == 1
+    assert event["display_pending"] is False
+    assert all(event[light] for light in S.DISPLAY_LIGHTS)
+    assert S.glance([str(log), str(second)])["look"] == 1
+    for light in S.DISPLAY_LIGHTS:
+        assert server(f"/img?p={PAINTER}&i=1&{light}=1") == (200, colour)
+    again = json.loads(server(query.rsplit("&u=", 1)[0] + f"&u={updated['nupdates']}")[1])
+    assert again["updates"] == []
+
+
 @pytest.mark.parametrize("light", S.DISPLAY_LIGHTS)
 def test_reading_a_saved_survey_tile_gets_its_gallery_companion(home, server, light):
     import base64
@@ -448,6 +491,93 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     front, card = render()
     assert "Finished" in card["og:title"]
     assert front["og:image"] == card["og:image"]
+
+
+def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_sitting(home, monkeypatch):
+    import export_static as E
+    tmp_path, studio, log = home
+    agy, done = "paint-studio-063cbb", "paint-studio-d64bb7"
+    tables = {
+        ("ps", "-Ao", "pid=,comm="): "  501 /opt/bin/pi\n  502 agy\n",
+        ("ps", "-wwAo", "args="): "\n".join([
+            f"/bin/uv run --no-project --script /Users/x/src/a/{agy}/bin/mcp/server.py --studio /Users/x/src/a/{agy}"
+            " --sittings --agy --break-seconds 0 --sessions-root /Users/x/.pi/agent/sessions",
+            f"/env/bin/python /Users/x/Art Work/{done}/bin/mcp/server.py --studio /Users/x/Art Work/{done} --sittings --agy",
+            "/env/bin/python /Users/x/work/watch.py --studio /Users/x/src/a/paint-studio-aaa111 --agy-dir /Users/x/.gemini",
+            "/env/bin/python /Users/x/src/a/paint-studio-bbb222/bin/mcp/server.py --studio /Users/x/src/a/paint-studio-bbb222",
+            "agy --agent easel-painter", ""]),
+    }
+
+    def run(cmd, **kw):
+        out = tables.get(tuple(cmd)) or ("p501\nfcwd\nn/Users/x/src/a/" + PAINTER + "\n" if cmd[1:3] == ["-a", "-p"] else "")
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+    monkeypatch.setattr(E.subprocess, "run", run)
+    assert E.working_studios() == {PAINTER, agy, done}
+
+    run_dir = tmp_path / "src/a/stillwet-runs/cowboy-zombie-agy/run"
+    (run_dir / "GEMINI").mkdir(parents=True)
+    (run_dir / "studios.json").write_text(json.dumps({"GEMINI1": agy}))
+    (run_dir / "GEMINI" / "p1_sittings.json").write_text('[{"sitting": 1, "part": 1, "status": "running"}]')
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+    sessions = [{"p": agy, "mtime": 1000.0}, {"p": done, "mtime": 1000.0}]
+    E.runner_states(sessions, E.working_studios(), 1060.0)
+    assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
+
+
+@pytest.mark.parametrize("state,working,age,outcome,active", [
+    ('{"sitting":1,"complete":false}', True, 60, None, True),
+    ('{"sitting":1,"complete":true}', True, 60, None, False),
+    ('{"sitting":1,"complete":false}', False, 60, None, False),
+    ('{"sitting":1,"complete":false}', True, 1800, None, False),
+    ('{"sitting":1,"complete":false}', True, -1, None, False),
+    ('{"sitting":1,"complete":false}', True, 60, {"status": "finished"}, False),
+    (None, True, 60, None, False),
+    ('{"complete":', True, 60, None, False),
+    ('[]', True, 60, None, False),
+    ('{}', True, 60, None, False),
+])
+def test_native_sitting_activity_requires_process_and_recent_session(home, monkeypatch, state, working, age, outcome, active):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "RUNS", str(root / "no-runner" / "studios.json"))
+    if state is not None:
+        (studio / "out/easel").mkdir(parents=True)
+        (studio / "out/easel/sittings.json").write_text(state)
+    session = {"p": PAINTER, "mtime": 1000, "outcome": outcome}
+    E.runner_states([session], {PAINTER} if working else set(), 1000 + age)
+    assert session["active"] is active
+    assert session["completed_at"] == (1000 if outcome else None)
+
+
+def test_native_sitting_exports_an_untitled_painter_as_live_without_overriding_runner_state(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "working_studios", lambda: {PAINTER})
+    log.write_text(start(str(studio)) + line({"type": "model_change", "modelId": "gemini-4-argon-high"})
+                   + look("l1", png_of("blue")))
+    (studio / "out/easel").mkdir(parents=True)
+    (studio / "out/easel/sittings.json").write_text('{"sitting":1,"complete":false}')
+    out = root / "export"
+    monkeypatch.setattr(sys, "argv", ["export_static.py", str(out)])
+    E.WRITTEN.clear()
+    E.main()
+    session, = json.loads((out / "data/sessions.json").read_text())
+    assert session["active"] is True
+    assert session["title"] is None
+    assert session["model"] == "gemini-4-argon-high"
+    assert "Live" in metadata(out / "index.html")["og:title"]
+    assert "Untitled, in progress" in (out / "index.html").read_text()
+
+    (root / "run/ARGON").mkdir(parents=True)
+    (root / "run/studios.json").write_text(json.dumps({"ARGON1": PAINTER}))
+    (root / "run/ARGON/p1_sittings.json").write_text('[{"status":"finished"}]')
+    E.runner_states([session], {PAINTER}, session["mtime"])
+    assert session["active"] is False
 
 
 def test_empty_and_imageless_exports_use_default_card(home):
@@ -742,6 +872,34 @@ def test_runner_discovery_includes_non_gallery_runs_and_digit_ending_lanes(home,
     p["outcome"] = None
     E.runner_states([p], {PAINTER}, p["mtime"])
     assert p["active"]
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_finished_painter_title_falls_back_to_the_runners_final_reply(home, server, monkeypatch, via):
+    tmp_path, studio, log = home
+    closing = "# *Winter Oak by the Bodden at Evening* (*Wintereiche am Bodden*)\n\nA solitary oak on a promontory."
+    log.write_text(start(str(studio)) + say(closing) + say("Of course, I'd be delighted to. Ask away."))
+    rd = tmp_path / "src/a/stillwet-runs/agy-fixture/run/ARGON"
+    rd.mkdir(parents=True)
+    (rd.parent / "studios.json").write_text(json.dumps({"ARGON1": PAINTER}))
+    (rd / "p1_final.txt").write_text(closing)
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+
+    def title():
+        S._lanes.update(at=0, map={})
+        if via == "live server":
+            entries = json.loads(server("/api/sessions")[1])
+        else:
+            out = tmp_path / "out"
+            assert export(tmp_path, out).returncode == 0
+            entries = json.loads((out / "data/sessions.json").read_text())
+        return next(s for s in entries if s.get("p") == PAINTER)["title"]
+
+    assert title() is None  # no runner outcome: the final reply isn't read
+    (rd / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "the painter is done"}))
+    assert title() == "Winter Oak by the Bodden at Evening"
+    log.write_text(start(str(studio)) + say(closing) + say("**The Blue Barn**\n\nA barn."))
+    assert title() == "The Blue Barn"  # a title in the session's own closing words wins
 
 
 def test_sittings_exclude_startup_only_crashes_but_keep_painting_and_final_review(home, server):

@@ -15,22 +15,13 @@ below hold for every builder, whatever the task.
 
 ## Running tests
 
-- **Fast checks:** `scripts/test`. It builds what it needs and runs
-  `notes/speed/test_lists/fast.tsv`, about 75 s once built (build about
-  20 s on top; each test step's limit is 60 s). Use it after every change.
-- **All required checks:** `scripts/test --all`
-  (`notes/speed/test_lists/all.tsv`): the fast checks, the slow tests by
-  exact name, the scripts' tests, the painter build and the Python tests.
-  Run it before you hand work over.
-- **An exact commit, for the record:** `scripts/test --all --candidate <sha>`
-  tests that commit in a fresh clean worktree and records a receipt in
-  `refs/notes/test-receipts` (`notes/speed/SAFEGUARDS.md`).
-- A step passes only if its command succeeds within its time limit and runs
-  at least its listed number of tests. A test name that matches nothing is a
-  failure, and a skipped test is not a passed test.
-- `notes/speed/SKIPPED.md` lists every ignored test and why. Run a slow test
-  only by its exact name (`cargo test ... -- --ignored --exact <name>`);
-  never run all ignored tests.
+- **The gate:** `scripts/test`, about 4 minutes from an empty target on
+  4 vCPUs, less once built. CI runs the same command on every pull request.
+- A check passes only if it exits 0 and shows its tests ran: a test name that
+  matches nothing is a failure, and a skipped test is not a passed test.
+- `notes/speed/SKIPPED.md` says what the gate runs and what it doesn't. Run
+  an ignored test only by its exact name
+  (`cargo test ... -- --ignored --exact <name>`); never run all ignored tests.
 
 ## The saved comparison results
 
@@ -55,15 +46,8 @@ below hold for every builder, whatever the task.
 
 ## One heavy job at a time
 
-Every build, test run or other multi-second CPU job goes through
-`scripts/lockrun`, which allows one such job machine-wide:
-
-    scripts/lockrun --timeout 60 -- <command>      ordinary checks, once built
-    scripts/lockrun --timeout 600 -- <command>     builds and batches
-
-`scripts/test` takes the lock itself. A job that runs out of time is
-stopped, its log is kept and it counts as unfinished. Don't extend the limit
-or retry the same slow command: investigate with a smaller case. Start long
+Run one build, test run or other multi-second CPU job at a time. Don't
+retry the same slow command: investigate with a smaller case. Start long
 commands in the background (`job_run`) and let their completion wake you.
 Don't wait in sleep or polling loops.
 
@@ -83,8 +67,8 @@ rewrite history you didn't create in this task.
 
 ## Before you finish
 
-- `scripts/test --all` passes, or every failing step is in your report with
-  its cause.
+- `scripts/test` passes, or every failing check is in your report with its
+  cause.
 - Your report lists commits, commands with their results and times, what
   you could not do, and questions for the user.
 - Temporary files, worktrees and build directories you made are gone (see

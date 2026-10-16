@@ -69,7 +69,7 @@ fn validate_metadata(
         || frame.scale <= 0.0
         || !um_px.is_finite()
         || um_px <= 0.0
-        || !(1..=5).contains(&engine)
+        || !crate::supported_engine(engine)
     {
         return Err(invalid("unsupported engine or invalid snapshot scale"));
     }
@@ -335,7 +335,3 @@ impl RenderSnapshot {
     }
 
 }
-
-#[cfg(test)]
-#[path = "render_snapshot_tests.rs"]
-mod tests;

@@ -60,11 +60,11 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		? `Read the painter's journal, ${JOURNAL}, and its note to you, ${TO_CRITIC}.`
 		: `Read the painter's journal, ${JOURNAL}. The painter hasn't left you a note.`;
 	const gets = occasion === "sitting"
-		? `It is saved in the studio as ${CRITIQUE}, and the painter reads it at the start of its next sitting.`
+		? `It is saved in the studio as ${CRITIQUE}, and the painter's next sitting opens with it.`
 		: `The painter reads it as soon as you finish, and it is saved in the studio as ${CRITIQUE}.`;
 	return [
 		why,
-		"Look at it as closely as you like: the whole canvas, detail crops, the other views and the palette. " + read,
+		"Look at it as closely as you like: the whole canvas, detail crops, the value, squint, mirror, relief and gallery views and the palette. " + read,
 		"Then tell the painter what you would fix and why, as one painter talking to another: what you see, what it does " +
 			"to the picture and what you would do about it. Your last message is what the painter gets. " + gets +
 			" The painter decides what to do with it.",

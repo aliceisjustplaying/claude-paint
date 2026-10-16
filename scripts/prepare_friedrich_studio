@@ -32,11 +32,11 @@ TOOLS = "paint,look,note,status,log,read,reference,reference_list"
 CRITIC_READING = (
     "\n\n"
     "Another painter visits your studio as a critic, at the end of each sitting\n"
-    "and whenever you ask for a visit with `ask_critic`. The critic sees what\n"
-    "`look` shows you and reads your journal and the note you give `ask_critic`\n"
-    "(kept in notes/to_critic.md); it doesn't paint. It writes what it would fix\n"
-    "and why in notes/critic.md, which you get at the start of your next sitting\n"
-    "or as `ask_critic`'s reply."
+    "and whenever you ask for a visit with `ask_critic`. The critic looks at the\n"
+    "painting with the same `look` you use and reads your journal and the note\n"
+    "you give `ask_critic` (kept in notes/to_critic.md); it doesn't paint. It\n"
+    "writes what it would fix and why in notes/critic.md, which you get at the\n"
+    "start of your next sitting or as `ask_critic`'s reply."
 )
 
 

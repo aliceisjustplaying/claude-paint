@@ -30,8 +30,8 @@ export default function critic(pi: ExtensionAPI) {
 		...read,
 		async execute(id, p, signal, onUpdate, ctx) {
 			const real = criticReadable(studio, p.path);
-			if (!real) throw new Error(`${p.path}: you can read ${JOURNAL}, ${TO_CRITIC} and the looks you take`);
-			if (!existsSync(real)) throw new Error(`${p.path}: the painter hasn't written it`);
+			if (!real) throw new Error(`${p.path}: you can read ${JOURNAL}, ${TO_CRITIC} and the easel's looks`);
+			if (!existsSync(real)) throw new Error(`${p.path}: there's no such file yet`);
 			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
 		},
 		executionMode: "sequential",

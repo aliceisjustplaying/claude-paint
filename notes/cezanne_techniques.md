@@ -307,8 +307,5 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Finishing
 
-- `save --gallery` (or `save --light az,el`) saves the picture lit on its
-  relief, as it would be seen on a wall; plain `save` is color only.
-
 - An unvarnished picture keeps its matte and glossy passages as painted.
   A varnish (where the easel has one) makes it all glossy: darks deepen.

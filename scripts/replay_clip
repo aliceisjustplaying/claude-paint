@@ -5,7 +5,11 @@
 #
 #   --every S        record a frame every S seconds of hand time (default 60)
 #   --length T       the clip's length in seconds, final hold included
-#                    (default 75)
+#                    (default 20)
+#   --fps N          video frames per second (default 30)
+#   --light MODE     gallery (default) or color; applies to replayed frames
+#                    (--reuse keeps the light already in the frames)
+#   --encoder-threads N  x264 workers (default 1); decode/filter each use 1
 #   --pace P         screen time goes as hand time^P (default 0.6): the
 #                    painting's first hours play slower and later hours
 #                    faster, so the long fine-detail stretch at the end doesn't
@@ -22,7 +26,7 @@
 #   --open-hold S    dynamic: show the bare canvas for S seconds first (default
 #                    0), taken out of the rest so the clip still runs --length
 #   --final-first S  open on the finished painting for S seconds, then cut to
-#                    the start (default 0); taken out of --length, so the
+#                    the start (default 0.5); taken out of --length, so the
 #                    painting is paced into --length - S - the final hold
 #   --width W        frame and clip width, px (default 1000)
 #   --frames-dir D   where the frames go (default: <out>.frames); with
@@ -42,7 +46,8 @@
 # frames.tsv with each frame's hand time. Each frame is then shown for as
 # long as the hand took until the next one, compressed by --pace and capped
 # by --max-hold; the final picture is held 3 s. H.264, yuv420p, faststart,
-# 24 fps. A clip that doesn't come out --length long, to within a video
+# 30 fps: by default 15 opening, 495 process and 90 final-hold frames.
+# A clip that doesn't come out --length long, to within a video
 # frame, is an error.
 set -euo pipefail
 # the log names its box, and the replay takes it from there: a box set in
@@ -52,12 +57,16 @@ unset EASEL_BOX
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 2 ] || usage
 log=$1 out=$2; shift 2
-every=60 length=75 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 openhold=0 finalfirst=0 reuse=0 maxhold=1 fps=24 hold=3
+every=60 length=20 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 openhold=0 finalfirst=0.5 reuse=0 maxhold=1 fps=30 hold=3
+light=gallery encoderthreads=1
 easel=""
 while [ $# -gt 0 ]; do
   case $1 in
     --every) every=$2; shift 2 ;;
     --length) length=$2; shift 2 ;;
+    --fps) fps=$2; shift 2 ;;
+    --light) light=$2; shift 2 ;;
+    --encoder-threads) encoderthreads=$2; shift 2 ;;
     --pace) pace=$2; shift 2 ;;
     --floor) floor=$2; shift 2 ;;
     --gamma) gamma=$2; shift 2 ;;
@@ -74,6 +83,13 @@ while [ $# -gt 0 ]; do
     *) usage ;;
   esac
 done
+[[ $fps =~ ^[1-9][0-9]*$ ]] || { echo "replay_clip: --fps must be a positive integer" >&2; exit 2; }
+[[ $encoderthreads =~ ^[1-9][0-9]*$ ]] || { echo "replay_clip: --encoder-threads must be a positive integer" >&2; exit 2; }
+case $light in
+  gallery) lightargs=(--gallery) ;;
+  color) lightargs=() ;;
+  *) echo "replay_clip: --light must be gallery or color" >&2; exit 2 ;;
+esac
 command -v ffmpeg >/dev/null || { echo "replay_clip: needs ffmpeg" >&2; exit 1; }
 dir=${dir:-$out.frames}
 
@@ -87,7 +103,7 @@ if [ "$reuse" = 0 ]; then
   fi
   rm -rf "$dir"
   t0=$(date +%s)
-  "$easel" run "$log" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" >/dev/null 2>"$dir.log" \
+  "$easel" run "$log" "${lightargs[@]}" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" >/dev/null 2>"$dir.log" \
     || { tail -20 "$dir.log" >&2; exit 1; }
   grep -E '^(frames|wrote)' "$dir.log" >&2
   echo "replay took $(( $(date +%s) - t0 )) s" >&2
@@ -161,9 +177,10 @@ if awk -v f="$finalfirst" 'BEGIN { exit !(f > 0) }'; then
   { printf "file '%s'\nduration %.5f\n" "${last//$q/$q\\$q$q}" "$finalfirst"; cat "$list"; } > "$list.tmp" && mv "$list.tmp" "$list"
 fi
 
-ffmpeg -loglevel error -y -f concat -safe 0 -i "$list" \
+awk -v fps="$fps" '{ print } /^file / { print "option framerate " fps }' "$list" > "$list.tmp" && mv "$list.tmp" "$list"
+ffmpeg -loglevel error -y -threads 1 -f concat -safe 0 -i "$list" -filter_threads 1 \
   -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,format=yuv420p" \
-  -c:v libx264 -crf 23 -preset slow -movflags +faststart "$out"
+  -c:v libx264 -threads:v "$encoderthreads" -crf 23 -preset slow -movflags +faststart "$out"
 ffprobe -v error -show_entries format=duration,size:stream=width,height,nb_frames -of compact "$out" >&2
 got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
 awk -v g="$got" -v l="$length" -v fps="$fps" 'BEGIN { d = g - l; exit !(d * d <= (1 / fps + 1e-6) ^ 2) }' \

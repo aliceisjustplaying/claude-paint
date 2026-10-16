@@ -195,6 +195,33 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(paint["required"], ["lua"])
         self.assertEqual(set(paint["properties"]), {"lua", "scratch", "new_scratch"})
 
+    async def test_notebook_tool_only_with_notebook_and_as_in_pi(self):
+        params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(self.studio), "--notebook"])
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                listed = (await session.list_tools()).tools
+                self.assertEqual([tool.name for tool in listed], ["paint", "look", "note", "status", "log", "notebook"])
+                source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
+                block = source.split('name: "notebook"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
+                self.assertEqual(listed[-1].description, "".join(ast.literal_eval(s) for s in re.findall(r'"(?:\\.|[^"\\])*"', block)))
+                self.assertEqual(listed[-1].inputSchema["required"], ["text"])
+                self.assertEqual(set(listed[-1].inputSchema["properties"]), {"text", "replaces"})
+                reply = await session.call_tool("notebook", {"text": "Glazes want a set underlayer."})
+                self.assertEqual(reply.content[0].text, f"noted in {self.studio.resolve() / 'notebook.md'}\n")
+                await session.call_tool("notebook", {"text": "Rags lift wet paint.\n"})
+                reply = await session.call_tool("notebook", {"text": "A set", "replaces": "Glazes want a set"})
+                self.assertEqual(reply.content[0].text, f"revised in {self.studio.resolve() / 'notebook.md'}\n")
+                for replaces, error in ((" ", "notebook: `replaces` is empty"), ("missing", "isn't in notebook.md"), ("et ", "more than once")):
+                    reply = await session.call_tool("notebook", {"text": "x", "replaces": replaces})
+                    self.assertTrue(reply.isError)
+                    self.assertIn(error, reply.content[0].text)
+        self.assertEqual((self.studio / "notebook.md").read_text(), "A set underlayer.\n\nRags lift wet paint.\n")
+        revisions = [json.loads(line) for line in (self.studio / "out/easel/notebook-revisions.jsonl").read_text().splitlines()]
+        self.assertEqual([sorted(r) for r in revisions], [["added", "at", "before"]] * 2 + [["at", "before", "replaced", "with"]])
+        self.assertEqual(revisions[1]["before"], "Glazes want a set underlayer.\n")
+        self.assertFalse((self.studio / "notes/journal.md").read_text())
+
     @connected
     async def test_paint_and_bare_environment(self):
         reply = await self.session.call_tool("paint", {"lua": "print('hello')", "scratch": True, "new_scratch": True})

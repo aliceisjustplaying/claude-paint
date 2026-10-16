@@ -1,0 +1,20 @@
+[
+  {
+    "name": "notebook",
+    "description": "Add to your notebook, notebook.md. It carries over from one painting to the next. To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "replaces": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    }
+  }
+]

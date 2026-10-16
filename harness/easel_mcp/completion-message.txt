@@ -1,0 +1,4 @@
+The painting is complete. Sitting {N} added no paint and had a whole-canvas look and a detail crop in normal color.
+
+Your journal (notes/journal.md):
+{JOURNAL}

@@ -493,6 +493,37 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     assert front["og:image"] == card["og:image"]
 
 
+def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_sitting(home, monkeypatch):
+    import export_static as E
+    tmp_path, studio, log = home
+    agy, done = "paint-studio-063cbb", "paint-studio-d64bb7"
+    tables = {
+        ("ps", "-Ao", "pid=,comm="): "  501 /opt/bin/pi\n  502 agy\n",
+        ("ps", "-wwAo", "args="): "\n".join([
+            f"/bin/uv run --no-project --script /Users/x/src/a/{agy}/bin/mcp/server.py --studio /Users/x/src/a/{agy}"
+            " --sittings --agy --break-seconds 0 --sessions-root /Users/x/.pi/agent/sessions",
+            f"/env/bin/python /Users/x/Art Work/{done}/bin/mcp/server.py --studio /Users/x/Art Work/{done} --sittings --agy",
+            "/env/bin/python /Users/x/work/watch.py --studio /Users/x/src/a/paint-studio-aaa111 --agy-dir /Users/x/.gemini",
+            "/env/bin/python /Users/x/src/a/paint-studio-bbb222/bin/mcp/server.py --studio /Users/x/src/a/paint-studio-bbb222",
+            "agy --agent easel-painter", ""]),
+    }
+
+    def run(cmd, **kw):
+        out = tables.get(tuple(cmd)) or ("p501\nfcwd\nn/Users/x/src/a/" + PAINTER + "\n" if cmd[1:3] == ["-a", "-p"] else "")
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+    monkeypatch.setattr(E.subprocess, "run", run)
+    assert E.working_studios() == {PAINTER, agy, done}
+
+    run_dir = tmp_path / "src/a/stillwet-runs/cowboy-zombie-agy/run"
+    (run_dir / "GEMINI").mkdir(parents=True)
+    (run_dir / "studios.json").write_text(json.dumps({"GEMINI1": agy}))
+    (run_dir / "GEMINI" / "p1_sittings.json").write_text('[{"sitting": 1, "part": 1, "status": "running"}]')
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+    sessions = [{"p": agy, "mtime": 1000.0}, {"p": done, "mtime": 1000.0}]
+    E.runner_states(sessions, E.working_studios(), 1060.0)
+    assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"
@@ -785,6 +816,34 @@ def test_runner_discovery_includes_non_gallery_runs_and_digit_ending_lanes(home,
     p["outcome"] = None
     E.runner_states([p], {PAINTER}, p["mtime"])
     assert p["active"]
+
+
+@pytest.mark.parametrize("via", ["live server", "static export"])
+def test_finished_painter_title_falls_back_to_the_runners_final_reply(home, server, monkeypatch, via):
+    tmp_path, studio, log = home
+    closing = "# *Winter Oak by the Bodden at Evening* (*Wintereiche am Bodden*)\n\nA solitary oak on a promontory."
+    log.write_text(start(str(studio)) + say(closing) + say("Of course, I'd be delighted to. Ask away."))
+    rd = tmp_path / "src/a/stillwet-runs/agy-fixture/run/ARGON"
+    rd.mkdir(parents=True)
+    (rd.parent / "studios.json").write_text(json.dumps({"ARGON1": PAINTER}))
+    (rd / "p1_final.txt").write_text(closing)
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+
+    def title():
+        S._lanes.update(at=0, map={})
+        if via == "live server":
+            entries = json.loads(server("/api/sessions")[1])
+        else:
+            out = tmp_path / "out"
+            assert export(tmp_path, out).returncode == 0
+            entries = json.loads((out / "data/sessions.json").read_text())
+        return next(s for s in entries if s.get("p") == PAINTER)["title"]
+
+    assert title() is None  # no runner outcome: the final reply isn't read
+    (rd / "p1_outcome.json").write_text(json.dumps({"status": "finished", "reason": "the painter is done"}))
+    assert title() == "Winter Oak by the Bodden at Evening"
+    log.write_text(start(str(studio)) + say(closing) + say("**The Blue Barn**\n\nA barn."))
+    assert title() == "The Blue Barn"  # a title in the session's own closing words wins
 
 
 def test_sittings_exclude_startup_only_crashes_but_keep_painting_and_final_review(home, server):

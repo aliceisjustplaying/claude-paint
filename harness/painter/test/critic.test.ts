@@ -37,7 +37,7 @@ test("the critic reads the journal, the note to it and the easel's looks, nothin
 
 test("a visit's message says what there is to read and where the notes go", () => {
 	const s = studio();
-	assert.match(visitMessage(s, "sitting"), /just ended a sitting[\s\S]*The painter hasn't left you a note\.[\s\S]*at the start of its next sitting/);
+	assert.match(visitMessage(s, "sitting"), /just ended a sitting[\s\S]*The painter hasn't left you a note\.[\s\S]*next sitting opens with it/);
 	writeFileSync(join(s, "notes/to_critic.md"), "the sky?\n");
 	assert.match(visitMessage(s, "asked"), /asked you to visit[\s\S]*its note to you, notes\/to_critic\.md\.[\s\S]*as soon as you finish/);
 	const args = criticArgs(s, { args: ["--model", "m"], dir: "/c" }, "asked", "/h");

@@ -184,7 +184,7 @@ pub fn exchange_kj() -> (f32, f32) {
 /// constant. A power of two, so quarter minutes fall on it exactly.
 pub const FLOW_TICKS: u32 = 64;
 
-type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32);
+type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32, f32);
 
 #[derive(Default)]
 struct FlowScratch {
@@ -285,6 +285,10 @@ impl Canvas {
         // (`bristle::surface_oil`)
         let drain = self.drain;
         let packed = |wet: &crate::wet::Wet, i: usize| if drain { wet.hide[i][7].clamp(0.0, 1.0) } else { 0.0 };
+        // and paint the flow brings to a pixel is laid there as a brush lays
+        // it (`Surf::add`): fluid, and drained by the ground under it while
+        // its pores take oil, from that pixel's absorbency
+        let soaks = drain && self.engine >= 4 && self.absorb_any;
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
         // the mobility (mm²/min) of each pixel in the dirty box
@@ -339,6 +343,7 @@ impl Canvas {
             let (rw, rh) = (x1 - x0, y1 - y0);
             let wet = &self.wet;
             let height = &self.height;
+            let absorb = &self.absorb;
             let sparse = active.len() < rw * rh / 8;
             indices.clear();
             if sparse {
@@ -460,12 +465,19 @@ impl Canvas {
                         ps += qs;
                         changed = true;
                     }
+                    // (the drain switch: the ground here drains the film the
+                    // paint came into, as `Surf::add` does; what is left of
+                    // its pores goes back with the rest)
+                    let mut cap = if soaks { absorb[i] } else { 0.0 };
+                    if soaks && qin > 0.0 {
+                        pv = crate::bristle::ground_drain(&mut cap, pv, &mut hide);
+                    }
                     let cure = if pv <= 0.0 { 0.0 } else { cure };
                     // (the drying thickness a bare pixel takes, by amount)
                     let own = th_of(i);
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
                     let flowing = if drain { pv * (1.0 - hide[7].clamp(0.0, 1.0)) } else { pv };
-                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in)
+                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in, cap)
                 })
                 .collect_into_vec(&mut next);
             // the largest mobility now: every pixel that has any is in the
@@ -476,7 +488,7 @@ impl Canvas {
             active.extend(next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))));
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.iter().copied().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap)) in next.iter().copied().enumerate() {
                 if !changed {
                     continue;
                 }
@@ -492,6 +504,9 @@ impl Canvas {
                 self.wet.solv[i] = ps * COAT_UM;
                 self.wet.lat[i] = lat;
                 self.wet.hide[i] = hide;
+                if soaks {
+                    self.absorb[i] = cap;
+                }
                 if was_bare && pv >= 1e-5 {
                     self.wet.cover[i] = 1.0;
                 }
@@ -1157,5 +1172,51 @@ mod tests {
         assert!(fluid.2 > 0.0 && half.2 > 0.0 && half.1.iter().all(|&v| v >= 1.0 - 1e-6), "half packed keeps its packed paint: {:?}", half.1);
         assert!(half.2 / half.3 < fluid.2 / fluid.3, "the liquid above packed paint is leaner: {} < {}", half.2 / half.3, fluid.2 / fluid.3);
         assert!(run(false, 1.0).0 == fluid.0, "without the switch the packed share is not read");
+    }
+
+    /// With the drain switch, thinned paint that flows off a film whose
+    /// ground is saturated onto bare absorbent ground is laid there as a
+    /// brush lays it (`Surf::add`): the ground drains it (`ground_drain`),
+    /// so its packed share rises and the ground's absorbency there falls by
+    /// the oil it took, and the paint is thinner by that oil. Without the
+    /// switch the flow doesn't read the absorbency: it moves the paint as on
+    /// an oil ground and leaves the absorbency as it was; with the switch on
+    /// an oil ground it flows as without it.
+    #[test]
+    fn paint_the_flow_brings_onto_absorbent_ground_drains_there() {
+        let run = |drain: bool, absorbent: f32| {
+            let mut c = canvas(5).with_drain(drain);
+            c.ground_finish(absorbent);
+            c.wet.ensure_solvent();
+            let (w, y) = (c.f.w, c.f.h / 2);
+            let lat = sienna(0.0).latent();
+            let src = y * w + 60;
+            // (thick paint under as much solvent: the ground under it took
+            // all it could)
+            c.wet.vol[src] = 3.0;
+            c.wet.solv[src] = 3.0 * super::COAT_UM;
+            c.wet.lat[src] = lat;
+            c.wet.hide[src] = [0.8, 0.0, 1.0, 0.0, 0.9, 0.7, 0.6, 0.0, 0.5, 0.0];
+            c.wet.stroke[src] = 1;
+            c.absorb[src] = 0.0;
+            let mut solvent = vec![src];
+            c.spread(10.0, &mut solvent);
+            let near: Vec<usize> = [src - 1, src + 1, src - w, src + w].into();
+            (c.wet.vol.clone(), c.wet.solv.clone(), c.wet.hide.clone(), c.absorb.clone(), near)
+        };
+        let full = crate::canvas::ABSORB_COATS;
+        let (vol, _, hide, absorb, near) = run(true, 1.0);
+        for &j in &near {
+            assert!(vol[j] > 0.0 && hide[j][7] > 0.5 && absorb[j] < full - 1e-4, "drained where it came: {} coats packed {} absorbency {}", vol[j], hide[j][7], absorb[j]);
+            assert!(hide[j][4] < 0.9, "leaner: {:?}", hide[j]);
+        }
+        let (off, oil) = (run(false, 1.0), run(false, 0.0));
+        assert!(off.0 == oil.0 && off.1 == oil.1 && off.2 == oil.2, "without the switch the absorbency is not read");
+        assert!(off.3.iter().filter(|&&a| a != full).count() == 1, "nor changed (but under the source, set saturated)");
+        for &j in &near {
+            assert!(off.2[j][7] == 0.0 && vol[j] < off.0[j], "unpacked, and thicker by the oil: {} > {}", off.0[j], vol[j]);
+        }
+        let on_oil = run(true, 0.0);
+        assert!(on_oil.0 == oil.0 && on_oil.1 == oil.1 && on_oil.2 == oil.2, "on an oil ground the switch changes nothing here");
     }
 }

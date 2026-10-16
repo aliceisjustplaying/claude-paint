@@ -131,7 +131,10 @@ export class HousePainter implements Painter {
       this.log({ event: "painter_dry_run", studio: dir, command: ["pi", ...this.args(job)] });
       return { stopped: null };
     }
-    if (!existsSync(dir)) cpSync(resolve(this.config.studio.template), dir, { recursive: true, verbatimSymlinks: true });
+    if (!existsSync(dir)) {
+      cpSync(resolve(this.config.studio.template), dir, { recursive: true, verbatimSymlinks: true });
+      await exec("chmod", ["-R", "u+w", dir]);
+    }
     writeFileSync(join(dir, "BRIEF.md"), job.brief);
     mkdirSync(sessions, { recursive: true });
     const previous = readdirSync(sessions).filter(name => name.endsWith(".jsonl")).sort().at(-1);

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { loadConfig, validateConfig } from "../src/config.ts";
 import { CONTINUE_MESSAGE, HousePainter, overLimit, PAINTER_MSG, painterJob, UsageMeter } from "../src/painter.ts";
@@ -43,19 +43,26 @@ function setup(t: { after(fn: () => void): void }, script: string, change: (conf
   const job = painterJob(item, { uri: item.uri, cid: item.cid }, "Paint a red stroke", config);
   t.after(() => {
     try { execFileSync(join(painter.studio(job), "bin/easel"), ["close"], { cwd: painter.studio(job), stdio: "ignore", timeout: 60000 }); } catch { /* no server */ }
+    execFileSync("chmod", ["-R", "u+w", dir]);
     rmSync(dir, { recursive: true, force: true });
   });
   const messages = () => readFileSync(asked, "utf8").trim().split("\n").map(line => JSON.parse(line) as string);
   return { config, painter, job, logs, messages, studio: painter.studio(job), sessions: painter.sessions(job) };
 }
 
-test("the house painter paints a short test painting in a copy of the house studio and hands back a fitted JPEG", async t => {
-  const f = setup(t, "paint");
+test("the house painter paints a short test painting in a copy of a read-only house studio and hands back a fitted JPEG", async t => {
+  const f = setup(t, "paint", c => {
+    const readOnly = join(dirname(c.database), "template");
+    cpSync(c.studio.template, readOnly, { recursive: true });
+    execFileSync("chmod", ["-R", "a-w", readOnly]);
+    c.studio.template = readOnly;
+  });
   const run = await f.painter.run(f.job, new AbortController().signal, Date.now());
   assert.deepEqual(run, { stopped: null });
   assert.equal(readFileSync(join(f.studio, "BRIEF.md"), "utf8"), f.job.brief);
   assert.deepEqual(readFileSync(join(f.studio, "bin/easel")), readFileSync(join(f.config.studio.template, "bin/easel")));
   assert.equal(readFileSync(join(f.studio, "bin/box"), "utf8").trim(), "every");
+  assert.equal(execFileSync("find", [f.studio, "!", "-perm", "-u+w"], { encoding: "utf8" }), "");
   assert.equal(f.messages().length, 4);
   assert.equal(f.messages()[0], PAINTER_MSG);
   assert.equal(readdirSync(f.sessions).filter(name => name.endsWith(".jsonl")).length, 1);

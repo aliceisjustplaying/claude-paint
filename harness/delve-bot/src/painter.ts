@@ -83,9 +83,9 @@ export class UsageMeter {
 }
 
 export function overLimit(usage: Usage, studio: Config["studio"]): string | null {
-  if (usage.input >= studio.maxInputTokens) return "input_tokens";
-  if (usage.output >= studio.maxOutputTokens) return "output_tokens";
-  if (usage.cost >= studio.maxCostUsd) return "cost";
+  if (studio.maxInputTokens != null && usage.input >= studio.maxInputTokens) return "input_tokens";
+  if (studio.maxOutputTokens != null && usage.output >= studio.maxOutputTokens) return "output_tokens";
+  if (studio.maxCostUsd != null && usage.cost >= studio.maxCostUsd) return "cost";
   return null;
 }
 
@@ -154,7 +154,7 @@ export class HousePainter implements Painter {
     };
     const check = () => {
       if (signal.aborted) stop("canceled");
-      else if (Date.now() - started >= this.config.studio.maxWallSeconds * 1000) stop("time");
+      else if (this.config.studio.maxWallSeconds != null && Date.now() - started >= this.config.studio.maxWallSeconds * 1000) stop("time");
       else { const reason = overLimit(meter.usage(), this.config.studio); if (reason) stop(reason); }
     };
     const poll = setInterval(check, 1000);
@@ -173,8 +173,8 @@ export class HousePainter implements Painter {
     const dir = this.studio(job), sessions = this.sessions(job), easel = join(dir, "bin/easel");
     const png = join(dir, "out/easel/painting/painting.png"), jpeg = join(sessions, "painting.jpg");
     rmSync(png, { force: true });
-    await exec(easel, ["save"], { cwd: dir, timeout: 600000 });
-    await exec(easel, ["close"], { cwd: dir, timeout: 60000 });
+    try { await exec(easel, ["save"], { cwd: dir, timeout: 600000 }); }
+    finally { await exec(easel, ["close"], { cwd: dir, timeout: 60000 }).catch(() => {}); }
     const source = readFileSync(png);
     const s = this.config.studio, w = source.readUInt32BE(16), h = source.readUInt32BE(20);
     const scale = Math.min(1, s.width / w, s.height / h);

@@ -39,7 +39,7 @@ export interface Config {
     enabled: boolean;
     includeLink: boolean;
     concurrent: 1;
-    maxSeconds: number;
+    maxSeconds?: number | null;
     width: number;
     height: number;
     fps: number;
@@ -83,10 +83,10 @@ export interface Config {
     root: string;
     sessions: string;
     harness: string;
-    maxWallSeconds: number;
-    maxInputTokens: number;
-    maxOutputTokens: number;
-    maxCostUsd: number;
+    maxWallSeconds?: number | null;
+    maxInputTokens?: number | null;
+    maxOutputTokens?: number | null;
+    maxCostUsd?: number | null;
   };
 }
 

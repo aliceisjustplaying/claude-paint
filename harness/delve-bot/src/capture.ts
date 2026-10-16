@@ -18,7 +18,7 @@ export function ffmpegArgs(config: Config, destination: string): string[] {
     "-c:v", "libx264", "-preset", "ultrafast", "-threads", "2", "-pix_fmt", "yuv420p",
     "-s", `${s.width}x${s.height}`, "-b:v", `${s.videoKbps}k`, "-maxrate", `${s.videoKbps}k`,
     "-bufsize", `${s.videoKbps * 2}k`, "-g", String(s.fps), "-bf", "0",
-    "-c:a", "aac", "-b:a", `${s.audioKbps}k`, "-t", String(s.maxSeconds), "-f", "flv", destination];
+    "-c:a", "aac", "-b:a", `${s.audioKbps}k`, ...(s.maxSeconds == null ? [] : ["-t", String(s.maxSeconds)]), "-f", "flv", destination];
 }
 
 export async function capturePage(config: Config, viewerUrl: string, destination: string, signal: AbortSignal): Promise<Capture> {

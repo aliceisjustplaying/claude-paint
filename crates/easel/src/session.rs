@@ -544,10 +544,7 @@ impl Session {
                 board.visit(p.heap, 0.0);
                 let mut projected = p.clone();
                 if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
-                    projected.mix = st.tubes.pile(h.fractions());
-                    projected.mix.solvent = h.solvent;
-                    projected.mix.oil_rate = h.oil_rate;
-                    projected.mix.wax_kept = h.wax_kept;
+                    projected.mix = h.mixture(&st.tubes);
                     projected.medium = h.medium;
                     projected.thinner = projected.thinner.map(|_| h.thinner);
                 }
@@ -2704,7 +2701,7 @@ mod tests {
         close(&get(&s, "mc"), (dw + dz * POPPY_RATE) / 2.0);
         let mn = get(&s, "mn");
         close(&mn, ((dw * POPPY_RATE + dv) / 2.0 + dz * POPPY_RATE) / 2.0);
-        assert!(mn.mix.as_tubes_come(), "{}", mn.recipe());
+        assert!(mn.mix.tubes_come, "{}", mn.recipe());
         // (wax: the Impressionists' cobalt comes in poppy with wax, their
         // vermilion in linseed with wax)
         let mut s = Session::with_box(W, find_box("impressionist").unwrap()).unwrap().with_oils(true);
@@ -2720,6 +2717,41 @@ mod tests {
         close(&w, (co.pigment_drying * POPPY_RATE + ve.pigment_drying * WAX_RATE) / 2.0);
         let wax = ve.oil_volume / (co.oil_volume + ve.oil_volume);
         assert!((w.mix.laid(0.0).wax - wax).abs() < 1e-5, "{} for {wax}", w.mix.laid(0.0).wax);
+    }
+
+    /// With the oils switch a dip jittered from a mix of piles in different
+    /// oils (`Palette::remix`, as each brush load, stipple and work pass
+    /// takes one) keeps each part in the oil it is in and dries at the dip's
+    /// own proportions: Sargent's lead white reground in linseed knifed with
+    /// his vermilion reground in poppy and his zinc white as it comes (in
+    /// poppy).
+    #[test]
+    #[cfg(feature = "box-sargent")]
+    fn a_dip_from_a_mix_keeps_each_part_in_its_oil() {
+        use paint::palette::POPPY_RATE;
+        let mut s = Session::with_box(W, find_box("sargent").unwrap()).unwrap().with_oils(true);
+        s.run(CANVAS).unwrap();
+        s.run(r#"a = pile{{"lead white", 1}, oil="linseed"}; b = pile{{"vermilion", 1}, oil="poppy"}; c = pile{{"zinc white", 1}}
+                 m = mix{{a, 1}, {b, 2}, {c, 1}}"#)
+            .unwrap();
+        let m = match &s.globals["m"].0 {
+            Value::UserData(u) => u.borrow::<api::PileU>().unwrap().current(),
+            o => panic!("m is {o:?}"),
+        };
+        let tubes = s.st.borrow().tubes.clone();
+        let own = |n: &str| {
+            let i = tubes.tubes.iter().position(|t| t.name == n).unwrap();
+            (i, tubes.pile(vec![(i, 1.0)]).pigment_drying)
+        };
+        let ((lw, dw), (v, dv), (zw, dz)) = (own("lead white"), own("vermilion"), own("zinc white"));
+        let want = |f: &dyn Fn(usize) -> f32| (f(lw) * dw + f(v) * dv * POPPY_RATE + f(zw) * dz * POPPY_RATE) / (f(lw) + f(v) + f(zw));
+        let f0 = |i: usize| m.mix.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+        assert!((m.mix.laid(0.0).drying - want(&f0)).abs() < 1e-5, "{}: {} for {}", m.recipe(), m.mix.laid(0.0).drying, want(&f0));
+        for seed in 0..60 {
+            let dip = tubes.remix(&m.mix, 1.0, &mut paint::Rng::new(seed));
+            let f = |i: usize| dip.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+            assert!((dip.laid(0.0).drying - want(&f)).abs() < 1e-5, "seed {seed}: {} for {}", dip.laid(0.0).drying, want(&f));
+        }
     }
 
     /// A gesture's points are checked before its curve is sampled (a point

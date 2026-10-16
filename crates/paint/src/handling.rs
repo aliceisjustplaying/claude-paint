@@ -1002,12 +1002,11 @@ impl Canvas {
 /// Graded color (`Handling::piles_at`): the piles mixed by their weights
 /// here (each pile, its medium, its thinner and its weight, the weights
 /// summing to 1), and the medium and thinner mixed alike. With the oils
-/// switch each pile's part dries as that pile does, in the oil it is in
-/// (`palette::held_by`).
+/// switch each part keeps the oil it is in (`palette::Knifed`).
 pub(crate) fn graded_mix<'m>(pal: &Palette, ps: impl Iterator<Item = (&'m crate::palette::Mixture, f32, f32, f32)>) -> (crate::palette::Mixture, f32, f32) {
     let mut parts: Vec<(usize, f32)> = Vec::new();
     let (mut med, mut thinner, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
-    let mut held = Vec::new();
+    let mut knifed = crate::palette::Knifed::default();
     for (m, md, th, wk) in ps {
         if wk <= 0.0 {
             continue;
@@ -1023,18 +1022,20 @@ pub(crate) fn graded_mix<'m>(pal: &Palette, ps: impl Iterator<Item = (&'m crate:
         thinner += wk * th;
         solv += wk * m.solvent;
         if pal.oils {
-            held.push((m, wk));
+            knifed.pile(m, wk / ms);
         } else {
             oilr += wk * m.oil_rate;
         }
     }
+    if pal.oils {
+        let grind = knifed.grind(pal, &parts);
+        let mut mix = pal.pile_ground(parts, grind);
+        mix.solvent = solv;
+        return (mix, med, thinner);
+    }
     let mut mix = pal.pile(parts);
     mix.solvent = solv;
-    if !pal.oils {
-        mix.oil_rate = oilr;
-    } else if let Some((rate, wax)) = crate::palette::held_by(&held) {
-        mix.held(rate, wax);
-    }
+    mix.oil_rate = oilr;
     (mix, med, thinner)
 }
 
@@ -1457,8 +1458,8 @@ mod tests {
     /// Graded color mixes its piles by their weights: with the oils switch
     /// each pile's part dries as that pile does, in the oil it is in (a pile
     /// reground in linseed, one as its tubes come), and its wax follows the
-    /// oil each brings; without the switch the oil rates mix by weight, as
-    /// before.
+    /// oil each brings, and a dip jittered from the mix keeps each part in
+    /// its oil; without the switch the oil rates mix by weight, as before.
     #[test]
     #[cfg(feature = "box-sargent")]
     fn graded_piles_dry_part_by_part_in_their_oils() {
@@ -1467,17 +1468,25 @@ mod tests {
         pal.oils = true;
         let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
         let (lw, v, zw) = (at("lead white"), at("vermilion"), at("zinc white"));
-        let mut a = pal.pile(vec![(lw, 0.5), (v, 0.5)]);
-        a.reground(Oil::Linseed);
+        let a = pal.reground(&pal.pile(vec![(lw, 0.5), (v, 0.5)]), Oil::Linseed);
         let b = pal.pile(vec![(zw, 1.0)]);
         let (dw, dv) = (pal.pile(vec![(lw, 1.0)]).pigment_drying, pal.pile(vec![(v, 1.0)]).pigment_drying);
         let (m, med, th) = graded_mix(&pal, [(&a, 0.2, 0.0, 0.25), (&b, 0.0, 0.4, 0.75)].into_iter());
         let want = 0.25 * (dw + dv) / 2.0 + 0.75 * b.pigment_drying * POPPY_RATE;
         assert!((m.rate() - want).abs() < 1e-6 && (m.laid(0.0).drying - want).abs() < 1e-6, "{} for {want}", m.rate());
         assert!((med - 0.05).abs() < 1e-6 && (th - 0.3).abs() < 1e-6);
+        // (each dip jittered from it, `Palette::remix`, at its own parts in
+        // their oils)
+        let dz = b.pigment_drying;
+        for seed in 0..50 {
+            let dip = pal.remix(&m, 0.8, &mut Rng::new(seed));
+            let f = |i: usize| dip.parts.iter().find(|p| p.0 == i).map_or(0.0, |p| p.1);
+            let want = (f(lw) * dw + f(v) * dv + f(zw) * dz * POPPY_RATE) / (f(lw) + f(v) + f(zw));
+            assert!((dip.laid(0.0).drying - want).abs() < 1e-5, "seed {seed}: {} for {want}", dip.laid(0.0).drying);
+        }
         // (as their tubes come, graded piles are as theirs come)
         let (m, _, _) = graded_mix(&pal, [(&pal.pile(vec![(lw, 1.0)]), 0.0, 0.0, 0.5), (&b, 0.0, 0.0, 0.5)].into_iter());
-        assert!(m.as_tubes_come());
+        assert!(m.tubes_come);
         // (without the switch: the oil rates by weight)
         pal.oils = false;
         let (mut a, b) = (pal.pile(vec![(lw, 1.0)]), pal.pile(vec![(v, 1.0)]));

@@ -37,10 +37,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
     let mut labels = Vec::new();
     for (n, h) in heaps.iter().enumerate() {
         let (cx, cy) = ((n % COLS) as f32 * CELL_W, (n / COLS) as f32 * CELL_H);
-        let mut mix = tubes.pile(h.fractions());
-        mix.solvent = h.solvent;
-        mix.oil_rate = h.oil_rate;
-        mix.wax_kept = h.wax_kept;
+        let mix = h.mixture(&tubes);
         let paint = mix.laid(h.medium);
         // the heap: a thick slab, the bead left standing where the knife lifts
         let mut k = Knife::new(46.0);

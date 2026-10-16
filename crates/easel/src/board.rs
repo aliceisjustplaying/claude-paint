@@ -16,6 +16,7 @@
 //! pile it was knifed as: old logs replay as they always did.
 
 use paint::Palette;
+use paint::palette::{Knifed, Mixture};
 
 /// Heaps that stay on the board; the oldest beyond this is scraped off.
 pub const LIVE: usize = 16;
@@ -40,9 +41,11 @@ pub struct Heap {
     pub medium: f32,
     pub solvent: f32,
     pub oil_rate: f32,
-    /// With the oils switch, the share of its tubes' wax still in it
-    /// (`Mixture::wax_kept`): 1 as they come, 0 reground (`pile{oil=}`).
-    pub wax_kept: f32,
+    /// With the oils switch, the oil each of its parts is in, aligned with
+    /// `parts` (`Mixture::grind`; empty without the switch): as its tubes
+    /// come, reground (`pile{oil=}`), or by volume as heaps and tube paint
+    /// were knifed together. Its dirt is in its tubes' own oils.
+    pub grind: Vec<(f32, f32)>,
     pub thinner: f32,
     /// Paint other brushes left in it: (tube, volume).
     pub dirt: Vec<(usize, f32)>,
@@ -74,6 +77,28 @@ impl Heap {
         all.retain(|p| p.1 > 0.0);
         all.iter_mut().for_each(|p| p.1 /= s.max(1e-9));
         all
+    }
+    /// Its paint as a mixture of `tubes` (its parts and dirt, `fractions`),
+    /// with its turpentine and oil; with the oils switch each part in the
+    /// oil it is in (`grind`).
+    pub fn mixture(&self, tubes: &Palette) -> Mixture {
+        let fr = self.fractions();
+        let mut mix = if self.grind.is_empty() {
+            tubes.pile(fr)
+        } else {
+            let mut k = Knifed::default();
+            for (&(i, v), &g) in self.parts.iter().zip(&self.grind) {
+                k.part(i, v, g);
+            }
+            for &(i, v) in &self.dirt {
+                k.part(i, v, tubes.own_grind(i));
+            }
+            let grind = k.grind(tubes, &fr);
+            tubes.pile_ground(fr, grind)
+        };
+        mix.solvent = self.solvent;
+        mix.oil_rate = self.oil_rate;
+        mix
     }
     /// The share of what a brush takes that is dirt.
     pub fn dirt_share(&self) -> f32 {
@@ -117,7 +142,7 @@ impl Board {
     pub fn knife(&mut self, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, wax_kept: 1.0, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
+        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, grind: Vec::new(), thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
         if self.dirty > 0.0 && self.residue_amount > 0.0 {
             let v = SEEP * self.dirty * self.residue_amount;
             h.dirt = self.residue.iter().map(|&(i, f)| (i, f * v)).collect();
@@ -204,7 +229,9 @@ impl Board {
 
     /// Knife more tube paint into heap `id`: `add` in the heap's own parts
     /// (as its recipe was given), with the added paint's `medium` (0: from the tube).
-    pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32) -> Result<(), String> {
+    /// With the oils switch the added paint comes in its tubes' own oils
+    /// (`tubes`), beside the oil the heap's paint is in (`Heap::grind`).
+    pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32, tubes: &Palette) -> Result<(), String> {
         if self.heap(id).is_none() {
             return Err("p:add: that pile is no longer on the palette".into());
         }
@@ -219,19 +246,37 @@ impl Board {
             return Err("p:add: more paint than the heap can count".into());
         }
         let mut added = 0.0;
+        let ground = !h.grind.is_empty();
         for &(i, v) in add {
             let v = v * k;
             added += v;
-            match h.parts.iter_mut().find(|p| p.0 == i) {
-                Some(p) => p.1 += v,
-                None => h.parts.push((i, v)),
+            match h.parts.iter().position(|p| p.0 == i) {
+                Some(j) => {
+                    if ground {
+                        // (the oils switch: the part's oil by volume, its
+                        // paint's and the added tube paint's)
+                        let (p, o, g) = (h.parts[j].1, tubes.own_grind(i), h.grind[j]);
+                        let s = (p + v).max(1e-12);
+                        h.grind[j] = ((p * g.0 + v * o.0) / s, (p * g.1 + v * o.1) / s);
+                    }
+                    h.parts[j].1 += v;
+                }
+                None => {
+                    h.parts.push((i, v));
+                    if ground {
+                        h.grind.push(tubes.own_grind(i));
+                    }
+                }
             }
         }
         h.medium = (h.medium * before + medium * added) / (before + added).max(1e-9);
         let retained = before / (before + added).max(1e-9);
         h.solvent *= retained;
         h.thinner *= retained;
-        h.oil_rate = h.oil_rate * retained + (1.0 - retained);
+        // (with the oils switch each part keeps its oil, `grind`)
+        if !ground {
+            h.oil_rate = h.oil_rate * retained + (1.0 - retained);
+        }
         h.changed = true;
         h.added = true;
         h.scraped = false;
@@ -286,6 +331,11 @@ impl Board {
 mod tests {
     use super::*;
 
+    /// A box to knife from (the oils switch off: as before).
+    fn tubes() -> Palette {
+        Palette::named_box(Palette::fallback_box()).unwrap()
+    }
+
     #[test]
     fn a_clean_board_leaves_heaps_as_knifed() {
         let mut b = Board::default();
@@ -322,7 +372,7 @@ mod tests {
         let mut b = Board::default();
         // knifed as {"white", 4}, {"blue", 1}: fractions 0.8, 0.2, given sum 5
         let a = b.knife(vec![(0, 0.8), (1, 0.2)], 5.0, 0.0, 0.0, 1.0, None);
-        b.add(a, &[(1, 1.0)], 0.0).unwrap();
+        b.add(a, &[(1, 1.0)], 0.0, &tubes()).unwrap();
         let f = b.heap(a).unwrap().fractions();
         let blue = f.iter().find(|p| p.0 == 1).unwrap().1;
         assert!((blue - 2.0 / 6.0).abs() < 1e-5, "4 white + 2 blue: a third blue ({blue})");
@@ -332,7 +382,7 @@ mod tests {
     fn added_tube_paint_dilutes_the_turps_and_the_oil() {
         let mut b = Board::default();
         let a = b.knife(vec![(0, 1.0)], 1.0, 0.0, 0.4, 0.6, None);
-        b.add(a, &[(0, 1.0)], 0.0).unwrap();
+        b.add(a, &[(0, 1.0)], 0.0, &tubes()).unwrap();
         let h = b.heap(a).unwrap();
         assert!((h.solvent - 0.2).abs() < 1e-6 && (h.oil_rate - 0.8).abs() < 1e-6, "{} {}", h.solvent, h.oil_rate);
     }
@@ -343,7 +393,7 @@ mod tests {
         // a tiny recipe sum makes each added part a vast volume
         let a = b.knife(vec![(0, 1.0)], 1e-30, 0.0, 0.0, 1.0, None);
         let before = b.heap(a).unwrap().clone();
-        assert!(b.add(a, &[(0, f32::MAX)], 0.0).is_err());
+        assert!(b.add(a, &[(0, f32::MAX)], 0.0, &tubes()).is_err());
         let h = b.heap(a).unwrap();
         assert_eq!((h.parts.clone(), h.medium, h.solvent, h.oil_rate), (before.parts, before.medium, before.solvent, before.oil_rate));
         assert!(h.fractions().iter().all(|p| p.1.is_finite()));
@@ -361,7 +411,7 @@ mod tests {
             b.knife(vec![(1, 1.0)], 1.0, 0.0, 0.0, 1.0, None);
         }
         assert!(b.heap(first).unwrap().scraped);
-        b.add(first, &[(0, 1.0)], 0.0).unwrap();
+        b.add(first, &[(0, 1.0)], 0.0, &tubes()).unwrap();
         let h = b.heap(first).unwrap();
         assert!(!h.scraped && h.dirt.is_empty());
         assert_eq!(b.heaps.last().unwrap().id, first, "back on the board as the newest heap");

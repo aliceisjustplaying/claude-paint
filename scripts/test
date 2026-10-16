@@ -13,6 +13,8 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo" || exit 1
 # no __pycache__ in the checkout: one breaks the baseline package's file list
 export PYTHONDONTWRITEBYTECODE=1
+# the checks pick their boxes themselves
+unset EASEL_BOX
 work=$(mktemp -d "${TMPDIR:-/tmp}/gate.XXXXXX")
 declare -A name_of=()
 stop() {
@@ -24,11 +26,11 @@ stop() {
 }
 trap stop INT TERM
 
-# launch NAME COMMAND: runs COMMAND in its own session, output in $work/NAME.log
+# launch NAME COMMAND: runs COMMAND in its own session (perl: macOS has no setsid), output in $work/NAME.log
 launch() {
   mkdir -p "$work/$1.tmp"
   echo "$EPOCHREALTIME" >"$work/$1.t0"
-  TMPDIR=$work/$1.tmp setsid bash -c "$2" >"$work/$1.log" 2>&1 </dev/null &
+  TMPDIR=$work/$1.tmp perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' bash -c "$2" >"$work/$1.log" 2>&1 </dev/null &
   name_of[$!]=$1
 }
 
@@ -46,7 +48,7 @@ reap() {
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --no-run --message-format=json-render-diagnostics >$work/build.json"
+launch build "cargo test --workspace --no-run --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -65,6 +67,7 @@ EOF
 exe() { awk -F'\t' -v k="$1" '$1 == k { print $2 }' "$work/exes"; }
 easel=$(exe 'bin easel')
 [ -x "$easel" ] || { echo "gate: the build made no easel executable"; exit 1; }
+easel=$(printf %q "$easel")
 
 names=() cmds=() wants=()
 # check NAME COMMAND WANT: WANT is newline-separated regexes, each of which must match a line of the output
@@ -74,6 +77,7 @@ check() { names+=("$1"); cmds+=("$2"); wants+=("$3"); }
 rust() {
   local name=$1 crate=$2 bin want='^test result: ok\. [1-9]' t
   bin=$(exe "$3")
+  [ -z "$bin" ] || bin=$(printf %q "$bin")
   shift 3
   if [ $# -gt 0 ]; then
     want=

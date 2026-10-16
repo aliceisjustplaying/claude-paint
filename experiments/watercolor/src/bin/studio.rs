@@ -17,7 +17,7 @@ fn main() {
         if args.iter().any(|s| s == "--scratch") {
             let main = studio::load(root)?;
             let paper = main.canvas.as_ref().ok_or_else(|| {
-                mlua::Error::external("create the painting's paper before using scratch")
+                mlua::Error::external("scratch paper takes its size, kind and seed from the painting's paper, which doesn't exist yet; make it first with paper{} in a paint chunk without scratch: true")
             })?;
             let lab = paper
                 .lab
@@ -128,10 +128,6 @@ fn main() {
                     fs::read_to_string(&args[4]).map_err(mlua::Error::external)?
                 };
                 let state = writer.as_ref().unwrap().run(&source)?;
-                let canvas = state
-                    .canvas
-                    .as_ref()
-                    .ok_or_else(|| mlua::Error::external("chunk made no paper"))?;
                 let logs = root.join("paintings/lua");
                 fs::create_dir_all(&logs).map_err(mlua::Error::external)?;
                 fs::write(
@@ -143,11 +139,15 @@ fn main() {
                     state.applied_sources.join("\n\n"),
                 )
                 .map_err(mlua::Error::external)?;
-                if let Some(lab) = &canvas.lab {
-                    println!(
-                        "Lab GPU: {}x{} cells",
-                        lab.simulation.width, lab.simulation.height
-                    );
+                if let Some(canvas) = &state.canvas {
+                    if let Some(lab) = &canvas.lab {
+                        println!(
+                            "Lab GPU: {}x{} cells",
+                            lab.simulation.width, lab.simulation.height
+                        );
+                    }
+                } else {
+                    println!("no paper yet; make it with paper{{}}");
                 }
                 println!(
                     "{}\npainting time: {:.4}s\nok",

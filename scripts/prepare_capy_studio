@@ -39,7 +39,7 @@ def main():
     (dest / "BRIEF.md").write_bytes(brief.encode())
     runtime = dest / "bin/mcp"
     runtime.mkdir(exist_ok=True)
-    for name in ("server.py", "tools.json", *(["remote.py"] if args.sessions_root else [])):
+    for name in ("server.py", "references.py", "tools.json", *(["remote.py"] if args.sessions_root else [])):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     registration = {
         "command": uv,

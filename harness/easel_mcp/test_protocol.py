@@ -16,7 +16,7 @@ import unittest
 from functools import wraps
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from io import StringIO
 
 from mcp import ClientSession, StdioServerParameters
@@ -102,6 +102,61 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    async def test_painting_header_sets_chunk_and_rebuild_waits(self):
+        loader = SourceFileLoader("width_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        log = self.studio / "paintings/lua/painting.lua"
+        log.parent.mkdir(parents=True)
+        width = self.studio / "bin/width"
+        for configured in (None, "2400", "4800"):
+            if configured is None:
+                width.unlink(missing_ok=True)
+            else:
+                width.write_text(configured)
+            for header, wide in (
+                (None, configured == "4800"),
+                ("--@ width 4800\n--@ chunk 1\n", True),
+                ("--@ chunk 1\n--@ width 4800\n", False),
+                ("--@ width 2400\n--@ chunk 1\n", False),
+                ("--@ sketch\n--@ width 4800\n--@ chunk 1\n", False),
+            ):
+                with self.subTest(configured=configured, header=header):
+                    if header is None:
+                        log.unlink(missing_ok=True)
+                    else:
+                        log.write_text(header)
+                    self.assertEqual(easel.wide(), wide)
+                    step = AsyncMock(side_effect=[(0, "rebuilding from the log (0 of 1 chunks)"), (0, "ready"), (0, "ok")])
+                    with patch.object(easel, "step", step), patch.object(module.time, "monotonic", return_value=100), patch.object(module.asyncio, "sleep", AsyncMock()):
+                        self.assertEqual(await easel.at(["do", "-"], "print(1)"), "ok")
+                    wait = (48 if wide else 12) * 60
+                    self.assertEqual([call.args[2] for call in step.await_args_list], [100 + wait, 100 + (50 if wide else 30) * 60, 100 + wait])
+
+    async def test_background_display_paths_are_not_renamed(self):
+        loader = SourceFileLoader("display_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        with patch.dict(os.environ, EASEL_ASYNC_DISPLAY="1", EASEL_DISPLAY_THREADS="2", PAINTER_SECRET="s"):
+            await easel.step(["open"], None, module.time.monotonic() + 5)
+        environment = json.loads((self.studio / "calls.jsonl").read_text().splitlines()[0])["env"]
+        self.assertEqual(environment["EASEL_ASYNC_DISPLAY"], "1")
+        self.assertEqual(environment["EASEL_DISPLAY_THREADS"], "2")
+        self.assertNotIn("PAINTER_SECRET", environment)
+        source = self.studio / "out/65c0681641604c1b93c51bdcfd66302e.png"
+        marker = source.parent / ".display" / source.name
+        marker.parent.mkdir(parents=True)
+        source.write_bytes(base64.b64decode(PNG))
+        path = str(source.relative_to(self.studio))
+        for state in ("pending", "ready", "failed"):
+            marker.write_text(state + "\n")
+            said, paths = easel.rename_looks(path + " (1x1, 0.01s)")
+            self.assertEqual(said, path + " (1x1)")
+            self.assertEqual(paths, [path])
+            self.assertTrue(source.is_file())
+
     async def test_opt_in_recording_preserves_stdio_tools_and_results(self):
         studio = self.studio / "paint-studio-abcd"
         studio.mkdir()
@@ -130,7 +185,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_initialize_and_tool_wording(self):
         self.assertEqual(self.initialized.serverInfo.name, "easel")
         listed = await self.session.list_tools()
-        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log"])
+        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
         source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
         for tool in listed.tools:
             block = source.split(f'name: "{tool.name}"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
@@ -267,7 +322,7 @@ class PreparationTests(unittest.TestCase):
         self.repo = self.root / "repo"
         runtime = self.repo / "harness/easel_mcp"
         runtime.mkdir(parents=True)
-        for name in ("server.py", "tools.json"):
+        for name in ("server.py", "references.py", "tools.json"):
             shutil.copy2(SERVER.with_name(name), runtime / name)
         (self.repo / "scripts").mkdir()
         script = SERVER.parent.parent.parent / "scripts/prepare_capy_studio"

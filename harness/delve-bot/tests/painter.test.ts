@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { loadConfig, validateConfig } from "../src/config.ts";
-import { CONTINUE_MESSAGE, HousePainter, overLimit, PAINTER_MSG, painterJob, UsageMeter } from "../src/painter.ts";
+import { CONTINUE_MESSAGE, HousePainter, overLimit, PAINTER_MSG, painterJob, stopServer, UsageMeter } from "../src/painter.ts";
 import type { Config } from "../src/types.ts";
 import { post } from "./helpers.ts";
 
@@ -103,6 +103,16 @@ test("a job already past its wall time never opens the easel or starts the paint
   const f = setup(t, "paint", c => { c.studio.maxWallSeconds = 3; });
   assert.deepEqual(await f.painter.run(f.job, new AbortController().signal, Date.now() - 4000), { stopped: "time" });
   assert.equal(existsSync(join(dirname(f.config.database), "asked.jsonl")), false);
+  assert.deepEqual(inStudio(f.studio), []);
+});
+
+test("a studio's easel server can be stopped without its socket", async t => {
+  const f = setup(t, "paint");
+  cpSync(realpathSync(f.config.studio.template), f.studio, { recursive: true });
+  execFileSync("chmod", ["-R", "u+w", f.studio]);
+  execFileSync(join(f.studio, "bin/easel"), ["open"], { cwd: f.studio, stdio: "ignore" });
+  assert.deepEqual(inStudio(f.studio), [join(f.studio, "bin/easel")]);
+  await stopServer(f.studio);
   assert.deepEqual(inStudio(f.studio), []);
 });
 

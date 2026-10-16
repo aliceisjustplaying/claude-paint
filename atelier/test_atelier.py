@@ -41,6 +41,7 @@ def world(tmp_path, monkeypatch):
             (dest / "bin/easel").write_bytes(b"the painter's easel")
             (dest / "notes/easel_guide.md").write_text("guide\n")
             (dest / "notes/journal.md").write_text("")
+            (dest / "notes/reference-library.json").write_text("[]")
             assert options["env"]["R16_BRANCH"] == real(["git", "-C", A.REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
             assert "STUDIO_WIDTH" not in options["env"]
             return done()
@@ -121,6 +122,7 @@ def test_start_prepares_the_first_painting(world):
         "studio": OPUS, "number": 1, "width": 2400, "box": "every", "harness": "pi", "theme": "a harbor at night"}
     assert manifest["easel_sha256"] == hashlib.sha256(b"the painter's easel").hexdigest()
     assert (folder / "notebook.md").read_text() == "" and list((folder / "walls").iterdir()) == []
+    assert not (folder / "notes/reference-library.json").exists()
     assert (folder / "BRIEF.md").read_text() == (work / "BRIEF.md").read_text() == A.render_brief(folder, "a harbor at night")
     assert (folder / "BRIEF.md").read_text().count("~/src/a/" + folder.name) == 1
     assert json.loads((work / "run/studios.json").read_text()) == {"OPUS1": folder.name}

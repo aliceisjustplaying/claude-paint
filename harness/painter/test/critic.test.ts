@@ -1,7 +1,7 @@
 // node --test harness/painter/test/critic.test.ts  (TMPDIR: a scratch directory; the last test runs pi)
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -76,11 +76,12 @@ test("the critic visits at the end of a sitting, and the next sitting opens with
 	writeFileSync(out, "");
 	assert.equal(sitting("Your brief is in BRIEF.md.").trim(), "done");
 	const requests = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
-	assert.deepEqual(requests.map((r) => r[0].text.slice(0, 40)), ["Your brief is in BRIEF.md.", "The painter has just ended a sitting at "]);
+	assert.deepEqual(requests.map((r) => r.find((m) => m.role === "user")!.text.slice(0, 40)), ["Your brief is in BRIEF.md.", "The painter has just ended a sitting at "]);
 	assert.equal(readFileSync(join(s, "notes/critic.md"), "utf8"), "From the critic's visit at the end of a sitting:\n\ndone\n");
-	assert.ok(existsSync(join(dir, "critic/sessions")));
+	assert.equal(readdirSync(join(dir, "critic/sessions")).length, 1);
+	assert.equal(readdirSync(join(dir, "sessions")).length, 1);   // the critic's session isn't among the painter's
 	writeFileSync(out, "");
 	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1" });
 	const [next] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
-	assert.match(next[0].text, /^You're back at the easel\.\n\n## BRIEF\.md[\s\S]*## The critic's notes \(notes\/critic\.md\)\n\nQuoted as the critic wrote them:\n\n> From the critic's visit at the end of a sitting:\n>\n> done$/);
+	assert.match(next.find((m) => m.role === "user")!.text, /^You're back at the easel\.\n\n## BRIEF\.md[\s\S]*## The critic's notes \(notes\/critic\.md\)\n\nQuoted as the critic wrote them:\n\n> From the critic's visit at the end of a sitting:\n>\n> done$/);
 });

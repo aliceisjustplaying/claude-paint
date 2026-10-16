@@ -370,7 +370,7 @@ def export(out, skip=(), only=None, live=False):
         # (the closing words of each sitting: its last words before the next sitting starts, newest first)
         closings = [e["text"] for k, e in enumerate(ev) if e["kind"] == "say"
                     and all(x["kind"] != "say" for x in ev[k + 1:next((j for j in range(k + 1, len(ev)) if ev[j]["kind"] == "start"), len(ev))])]
-        s["title"] = S.title_of_closings(closings)
+        s["title"] = S.title_of_closings(closings) or S.runner_title(p)
         # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
         # quiet run as in progress only then
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"

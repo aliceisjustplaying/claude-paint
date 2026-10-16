@@ -1243,4 +1243,35 @@ mod tests {
         live.rebuild().unwrap();
         assert!(state(&live) == bytes && live.program("paper") == log);
     }
+
+    /// A save keeps the paper-and-pastel switch and the sheet: read back
+    /// (`save::read`), the session has the switch, the same canvas bit for
+    /// bit (a sheet: version 13), paints on as the live one does, and writes
+    /// the switch into its log's head.
+    #[test]
+    #[cfg(all(tube_box, feature = "replay"))]
+    fn paper_survives_a_save() {
+        let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+        for setup in [CANVAS, sheet] {
+            let path = std::env::temp_dir().join(format!("easel-paper-save-{}-{}.ckpt", std::process::id(), setup.len()));
+            let mut live = Session::new(96).unwrap().with_paper(true).unwrap();
+            live.run(setup).unwrap();
+            live.run("b = brush(\"round\", 6); b:load(pile{{\"raw umber\", 1}}, 0.6); b:stroke({{100, 300}, {800, 320}})").unwrap();
+            crate::save::write(&live, &live.program("t"), &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            let saved = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            assert!(restored.st.borrow().paper);
+            assert_eq!(saved(&restored), saved(&live));
+            assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == sheet);
+            restored.run("wait(1)").unwrap();
+            live.run("wait(1)").unwrap();
+            assert_eq!(saved(&restored), saved(&live));
+            assert!(logged_paper(&restored.program("t")));
+            std::fs::remove_file(path).unwrap();
+        }
+    }
 }

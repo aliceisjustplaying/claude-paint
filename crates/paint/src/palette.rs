@@ -72,8 +72,13 @@ impl Tube {
 /// build for one box holds that box's tube records and no others
 /// (`the_catalog_is_this_builds_boxes`). The rest came with round 20's
 /// boxes; notes/r20/TUBES.md gives each one's numbers, the proposal they
-/// come from and why. All numbers are estimates from the pigment literature,
-/// not measurements.
+/// come from and why. The last six (strontium yellow to vine black) came
+/// with the giverny and impressionist boxes; their materials notes
+/// (notes/research/{giverny,impressionist}_materials.md) map them to the
+/// pigments found, and the comment at each gives its basis. All numbers are
+/// estimates from the pigment literature, not measurements (the three
+/// chromate yellows' color and strength are from measurements of
+/// reconstructed pigments and test paints).
 pub fn catalog() -> Vec<Tube> {
     vec![
         // ---- the tube box (round 19)
@@ -193,10 +198,12 @@ pub fn catalog() -> Vec<Tube> {
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
-        // lead-free chromate yellows of the 1850s-80s: dry powders measured
-        // (Otero et al. 2017, Heritage Science 5:46: L*a*b* 94/-11/55, 90/-8/52,
-        // 87/5/89; tinting 78%, 92%, 65% of lead chromate), masstones
-        // darkened for oil; hiding from their refractive indices
+        // lead-free chromate yellows of the 1850s-80s, as reconstructed from
+        // historical recipes and measured (Otero et al. 2017, Heritage
+        // Science 5:46): the pigments' color L*a*b* 94/-11/55, 90/-8/52,
+        // 87/5/89, and tinting strength in test paints (PVA, with barium
+        // sulfate) 78%, 92%, 65% of lead chromate's; masstones darkened for
+        // oil (this easel's adjustment); hiding from their refractive indices
         #[cfg(any(feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("strontium yellow", "strontium chromate", "#f2df53", 0.55, 0.65, 0.8, drier::CHROMATE),
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
@@ -212,6 +219,9 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-impressionist", feature = "box-every"))]
         tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // Engine-3 drying follows the medium carbon-black class; estimate.
+        // (A stroke touch-dry in about 4.9 days, by the drying test's film;
+        // engine 2's rate alone would take about 12.6 at engine 3's pace,
+        // 5.0 in engine 2 itself.)
         // charcoal black: bluish, weak, without bone's phosphate (Butler
         // 1984 found it in 9 of 10 paintings examined). Estimates
         #[cfg(any(feature = "box-impressionist", feature = "box-every"))]
@@ -371,6 +381,9 @@ pub struct Palette {
     pub engine: u32,
     pub quarter_tiles: bool,
     pub adaptive_sweep: bool,
+    /// `body_of` joins a limb to the nearest other limb, and only when it
+    /// starts within its own width of it (`Outline::body`): new paintings.
+    pub limbs_join_nearest: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -378,7 +391,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -392,7 +405,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -401,7 +414,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -515,7 +528,7 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, ..Palette::new(self.name, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.

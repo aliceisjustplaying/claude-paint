@@ -11,7 +11,7 @@ walls are copied in at start and carried home at finish.
 
 start: under the studio's lock and the admission lock every start takes, refuses while the studio's last painting
 hasn't hung or free disk is under DISK_FLOOR plus PER_PAINTING for each painting on an easel (this one included). Exports the house every-box studio
-(scripts/export_r16_studio every, 2400 px, from this checkout's HEAD), copies in notebook.md and the walls, writes
+(scripts/export_r16_studio every, 2400 px, from this checkout's HEAD, without its reference library), copies in notebook.md and the walls, writes
 BRIEF.md from texts/, the notebook's before-copy and works/<id>-<nnn>/ (manifest.json, BRIEF.md, run/studios.json).
 Writes the launch agent (launch_agent()) and, without --prepare, loads it.
 
@@ -204,6 +204,7 @@ class Atelier:
             commit = run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
             env = {k: v for k, v in os.environ.items() if k not in ("STUDIO_WIDTH", "EASEL_WIDTH", "EASEL_BOX")}
             run([REPO / "scripts/export_r16_studio", BOX, folder], env={**env, "R16_BRANCH": commit}, check=True)
+            (folder / "notes/reference-library.json").unlink(missing_ok=True)
 
             cards = self.cards(sid)
             notebook = (home / "notebook.md").read_text() if (home / "notebook.md").exists() else ""

@@ -1,6 +1,6 @@
 # Exact-state timing report
 
-Run `scripts/bench_exact` or `scripts/test --bench-exact`. Both report timings and per-chunk state digests for r19, mixed passes, a thinned wash followed by a wait and a brushed ground at 600 and 2400 pixels. There are no timing thresholds and this report is separate from the test gate.
+Run `scripts/bench_exact`. It reports timings and per-chunk state digests for r19, mixed passes, a thinned wash followed by a wait and a brushed ground at 600 and 2400 pixels. There are no timing thresholds and this report is separate from the test gate.
 
 The command builds the release easel, runs one scene at a time at low priority and deletes its PNGs and digest files. It requires 15 GiB of free disk space. Use `--easel PATH` to measure an existing binary and `--output FILE` to retain the JSON report. `--scenes sampler` adds a small p9-style sampler plate for parity checks. The scenes use a short 4:1 canvas to keep the report small; this is not a finished-painting benchmark.
 

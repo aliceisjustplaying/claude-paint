@@ -52,23 +52,28 @@ MODEL_NAMES = {
 
 
 def working_studios():
-    """Actual Pi process working directories, not persistent easel servers or saved running records."""
+    """Actual painter processes, not persistent easel servers or saved running records: a Pi's working directory,
+    or the --studio of an agy painter's easel tool server (the studio's bin/mcp/server.py --agy)."""
     try:
         ps = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, check=True, timeout=10)
         pids = [parts[0] for row in ps.stdout.splitlines()
                 if len(parts := row.split()) == 2 and os.path.basename(parts[1]) == "pi"]
+        args = subprocess.run(["ps", "-wwAo", "args="], capture_output=True, text=True, check=True, timeout=10)
+        agy = {os.path.basename(m.group(1)) for row in map(str.strip, args.stdout.splitlines())
+               if re.search(r"(?:^| )--agy(?: |$)", row)
+               and (m := re.search(r"/bin/mcp/server\.py .*?--studio (.+?)(?: --|$)", row))}
         lsof = shutil.which("lsof") or "/usr/sbin/lsof"
         if not pids:
-            return set()
+            return agy
         r = subprocess.run([lsof, "-a", "-p", ",".join(pids), "-d", "cwd", "-Fn"],
                            capture_output=True, text=True, timeout=10)
-        return {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
+        return agy | {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}
     except (OSError, subprocess.SubprocessError):
         return set()  # no execution evidence: never claim live
 
 
 def runner_states(sessions, working, now):
-    """Require a running sitting, a live Pi in that studio and recent session activity. Completion
+    """Require a running sitting, a live painter in that studio and recent session activity. Completion
     comes only from the runner outcome, never a title, quiet session or exported render."""
     records = {}
     for path in S.runner_paths():
@@ -359,13 +364,13 @@ def export(out, skip=(), only=None, live=False):
         # index, the studio's picker)
         s["look"] = None
         for e in ev:
-            if e["kind"] == "image" and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
+            if e["kind"] == "image" and not e.get("display_pending") and S.is_whole(e.get("look")) and 0 <= e["img"] < n and web[e["img"]]:
                 s["look"] = e["img"]
         # the painting's title, if the painter's last words begin with one
         # (the closing words of each sitting: its last words before the next sitting starts, newest first)
         closings = [e["text"] for k, e in enumerate(ev) if e["kind"] == "say"
                     and all(x["kind"] != "say" for x in ev[k + 1:next((j for j in range(k + 1, len(ev)) if ev[j]["kind"] == "start"), len(ev))])]
-        s["title"] = S.title_of_closings(closings)
+        s["title"] = S.title_of_closings(closings) or S.runner_title(p)
         # its last event is its own words: it ended a sitting (or the painting), not cut off mid-step; the website lists a
         # quiet run as in progress only then
         s["said"] = bool(ev) and ev[-1]["kind"] == "say"

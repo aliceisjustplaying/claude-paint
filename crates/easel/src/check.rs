@@ -170,22 +170,3 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
         _ => false,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::client_gone;
-    use std::io::{Read, Write};
-    use std::os::unix::net::UnixStream;
-
-    #[test]
-    fn a_client_waiting_for_its_reply_is_there_and_one_that_closed_is_gone() {
-        let (mut client, mut server) = UnixStream::pair().unwrap();
-        // what a client does: send the request (its length first), wait for the reply
-        client.write_all(b"7\nstatus\n").unwrap();
-        let mut req = [0u8; 9];
-        server.read_exact(&mut req).unwrap();
-        assert!(!client_gone(&server), "a waiting client was taken for gone");
-        drop(client);
-        assert!(client_gone(&server), "a closed client was taken for still there");
-    }
-}

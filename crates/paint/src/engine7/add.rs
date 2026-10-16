@@ -118,7 +118,3 @@ impl Film {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "add_bench.rs"]
-mod bench;

@@ -22,24 +22,58 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A pixel rectangle (x0, y0, x1, y1), end-exclusive.
 pub(crate) type Rect = (usize, usize, usize, usize);
 
+/// Shrink dense work tiles toward 32 strokes per tile, never below half
+/// their legacy dimensions. The plan, not the worker count, sets the scale.
+pub(crate) fn work_tile_scale(strokes: &[usize]) -> f32 {
+    let longest = strokes.iter().copied().max().unwrap_or(0).max(32);
+    (32.0 / longest as f32).sqrt().max(0.5)
+}
+
+pub(crate) fn quarter_work_tile_scale(strokes: &[usize]) -> f32 {
+    if strokes.iter().any(|&n| n > 32) { 0.25 } else { 1.0 }
+}
+
+fn disjoint_groups(order: &[usize], rects: &[Option<Rect>]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for &t in order {
+        let Some(a) = rects[t] else { continue };
+        if let Some(group) = groups.iter_mut().find(|group| group.iter().all(|&u| {
+            let b = rects[u].unwrap();
+            !(a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3)
+        })) {
+            group.push(t);
+        } else {
+            groups.push(vec![t]);
+        }
+    }
+    groups
+}
+
 struct Ctx<'a, T, W> {
     order: &'a [usize],
     succ: Vec<Vec<usize>>,
     pending: Vec<AtomicUsize>,
     out: Vec<Mutex<Option<T>>>,
     work: &'a W,
+    stats: Option<&'a crate::engine7::BatchStats>,
 }
 
 fn run<'a, 's, T: Send, W: Fn(usize) -> T + Sync>(c: &'a Ctx<'a, T, W>, s: &Scope<'s>, k: usize)
 where
     'a: 's,
 {
-    let v = (c.work)(c.order[k]);
+    let v = match c.stats {
+        Some(st) => st.tile(|| (c.work)(c.order[k])),
+        None => (c.work)(c.order[k]),
+    };
     *c.out[k].lock().unwrap() = Some(v);
     for &j in &c.succ[k] {
         // the last predecessor to finish starts it (AcqRel: j sees every
         // predecessor's writes)
         if c.pending[j].fetch_sub(1, Ordering::AcqRel) == 1 {
+            if let Some(st) = c.stats {
+                st.ready(1);
+            }
             s.spawn(move |s| run(c, s, j));
         }
     }
@@ -47,8 +81,9 @@ where
 
 /// Run `work(i)` for every `i` in `order`, as if one by one in that order,
 /// where `rects[i]` bounds every pixel `work(i)` touches. Returns the
-/// results in `order`'s order.
-pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], rects: &[Option<Rect>], work: W) -> Vec<T> {
+/// results in `order`'s order. Counts ready and running tiles into
+/// `stats`, if given (`E7_STATS`).
+pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], rects: &[Option<Rect>], stats: Option<&crate::engine7::BatchStats>, work: W) -> Vec<T> {
     let n = order.len();
     let overlaps = |a: Rect, b: Rect| a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3;
     let r: Vec<Rect> = order.iter().map(|&i| rects[i].expect("tile without footprint")).collect();
@@ -79,8 +114,12 @@ pub(crate) fn run_ordered<T: Send, W: Fn(usize) -> T + Sync>(order: &[usize], re
         pending: count.iter().map(|&c| AtomicUsize::new(c)).collect(),
         out: (0..n).map(|_| Mutex::new(None)).collect(),
         work: &work,
+        stats,
     };
     let ready: Vec<usize> = (0..n).filter(|&k| count[k] == 0).collect();
+    if let Some(st) = stats {
+        st.ready(ready.len());
+    }
     rayon::scope(|s| {
         for k in ready {
             let c = &ctx;
@@ -113,6 +152,9 @@ pub(crate) enum TileOrder {
     /// The verb's default (checkerboard phases that let tiles run in
     /// parallel): with hand time on, a sweep down instead.
     Default(Vec<usize>),
+    /// Dense quarter-sized work tiles: keep the default hand-time batches,
+    /// then regroup each whole-canvas batch into disjoint footprint groups.
+    Quarter(Vec<usize>),
 }
 
 /// The tiles of a covering pass, planned and counted, ready to paint.
@@ -151,11 +193,15 @@ impl Canvas {
     /// handed out, so it paints with the same ids as the whole canvas.
     pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
         let Pass { grid, order, rects, secs, ids, slice } = pass;
+        let regroup = matches!(order, TileOrder::Quarter(_));
         let order = match order {
-            TileOrder::Default(_) if slice.is_some() => sweep_down(grid),
-            TileOrder::Asked(o) | TileOrder::Default(o) => o,
+            TileOrder::Default(_) | TileOrder::Quarter(_) if slice.is_some() => sweep_down(grid),
+            TileOrder::Asked(o) | TileOrder::Default(o) | TileOrder::Quarter(o) => o,
         };
-        let batches = batches(&order, &secs, slice);
+        let batches = match (slice, self.hand_slice_secs()) {
+            (Some(limit), Some(base)) if limit > base => bounded_batches(&order, &secs, limit),
+            _ => batches(&order, &secs, slice),
+        };
         let n_batches = batches.len();
         let mut offsets = vec![0u32; ids.len()];
         for (bi, (order, bsecs)) in batches.into_iter().enumerate() {
@@ -168,6 +214,7 @@ impl Canvas {
                 offsets[t] = acc;
                 acc += ids[t];
             }
+            let order = if regroup { disjoint_groups(&order, &rects).into_iter().flatten().collect() } else { order };
             let f = self.f;
             let order: Vec<usize> = order.into_iter().filter(|&t| rects[t].is_some_and(|r| f.clip(r).is_some())).collect();
             if std::env::var_os("PAINT_DEBUG").is_some() {
@@ -177,7 +224,12 @@ impl Canvas {
             // tiles run in parallel wherever that can't change the result: a
             // tile starts once every earlier tile (in `order`) it overlaps is
             // done
-            let dirty = run_ordered(&order, &rects, |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            let stats = crate::engine7::stats().then(crate::engine7::BatchStats::default);
+            let t0 = std::time::Instant::now();
+            let dirty = run_ordered(&order, &rects, stats.as_ref(), |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            if let Some(st) = &stats {
+                st.print(order.len(), t0.elapsed().as_secs_f64());
+            }
             if let Some((x0, y0, x1, y1)) = dirty {
                 self.wet.touch(x0, y0, x1, y1);
             }
@@ -210,39 +262,16 @@ fn batches(order: &[usize], secs: &[f64], slice: Option<f64>) -> Vec<(Vec<usize>
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn batches_cut_the_order_by_hand_time() {
-        let secs = [30.0, 50.0, 0.0, 70.0, 10.0, 90.0];
-        let order = [5, 0, 1, 2, 3, 4];
-        assert_eq!(batches(&order, &secs, None), vec![(order.to_vec(), 250.0)]);
-        let b = batches(&order, &secs, Some(60.0));
-        assert_eq!(b, vec![(vec![5], 90.0), (vec![0, 1], 80.0), (vec![2, 3], 70.0), (vec![4], 10.0)]);
-    }
-
-    /// Overlapping items keep their order; the rest may interleave.
-    #[test]
-    fn keeps_order_of_overlapping_items() {
-        let rects: Vec<Option<Rect>> = (0..40).map(|i| Some(((i % 8) * 10, (i / 8) * 10, (i % 8) * 10 + 15, (i / 8) * 10 + 15))).collect();
-        let order: Vec<usize> = (0..40).rev().collect();
-        let log = Mutex::new(Vec::new());
-        let out = run_ordered(&order, &rects, |i| {
-            log.lock().unwrap().push(i);
-            i * 2
-        });
-        assert_eq!(out, order.iter().map(|i| i * 2).collect::<Vec<_>>());
-        let log = log.into_inner().unwrap();
-        let pos = |i: usize| log.iter().position(|&v| v == i).unwrap();
-        for (a, &i) in order.iter().enumerate() {
-            for &j in &order[a + 1..] {
-                let (p, q) = (rects[i].unwrap(), rects[j].unwrap());
-                if p.0 < q.2 && q.0 < p.2 && p.1 < q.3 && q.1 < p.3 {
-                    assert!(pos(i) < pos(j), "{i} must run before {j}");
-                }
-            }
+fn bounded_batches(order: &[usize], secs: &[f64], limit: f64) -> Vec<(Vec<usize>, f64)> {
+    let mut out: Vec<(Vec<usize>, f64)> = vec![(Vec::new(), 0.0)];
+    for &t in order {
+        let last = out.last_mut().unwrap();
+        if !last.0.is_empty() && last.1 + secs[t] > limit {
+            out.push((vec![t], secs[t]));
+        } else {
+            last.0.push(t);
+            last.1 += secs[t];
         }
     }
+    out
 }

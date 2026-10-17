@@ -28,6 +28,11 @@
 //! nothing new is kept on the canvas: the rag's own state is the `Rag` the
 //! caller holds.
 //!
+//! With the rag lift switch (`Canvas::with_rag_lift`, engine 7) the face
+//! keeps all it lifts: nothing is smeared back, so a loaded face lifts less
+//! and lays nothing down. A wipe over a mask lifts only inside the mask, by
+//! the mask's value, wherever the pad's rim reaches.
+//!
 //! In a crop render the rag sees only the window's paint, so its load (and
 //! what later strokes lift) can differ a little from the whole canvas's,
 //! as a brush's pick-up does.
@@ -175,6 +180,10 @@ const END_MM: f32 = 8.0;
 /// the rag's load [E].
 const SOAK: f32 = 0.35;
 const SMEAR: f32 = 0.2;
+/// A face loaded this far is full: it lifts almost nothing more (its
+/// thirst is under a tenth and its room a twentieth of a clean face's).
+/// With the rag lift switch the easel says so when a wipe starts on one.
+pub const FULL: f32 = 0.95;
 
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
 /// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
@@ -741,6 +750,11 @@ impl Canvas {
     /// spread along the path). Counts the hand time; returns the volume
     /// lifted (mm³). One point is a blot (`rag_blot`).
     pub fn rag_wipe(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pressure: &[f32], seed: u64) -> f64 {
+        self.rag_wipe_in(rag, pts, pressure, seed, None)
+    }
+
+    /// `rag_wipe`, lifting only inside `clip` (by its value) when it is given.
+    fn rag_wipe_in(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pressure: &[f32], seed: u64, clip: Option<&Mask>) -> f64 {
         if pts.is_empty() {
             return 0.0;
         }
@@ -763,7 +777,7 @@ impl Canvas {
         self.tally.rag_stroke((len * mmu) as f64, (rag.width * mmu) as f64);
         let cs = rag.cloth_seed(seed);
         if self.engine >= 3 {
-            return self.rag_wipe3(rag, pts, &pr, cs);
+            return self.rag_wipe3(rag, pts, &pr, cs, clip);
         }
         // before engine 3: steps of each segment in turn
         let w = rag.width;
@@ -860,7 +874,7 @@ impl Canvas {
     /// what the pad touches and for the box searched. A contact lasts the
     /// step's slide at `pace::RAG_MM_S` (`Touch`). Returns the volume lifted
     /// (mm³).
-    fn rag_wipe3(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pr: &dyn Fn(f32) -> f32, cs: u64) -> f64 {
+    fn rag_wipe3(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pr: &dyn Fn(f32) -> f32, cs: u64, clip: Option<&Mask>) -> f64 {
         let mmu = self.mm_per_unit;
         let w = rag.width;
         let r0 = 0.5 * w;
@@ -890,8 +904,10 @@ impl Canvas {
         let n = (len / step).ceil().max(1.0) as usize;
         let sl = len / n as f32;
         let touch = Touch { secs: sl * mmu / pace::RAG_MM_S as f32, slip_mm: sl * mmu };
-        // the face's mobile paint from before, soaked in the meantime
-        let mut pool = self.rag_pool(rag, (len * mmu) as f64 / pace::RAG_MM_S);
+        // the face's mobile paint from before, soaked in the meantime (with
+        // the rag lift switch the face keeps it all: no pool)
+        let keep = self.rag_lift;
+        let mut pool = if keep { Pool::default() } else { self.rag_pool(rag, (len * mmu) as f64 / pace::RAG_MM_S) };
         let mut total = 0.0;
         let mut first = 0usize;
         let mut pieces: Vec<Seg> = Vec::with_capacity(4);
@@ -939,11 +955,19 @@ impl Canvas {
                 bbox = (bbox.0.min(q.a.0.min(ex) - r - 1.0), bbox.1.min(q.a.1.min(ey) - r - 1.0), bbox.2.max(q.a.0.max(ex) + r + 1.0), bbox.3.max(q.a.1.max(ey) + r + 1.0));
             }
             let pc = &pieces;
-            total += self.rag_contact(rag, bbox, p, touch, Some(&mut pool), |x, y| pad3(pc, x, y, r, len, p, mmu, cs));
+            total += self.rag_contact(rag, bbox, p, touch, if keep { None } else { Some(&mut pool) }, |x, y| {
+                let e = pad3(pc, x, y, r, len, p, mmu, cs);
+                match clip {
+                    Some(m) => (e.0 * m.sample(x, y).clamp(0.0, 1.0), e.1, e.2, e.3),
+                    None => e,
+                }
+            });
         }
         // what is still at the cloth's surface goes with the face as the
         // pad lifts off (it is in `load` already)
-        self.rag_keep(rag, &pool);
+        if !keep {
+            self.rag_keep(rag, &pool);
+        }
         total
     }
 
@@ -964,7 +988,7 @@ impl Canvas {
         // face's mobile paint doesn't smear (no slide) but soaks in while it
         // is pressed, and what it lifts joins it
         let dwell = if e3 { touch.secs / pace::BLOT_PRESS as f32 } else { 1.0 };
-        let mut pool = if e3 { Some(self.rag_pool(rag, pace::BLOT_PRESS)) } else { None };
+        let mut pool = if e3 && !self.rag_lift { Some(self.rag_pool(rag, pace::BLOT_PRESS)) } else { None };
         let got = self.rag_contact(rag, bbox, pressure, touch, pool.as_mut(), |px, py| {
             let (qx, qy) = (px - x, py - y);
             let d = (qx * qx + qy * qy).sqrt();
@@ -991,11 +1015,12 @@ impl Canvas {
     /// short of its edge by about a third of the pad (the pad's soft edge
     /// reaches it, a little past in places). `o.passes` times over, each
     /// pass a little turned. Refolds when `o.refold` says so. Long passes
-    /// age the paint as they go (hand time slices). Returns the strokes.
-    pub fn rag_region(&mut self, rag: &mut Rag, m: &Mask, o: &RagPass) -> usize {
+    /// age the paint as they go (hand time slices). Returns the strokes,
+    /// and how many of them began on a full face (`FULL`).
+    pub fn rag_region(&mut self, rag: &mut Rag, m: &Mask, o: &RagPass) -> (usize, usize) {
         self.check_mask(m);
         let mut rng = Rng::new(o.seed ^ 0x7A6E_0000);
-        let mut n = 0;
+        let (mut n, mut full) = (0, 0);
         for pass in 0..o.passes.max(1) {
             let ang = o.angle + if pass == 0 { 0.0 } else { rng.range(-0.18, 0.18) };
             let shift = if pass % 2 == 1 { 0.5 } else { 0.0 };
@@ -1009,7 +1034,8 @@ impl Canvas {
                 let p = (o.pressure * (1.0 + 0.1 * rng.normal())).clamp(0.0, 1.0);
                 let prof = [p * rng.range(0.8, 0.95), p, p * rng.range(0.85, 1.0)];
                 let s = o.seed.wrapping_add(((pass as u64) << 32) | k as u64);
-                self.rag_wipe(rag, pts, &prof, s);
+                full += usize::from(rag.load >= FULL);
+                self.rag_wipe_in(rag, pts, &prof, s, self.rag_lift.then_some(m));
                 n += 1;
                 if let Some(slice) = self.hand_slice_secs() {
                     let owed = self.hand_owed_secs();
@@ -1019,7 +1045,7 @@ impl Canvas {
                 }
             }
         }
-        n
+        (n, full)
     }
 }
 

@@ -235,6 +235,9 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: a rag keeps what it lifts, and a mask wipe lifts only
+    /// inside its mask (`rag`).
+    pub(crate) rag_lift: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -286,6 +289,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            rag_lift: false,
             soak: None,
         }
     }
@@ -296,6 +300,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.rag_lift &= crate::engine7::active(v);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -325,6 +330,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_rag_lift(mut self, enabled: bool) -> Self {
+        self.rag_lift = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn rag_lift(&self) -> bool {
+        self.rag_lift
     }
 
     /// Physical width of the painting in mm (default 700).

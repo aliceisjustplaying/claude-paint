@@ -33,7 +33,7 @@ def hide_counters(text):
 
 def tool_words(text):
     text = text.replace("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)", "a crop may be at most 500 units on either side; choose a smaller crop")
-    return re.sub(r"--(crop|mode|size|grid|palette|light|survey|compare|ref|hold|at)\b", r"\1", text)
+    return re.sub(r"--(crop|mask|mode|size|grid|palette|light|survey|compare|ref|hold|at)\b", r"\1", text)
 
 
 def studio_path(studio, value):
@@ -144,7 +144,7 @@ def look_args(view):
     args = []
     if view.get("survey"):
         args.append("--survey")
-    for key in ("compare", "ref", "hold", "at", "crop", "mode", "light"):
+    for key in ("compare", "ref", "hold", "at", "crop", "mask", "mode", "light"):
         if view.get(key):
             args.extend(["--" + key, str(view[key])])
     if "size" in view:

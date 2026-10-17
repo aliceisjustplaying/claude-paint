@@ -193,7 +193,8 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 			label: "look",
 			description:
 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. " +
+				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at full detail up to 1200 pixels a side; larger crops are scaled down. The reply gives the scale in pixels per canvas unit. " +
+				"mask: a global mask's name (or several, comma-separated), shown as outlines and a light fill over the view. " +
 				"mode: \"value\" (the picture in grays, its lightness alone, in the gallery light), \"squint\", \"edges\" (the picture's edges drawn over a dim gray of it: orange where an edge is hard, blue where it is soft, brighter the more the lightness changes across it; hard and soft as they read at the size of the image the look returns), \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
 				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
@@ -205,6 +206,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 			parameters: Type.Object({
 				scratch,
 				crop: Type.Optional(Type.String()),
+				mask: Type.Optional(Type.String()),
 				mode: Type.Optional(Type.String()),
 				light: Type.Optional(Type.String()),
 				survey: Type.Optional(Type.Boolean()),

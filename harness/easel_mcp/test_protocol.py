@@ -302,6 +302,14 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(list((self.studio / "out/easel/painting").glob("*.png"))), 3)
 
     @connected
+    async def test_named_masks_and_wide_crop_reach_the_easel(self):
+        reply = await self.session.call_tool("look", {"crop": "0,100,1000,200", "mask": "shape,soft", "size": 300})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[1].type, "image")
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1]["args"], ["look", "--crop", "0,100,1000,200", "--mask", "shape,soft", "--size", "300"])
+
+    @connected
     async def test_easel_errors_without_wrapper(self):
         reply = await self.session.call_tool("paint", {"lua": "fail"})
         self.assertTrue(reply.isError)

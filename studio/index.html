@@ -696,6 +696,7 @@ function kindOf(e) {
     const on = e.scratch ? ' on the scratch canvas' : '';
     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + on : (e.err ? `paints${on}, but its code has an error` : 'paints' + on)]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
+  if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
     if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
@@ -921,7 +922,7 @@ function journal(i, scroll) {
         html = '🪑 ' + esc(sitLabel(e)) + (gap > 120 ? ' <span>· after ' + ago(gap).replace(' ago', '') + ' away</span>' : ''); }
       else { const c = kindOf(e);
         if (c && !(e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')))) {
-          const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
+          const title = esc(e.kind === 'cmd' || e.kind === 'jnote' || e.kind === 'notebook' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
           html = '<span class="chip ' + c[0] + '" title="' + title + '"' + (e.kind === 'image' ? ' data-i="' + k + '"' : '') + '>' + c[1] + ' ' + esc(c[2]) + '</span>';
           const w = waitChip(e, k);
           if (w) html += '<span class="chip ' + w[0] + '" title="' + esc(w[3]) + '">' + w[1] + ' ' + esc(w[2]) + '</span>';
@@ -1184,15 +1185,18 @@ function lookWords(req) {
   if (/hold/.test(req)) return ['Knife held up', 'the loaded knife held up to a passage of the canvas, to judge a mix against it', 'holds the loaded knife up to the canvas'];
   if (/compare/.test(req)) return ['Before and after', 'an earlier look beside the canvas now', 'compares the canvas with an earlier look'];
   const mode = (req.match(/mode\s+([a-z]+(?:\s*,\s*[a-z]+)*)/) || [''])[0], crop = /crop/.test(req), sq = /squint|blur/.test(mode), val = /value|gray/.test(mode), mir = /mirror/.test(mode);
-  // the light, as the easel takes it: a light given (it rakes, whatever the mode), else the first of relief/raking/gallery in the mode list
-  const lit = /light\s/.test(req) ? 'relief' : (mode.replace(/^mode\s+/, '').split(',').map(m => m.trim()).find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', rel = lit !== '' && !gal;
+  // the light, as the easel takes it: a light given (whatever the mode), else the first of relief/raking/gallery in the mode list;
+  // a light given rakes at 35° or lower, and a higher one is named by its elevation (the easel's numbers, 5e1 included)
+  const lm = req.match(/light\s+([^,\s]+)\s*,\s*([^,\s)]+)/), el = lm ? Number(lm[2]) : NaN;
+  const lit = /light\s/.test(req) ? (el > 35 ? 'high' : 'relief') : (mode.replace(/^mode\s+/, '').split(',').map(m => m.trim()).find(m => /^(relief|raking|gallery)$/.test(m)) || ''), gal = lit === 'gallery', high = lit === 'high', rel = lit !== '' && !gal && !high;
+  const hw = high && `light ${el}° high`;
   const why = [crop && 'up close, at full detail', sq && 'blurred on purpose, as through half-closed eyes, to judge the big shapes',
                val && 'in grays, to judge light against dark', mir && 'flipped left to right, to see it with fresh eyes',
-               rel && 'under a raking light, to see the ridges and furrows of the paint', gal && 'lit from above, as it would hang'].filter(Boolean);
+               rel && 'under a raking light, to see the ridges and furrows of the paint', high && `under a light ${el}° above the canvas`, gal && 'lit from above, as it would hang'].filter(Boolean);
   if (!why.length) return ['The whole canvas', '', 'looks at the whole canvas'];
-  const lw = rel ? 'raking light' : gal && 'gallery light', plain = crop || sq || val || mir;
-  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
-  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : 'looks at it in gallery light'];
+  const lw = rel ? 'raking light' : gal ? 'gallery light' : hw, plain = crop || sq || val || mir;
+  const title = [crop ? 'Close-up' : sq ? 'Squinting' : val ? 'Value check' : mir ? 'Mirrored' : rel ? 'Raking light' : high ? `Light ${el}° high` : 'Gallery light', crop && sq && 'squinting', (crop || sq) && val && 'in grays', (crop || sq || val) && mir && 'mirrored', plain && lw].filter(Boolean).join(', ');
+  return [title, why.join('; '), crop ? 'looks closer at a detail' : sq ? 'squints at the canvas' : val ? 'checks the picture in grays' : mir ? 'looks at it mirrored' : rel ? 'looks at the paint under a raking light' : high ? `looks at the paint under a ${hw}` : 'looks at it in gallery light'];
 }
 // a crop's window in canvas units [x0, y0, x1, y1] (two opposite corners; the canvas is 1000 units wide, y down: notes/easel_guide.md)
 function cropOf(req) {

@@ -13,9 +13,19 @@ import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { reviseJournal } from "./journal.ts";
+import { writeNotebook } from "./notebook.ts";
 import { reference, referenceList } from "./references.ts";
 import { atEasel, directoryListing, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
+
+const scratch = Type.Optional(
+	Type.Boolean({
+		description:
+			"true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting.",
+	}),
+);
+const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
+const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
@@ -47,14 +57,6 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 		}),
 		executionMode: "sequential",
 	});
-	const scratch = Type.Optional(
-		Type.Boolean({
-			description:
-				"true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting.",
-		}),
-	);
-	const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
-	const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
 
 	pi.registerTool({
 		...defineTool({
@@ -80,6 +82,83 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 		executionMode: "sequential",
 	});
 
+	registerLook(pi, studio, limits);
+
+	pi.registerTool({
+		...defineTool({
+			name: "note",
+			label: "note",
+			description: "Add an entry to your journal, notes/journal.md, stamped with the painting's time. " +
+				"To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
+			async execute(_id, p, signal) {
+				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
+				return text(await atEasel(studio, ["note", "-"], p.text, signal));
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	// the atelier's painters only (atelier/run.py lists it in --tools): notebook.md carries over between paintings
+	pi.registerTool({
+		...defineTool({
+			name: "notebook",
+			label: "notebook",
+			description: "Add to your notebook, notebook.md. It carries over from one painting to the next. " +
+				"To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
+			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
+			async execute(_id, p) {
+				return text(writeNotebook(studio, p.text, p.replaces));
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	pi.registerTool({
+		...defineTool({
+			name: "status",
+			label: "status",
+			description: "The canvas's setup.",
+			parameters: Type.Object({ scratch }),
+			async execute(_id, p, signal) {
+				return text(tag(p, statusReply(await atEasel(studio, ["status", ...on(p)], undefined, signal))));
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	pi.registerTool({
+		...defineTool({
+			name: "log",
+			label: "log",
+			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
+			parameters: Type.Object({ scratch }),
+			async execute(_id, p, signal) {
+				const whole = p.scratch ? "paintings/lua/scratch.lua" : "paintings/lua/painting.lua";
+				return text(tag(p, tail(logReply(await atEasel(studio, ["log", ...on(p)], undefined, signal)), 50_000, whole)));
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	// read gets the path that was checked, so it can't resolve the painter's spelling to another file
+	pi.registerTool({
+		...read,
+		async execute(id, p, signal, onUpdate, ctx) {
+			const real = studioPath(studio, p.path);
+			if (!real) throw new Error(`${p.path} is outside the studio`);
+			if (!existsSync(real)) throw new Error(`${p.path}: no such file in the studio`);
+			const listing = directoryListing(real);
+			if (listing !== undefined) return text(listing);
+			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
+		},
+		executionMode: "sequential",
+	});
+}
+
+/** `look`, as the painter has it; the critic's session (critic.ts) has the same tool. */
+export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
+	const read = createReadToolDefinition(studio);
 	pi.registerTool({
 		...defineTool({
 			name: "look",
@@ -135,62 +214,6 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
 			},
 		}),
-		executionMode: "sequential",
-	});
-
-	pi.registerTool({
-		...defineTool({
-			name: "note",
-			label: "note",
-			description: "Add an entry to your journal, notes/journal.md, stamped with the painting's time. " +
-				"To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
-			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
-			async execute(_id, p, signal) {
-				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
-				return text(await atEasel(studio, ["note", "-"], p.text, signal));
-			},
-		}),
-		executionMode: "sequential",
-	});
-
-	pi.registerTool({
-		...defineTool({
-			name: "status",
-			label: "status",
-			description: "The canvas's setup.",
-			parameters: Type.Object({ scratch }),
-			async execute(_id, p, signal) {
-				return text(tag(p, statusReply(await atEasel(studio, ["status", ...on(p)], undefined, signal))));
-			},
-		}),
-		executionMode: "sequential",
-	});
-
-	pi.registerTool({
-		...defineTool({
-			name: "log",
-			label: "log",
-			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
-			parameters: Type.Object({ scratch }),
-			async execute(_id, p, signal) {
-				const whole = p.scratch ? "paintings/lua/scratch.lua" : "paintings/lua/painting.lua";
-				return text(tag(p, tail(logReply(await atEasel(studio, ["log", ...on(p)], undefined, signal)), 50_000, whole)));
-			},
-		}),
-		executionMode: "sequential",
-	});
-
-	// read gets the path that was checked, so it can't resolve the painter's spelling to another file
-	pi.registerTool({
-		...read,
-		async execute(id, p, signal, onUpdate, ctx) {
-			const real = studioPath(studio, p.path);
-			if (!real) throw new Error(`${p.path} is outside the studio`);
-			if (!existsSync(real)) throw new Error(`${p.path}: no such file in the studio`);
-			const listing = directoryListing(real);
-			if (listing !== undefined) return text(listing);
-			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
-		},
 		executionMode: "sequential",
 	});
 }

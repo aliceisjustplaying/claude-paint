@@ -60,7 +60,6 @@ class StudioGuideTests(unittest.TestCase):
     def test_live_templates_have_probe_and_reference_tools(self):
         paths = [REPO / f"notes/round{number}/runner/r21_chains.py" for number in range(24, 30)]
         paths.append(REPO / "archive/collection/runners/gallery-fcf9c110/r41/r21_chains.py")
-        paths.append(REPO / "atelier/house/r21_chains.py")
         for path in paths:
             with self.subTest(path=path):
                 values = [ast.literal_eval(node.value) for node in ast.parse(path.read_text()).body

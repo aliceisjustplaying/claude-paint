@@ -235,11 +235,14 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: a knife's paint laid on wet paint stays on top of it
+    /// (`Canvas::knife`).
+    pub(crate) knife_skim: bool,
     /// Engine 7: a blender lays the wet paint it carries only where wet paint
     /// was when its pass began, and a little way past it (`Canvas::work`).
     pub(crate) blend_feather: bool,
     /// Engine 7: a brush's paint laid on wet paint stays on top of it
-    /// (`bristle::SKIM_COATS`).
+    /// (`bristle::BRUSH_SKIM_COATS`).
     pub(crate) brush_skim: bool,
     /// While a blender pass with `blend_feather` runs: how much of the paint
     /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
@@ -295,6 +298,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            knife_skim: false,
             blend_feather: false,
             brush_skim: false,
             receptive: None,
@@ -308,6 +312,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.knife_skim &= v == crate::engine7::ENGINE;
         self.blend_feather &= v == crate::engine7::ENGINE;
         self.brush_skim &= v == crate::engine7::ENGINE;
         self
@@ -339,6 +344,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_knife_skim(mut self, enabled: bool) -> Self {
+        self.knife_skim = enabled && self.engine == crate::engine7::ENGINE;
+        self
+    }
+
+    pub fn knife_skim(&self) -> bool {
+        self.knife_skim
     }
 
     pub fn with_blend_feather(mut self, enabled: bool) -> Self {

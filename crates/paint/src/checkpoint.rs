@@ -79,6 +79,7 @@ const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
 const QUARTER_TILES: u64 = 1 << 33;
 const ADAPTIVE_SWEEP: u64 = 1 << 34;
+const KNIFE_SKIM: u64 = 1 << 35;
 // (1 << 35 and 1 << 36 are taken by the knife skim and the glaze film)
 const BLEND_FEATHER: u64 = 1 << 37;
 const BRUSH_SKIM: u64 = 1 << 38;
@@ -316,7 +317,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -469,10 +470,11 @@ impl Canvas {
             let word = get_u64(r)?;
             c.quarter_tiles = word & QUARTER_TILES != 0;
             c.adaptive_sweep = word & ADAPTIVE_SWEEP != 0;
+            c.knife_skim = word & KNIFE_SKIM != 0;
             c.blend_feather = word & BLEND_FEATHER != 0;
             c.brush_skim = word & BRUSH_SKIM != 0;
-            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP | BLEND_FEATHER | BRUSH_SKIM)) {
-                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.blend_feather || c.brush_skim) || v == crate::engine7::ENGINE) => v,
+            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.knife_skim || c.blend_feather || c.brush_skim) || v == crate::engine7::ENGINE) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };

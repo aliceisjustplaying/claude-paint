@@ -1427,7 +1427,14 @@ impl Server {
         if !real.starts_with(&studio) {
             return Err(format!("--ref {}: the motif is a picture in this studio ({})", pic.display(), studio.display()));
         }
-        let im = image::open(&real).map_err(|e| format!("--ref {}: {e}", pic.display()))?.to_rgb8();
+        use image::ImageDecoder;
+        let im = (|| -> image::ImageResult<image::RgbImage> {
+            let mut decoder = image::ImageReader::open(&real)?.into_decoder()?;
+            let orientation = decoder.orientation()?;
+            let mut im = image::DynamicImage::from_decoder(decoder)?;
+            im.apply_orientation(orientation);
+            Ok(im.into_rgb8())
+        })().map_err(|e| format!("--ref {}: {e}", pic.display()))?;
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (f, whole) = (c.window(), c.frame());
         // the picture fitted to the canvas's shape: scaled to cover it, centered

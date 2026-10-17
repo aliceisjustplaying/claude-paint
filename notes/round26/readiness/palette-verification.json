@@ -1,8 +1,8 @@
 {
   "state": "readable palette restored in normal and stream views",
   "tests": "42 passed; new captured Fable-board regression fails pre-fix with missing palette metadata",
-  "live": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-12e572",
-  "stream": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-12e572&stream=1",
+  "live": "http://private-viewer.invalid:8768/?p=paint-studio-12e572",
+  "stream": "http://private-viewer.invalid:8768/?p=paint-studio-12e572&stream=1",
   "public": "https://near-range-ips-fighter.trycloudflare.com/?p=paint-studio-12e572",
   "before": "notes/round25/readiness/live-palette-20261005-1257.png",
   "normal_after": "notes/round26/readiness/palette-normal-after.png",

@@ -85,7 +85,7 @@ write the existing studio viewer's event format and support durable call retries
 - Builder agents work from `notes/agent_brief_template.md`: the test
   command, the saved comparison results, the one-heavy-job rule and the ban
   on painting replays in tests.
-- CI on sakaki runs `scripts/test` on every pull request and push to main
+- CI runs `scripts/test` on every pull request and push to main
   (`.woodpecker/test.yaml`), beside the review (`.woodpecker/review.yaml`).
 - Working rules: never chain a commit or push after a merge in one command
   (a failed merge was once committed with conflict markers and pushed); create

@@ -1,5 +1,5 @@
 {
-  "base": "http://100.82.115.34:8770/studio/",
+  "base": "http://192.0.2.1:8770/studio/",
   "browser": "154.0.8037.98",
   "checks": [
     {
@@ -62,32 +62,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214347166",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214347166",
           "status": 200,
           "type": "application/octet-stream"
         }
@@ -154,32 +154,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214348464",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214348464",
           "status": 200,
           "type": "application/octet-stream"
         }
@@ -246,32 +246,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214349613",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-12e572/file/paintings/lua/painting.lua?t=1791214349613",
           "status": 200,
           "type": "application/octet-stream"
         }
@@ -338,32 +338,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214350762",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214350762",
           "status": 200,
           "type": "application/octet-stream"
         }
@@ -430,32 +430,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214351822",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214351822",
           "status": 200,
           "type": "application/octet-stream"
         }
@@ -522,32 +522,32 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-format.js",
+          "url": "http://192.0.2.1:8770/studio/code-format.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/code-display.js",
+          "url": "http://192.0.2.1:8770/studio/code-display.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8770/studio/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         },
         {
-          "url": "http://100.82.115.34:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214352719",
+          "url": "http://192.0.2.1:8770/studio/data/paint-studio-7c4dd1/file/paintings/lua/painting.lua?t=1791214352719",
           "status": 200,
           "type": "application/octet-stream"
         }

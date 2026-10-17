@@ -53,6 +53,6 @@ Independent fixture review verified original catalog fields and legacy box
 order/values unchanged; historical fixture restored byte-exact and current
 expansion has its own snapshot. No builder recorded a self-approval.
 
-Existing private viewer API http://100.82.115.34:8765/api/sessions answered HTTP 200.
+Existing private viewer API http://192.0.2.1:8765/api/sessions answered HTTP 200.
 No existing services or Serve routes were changed. The viewer process predates
 this merge; its loaded Python backend was not restarted.

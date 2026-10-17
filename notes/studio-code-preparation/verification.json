@@ -12,7 +12,7 @@
     "isolation": "Candidate studio files live on a separate branch; studio/ in the main checkout used by the minute-by-minute exporter is unchanged."
   },
   "tailnet": {
-    "url": "http://100.82.115.34:8769/?p=paint-studio-12e572",
+    "url": "http://192.0.2.1:8769/?p=paint-studio-12e572",
     "verifiedFrom": "VPS over the private tailnet",
     "httpStatus": 200
   },

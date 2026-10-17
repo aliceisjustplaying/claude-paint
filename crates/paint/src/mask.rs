@@ -231,12 +231,26 @@ impl Mask {
     }
 
     /// How far a brush worked over the region carries past it: 1 in the
-    /// region, falling to 0 over `d` units out from its edge (the 0.5 line),
-    /// and never below the mask's own value.
-    pub fn reach(&self, d: f32) -> Mask {
-        let (sd, _) = self.signed_distance_px();
-        let k = (d * self.f.scale).max(1.0);
-        Mask { f: self.f, data: sd.into_par_iter().zip(self.data.par_iter()).map(|(v, &m)| (1.0 - crate::smoothstep(0.0, k, -v)).max(m)).collect() }
+    /// region, falling to 0 over `d(x, y)` units out from its edge (the 0.5
+    /// line), `d` taken at the nearest point inside, and never below the
+    /// mask's own value.
+    pub fn reach(&self, d: impl Fn(f32, f32) -> f32 + Sync) -> Mask {
+        let (sd, near) = self.signed_distance_px();
+        let (f, inv) = (self.f, 1.0 / self.f.scale);
+        let data = sd
+            .into_par_iter()
+            .zip(near.par_iter())
+            .zip(self.data.par_iter())
+            .map(|((v, &j), &m)| {
+                if j == u32::MAX {
+                    return m;
+                }
+                let j = j as usize;
+                let k = (d(((j % f.w) as f32 + 0.5) * inv, ((j / f.w) as f32 + 0.5) * inv) * f.scale).max(1.0);
+                (1.0 - crate::smoothstep(0.0, k, -v)).max(m)
+            })
+            .collect();
+        Mask { f, data }
     }
 }
 

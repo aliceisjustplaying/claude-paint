@@ -699,6 +699,48 @@ def test_the_picker_gets_the_newest_whole_look_and_the_title_from_the_closing_re
         assert picture == png_of("blue")
 
 
+@pytest.mark.parametrize("via", ["live server", "static export", "atelier export"])
+def test_mask_looks_never_replace_the_painting(home, server, via):
+    from PIL import Image
+    import atelier_export as A
+
+    tmp_path, studio, log = home
+    out = tmp_path / "out"
+    work = atelier_work(tmp_path / "atelier", "test", 1, PAINTER)
+
+    def painting():
+        sessions = json.loads(server("/api/sessions")[1])
+        if via == "atelier export":
+            current = A.easel("test", 1, str(work), [dict(s, active=False) for s in sessions], str(out))
+            return None if current["look"] is None else (out / "test/1/look.jpg").read_bytes()
+        if via == "static export":
+            r = export(tmp_path, out)
+            assert r.returncode == 0, r.stderr
+            sessions = json.loads((out / "data/sessions.json").read_text())
+        current = next(s for s in sessions if s.get("p") == PAINTER)
+        if current["look"] is None:
+            return None
+        if via == "static export":
+            return (out / "data" / PAINTER / "img" / f"{current['look']}.png").read_bytes()
+        code, picture = server(f"/api/glance?p={PAINTER}&i={current['look']}")
+        assert code == 200
+        return picture
+
+    log.write_text(start(str(studio)) + looks_at_once(("mask1", {"mask": "sky"}, png_of("red"))))
+    assert painting() is None
+    with open(log, "a") as fh:
+        fh.write(look("plain", png_of("blue"))
+                 + looks_at_once(("mask2", {"mask": "sky", "size": 800}, png_of("green"))))
+    pixel = Image.open(io.BytesIO(painting())).getpixel((0, 0))
+    assert pixel[0] < 5 and pixel[1] < 5 and pixel[2] > 245
+
+
+@pytest.mark.parametrize("args", [{"mask": "sky"}, {"mask": "sky", "size": 800},
+                                  {"size": 800, "mask": "sky"}, {"mode": "normal", "mask": "sky"}])
+def test_a_mask_look_is_not_the_whole_painting(args):
+    assert not S.is_whole(S.look_text(args))
+
+
 @pytest.mark.parametrize("asset,ctype", [
     ("stream.css", "text/css"),
     ("code-display.js", "text/javascript"),

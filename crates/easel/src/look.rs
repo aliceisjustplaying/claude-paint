@@ -45,7 +45,7 @@ fn is_num(s: Option<&String>) -> bool {
 
 impl View {
     pub fn display_eligible(&self) -> bool {
-        !(self.value || self.squint || self.edges || self.mirror || self.light.is_some() || self.palette)
+        !(self.value || self.squint || self.edges || self.mirror || self.light.is_some() || self.palette || !self.mask.is_empty())
     }
 
     /// Parse look arguments (see `LOOK_ARGS`).
@@ -881,6 +881,20 @@ mod tests {
         assert_eq!(cropped, image::imageops::crop_imm(&shown, 10, 0, 40, 40).to_image());
         assert!(View::parse(&["--mask".into(), "a,".into()]).is_err());
         assert!(View::parse(&["--palette".into(), "--mask".into(), "shape".into()]).is_err());
+    }
+
+    #[test]
+    fn mask_looks_have_no_display_companions() {
+        let root = std::env::temp_dir().join(format!("mask-companions-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let c = Canvas::new(100, 1.0, [0.5; 3]);
+        let masked = view(&["--mask", "sky"]);
+        companions(&c, &[(masked.clone(), root.join("look.png"))]);
+        let generated = DISPLAY_PRESETS.iter().any(|p| root.join(p.folder).join("look.png").exists());
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(!generated);
+        assert!(!masked.display_eligible());
+        assert!(View::default().display_eligible());
     }
 
     fn args(a: &[&str]) -> Vec<String> {

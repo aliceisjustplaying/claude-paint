@@ -12,8 +12,8 @@ does; this says how to use them. What you paint is yours to choose.
   crop. Then paint it on the painting with the same pile and the same
   handling.
 - **Plan in values.** `look` with `mode: "value,squint"` shows the picture as
-  big masses of light and dark. Make the masses hold there before you add
-  detail.
+  big masses of light and dark. Make the masses hold there first; the
+  detail is built over them.
 - **Coordinates.** A look's pixels are not canvas units. Use `grid: true` (or
   a crop with `grid: 10`) to read positions off a look before you aim a mask
   at something you saw.

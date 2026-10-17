@@ -425,7 +425,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             } else if dep_per_w > 0.0 {
                 let mut d = dep_per_w * wt;
                 if let Some((_, from)) = pass_film {
-                    d = d.min(crate::bristle::film_room(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y as usize * w + x as usize).0), id));
+                    d *= crate::bristle::film_lay(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y as usize * w + x as usize).0), id, d);
                 } else if capped {
                     let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                     d = d.min((cap - used).max(0.0));
@@ -472,11 +472,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0));
                 let mut mm = m * sh * c.k;
                 if let Some((_, from)) = pass_film.filter(|_| mm > 0.0) {
-                    let ms = src[SOLV] / COAT_UM * mm;
-                    let room = crate::bristle::film_room(&sf, j, from, cap * c.k, id);
-                    if mm + ms > room {
-                        mm *= room / (mm + ms);
-                    }
+                    mm *= crate::bristle::film_lay(&sf, j, from, cap * c.k, id, mm * (1.0 + src[SOLV] / COAT_UM));
                 } else if capped && mm > 0.0 {
                     // a thinned stroke adds no more wet film to the pixel it
                     // ploughs into than its ceiling there allows

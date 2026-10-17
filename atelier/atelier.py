@@ -263,10 +263,7 @@ class Atelier:
             waiting = self.on_easel(sid)
             if not waiting:
                 raise Refused(f"{sid}: no painting on the easel")
-            work, number, result = self.hang(sid, waiting[-1])
-        self.history(f"{sid}: painting {int(work.name[-3:])} hung as wall {number} ({result.split(':')[1].strip()} replay check)")
-        self.commit(sid, int(work.name[-3:]), work)
-        return work
+            return self.hang(sid, waiting[-1])
 
     def hang(self, sid, work):
         from PIL import Image
@@ -317,16 +314,19 @@ class Atelier:
         wall.save(png, "PNG")
         png.replace(home / "walls" / f"{number}.png")
         finished = now()
-        write_json(home / "cards" / f"{n:03d}.json", {"number": number, "title": title_of(reply), "words": reply,
-                                                      "folder": folder.name, "finished": finished})
-        write(home / "walls/list.md", render_walls(self.cards(sid)))
+        card = {"number": number, "title": title_of(reply), "words": reply,
+                "folder": folder.name, "finished": finished}
+        write(home / "walls/list.md", render_walls([*self.cards(sid), card]))
         shutil.copy2(folder / "notes/journal.md", work / "journal.md")
         shutil.copy2(log, work / "painting.lua")
         manifest.update(finished=finished, sittings=sittings, canvas=canvas, check=result)
         write_json(work / "manifest.json", manifest)
-        return work, number, result
+        self.history(f"{sid}: painting {n} hung as wall {number} ({result.split(':')[1].strip()} replay check)")
+        self.commit(sid, n, work, card)
+        write_json(home / "cards" / f"{n:03d}.json", card)
+        return work
 
-    def commit(self, sid, n, work):
+    def commit(self, sid, n, work, card):
         """The painting's text records into the stillwet-runs-data clone, at their stillwet-runs paths, with the home
         folder written as ~ (the clone's records are redacted so); no images."""
         home = self.home(sid)
@@ -339,6 +339,8 @@ class Atelier:
                 copy = target / path.relative_to(self.root)
                 copy.parent.mkdir(parents=True, exist_ok=True)
                 copy.write_bytes(path.read_bytes().replace(str(Path.home()).encode(), b"~"))
+            card_record = json.dumps(card, indent=1, ensure_ascii=False) + "\n"
+            write(target / home.relative_to(self.root) / "cards" / f"{n:03d}.json", card_record.replace(str(Path.home()), "~"))
             run(["git", "-C", self.data, "add", "--", target], check=True, capture_output=True)
             run(["git", "-C", self.data, "commit", "-q", "-m", f"atelier: {sid} painting {n} hangs"], check=True, capture_output=True)
 

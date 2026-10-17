@@ -224,6 +224,13 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[-1]["args"], ["look", "--mode", "gallery", "--size", "100", "--grid", "25.123456789"])
 
     @connected
+    async def test_look_mask_reaches_the_easel(self):
+        reply = await self.session.call_tool("look", {"crop": "0,300,1000,500", "mask": "sky,pond"})
+        self.assertFalse(reply.isError)
+        calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1]["args"], ["look", "--crop", "0,300,1000,500", "--mask", "sky,pond"])
+
+    @connected
     async def test_survey_budget_and_remaining_tiles(self):
         reply = await self.session.call_tool("look", {"survey": True, "mode": "gallery"})
         self.assertEqual(len(reply.content), 3)

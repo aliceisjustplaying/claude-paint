@@ -131,6 +131,7 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ palette: false }), []);
 	assert.equal(toolWords("look: --palette takes no other option"), "look: palette takes no other option");
 	assert.deepEqual(lookArgs({ survey: true, mode: "gallery" }), ["--survey", "--mode", "gallery"]);
+	assert.deepEqual(lookArgs({ crop: "0,300,1000,500", mask: "sky,pond" }), ["--crop", "0,300,1000,500", "--mask", "sky,pond"]);
 	for (const options of [{ mode: "gallery" }, { compare: "outside.png" }, { survey: true }, { size: 0 }]) {
 		assert.throws(() => lookArgs({ palette: true, ...options }), /palette takes no other option/);
 	}
@@ -238,7 +239,7 @@ test("an abort stops the tool's chain: nothing after it runs, and no listener is
 });
 
 test("look's errors name the tool's options, not the easel's flags", () => {
-	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)"), "a crop may be at most 500 units on either side; choose a smaller crop");
+	assert.equal(toolWords("look --mask sky: no global is named sky"), "look mask sky: no global is named sky");
 	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");
 	assert.equal(toolWords("look: --survey and --compare are two looks; --light needs --mode relief"), "look: survey and compare are two looks; light needs mode relief");
 	assert.equal(toolWords("look: --hold is a look of its own: no --survey or --compare"), "look: hold is a look of its own: no survey or compare");

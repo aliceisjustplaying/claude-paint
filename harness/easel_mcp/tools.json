@@ -25,7 +25,7 @@
   },
   {
     "name": "look",
-    "description": "Look at the canvas as it is now. Without options: the whole canvas, scaled down. crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. grid: true, or a spacing in canvas units. survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
+    "description": "Look at the canvas as it is now. Without options: the whole canvas, scaled down. crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail up to 1200 pixels a side (500 units); a wider crop is scaled down to fit, and the reply gives its pixels per canvas unit. mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels (up to 1600 for the whole canvas, 1200 for a crop). grid: true, or a spacing in canvas units. mask: the name of a global that holds a mask, or several, comma-separated: each mask's outline and a light fill, drawn over the view in its own color, with its name in that color at the lower right. survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid, mirror and mask are unavailable with hold. It shows the paint on the knife, not how it would look laid. palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -69,6 +69,9 @@
               "type": "number"
             }
           ]
+        },
+        "mask": {
+          "type": "string"
         }
       },
       "required": []

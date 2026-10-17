@@ -468,6 +468,19 @@ impl Session {
             .collect()
     }
 
+    /// The masks the globals `names` hold, in that order, for the look `--mask` to draw.
+    /// Reads only: no Lua runs and nothing changes.
+    pub fn masks(&self, names: &[String]) -> Result<Vec<std::sync::Arc<paint::mask::Mask>>, String> {
+        names
+            .iter()
+            .map(|name| match self.globals.get(name).filter(|(_, c)| *c > 0).map(|(v, _)| v) {
+                Some(Value::UserData(u)) if u.is::<api::M>() => Ok(std::sync::Arc::new((*u.borrow::<api::M>().map_err(|e| e.to_string())?.0).clone())),
+                Some(v) => Err(format!("look --mask {name}: {name} holds {}, not a mask", describe(v))),
+                None => Err(format!("look --mask {name}: no global is named {name}")),
+            })
+            .collect()
+    }
+
     /// What the global `name` puts on a knife held up to the canvas (the look
     /// `--hold`): a knife's own load, with its blade's length and how full it
     /// is, or a pile as its heap is on the board now, as a fresh full load on

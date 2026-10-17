@@ -3,12 +3,15 @@
 //! paint on it as laid), whole or a window of it, and a few ways a painter
 //! looks at a picture: in grays, squinting and in a mirror. A grid in
 //! canvas units can be laid over the look, as a painter squares up a
-//! drawing; it never touches the canvas.
+//! drawing; it never touches the canvas. So can the painting's masks: their
+//! outlines and a light fill, drawn over the look in the same way.
 
 use image::ImageEncoder;
 use paint::color::luminance;
+use paint::mask::Mask;
 use paint::{Canvas, Rgb};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Clone, Default)]
 pub struct View {
@@ -17,7 +20,8 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
-    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops are shown at `LOOK_SCALE` px a unit (a 2400 px canvas's own).
+    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops are shown at `LOOK_SCALE` px a unit (a 2400 px canvas's own),
+    /// scaled down when their longest side would pass this (None: `CROP_MAX`, capped at it).
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
@@ -26,9 +30,13 @@ pub struct View {
     pub light: Option<(f32, f32)>,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
+    /// The masks to draw over the look, by the names of the globals holding them (`--mask`).
+    pub mask: Vec<String>,
+    /// Those masks, in that order: the session fills them in (`Session::masks`).
+    pub masks: Vec<Arc<Mask>>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N --mask name[,name] | --palette";
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
@@ -95,11 +103,19 @@ impl View {
                     }
                 }
                 "--palette" => v.palette = true,
+                "--mask" => {
+                    let s = next()?;
+                    let names: Vec<String> = s.split(',').map(|t| t.trim().to_string()).collect();
+                    if names.iter().any(|n| n.is_empty()) {
+                        return Err(format!("--mask {s}: want the names of globals that hold masks, comma-separated"));
+                    }
+                    v.mask.extend(names);
+                }
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
             i += 1;
         }
-        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some()) {
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some() || !v.mask.is_empty()) {
             return Err("look: --palette takes no other option".into());
         }
         Ok(v)
@@ -345,10 +361,72 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<
     Ok(())
 }
 
+/// The masks' colors, in the order they are named.
+const MASK_COLORS: [Rgb; 4] = [[1.0, 0.1, 0.75], [0.05, 0.85, 1.0], [1.0, 0.8, 0.0], [0.3, 1.0, 0.2]];
+
+/// Each mask over the look: a light fill as strong as the mask is (a soft edge fades), a
+/// line just inside where it crosses one half, and its name in its color at the lower right.
+fn draw_masks(img: &mut Img, m: &Map, names: &[String], masks: &[Arc<Mask>], fs: i64) {
+    let (w, h) = (img.w as i64, img.h as i64);
+    let t = fs - 1;
+    for (k, (name, mask)) in names.iter().zip(masks).enumerate() {
+        let c = MASK_COLORS[k % MASK_COLORS.len()];
+        let val: Vec<f32> = (0..img.w * img.h)
+            .map(|i| {
+                let (u, v) = m.from((i % img.w) as f32 + 0.5, (i / img.w) as f32 + 0.5);
+                mask.sample(u, v).clamp(0.0, 1.0)
+            })
+            .collect();
+        let outside = |x: i64, y: i64| x >= 0 && y >= 0 && x < w && y < h && val[(y * w + x) as usize] < 0.5;
+        for y in 0..h {
+            for x in 0..w {
+                let a = val[(y * w + x) as usize];
+                let edge = a >= 0.5 && (-t..=t).any(|dy| (-t..=t).any(|dx| outside(x + dx, y + dy)));
+                img.blend(x, y, c, if edge { 1.0 } else { 0.22 * a });
+            }
+        }
+        let lw = name.chars().count() as i64 * 4 * fs + fs;
+        img.text(w - lw - 2, h - (k as i64 + 1) * 8 * fs - 2, name, fs, c);
+    }
+}
+
 /// The pixels to a canvas unit a crop is shown at (the 2400 px canvas's own).
 const LOOK_SCALE: f32 = 2.4;
 
-/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops are shown at `LOOK_SCALE`, at most 1200 px per side.
+/// A crop's longest side, px: one that would be longer at `LOOK_SCALE` is scaled down to it.
+const CROP_MAX: usize = 1200;
+
+/// A crop in whole-canvas pixels, clipped to the window the canvas holds.
+fn crop_px(f: paint::Frame, [a, b, c, d]: [f32; 4]) -> std::result::Result<(usize, usize, usize, usize), String> {
+    let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
+    let cl = |u: f32, lo: usize, hi: usize| ((u * f.scale).round().max(0.0) as usize).clamp(lo, hi);
+    let r = (cl(a, wx0, wx1), cl(b, wy0, wy1), cl(c, wx0, wx1), cl(d, wy0, wy1));
+    if r.2 <= r.0 || r.3 <= r.1 {
+        return Err("--crop is empty or outside the canvas".into());
+    }
+    Ok(r)
+}
+
+/// `n` canvas pixels as a crop shows them at full detail: `LOOK_SCALE` px a unit, or the
+/// canvas's own pixels if it has fewer (a painting begun at 4800 px looks to its painter
+/// as one begun at 2400 does).
+fn shown(f: paint::Frame, n: usize) -> usize {
+    if f.scale > LOOK_SCALE { ((n as f32 * LOOK_SCALE / f.scale).round() as usize).max(1) } else { n }
+}
+
+/// For the reply: what a crop shown at `w` x `h` px is scaled to, when that is less than
+/// full detail (`shown`). None for a crop at full detail and for a whole view.
+pub fn scale_note(f: paint::Frame, v: &View, w: usize, h: usize) -> Option<String> {
+    let (x0, y0, x1, y1) = crop_px(f, v.crop?).ok()?;
+    let long = (x1 - x0).max(y1 - y0);
+    if w.max(h) >= shown(f, long) {
+        return None;
+    }
+    let ppu = w.max(h) as f32 * f.scale / long as f32;
+    Some(format!("scaled down to {ppu:.2} pixels a canvas unit (full detail is {})", f.scale.min(LOOK_SCALE)))
+}
+
+/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops are shown at `LOOK_SCALE`, scaled down to at most 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {
     let (w, h, png) = render(c, v)?;
     if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -436,40 +514,24 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
     if f.w.checked_mul(f.h) != Some(px.len()) {
         return Err("look: optical pixels do not match the captured frame".into());
     }
+    if v.masks.len() != v.mask.len() {
+        return Err("look --mask: the masks were not read from the session".into());
+    }
     // crop: units -> whole-canvas pixels -> pixels of the held window
-    let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
+    let (wx0, wy0) = (f.x0, f.y0);
     let (x0, y0, x1, y1) = match v.crop {
-        None => (wx0, wy0, wx1, wy1),
-        Some([a, b, cc, d]) => {
-            let s = f.scale;
-            let cl = |u: f32, lo: usize, hi: usize| ((u * s).round().max(0.0) as usize).clamp(lo, hi);
-            let r = (cl(a, wx0, wx1), cl(b, wy0, wy1), cl(cc, wx0, wx1), cl(d, wy0, wy1));
-            if r.2 <= r.0 || r.3 <= r.1 {
-                return Err("--crop is empty or outside the canvas".into());
-            }
-            r
-        }
+        None => (wx0, wy0, wx0 + f.w, wy0 + f.h),
+        Some(crop) => crop_px(f, crop)?,
     };
     let (cw, ch) = (x1 - x0, y1 - y0);
     let long = cw.max(ch);
-    // a crop is shown at LOOK_SCALE px to a unit whatever the canvas's own width:
-    // a painting begun at 4800 px looks to its painter as one begun at 2400 does
-    let shown = |n: usize| if f.scale > LOOK_SCALE { ((n as f32 * LOOK_SCALE / f.scale).round() as usize).max(1) } else { n };
-    if v.crop.is_some() && (shown(cw) > 1200 || shown(ch) > 1200) {
-        let units = 1200.0 / f.scale.min(LOOK_SCALE);
-        let side = (units / 2.0).floor().max(1.0);
-        let a = wx0 as f32 / f.scale;
-        let b = wy0 as f32 / f.scale;
-        return Err(format!(
-            "--crop exceeds 1200 pixels per side (a crop is shown at 2.4 pixels a unit); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
-            a + side,
-            b + side
-        ));
-    }
     if long == 0 || cw == 0 || ch == 0 {
         return Err("look: canvas is empty".into());
     }
-    let mut size = if v.crop.is_some() { shown(long) } else { v.size.unwrap_or(1000).clamp(1, 1600) };
+    let mut size = match v.crop {
+        Some(_) => shown(f, long).min(v.size.unwrap_or(CROP_MAX).clamp(1, CROP_MAX)),
+        None => v.size.unwrap_or(1000).clamp(1, 1600),
+    };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
@@ -509,6 +571,7 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
         };
         let fs = if ow.max(oh) >= 1500 { 3 } else { 2 };
         let mut im = Img { w: ow, h: oh, px: img };
+        draw_masks(&mut im, &map, &v.mask, &v.masks, fs);
         if let Some(step) = v.grid {
             draw_grid(&mut im, &map, step, fs)?;
         }
@@ -655,4 +718,96 @@ fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
         }
     }
     a
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GRAY: Rgb = [0.3, 0.3, 0.3];
+
+    /// A 1000 x 500 unit canvas at 2.4 px a unit, all one gray.
+    fn canvas() -> (paint::Frame, Vec<Rgb>) {
+        let f = paint::Frame::new(2400, 1200, 2.4);
+        (f, vec![GRAY; f.w * f.h])
+    }
+
+    fn view(args: &[&str]) -> View {
+        View::parse(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>()).unwrap()
+    }
+
+    fn pixels(png: &[u8]) -> image::RgbImage {
+        image::load_from_memory(png).unwrap().to_rgb8()
+    }
+
+    #[test]
+    fn a_wide_crop_is_scaled_down_and_says_so() {
+        let (f, px) = canvas();
+        // a crop that fits is shown at full detail, as before, and the reply says nothing more
+        let v = view(&["--crop", "0,0,500,100"]);
+        let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (1200, 240));
+        assert_eq!(scale_note(f, &v, w, h), None);
+        // a strip across the whole canvas: the long side at 1200 px, half of full detail
+        let v = view(&["--crop", "0,200,1000,300"]);
+        let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (1200, 120));
+        assert_eq!(scale_note(f, &v, w, h).unwrap(), "scaled down to 1.20 pixels a canvas unit (full detail is 2.4)");
+        // size sets a crop's long side, up to 1200 px
+        let v = view(&["--crop", "0,0,400,300", "--size", "480"]);
+        let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (480, 360));
+        assert_eq!(scale_note(f, &v, w, h).unwrap(), "scaled down to 1.20 pixels a canvas unit (full detail is 2.4)");
+        let (w, h, _) = render_pixels(f, &view(&["--crop", "0,0,1000,500", "--size", "1600"]), &px).unwrap();
+        assert_eq!((w, h), (1200, 600));
+        // a whole view is as it was
+        let v = view(&[]);
+        let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (1000, 500));
+        assert_eq!(scale_note(f, &v, w, h), None);
+    }
+
+    #[test]
+    fn masks_are_drawn_over_the_look() {
+        let (f, px) = canvas();
+        let plain = render_pixels(f, &view(&[]), &px).unwrap().2;
+        // the left half of the canvas, and a soft-edged band across its middle
+        let left = Arc::new(Mask::from_fn(f, |x, _| if x < 500.0 { 1.0 } else { 0.0 }));
+        let band = Arc::new(Mask::from_fn(f, |_, y| (1.0 - (y - 250.0).abs() / 50.0).clamp(0.0, 1.0)));
+        let mut v = view(&["--mask", "left, band"]);
+        assert_eq!(v.mask, ["left", "band"]);
+        assert!(render_pixels(f, &v, &px).is_err(), "names without their masks");
+        v.masks = vec![left, band];
+        let (w, h, png) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (1000, 500));
+        let (seen, plain) = (pixels(&png), pixels(&plain));
+        let g = plain.get_pixel(0, 0).0;
+        // outside both: the paint as it is
+        assert_eq!(seen.get_pixel(750, 50).0, g);
+        // inside the first: lightly filled with its color (magenta: more red and blue, less green)
+        let p = seen.get_pixel(250, 50).0;
+        assert!(p[0] > g[0] && p[2] > g[2] && p[1] < g[1], "{p:?} over {g:?}");
+        assert!(p[0] < 200, "a light fill, not a solid one: {p:?}");
+        // its outline, just inside where it ends (x = 500 units is pixel 500 of 1000)
+        let line = seen.get_pixel(499, 50).0;
+        assert!(line[0] > 230 && line[1] < 120, "{line:?}");
+        // the second in its own color: the band's middle is filled more than its soft edge
+        let (mid, edge) = (seen.get_pixel(750, 250).0, seen.get_pixel(750, 215).0);
+        assert!(mid[2] > g[2] && mid[1] > g[1] && mid[0] < g[0], "{mid:?}");
+        assert!(mid[2] > edge[2] && edge[2] > g[2], "{mid:?} {edge:?}");
+        // mirrored, the first lies on the right
+        let mut m = view(&["--mask", "left", "--mode", "mirror"]);
+        m.masks = vec![v.masks[0].clone()];
+        let mirrored = pixels(&render_pixels(f, &m, &px).unwrap().2);
+        assert_eq!(mirrored.get_pixel(250, 50).0, g);
+        assert_ne!(mirrored.get_pixel(750, 50).0, g);
+    }
+
+    #[test]
+    fn mask_names_are_parsed() {
+        let bad = |a: &[&str]| View::parse(&a.iter().map(|a| a.to_string()).collect::<Vec<_>>()).err().unwrap();
+        assert!(bad(&["--mask", "sky,,pond"]).contains("comma-separated"), "{}", bad(&["--mask", "sky,,pond"]));
+        assert!(bad(&["--mask"]).contains("needs a value"));
+        assert_eq!(bad(&["--palette", "--mask", "sky"]), "look: --palette takes no other option");
+    }
 }

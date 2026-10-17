@@ -6,12 +6,13 @@ import secrets
 SITTING_ZERO = (
     'Your brief is in BRIEF.md. This sitting is only for writing notes/concepts.md as described under Choosing the picture. '
     'Write each estimate on its own line after the picture as Estimate: N/100, where N is a whole number from 0 to 100. '
-    'Use write_concepts to save the whole file at once. Each save replaces it.'
+    'Use plain text and put nothing else in the file. Use write_concepts to save the whole file at once. Each save replaces it.'
 )
 RETRY = (
-    "notes/concepts.md didn't parse. Replace it with eight entries numbered 1 to 8, each with a picture in a sentence or two "
+    "Your brief is in BRIEF.md. notes/concepts.md is missing or didn't parse. Replace it with eight entries as described under Choosing the picture, "
+    'numbered 1 to 8, each with a picture in a sentence or two '
     'followed by its own line Estimate: N/100, where N is a whole number from 0 to 100. '
-    'Use write_concepts to save the whole file at once. Each save replaces it.'
+    'Use plain text and put nothing else in the file. Use write_concepts to save the whole file at once. Each save replaces it.'
 )
 
 

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -111,6 +112,32 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         direct = subprocess.run([sys.executable, str(runner / "r21_chains.py")], capture_output=True, text=True)
         self.assertNotEqual(direct.returncode, 0)
         self.assertIn("Use the prepared run.py", direct.stderr)
+
+    def test_r41_house_names_the_open_passages_and_opens_later_sittings_with_them(self):
+        prep = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
+        (self.studio / "BRIEF.md").unlink()
+        (self.studio / "bin/box").write_text("friedrich")
+        (self.studio / "paintings/lua").mkdir(parents=True)
+        (self.studio / "notes/journal.md").write_text("")
+        house = self.root / "house-r41"
+        house.mkdir()
+        for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "studio_notes.md"):
+            shutil.copy(REPO / "notes/round29/runner" / name, house / name)
+        for name in ("brief_template.md", "r21_chains.py"):
+            shutil.copy(REPO / "archive/collection/runners/gallery-fcf9c110/r41" / name, house / name)
+        runner = self.root / "runner"
+        prep["prepare"](self.studio, house, runner, house / "studio_notes.md", self.root / "prepared-run", critic=True)
+        config = json.loads(subprocess.check_output([sys.executable, str(runner / "run.py"), "--check"]))
+        self.assertIn("`Open passages:`", config["first_sitting_cmd"][-1])
+        self.assertEqual(config["later_sitting_env"]["PAINTER_OPEN_PASSAGES"], "1")
+        self.assertEqual(config["later_sitting_env"]["PAINTER_SITTING_RECOVERY"], "1")
+        self.assertNotIn("PAINTER_OPEN_PASSAGES", config["first_sitting_env"])
+        brief = (self.studio / "BRIEF.md").read_text()
+        for words in (brief, (runner / "r21_chains.py").read_text()):
+            self.assertNotIn("heart", words)
+            self.assertNotIn("Before adding repeated small details", words)
+        self.assertIn("`Open passages:`", brief)
+        self.assertIn("particular detail", brief)
 
     async def test_exported_agy_discovers_and_retrieves_every_page(self):
         prepare = runpy.run_path(str(REPO / "scripts/prepare_agy_studio"))["prepare"]

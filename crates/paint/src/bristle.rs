@@ -872,14 +872,21 @@ impl Surf {
     /// below lies buried under it, out of sight.
     #[inline]
     pub(crate) unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+        if self.drain && v <= 0.0 {
+            return;
+        }
         if self.skim <= 0.0 {
             return unsafe { self.add(i, v, lat, hide, cure) };
         }
         unsafe {
             let buried = (*self.vol.add(i) - self.skim).max(0.0);
+            let below = (self.drain && buried > 0.0).then(|| skim_top(&mut *self.hide.add(i), *self.vol.add(i), buried));
             *self.vol.add(i) -= buried;
             self.add(i, v, lat, hide, cure);
             *self.vol.add(i) += buried;
+            if let Some(below) = below {
+                restore_buried(&mut *self.hide.add(i), &below, buried / *self.vol.add(i));
+            }
         }
     }
 
@@ -2707,6 +2714,18 @@ pub(crate) fn fluid_of(hd: Prop) -> Prop {
     h
 }
 
+pub(crate) fn skim_top(hd: &mut Prop, vol: f32, buried: f32) -> Prop {
+    let mut below = *hd;
+    *hd = take_from(&mut below, vol, vol - buried);
+    below
+}
+
+pub(crate) fn restore_buried(hd: &mut Prop, below: &Prop, share: f32) {
+    for k in 4..hd.len() {
+        hd[k] += (below[k] - hd[k]) * share;
+    }
+}
+
 /// The oil at the surface of a film whose properties are `hd`: the paint's
 /// own above its packed layer (`ground_drain`; the drain switch).
 pub(crate) fn surface_oil(hd: &Prop) -> f32 {
@@ -2837,10 +2856,41 @@ unsafe fn knife_add(sf: &Surf, i: usize, v: f32, k: &Knife, skim: bool) {
         if !skim {
             return sf.add(i, v, &k.lat, k.hide, k.cure);
         }
-        let buried = (*sf.vol.add(i) - SKIM_COATS).max(0.0);
-        *sf.vol.add(i) -= buried;
-        sf.add(i, v, &k.lat, k.hide, k.cure);
-        *sf.vol.add(i) += buried;
+        Surf { skim: SKIM_COATS, ..*sf }.lay(i, v, &k.lat, k.hide, k.cure);
+    }
+}
+
+#[cfg(test)]
+mod skim_packing_tests {
+    use super::*;
+
+    #[test]
+    fn skimming_keeps_the_packed_paint_buried_under_it() {
+        for path in ["brush", "engine7", "knife"] {
+            let mut c = Canvas::new(2, 1.0, [0.3; 3]).with_engine(7).with_drain(true);
+            c.wet.vol[0] = 1.0;
+            c.wet.hide[0] = [0.8, 0.6, 1.0, 0.0, 0.4, 0.7, 0.4, 1.0, 0.4, 0.0];
+            let mut sf = c.surf();
+            sf.skim = SKIM_COATS;
+            let paint = crate::Paint { oil: 1.0, packed: 0.7, floor: 0.4, oil_volume: 0.4, ..crate::Paint::body([1.0; 3]) };
+            let mut knife = Knife::new(20.0);
+            knife.load(paint, 1.0);
+            for pass in 0..=3 {
+                let added = if pass == 0 { 0.0 } else { 0.25 };
+                unsafe {
+                    match path {
+                        "brush" => sf.lay(0, added, &knife.lat, knife.hide, 0.0),
+                        "engine7" => crate::engine7::add::Film::of(&sf).lay(0, added, &crate::engine7::add::Paint7::new(sf.lean, sf.drain, &knife.lat, knife.hide, 0.0), sf.skim),
+                        _ => knife_add(&sf, 0, added, &knife, true),
+                    }
+                }
+                let (vol, hd) = (c.wet.vol[0], c.wet.hide[0]);
+                assert!((vol - (1.0 + 0.25 * pass as f32)).abs() < 1e-6, "{path}: volume {vol}");
+                let packed = if pass == 0 { 1.0 } else { 1.0 - SKIM_COATS };
+                assert!((vol * hd[7] - packed).abs() < 1e-6, "{path}: packed paint {} at pass {pass}", vol * hd[7]);
+                assert!((vol * hd[4] - (0.4 + 0.25 * pass as f32)).abs() < 1e-6, "{path}: oil {} at pass {pass}", vol * hd[4]);
+            }
+        }
     }
 }
 

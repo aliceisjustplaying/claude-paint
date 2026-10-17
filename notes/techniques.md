@@ -273,9 +273,9 @@ does; this says how to use them. What you paint is yours to choose.
   set layer.
 - **Dip it for a lift.** A dry rag lifts less and leaves a pale tint of
   the color in the weave: useful for wiping lights out of a wet glaze or
-  lay-in. To take a passage off, dip well (`r:dip(0.9)`), press firmly, give it two or
-  three passes, then go over it again across the first direction with a
-  fresh, dipped rag.
+  lay-in. To take a passage off, dip well (`r:dip(0.9)`), press firmly,
+  give it two or three passes, then go over it again across the first
+  direction with a fresh, dipped rag.
 - **The spirits go in minutes.** Dampness halves every three minutes of
   painting time, and a long mask wipe takes minutes. Dip just before each
   wipe; `print(r.damp)` says how much is left.

@@ -89,7 +89,7 @@ def corrected_runner(source, tools=TOOLS, reading=READING, die_roll=False):
         lines = result.splitlines(keepends=True)
         hook = hooks[0]
         indent = " " * hook.col_offset
-        lines.insert(hook.lineno - 1, indent + 'if k == 1 and not cont:\n' + indent + '    msg = DIE_ROLL_OPENING + "\\n\\n" + msg\n')
+        lines.insert(hook.lineno - 1, indent + 'if not cont and (k == 1 or before == 0):\n' + indent + '    msg = DIE_ROLL_OPENING + "\\n\\n" + msg\n')
         result = "".join(lines)
     if "friedrich_painter.md" in result or "notes/research/trees.md" in result:
         raise ValueError("house runner still supplies the retired required reading")

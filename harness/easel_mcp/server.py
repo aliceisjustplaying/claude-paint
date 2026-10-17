@@ -141,13 +141,22 @@ def look_args(view):
 
 
 REPLAY = re.compile(r"rebuilding from the log \((\d+) of (\d+) chunks\)")
+# `status` from an easel that is starting, before it has read the log (main.rs `STARTING`)
+STARTING = "the easel is starting; retry in a moment"
 
 
-def chunks_in(log):
+def log_text(log):
     try:
-        return len(re.findall(r"^--@ chunk", log.read_text(), flags=re.MULTILINE))
+        return log.read_text()
     except OSError:
-        return 0
+        return ""
+
+
+def kept(log, before, lua):
+    """Whether `lua` was kept as a new chunk: the log changed since `before` and its last chunk is
+    `lua` as the easel keeps it. A fresh scratch canvas replaces its log, so chunks aren't counted."""
+    now = log_text(log)
+    return now != before and re.split(r"^--@ chunk \d+\n", now, flags=re.MULTILINE)[-1] == (lua or "").rstrip() + "\n"
 
 
 def image_limits():
@@ -255,6 +264,13 @@ class Easel:
                 await asyncio.sleep(min(0.1, progress_deadline - time.monotonic()))
                 args = ["status"]
                 continue
+            if code and out.strip() == STARTING:
+                # the easel has its socket but hasn't read the log yet: its progress is a moment away
+                if time.monotonic() >= progress_deadline:
+                    raise ValueError("the easel isn't answering")
+                await asyncio.sleep(min(0.1, progress_deadline - time.monotonic()))
+                args = ["status"]
+                continue
             if code == 0:
                 return rebuilding
             if opened or rebuilding:
@@ -268,7 +284,7 @@ class Easel:
         if await self.ensure_open(deadline, args[0] == "status"):
             deadline = time.monotonic() + wait
         log = self.studio / "paintings/lua" / ("scratch.lua" if "--scratch" in args else "painting.lua")
-        before = chunks_in(log) if args[0] == "do" else 0
+        before = log_text(log) if args[0] == "do" else ""
         try:
             code, out = await self.step(args, text, deadline)
         except asyncio.TimeoutError:
@@ -285,7 +301,7 @@ class Easel:
                 raise ValueError(f"{minutes}; `log` shows whether the chunk ran") from None
             if now.startswith("painting a chunk"):
                 raise ValueError(f"{minutes}. The chunk is still running and isn't in the log yet: {now}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept.") from None
-            if chunks_in(log) > before:
+            if kept(log, before, text):
                 raise ValueError(f"{minutes}, but the chunk ran: it is in the log.") from None
             raise ValueError(f"{minutes}, and the chunk isn't in the log: it changed nothing.") from None
         out = out.rstrip()

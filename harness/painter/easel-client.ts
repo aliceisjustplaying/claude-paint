@@ -88,6 +88,8 @@ async function step(studio: string, args: string[], input: string | undefined, s
 
 /** The easel's answer to `status` while it rebuilds the painting from its log: chunks done, of how many. */
 const REPLAY = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/;
+/** `status` from an easel that is starting, before it has read the log (main.rs `STARTING`). */
+const STARTING = "the easel is starting; retry in a moment";
 
 /**
  * Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. With
@@ -129,6 +131,13 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 			r = await step(studio, ["status"], undefined, signal, progressDeadline);
 			continue;
 		}
+		if (r.code !== 0 && r.out.trim() === STARTING) {
+			// the easel has its socket but hasn't read the log yet: its progress is a moment away
+			if (Date.now() >= deadline) throw new Error("the easel isn't answering");
+			await pause(Math.min(100, deadline - Date.now()), undefined, { signal });
+			r = await step(studio, ["status"], undefined, signal, deadline);
+			continue;
+		}
 		if (r.code === 0) return rebuilding;
 		// Never open a second easel after an open or a rebuild failure.
 		if (opened || rebuilding) throw new Error(r.out.trim() || "the easel didn't open");
@@ -137,13 +146,22 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	}
 }
 
-/** The chunks in a log: its `--@ chunk` lines (0 if there is no log yet). */
-function chunksIn(log: string): number {
+/** A log's text ("" if there is no log yet). */
+function logText(log: string): string {
 	try {
-		return readFileSync(log, "utf8").match(/^--@ chunk/gm)?.length ?? 0;
+		return readFileSync(log, "utf8");
 	} catch {
-		return 0;
+		return "";
 	}
+}
+
+/**
+ * Whether `lua` was kept as a new chunk: the log changed since `before` and its last chunk is
+ * `lua` as the easel keeps it. A fresh scratch canvas replaces its log, so chunks aren't counted.
+ */
+function kept(log: string, before: string, lua: string | undefined): boolean {
+	const now = logText(log);
+	return now !== before && now.split(/^--@ chunk \d+\n/m).at(-1) === `${(lua ?? "").trimEnd()}\n`;
 }
 
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
@@ -152,7 +170,7 @@ export async function atEasel(studio: string, args: string[], input: string | un
 	let deadline = Date.now() + wait;
 	if (await ensureOpen(studio, signal, deadline, args[0] === "status")) deadline = Date.now() + wait;
 	const log = join(studio, "paintings", "lua", args.includes("--scratch") ? "scratch.lua" : "painting.lua");
-	const before = args[0] === "do" ? chunksIn(log) : 0;
+	const before = args[0] === "do" ? logText(log) : "";
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
 		if (args[0] !== "do") throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
@@ -165,7 +183,7 @@ export async function atEasel(studio: string, args: string[], input: string | un
 		if (now.startsWith("painting a chunk")) {
 			throw new Error(`${minutes}. The chunk is still running and isn't in the log yet: ${now}. \`status\` shows how far it has got while it runs; once it ends, \`log\` shows whether it was kept.`);
 		}
-		if (chunksIn(log) > before) throw new Error(`${minutes}, but the chunk ran: it is in the log.`);
+		if (kept(log, before, input)) throw new Error(`${minutes}, but the chunk ran: it is in the log.`);
 		throw new Error(`${minutes}, and the chunk isn't in the log: it changed nothing.`);
 	}
 	const text = r.out.trimEnd();

@@ -2,7 +2,7 @@
 //!
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N] [--mask name[,name]]
 //!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
@@ -106,7 +106,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000] [--mask name[,name]]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -126,7 +126,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
                       (a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000] [--mask name[,name]]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -965,7 +965,7 @@ const HOLD_HALF: f32 = 120.0;
 /// Only reads: no hand time, nothing in the log, the canvas and state untouched.
 fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>), String> {
     use image::ImageEncoder;
-    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette || !v.mask.is_empty() {
         return Err("look --hold takes --at, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (paint, blade, full) = s.held(name)?;
@@ -979,7 +979,11 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
     }
     let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
-    let (_, _, png) = look::render(&c, &seen_as(crop))?;
+    let (pw, ph, png) = look::render(&c, &seen_as(crop))?;
+    // (the blade is shown at full detail: so is the passage it is held over)
+    if look::scale_note(c.window(), &seen_as(crop), pw, ph).is_some() {
+        return Err("look --hold: the passage is shown at full detail, at most 1200 pixels a side: a --crop of at most 500 units a side".into());
+    }
     let mut passage = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     // the knife: its paint laid thick on a steel blade, on a board of its own with the
     // painting's pixels to the unit, millimetres to the unit and engine
@@ -1261,7 +1265,8 @@ impl Server {
             return self.compare(&rest, &prev);
         }
         let args = &rest[..];
-        let v = look::View::parse(args)?;
+        let mut v = look::View::parse(args)?;
+        v.masks = self.s.masks(&v.mask)?;
         let t0 = Instant::now();
         if v.palette {
             let (w, h, png) = palette_look(&self.s)?;
@@ -1284,8 +1289,9 @@ impl Server {
                     }
                     None => display::new_look(&session_dir(&self.name), &png)?,
                 };
+                let note = look::scale_note(optics.frame(), &v, w, h).map(|n| format!(": {n}")).unwrap_or_default();
                 let publication = display::Publication::new(vec![(v, path.clone())])?;
-                reply = Some(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+                reply = Some(format!("{} ({w}x{h}, {:.2}s){note}\n", path.display(), t0.elapsed().as_secs_f64()));
                 Ok(Box::new(move |cancel| publication.render(optics, cancel)))
             })?;
             return Ok(reply.unwrap());
@@ -1300,7 +1306,8 @@ impl Server {
                 (w, h, new_look(&session_dir(&self.name), &png)?)
             }
         };
-        let reply = format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64());
+        let note = look::scale_note(c.window(), &v, w, h).map(|n| format!(": {n}")).unwrap_or_default();
+        let reply = format!("{} ({w}x{h}, {:.2}s){note}\n", path.display(), t0.elapsed().as_secs_f64());
         look::companions(&c, &[(v, path)]);
         Ok(reply)
     }
@@ -1314,6 +1321,7 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
         let view = look::View::parse(args)?;
+        let masks = self.s.masks(&view.mask)?;
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px as a crop is shown, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
@@ -1327,7 +1335,8 @@ impl Server {
                     let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
                     let mut a = args.to_vec();
                     a.extend(["--crop".to_string(), crop.clone()]);
-                    let v = look::View::parse(&a)?;
+                    let mut v = look::View::parse(&a)?;
+                    v.masks = masks.clone();
                     let (w, h, png) = look::render_pixels(c.window(), &v, seen)?;
                     let p = if stable { display::new_look(&session_dir(&self.name), &png)? } else { new_look(&session_dir(&self.name), &png)? };
                     out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
@@ -1364,9 +1373,11 @@ impl Server {
         if !a.iter().any(|x| x == "--size" || x == "--crop") {
             a.extend(["--size".to_string(), "800".to_string()]);
         }
-        let v = look::View::parse(&a)?;
+        let mut v = look::View::parse(&a)?;
+        v.masks = self.s.masks(&v.mask)?;
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
-        let (_, _, png) = look::render(&c, &v)?;
+        let (nw, nh, png) = look::render(&c, &v)?;
+        let note = look::scale_note(c.window(), &v, nw, nh).map(|n| format!(" ({n})")).unwrap_or_default();
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
         // an earlier look of this studio: a picture under its folder, nothing outside it
         let studio = root().canonicalize().map_err(|e| e.to_string())?;
@@ -1390,7 +1401,7 @@ impl Server {
         let mut bytes = Vec::new();
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
         let p = new_look(&session_dir(&self.name), &bytes)?;
-        Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
+        Ok(format!("{} ({}x{}): left {}, right now{note}\n", p.display(), both.width(), h, prev.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.

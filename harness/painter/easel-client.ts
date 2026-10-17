@@ -180,7 +180,7 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string; mask?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette) {
 		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
@@ -198,17 +198,13 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	if (p.size !== undefined) a.push("--size", String(p.size));
 	if (p.grid === true) a.push("--grid");
 	else if (typeof p.grid === "number") a.push("--grid", String(p.grid));
+	if (p.mask) a.push("--mask", p.mask);
 	return a;
 }
 
-/**
- * An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on, and
- * a crop's limit is in canvas units (1200 of the live canvas's 2400 pixels are 500 units), not pixels.
- */
+/** An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on. */
 export function toolWords(t: string): string {
-	return t
-		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
-		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
+	return t.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at|mask)\b/g, "$1");
 }
 
 /** Deliver a survey in order within the request budget, keeping every original tile on disk. */

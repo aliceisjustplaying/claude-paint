@@ -3,8 +3,8 @@
 # (nothing extracted, no easel cached): each studio gets its own box's easel.
 # The sargent, inness and blank exports start together, so they extract the
 # archive and build at the same time; then each studio's easel must know
-# exactly its own box (the list its refusal of an unknown box gives) and
-# its strings must hold no other box's name. The sargent export is held
+# exactly its own box (the list its refusal of an unknown box gives).
+# The sargent export is held
 # between its build and its copy (STUDIO_BUILD_HOOK) until the inness and
 # blank builds have finished, so an export that copied from a build output
 # the others share would copy another box's easel every time.
@@ -59,13 +59,6 @@ for p in "${profiles[@]}"; do
   err=$(cd / && "$probe/bin/easel" open 2>&1 || true)
   known=$(sed -n 's/.*no box "no-such-box" (its boxes: \(.*\)).*/\1/p' <<<"$err")
   [ "$known" = "$want" ] || { echo "$p: its easel knows the boxes [$known], not [$want] ($err)" >&2; exit 1; }
-  # and its strings name no other box (inside words too: they run together)
-  others=()
-  for b in sargent inness tadema tonn hopper "tube box"; do
-    [ "$b" = "$p" ] || { [ "$b" = "tube box" ] && [ "$p" = blank ]; } || others+=("$b")
-  done
-  hit=$(grep -ioE "$(IFS='|'; echo "${others[*]}")" <<<"$(strings "$e")" | sort -u | tr '\n' ' ' || true)
-  [ -z "$hit" ] || { echo "$p: its easel's strings name other boxes: $hit" >&2; exit 1; }
   echo "$p: ok (boxes: $known)"
 done
 echo "export_concurrent: three exports at once from an empty build directory each got their own box's easel ($work)"

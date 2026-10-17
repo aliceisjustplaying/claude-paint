@@ -89,8 +89,9 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "yours to use, whether that means days or years. Enjoy it. "
                    "At the end of the sitting, record an updated handoff in your journal and last reply: "
                    "the `Open passages:` list as it now stands (`Open passages: none` when nothing is open) and the practical lessons that still apply. "
-                   "When that list is empty and a fresh look at the whole canvas and detail crops finds "
-                   "nothing more to take up, record your reflections in your journal and finish.")
+                   "The painting is finished when you end a sitting in which you made no marks on the painting "
+                   "and looked at the whole canvas and at a detail crop in normal color, even if the list still "
+                   "names passages. Record your reflections in your journal before you end that sitting.")
 
 
 def return_message(sittings):

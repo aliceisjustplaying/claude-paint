@@ -23,6 +23,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 SERVER = Path(__file__).with_name("server.py")
+# what the painter must not hear about a chunk: the machine's time, the tool's wait, the easel's line and mark counts, chunk numbers
+MACHINE_WORDS = r"running for|within|\d+ minutes?\b|budget|limit|\bline \d|\d+ lines|of \d|strokes|touches|chunk \d|\(chunk|\d+ chunks?"
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII="
 FAKE = '''#!{python}
 import base64, json, os, sys
@@ -164,11 +166,13 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
 
         log = self.studio / "paintings/lua/painting.lua"
         log.parent.mkdir(parents=True)
-        running = "painting a chunk (at line 3 of 9): 40 strokes and touches so far"
+        running = "painting a chunk (at line 3 of 9): 40 strokes and touches so far, 2 min 30 s on the painting's clock (now day 2, 14:05), running for 12 min 3 s"
         three = "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n"
-        ran, nothing = "the easel didn't answer within 12 minutes, but the chunk ran: it is in the log.", "the easel didn't answer within 12 minutes, and the chunk isn't in the log: it changed nothing."
+        stopped = "`paint` stopped waiting for the easel's answer"
+        ran, nothing = f"{stopped}, but the chunk ran: it is in the log.", f"{stopped}, and the chunk isn't in the log: it changed nothing."
         for status, after, said in (
-            (running, None, f"the easel didn't answer within 12 minutes. The chunk is still running and isn't in the log yet: {running}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept."),
+            (running, None, f"{stopped}. The chunk is still running and isn't in the log yet: painting a chunk: it has taken 2 min 30 s of the painting's time so far, and the painting's clock reads day 2, 14:05. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept."),
+            ("painting a chunk: starting, running for 12 min 0 s", None, f"{stopped}. The chunk is still running and isn't in the log yet: painting a chunk: starting. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept."),
             ("4 chunks · 2400px · no canvas yet", three + "\n--@ chunk 4\nx = 1\n", ran),
             ("the chunk is in the log (chunk 4); the easel is finishing its reply, running for 12 min 1 s", three + "\n--@ chunk 4\nx = 1\n", ran),
             ("3 chunks · 2400px · no canvas yet", None, nothing),
@@ -189,6 +193,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(said=said), patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
                 await easel.at(["do", "-"], "x = 1")
             self.assertEqual(str(raised.exception), said)
+            self.assertNotRegex(str(raised.exception), MACHINE_WORDS)
 
         # a chunk sent with CRLF line ends is kept with them: the log is read as written
         log.write_text(three)
@@ -204,6 +209,25 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
             await easel.at(["do", "-"], "x = 1\r\ny = 2\r\n")
         self.assertEqual(str(raised.exception), ran)
+
+    def test_progress_tells_what_is_happening_and_the_paintings_time(self):
+        loader = SourceFileLoader("progress_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        for easel, painter in (
+            ("painting a chunk (at line 8 of 20): 100 strokes and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s",
+             "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"),
+            ("painting a chunk (20 lines): 0 strokes and touches so far, 14 min 20 s on the painting's clock (now day 3, 18:40), running for 40 s",
+             "painting a chunk: it has taken 14 min 20 s of the painting's time so far, and the painting's clock reads day 3, 18:40"),
+            ("painting a chunk: starting, running for 2 s", "painting a chunk: starting"),
+            ("the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s", "the chunk is in the log; the easel is finishing its reply"),
+            # an easel line worded otherwise still tells only that a chunk is painting
+            ("painting a chunk (line 3/9): 40 marks, 12 min elapsed", "painting a chunk"),
+            ("canvas{size=900}", "canvas{size=900}"),
+        ):
+            with self.subTest(easel=easel):
+                self.assertEqual(module.progress_words(easel), painter)
+                self.assertNotRegex(module.progress_words(easel), MACHINE_WORDS)
 
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))

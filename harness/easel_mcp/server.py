@@ -31,6 +31,17 @@ def hide_counters(text):
     return re.sub(r"the chunk ran longer than \d+ minutes and was stopped", "the chunk didn't finish and was stopped", text)
 
 
+def progress_words(text):
+    """A running chunk's progress built only from what the painter may hear (easel-client.ts progressReply)."""
+    def painting(line):
+        spent = re.search(r"(\d+(?: min \d+)? s) on the painting's clock \(now (day \d+, \d\d:\d\d)\)", line[0])
+        if spent:
+            return f"painting a chunk: it has taken {spent[1]} of the painting's time so far, and the painting's clock reads {spent[2]}"
+        return "painting a chunk: starting" if line[0].startswith("painting a chunk: starting") else "painting a chunk"
+    text = re.sub(r"^painting a chunk\b.*$", painting, text, count=1, flags=re.MULTILINE)
+    return re.sub(r"^the chunk is in the log\b.*$", "the chunk is in the log; the easel is finishing its reply", text, count=1, flags=re.MULTILINE)
+
+
 def tool_words(text):
     text = text.replace("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)", "a crop may be at most 500 units on either side; choose a smaller crop")
     return re.sub(r"--(crop|mask|mode|size|grid|palette|light|survey|compare|ref|hold|at)\b", r"\1", text)
@@ -311,19 +322,19 @@ class Easel:
             if args[0] != "do" or (self.studio / "bin/watercolor-studio").is_file():
                 raise ValueError("the easel didn't answer; `log` shows whether the chunk ran") from None
             # what landed: the chunk still running (its progress), in the log, or neither
-            minutes = f"the easel didn't answer within {round(wait / 60)} minutes"
+            stopped = "`paint` stopped waiting for the easel's answer"
             try:
                 code, now = await self.step(["status"], None, time.monotonic() + 10)
             except asyncio.TimeoutError:
                 code, now = 1, ""
-            now = now.strip()
+            now = progress_words(now.strip())
             if code:
-                raise ValueError(f"{minutes}; `log` shows whether the chunk ran") from None
+                raise ValueError(f"{stopped}; `log` shows whether the chunk ran") from None
             if now.startswith("painting a chunk"):
-                raise ValueError(f"{minutes}. The chunk is still running and isn't in the log yet: {now}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept.") from None
+                raise ValueError(f"{stopped}. The chunk is still running and isn't in the log yet: {now}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept.") from None
             if kept(log, before, text):
-                raise ValueError(f"{minutes}, but the chunk ran: it is in the log.") from None
-            raise ValueError(f"{minutes}, and the chunk isn't in the log: it changed nothing.") from None
+                raise ValueError(f"{stopped}, but the chunk ran: it is in the log.") from None
+            raise ValueError(f"{stopped}, and the chunk isn't in the log: it changed nothing.") from None
         out = out.rstrip()
         if code:
             raise ValueError(out or "the easel gave no answer")
@@ -441,7 +452,7 @@ class Easel:
             said = self.revise_journal(params["replaces"], params["text"]) if "replaces" in params else await self.at(["note", "-"], params["text"])
         elif name == "status":
             said = await self.at(["status", *on])
-            said = tag + re.sub(r"^\d+px · ", "", re.sub(r"^\d+ chunks? · ", "", said))
+            said = tag + progress_words(re.sub(r"^\d+px · ", "", re.sub(r"^\d+ chunks? · ", "", said)))
         elif name == "log":
             said = re.sub(r"^--@ chunk \d+[ \t]*$", "--@ chunk", await self.at(["log", *on]), flags=re.MULTILINE)
             units = said.encode("utf-16-le", errors="surrogatepass")

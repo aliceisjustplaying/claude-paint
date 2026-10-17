@@ -27,7 +27,7 @@ done. Its tools:
 |---|---|
 | `paint` | runs a chunk of Lua. The reply is what the chunk printed, the painting's current clock, then `ok` |
 | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
-| `probe` | gives the paint at a point (`at: "x,y"`) or averaged over an area (`crop: "x0,y0,x1,y1"`) in numbers: its color and value from 0 to 255 as a look shows them, the same in the gallery's light, and whether it is open, setting, tacky or dry; it can't tell which piles the paint came from |
+| `probe` | gives the paint at a point (`at: "x,y"`) or averaged over an area (`crop: "x0,y0,x1,y1"`) in numbers: its color and value from 0 to 255 without the gallery's light, the color as a look without a mode shows it; the same two in the gallery's light, the color as mode `gallery` shows it and the value as mode `value` shows it; and whether it is open, setting, tacky or dry; it can't tell which piles the paint came from |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
 | `status` | the canvas's setup; while a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done |
 | `log` | the painting so far: every chunk that ran, each after a line `--@ chunk`; with `find: "<text>"`, only the lines that hold that text, each with its line number and the two lines before and after it |
@@ -711,13 +711,12 @@ each campaign, and compare before and after.
 
 ## How chunks behave
 
-- **A long chunk.** If `paint` stops waiting before a chunk finishes, its
-  reply says whether the chunk is still running, with how far it has got,
-  or whether it is in the log. While a chunk runs, `status` answers how
-  far it has got: the line it is at, its strokes and touches so far, the
-  painting time they have taken and how long it has been running. Once the
-  chunk is in the log and the easel is still finishing its reply, `status`
-  says that instead.
+- **A long chunk.** If `paint` stops waiting for the easel's answer before
+  a chunk finishes, its reply says whether the chunk is still running, with
+  the painting time it has taken so far, or whether it is in the log. While
+  a chunk runs, `status` says so, with the painting time it has taken so
+  far and the painting's clock. Once the chunk is in the log and the easel
+  is still finishing its reply, `status` says that instead.
 - **Option types.** Each option takes the type shown in this guide.
   Options documented as `function(x, y)` accept a Lua function; numeric
   options take the computed number.

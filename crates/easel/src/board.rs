@@ -233,6 +233,7 @@ impl Board {
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
+        let before_medium = tubes.pile(h.fractions()).effective_medium(h.medium);
         // (amounts that overflow the heap, together or with it, would leave its proportions NaN)
         let more: f32 = add.iter().map(|&(_, v)| v * k).sum();
         if !(more.is_finite() && (before + more).is_finite()) {
@@ -247,7 +248,7 @@ impl Board {
                 None => h.parts.push((i, v)),
             }
         }
-        h.medium = (h.medium * before + medium * added) / (before + added).max(1e-9);
+        h.medium = tubes.pile(h.fractions()).effective_medium((before_medium * before + medium * added) / (before + added).max(1e-9));
         let retained = before / (before + added).max(1e-9);
         h.solvent *= retained;
         h.thinner *= retained;

@@ -497,11 +497,11 @@ the less it lifts. One part holds about as much paint as a 20 µm wash
 covering twenty squares the width of the pad; thicker paint fills it over
 a smaller area, so a wipe over a big wet area can fill it in its first
 few strokes. A wipe that runs on a full part lifts almost nothing, and the
-chunk's reply says so (`rag: the face in use is full: ...`). `r:refold()` turns a cleaner
-part outward, though every part holds at least what has soaked through
-the whole cloth (`r.soaked`, 0..1); `rag()` takes a fresh one. These
-numbers can be read, not set. Over a mask, `refold=` refolds whenever the
-load passes that value.
+chunk's reply says so (`rag: the face in use is full: ...`).
+`r:refold()` turns a cleaner part outward, though every part holds at
+least what has soaked through the whole cloth (`r.soaked`, 0..1); `rag()`
+takes a fresh one. These numbers can be read, not set. Over a mask,
+`refold=` refolds whenever the load passes that value.
 
 Over a mask, `wipe` lays wipes side by side across it in `angle`'s
 direction, back and forth, each starting and stopping a little inside the

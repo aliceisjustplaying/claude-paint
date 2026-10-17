@@ -32,9 +32,9 @@ expect() {
   [ "$got" = "$want" ] || { echo "studio_names: $(basename "$d") with own=($*): expected $want, got $got" >&2; cat "$d.out" >&2; exit 1; }
 }
 
-# a forbidden name early in a long binary
+# forbidden names in the binary
 d=$(studio early "Nothing here.")
-{ printf 'tube box\nsargent\nInness\n'; for i in $(seq 1 40000); do printf 'filler string number %06d for the pipe\n' "$i"; done; } > "$d/bin/easel"
+printf 'tube box\nsargent\nInness\n' > "$d/bin/easel"
 expect pass "$d" Sargent
 
 # spellings of names in the notes

@@ -680,7 +680,8 @@ each campaign, and compare before and after.
   chunk is still running, with how far it has got, or whether it is in the
   log. While a chunk runs, `status` answers how far it has got: the line it
   is at, its strokes and touches so far, the painting time they have taken
-  and how long it has been running.
+  and how long it has been running. Once the chunk is in the log and the
+  easel is still finishing its reply, `status` says that instead.
 - **Option types.** Each option takes the type shown in this guide.
   Options documented as `function(x, y)` accept a Lua function; numeric
   options take the computed number.

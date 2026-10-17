@@ -86,9 +86,12 @@ pub struct Progress {
     marks: AtomicU64,
     clock0: AtomicU64,
     clock: AtomicU64,
+    /// The chunk's number in the log once it is kept there (0: not yet), while the easel
+    /// finishes its reply (a look, a frame).
+    kept: AtomicUsize,
 }
 
-pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0) };
+pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
 
 impl Progress {
     fn begin(&self, lines: usize, st: &Studio) {
@@ -109,6 +112,17 @@ impl Progress {
         self.marks.store(0, Ordering::Relaxed);
         self.clock0.store(0, Ordering::Relaxed);
         self.clock.store(0, Ordering::Relaxed);
+        self.kept.store(0, Ordering::Relaxed);
+    }
+
+    /// The chunk is in the log as chunk `n` (main.rs `serve_cmd`).
+    pub fn keep(&self, n: usize) {
+        self.kept.store(n, Ordering::Release);
+    }
+
+    /// The running chunk's number in the log, once it is kept there.
+    pub fn kept(&self) -> usize {
+        self.kept.load(Ordering::Acquire)
     }
 
     /// After a verb of a live chunk (time.rs `verb`).
@@ -122,6 +136,10 @@ impl Progress {
 
     /// The running chunk's progress, `elapsed` after it began, as `status` answers it.
     pub fn report(&self, elapsed: Duration) -> String {
+        let kept = self.kept();
+        if kept > 0 {
+            return format!("the chunk is in the log (chunk {kept}); the easel is finishing its reply, running for {}", minutes_seconds(elapsed.as_secs_f64()));
+        }
         let (line, lines) = (self.line.load(Ordering::Relaxed), self.lines.load(Ordering::Relaxed));
         let marks = self.marks.load(Ordering::Relaxed).saturating_sub(self.marks0.load(Ordering::Relaxed));
         let clock = f64::from_bits(self.clock.load(Ordering::Relaxed));
@@ -1238,5 +1256,20 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+}
+
+#[cfg(test)]
+mod progress {
+    use super::*;
+
+    #[test]
+    fn a_kept_chunk_is_reported_as_in_the_log() {
+        let p = Progress { lines: AtomicUsize::new(6), line: AtomicUsize::new(5), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+        assert!(p.report(Duration::from_secs(3)).starts_with("painting a chunk (at line 5 of 6)"));
+        p.keep(2);
+        assert_eq!(p.report(Duration::from_secs(75)), "the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s");
+        p.clear();
+        assert!(p.report(Duration::from_secs(1)).starts_with("painting a chunk: starting"));
     }
 }

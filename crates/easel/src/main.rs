@@ -821,7 +821,13 @@ fn serve(args: &[String]) -> Result<(), String> {
             // while the chunk runs, `status` answers how far it has got; other requests wait
             session::PROGRESS.clear();
             let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
-            let status = || validate_log(&name, &written).map(|()| session::PROGRESS.report(t0.elapsed()));
+            // once the chunk is kept, the log on disk has grown past `written`: `report` says so
+            let status = || {
+                if session::PROGRESS.kept() == 0 {
+                    validate_log(&name, &written)?;
+                }
+                Ok(session::PROGRESS.report(t0.elapsed()))
+            };
             match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
                 Ok((r, waiting)) => {
                     pending.extend(waiting);
@@ -1607,6 +1613,7 @@ impl Server {
                 Ok(ran) => {
                     let note = self.save_log()?;
                     let n = self.s.log.len();
+                    session::PROGRESS.keep(n);
                     let mut out = note;
                     out.push_str(&ran.out);
                     out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));

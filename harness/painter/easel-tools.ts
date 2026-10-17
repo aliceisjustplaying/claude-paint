@@ -18,6 +18,15 @@ import { reference, referenceList } from "./references.ts";
 import { atEasel, directoryListing, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
 
+const scratch = Type.Optional(
+	Type.Boolean({
+		description:
+			"true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting.",
+	}),
+);
+const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
+const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
+
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
 	pi.registerTool({
@@ -48,14 +57,6 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 		}),
 		executionMode: "sequential",
 	});
-	const scratch = Type.Optional(
-		Type.Boolean({
-			description:
-				"true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting.",
-		}),
-	);
-	const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
-	const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
 
 	pi.registerTool({
 		...defineTool({
@@ -81,63 +82,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 		executionMode: "sequential",
 	});
 
-	pi.registerTool({
-		...defineTool({
-			name: "look",
-			label: "look",
-			description:
-				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. " +
-				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
-				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
-				"grid: true, or a spacing in canvas units. " +
-				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
-				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
-				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
-				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
-			parameters: Type.Object({
-				scratch,
-				crop: Type.Optional(Type.String()),
-				mode: Type.Optional(Type.String()),
-				light: Type.Optional(Type.String()),
-				survey: Type.Optional(Type.Boolean()),
-				compare: Type.Optional(Type.String()),
-				hold: Type.Optional(Type.String()),
-				at: Type.Optional(Type.String()),
-				palette: Type.Optional(Type.Boolean()),
-				size: Type.Optional(Type.Number()),
-				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
-			}),
-			async execute(id, p, signal, onUpdate, ctx) {
-				const { scratch: onScratch, ...view } = p;
-				let said: string;
-				lookArgs(view); // validate combinations before resolving compare paths
-				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
-				// compare: an earlier look of this studio, nothing outside it (as `read`)
-				let compare = p.compare || undefined; // (an empty path is none)
-				if (compare !== undefined) {
-					compare = studioPath(studio, compare);
-					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
-				}
-				try {
-					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare })], undefined, signal);
-				} catch (e) {
-					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
-				}
-				let paths: string[];
-				({ said, paths } = renameLooks(studio, said));
-				if (onScratch) said = `[scratch canvas]\n${said}`;
-				if (paths.length === 0) throw new Error(said);
-				// (a survey names several looks: each is read, in order)
-				const reads = [];
-				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
-				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
-				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
-				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
-			},
-		}),
-		executionMode: "sequential",
-	});
+	registerLook(pi, studio, limits);
 
 	pi.registerTool({
 		...defineTool({
@@ -207,6 +152,68 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			if (listing !== undefined) return text(listing);
 			return read.execute(id, { ...p, path: real }, signal, onUpdate, ctx);
 		},
+		executionMode: "sequential",
+	});
+}
+
+/** `look`, as the painter has it; the critic's session (critic.ts) has the same tool. */
+export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
+	const read = createReadToolDefinition(studio);
+	pi.registerTool({
+		...defineTool({
+			name: "look",
+			label: "look",
+			description:
+				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
+				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. " +
+				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
+				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
+				"grid: true, or a spacing in canvas units. " +
+				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
+				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
+				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
+				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
+			parameters: Type.Object({
+				scratch,
+				crop: Type.Optional(Type.String()),
+				mode: Type.Optional(Type.String()),
+				light: Type.Optional(Type.String()),
+				survey: Type.Optional(Type.Boolean()),
+				compare: Type.Optional(Type.String()),
+				hold: Type.Optional(Type.String()),
+				at: Type.Optional(Type.String()),
+				palette: Type.Optional(Type.Boolean()),
+				size: Type.Optional(Type.Number()),
+				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
+			}),
+			async execute(id, p, signal, onUpdate, ctx) {
+				const { scratch: onScratch, ...view } = p;
+				let said: string;
+				lookArgs(view); // validate combinations before resolving compare paths
+				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				// compare: an earlier look of this studio, nothing outside it (as `read`)
+				let compare = p.compare || undefined; // (an empty path is none)
+				if (compare !== undefined) {
+					compare = studioPath(studio, compare);
+					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
+				}
+				try {
+					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare })], undefined, signal);
+				} catch (e) {
+					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
+				}
+				let paths: string[];
+				({ said, paths } = renameLooks(studio, said));
+				if (onScratch) said = `[scratch canvas]\n${said}`;
+				if (paths.length === 0) throw new Error(said);
+				// (a survey names several looks: each is read, in order)
+				const reads = [];
+				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
+				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
+				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
+				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
+			},
+		}),
 		executionMode: "sequential",
 	});
 }

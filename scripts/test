@@ -99,8 +99,11 @@ check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
-  drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features
-rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before session::tests::a_gesture_keeps_its_width_to_its_last_point \
+  drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features \
+  bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint
+rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  session::tests::a_gesture_keeps_its_width_to_its_last_point \
+  session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it \
   api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'

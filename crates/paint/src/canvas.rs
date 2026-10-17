@@ -235,6 +235,9 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: a knife's paint laid on wet paint stays on top of it
+    /// (`Canvas::knife`).
+    pub(crate) knife_skim: bool,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -286,6 +289,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            knife_skim: false,
             soak: None,
         }
     }
@@ -296,6 +300,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -325,6 +330,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_knife_skim(mut self, enabled: bool) -> Self {
+        self.knife_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self
+    }
+
+    pub fn knife_skim(&self) -> bool {
+        self.knife_skim
     }
 
     /// Physical width of the painting in mm (default 700).
@@ -620,5 +634,28 @@ impl Canvas {
         }
         image::save_buffer(path.as_ref(), &buf, w as u32, h as u32, image::ColorType::Rgb8)
             .map_err(std::io::Error::other)
+    }
+}
+
+#[cfg(test)]
+mod review_lighting_tests {
+    use super::*;
+
+    /// The light's two ends, exactly: overhead (90°) casts no shadow and
+    /// lights flat paint fully; grazing (0°), a lamp in the canvas's plane,
+    /// leaves flat paint to the room's light, lights the ridge's face turned
+    /// to it, and hides whatever lies behind the ridge. No NaN at either end.
+    #[test]
+    fn review_overhead_and_grazing_lights_are_exact() {
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_size_mm(300.0);
+        for y in 0..300 { for x in 200..205 { c.height[y * 300 + x] += 8000.0; } }
+        let (over, graze, low) = (c.seen_lit(0.0, 90.0, 1.0), c.seen_lit(0.0, 0.0, 1.0), c.seen_lit(0.0, 30.0, 1.0));
+        assert!(over.iter().chain(&graze).all(|p| p.iter().all(|v| v.is_finite())));
+        // the light comes from the right (azimuth 0): x 100 lies behind the ridge, x 250 in front of it
+        let (behind, front, face) = (150 * 300 + 100, 150 * 300 + 250, 150 * 300 + 205);
+        assert!((over[behind][0] - over[front][0]).abs() < 1e-4, "overhead: no shadow ({} vs {})", over[behind][0], over[front][0]);
+        assert!(graze[front][0] < low[front][0] * 0.6, "grazing: flat paint gets only the room's light");
+        assert!(graze[face][0] > graze[front][0] * 1.5, "grazing: the ridge's face toward the lamp is lit");
+        assert!(graze[behind][0] <= graze[front][0], "grazing: nothing behind the ridge is lit by the lamp");
     }
 }

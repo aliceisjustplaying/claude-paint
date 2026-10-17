@@ -27,3 +27,38 @@ export function reviseJournal(studio: string, old: string, text: string, now: Da
 	writeFileSync(path, after);
 	return `revised in ${path}\n`;
 }
+/** The line a handoff's list of open passages starts with (the runner's first-sitting message names it). */
+export const OPEN_PASSAGES = "Open passages:";
+
+const STAMP = /^- day \d+, (?:[01]\d|2[0-3]):[0-5]\d: ?/;
+const HEADING = /^[#*_\s]*open passages\s*[*_]*:/i;
+const ITEM = /^(\s*)(?:[-*•]|\d+[.)])\s+/;
+
+/**
+ * The journal's latest list of open passages: the last line reading `Open passages:` (in a stamped
+ * entry or on its own, with or without Markdown emphasis) and the list items under it, dedented and
+ * otherwise as the painter wrote them; undefined when the journal has no such line.
+ */
+export function openPassages(journal: string): string | undefined {
+	const lines = journal.split(/\r\n|\r|\n/);
+	let at = -1;
+	for (let i = 0; i < lines.length; i++) if (HEADING.test(lines[i].replace(STAMP, ""))) at = i;
+	if (at < 0) return undefined;
+	const block = [lines[at].replace(STAMP, "").trim()];
+	let indent: number | undefined;
+	let blanks = 0;
+	for (const line of lines.slice(at + 1)) {
+		if (STAMP.test(line)) break;
+		if (!line.trim()) {
+			blanks++;
+			continue;
+		}
+		const item = ITEM.exec(line);
+		const depth = line.length - line.trimStart().length;
+		if (item && (indent === undefined || depth >= indent)) indent ??= depth;
+		else if (indent === undefined || depth <= indent) break;
+		for (; blanks > 0; blanks--) block.push("");
+		block.push(line.slice(Math.min(depth, indent!)));
+	}
+	return block.join("\n");
+}

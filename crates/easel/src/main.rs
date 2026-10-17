@@ -2,11 +2,12 @@
 //!
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | globals | save [path] | frames on|off | close
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--out path] [--look] [--state-digest digests.txt]
+//!   easel run paintings/lua/<name>.lua [--out path] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+//!                                    (replay build) replay at the width it was painted at
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
@@ -105,7 +106,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
@@ -124,8 +125,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
+                      (a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
@@ -139,7 +141,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at its width and write the PNG
+  easel run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+                      replay at its width and write the PNG
       [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
@@ -1226,7 +1229,8 @@ impl Server {
                 }
                 "--survey" => survey = true,
                 "--compare" => {
-                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    // (not a following option taken for the path)
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
                     i += 1;
                 }
                 "--ref" => {
@@ -1674,14 +1678,17 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !p[0].is_finite() || !(3.0..=89.0).contains(&p[1]) {
-        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 3 to 89)"));
+    if p.len() != 2 || !p[0].is_finite() || !(0.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 0 to 90)"));
     }
     Ok((p[0], p[1]))
 }
 
 /// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
 fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err("save: --light and --gallery are two lights; give one".into());
+    }
     let (mut path, mut light) = (None, None);
     let mut i = 0;
     while i < args.len() {
@@ -1915,6 +1922,9 @@ fn run(args: &[String]) -> Result<(), String> {
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err(format!("run: --light and --gallery are two lights; give one ({RUN_USAGE})"));
+    }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,

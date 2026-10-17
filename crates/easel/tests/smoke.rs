@@ -45,6 +45,7 @@ const CANVAS: &str = r#"canvas{size=300, aspect=5, linen={16, 14}, seed=3, groun
 const PAINT: &str = r#"
 a = pile{{"lead white", 6}, {"yellow ochre", 2}, {"vermilion", 0.3}, medium=0.2}
 c = pile{{"lead white", 4}, {"cobalt blue", 1}, medium=0.35}
+m = rect(100, 100, 300, 250)
 print(a, c)
 work(rect(100, 100, 300, 250), {hand="body", pile=c, coverage=3})
 b = brush("filbert", 8)
@@ -73,6 +74,11 @@ fn a_short_session_at_the_easel() {
     assert!(Path::new(path).exists(), "{look}");
     let look = ok(&["-s", "smoke", "look", "--crop", "450,20,950,180", "--grid", "50", "--mode", "value,squint"]);
     assert!(Path::new(look.split_whitespace().next().unwrap()).exists(), "{look}");
+    // a crop of any span, scaled down past 1200 px, with a mask drawn over it
+    let look = ok(&["-s", "smoke", "look", "--crop", "0,0,1000,200", "--mask", "m"]);
+    assert!(look.contains("(1200x240, ") && look.ends_with(": scaled down to 1.20 pixels a canvas unit (full detail is 2.4)\n"), "{look}");
+    let e = fails(&["-s", "smoke", "look", "--mask", "a"]);
+    assert!(e.contains("look --mask a: a holds pile(") && e.contains("not a mask"), "{e}");
 
     // not in the easel: every one errors, and the log keeps its two chunks
     for cmd in ["undo", "try", "show", "edit", "undone", "redo"] {

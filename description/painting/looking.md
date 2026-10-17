@@ -126,7 +126,8 @@ After an integrity error, normal commands remain restricted as described in [com
 ## Edge cases
 
 - Whole-view size defaults to 1000 pixels on the long side; the renderer clamps it to 1–1600 pixels and never enlarges the source.
-- A live crop has 2.4 pixels per canvas unit and may span at most 500 units on either side.
+- A live crop has 2.4 pixels per canvas unit up to 1200 pixels on its longer side (500 units); a longer crop is scaled down to 1200 pixels (or a smaller `size`) and the reply names its pixels per canvas unit. A held knife's passage stays at full detail and so at most 500 units a side.
+- A mask overlay names globals holding masks; each is drawn over the view as an outline and a light fill in its own color, never onto the canvas.
 - Crop coordinates name corners, not width and height.
 - A grid's lines are never part of a later ungridded look or saved painting.
 - `normal` adds no transformation; it does not clear modes already selected in the same request.

@@ -62,7 +62,7 @@ does; this says how to use them. What you paint is yours to choose.
 - An **oil ground** (the default) absorbs nothing: paint stays open and
   glossy longer. An **absorbent ground** (`absorbent=true`) drinks the oil of
   thin paint: matte, lean, quick to set, colors that sit on the surface;
-  thick paint keeps its surface and its gloss, and coarse pigments sink
+  thick paint stays open and glossy on top, and coarse pigments sink
   further than fine ones. Choose before you start: it is the
   canvas's character.
 - A **toned ground** (a little ochre, umber or black in the white) sets the

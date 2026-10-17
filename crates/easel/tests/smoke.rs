@@ -90,8 +90,11 @@ fn a_short_session_at_the_easel() {
     };
     let near = |a: [i32; 3], b: [i32; 3]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= 1);
     let (color, value) = read(lines[1], "color ");
-    assert!(near(color, shown("normal")) && near([value; 3], shown("value")), "{probe}");
+    let linear = color.map(|v| paint::color::srgb_to_linear(v as f32 / 255.0));
+    let expected = (paint::color::linear_to_srgb(paint::color::luminance(linear)) * 255.0).round() as i32;
+    assert!(near(color, shown("normal")) && (value - expected).abs() <= 1, "{probe}");
     let (color, value) = read(lines[2], "in gallery light ");
+    assert!(near([value; 3], shown("value")), "{probe}");
     assert!(near(color, shown("gallery")) && near([value; 3], shown("gallery,value")), "{probe}");
     let felt = r.lines().find(|l| ["open", "setting", "tacky", "dry"].contains(l)).unwrap();
     let probe = ok(&["-s", "smoke", "probe", "--at", "300,200"]);

@@ -1,5 +1,5 @@
 {
-  "base": "http://100.82.115.34:8769/",
+  "base": "http://192.0.2.1:8769/",
   "browser": "154.0.8037.98",
   "checks": [
     {
@@ -62,27 +62,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }
@@ -149,27 +149,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }
@@ -236,27 +236,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }
@@ -323,27 +323,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }
@@ -410,27 +410,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }
@@ -497,27 +497,27 @@
       },
       "responses": [
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-format.js",
+          "url": "http://192.0.2.1:8769/code-format.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/code-display.js",
+          "url": "http://192.0.2.1:8769/code-display.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_web.js",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_web.js",
           "status": 200,
           "type": "text/javascript; charset=utf-8"
         },
         {
-          "url": "http://100.82.115.34:8769/vendor/stylua/stylua_lib_bg.wasm",
+          "url": "http://192.0.2.1:8769/vendor/stylua/stylua_lib_bg.wasm",
           "status": 200,
           "type": "application/wasm"
         }

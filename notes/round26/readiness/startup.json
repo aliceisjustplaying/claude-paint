@@ -1,7 +1,7 @@
 {
   "state": "running; provider responded and studio tools succeeded",
   "studio": "paint-studio-12e572",
-  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-12e572",
+  "viewer": "http://private-viewer.invalid:8768/?p=paint-studio-12e572",
   "source_commit": "3c7bf92d3f046bf64db863916487c0fa703d1e19",
   "provider": "anthropic",
   "model": "claude-opus-5-5",

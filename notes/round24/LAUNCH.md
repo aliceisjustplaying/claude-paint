@@ -55,7 +55,7 @@
   "You may sign the painting."
   Refreshed Inness export/probe and runner dry run passed; the copied
   runner uses the revised prompts ([log](readiness/launch-refresh.log)). The private
-  viewer returns HTTP 200 at <http://m3p.tailec2dc.ts.net:8765/> from the M3;
+  viewer returns HTTP 200 at <http://private-viewer.invalid:8765/> from the M3;
   this round did not access the M1. Public sync is enabled. The owner
   explicitly requested live website publication of this engine-3 painting;
   the new studio stays included in the regular export.
@@ -125,7 +125,7 @@ tagging it: the runner copied in step 4 comes from the tag.
    `--dry` should print `--thinking high`, `R16_BRANCH=round-24` and
    paths under `claude-paint-r24run`.
 5. Check the viewer:
-   `curl -s -o /dev/null -w "%{http_code}\n" http://m3p.tailec2dc.ts.net:8765/`
+   `curl -s -o /dev/null -w "%{http_code}\n" http://private-viewer.invalid:8765/`
    should print 200. If it doesn't, reload the LaunchAgent:
    ```
    launchctl bootout gui/$(id -u)/art.stillwet.studio.tailnet
@@ -157,13 +157,13 @@ tagging it: the runner copied in step 4 comes from the tag.
    grep -c '^--@ chunk' ~/src/a/$s/paintings/lua/painting.lua
    ```
    The viewer URL for the painter is
-   `http://m3p.tailec2dc.ts.net:8765/?p=<studio>`. The painter is listed
+   `http://private-viewer.invalid:8765/?p=<studio>`. The painter is listed
    under round r24, lane INNS.
 
 ## Viewer
 
 - `art.stillwet.studio.tailnet` (LaunchAgent; templates and `install.sh`
-  in `notes/launchd/`): `studio.py --host 100.82.115.34 --port 8765`,
+  in `notes/launchd/`): `studio.py --host 192.0.2.1 --port 8765`,
   started from `~/src/a/claude-paint`. It is bound to the Tailscale
   address only, with no Serve route and no Funnel. Its log is
   `~/tmp/studio-viewer-logs/art.stillwet.studio.tailnet.log`.
@@ -171,11 +171,11 @@ tagging it: the runner copied in step 4 comes from the tag.
   exit 78. The last log entry was an earlier `Can't assign requested
   address` (it bound before the Tailscale address existed). `kickstart -k`
   hung. Lane E reloaded it with the `bootout`/`bootstrap` in step 5, and it
-  has run since then. `http://m3p.tailec2dc.ts.net:8765/` answered 200 on
-  this machine and from the M1 Pro (`ssh m1p curl ...`). `/api/sessions`
+  has run since then. `http://private-viewer.invalid:8765/` answered 200 on
+  this machine and from the M1 Pro (`ssh remote-mac curl ...`). `/api/sessions`
   listed round 23's painter as `r23`/`INNS`.
 - Existing Serve routes, unchanged (`tailscale serve status`, both tailnet
-  only): `https://m3p.tailec2dc.ts.net` → `127.0.0.1:8766` (the
+  only): `https://private-viewer.invalid` → `127.0.0.1:8766` (the
   `--public` viewer, `art.stillwet.studio.public`, also not running) and
   `:8443` → `localhost:5733`.
 - `art.stillwet.studio.sync` runs every minute. It exports every painter

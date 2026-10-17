@@ -9,9 +9,8 @@ each pigment is and what is documented about laying and mixing it in oil.*
 
 The box holds every tube the easel knows, from old pigments (lead white,
 vermilion, smalt, the earths, verdigris) to the cadmiums, the cobalt colors,
-the chromate yellows, the iron-oxide Mars colors and a modern quinacridone. Some are fast driers (the lead colors, the umbers, the copper and
-cobalt colors), some slow (ivory
-black, the cadmiums, bone brown, bitumen). Several are transparent
+the chromate yellows, the iron-oxide Mars colors and a modern quinacridone. Some are fast driers (the lead colors, the copper and
+cobalt colors), some slow (the cadmiums, bone brown, bitumen). Several are transparent
 lakes or glazing colors; several are documented to fade, darken or change
 color with time (§8). The easel guide's tube table gives each tube's
 hiding, stiffness, tinting strength and drying as the easel models them;
@@ -31,8 +30,7 @@ fading in light.
 
 ### Whites
 
-- **lead white** (basic lead carbonate). Lead "produces a uniquely strong
-  paint film, and dries rapidly"; lead white is a rapid dryer. Period tube paints held "linseed oil in the darker colours and
+- **lead white** (basic lead carbonate). Period tube paints held "linseed oil in the darker colours and
   poppyseed oil in white paint". It is the
   white of documented grounds: gray grounds of lead white and ivory black
   in linseed oil, lead white with calcite
@@ -131,8 +129,7 @@ fading in light.
   overpaint that leaves lower layers showing; a madder
   mixed with megilp laid thickly over opaque paint. In
   paintings analyzed from the 1880s red lakes were mostly in linseed oil.
-- **permanent alizarin** (a quinacridone). The exact pigment behind the name
-  is not stated. *Uncertain.* A different pigment from rose
+- **permanent alizarin** (a quinacridone). *Uncertain.* A different pigment from rose
   madder. Little else is documented.
 - **carmine lake** (carminic acid from cochineal, on alumina). Cochineal as
   well as madder lakes are found in French paint of the late 19th century. It fades. Its numbers are estimates.
@@ -162,8 +159,7 @@ fading in light.
   content. Used from 1860.
 - **ultramarine blue** (synthetic ultramarine). Tinting strength "quite
   good"; the catalog's masstone is converted from a published
-  measurement. Sold as "permanent blue", and in a
-  darker, more transparent grade. A model ultramarine oil paint had
+  measurement. Sold as "permanent blue". A model ultramarine oil paint had
   a yield stress of only 10–20 Pa, and its brushstrokes came out regular and
   low in relief.
 - **ultramarine ash** (natural ultramarine, a pale last extraction). The
@@ -191,9 +187,8 @@ fading in light.
   permanent. Known from 1780; "poor tinting strength and high
   cost… kept it in limited use".
 - **green earth** (celadonite and glauconite clay). Translucent, weak and
-  short of body; "very weak tinting strength …
-  transparent". Its masstone is Munsell 7.5G/2.9/1.5.
-  Ancient, and in painters' manuals through the 19th century. Documented as a glaze.
+  short of body. Its masstone is Munsell 7.5G/2.9/1.5.
+  Ancient, and in painters' manuals through the 19th century.
 
 ### Earths and browns
 
@@ -205,10 +200,9 @@ fading in light.
 - **brown ochre** (iron oxide earth, a darker grade). A natural iron-oxide
   earth. Little else is documented; its numbers copy yellow
   ochre's.
-- **raw sienna** (sienna earth, unroasted). Documented in glazes. The siennas are rapid dryers.
+- **raw sienna** (sienna earth, unroasted). Documented in glazes.
 - **burnt sienna** (roasted sienna earth). One maker rates it opaque, but
-  siennas are semitransparent in thin films. *Uncertain.* A rapid
-  dryer.
+  siennas are semitransparent in thin films. *Uncertain.*
 - **red earth** (iron oxide earth). Hematite; "light red" is a
   red iron oxide. Documented as a transparent stain on white
   canvas, "not enough to lose the sense of transparency," letting the red
@@ -217,7 +211,7 @@ fading in light.
 - **Indian red** (nearly pure ferric oxide). A natural haematite,
   purplish, and a separate pigment from Mars red. Little else is
   documented.
-- **raw umber** (iron and manganese oxide earth). Umbers are rapid dryers; with white it "will tend to dry v quickly". Documented as
+- **raw umber** (iron and manganese oxide earth). Documented as
   a light-brown canvas stain, for outlining with "some strong
   drier" and in glazes.
 - **Mars brown** (synthetic iron oxide, roasted). A good drier, as the Mars
@@ -235,8 +229,7 @@ fading in light.
 
 ### Blacks
 
-- **bone black** (charred bone: carbon and calcium phosphate). Ivory black
-  is "notoriously slow" to dry. With lead white it made the gray
+- **bone black** (charred bone: carbon and calcium phosphate). With lead white it made the gray
   commercial grounds of the period.
   Documented in glazes. Blacks were
   usually bound in linseed oil in paintings of 1869 to the 1880s.
@@ -256,20 +249,15 @@ fading in light.
   madder fade; barium yellow turns green; chrome yellow darkens.
   Magenta fades; smalt can lose its color or brown. A
   green mixed with a fugitive yellow turned blue where light reached it. None of this happens at the easel.
-- **Fast over slow.** A fast-drying earth brown over a slower-drying paint
-  gives a crack pattern. Traction crackle forms where a layer
+- **Fast over slow.** Traction crackle forms where a layer
   goes over paint not yet dry, and in thick brown or bituminous
   paint. Zinc white's hard films crack over softer
   layers.
-- **Drying.** Earth tones (umbers, siennas) and lead white dry fast, ivory
-  black slowly; drying also depends on "thickness of paint layer"
-  and the medium, and "even the fast drying pigments won't really
-  dry during a working session". Lead colors and copper colors
+- **Drying.** Lead colors and copper colors
   speed drying; the cadmiums are slow;
   bone brown and bitumen are poor driers.
 - **Oils.** Drying and yellowing run linseed, then walnut, then poppy;
-  the colormen ground light colors in poppy oil and poor driers in linseed. Linseed is "the most common and the fastest drying … (also forms
-  the most durable paint films, but is more prone to yellowing)".
+  the colormen ground light colors in poppy oil and poor driers in linseed.
 - **Driers.** Oil cooked with litharge, or the siccatives of Courtrai or
   Haarlem, dries much faster but darker and more brittle with too much. Courtrai was "heavily loaded with compounds of lead"; Haarlem was
   copal in oil of spike. Lead white with litharge shrank more and

@@ -3,7 +3,7 @@
   "results": [
     {
       "painter": "opus",
-      "url": "http://100.82.115.34:8768/?p=paint-studio-24be5f",
+      "url": "http://192.0.2.1:8768/?p=paint-studio-24be5f",
       "http_status": 200,
       "badge": "Sitting limit reached",
       "badge_reason": "2026-10-05 03:14:20 4 record(s): NOT FINISHED: stopped after 4 sittings (MAX_SITTINGS)",
@@ -11,7 +11,7 @@
     },
     {
       "painter": "fable",
-      "url": "http://100.82.115.34:8768/?p=paint-studio-ea8319",
+      "url": "http://192.0.2.1:8768/?p=paint-studio-ea8319",
       "http_status": 200,
       "badge": "Finished",
       "badge_reason": "2026-10-04 23:44:51 2 record(s): the painter is done: sitting 2 added no painting",

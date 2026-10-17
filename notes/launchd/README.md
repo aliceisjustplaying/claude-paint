@@ -1,11 +1,13 @@
 # Studio viewers under launchd
 
+In historical notes, private-viewer.invalid and 192.0.2.1 are placeholders for redacted network addresses, not live endpoints.
+
 Two LaunchAgents keep the studio viewer up across sessions and logins, restarting it if it dies
 (`KeepAlive`, 15 s throttle):
 
-- `art.stillwet.studio.tailnet`: `studio.py --host 100.82.115.34 --port 8765` (Tailscale only)
+- `art.stillwet.studio.tailnet`: `studio.py --host 192.0.2.1 --port 8765` (Tailscale only)
 - `art.stillwet.studio.public`: `studio.py --public --host 127.0.0.1 --port 8766`, behind the
-  Funnel (https://m3p.tailec2dc.ts.net/; off: `tailscale funnel --https=443 off`)
+  Funnel (https://private-viewer.invalid/; off: `tailscale funnel --https=443 off`)
 
 Logs: `~/tmp/studio-viewer-logs/<label>.log`.
 

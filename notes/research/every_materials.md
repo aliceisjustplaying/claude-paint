@@ -6,7 +6,7 @@ are listed at the end. "Uncertain" marks claims that are unverified or
 rest on one account. It describes the 54 tubes of this box as paints: what
 each pigment is and what is documented about laying and mixing it in oil.*
 
-<!-- research: Assembled only from the repo's notes: notes/research/{sargent,inness,alma_tadema,tonn,hopper,giverny,
+<!-- research: Assembled only from the repo's notes: notes/research/{sargent,inness,alma_tadema,hopper,giverny,
 impressionist,friedrich}_materials.md, notes/research/oil_paint_physics.md, notes/r20/TUBES.md and the comments in
 crates/paint/src/palette.rs catalog(). Keys are the notes' own. Five keys cited by TUBES.md ([OH], [CAMEO],
 [CAMEO-mars], [AP2-LTY], [CH p.161]) have no full entry in any repo note; their Sources lines say so. -->
@@ -16,10 +16,9 @@ crates/paint/src/palette.rs catalog(). Keys are the notes' own. Five keys cited 
 The box holds every tube the easel knows, from old pigments (lead white,
 vermilion, smalt, the earths, verdigris) to the cadmiums, the cobalt colors,
 the chromate yellows, the iron-oxide Mars colors and a modern quinacridone
-[EASEL]. Some are fast driers (the lead colors, the umbers, the copper and
-cobalt colors) [DRY23; AP1 p.114; AP2 p.136; EASEL], some slow (ivory
-black, the cadmiums, bone brown, bitumen) [DRY23; AP1 p.72; SAL §243;
-CAMEO]. Several are transparent
+[EASEL]. Some are fast driers (the lead colors, the copper and
+cobalt colors) [AP1 p.114; AP2 p.136; EASEL], some slow (the cadmiums,
+bone brown, bitumen) [AP1 p.72; SAL §243; CAMEO]. Several are transparent
 lakes or glazing colors; several are documented to fade, darken or change
 color with time (§8). The easel guide's tube table gives each tube's
 hiding, stiffness, tinting strength and drying as the easel models them;
@@ -40,9 +39,7 @@ fading in light.
 
 ### Whites
 
-- **lead white** (basic lead carbonate). Lead "produces a uniquely strong
-  paint film, and dries rapidly" [LEAD20]; lead white is a rapid dryer
-  [DRY23]. Period tube paints held "linseed oil in the darker colours and
+- **lead white** (basic lead carbonate). Period tube paints held "linseed oil in the darker colours and
   poppyseed oil in white paint" [APOLLO "The Painter's Palette"]. It is the
   white of documented grounds: gray grounds of lead white and ivory black
   in linseed oil [APOLLO "Canvases and Priming"], lead white with calcite
@@ -155,8 +152,7 @@ fading in light.
   mixed with megilp laid thickly over opaque paint [BAS "Materials"]. In
   paintings analyzed from the 1880s red lakes were mostly in linseed oil
   [TB24 p.26].
-- **permanent alizarin** (a quinacridone). The exact pigment behind the name
-  is not stated [ALIZ25]. *Uncertain.* A different pigment from rose
+- **permanent alizarin** (a quinacridone). *Uncertain.* A different pigment from rose
   madder [EASEL]. Little else is documented.
 - **carmine lake** (carminic acid from cochineal, on alumina). Cochineal as
   well as madder lakes are found in French paint of the late 19th century
@@ -191,8 +187,7 @@ fading in light.
   content [OH]. Used from 1860 [BAS "Appendix"].
 - **ultramarine blue** (synthetic ultramarine). Tinting strength "quite
   good" [AP2 p.44]; the catalog's masstone is converted from a published
-  measurement [AP2 p.51]. Sold as "permanent blue" [AP2 p.55], and in a
-  darker, more transparent grade [BLUE21]. A model ultramarine oil paint had
+  measurement [AP2 p.51]. Sold as "permanent blue" [AP2 p.55]. A model ultramarine oil paint had
   a yield stress of only 10–20 Pa, and its brushstrokes came out regular and
   low in relief [1].
 - **ultramarine ash** (natural ultramarine, a pale last extraction). The
@@ -226,10 +221,9 @@ fading in light.
   permanent [WEB-co]. Known from 1780; "poor tinting strength and high
   cost… kept it in limited use" [WEB-co].
 - **green earth** (celadonite and glauconite clay). Translucent, weak and
-  short of body [AP1 p.146; FIELD p.129]; "very weak tinting strength …
-  transparent" [TV22]. Its masstone is Munsell 7.5G/2.9/1.5 [AP1 Table 1].
+  short of body [AP1 p.146; FIELD p.129]. Its masstone is Munsell 7.5G/2.9/1.5 [AP1 Table 1].
   Ancient, and in painters' manuals through the 19th century [AP1
-  pp.143–144, 147]. Documented as a glaze [TV22].
+  pp.143–144, 147].
 
 ### Earths and browns
 
@@ -242,10 +236,9 @@ fading in light.
   earth [MANUAL]. Little else is documented; its numbers copy yellow
   ochre's [EASEL].
 - **raw sienna** (sienna earth, unroasted). Documented in glazes [SON
-  pp.233, 236, 253]. The siennas are rapid dryers [DRY23].
+  pp.233, 236, 253].
 - **burnt sienna** (roasted sienna earth). One maker rates it opaque, but
-  siennas are semitransparent in thin films [OH]. *Uncertain.* A rapid
-  dryer [DRY23].
+  siennas are semitransparent in thin films [OH]. *Uncertain.*
 - **red earth** (iron oxide earth). Hematite [ALF p.348]; "light red" is a
   red iron oxide [MANUAL]. Documented as a transparent stain on white
   canvas, "not enough to lose the sense of transparency," letting the red
@@ -255,8 +248,7 @@ fading in light.
 - **Indian red** (nearly pure ferric oxide). A natural haematite,
   purplish, and a separate pigment from Mars red [CH p.161]. Little else is
   documented.
-- **raw umber** (iron and manganese oxide earth). Umbers are rapid dryers
-  [DRY23]; with white it "will tend to dry v quickly" [UMB20]. Documented as
+- **raw umber** (iron and manganese oxide earth). Documented as
   a light-brown canvas stain [SON p.251], for outlining with "some strong
   drier" [SON pp.251–252] and in glazes [SON pp.251–254; MI95 pp.263–264].
 - **Mars brown** (synthetic iron oxide, roasted). A good drier, as the Mars
@@ -275,8 +267,7 @@ fading in light.
 
 ### Blacks
 
-- **bone black** (charred bone: carbon and calcium phosphate). Ivory black
-  is "notoriously slow" to dry [DRY23]. With lead white it made the gray
+- **bone black** (charred bone: carbon and calcium phosphate). With lead white it made the gray
   commercial grounds of the period [APOLLO "Canvases and Priming"].
   Documented in glazes [SON pp.252–253; MI95 pp.263–264, 267]. Blacks were
   usually bound in linseed oil in paintings of 1869 to the 1880s [TB14].
@@ -299,21 +290,16 @@ fading in light.
   Magenta fades [SAL]; smalt can lose its color or brown [NPJ25; HH]. A
   green mixed with a fugitive yellow turned blue where light reached it
   [NGA-E]. None of this happens at the easel [EASEL].
-- **Fast over slow.** A fast-drying earth brown over a slower-drying paint
-  gives a crack pattern [CRACK21]. Traction crackle forms where a layer
+- **Fast over slow.** Traction crackle forms where a layer
   goes over paint not yet dry [NGA-G], and in thick brown or bituminous
   paint [NGA96 pp.355–356]. Zinc white's hard films crack over softer
   layers [AP1 p.175].
-- **Drying.** Earth tones (umbers, siennas) and lead white dry fast, ivory
-  black slowly [DRY23]; drying also depends on "thickness of paint layer"
-  and the medium [VAR21], and "even the fast drying pigments won't really
-  dry during a working session" [FAST20]. Lead colors and copper colors
+- **Drying.** Lead colors and copper colors
   speed drying [AP1 p.114; AP2 p.136]; the cadmiums are slow [AP1 p.72];
   bone brown and bitumen are poor driers [SAL §243; CAMEO].
 - **Oils.** Drying and yellowing run linseed, then walnut, then poppy [AM];
   the colormen ground light colors in poppy oil and poor driers in linseed
-  [AM p.72]. Linseed is "the most common and the fastest drying … (also forms
-  the most durable paint films, but is more prone to yellowing)" [DRY23].
+  [AM p.72].
 - **Driers.** Oil cooked with litharge, or the siccatives of Courtrai or
   Haarlem, dries much faster but darker and more brittle with too much
   [AM]. Courtrai was "heavily loaded with compounds of lead"; Haarlem was
@@ -385,14 +371,5 @@ brown, bitumen, bone black and vine black.
 - **[KOR]** Körber, M., "Head and Heart and Hand," in *Caspar David Friedrich: Where It All Started*, SKD Dresden 2024, pp.281–285 (Busch, pp.326–327); publisher excerpt: https://media2.hugendubel.de/shop/coverscans/495PDF/49546505_1ccd3397eb4244e1a938b4291c8c6b00.pdf
 - **[HH]** Hamburger Kunsthalle, GigaPixel commentary. https://cdfriedrich.de/gigapixel/
 - **[MAD]** Mäder, Körber, Hohenstein, Fuhrmann, Stege, Wagner and Birkholz, *METALLA* Sonderheft 13 (2025), pp.102–104. https://metalla.org/index.php/METALLA/en/issue/download/393/75 (DOI 10.46586/metalla.v.2025.i13)
-- **[LEAD20]** Kendric Tonn, posts on X, 24 Jan. 2020: 1220820446494502913, 1220824611165757442, 1220824612436611073, 1220824613195788290, 1220825339057856513. (X posts are cited by status ID at https://x.com/kendrictonn/status/<ID>.)
-- **[DRY23]** The same, paint-drying thread, 29 Sept. 2023: 1707549922206286289, 1707551312710381821, 1707552078607143021, 1707552516324663552, 1707552851298537686, 1707553480427413536, 1707553791862796372.
-- **[UMB20]** The same, 1303089105643896835.
-- **[TV22]** The same, 5 Apr. 2022: 1511434506800189440, 1511434874644803590, 1511435225519304721, 1511437398688903178.
-- **[BLUE21]** The same, 1345501722609909760; 1345502068308643845; 1345503162577387521; 1345503460276527106.
-- **[ALIZ25]** The same, 1918663777882374476 (3 May 2025); 1923220368627495145 (16 May 2025).
-- **[CRACK21]** The same, 1348041918303903744; 1348042478365110272; 1348043275295404040; 1348043627092705284.
-- **[VAR21]** The same, varnish thread, 18 Sept. 2021: 1439256386265878543 through 1439259665100115969 (incl. 1439256655406018560, 1439257096294486019, 1439257364083904518, 1439257519633879045, 1439257749951557635, 1439258053988298756, 1439258246406197253, 1439258538577211392, 1439258858912993285, 1439258987199963144, 1439259202514526221).
-- **[FAST20]** The same, 1275990237978808321 (25 June 2020).
 - **[1]** Ranquet et al., "A holistic view on the role of egg yolk in Old Masters' oil paints," *Nat. Commun.* 2023. https://pmc.ncbi.nlm.nih.gov/articles/PMC10050151/
 - **[12]** Janas et al., "Shrinkage and mechanical properties of drying oil paints," *npj Herit. Sci.* 2022. https://www.nature.com/articles/s40494-022-00814-2

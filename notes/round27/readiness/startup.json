@@ -2,7 +2,7 @@
   "verified_at_utc": "2026-10-05T15:14:04Z",
   "state": "running; provider responded and studio tools succeeded",
   "studio": "paint-studio-7c4dd1",
-  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-7c4dd1",
+  "viewer": "http://private-viewer.invalid:8768/?p=paint-studio-7c4dd1",
   "source_commit": "4b9bef6a5872803f4f20623c15b7677a152db70c",
   "provider": "anthropic",
   "model": "claude-opus-5-5",

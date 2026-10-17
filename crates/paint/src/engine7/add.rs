@@ -6,7 +6,7 @@
 //! and `[6..10]`). Every lane runs engine 5's arithmetic in engine 5's
 //! order, so a pixel ends bit for bit where engine 5 leaves it.
 
-use crate::bristle::{Surf, fluid_of, ground_draw, ground_drain};
+use crate::bristle::{Surf, fluid_of, ground_draw, ground_drain, restore_buried, skim_top};
 use crate::drying::Px;
 use crate::wet::{Latent, Prop};
 
@@ -80,14 +80,21 @@ impl Film {
     /// As `add`.
     #[inline(always)]
     pub(crate) unsafe fn lay(&self, i: usize, v: f32, p: &Paint7, skim: f32) {
+        if self.drain && v <= 0.0 {
+            return;
+        }
         unsafe {
             if skim <= 0.0 {
                 return self.add(i, v, p);
             }
             let buried = (*self.vol.add(i) - skim).max(0.0);
+            let below = (self.drain && buried > 0.0).then(|| skim_top(&mut *self.hide.add(i), *self.vol.add(i), buried));
             *self.vol.add(i) -= buried;
             self.add(i, v, p);
             *self.vol.add(i) += buried;
+            if let Some(below) = below {
+                restore_buried(&mut *self.hide.add(i), &below, buried / *self.vol.add(i));
+            }
         }
     }
 

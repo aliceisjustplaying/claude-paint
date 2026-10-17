@@ -432,7 +432,7 @@ def tool_definitions(studio, sittings=False, agy=False):
                     definition["inputSchema"]["properties"][key]["description"] = "true: use separate scratch paper, with the painting's size, kind and seed, its own brushes, clock and log" if key == "scratch" else "with scratch: true, keep the old scratch sheet's log and checkpoint and start a fresh sheet before this chunk"
     if sittings:
         definitions += json.loads(Path(__file__).with_name("sitting-tools.json").read_text())
-        next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left."
+        next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done."
     if agy:
         for definition in definitions:
             name = definition["name"]

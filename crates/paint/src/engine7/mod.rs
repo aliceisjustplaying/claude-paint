@@ -41,10 +41,11 @@ pub const ENGINE: u32 = 7;
 /// as `bristle::Rect`. `None` where one is optional means no pixels.
 pub type Rect = (usize, usize, usize, usize);
 
-/// Whether a canvas of engine `v` paints with engine 7's code.
+/// Whether a canvas of engine `v` paints with engine 7's code (engines 7
+/// and 8: `crate::REACH_END`).
 #[inline]
 pub fn active(v: u32) -> bool {
-    v == ENGINE
+    v >= ENGINE
 }
 
 /// Whether `E7_STATS=1` is set: engine 7 then prints its `E7BATCH` and

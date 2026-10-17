@@ -68,7 +68,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			label: "paint",
 			description:
 				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
-				"A chunk that stops with an error changes nothing.",
+				"A chunk that stops with an error changes nothing. " +
+				"In `work`, `coverage` counts layers of strokes over each point, except for the `glaze` and `scumble` hands, where it is the share of the mask their thin film reaches (1: all of it).",
 			parameters: Type.Object({
 				lua: Type.String({ description: "the chunk" }),
 				scratch,

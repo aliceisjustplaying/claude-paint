@@ -12,11 +12,15 @@ empty target and TIME_WARM once built.
 
 - paint, by exact name: `tests::{fixture_matches_golden, drag_conserves_paint,
   dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
-  `drying::tests::checkpoint_mid_drying_resumes_exactly` and
-  `noise::tests::worley_finds_the_true_nearest_features`.
+  `drying::tests::checkpoint_mid_drying_resumes_exactly`,
+  `noise::tests::worley_finds_the_true_nearest_features` and
+  `rag::rag_lift::{a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along,
+  a_mask_wipe_lifts_nothing_outside_its_mask}`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
+  `session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,
-  `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` and
+  `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw`,
+  `api::draw_rag::tests::a_wipe_on_a_full_face_says_so` and
   `boxes::a_round_19_log_replays_as_before` (`#[ignore = "slow"]`, run by name:
   the round 19 log at 2400 px against `r19_default_box.png`).
 - easel integration files, whole: `smoke.rs`, `session_integrity.rs`,

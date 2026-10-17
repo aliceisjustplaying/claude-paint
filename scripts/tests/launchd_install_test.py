@@ -29,7 +29,7 @@ class LaunchdInstallTests(unittest.TestCase):
                 shutil.copy2(path, self.launchd / path.name)
         self.events = self.root / "events.jsonl"
         self.ip = ".".join(map(str, (100, 64, 0, 7)))
-        self.env = dict(os.environ, HOME=str(self.home), PATH=f"{self.bin}:/usr/bin:/bin",
+        self.env = dict(os.environ, HOME=str(self.home), PATH=f"{self.bin}:{os.environ['PATH']}",
                         MOCK_EVENTS=str(self.events), MOCK_TAILNET_IP=self.ip,
                         MOCK_TAILSCALE_STATUS="0")
         self.mock("uv", "pass")
@@ -86,6 +86,13 @@ class LaunchdInstallTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [["tailscale", "ip", "-4"]])
                 self.assertEqual(existing.read_text(), "existing service")
                 self.assertEqual(list(self.agents.iterdir()), [existing])
+
+    def test_install_with_tools_outside_system_bin(self):
+        for name in ("bash", "dirname", "basename", "sed", "id"):
+            (self.bin / name).symlink_to(shutil.which(name))
+        self.env["PATH"] = str(self.bin)
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

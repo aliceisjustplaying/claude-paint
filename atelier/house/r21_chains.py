@@ -106,10 +106,11 @@ READING = {
     p: (f"notes/easel_guide.md; notes/studio_notes.md;\n"
         f"notes/research/{f}_materials.md (his materials and method)"
         + " and\nnotes/research/oil_paint_physics.md as needed.")
-    for p, f in [("sargent", "sargent"), ("inness", "inness"), ("alma-tadema", "alma_tadema"), ("hopper", "hopper")]
+    for p, f in [("sargent", "sargent"), ("inness", "inness"), ("alma-tadema", "alma_tadema"), ("tonn", "tonn"), ("hopper", "hopper")]
 }
 # round 22: pictures of his paintings in reference/
 READING["tonn"] = ("notes/easel_guide.md; notes/studio_notes.md;\n"
+                   "notes/research/tonn_materials.md (his materials and method);\n"
                    "reference/ (his paintings; reference/README.md lists them) and\n"
                    "notes/research/oil_paint_physics.md as needed.")
 # round 21's studio (round 19's reading list for it)
@@ -202,6 +203,7 @@ OPENING_PLAIN = {
 }
 READING_PLAIN = {
     "tonn": ("notes/easel_guide.md; notes/studio_notes.md;\n"
+             "notes/research/tonn_materials.md (his materials and method) and\n"
              "notes/research/oil_paint_physics.md as needed."),
 }
 

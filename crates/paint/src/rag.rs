@@ -203,7 +203,7 @@ struct Pool {
 /// already. mm³ of paint, its mean color, hiding and cure, mm³ of solvent,
 /// and when it was last brought up to date: minutes of painting time
 /// (`Canvas::now_min`) and hand seconds (`Tally::secs`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct Mobile {
     pub mm3: f32,
     pub lat: crate::wet::Latent,
@@ -212,6 +212,23 @@ pub struct Mobile {
     pub solv_mm3: f32,
     pub at_min: f64,
     pub at_secs: f64,
+}
+
+impl std::fmt::Debug for Mobile {
+    /// As derived, but the paint's properties without the pigment's packing
+    /// (`Prop`'s last five, which nothing reads yet): a rag prints as it
+    /// always did (`easel run --state-digest` hashes it).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mobile")
+            .field("mm3", &self.mm3)
+            .field("lat", &self.lat)
+            .field("hide", &&self.hide[..5])
+            .field("cure", &self.cure)
+            .field("solv_mm3", &self.solv_mm3)
+            .field("at_min", &self.at_min)
+            .field("at_secs", &self.at_secs)
+            .finish()
+    }
 }
 
 /// One contact of the pad (`rag_contact`): how long it lasts (s) and how

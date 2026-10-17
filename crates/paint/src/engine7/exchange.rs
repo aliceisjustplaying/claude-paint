@@ -14,7 +14,7 @@
 //! - the capsule's contact list is gathered once into the thread's window,
 //!   so the second pass visits only the pixels the hair touches, with their
 //!   fluidity read once;
-//! - pickup and plough sum paint as packed 16-float vectors (volume, latent
+//! - pickup and plough sum paint as packed 21-float vectors (volume, latent
 //!   color, properties, cure, cover, solvent), which the compiler lays out
 //!   in vector registers;
 //! - the plough gathers what it moves per destination pixel and lays it
@@ -114,7 +114,7 @@ unsafe fn packed(sf: &Surf, i: usize, cure: f32) -> [f32; PACK] {
         let mut p = [0.0f32; PACK];
         p[VOL] = 1.0;
         p[LAT0..LAT0 + LAT].copy_from_slice(l);
-        p[HIDE0..HIDE0 + 5].copy_from_slice(hd);
+        p[HIDE0..HIDE0 + hd.len()].copy_from_slice(hd);
         p[CURE] = cure;
         p
     }
@@ -521,8 +521,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;
             }
-            let mut hide: Prop = [0.0; 5];
-            for k in 0..5 {
+            let mut hide: Prop = [0.0; 10];
+            for k in 0..hide.len() {
                 hide[k] = c.a[HIDE0 + k] * inv;
             }
             if c.a[SOLV] > 0.0 {
@@ -548,8 +548,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             for k in 0..LAT {
                 got_l[k] = got[LAT0 + k] / got_v;
             }
-            let mut got_h: Prop = [0.0; 5];
-            for k in 0..5 {
+            let mut got_h: Prop = [0.0; 10];
+            for k in 0..got_h.len() {
                 got_h[k] = got[HIDE0 + k] / got_v;
             }
             br.cure = mix_cure(br.cure, br.vol, got[CURE] / got_v, got_v);

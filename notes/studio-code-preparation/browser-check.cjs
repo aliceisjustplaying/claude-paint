@@ -4,7 +4,7 @@ const dir=__dirname;fs.mkdirSync(dir,{recursive:true});
 try {
 for(const [mode,width,height,stream] of [['regular',1440,900,false],['stream',1920,1080,true],['narrow',390,844,false],['narrow-stream',390,844,true]]) {
  const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',e=>errors.push(String(e)));let fileRequests=0;page.on('request',r=>{if(r.url().includes('/api/file'))fileRequests++});
- await page.goto(`http://100.82.115.34:8769/?p=paint-studio-12e572${stream?'&stream=1':''}`);await page.waitForFunction(()=>document.querySelector('#codeformat').textContent.includes('formatted'));
+ await page.goto(`http://192.0.2.1:8769/?p=paint-studio-12e572${stream?'&stream=1':''}`);await page.waitForFunction(()=>document.querySelector('#codeformat').textContent.includes('formatted'));
  // The regression: formatted current code exists before the first opening, including when replaying closed.
  assert.equal(await page.locator('#togglecode').getAttribute('aria-expanded'),'false');
  const before=fileRequests;
@@ -29,12 +29,12 @@ for(const [mode,width,height,stream] of [['regular',1440,900,false],['stream',19
 for(const [name,body,block] of [['invalid-lua','local x = "<script>"\nfunction broken(\n',false],['worker-unavailable','local x = "<script>"\nreturn x\n',true]]) {
  const page=await browser.newPage();await page.route('**/api/file?**',r=>r.fulfill({contentType:'text/plain',body}));
  if(block)await page.route('**/code-format.js',r=>r.abort());
- await page.goto('http://100.82.115.34:8769/?p=paint-studio-12e572');await page.waitForFunction(()=>document.querySelector('#codeformat').textContent==='raw source'&&document.querySelector('#code .src')?.textContent.includes('local x'));
+ await page.goto('http://192.0.2.1:8769/?p=paint-studio-12e572');await page.waitForFunction(()=>document.querySelector('#codeformat').textContent==='raw source'&&document.querySelector('#code .src')?.textContent.includes('local x'));
  const rows=await page.locator('#code .src').allTextContents();assert.deepEqual(rows,body.split('\n').map(l=>l||' '));assert.equal(await page.locator('#code script').count(),0);checks.push({mode:name,rawRetained:true,htmlEscaped:true});await page.close();
 }
 // Rust and stale formatting use the same display boundary; neither source is written.
-const page=await browser.newPage();await page.goto('http://100.82.115.34:8769/?p=paint-studio-12e572');await page.waitForFunction(()=>document.querySelector('#codeformat').textContent.includes('formatted'));
+const page=await browser.newPage();await page.goto('http://192.0.2.1:8769/?p=paint-studio-12e572');await page.waitForFunction(()=>document.querySelector('#codeformat').textContent.includes('formatted'));
 await page.evaluate(()=>{live=false;renderCode('test.lua','local stale = 1\n'.repeat(4000),new Set());renderCode('test.rs','fn main() { println!("<tag>"); }\n',new Set());});await page.waitForFunction(()=>document.querySelector('#file').textContent==='test.rs');await page.waitForTimeout(800);assert.deepEqual(await page.locator('#code .src').allTextContents(),['fn main() { println!("<tag>"); }',' ']);checks.push({mode:'rust-and-stale-reply',rawRetained:true,staleReplyIgnored:true});
 await page.evaluate(()=>{const a='local x=1\nlocal s="a   b ; <tag>" -- words   stay\n';const b='local x=2\nlocal s="a   b ; <tag>" -- words   stay\n';renderCode('test.lua',b,new Set([0]),a);});await page.waitForFunction(()=>document.querySelector('#file').textContent==='test.lua');const text=await page.locator('#code .src').allTextContents();assert(text.join('\n').includes('a   b ; <tag>'));assert(text.join('\n').includes('-- words   stay'));assert.equal(await page.locator('#code .new').count(),1);checks.push({mode:'literals-and-highlights',literalContentsPreserved:true,changedDisplayLines:1});await page.close();
-assert.deepEqual(errors,[]);fs.writeFileSync(`${dir}/browser-checks.json`,JSON.stringify({url:'http://100.82.115.34:8769/?p=paint-studio-12e572',browser:browser.version(),checks,pageErrors:errors},null,2));console.log(JSON.stringify({passed:checks.length,checks}));
+assert.deepEqual(errors,[]);fs.writeFileSync(`${dir}/browser-checks.json`,JSON.stringify({url:'http://192.0.2.1:8769/?p=paint-studio-12e572',browser:browser.version(),checks,pageErrors:errors},null,2));console.log(JSON.stringify({passed:checks.length,checks}));
 }finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});

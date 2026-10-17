@@ -181,7 +181,7 @@
     "studio_only_rsync": true
   },
   "private_preview": {
-    "url": "http://100.82.115.34:8774/studio/?p=paint-studio-7c4dd1",
+    "url": "http://192.0.2.1:8774/studio/?p=paint-studio-7c4dd1",
     "verified_from": "VPS",
     "http": 200,
     "server_session": 88175

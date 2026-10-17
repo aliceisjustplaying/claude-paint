@@ -128,7 +128,7 @@
       "limit": null
     }
   ],
-  "private_viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-aef22d",
+  "private_viewer": "http://private-viewer.invalid:8768/?p=paint-studio-aef22d",
   "private_viewer_http": 200,
   "private_picker_contains_r29_mont": true,
   "remote_mac_verification": "not independently checked from another Mac",

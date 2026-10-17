@@ -1,6 +1,6 @@
 # What the gate runs, and what it doesn't
 
-`scripts/test` is the one gate, run the same way by hand and by sakaki CI
+`scripts/test` is the one gate, run the same way by hand and by CI
 (`.woodpecker/test.yaml`). It builds the workspace's test binaries once
 (`cargo test --workspace --no-run`, test profile), then runs the checks below,
 at most four at a time. A check passes only if it exits 0 and shows its tests

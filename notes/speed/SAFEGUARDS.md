@@ -2,7 +2,7 @@
 
 Removed with the old gate: `scripts/test_candidate`, `scripts/merge_candidate`,
 `scripts/lockrun`, their receipts and `scripts/tests/safeguards.sh`. Pull
-requests and sakaki CI (`scripts/test`) are now how a change reaches main.
+requests and CI (`scripts/test`) are now how a change reaches main.
 `scripts/golden_approve` stays as a manual tool, with only its own code left
 in `scripts/safeguards_lib.py`; nothing runs its `check` automatically. The
 rest of this file is the history of the removed tools.

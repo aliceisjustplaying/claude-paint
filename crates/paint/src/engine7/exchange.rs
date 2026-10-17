@@ -411,6 +411,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                         if *sv > 0.0 {
                             let ts = (*sv * tk / v).min(*sv);
                             *sv -= ts;
+                            sf.film_give(i, ts / COAT_UM);
                             got_s += ts / COAT_UM * px_area;
                         }
                     }
@@ -492,7 +493,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             if out_m > 0.0 {
                 if sol_um > 0.0 {
-                    *sf.solv.add(i) = (sol_um - src[SOLV] * out_m).max(0.0);
+                    let left = (sol_um - src[SOLV] * out_m).max(0.0);
+                    *sf.solv.add(i) = left;
+                    sf.film_give(i, (sol_um - left) / COAT_UM);
                 }
                 sf.take(i, out_m);
                 ploughed += out_m * px_area;

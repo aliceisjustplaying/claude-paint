@@ -851,16 +851,26 @@ impl Surf {
     #[inline]
     pub(crate) unsafe fn take(&self, i: usize, v: f32) {
         unsafe {
-            if let Some((_, from)) = self.film.filter(|_| !self.laid.is_null())
-                && *self.laid_id.add(i) >= from
-            {
-                let laid = &mut *self.laid.add(i);
-                *laid = (*laid - v).max(0.0);
-            }
+            self.film_give(i, v);
             let vol = &mut *self.vol.add(i);
             *vol -= v;
             if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
                 (*self.dry.add(i)).cure = 0.0;
+            }
+        }
+    }
+
+    /// A pass with a film ceiling (`film_lay`) gets back the `coats` of
+    /// liquid (paint or solvent) a stroke takes up from pixel `i`, where the
+    /// pass has laid paint.
+    #[inline]
+    pub(crate) unsafe fn film_give(&self, i: usize, coats: f32) {
+        unsafe {
+            if let Some((_, from)) = self.film.filter(|_| !self.laid.is_null())
+                && *self.laid_id.add(i) >= from
+            {
+                let laid = &mut *self.laid.add(i);
+                *laid = (*laid - coats).max(0.0);
             }
         }
     }
@@ -1802,6 +1812,7 @@ pub(crate) unsafe fn exchange(
                             if *sv > 0.0 {
                                 let ts = (*sv * take / v).min(*sv);
                                 *sv -= ts;
+                                sf.film_give(i, ts / COAT_UM);
                                 got_s += ts / COAT_UM * px_area;
                             }
                         }
@@ -1909,6 +1920,7 @@ pub(crate) unsafe fn exchange(
                                         let si = &mut *sf.solv.add(i);
                                         let mu = (ms * COAT_UM).min(*si);
                                         *si -= mu;
+                                        sf.film_give(i, mu / COAT_UM);
                                         *sf.solv.add(j) += mu;
                                     }
                                     let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };

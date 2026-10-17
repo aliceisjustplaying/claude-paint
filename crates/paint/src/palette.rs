@@ -384,6 +384,12 @@ pub struct Palette {
     /// `body_of` joins a limb to the nearest other limb, and only when it
     /// starts within its own width of it (`Outline::body`): new paintings.
     pub limbs_join_nearest: bool,
+    /// A rag keeps what it lifts and a mask wipe stays inside its mask
+    /// (`Canvas::with_rag_lift`): new paintings.
+    pub rag_lift: bool,
+    /// A full palette board refuses a new heap instead of scraping off the
+    /// oldest (the easel's board.rs): new paintings.
+    pub full_palette_refuses: bool,
     /// A blend or glaze meets its mask as the mask says: `soften` keeps a
     /// graded mask's own ramp where it is the wider one, and an unclipped
     /// blender or glaze reaches half a brush past its mask, not a stroke's
@@ -403,7 +409,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -417,7 +423,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, blend_at_masks: false, knife_skim: false, blend_feather: false, brush_skim: false, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, blend_at_masks: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -426,7 +432,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -540,7 +546,7 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, rag_lift: self.rag_lift, full_palette_refuses: self.full_palette_refuses, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.

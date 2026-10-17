@@ -13,6 +13,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 /// Marks the start of a chunk in a session file.
@@ -36,6 +37,9 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose full palette board refuses a new heap instead of scraping off the
+/// oldest (board.rs): every new painting. A log without it replays with the oldest scraped off.
+pub const FULL_PALETTE_MARK: &str = "--@ full-palette-refuses";
 /// Marks a painting whose blender and glaze meet their masks as the mask says
 /// (`paint::Palette::blend_at_masks`): every new painting. A log without it
 /// replays `soften` as a fresh ramp on the mask's 0.5 line and its unclipped
@@ -48,6 +52,10 @@ pub const BLEND_FEATHER_MARK: &str = "--@ blend-feather";
 /// A log's head line: a brush's paint laid on wet paint stays on top of it
 /// (`paint::Canvas::with_brush_skim`). Every new painting has it.
 pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
+/// A log's head line: its rag keeps what it lifts and a mask wipe stays
+/// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
+/// it.
+pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -82,6 +90,95 @@ pub fn chunk_limit_for(width: usize) -> Duration {
 }
 /// Lua instructions between two looks at the clock.
 const HOOK_EVERY: u32 = 1_000_000;
+
+/// How far the chunk a live session is running has got, for `status` while it runs (main.rs
+/// `serving_status`). A process runs one chunk at a time; replays leave it alone. Written on
+/// the session's thread, read on the thread that answers `status`.
+pub struct Progress {
+    /// The chunk's lines, and the line of it running when last seen (0: not seen yet). The
+    /// line is looked at with the clock (`HOOK_EVERY`), so not inside one long verb.
+    lines: AtomicUsize,
+    line: AtomicUsize,
+    /// Strokes and touches (`paint::Tally`) and the painting's clock (minutes, f64 bits) when
+    /// the chunk began and after its last verb.
+    marks0: AtomicU64,
+    marks: AtomicU64,
+    clock0: AtomicU64,
+    clock: AtomicU64,
+    /// The chunk's number in the log once it is kept there (0: not yet), while the easel
+    /// finishes its reply (a look, a frame).
+    kept: AtomicUsize,
+}
+
+pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+
+impl Progress {
+    fn begin(&self, lines: usize, st: &Studio) {
+        let marks = st.canvas.as_ref().map_or(0, |c| { let t = c.tally(); t.strokes + t.touches });
+        self.lines.store(lines, Ordering::Relaxed);
+        self.line.store(0, Ordering::Relaxed);
+        self.marks0.store(marks, Ordering::Relaxed);
+        self.marks.store(marks, Ordering::Relaxed);
+        self.clock0.store(st.clock.to_bits(), Ordering::Relaxed);
+        self.clock.store(st.clock.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Before a chunk is asked for: nothing of the last one's is reported.
+    pub fn clear(&self) {
+        self.lines.store(0, Ordering::Relaxed);
+        self.line.store(0, Ordering::Relaxed);
+        self.marks0.store(0, Ordering::Relaxed);
+        self.marks.store(0, Ordering::Relaxed);
+        self.clock0.store(0, Ordering::Relaxed);
+        self.clock.store(0, Ordering::Relaxed);
+        self.kept.store(0, Ordering::Relaxed);
+    }
+
+    /// The chunk is in the log as chunk `n` (main.rs `serve_cmd`).
+    pub fn keep(&self, n: usize) {
+        self.kept.store(n, Ordering::Release);
+    }
+
+    /// The running chunk's number in the log, once it is kept there.
+    pub fn kept(&self) -> usize {
+        self.kept.load(Ordering::Acquire)
+    }
+
+    /// After a verb of a live chunk (time.rs `verb`).
+    pub fn verb(&self, st: &Studio) {
+        if let Some(c) = st.canvas.as_ref() {
+            let t = c.tally();
+            self.marks.store(t.strokes + t.touches, Ordering::Relaxed);
+        }
+        self.clock.store(st.clock.to_bits(), Ordering::Relaxed);
+    }
+
+    /// The running chunk's progress, `elapsed` after it began, as `status` answers it.
+    pub fn report(&self, elapsed: Duration) -> String {
+        let kept = self.kept();
+        if kept > 0 {
+            return format!("the chunk is in the log (chunk {kept}); the easel is finishing its reply, running for {}", minutes_seconds(elapsed.as_secs_f64()));
+        }
+        let (line, lines) = (self.line.load(Ordering::Relaxed), self.lines.load(Ordering::Relaxed));
+        let marks = self.marks.load(Ordering::Relaxed).saturating_sub(self.marks0.load(Ordering::Relaxed));
+        let clock = f64::from_bits(self.clock.load(Ordering::Relaxed));
+        let spent = (clock - f64::from_bits(self.clock0.load(Ordering::Relaxed))).max(0.0) * 60.0;
+        if lines == 0 {
+            return format!("painting a chunk: starting, running for {}", minutes_seconds(elapsed.as_secs_f64()));
+        }
+        let at = if line > 0 { format!("at line {line} of {lines}") } else { format!("{lines} lines") };
+        format!(
+            "painting a chunk ({at}): {marks} strokes and touches so far, {} on the painting's clock (now {}), running for {}",
+            minutes_seconds(spent), crate::time::time_of_day(clock), minutes_seconds(elapsed.as_secs_f64())
+        )
+    }
+}
+
+/// `14 min 20 s`, `40 s`.
+fn minutes_seconds(secs: f64) -> String {
+    let s = secs.round() as u64;
+    if s < 60 { format!("{s} s") } else { format!("{} min {} s", s / 60, s % 60) }
+}
 
 pub struct Chunk {
     pub src: String,
@@ -199,11 +296,27 @@ impl Session {
         let deadline = Rc::new(Cell::new(None::<Instant>));
         let d = deadline.clone();
         let limit_min = chunk_limit_for(width).as_secs() / 60;
-        lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |_, _| match d.get() {
+        lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |lua, _| match d.get() {
             Some(t) if Instant::now() > t => Err(mlua::Error::runtime(format!(
                 "the chunk ran longer than {limit_min} minutes and was stopped; nothing it did was kept"
             ))),
-            _ => Ok(mlua::VmState::Continue),
+            // a live chunk: the line of it running (its outermost frame; a function an
+            // earlier chunk made is that chunk's)
+            Some(_) => {
+                let mut line = None;
+                for level in 0..200 {
+                    let Some(found) = lua.inspect_stack(level, |f| {
+                        let chunk = f.source().source.is_some_and(|s| s.trim_start_matches(['=', '@']).starts_with("chunk "));
+                        chunk.then(|| f.current_line()).flatten()
+                    }) else { break };
+                    line = found.or(line);
+                }
+                if let Some(l) = line {
+                    PROGRESS.line.store(l, Ordering::Relaxed);
+                }
+                Ok(mlua::VmState::Continue)
+            }
+            None => Ok(mlua::VmState::Continue),
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
@@ -341,6 +454,10 @@ impl Session {
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
+        self.st.borrow_mut().live = !self.replay;
+        if !self.replay {
+            PROGRESS.begin(src.lines().count(), &self.st.borrow());
+        }
         let t0 = Instant::now();
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
@@ -452,6 +569,12 @@ impl Session {
         if self.st.borrow().tubes.blend_at_masks {
             let _ = writeln!(s, "{BLEND_MARK}");
         }
+        if self.st.borrow().tubes.rag_lift {
+            let _ = writeln!(s, "{RAG_LIFT_MARK}");
+        }
+        if self.st.borrow().tubes.full_palette_refuses {
+            let _ = writeln!(s, "{FULL_PALETTE_MARK}");
+        }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
         }
@@ -537,7 +660,7 @@ impl Session {
                 // the live board's dirt, ordering or last-carried paint.
                 let st = self.st.borrow();
                 let mut board = st.board.clone();
-                board.visit(p.heap, 0.0);
+                let _ = board.visit(p.heap, 0.0);
                 let mut projected = p.clone();
                 if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
                     projected.mix = st.tubes.pile(h.fractions());
@@ -1109,6 +1232,8 @@ fn box_list() -> String {
 /// (`LIMBS_MARK`), and likewise for the blender's feather
 /// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`) and
 /// blends and glazes at masks (`BLEND_MARK`).
+/// New paintings' full palette refuses a new heap; an existing one's as its
+/// log says (`FULL_PALETTE_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1116,9 +1241,11 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.engine = paint::REACH_END;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
+        b.full_palette_refuses = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
+        b.rag_lift = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1155,9 +1282,14 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
+    b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
+    if b.rag_lift && !paint::engine7::active(engine) {
+        return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7 or 8"));
+    }
     Ok(b)
 }
 
@@ -1353,6 +1485,48 @@ mod tests {
         assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
     }
 
+    /// A new painting's rag keeps what it lifts and stays inside a mask
+    /// (`paint::Canvas::with_rag_lift`) and its log's head says so; a replay
+    /// of that log and a save of it do too, and a log without the line (every
+    /// painting before it) doesn't. Engines 7 and 8 have it.
+    #[test]
+    fn new_paintings_record_the_rag_lift_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().rag_lift());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{RAG_LIFT_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.rag_lift());
+        for engine in [paint::engine7::ENGINE, paint::REACH_END] {
+            for lifts in [false, true] {
+                for other_flags in [false, true] {
+                    let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                    for (on, mark) in [(lifts, RAG_LIFT_MARK), (other_flags, KNIFE_SKIM_MARK), (other_flags, BLEND_FEATHER_MARK), (other_flags, BRUSH_SKIM_MARK)] {
+                        if !on {
+                            log = log.replace(&format!("{mark}\n"), "");
+                        }
+                    }
+                    let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+                    for chunk in parse_program(&log) {
+                        replay.run(&chunk).unwrap();
+                    }
+                    assert_eq!(replay.canvas().unwrap().rag_lift(), lifts);
+                    assert_eq!(replay.program("p"), log);
+                    let mut saved = Vec::new();
+                    replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+                    let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+                    assert_eq!(restored.engine(), engine);
+                    assert_eq!(restored.rag_lift(), lifts, "rag lift's bit 39 must round-trip independently");
+                    assert_eq!((restored.knife_skim(), restored.blend_feather(), restored.brush_skim()), (other_flags, other_flags, other_flags));
+                }
+            }
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+    }
+
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
     /// names.
     fn replay_fixture(name: &str) -> (Session, String) {
@@ -1373,6 +1547,21 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+}
+
+#[cfg(test)]
+mod progress {
+    use super::*;
+
+    #[test]
+    fn a_kept_chunk_is_reported_as_in_the_log() {
+        let p = Progress { lines: AtomicUsize::new(6), line: AtomicUsize::new(5), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0), kept: AtomicUsize::new(0) };
+        assert!(p.report(Duration::from_secs(3)).starts_with("painting a chunk (at line 5 of 6)"));
+        p.keep(2);
+        assert_eq!(p.report(Duration::from_secs(75)), "the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s");
+        p.clear();
+        assert!(p.report(Duration::from_secs(1)).starts_with("painting a chunk: starting"));
     }
 }
 

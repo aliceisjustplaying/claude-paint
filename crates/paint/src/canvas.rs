@@ -235,6 +235,9 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: a rag keeps what it lifts, and a mask wipe lifts only
+    /// inside its mask (`rag`).
+    pub(crate) rag_lift: bool,
     /// Engine 7: a knife's paint laid on wet paint stays on top of it
     /// (`Canvas::knife`).
     pub(crate) knife_skim: bool,
@@ -298,6 +301,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            rag_lift: false,
             knife_skim: false,
             blend_feather: false,
             brush_skim: false,
@@ -312,6 +316,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.rag_lift &= crate::engine7::active(v);
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
@@ -344,6 +349,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_rag_lift(mut self, enabled: bool) -> Self {
+        self.rag_lift = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn rag_lift(&self) -> bool {
+        self.rag_lift
     }
 
     pub fn with_knife_skim(mut self, enabled: bool) -> Self {

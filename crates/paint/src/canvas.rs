@@ -260,6 +260,9 @@ pub struct Canvas {
     pub(crate) receptive: Option<Vec<f32>>,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
+    /// The drain switch (`with_drain`): an absorbent ground drains paint as
+    /// its pigment packs (`bristle::ground_drain`).
+    pub(crate) drain: bool,
 }
 
 impl Canvas {
@@ -318,6 +321,7 @@ impl Canvas {
             brush_skim: false,
             receptive: None,
             soak: None,
+            drain: false,
         }
     }
 
@@ -337,6 +341,25 @@ impl Canvas {
     }
     pub fn engine(&self) -> u32 {
         self.engine
+    }
+
+    /// Turn on the drain switch (an easel log's `--@ drain`, engine 5 and
+    /// later): an absorbent ground drains the film over it as its pigment
+    /// packs, to the oil left when the pigment packs and below it only for
+    /// pigments coarser than the ground's pores, the packed layer growing up
+    /// from the ground while the surface keeps its oil, flow and gloss
+    /// (`bristle::ground_drain`); paint comes off from the top down; a film's
+    /// gloss reads its surface's oil against its pigment's packing
+    /// (`bake`). Without it an absorbent ground draws oil from the paint
+    /// just laid, as engine 4 has it (`bristle::ground_draw`), and a painting
+    /// is as it always was. A checkpoint keeps it (version 14).
+    pub fn with_drain(mut self, on: bool) -> Self {
+        self.drain = on;
+        self
+    }
+    /// The drain switch (`with_drain`).
+    pub fn drain(&self) -> bool {
+        self.drain
     }
 
     pub fn with_quarter_tiles(mut self, enabled: bool) -> Self {

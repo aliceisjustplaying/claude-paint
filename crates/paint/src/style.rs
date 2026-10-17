@@ -220,7 +220,9 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim);
+                            // (written with the drain switch on to keep the
+                            // paint's packing, below; prepared, it is off)
+                            return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim);
                         }
                     }
                 }
@@ -248,8 +250,15 @@ impl Style {
         }
         c.engine = engine;
         if let Some((path, key)) = cache {
+            // the cache keeps the paint's packing (`wet::Prop`'s last five),
+            // which only a draining canvas's checkpoint holds (version 14), so
+            // a ground read back is the ground just prepared, bit for bit (the
+            // caller sets the drain switch on either)
             let mut bytes = Vec::new();
-            if c.write_state(&mut bytes, &key).is_ok() {
+            c.drain = c.engine >= 4;
+            let written = c.write_state(&mut bytes, &key).is_ok();
+            c.drain = false;
+            if written {
                 use std::io::Write;
                 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));

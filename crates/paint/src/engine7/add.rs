@@ -6,7 +6,7 @@
 //! and `[6..10]`). Every lane runs engine 5's arithmetic in engine 5's
 //! order, so a pixel ends bit for bit where engine 5 leaves it.
 
-use crate::bristle::{OIL_SHARE, Surf};
+use crate::bristle::{Surf, fluid_of, ground_draw, ground_drain};
 use crate::drying::Px;
 use crate::wet::{Latent, Prop};
 
@@ -22,10 +22,16 @@ pub(crate) struct Film {
     dry: *mut Px,
     /// Null when no part of the ground is absorbent.
     absorb: *mut f32,
+    /// The drain switch (`Surf::drain`): the ground drains the film as its
+    /// pigment packs (`bristle::ground_drain`) instead of drawing oil from
+    /// the paint just laid (`bristle::ground_draw`).
+    drain: bool,
 }
 
 /// Paint ready to lay: the source's color and properties with the solvent
-/// that evaporates as it is laid (engine 4's lean film) already taken out.
+/// that evaporates as it is laid (engine 4's lean film) already taken out,
+/// and with the drain switch broken up and fluid (`bristle::fluid_of`), as
+/// `Surf::add` lays it.
 #[derive(Clone, Copy)]
 pub(crate) struct Paint7 {
     lat: [[f32; 4]; 2],
@@ -37,7 +43,7 @@ pub(crate) struct Paint7 {
 
 impl Paint7 {
     #[inline(always)]
-    pub(crate) fn new(lean: bool, lat: &Latent, hide: Prop, cure: f32) -> Paint7 {
+    pub(crate) fn new(lean: bool, drain: bool, lat: &Latent, hide: Prop, cure: f32) -> Paint7 {
         let (keep, hide) = if lean && hide[3] > 0.0 {
             let mut h = hide;
             h[3] = 0.0;
@@ -45,6 +51,7 @@ impl Paint7 {
         } else {
             (1.0, hide)
         };
+        let hide = if drain { fluid_of(hide) } else { hide };
         Paint7 {
             lat: [[lat[0], lat[1], lat[2], lat[3]], [lat[3], lat[4], lat[5], lat[6]]],
             hide: [[hide[0], hide[1], hide[2], hide[3]], [hide[3], hide[4], hide[5], hide[6]], [hide[6], hide[7], hide[8], hide[9]]],
@@ -62,7 +69,7 @@ fn lerp4(p: [f32; 4], q: [f32; 4], a: f32) -> [f32; 4] {
 impl Film {
     /// The film of `sf`'s buffers, taken once per exchange call.
     pub(crate) fn of(sf: &Surf) -> Film {
-        Film { vol: sf.vol, lat: sf.lat, hide: sf.hide, dry: if sf.cure_now { sf.dry } else { std::ptr::null_mut() }, absorb: sf.absorb }
+        Film { vol: sf.vol, lat: sf.lat, hide: sf.hide, dry: if sf.cure_now { sf.dry } else { std::ptr::null_mut() }, absorb: sf.absorb, drain: sf.drain }
     }
 
     /// `add`, for paint a brush lays from its load (`Surf::lay`): with
@@ -120,20 +127,10 @@ impl Film {
             if self.absorb.is_null() {
                 return;
             }
-            let cap = &mut *self.absorb.add(i);
-            if *cap <= 0.0 {
-                return;
-            }
-            let hd = &mut *self.hide.add(i);
-            let take = (*cap).min(0.8 * (v * OIL_SHARE * hd[4].max(0.0)));
-            if take > 0.0 {
-                *cap -= take;
-                let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
-                let lean = (take / film_oil).min(0.9);
-                hd[4] *= 1.0 - lean;
-                hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
-                *vol = (t - take).max(0.0);
-            }
+            // (the ground's draw, or with the drain switch its drain, as
+            // `Surf::add` has them)
+            let (cap, hd) = (&mut *self.absorb.add(i), &mut *self.hide.add(i));
+            *vol = if self.drain { ground_drain(cap, t, hd) } else { ground_draw(cap, v, t, hd) };
         }
     }
 }

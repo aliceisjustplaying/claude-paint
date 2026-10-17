@@ -216,13 +216,15 @@ pub struct Mobile {
 
 impl std::fmt::Debug for Mobile {
     /// As derived, but the paint's properties without the pigment's packing
-    /// (`Prop`'s last five, which nothing reads yet): a rag prints as it
-    /// always did (`easel run --state-digest` hashes it).
+    /// (`Prop`'s last five) while it carries none: a rag on a canvas without
+    /// the drain switch, which lifts only the first five (`rag_contact`),
+    /// prints as it always did (`easel run --state-digest` hashes it).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = if self.hide[5..].iter().all(|&v| v == 0.0) { 5 } else { self.hide.len() };
         f.debug_struct("Mobile")
             .field("mm3", &self.mm3)
             .field("lat", &self.lat)
-            .field("hide", &&self.hide[..5])
+            .field("hide", &&self.hide[..n])
             .field("cure", &self.cure)
             .field("solv_mm3", &self.solv_mm3)
             .field("at_min", &self.at_min)
@@ -634,13 +636,17 @@ impl Canvas {
             for &(i, take) in &asks[k0..k1] {
                 let take = take * scale;
                 if take > 0.0 {
+                    // (the drain switch: the rag lifts from the top down,
+                    // `bristle::take_from`)
+                    let h = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
                     if pooled {
                         let l = &self.wet.lat[i];
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
                         }
-                        let h = &self.wet.hide[i];
-                        for q in 0..h.len() {
+                        // (without the drain switch the rag carries engine
+                        // 4's five properties; the packing is the drain's)
+                        for q in 0..if self.drain { h.len() } else { 5 } {
                             got.hide[q] += h[q] * take;
                         }
                         if timed {
@@ -747,8 +753,11 @@ impl Canvas {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
         let hd = &mut self.wet.hide[i];
+        // (the drain switch: the smear is fluid however packed it was where
+        // the rag took it up, `Surf::add`)
+        let ph = if self.drain { crate::bristle::fluid_of(pl.hide) } else { pl.hide };
         for k in 0..hd.len() {
-            hd[k] += (pl.hide[k] - hd[k]) * a;
+            hd[k] += (ph[k] - hd[k]) * a;
         }
         if self.wet.clock.px.len() == self.wet.vol.len() {
             let p = &mut self.wet.clock.px[i];
@@ -756,6 +765,12 @@ impl Canvas {
         }
         self.wet.cover[i] = 1.0;
         self.wet.vol[i] = t;
+        // the drain switch: an absorbent ground drains the smear, as it
+        // drains paint a brush lays (`bristle::ground_drain`)
+        if self.drain && self.absorb_any {
+            let hd = &mut self.wet.hide[i];
+            self.wet.vol[i] = crate::bristle::ground_drain(&mut self.absorb[i], t, hd);
+        }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)
         {
@@ -1243,6 +1258,55 @@ mod rag_lift {
                 assert_eq!(moved, 0.0, "film outside the mask changed by {moved} µm·px");
             } else {
                 assert!(moved > 0.0, "older logs lift past the mask");
+            }
+        }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wet::OIL_VOLUME;
+
+    /// With the drain switch an absorbent ground drains what a rag smears
+    /// onto it, as it drains paint a brush lays (`bristle::ground_drain`):
+    /// on bare absorbent ground the smear loses oil down toward its drained
+    /// floor and packs from the ground up, its stiffness its own; where the
+    /// ground's pores are already full it keeps its material. Without it a
+    /// smear stays as it came (`a_rag_smear_preserves_the_paint_oil_and_turps`).
+    #[test]
+    fn an_absorbent_ground_drains_a_rag_smear_with_the_drain_switch() {
+        for drain in [false, true] {
+            let mut c = Canvas::new(240, 1.0, [0.3, 0.2, 0.1]).with_engine(5).with_drain(drain);
+            c.ground_finish(1.0);
+            for i in 0..c.wet.vol.len() {
+                if i % 240 < 120 {
+                    c.wet.vol[i] = 0.8;
+                    c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, OIL_VOLUME, 0.0];
+                    c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+                    // (painted on before: its ground's pores are full)
+                    c.absorb[i] = 0.0;
+                }
+            }
+            let mut rag = Rag::new(50.0, 2);
+            assert!(c.rag_wipe(&mut rag, &[(100.0, 200.0), (900.0, 200.0)], &[0.8], 19) > 0.0);
+            let mut laid = 0;
+            for (i, (&v, h)) in c.wet.vol.iter().zip(&c.wet.hide).enumerate() {
+                if i % 240 >= 130 && v > 1e-5 {
+                    laid += 1;
+                    if drain {
+                        assert!(h[4] < 1.0 - 1e-3 && h[4] >= 0.4 - 1e-4 && h[7] > 1e-3 && (h[1] - 0.6).abs() < 1e-5, "a smear on bare absorbent ground drains and packs: {h:?}");
+                    } else {
+                        assert!((h[4] - 1.0).abs() < 1e-5 && (h[1] - 0.6).abs() < 1e-5, "without the switch a smear stays as it came: {h:?}");
+                    }
+                }
+            }
+            assert!(laid > 0, "the rag must carry paint onto the bare half");
+            // (clear of the boundary, where the pad lays back what it took
+            // from the drained half)
+            for (i, h) in c.wet.hide.iter().enumerate() {
+                if i % 240 < 96 && c.wet.vol[i] > 1e-5 {
+                    assert!((h[4] - 1.0).abs() < 1e-5 && h[7] == 0.0, "full pores leave the paint its oil: {h:?}");
+                }
             }
         }
     }

@@ -1092,7 +1092,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let f = c.frame();
     let (len, wide) = (2.0 * blade, blade + 12.0);
     let board_h = wide + 20.0;
-    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine());
+    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain());
     let mut knife = paint::Knife::new(blade);
     knife.load(paint, full);
     let cy = board_h / 2.0;

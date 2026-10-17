@@ -33,13 +33,16 @@ pub type Latent = [f32; LAT];
 /// relative to average paint (see `drying::drier`). Solvent and oil are
 /// engine 4's (see `Paint`; engine 3's thinner keeps its solvent beside the
 /// paint, `crate::thinner`). The last five carry each paint's pigment
-/// packing, in memory only (a checkpoint keeps the first five): the oil
+/// packing (a checkpoint keeps them only with the drain switch, version
+/// 14; without it, the first five): the oil
 /// left, relative to tube paint as `oil` is, when the pigment packs
 /// (`Paint::packed`) and when an absorbent ground has drained all it can
 /// (`Paint::floor`), the share of a film packed from the ground up as it
 /// drained, of its thickness, the oil's share of the volume of its tube
 /// paint (`Paint::oil_volume`), and the share of its oil from waxed tubes.
-/// Nothing reads them yet: the packed share and the wax stay 0.
+/// Only the drain switch reads them (`Canvas::with_drain`,
+/// `bristle::ground_drain`), which alone sets the packed share; the wax
+/// stays 0.
 pub type Prop = [f32; 10];
 
 /// The packed oil and drained floor of paint that names no tubes (relative

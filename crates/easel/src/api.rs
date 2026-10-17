@@ -1820,7 +1820,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
-                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+                // (the drain switch rides on the box, `session::DRAIN_MARK`;
+                // the ground is prepared alike either way)
+                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_drain(tubes.drain);
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }
@@ -2148,8 +2150,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 (v, _) => tool_of(v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
-            let engine = st1.borrow().tubes.engine;
-            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine)));
+            let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
+            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(drain)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
         })?)?;
@@ -2171,7 +2173,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(2.0..=200.0).contains(&width) {
                 return err("knife{width=}: the blade's length in units, 2 to 200");
             }
-            let k = Rc::new(RefCell::new(paint::Knife::new(width)));
+            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_packing(st1.borrow().tubes.drain)));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             Ok(KnifeU { k, st: st1.clone() })
         })?)?;

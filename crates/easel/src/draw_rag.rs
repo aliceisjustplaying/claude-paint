@@ -11,7 +11,7 @@
 use crate::api::{S, check_keys, err, mask_of, num, points, seed_of};
 use crate::time::{self, Verb};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
-use paint::rag::{PAD_MM, Rag, RagPass, pace};
+use paint::rag::{FULL, PAD_MM, Rag, RagPass, pace};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,6 +21,19 @@ const BLOT_KEYS: &[&str] = &["pressure", "seed"];
 
 fn no_canvas() -> mlua::Error {
     mlua::Error::runtime("no canvas yet: call canvas{} first")
+}
+
+/// What the chunk's reply says when a wipe ran on a full face (`FULL`), with
+/// the rag lift switch: `strokes` is how many of a mask wipe's strokes began
+/// on one, of how many (None: a wipe along a path that began on one).
+fn full_note(r: &Rag, strokes: Option<(usize, usize)>) -> String {
+    let cloth = r.soaked >= FULL;
+    match (strokes, cloth) {
+        (Some((full, n)), false) => format!("rag: the face in use is full: {full} of {n} strokes began on it and lifted almost nothing (load {:.2}). A refold (r:refold(), or refold= in the wipe) turns out a cleaner face.\n", r.load),
+        (Some((full, n)), true) => format!("rag: the whole cloth is full: {full} of {n} strokes lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
+        (None, false) => format!("rag: the face in use was full when this wipe began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.\n", r.load),
+        (None, true) => format!("rag: the whole cloth is full, so this wipe lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
+    }
 }
 
 /// A rag in the painter's hand.
@@ -115,7 +128,10 @@ impl UserData for RagU {
                     let pass = RagPass { pressure: pr[0], angle, passes: passes as u32, refold, seed: sd };
                     time::verb(&u.st, Verb::Pass, |s| {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                        c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
+                        let (n, full) = c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
+                        if c.rag_lift() && full > 0 {
+                            s.out.push_str(&full_note(&u.rag.borrow(), Some((full, n))));
+                        }
                         Ok(())
                     })
                 }
@@ -134,7 +150,11 @@ impl UserData for RagU {
                     let sd = seed(&u.st, lua, o.as_ref())?;
                     time::verb(&u.st, Verb::Marks, |s| {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                        let full = u.rag.borrow().load >= FULL;
                         c.rag_wipe(&mut u.rag.borrow_mut(), &pts, &pr, sd);
+                        if c.rag_lift() && full {
+                            s.out.push_str(&full_note(&u.rag.borrow(), None));
+                        }
                         Ok(())
                     })
                 }
@@ -249,5 +269,25 @@ print(n, h, type(rag))"#;
         assert!(paint::ENGINE >= 3);
         run(&mut new, CANVAS);
         assert_eq!(run(&mut new, "print(type(rag))").trim(), "function");
+    }
+
+    /// With the rag lift switch (every new painting) a wipe that runs on a
+    /// full face says so in the chunk's reply; an older log's rag doesn't.
+    #[test]
+    fn a_wipe_on_a_full_face_says_so() {
+        let src = r#"work(rect(0, 0, 1000, 600), {hand="broad", pile=pile{{"bone black", 1}}, coverage=2, fill=true, seed=1})
+r = rag{width=30}
+r:wipe(rect(0, 0, 1000, 600), {pressure=0.6})
+r:wipe({{100, 300}, {900, 300}})"#;
+        let mut tubes = paint::Palette::tube_box();
+        tubes.engine = paint::engine7::ENGINE;
+        let mut old = Session::with_box(W, tubes.clone()).unwrap();
+        run(&mut old, CANVAS);
+        assert!(!run(&mut old, src).contains("rag:"));
+        tubes.rag_lift = true;
+        let mut new = Session::with_box(W, tubes).unwrap();
+        run(&mut new, CANVAS);
+        let out = run(&mut new, src);
+        assert!(out.contains("rag: the face in use is full: ") && out.contains("rag: the face in use was full when this wipe began"), "{out}");
     }
 }

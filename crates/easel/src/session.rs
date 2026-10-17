@@ -57,6 +57,10 @@ pub const BLEND_FEATHER_MARK: &str = "--@ blend-feather";
 /// A log's head line: a brush's paint laid on wet paint stays on top of it
 /// (`paint::Canvas::with_brush_skim`). Every new painting has it.
 pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
+/// A log's head line: its rag keeps what it lifts and a mask wipe stays
+/// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
+/// it.
+pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -572,6 +576,9 @@ impl Session {
         }
         if self.st.borrow().tubes.glaze_film {
             let _ = writeln!(s, "{GLAZE_FILM_MARK}");
+        }
+        if self.st.borrow().tubes.rag_lift {
+            let _ = writeln!(s, "{RAG_LIFT_MARK}");
         }
         if self.st.borrow().tubes.full_palette_refuses {
             let _ = writeln!(s, "{FULL_PALETTE_MARK}");
@@ -1239,6 +1246,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
+        b.rag_lift = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1283,6 +1291,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
+    b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
+    if b.rag_lift && !paint::engine7::active(engine) {
+        return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7 or 8"));
+    }
     Ok(b)
 }
 
@@ -1474,6 +1486,48 @@ mod tests {
             let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
             assert_eq!(restored.engine(), logged_engine(&log).unwrap());
             assert_eq!(restored.knife_skim(), skims);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's rag keeps what it lifts and stays inside a mask
+    /// (`paint::Canvas::with_rag_lift`) and its log's head says so; a replay
+    /// of that log and a save of it do too, and a log without the line (every
+    /// painting before it) doesn't. Engines 7 and 8 have it.
+    #[test]
+    fn new_paintings_record_the_rag_lift_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().rag_lift());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{RAG_LIFT_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.rag_lift());
+        for engine in [paint::engine7::ENGINE, paint::REACH_END] {
+            for lifts in [false, true] {
+                for other_flags in [false, true] {
+                    let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                    for (on, mark) in [(lifts, RAG_LIFT_MARK), (other_flags, KNIFE_SKIM_MARK), (other_flags, BLEND_FEATHER_MARK), (other_flags, BRUSH_SKIM_MARK)] {
+                        if !on {
+                            log = log.replace(&format!("{mark}\n"), "");
+                        }
+                    }
+                    let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+                    for chunk in parse_program(&log) {
+                        replay.run(&chunk).unwrap();
+                    }
+                    assert_eq!(replay.canvas().unwrap().rag_lift(), lifts);
+                    assert_eq!(replay.program("p"), log);
+                    let mut saved = Vec::new();
+                    replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+                    let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+                    assert_eq!(restored.engine(), engine);
+                    assert_eq!(restored.rag_lift(), lifts, "rag lift's bit 39 must round-trip independently");
+                    assert_eq!((restored.knife_skim(), restored.blend_feather(), restored.brush_skim()), (other_flags, other_flags, other_flags));
+                }
+            }
         }
         assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
     }

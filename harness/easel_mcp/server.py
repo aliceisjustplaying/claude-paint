@@ -26,6 +26,15 @@ import anyio
 from references import reference, reference_list
 
 
+def critic_cli(studio):
+    if not os.environ.get("PAINTER_CRITIC") or not (studio / "bin/easel").is_file() or (studio / "bin/watercolor-studio").is_file():
+        return None
+    if os.environ.get("PAINTER_CRITIC_CLI"):
+        return os.environ["PAINTER_CRITIC_CLI"]
+    path = Path(__file__).resolve().parents[1] / "painter/visit-cli.ts"
+    return str(path) if path.is_file() else None
+
+
 def hide_counters(text):
     text = re.sub(r'\[string "chunk \d+"\]', '[string "chunk"]', text)
     return re.sub(r"the chunk ran longer than \d+ minutes and was stopped", "the chunk didn't finish and was stopped", text)
@@ -385,7 +394,7 @@ class Easel:
         return f"revised in {path}\n"
 
     async def call(self, name, params):
-        if name == "ask_critic" and os.environ.get("PAINTER_CRITIC"):
+        if name == "ask_critic" and critic_cli(self.studio):
             from critic import visit
             result = await visit(self.studio, "asked", params.get("note"))
             return [types.TextContent(type="text", text=result["notes"])]
@@ -473,7 +482,7 @@ class Easel:
 
 def tool_definitions(studio, sittings=False, agy=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
-    if os.environ.get("PAINTER_CRITIC"):
+    if critic_cli(studio):
         definitions += json.loads(Path(__file__).with_name("critic-tools.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
         definitions = [definition for definition in definitions if definition["name"] != "probe"]

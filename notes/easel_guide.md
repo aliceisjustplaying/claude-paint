@@ -24,12 +24,13 @@ The studio holds one painting, and the easel is open on it. Its tools:
 |---|---|
 | `paint` | runs a chunk of Lua. The reply is what the chunk printed, the painting's current clock, then `ok` |
 | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
+| `probe` | gives the paint at a point (`at: "x,y"`) or averaged over an area (`crop: "x0,y0,x1,y1"`) in numbers: its color and value from 0 to 255 as a look shows them, the same in the gallery's light, and whether it is open, setting, tacky or dry; it can't tell which piles the paint came from |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
 | `status` | the canvas's setup |
-| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk` |
+| `log` | the painting so far: every chunk that ran, each after a line `--@ chunk`; with `find: "<text>"`, only the lines that hold that text, each with its line number and the two lines before and after it |
 
 The first chunk is `canvas{}` (see [The canvas](#the-canvas)). `read` reads the files in this folder: your brief and
-your notes.
+your notes. `read` on a folder lists what is in it.
 
 Beside the painting is a scratch canvas to try things on (see [The scratch canvas](#the-scratch-canvas)): `paint`,
 `look`, `status` and `log` work on it with `scratch: true`.

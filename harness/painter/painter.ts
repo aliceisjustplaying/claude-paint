@@ -28,17 +28,23 @@
  * 7. A usage limit that resets with time (limits.ts) doesn't end the sitting: the run waits until
  *    the limit should have lifted and then asks again with the conversation as it was, nothing
  *    added (PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H change the waits).
+ * 8. With PAINTER_CRITIC (visit.ts), a critic visits: at the end of each sitting and when the painter
+ *    calls ask_critic. A later sitting opens with the critic's latest notes after the summary.
  * The PAINTER_* variables are read once and removed from the environment.
  */
-import { createReadToolDefinition, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
+import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { buildSummary, CANVAS_VIEW } from "./summary.ts";
 import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
 import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
+import { text } from "./easel-client.ts";
+import { CRITIQUE, criticFromEnv, leaveNote, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
 
-export default function painter(pi: ExtensionAPI) {
+/** The system prompt is only what --system-prompt gives (the critic's session uses this too). */
+export function onlyOurSystemPrompt(pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
 		const options = event.systemPromptOptions;
 		// system_prompt.md may open with an HTML comment for us (e.g. its DRAFT marker): not for the painter.
@@ -49,13 +55,18 @@ export default function painter(pi: ExtensionAPI) {
 		options.promptGuidelines = [];
 		options.toolGuidelines = {};
 	});
+}
+
+export default function painter(pi: ExtensionAPI) {
+	onlyOurSystemPrompt(pi);
 
 	const limits = limitsFromEnv();
 	const tpm = process.env.PAINTER_INPUT_TPM ? Number(process.env.PAINTER_INPUT_TPM) : undefined;
 	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
 	const limitWait = limitWaitFromEnv();
 	let sittingRecovery = process.env.PAINTER_SITTING_RECOVERY === "1";
-	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY"]) delete process.env[k];
+	const critic = criticFromEnv();
+	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY", "PAINTER_CRITIC"]) delete process.env[k];
 	const studio = process.cwd();
 	const read = createReadToolDefinition(studio);
 	const views = new Map<string, unknown[]>();
@@ -81,7 +92,8 @@ export default function painter(pi: ExtensionAPI) {
 		const { summary } = await buildSummary(studio, [], undefined, "");
 		const view = CANVAS_VIEW.exec(summary)?.[1];
 		const images = view ? await viewImages(view, ctx) : [];
-		return { action: "transform" as const, text: `${event.text}\n\n${summary}`, images: [...(event.images ?? []), ...(images as never[])] };
+		const notes = critic ? sittingCritique(studio) : "";
+		return { action: "transform" as const, text: `${event.text}\n\n${summary}${notes}`, images: [...(event.images ?? []), ...(images as never[])] };
 	});
 	const pace = tpm ? new TokenPace(tpm) : undefined;
 	let lastRequest = 0;
@@ -138,7 +150,17 @@ export default function painter(pi: ExtensionAPI) {
 	// the errored response is left out of the model's context (a context_edit; the session file
 	// keeps it), so the next request is the conversation as it was before the limit
 	pi.on("agent_before_settle", async (event) => {
-		if (!pendingLimit || !limited) return undefined;
+		if (!pendingLimit || !limited) {
+			// the end of the sitting: the critic's visit (not after a usage limit, which it would meet too)
+			if (critic && !limited) {
+				try {
+					await visit(studio, critic, "sitting");
+				} catch (e) {
+					console.error(`painter: ${(e as Error).message}`);
+				}
+			}
+			return undefined;
+		}
 		pendingLimit = false;
 		const wait = limitWaitMs(limited.text, limited.since, Date.now(), limitWait);
 		const last = event.context.contextEntries.at(-1);
@@ -153,5 +175,23 @@ export default function painter(pi: ExtensionAPI) {
 	});
 
 	registerEaselTools(pi, process.cwd(), limits);
+	if (critic) {
+		pi.registerTool({
+			...defineTool({
+				name: "ask_critic",
+				label: "ask_critic",
+				description:
+					"Ask the critic to visit the studio now. The critic looks at the painting and reads your journal and your note, " +
+					`then writes back what it would fix and why. Its notes are this tool's reply, and are saved as ${CRITIQUE}. ` +
+					`note: what you'd like the critic to know or look at; it stays in ${TO_CRITIC} for later visits until you leave another.`,
+				parameters: Type.Object({ note: Type.Optional(Type.String()) }),
+				async execute(_id, p, signal) {
+					if (p.note?.trim()) leaveNote(studio, critic, p.note);
+					return text(await visit(studio, critic, "asked", signal));
+				},
+			}),
+			executionMode: "sequential",
+		});
+	}
 	vision(pi);
 }

@@ -48,7 +48,7 @@ SESS = HOME / ".pi/agent/sessions"
 WATCHDOG_MIN = 30
 
 # the painter's tools (harness/painter/easel-tools.ts): the easel and reading the studio; no shell
-TOOLS = "paint,look,note,status,log,read"
+TOOLS = "paint,look,probe,note,status,log,read,reference,reference_list"
 HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compaction.ts"),
            "--system-prompt", str(H / "system_prompt.md"), "--tools", TOOLS,
            "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]

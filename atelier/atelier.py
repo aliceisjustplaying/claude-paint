@@ -36,6 +36,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import runpy
 import secrets
 import shutil
 import subprocess
@@ -205,6 +206,9 @@ class Atelier:
             env = {k: v for k, v in os.environ.items() if k not in ("STUDIO_WIDTH", "EASEL_WIDTH", "EASEL_BOX")}
             run([REPO / "scripts/export_r16_studio", BOX, folder], env={**env, "R16_BRANCH": commit}, check=True)
             (folder / "notes/reference-library.json").unlink(missing_ok=True)
+            rewrite = runpy.run_path(str(REPO / "scripts/studio_guide.py"))["rewrite"]
+            guide = folder / "notes/easel_guide.md"
+            guide.write_text(rewrite(guide.read_text(), notebook=True))
 
             cards = self.cards(sid)
             notebook = (home / "notebook.md").read_text() if (home / "notebook.md").exists() else ""

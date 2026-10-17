@@ -53,6 +53,10 @@ class StudioGuideTests(unittest.TestCase):
         text = "# The easel\n\nbin/easel open\n"
         self.assertEqual(REWRITE(text), text)
 
+    def test_older_pi_guide_does_not_gain_an_unsupported_probe(self):
+        text = "\n".join(line for line in OIL.splitlines() if not line.startswith("| `probe` |")) + "\n"
+        self.assertEqual(tools_in(REWRITE(text)), ["paint", "look", "note", "status", "log", "read"])
+
     def test_duplicate_tool_tables_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "one tool table"):
             REWRITE(OIL + OIL)

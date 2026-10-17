@@ -246,6 +246,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             ("look", {"palette": True, "size": 0}, "look: palette takes no other option"),
             ("look", {"survey": True, "compare": "a.png"}, "look: survey and compare are two looks; ask for one"),
             ("look", {"compare": "../outside.png"}, "look: compare is the path of an earlier look in this studio"),
+            ("look", {"ref": "../outside.png"}, "look: ref is the path of a picture of the motif in this studio"),
+            ("look", {"ref": "a.png", "survey": True}, "look: ref is a look of its own: no survey, compare or hold"),
         ):
             reply = await self.session.call_tool(name, arguments)
             self.assertTrue(reply.isError)

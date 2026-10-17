@@ -371,13 +371,14 @@ pub struct Held {
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
 /// thinner, field for field, plus `solvent` when `show` (engine 3); the
-/// paint's properties without solvent and oil unless `oil` (engine 4).
+/// paint's properties without solvent and oil unless `oil` (engine 4), and
+/// never the pigment's packing (`Prop`'s last five, which nothing reads yet).
 struct BristleText<'a>(&'a Bristle, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
-        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
+        let hide: &[f32] = if self.2 { &b.hide[..5] } else { &b.hide[..3] };
         let mut d = f.debug_struct("Bristle");
         d.field("rx", &b.rx)
             .field("ry", &b.ry)
@@ -478,7 +479,7 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5, 1.0, 0.0, 1.0],
+                    hide: [0.5, 0.5, 1.0, 0.0, 1.0, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0],
                     cure: 0.0,
                     solvent: 0.0,
                 }
@@ -527,12 +528,12 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
         }
     }
 
@@ -557,12 +558,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
         }
     }
 
@@ -1126,7 +1127,7 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 10], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         ts += b.solvent;
@@ -1144,7 +1145,7 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     for l in &mut lat {
         *l /= tv;
     }
-    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
+    hide = hide.map(|h| h / tv);
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
     let share_s = k * ts / bristles.len() as f32;
@@ -1807,7 +1808,7 @@ pub(crate) unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0; 5];
+        let mut got_h: Prop = [0.0; 10];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
@@ -2611,7 +2612,7 @@ const SKIM_COATS: f32 = 0.25;
 /// bead of paint it carries (coats × units², as a bristle's load). It lays
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
 /// ridges and a bead where it lifts, and scrapes wet paint off.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Knife {
     pub width: f32,
     vol: f32,
@@ -2619,6 +2620,22 @@ pub struct Knife {
     lat: Latent,
     hide: Prop,
     cure: f32,
+}
+
+/// As derived, but the paint's properties without the pigment's packing
+/// (`Prop`'s last five, which nothing reads yet): a knife prints as it
+/// always did (`easel run --state-digest` hashes it).
+impl std::fmt::Debug for Knife {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Knife")
+            .field("width", &self.width)
+            .field("vol", &self.vol)
+            .field("solvent", &self.solvent)
+            .field("lat", &self.lat)
+            .field("hide", &&self.hide[..5])
+            .field("cure", &self.cure)
+            .finish()
+    }
 }
 
 impl Knife {
@@ -2637,7 +2654,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 10], cure: 0.0 }
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -2665,7 +2682,7 @@ impl Knife {
         }
         let color = mixbox::latent_to_linear_float_rgb(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { solvent: self.hide[3], oil: self.hide[4], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {

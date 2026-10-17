@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+import { atEasel, directoryListing, easel, logFind, lookArgs, probeArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
 test("painting headers set the waits before the new-painting width", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
@@ -147,6 +147,39 @@ test("a long log keeps its end and says what was left out", () => {
 	assert.match(t, /^\(the first 6 characters are left out; read paintings\/lua\/painting\.lua for all of it\)\n6789$/);
 });
 
+test("log's find gives the lines that hold the text, numbered as in the file, with two lines around each", () => {
+	const log = ["--@ chunk", "canvas{}", "--@ chunk", "sky = pile{{\"lead white\", 4}}", "b = brush(\"flat\", 20)", "b:load(sky)", "x = 1", "y = 2", "w = 0", "z = 3", "q = 4", "Sky2 = mix{{sky, 1}}"].join("\n");
+	assert.equal(
+		logFind(log, "SKY", "paintings/lua/painting.lua"),
+		[
+			'3 lines of paintings/lua/painting.lua hold "SKY"',
+			"2- canvas{}",
+			"3- --@ chunk",
+			'4: sky = pile{{"lead white", 4}}',
+			'5- b = brush("flat", 20)',
+			"6: b:load(sky)",
+			"7- x = 1",
+			"8- y = 2",
+			"--",
+			"10- z = 3",
+			"11- q = 4",
+			"12: Sky2 = mix{{sky, 1}}",
+		].join("\n"),
+	);
+	assert.equal(logFind("a\nb", "a", "paintings/lua/scratch.lua"), '1 line of paintings/lua/scratch.lua holds "a"\n1: a\n2- b');
+	assert.equal(logFind(log, "mask", "paintings/lua/painting.lua"), 'no line of paintings/lua/painting.lua holds "mask"');
+	const many = logFind(Array.from({ length: 150 }, (_, i) => `m${i}`).join("\n"), "m", "paintings/lua/painting.lua");
+	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 are shown\)\n1: m0\n/);
+	assert.match(many, /\n100: m99\n101: m100\n102: m101$/);
+});
+
+test("probe takes a point or an area, one of the two", () => {
+	assert.deepEqual(probeArgs({ at: "10,20" }), ["--at", "10,20"]);
+	assert.deepEqual(probeArgs({ crop: "0,0,50,40" }), ["--crop", "0,0,50,40"]);
+	for (const p of [{}, { at: "1,2", crop: "0,0,5,5" }, { at: "" }]) assert.throws(() => probeArgs(p), /^Error: probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two$/);
+	assert.equal(toolWords("probe: --at 1,2,3: want x,y in canvas units"), "probe: at 1,2,3: want x,y in canvas units");
+});
+
 // With EASEL_BIN (a painter build of the easel): the tools' path through a real session.
 const bin = process.env.EASEL_BIN;
 test("paint, look, note and status at a real easel", { skip: !bin || !existsSync(bin) }, async () => {
@@ -166,6 +199,8 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 		assert.match(await atEasel(studio, ["note", "-"], "first note"), /noted/);
 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
 		assert.match(await atEasel(studio, ["status"], undefined), /^2 chunks/);
+		assert.match(await atEasel(studio, ["probe", ...probeArgs({ at: "100,100" })], undefined), /^at 100,100\ncolor \d+,\d+,\d+ · value \d+\nin gallery light \d+,\d+,\d+ · value \d+\ndrying: dry$/);
+		assert.match(await atEasel(studio, ["probe", ...probeArgs({ crop: "0,0,10,10" })], undefined), /^over 0,0,10,10, averaged over 24 x 24 pixels\n[\s\S]*\ndrying: dry 100%$/);
 		for (const blocked of [".gallery", ".relief"]) {
 			const ordinary = await atEasel(studio, ["look"], undefined);
 			const primary = resolve(studio, /^(.+\.png)(?: \(.*)?$/m.exec(ordinary)![1]);

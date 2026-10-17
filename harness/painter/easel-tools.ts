@@ -15,8 +15,12 @@ import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earend
 import { reviseJournal } from "./journal.ts";
 import { writeNotebook } from "./notebook.ts";
 import { reference, referenceList } from "./references.ts";
-import { atEasel, directoryListing, hideCounters, logReply, paintReply, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
+import { atEasel, directoryListing, hideCounters, logFind, logReply, paintReply, probeArgs, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
 import type { PruneLimits } from "./context-images.ts";
+
+const FIND =
+	"Text to look for, in any case. Only the lines that hold it come back, each after its line number in the log's file and a colon, " +
+	"with the two lines before and after it, numbered with a dash.";
 
 const scratch = Type.Optional(
 	Type.Boolean({
@@ -86,6 +90,28 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 
 	pi.registerTool({
 		...defineTool({
+			name: "probe",
+			label: "probe",
+			description:
+				"The paint on the canvas as it is now, in numbers. at: \"x,y\" in canvas units, a point; or crop: \"x0,y0,x1,y1\" (two opposite corners), the average over that area. " +
+				"The reply gives its color as red, green and blue from 0 to 255, as a look shows it, and its value from 0 (black) to 255 (white), the gray mode \"value\" shows; " +
+				"the same two in the gallery's light, as mode \"gallery\" shows it; and whether the paint there is open, setting, tacky or dry (over an area, the share of each). " +
+				"It doesn't say which piles the paint came from: the canvas keeps the color, not the piles.",
+			parameters: Type.Object({ scratch, at: Type.Optional(Type.String()), crop: Type.Optional(Type.String()) }),
+			async execute(_id, p, signal) {
+				const where = probeArgs(p);
+				try {
+					return text(tag(p, await atEasel(studio, ["probe", ...on(p), ...where], undefined, signal)));
+				} catch (e) {
+					throw new Error(toolWords((e as Error).message));
+				}
+			},
+		}),
+		executionMode: "sequential",
+	});
+
+	pi.registerTool({
+		...defineTool({
 			name: "note",
 			label: "note",
 			description: "Add an entry to your journal, notes/journal.md, stamped with the painting's time. " +
@@ -132,10 +158,11 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			name: "log",
 			label: "log",
 			description: "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua).",
-			parameters: Type.Object({ scratch }),
+			parameters: Type.Object({ scratch, find: Type.Optional(Type.String({ description: FIND })) }),
 			async execute(_id, p, signal) {
 				const whole = p.scratch ? "paintings/lua/scratch.lua" : "paintings/lua/painting.lua";
-				return text(tag(p, tail(logReply(await atEasel(studio, ["log", ...on(p)], undefined, signal)), 50_000, whole)));
+				const log = logReply(await atEasel(studio, ["log", ...on(p)], undefined, signal));
+				return text(tag(p, p.find ? logFind(log, p.find, whole) : tail(log, 50_000, whole)));
 			},
 		}),
 		executionMode: "sequential",

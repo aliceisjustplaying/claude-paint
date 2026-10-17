@@ -69,13 +69,12 @@ def studio_path(studio, value):
 
 PAGE_BYTES = 8000
 READ_PAGE = 'Page {n} of {total}. For page {next}, call read with {{"path": {path}, "page": {next}}}'
-LOG_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": false, "page": {next}}}'
-LOG_SCRATCH_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": true, "page": {next}}}'
+LOG_PAGE = "Page {n} of {total}. For page {next}, call log with {call}"
 REPLY_PAGE = 'Reply saved in full to {file}. Page 1 of {total}. For page 2, call read with {{"path": {path}, "page": 2}}'
 LAST_PAGE = "Page {total} of {total}, the last page."
 SAVED = " When the reply's text is over 8,000 bytes, the whole text is saved to a file in the studio and this returns its first page."
 AGY_DESCRIPTIONS = {
-    "read": "Read a file in this studio. PNG files return an image; other files return text. Text over 8,000 bytes comes back one page at a time, each page ending with one line that gives the page number and the page count.",
+    "read": "Read a file in this studio. PNG files return an image; other files return text. A folder returns the names of what is in it, a folder's ending in /. Text over 8,000 bytes comes back one page at a time, each page ending with one line that gives the page number and the page count.",
     "log": "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua). Text over 8,000 bytes comes back one page at a time, as with read.",
 }
 AGY_PAGE_PARAMS = {
@@ -116,6 +115,25 @@ def page_of(text, page, more, tool, limit=PAGE_BYTES):
         return text
     line = more(number, len(pages)) if number < len(pages) else LAST_PAGE.format(n=number, total=len(pages))
     return f"{pages[number - 1]}\n{line}"
+
+
+def log_find(log, find, whole):
+    lines = log.split("\n")
+    want = find.lower()
+    hits = [i for i, line in enumerate(lines) if want in line.lower()]
+    if not hits:
+        return f'no line of {whole} holds "{find}"'
+    hit = set(hits)
+    one = len(hits) == 1
+    out = [f'{len(hits)} {"line" if one else "lines"} of {whole} {"holds" if one else "hold"} "{find}"' + (" (the first 100 are shown)" if len(hits) > 100 else "")]
+    last = -1
+    for i in hits[:100]:
+        start = max(i - 2, last + 1)
+        if last >= 0 and start > last + 1:
+            out.append("--")
+        out.extend(f"{k + 1}{':' if k in hit else '-'} {lines[k]}" for k in range(start, min(i + 2, len(lines) - 1) + 1))
+        last = max(last, i + 2)
+    return "\n".join(out)
 
 
 def look_args(view):
@@ -355,6 +373,15 @@ class Easel:
                     said += f"\nPartial survey: showing tiles 1–{count} of {len(images)} within the image budget. The remaining full-detail tiles have not been shown. Read each remaining file in a separate turn before assessing the whole canvas:\n" + "\n".join(paths[count:]) + "\n"
                 images = images[:count]
             return [types.TextContent(type="text", text=said), *images]
+        if name == "probe":
+            at, crop = params.get("at"), params.get("crop")
+            if bool(at) == bool(crop):
+                raise ValueError('probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two')
+            try:
+                said = await self.at(["probe", *on, *(["--at", str(at)] if at else ["--crop", str(crop)])])
+            except ValueError as error:
+                raise ValueError(tool_words(str(error))) from None
+            return [types.TextContent(type="text", text=tag + said)]
         if name == "note":
             said = self.revise_journal(params["replaces"], params["text"]) if "replaces" in params else await self.at(["note", "-"], params["text"])
         elif name == "status":
@@ -363,8 +390,10 @@ class Easel:
         elif name == "log":
             said = re.sub(r"^--@ chunk \d+[ \t]*$", "--@ chunk", await self.at(["log", *on]), flags=re.MULTILINE)
             units = said.encode("utf-16-le", errors="surrogatepass")
-            if len(units) > 100_000:
-                whole = "paintings/lua/scratch.lua" if scratch else "paintings/lua/painting.lua"
+            whole = "paintings/lua/scratch.lua" if scratch else "paintings/lua/painting.lua"
+            if params.get("find"):
+                said = log_find(said, params["find"], whole)
+            elif len(units) > 100_000:
                 said = f"(the first {len(units) // 2 - 50_000} characters are left out; read {whole} for all of it)\n" + units[-100_000:].decode("utf-16-le", errors="replace")
             said = tag + said
         else:
@@ -375,6 +404,7 @@ class Easel:
 def tool_definitions(studio, sittings=False, agy=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
+        definitions = [definition for definition in definitions if definition["name"] != "probe"]
         for definition in definitions:
             if definition["name"] == "paint":
                 definition["description"] = "Run a Lua chunk on watercolor paper (notes/watercolor_easel_guide.md). Successful chunks keep the paper, named brushes and clock for the next chunk. A failed chunk keeps the committed state."

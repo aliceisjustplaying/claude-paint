@@ -483,6 +483,18 @@ is the silhouette of a skeleton of points and widths. Methods: `o:mask()`,
 `o:offset(d)`, `o:paint(brush, {...})`, `o:path(i)`, `o:paths()`,
 `o:strokes()`, `o:at(t)`, `o:length()`, `o:corners()`.
 
+An outline of three or more points is closed (its line returns from the
+last point to the first) unless it is given `open=true`; two points make an
+open line. On a closed outline `o:below()` and `o:above()` fill the shape
+itself and ignore `bottom`, and `o:band()` and `o:paint()` include the
+closing stretch. For a horizon or shoreline you mean to fill below or
+above, draw it with `open=true`:
+
+```lua
+shore = outline{{0, 500}, {500, 480}, {1000, 550}, open=true}
+land = shore:below()
+```
+
 ## Drawing: pencil, chalk and eraser
 
 ```lua

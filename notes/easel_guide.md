@@ -510,12 +510,8 @@ hollows. The last of a film comes away more and more slowly, so a dry rag
 leaves a pale tint of the color that more wiping thins. Toward its rim the
 pad presses lightly and reaches only the tops of the weave, so the edge of
 a wipe shows the weave. Its folds and creases touch unevenly, so a wipe
-leaves streaks along its path and a blot a crumpled patch. During a wipe,
-a little freshly lifted paint smears back along the lightly pressed edges
-and trailing end.
-
-Fresh paint at the face's surface can smear into the next wipe too. It
-gradually soaks into the cloth; refolding turns that paint inward.
+leaves streaks along its path and a blot a crumpled patch. What the rag
+lifts stays in the cloth: none of it goes back onto the canvas.
 
 A rag dipped in spirits (`r:dip`, 0..1) lifts wet paint more readily and
 reaches farther into the hollows. It works gradually: wipe after wipe
@@ -523,18 +519,23 @@ takes the paint nearly to the ground. Its folds still leave streaks.
 Dampness (`r.damp`) halves every three minutes of painting time. Refolding
 retains the cloth's dampness; another dip adds spirits.
 
-What it lifts soaks into the cloth. `r.load` is how loaded the part in use
-is (0 clean, 1 full): the more loaded, the less it lifts. `r:refold()`
-turns a cleaner part outward, though every part holds at least what has
-soaked through the whole cloth (`r.soaked`, 0..1); `rag()` takes a fresh
-one. These numbers can be read, not set. Over a mask, `refold=`
-refolds whenever the load passes that value.
+`r.load` is how full the part in use is (0 clean, 1 full): the fuller,
+the less it lifts. One part holds about as much paint as a 20 µm wash
+covering twenty squares the width of the pad; thicker paint fills it over
+a smaller area, so a wipe over a big wet area can fill it in its first
+few strokes. A wipe that runs on a full part lifts almost nothing, and the
+chunk's reply says so (`rag: the face in use is full: ...`).
+`r:refold()` turns a cleaner part outward, though every part holds at
+least what has soaked through the whole cloth (`r.soaked`, 0..1); `rag()`
+takes a fresh one. These numbers can be read, not set. Over a mask,
+`refold=` refolds whenever the load passes that value.
 
 Over a mask, `wipe` lays wipes side by side across it in `angle`'s
 direction, back and forth, each starting and stopping a little inside the
-mask. The pad's rim reaches the mask's edge, and in places past it:
-the rag isn't clipped to the mask. `passes` goes over it again, each time
-a little turned. `seed=` fixes the cloth's folds.
+mask. The rag lifts only inside the mask, as much as the mask's value
+there: paint outside it stays as it was, even where the pad reaches past
+the edge. `passes` goes over it again, each time a little turned. `seed=`
+fixes the cloth's folds.
 
 **What it can't reach.** It lifts only open paint, and less the further
 the paint has set: paint that is `"setting"` comes away slowly, and paint

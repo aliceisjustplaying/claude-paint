@@ -18,9 +18,12 @@ empty target and TIME_WARM once built.
   the blender's feather and the brush skim: `handling::wet_edges::{a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops,
   a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend,
   a_blend_still_works_a_thin_wet_film_on_dry_paint}`.
+- rag, by exact name: `rag::rag_lift::{a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along, a_mask_wipe_lifts_nothing_outside_its_mask}`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
   `session::tests::{new_paintings_record_the_glaze_film_and_older_logs_replay_without_it,
   a_glaze_tints_the_drawing_under_it_and_keeps_it_legible, a_scumble_at_half_coverage_leaves_gaps}`,
+  `session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it`,
+  `api::draw_rag::tests::a_wipe_on_a_full_face_says_so`,
   `session::tests::a_gesture_keeps_its_width_to_its_last_point`,
   `session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it`,
   `session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them`,

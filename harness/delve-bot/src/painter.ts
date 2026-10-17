@@ -10,7 +10,7 @@ const asset = (name: string) => new URL(`../assets/${name}`, import.meta.url);
 const exec = promisify(execFile);
 
 // the house runner's (r40 r21_chains.py): its tools, its first message and its message for an interrupted sitting
-const TOOLS = "paint,look,note,status,log,read";
+const TOOLS = "paint,look,probe,note,status,log,read,reference,reference_list";
 export const PAINTER_MSG = "Your brief is in BRIEF.md in this folder. Your last message is your reply: the " +
   "painting's title if you give it one and a few sentences about the picture. " +
   "At the end of each sitting, leave a handoff in your journal and last reply: passages still unresolved, " +

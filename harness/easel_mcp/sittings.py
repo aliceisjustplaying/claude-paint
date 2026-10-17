@@ -3,6 +3,7 @@ import base64
 import io
 import json
 import math
+import os
 from pathlib import Path
 import re
 import time
@@ -95,14 +96,17 @@ class SittingEasel(Easel):
             return [types.TextContent(type="text", text=text)]
         if name == "end_sitting":
             if self.state["complete"]:
+                await self.visit_critic()
                 return self.completion()
             if self.state["due"] is None:
                 if self.painting_count() == self.state["painting_before"] and self.state["whole"] and self.state["detail"]:
                     self.state["complete"] = True
                     self.save()
+                    await self.visit_critic()
                     return self.completion()
                 self.state["due"] = time.time() + self.break_seconds
                 self.save()
+            await self.visit_critic()
             await asyncio.sleep(max(0, self.state["due"] - time.time()))
             said = await self.at(["status"]) if self.watercolor else (await super().call("paint", {"lua": "print(wait(0))"}))[0].text
             clock = re.findall(r"^day \d+, \d\d:\d\d$", said, re.MULTILINE)[-1]
@@ -112,12 +116,16 @@ class SittingEasel(Easel):
             self.save()
             journal = self.journal()
             message = Path(__file__).with_name("sitting-message.txt").read_text().strip()
+            if os.environ.get("PAINTER_CRITIC") and self.state.get("critic_opening"):
+                message = self.state["critic_opening"] + "\n\n" + message
             text = f"{message}\n\nSitting {self.state['sitting']}\nPainting clock: {clock}\n\nYour journal (notes/journal.md):\n{journal}"
             return [types.TextContent(type="text", text=self.reply(text)), *look]
         if name == "paint" and (self.state["due"] is not None or self.state["complete"]):
             raise ValueError("paint: the painting is complete" if self.state["complete"] else "paint: this sitting has ended; end_sitting starts the next one")
         before = self.painting_count() if name == "paint" and not params.get("scratch") else None
         result = await super().call(name, params)
+        if self.page_bytes and name == "ask_critic":
+            result[0] = types.TextContent(type="text", text=self.reply(result[0].text))
         if before is not None and self.watercolor and count_painting_chunks("--@ chunk 1\n" + params["lua"], WATERCOLOR_VERBS, WATERCOLOR_METHODS):
             self.state["marks"] = before + 1
         if before is not None and self.painting_count() > before:
@@ -136,6 +144,17 @@ class SittingEasel(Easel):
             remaining = "untimed" if self.sitting_seconds is None else f"{max(0, self.sitting_seconds - (time.time() - self.state['started'])):.0f} of {self.sitting_seconds:.0f} seconds left"
             result.append(types.TextContent(type="text", text=f"Sitting {self.state['sitting']}, {remaining}"))
         return result
+
+    async def visit_critic(self):
+        if not os.environ.get("PAINTER_CRITIC"):
+            return
+        from critic import visit
+        if self.state.get("critic_sitting") == self.state["sitting"]:
+            return
+        result = await visit(self.studio, "sitting")
+        if result is not None:
+            self.state.update(critic_sitting=self.state["sitting"], critic_opening=result["opening"])
+            self.save()
 
     def reply(self, text):
         if not self.page_bytes or len(text.encode()) <= self.page_bytes:

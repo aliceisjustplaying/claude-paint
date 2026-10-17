@@ -2,9 +2,21 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
+
+
+CRITIC_READING = (
+    "\n\n"
+    "Another painter visits your studio as a critic, at the end of each sitting\n"
+    "and whenever you ask for a visit with `ask_critic`. The critic looks at the\n"
+    "painting with the same `look` you use and reads your journal and the note\n"
+    "you give `ask_critic` (kept in notes/to_critic.md); it doesn't paint. It\n"
+    "writes what it would fix and why in notes/critic.md, which you get at the\n"
+    "start of your next sitting or as `ask_critic`'s reply."
+)
 
 
 def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
@@ -27,7 +39,7 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
         raise ValueError("the studio already has agy configuration")
     runtime.mkdir(parents=True, exist_ok=True)
     agents.mkdir(parents=True, exist_ok=True)
-    for name in ("server.py", "remote.py", "references.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py"):
+    for name in ("server.py", "remote.py", "references.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py", "critic.py", "critic-tools.json"):
         shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     shutil.copy2(repo / "harness/agy/painter.md", agents / "easel-painter.md")
     shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
@@ -36,7 +48,17 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
             "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
     if sitting_seconds is not None:
         args += ["--sitting-seconds", str(sitting_seconds)]
-    config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": {}}}}
+    env = {"PAINTER_CRITIC_CLI": str(repo / "harness/painter/visit-cli.ts")}
+    if "PAINTER_CRITIC" in os.environ:
+        env["PAINTER_CRITIC"] = os.environ["PAINTER_CRITIC"]
+    if env.get("PAINTER_CRITIC"):
+        for name in ("easel_guide.md", "watercolor_easel_guide.md"):
+            guide = studio / "notes" / name
+            if guide.is_file():
+                text = guide.read_text()
+                if CRITIC_READING.lstrip("\n") not in text:
+                    guide.write_text(text + CRITIC_READING)
+    config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": env}}}
     (studio / ".agents/mcp_config.json").write_text(json.dumps(config, indent=2) + "\n")
     folder = "--" + str(studio).strip("/").replace("/", "-") + "--"
     if "-src-a-" not in folder:

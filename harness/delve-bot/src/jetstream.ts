@@ -20,10 +20,7 @@ export function readMessage(data: unknown, config: Config): IngestEvent | null {
 export async function consume(engine: Engine, signal: AbortSignal): Promise<void> {
   while (!signal.aborted) {
     try { await engine.drain(); }
-    catch {
-      await delay(1000, undefined, { signal }).catch(() => {});
-      continue;
-    }
+    catch {}
     const url = new URL(engine.config.jetstreamUrl);
     url.searchParams.set("wantedCollections", "town.delve.feed.post");
     url.searchParams.set("compress", "false");
@@ -32,7 +29,14 @@ export async function consume(engine: Engine, signal: AbortSignal): Promise<void
     await new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(url);
       let processing = Promise.resolve();
+      let draining = false;
       let failed = false;
+      const drain = () => {
+        if (draining) return;
+        draining = true;
+        processing = engine.drain().catch(() => {}).finally(() => { draining = false; });
+      };
+      const retry = setInterval(drain, 1000);
       const abort = () => socket.close();
       const timeout = setTimeout(() => socket.close(), 10000);
       signal.addEventListener("abort", abort, { once: true });
@@ -43,12 +47,13 @@ export async function consume(engine: Engine, signal: AbortSignal): Promise<void
           const parsed = readMessage(event.data, engine.config);
           if (!parsed) return;
           engine.stage(parsed);
-          processing = processing.then(() => engine.drain()).catch(() => { failed = true; socket.close(); });
+          drain();
         } catch { failed = true; socket.close(); }
       });
       socket.addEventListener("error", abort, { once: true });
       socket.addEventListener("close", () => {
         clearTimeout(timeout);
+        clearInterval(retry);
         signal.removeEventListener("abort", abort);
         void processing.then(() => failed ? reject(new Error("jetstream_processing_failed")) : resolve());
       }, { once: true });

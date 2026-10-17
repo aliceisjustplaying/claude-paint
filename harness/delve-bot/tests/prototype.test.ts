@@ -433,6 +433,77 @@ test("delete during in-flight hydration leaves a durable tombstone", async t => 
   assert.equal(f.store.jobs().length, 0);
 });
 
+test("deleted requests never block later events when hydration is missing or fails", async t => {
+  for (const timing of ["staged", "missing", "error"]) await t.test(timing, async t => {
+    const f = await fixture(t);
+    const deleted = post("deleted"), next = f.add(post("next", "did:plc:next"));
+    let reads = 0;
+    const fetcher: typeof fetch = async (input, init) => {
+      if (new URL(String(input)).searchParams.get("uri") === deleted.uri) {
+        reads++;
+        f.engine.stage({ cursor: 2, operation: "delete", uri: deleted.uri, post: null });
+        if (timing === "error") throw new Error("missing_post");
+      }
+      return fetch(input, init);
+    };
+    const engine = new Engine(f.config, f.store, fetcher, f.env, fakePainter());
+    engine.stage({ cursor: 1, operation: "create", uri: deleted.uri, post: deleted });
+    if (timing === "staged") engine.stage({ cursor: 2, operation: "delete", uri: deleted.uri, post: null });
+    engine.stage({ cursor: 3, operation: "create", uri: next.uri, post: next });
+    await engine.drain(NOW);
+    assert.equal(reads, timing === "staged" ? 0 : 1);
+    assert.equal(f.store.cursor(), 3);
+    assert.equal(f.store.nextEvent(), null);
+    assert.deepEqual(f.store.jobs().map(row => row.id), [next.uri]);
+    assert.equal(f.network.checks.length, 1);
+  });
+});
+
+test("stream shutdown leaves a job resumable without charging admission again", async t => {
+  const f = await fixture(t, c => { c.streaming.enabled = true; });
+  t.mock.method(console, "log", () => {});
+  const item = f.add(post());
+  assert.equal(await f.engine.intake(item, NOW), "accepted");
+  const started = Promise.withResolvers<void>();
+  const pumping = f.engine.pump(NOW, async (_job, signal) => {
+    started.resolve();
+    await new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }));
+  });
+  const rejected = assert.rejects(pumping);
+  await started.promise;
+  await f.engine.streaming.stop();
+  await rejected;
+  assert.equal(f.store.jobs()[0]?.status, "running");
+  assert.equal(f.store.intents().length, 1);
+  const second = new Store(f.config.database);
+  t.after(() => second.close());
+  const restarted = new Engine(f.config, second, fetch, f.env, fakePainter());
+  assert.equal(await restarted.intake(item, NOW), "duplicate");
+  await restarted.pump(NOW + 1000);
+  assert.equal(second.jobs().length, 1);
+  assert.equal(second.jobs()[0]?.started, NOW);
+  assert.equal(second.jobs()[0]?.status, "done");
+  assert.equal(second.intents().filter(intent => intent.id.endsWith("#done")).length, 1);
+});
+
+test("stream failures persist a failed result until the failure reply can be queued", async t => {
+  const f = await fixture(t, c => { c.streaming.enabled = true; c.caps.pendingReplies = 1; });
+  t.mock.method(console, "log", () => {});
+  t.mock.method(console, "error", () => {});
+  const item = f.add(post());
+  await f.engine.intake(item, NOW);
+  let runs = 0;
+  const fail = async () => { runs++; throw new Error("service_unavailable"); };
+  await f.engine.pump(NOW, fail);
+  assert.equal(f.store.jobs()[0]?.status, "running");
+  await f.engine.flush(NOW);
+  await f.engine.pump(NOW + 1000, fail);
+  assert.equal(runs, 1);
+  assert.equal(f.store.jobs()[0]?.status, "failed");
+  assert.equal(f.store.intents().filter(intent => intent.id.endsWith("#failed")).length, 1);
+  assert.equal(f.store.intents().some(intent => intent.id.endsWith("#done")), false);
+});
+
 test("same-thread burst reserves the completion turn and cannot strand all replies", async t => {
   const f = await fixture(t);
   const root = f.add(post());

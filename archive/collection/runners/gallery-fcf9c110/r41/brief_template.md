@@ -45,10 +45,11 @@ Before repeating an unfamiliar mixture or stroke, inspect a small trial, on the 
 - Your journal handoff at the end of each sitting lists the passages
   still open under a line reading `Open passages:`, or reads
   `Open passages: none` when nothing is open, and the next sitting opens
-  with that list. The painting is finished when the list is empty
-  and a fresh look at the whole canvas and detail crops in normal color
-  finds nothing more to take up. Then record your reflections in your
-  journal and finish.
+  with that list. The painting is finished when you end a sitting in
+  which you made no marks on the painting and looked at the whole canvas
+  and at a detail crop in normal color, even if the list still names
+  passages. Record your reflections in your journal before you end that
+  sitting.
 
 ## Your reply
 When you stop working, reply with the painting's title if you give it one

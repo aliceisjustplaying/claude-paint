@@ -82,7 +82,7 @@
   },
   {
     "name": "probe",
-    "description": "The paint on the canvas as it is now, in numbers. at: \"x,y\" in canvas units, a point; or crop: \"x0,y0,x1,y1\" (two opposite corners), the average over that area. The reply gives its color as red, green and blue from 0 to 255, as a look shows it, and its value from 0 (black) to 255 (white), the gray mode \"value\" shows; the same two in the gallery's light, as mode \"gallery\" shows it; and whether the paint there is open, setting, tacky or dry (over an area, the share of each). It doesn't say which piles the paint came from: the canvas keeps the color, not the piles.",
+    "description": "The paint on the canvas as it is now, in numbers. at: \"x,y\" in canvas units, a point; or crop: \"x0,y0,x1,y1\" (two opposite corners), the average over that area. The reply gives the paint's color as red, green and blue from 0 to 255 and its value from 0 (black) to 255 (white), twice. The line \"color\" has them without the gallery's light; that color is what a look without a mode shows. The line \"in gallery light\" has them in the gallery's light; that color is what mode \"gallery\" shows, and that value is what the gray mode \"value\" shows. Last, whether the paint there is open, setting, tacky or dry (over an area, the share of each). It doesn't say which piles the paint came from: the canvas keeps the color, not the piles.",
     "inputSchema": {
       "type": "object",
       "properties": {

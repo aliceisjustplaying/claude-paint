@@ -321,13 +321,17 @@ touch opened; sleep 30`);
 	}
 });
 
+// what the painter must not hear about a chunk: the machine's time, the tool's wait, the easel's line and mark counts, chunk numbers
+const MACHINE_WORDS = /running for|within|\d+ minutes?\b|budget|limit|\bline \d|\d+ lines|of \d|strokes|touches|chunk \d|\(chunk|\d+ chunks?/;
+
 test("a chunk that outlasts the tool's wait is reported as running, in the log, or neither", async () => {
 	const doWait = WAIT_MS.do;
 	WAIT_MS.do = 300;
-	const ran = /^Error: the easel didn't answer within 0 minutes, but the chunk ran: it is in the log\.$/;
-	const nothing = /^Error: the easel didn't answer within 0 minutes, and the chunk isn't in the log: it changed nothing\.$/;
+	const ran = /^Error: `paint` stopped waiting for the easel's answer, but the chunk ran: it is in the log\.$/;
+	const nothing = /^Error: `paint` stopped waiting for the easel's answer, and the chunk isn't in the log: it changed nothing\.$/;
 	const cases: [string, RegExp][] = [
-		["echo 'painting a chunk (at line 3 of 9): 40 strokes and touches so far'", /^Error: the easel didn't answer within 0 minutes\. The chunk is still running and isn't in the log yet: painting a chunk \(at line 3 of 9\): 40 strokes and touches so far\. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept\.$/],
+		["echo \"painting a chunk (at line 3 of 9): 40 strokes and touches so far, 2 min 30 s on the painting's clock (now day 2, 14:05), running for 12 min 3 s\"", /^Error: `paint` stopped waiting for the easel's answer\. The chunk is still running and isn't in the log yet: painting a chunk: it has taken 2 min 30 s of the painting's time so far, and the painting's clock reads day 2, 14:05\. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept\.$/],
+		["echo 'painting a chunk: starting, running for 12 min 0 s'", /^Error: `paint` stopped waiting for the easel's answer\. The chunk is still running and isn't in the log yet: painting a chunk: starting\. /],
 		["printf '\\n--@ chunk 4\\nx = 1\\n' >> paintings/lua/painting.lua; echo '4 chunks · 2400px · no canvas yet'", ran],
 		["printf '\\n--@ chunk 4\\nx = 1\\n' >> paintings/lua/painting.lua; echo 'the chunk is in the log (chunk 4); the easel is finishing its reply, running for 1 s'", ran],
 		["echo '3 chunks · 2400px · no canvas yet'", nothing],
@@ -345,7 +349,11 @@ sleep 30`);
 			mkdirSync(join(studio, "paintings", "lua"), { recursive: true });
 			writeFileSync(join(studio, "paintings", "lua", "painting.lua"), "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n");
 			try {
-				await assert.rejects(atEasel(studio, ["do", "-"], "x = 1"), error);
+				await assert.rejects(atEasel(studio, ["do", "-"], "x = 1"), (e: Error) => {
+					assert.match(String(e), error);
+					assert.doesNotMatch(e.message, MACHINE_WORDS);
+					return true;
+				});
 			} finally {
 				rmSync(studio, { recursive: true, force: true });
 			}
@@ -489,9 +497,17 @@ test("no reply counts the painter's work or times the machine", async () => {
 		[statusReply, "12 chunks · 2400px · canvas{size=900}", "canvas{size=900}"],
 		[statusReply, "0 chunks · 2400px · no canvas yet", "no canvas yet"],
 		[hideCounters, "the chunk ran longer than 10 minutes and was stopped; nothing it did was kept", "the chunk didn't finish and was stopped; nothing it did was kept"],
+		// a running chunk: what is happening and the painting's own time, nothing of the machine's
+		[statusReply, "painting a chunk (at line 8 of 20): 100 strokes and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s", "painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00"],
+		[statusReply, "painting a chunk (20 lines): 0 strokes and touches so far, 14 min 20 s on the painting's clock (now day 3, 18:40), running for 40 s", "painting a chunk: it has taken 14 min 20 s of the painting's time so far, and the painting's clock reads day 3, 18:40"],
+		[statusReply, "painting a chunk: starting, running for 2 s", "painting a chunk: starting"],
+		[statusReply, "the chunk is in the log (chunk 2); the easel is finishing its reply, running for 1 min 15 s", "the chunk is in the log; the easel is finishing its reply"],
+		// an easel line worded otherwise still tells only that a chunk is painting
+		[statusReply, "painting a chunk (line 3/9): 40 marks, 12 min elapsed", "painting a chunk"],
 		[logReply, "-- easel session\n--@ engine 2\n\n--@ chunk 1\nx = 1\n\n--@ chunk 12\ny = 2\n", "-- easel session\n--@ engine 2\n\n--@ chunk\nx = 1\n\n--@ chunk\ny = 2\n"],
 	];
 	for (const [f, input, want] of cases) assert.equal(f(input), want, input);
+	for (const [f, input] of cases) if (f === statusReply) assert.doesNotMatch(f(input), MACHINE_WORDS, input);
 });
 
 test("a look is renamed at random and shown without the machine's seconds", async () => {

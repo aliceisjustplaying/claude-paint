@@ -13,10 +13,13 @@ import subprocess
 
 OPENING = (
     "Compose and paint one original picture in the manner of Caspar David\n"
-    "Friedrich, at the easel, a simulator of oil paint on linen. The place,\n"
-    "subject and composition are yours to invent. Work from knowledge and the\n"
-    "notes in your studio; don't use reference images, image models or pictures\n"
-    "of his work."
+    "Friedrich, at the easel, a simulator of oil paint on linen. His pictures\n"
+    "are built on large, simple masses, and over those masses they carry a\n"
+    "great deal of particular detail: each twig of a branch, the single blades\n"
+    "and stems of a foreground, the separate buildings of a far shore. The\n"
+    "place, subject and composition are yours to invent. Work from knowledge\n"
+    "and the notes in your studio; don't use reference images, image models or\n"
+    "pictures of his work."
 )
 READING = (
     "notes/easel_guide.md; notes/techniques.md; notes/studio_notes.md;\n"

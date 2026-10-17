@@ -30,6 +30,9 @@
  *    added (PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H change the waits).
  * 8. With PAINTER_CRITIC (visit.ts), a critic visits: at the end of each sitting and when the painter
  *    calls ask_critic. A later sitting opens with the critic's latest notes after the summary.
+ * 9. With PAINTER_OPEN_PASSAGES=1 (the house runner from r41 sets it with PAINTER_SITTING_RECOVERY), a later
+ *    sitting opens with the passages to take up (visit.ts): the open passages from the painter's journal
+ *    handoff and, with a critic, its latest notes, before the runner's message; the summary follows it.
  * The PAINTER_* variables are read once and removed from the environment.
  */
 import { Type } from "@earendil-works/pi-ai";
@@ -41,7 +44,7 @@ import { limitsFromEnv, pruneImages } from "./context-images.ts";
 import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
 import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 import { text } from "./easel-client.ts";
-import { CRITIQUE, criticFromEnv, leaveNote, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
+import { CRITIQUE, criticFromEnv, leaveNote, passagesToTakeUp, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
 
 /** The system prompt is only what --system-prompt gives (the critic's session uses this too). */
 export function onlyOurSystemPrompt(pi: ExtensionAPI) {
@@ -65,8 +68,9 @@ export default function painter(pi: ExtensionAPI) {
 	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
 	const limitWait = limitWaitFromEnv();
 	let sittingRecovery = process.env.PAINTER_SITTING_RECOVERY === "1";
+	const passagesFirst = process.env.PAINTER_OPEN_PASSAGES === "1";
 	const critic = criticFromEnv();
-	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY", "PAINTER_CRITIC"]) delete process.env[k];
+	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY", "PAINTER_OPEN_PASSAGES", "PAINTER_CRITIC"]) delete process.env[k];
 	const studio = process.cwd();
 	const read = createReadToolDefinition(studio);
 	const views = new Map<string, unknown[]>();
@@ -92,8 +96,10 @@ export default function painter(pi: ExtensionAPI) {
 		const { summary } = await buildSummary(studio, [], undefined, "");
 		const view = CANVAS_VIEW.exec(summary)?.[1];
 		const images = view ? await viewImages(view, ctx) : [];
-		const notes = critic ? sittingCritique(studio) : "";
-		return { action: "transform" as const, text: `${event.text}\n\n${summary}${notes}`, images: [...(event.images ?? []), ...(images as never[])] };
+		const text = passagesFirst
+			? `${passagesToTakeUp(studio, critic !== undefined)}\n\n${event.text}\n\n${summary}`
+			: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
+		return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
 	});
 	const pace = tpm ? new TokenPace(tpm) : undefined;
 	let lastRequest = 0;

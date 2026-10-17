@@ -78,8 +78,10 @@ class SittingEasel(Easel):
     async def call(self, name, params):
         if name == "read":
             path = studio_path(self.studio, params["path"])
+            if path is not None and path.is_dir():
+                return [types.TextContent(type="text", text="\n".join(sorted(entry.name + ("/" if entry.is_dir() else "") for entry in path.iterdir())) or "empty folder")]
             if path is None or not path.is_file():
-                raise ValueError("read: the path must be a file in this studio")
+                raise ValueError("read: the path must be a file or a folder in this studio")
             if path.suffix.lower() == ".png":
                 if self.page_bytes:
                     return pi_image(path.read_bytes())

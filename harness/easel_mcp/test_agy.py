@@ -115,6 +115,7 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         guide = "".join(f"line {i}: wet paint é → ✓ {'x' * (i % 90)}\n" for i in range(900)) + "y" * 20000 + "\nno newline at the end"
         (self.studio / "notes/guide.md").write_text(guide)
         (self.studio / "notes/short.md").write_text("short\n")
+        (self.studio / "notes/refs").mkdir()
         (self.studio / "log-output.txt").write_text("--@ chunk 1\n" + "dab(b, 1, 1)\n" * 1500)
         (self.studio / "do-output.txt").write_text("printed\n" * 2000)
         params = StdioServerParameters(command=sys.executable, args=[str(SERVER), "--studio", str(self.studio),
@@ -147,6 +148,11 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 first = (await session.call_tool("read", {"path": "notes/guide.md"})).content[0].text
                 self.assertTrue(first.endswith('call read with {"path": "notes/guide.md", "page": 2}'))
                 self.assertEqual((await session.call_tool("read", {"path": "notes/short.md"})).content[0].text, "short\n")
+                self.assertEqual((await session.call_tool("read", {"path": "notes"})).content[0].text, "guide.md\njournal.md\nrefs/\nshort.md")
+                self.assertEqual((await session.call_tool("read", {"path": "notes/refs/"})).content[0].text, "empty folder")
+                outside = await session.call_tool("read", {"path": ".."})
+                self.assertTrue(outside.isError)
+                self.assertEqual(outside.content[0].text, "read: the path must be a file or a folder in this studio")
                 beyond = await session.call_tool("read", {"path": "notes/guide.md", "page": 99})
                 self.assertTrue(beyond.isError)
                 log, _ = await pages("log", {})
@@ -185,6 +191,8 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
+                names = [tool.name for tool in (await session.list_tools()).tools]
+                self.assertEqual(names, ["paint", "look", "note", "status", "log", "reference", "reference_list", "end_sitting", "read"])
 
                 async def sitting(lua):
                     self.assertFalse((await session.call_tool("paint", {"lua": lua})).isError)

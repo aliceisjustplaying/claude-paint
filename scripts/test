@@ -99,9 +99,12 @@ check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
-  drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features
+  drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features \
+  rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
-  api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw
+  session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it \
+  api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw \
+  api::draw_rag::tests::a_wipe_on_a_full_face_says_so
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"

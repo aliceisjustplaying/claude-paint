@@ -25,6 +25,9 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// A log's head line: its knife's paint laid on wet paint stays on top of it
+/// (`paint::Canvas::with_knife_skim`). Every new painting has it.
+pub const KNIFE_SKIM_MARK: &str = "--@ knife-skim";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
@@ -406,6 +409,9 @@ impl Session {
         }
         if self.st.borrow().tubes.adaptive_sweep {
             let _ = writeln!(s, "--@ adaptive-sweep");
+        }
+        if self.st.borrow().tubes.knife_skim {
+            let _ = writeln!(s, "{KNIFE_SKIM_MARK}");
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
@@ -1000,6 +1006,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
+        b.knife_skim = true;
         b.limbs_join_nearest = true;
         return Ok(b);
     };
@@ -1007,6 +1014,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
+    }
+    let knife_skim = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == KNIFE_SKIM_MARK);
+    if knife_skim && engine != paint::engine7::ENGINE {
+        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7"));
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -1025,6 +1036,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.engine = engine;
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
+    b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
     Ok(b)
 }
@@ -1115,6 +1127,32 @@ mod tests {
         assert_eq!(s.program("painting"), text);
         let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) { "137bcdd02d9ccf64" } else { "2d2bc0a5b6922d4a" };
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
+    }
+
+    /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and
+    /// its log's head says so; a replay of that log and a save of it skim
+    /// too, and a log without the line (every painting before it) doesn't.
+    /// Only engine 7 skims.
+    #[test]
+    fn new_paintings_record_the_knife_skim_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().knife_skim());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{KNIFE_SKIM_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.knife_skim());
+        for (log, skims) in [(text.clone(), true), (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().knife_skim(), skims);
+            assert_eq!(replay.program("p"), log);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
     }
 
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log

@@ -2490,6 +2490,11 @@ const PRESS_IN_UM: f32 = 60.0;
 /// it; finer hollows than that it bridges (`Canvas::knife`).
 const FLEX_MM: f32 = 4.0;
 
+/// How deep (coats; about 6 µm) a knife's paint laid on wet paint mixes into
+/// it when the canvas skims (`Canvas::knife`): the blade slides the paint on
+/// without stirring it in, so only the film where the two meet blends.
+const SKIM_COATS: f32 = 0.25;
+
 /// A painting knife: a flat, rigid steel blade, `width` units long, and the
 /// bead of paint it carries (coats × units², as a bristle's load). It lays
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
@@ -2561,6 +2566,25 @@ impl Knife {
     }
 }
 
+/// Lay `v` coats of the knife's paint at pixel `i` (`Surf::add`). With
+/// `skim` it mixes with only the top `SKIM_COATS` of the wet paint there; the
+/// wet paint below lies buried under it, out of sight, and the pixel takes
+/// the color of what is on top (its one color is what is seen).
+///
+/// # Safety
+/// As `Surf::add`.
+unsafe fn knife_add(sf: &Surf, i: usize, v: f32, k: &Knife, skim: bool) {
+    unsafe {
+        if !skim {
+            return sf.add(i, v, &k.lat, k.hide, k.cure);
+        }
+        let buried = (*sf.vol.add(i) - SKIM_COATS).max(0.0);
+        *sf.vol.add(i) -= buried;
+        sf.add(i, v, &k.lat, k.hide, k.cure);
+        *sf.vol.add(i) += buried;
+    }
+}
+
 impl Canvas {
     /// Drag a knife along `pts` (units), its blade held across the path or at
     /// a fixed `angle` (radians), pressed `pressure` (start, end; 0..1). The
@@ -2572,7 +2596,9 @@ impl Canvas {
     /// ridges. Where the surface lies below the blade, within the gap of it,
     /// `lay` fills it from the bead to the blade's level: a slab with a flat
     /// top, or over dry impasto paint on its peaks only. When the blade
-    /// lifts, the share `lift` of the bead stays where it last was.
+    /// lifts, the share `lift` of the bead stays where it last was. On a
+    /// canvas that skims (`with_knife_skim`) paint laid on wet paint stays
+    /// on top of it, mixing with only the film where the two meet.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
@@ -2585,6 +2611,7 @@ impl Canvas {
         // at the slab's ends, its leading edge, and where the blade's reach
         // into the hollows runs out (`tn`, a noise along and across the blade)
         let tears = self.engine >= 5;
+        let skim = self.knife_skim;
         // (the paint the tears held back under the blade: back on it at the end)
         let (mut held, mut held_solvent) = (0.0f32, 0.0f32);
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
@@ -2738,7 +2765,7 @@ impl Canvas {
                         let give = want.min(liquid / px_area * 0.25);
                         let phi = k.solvent / liquid;
                         if give > 1e-7 {
-                            sf.add(i, give * (1.0 - phi), &k.lat, k.hide, k.cure);
+                            knife_add(&sf, i, give * (1.0 - phi), k, skim);
                             if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
                             *sf.cover.add(i) = 1.0;
                             k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
@@ -2778,7 +2805,7 @@ impl Canvas {
                     let v = leave * wgt / tw / px_area;
                     // SAFETY: as above
                     unsafe {
-                        sf.add(i, v * (1.0 - phi), &k.lat, k.hide, k.cure);
+                        knife_add(&sf, i, v * (1.0 - phi), k, skim);
                         if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
                         *sf.cover.add(i) = 1.0;
                         *sf.stroke.add(i) = id;
@@ -2795,5 +2822,44 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
+    }
+}
+
+#[cfg(test)]
+mod knife_skim {
+    use super::*;
+    use crate::color::{hex, luminance};
+
+    /// The mean luminance of the middle of a light knife pull laid lightly
+    /// over dark knife paint, wet or dried first.
+    fn light_over_dark(skim: bool, dried: bool) -> f32 {
+        let mut c = Canvas::new(300, 1.0, hex("#e8e0d0")).with_engine(crate::engine7::ENGINE).with_knife_skim(skim);
+        let mut k = Knife::new(120.0);
+        for x in [350.0, 450.0, 550.0, 650.0] {
+            k.load(Paint::body(hex("#1c2430")), 1.0);
+            c.knife(&mut k, &[(x, 250.0), (x, 750.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+        }
+        if dried {
+            c.dry();
+        }
+        k.wipe();
+        k.load(Paint::body(hex("#f2ece0")), 1.0);
+        c.knife(&mut k, &[(500.0, 350.0), (500.0, 650.0)], (0.05, 0.05), Some(0.0), true, 0.1);
+        let (seen, w, s) = (c.seen(), c.f.w, c.f.scale);
+        let px = |u: f32| (u * s) as usize;
+        let lum: Vec<f32> = (px(420.0)..px(580.0)).flat_map(|y| (px(470.0)..px(530.0)).map(move |x| y * w + x)).map(|i| luminance(seen[i])).collect();
+        lum.iter().sum::<f32>() / lum.len() as f32
+    }
+
+    /// A loaded knife laid lightly on wet dark paint leaves its own color on
+    /// top, about as it does on the same paint dried. Without the skim (older
+    /// logs) it is stirred into the wet paint under it and goes gray.
+    #[test]
+    fn a_skimming_knife_keeps_its_light_on_wet_dark_paint() {
+        let dried = light_over_dark(true, true);
+        let wet = light_over_dark(true, false);
+        let stirred = light_over_dark(false, false);
+        assert!(wet > 0.85 * dried, "on wet {wet}, on dried {dried}");
+        assert!(stirred < 0.6 * dried, "stirred in {stirred}, on dried {dried}");
     }
 }

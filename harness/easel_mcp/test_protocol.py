@@ -64,6 +64,11 @@ elif command == "look":
             companion.parent.mkdir(exist_ok=True)
             companion.write_bytes(path.read_bytes())
         print(str(path.relative_to(root)) + " (1x1, 0.01s)")
+elif command == "probe":
+    if args[-1] == "9,9":
+        print("probe: --at 9,9 is outside the canvas (0,0 to 1000,800)")
+        sys.exit(1)
+    print("at 1,2\\ncolor 10,20,30 · value 18\\nin gallery light 11,21,31 · value 19\\ndrying: dry")
 elif command == "note":
     text = sys.stdin.read()
     path = root / "notes/journal.md"
@@ -134,6 +139,72 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                     wait = (48 if wide else 12) * 60
                     self.assertEqual([call.args[2] for call in step.await_args_list], [100 + wait, 100 + (50 if wide else 30) * 60, 100 + wait])
 
+    async def test_status_replay_open_and_chunk_timeouts_say_what_landed(self):
+        loader = SourceFileLoader("landed_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        replay = "rebuilding from the log (2 of 5 chunks)"
+        step = AsyncMock(side_effect=[(0, replay), (0, replay)])
+        with patch.object(easel, "step", step):
+            self.assertEqual(await easel.at(["status"]), replay)
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["status"]])
+
+        # an easel that has its socket but hasn't read the log yet is asked again, not opened
+        step = AsyncMock(side_effect=[(1, module.STARTING), (0, replay), (0, replay)])
+        with patch.object(easel, "step", step), patch.object(module.asyncio, "sleep", AsyncMock()):
+            self.assertEqual(await easel.at(["status"]), replay)
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["status"], ["status"]])
+
+        step = AsyncMock(side_effect=[(1, "no painting open: easel open"), module.asyncio.TimeoutError(), (0, "rebuilding from the log (1 of 4 chunks)")])
+        with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+            await easel.at(["look"])
+        self.assertEqual(str(raised.exception), "the easel is reopening the painting from its log and hasn't finished: rebuilding from the log (1 of 4 chunks). `status` shows how far it has got.")
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["open"], ["status"]])
+
+        log = self.studio / "paintings/lua/painting.lua"
+        log.parent.mkdir(parents=True)
+        running = "painting a chunk (at line 3 of 9): 40 strokes and touches so far"
+        three = "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n"
+        ran, nothing = "the easel didn't answer within 12 minutes, but the chunk ran: it is in the log.", "the easel didn't answer within 12 minutes, and the chunk isn't in the log: it changed nothing."
+        for status, after, said in (
+            (running, None, f"the easel didn't answer within 12 minutes. The chunk is still running and isn't in the log yet: {running}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept."),
+            ("4 chunks · 2400px · no canvas yet", three + "\n--@ chunk 4\nx = 1\n", ran),
+            ("the chunk is in the log (chunk 4); the easel is finishing its reply, running for 12 min 1 s", three + "\n--@ chunk 4\nx = 1\n", ran),
+            ("3 chunks · 2400px · no canvas yet", None, nothing),
+            # a fresh scratch canvas: a new log, its setup and then the chunk, or the setup alone
+            ("2 chunks · 2400px · no canvas yet", "--@ chunk 1\ncanvas{}\n\n--@ chunk 2\nx = 1\n", ran),
+            ("1 chunks · 2400px · no canvas yet", "--@ chunk 1\ncanvas{}\n", nothing),
+        ):
+            log.write_text(three)
+            replies = [(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError(), (0, status)]
+
+            async def step(args, text, deadline, replies=replies, after=after):
+                if args[0] == "do" and after is not None:
+                    log.write_text(after)
+                reply = replies.pop(0)
+                if isinstance(reply, Exception):
+                    raise reply
+                return reply
+            with self.subTest(said=said), patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+                await easel.at(["do", "-"], "x = 1")
+            self.assertEqual(str(raised.exception), said)
+
+        # a chunk sent with CRLF line ends is kept with them: the log is read as written
+        log.write_text(three)
+        replies = [(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError(), (0, "4 chunks · 2400px · no canvas yet")]
+
+        async def step(args, text, deadline):
+            if args[0] == "do":
+                log.write_bytes((three + "\n--@ chunk 4\n").encode() + text.rstrip().encode() + b"\n")
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+            await easel.at(["do", "-"], "x = 1\r\ny = 2\r\n")
+        self.assertEqual(str(raised.exception), ran)
+
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))
         module = module_from_spec(spec_from_loader(loader.name, loader))
@@ -185,7 +256,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_initialize_and_tool_wording(self):
         self.assertEqual(self.initialized.serverInfo.name, "easel")
         listed = await self.session.list_tools()
-        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
+        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "probe", "note", "status", "log", "reference", "reference_list"])
         source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
         for tool in listed.tools:
             block = source.split(f'name: "{tool.name}"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
@@ -246,6 +317,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             ("look", {"palette": True, "size": 0}, "look: palette takes no other option"),
             ("look", {"survey": True, "compare": "a.png"}, "look: survey and compare are two looks; ask for one"),
             ("look", {"compare": "../outside.png"}, "look: compare is the path of an earlier look in this studio"),
+            ("look", {"ref": "../outside.png"}, "look: ref is the path of a picture of the motif in this studio"),
+            ("look", {"ref": "a.png", "survey": True}, "look: ref is a look of its own: no survey, compare or hold"),
         ):
             reply = await self.session.call_tool(name, arguments)
             self.assertTrue(reply.isError)
@@ -303,6 +376,39 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.content[0].text, "[scratch canvas]\ntest canvas")
         reply = await self.session.call_tool("log", {"scratch": True})
         self.assertEqual(reply.content[0].text, "[scratch canvas]\n--@ chunk\ncanvas{}\n--@ chunk\nwait(1)")
+
+    @connected
+    async def test_probe_point_area_and_errors(self):
+        reply = await self.session.call_tool("probe", {"at": "1,2"})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[0].text, "at 1,2\ncolor 10,20,30 · value 18\nin gallery light 11,21,31 · value 19\ndrying: dry")
+        reply = await self.session.call_tool("probe", {"crop": "0,0,50,40", "scratch": True})
+        self.assertTrue(reply.content[0].text.startswith("[scratch canvas]\nat 1,2\n"))
+        reply = await self.session.call_tool("probe", {"at": "9,9"})
+        self.assertTrue(reply.isError)
+        self.assertEqual(reply.content[0].text, "probe: at 9,9 is outside the canvas (0,0 to 1000,800)")
+        calls = [json.loads(line)["args"] for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([call for call in calls if call[0] == "probe"], [["probe", "--at", "1,2"], ["probe", "--scratch", "--crop", "0,0,50,40"], ["probe", "--at", "9,9"]])
+        for arguments in ({}, {"at": "1,2", "crop": "0,0,5,5"}, {"crop": ""}):
+            reply = await self.session.call_tool("probe", arguments)
+            self.assertTrue(reply.isError)
+            self.assertEqual(reply.content[0].text, 'probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two')
+        self.assertEqual(len(calls), len((self.studio / "calls.jsonl").read_text().splitlines()))
+
+    @connected
+    async def test_log_find_numbers_lines_with_context(self):
+        (self.studio / "log-output.txt").write_text("--@ chunk 1\ncanvas{}\n--@ chunk 2\nsky = pile{{'lead white', 4}}\na = 1\nb = 2\nw = 0\nc = 3\nd = 4\nmix{{SKY, 1}}")
+        reply = await self.session.call_tool("log", {"find": "Sky"})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[0].text, "\n".join([
+            '2 lines of paintings/lua/painting.lua hold "Sky"',
+            "2- canvas{}", "3- --@ chunk", "4: sky = pile{{'lead white', 4}}", "5- a = 1", "6- b = 2",
+            "--", "8- c = 3", "9- d = 4", "10: mix{{SKY, 1}}",
+        ]))
+        reply = await self.session.call_tool("log", {"find": "canvas", "scratch": True})
+        self.assertEqual(reply.content[0].text, '[scratch canvas]\n1 line of paintings/lua/scratch.lua holds "canvas"\n1- --@ chunk\n2: canvas{}\n3- --@ chunk\n4- sky = pile{{\'lead white\', 4}}')
+        reply = await self.session.call_tool("log", {"find": "mask"})
+        self.assertEqual(reply.content[0].text, 'no line of paintings/lua/painting.lua holds "mask"')
 
     @connected
     async def test_open_failure_does_not_retry(self):

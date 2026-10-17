@@ -86,8 +86,16 @@ async function step(studio: string, args: string[], input: string | undefined, s
 	return r;
 }
 
-/** Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. */
-export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<boolean> {
+/** The easel's answer to `status` while it rebuilds the painting from its log: chunks done, of how many. */
+const REPLAY = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/;
+/** `status` from an easel that is starting, before it has read the log (main.rs `STARTING`). */
+const STARTING = "the easel is starting; retry in a moment";
+
+/**
+ * Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. With
+ * `answerReplay` (the status tool), a replay's progress is the answer: it returns at once.
+ */
+export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other, answerReplay = false): Promise<boolean> {
 	let r = await step(studio, ["status"], undefined, signal, deadline);
 	let opened = false;
 	let rebuilding = false;
@@ -95,8 +103,16 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	let total: number | undefined;
 	let progressDeadline = deadline;
 	for (;;) {
+		if (r.timedOut && opened && !rebuilding) {
+			// an open that outlasts the tool: the easel answers how far its replay of the log has got
+			const s = await easel(studio, ["status"], undefined, signal, 10_000);
+			if (signal?.aborted) throw new Error("Operation aborted");
+			if (!s.timedOut && s.code === 0 && REPLAY.test(s.out.trim())) {
+				throw new Error(`the easel is reopening the painting from its log and hasn't finished: ${s.out.trim()}. \`status\` shows how far it has got.`);
+			}
+		}
 		if (r.timedOut) throw new Error(rebuilding ? "the easel rebuild stalled without progress" : opened ? "the easel didn't open in time" : "the easel isn't answering");
-		const progress = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/.exec(r.out.trim());
+		const progress = REPLAY.exec(r.out.trim());
 		if (progress) {
 			const k = Number(progress[1]);
 			const n = Number(progress[2]);
@@ -104,6 +120,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 				throw new Error(`the easel returned invalid rebuild progress: ${r.out.trim()}`);
 			}
 			total = n;
+			if (answerReplay) return true;
 			if (!rebuilding || k > completed) {
 				completed = k;
 				progressDeadline = Date.now() + (wideStudio(studio) ? WIDE_WAIT_MS.rebuild : WAIT_MS.rebuild);
@@ -114,6 +131,13 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 			r = await step(studio, ["status"], undefined, signal, progressDeadline);
 			continue;
 		}
+		if (r.code !== 0 && r.out.trim() === STARTING) {
+			// the easel has its socket but hasn't read the log yet: its progress is a moment away
+			if (Date.now() >= deadline) throw new Error("the easel isn't answering");
+			await pause(Math.min(100, deadline - Date.now()), undefined, { signal });
+			r = await step(studio, ["status"], undefined, signal, deadline);
+			continue;
+		}
 		if (r.code === 0) return rebuilding;
 		// Never open a second easel after an open or a rebuild failure.
 		if (opened || rebuilding) throw new Error(r.out.trim() || "the easel didn't open");
@@ -122,14 +146,45 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	}
 }
 
+/** A log's text ("" if there is no log yet). */
+function logText(log: string): string {
+	try {
+		return readFileSync(log, "utf8");
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Whether `lua` was kept as a new chunk: the log changed since `before` and its last chunk is
+ * `lua` as the easel keeps it. A fresh scratch canvas replaces its log, so chunks aren't counted.
+ */
+function kept(log: string, before: string, lua: string | undefined): boolean {
+	const now = logText(log);
+	return now !== before && now.split(/^--@ chunk \d+\n/m).at(-1) === `${(lua ?? "").trimEnd()}\n`;
+}
+
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	const wait = args[0] === "do" ? (wideStudio(studio) ? WIDE_WAIT_MS.do : WAIT_MS.do) : WAIT_MS.other;
 	let deadline = Date.now() + wait;
-	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
+	if (await ensureOpen(studio, signal, deadline, args[0] === "status")) deadline = Date.now() + wait;
+	const log = join(studio, "paintings", "lua", args.includes("--scratch") ? "scratch.lua" : "painting.lua");
+	const before = args[0] === "do" ? logText(log) : "";
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
-		throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		if (args[0] !== "do") throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		// what landed: the chunk still running (its progress), in the log, or neither
+		const s = await easel(studio, ["status"], undefined, signal, 10_000);
+		if (signal?.aborted) throw new Error("Operation aborted");
+		const minutes = `the easel didn't answer within ${Math.round(wait / 60_000)} minutes`;
+		if (s.timedOut || s.code !== 0) throw new Error(`${minutes}; \`log\` shows whether the chunk ran`);
+		const now = s.out.trim();
+		if (now.startsWith("painting a chunk")) {
+			throw new Error(`${minutes}. The chunk is still running and isn't in the log yet: ${now}. \`status\` shows how far it has got while it runs; once it ends, \`log\` shows whether it was kept.`);
+		}
+		if (kept(log, before, input)) throw new Error(`${minutes}, but the chunk ran: it is in the log.`);
+		throw new Error(`${minutes}, and the chunk isn't in the log: it changed nothing.`);
 	}
 	const text = r.out.trimEnd();
 	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
@@ -180,7 +235,7 @@ function realOf(full: string): string {
 	}
 }
 
-export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; hold?: string; at?: string }): string[] {
+export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?: boolean | number; light?: string; palette?: boolean; survey?: boolean; compare?: string; ref?: string; hold?: string; at?: string }): string[] {
 	const a: string[] = [];
 	if (p.palette) {
 		if (Object.entries(p).some(([key, value]) => key !== "palette" && value !== undefined && value !== false && value !== "")) {
@@ -190,6 +245,7 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	}
 	if (p.survey) a.push("--survey");
 	if (p.compare) a.push("--compare", p.compare);
+	if (p.ref) a.push("--ref", p.ref);
 	if (p.hold) a.push("--hold", p.hold);
 	if (p.at) a.push("--at", p.at);
 	if (p.crop) a.push("--crop", p.crop);
@@ -201,6 +257,12 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	return a;
 }
 
+/** The easel's `probe` arguments for the tool's `at` or `crop`: one of the two. */
+export function probeArgs(p: { at?: string; crop?: string }): string[] {
+	if (!p.at === !p.crop) throw new Error('probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two');
+	return p.at ? ["--at", p.at] : ["--crop", p.crop!];
+}
+
 /**
  * An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on, and
  * a crop's limit is in canvas units (1200 of the live canvas's 2400 pixels are 500 units), not pixels.
@@ -208,7 +270,7 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 export function toolWords(t: string): string {
 	return t
 		.replace(/--crop exceeds 1200 pixels per side; choose a smaller crop \(crops stay 1:1\)/g, "a crop may be at most 500 units on either side; choose a smaller crop")
-		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|hold|at)\b/g, "$1");
+		.replace(/--(crop|mode|size|grid|palette|light|survey|compare|ref|hold|at)\b/g, "$1");
 }
 
 /** Deliver a survey in order within the request budget, keeping every original tile on disk. */
@@ -252,6 +314,27 @@ export function paintReply(reply: string): string {
 /** A status reply without the chunk count or the pixel width: `12 chunks · 2400px · <setup>` reads `<setup>`. */
 export function statusReply(reply: string): string {
 	return reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, "");
+}
+
+/**
+ * The lines of `log` that hold `find` (in any case), numbered as in the file `whole`: `12: ...`,
+ * with the two lines before and after each, `11- ...`, and `--` between passages apart.
+ */
+export function logFind(log: string, find: string, whole: string): string {
+	const lines = log.split("\n");
+	const want = find.toLowerCase();
+	const hits = lines.flatMap((line, i) => (line.toLowerCase().includes(want) ? [i] : []));
+	if (hits.length === 0) return `no line of ${whole} holds "${find}"`;
+	const hit = new Set(hits);
+	const out = [`${hits.length} ${hits.length === 1 ? "line" : "lines"} of ${whole} ${hits.length === 1 ? "holds" : "hold"} "${find}"${hits.length > 100 ? " (the first 100 are shown)" : ""}`];
+	let last = -1;
+	for (const i of hits.slice(0, 100)) {
+		const from = Math.max(i - 2, last + 1);
+		if (last >= 0 && from > last + 1) out.push("--");
+		for (let k = from; k <= Math.min(i + 2, lines.length - 1); k++) out.push(`${k + 1}${hit.has(k) ? ":" : "-"} ${lines[k]}`);
+		last = Math.max(last, i + 2);
+	}
+	return out.join("\n");
 }
 
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */

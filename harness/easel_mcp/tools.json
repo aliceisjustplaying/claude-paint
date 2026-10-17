@@ -25,7 +25,7 @@
   },
   {
     "name": "look",
-    "description": "Look at the canvas as it is now. Without options: the whole canvas, scaled down. crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. grid: true, or a spacing in canvas units. survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
+    "description": "Look at the canvas as it is now. Without options: the whole canvas, scaled down. crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), shown at full detail. mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. grid: true, or a spacing in canvas units. survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -43,6 +43,9 @@
           "type": "string"
         },
         "compare": {
+          "type": "string"
+        },
+        "ref": {
           "type": "string"
         },
         "hold": {
@@ -75,6 +78,26 @@
     }
   },
   {
+    "name": "probe",
+    "description": "The paint on the canvas as it is now, in numbers. at: \"x,y\" in canvas units, a point; or crop: \"x0,y0,x1,y1\" (two opposite corners), the average over that area. The reply gives its color as red, green and blue from 0 to 255, as a look shows it, and its value from 0 (black) to 255 (white), the gray mode \"value\" shows; the same two in the gallery's light, as mode \"gallery\" shows it; and whether the paint there is open, setting, tacky or dry (over an area, the share of each). It doesn't say which piles the paint came from: the canvas keeps the color, not the piles.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scratch": {
+          "type": "boolean",
+          "description": "true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting."
+        },
+        "at": {
+          "type": "string"
+        },
+        "crop": {
+          "type": "string"
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "note",
     "description": "Add an entry to your journal, notes/journal.md, stamped with the painting's time. To revise what is already there, give the exact passage to change as `replaces`: `text` takes its place.",
     "inputSchema": {
@@ -94,7 +117,7 @@
   },
   {
     "name": "status",
-    "description": "The canvas's setup.",
+    "description": "The canvas's setup. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -115,6 +138,10 @@
         "scratch": {
           "type": "boolean",
           "description": "true: the scratch canvas beside the painting instead of the painting. It is set up as the painting's canvas was, with its own palette, brushes and variables, and its own log; nothing done there reaches the painting. It keeps its own clock: time spent or waited there doesn't pass for the painting."
+        },
+        "find": {
+          "type": "string",
+          "description": "Text to look for, in any case. Only the lines that hold it come back, each after its line number in the log's file and a colon, with the two lines before and after it, numbered with a dash."
         }
       },
       "required": []

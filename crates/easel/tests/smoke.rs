@@ -74,6 +74,42 @@ fn a_short_session_at_the_easel() {
     let look = ok(&["-s", "smoke", "look", "--crop", "450,20,950,180", "--grid", "50", "--mode", "value,squint"]);
     assert!(Path::new(look.split_whitespace().next().unwrap()).exists(), "{look}");
 
+    // probing: a pixel reads as the looks show it (plain, in grays, in the gallery's light,
+    // within the looks' 8-bit rounding), and its drying as drying() reads it
+    let shown = |mode: &str| {
+        let look = ok(&["-s", "smoke", "look", "--crop", "150,150,155,155", "--mode", mode]);
+        image::open(look.split_whitespace().next().unwrap()).unwrap().to_rgb8().get_pixel(0, 0).0.map(i32::from)
+    };
+    let probe = ok(&["-s", "smoke", "probe", "--at", "150,150"]);
+    let lines: Vec<&str> = probe.lines().collect();
+    assert_eq!((lines.len(), lines[0]), (4, "at 150,150"), "{probe}");
+    let read = |line: &str, head: &str| -> ([i32; 3], i32) {
+        let (rgb, value) = line.strip_prefix(head).and_then(|l| l.split_once(" · value ")).unwrap_or_else(|| panic!("{probe}"));
+        let rgb: Vec<i32> = rgb.split(',').map(|v| v.parse().unwrap()).collect();
+        ([rgb[0], rgb[1], rgb[2]], value.parse().unwrap())
+    };
+    let near = |a: [i32; 3], b: [i32; 3]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= 1);
+    let (color, value) = read(lines[1], "color ");
+    assert!(near(color, shown("normal")) && near([value; 3], shown("value")), "{probe}");
+    let (color, value) = read(lines[2], "in gallery light ");
+    assert!(near(color, shown("gallery")) && near([value; 3], shown("gallery,value")), "{probe}");
+    let felt = r.lines().find(|l| ["open", "setting", "tacky", "dry"].contains(l)).unwrap();
+    let probe = ok(&["-s", "smoke", "probe", "--at", "300,200"]);
+    assert!(probe.ends_with(&format!("\ndrying: {felt}\n")), "drying(300, 200) said {felt}: {probe}");
+    let probe = ok(&["-s", "smoke", "probe", "--crop", "300,200,100,100"]);
+    assert!(probe.starts_with("over 300,200,100,100, averaged over 480 x 240 pixels\ncolor "), "{probe}");
+    let shares: f64 = probe.lines().last().unwrap().strip_prefix("drying: ").unwrap().split(", ").map(|s| s.rsplit_once(' ').unwrap().1.trim_end_matches('%').parse::<f64>().unwrap()).sum();
+    assert!((shares - 100.0).abs() <= 2.0, "{probe}");
+    for (args, want) in [
+        (&["--at", "1001,50"][..], "probe: at 1001,50 is outside the canvas (0,0 to 1000,200)"),
+        (&["--at", "1,2,3"][..], "probe: --at 1,2,3: want x,y in canvas units"),
+        (&[][..], "probe: want --at x,y or --crop x0,y0,x1,y1 (canvas units)"),
+        (&["--scratch", "--at", "1,1"][..], "there is no scratch canvas yet"),
+    ] {
+        let e = fails(&[&["-s", "smoke", "probe"][..], args].concat());
+        assert!(e.contains(want), "{args:?}: {e}");
+    }
+
     // not in the easel: every one errors, and the log keeps its two chunks
     for cmd in ["undo", "try", "show", "edit", "undone", "redo"] {
         let e = fails(&["-s", "smoke", cmd, "1"]);

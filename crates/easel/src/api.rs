@@ -1292,6 +1292,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
     #[cfg(not(feature = "replay"))]
     check_keys(&o, WORK_KEYS, "work")?;
+    let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
     let f = frame(st)?;
@@ -1506,10 +1507,12 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         v => h = h.sweep(f32::from_lua_value(v)?),
     }
-    // an unclipped blender or glaze carries past its mask by half a brush,
-    // not by a stroke's length (a clip mask of the painter's own says how far)
+    // an unclipped blender or glaze carries past its mask by half a brush (as
+    // the marks are sized there), not by a stroke's length (a clip mask of the
+    // painter's own says how far); what is in front still limits it, once
     let limit = if st.borrow().tubes.blend_at_masks && !h.clip && (blending || hand == "glaze") && !matches!(o.get::<Value>("clip")?, Value::UserData(_)) {
-        let reach = mask.reach(h.tool.width * 0.5);
+        let (half, hd) = (h.tool.width * 0.5, &h);
+        let reach = region.reach(|x, y| half * hd.scale_here(f, x, y));
         Some(std::sync::Arc::new(match limit {
             Some(l) => reach.mul(&l),
             None => reach,

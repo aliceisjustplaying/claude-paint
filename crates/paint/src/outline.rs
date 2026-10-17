@@ -590,36 +590,43 @@ impl Outline {
     /// A silhouette grown from a skeleton: the first limb is the spine, the
     /// others join it smoothly over `blend` times their width. Every limb is a smooth curve through its points, as wide as
     /// `widths` there.
-    pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>) -> Outline {
-        // a limb that starts outside the spine is extended into it, so a
-        // limb starting a little off the spine still joins it
+    ///
+    /// A limb starting a little off the spine is extended into it. With
+    /// `nearest` (new paintings), it is extended into the nearest other limb
+    /// instead, and only when it starts within its own width of it: a branch
+    /// off a branch joins that branch, and a limb that starts further off
+    /// stays apart rather than growing a bar back to the spine. Without it
+    /// (older logs), every limb is extended into the spine, however far.
+    pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>, nearest: bool) -> Outline {
         let limbs: Vec<Bone> = limbs
             .iter()
             .enumerate()
             .map(|(k, l)| {
                 let mut l = l.clone();
-                let spine = &limbs[0];
-                if k == 0 || l.pts.is_empty() || spine.pts.is_empty() {
+                if k == 0 || l.pts.is_empty() || limbs[0].pts.is_empty() {
                     return l;
                 }
                 let r = l.widths.first().copied().unwrap_or(1.0) * 0.5;
                 let s0 = l.pts[0];
-                // nearest point of the spine's center line and its radius there
+                // nearest point of a center line it may join, and the radius there
                 let mut best = (f32::MAX, s0, 0.0);
-                for i in 0..spine.pts.len() {
-                    let a = spine.pts[i];
-                    let b = spine.pts[(i + 1).min(spine.pts.len() - 1)];
-                    let (wa, wb) = (spine.widths.get(i).or(spine.widths.last()).copied().unwrap_or(1.0), spine.widths.get(i + 1).or(spine.widths.last()).copied().unwrap_or(1.0));
-                    let (bx, by) = (b.0 - a.0, b.1 - a.1);
-                    let h = (((s0.0 - a.0) * bx + (s0.1 - a.1) * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
-                    let c = (a.0 + bx * h, a.1 + by * h);
-                    let d = dist(s0, c);
-                    if d < best.0 {
-                        best = (d, c, 0.5 * (wa + (wb - wa) * h));
+                let joins: Vec<&Bone> = if nearest { limbs.iter().enumerate().filter(|&(j, _)| j != k).map(|(_, b)| b).collect() } else { vec![&limbs[0]] };
+                for spine in joins {
+                    for i in 0..spine.pts.len() {
+                        let a = spine.pts[i];
+                        let b = spine.pts[(i + 1).min(spine.pts.len() - 1)];
+                        let (wa, wb) = (spine.widths.get(i).or(spine.widths.last()).copied().unwrap_or(1.0), spine.widths.get(i + 1).or(spine.widths.last()).copied().unwrap_or(1.0));
+                        let (bx, by) = (b.0 - a.0, b.1 - a.1);
+                        let h = (((s0.0 - a.0) * bx + (s0.1 - a.1) * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
+                        let c = (a.0 + bx * h, a.1 + by * h);
+                        let d = dist(s0, c);
+                        if d < best.0 {
+                            best = (d, c, 0.5 * (wa + (wb - wa) * h));
+                        }
                     }
                 }
                 let (d, c, rs) = best;
-                if d > rs - r * 0.5 && d > 1e-4 {
+                if d > rs - r * 0.5 && d > 1e-4 && (!nearest || d - rs <= 2.0 * r) {
                     let reach = d - rs + r;
                     let u = ((c.0 - s0.0) / d, (c.1 - s0.1) / d);
                     l.pts.insert(0, (s0.0 + u.0 * reach, s0.1 + u.1 * reach));

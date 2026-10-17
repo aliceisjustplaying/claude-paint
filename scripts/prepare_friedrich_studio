@@ -13,10 +13,12 @@ import subprocess
 
 OPENING = (
     "Compose and paint one original picture in the manner of Caspar David\n"
-    "Friedrich, at the easel, a simulator of oil paint on linen. The place,\n"
-    "subject and composition are yours to invent. Work from knowledge and the\n"
-    "notes in your studio; don't use reference images, image models or pictures\n"
-    "of his work."
+    "Friedrich, at the easel, a simulator of oil paint on linen. His pictures\n"
+    "are composed in large, simple masses, and over those masses they carry a\n"
+    "great deal of particular detail, each small form drawn and painted on its\n"
+    "own. The place, subject and composition are yours to invent. Work from\n"
+    "knowledge and the notes in your studio; don't use reference images, image\n"
+    "models or pictures of his work."
 )
 READING = (
     "notes/easel_guide.md; notes/techniques.md; notes/studio_notes.md;\n"
@@ -28,9 +30,19 @@ READING = (
     "until it is null to read the full text."
 )
 TOOLS = "paint,look,note,status,log,read,reference,reference_list"
+# --critic (harness/painter/visit.ts): a second painter visits as a critic
+CRITIC_READING = (
+    "\n\n"
+    "Another painter visits your studio as a critic, at the end of each sitting\n"
+    "and whenever you ask for a visit with `ask_critic`. The critic looks at the\n"
+    "painting with the same `look` you use and reads your journal and the note\n"
+    "you give `ask_critic` (kept in notes/to_critic.md); it doesn't paint. It\n"
+    "writes what it would fix and why in notes/critic.md, which you get at the\n"
+    "start of your next sitting or as `ask_critic`'s reply."
+)
 
 
-def corrected_runner(source):
+def corrected_runner(source, tools=TOOLS, reading=READING):
     lines = source.splitlines(keepends=True)
     changes = []
     found = set()
@@ -39,10 +51,10 @@ def corrected_runner(source):
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             target = ast.unparse(node.targets[0])
             if target == "TOOLS":
-                changes.append((node.lineno, node.end_lineno, f"TOOLS = {TOOLS!r}\n"))
+                changes.append((node.lineno, node.end_lineno, f"TOOLS = {tools!r}\n"))
                 found.add("tools")
             if target == "READING['friedrich']":
-                changes.append((node.lineno, node.end_lineno, f"READING['friedrich'] = {READING!r}\n"))
+                changes.append((node.lineno, node.end_lineno, f"READING['friedrich'] = {reading!r}\n"))
                 found.add("reading")
             if target == "OPENING" and isinstance(node.value, ast.Dict):
                 for key, value in zip(node.value.keys, node.value.values):
@@ -69,7 +81,7 @@ def corrected_runner(source):
     return result
 
 
-def prepare(studio, house, runner, studio_notes, run_dir=None):
+def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
     if (studio / "bin/box").read_text().strip() != "friedrich":
         raise ValueError("expected an exported Friedrich studio")
     if (studio / "out").exists() or any((studio / "paintings/lua").iterdir()) or (studio / "notes/journal.md").read_text():
@@ -80,12 +92,13 @@ def prepare(studio, house, runner, studio_notes, run_dir=None):
         raise ValueError("the new studio already has retired required reading")
     if not (studio / "notes/reference-library.json").is_file():
         raise ValueError("export the reference library before preparing the brief")
-    source = corrected_runner((house / "r21_chains.py").read_text())
+    tools, reading = (TOOLS + ",ask_critic", READING + CRITIC_READING) if critic else (TOOLS, READING)
+    source = corrected_runner((house / "r21_chains.py").read_text(), tools, reading)
     template = (house / "brief_template.md").read_text()
     for placeholder in ("{OPENING}", "{STUDIO}", "{READING}"):
         if template.count(placeholder) != 1:
             raise ValueError("house brief template differs: " + placeholder)
-    brief = template.replace("{OPENING}", OPENING).replace("{STUDIO}", str(studio)).replace("{READING}", READING)
+    brief = template.replace("{OPENING}", OPENING).replace("{STUDIO}", str(studio)).replace("{READING}", reading)
     strip = runpy.run_path(str(Path(__file__).with_name("strip_sources")))["strip"]
     runner.mkdir(parents=True)
     for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "brief_template.md"):
@@ -97,7 +110,7 @@ def prepare(studio, house, runner, studio_notes, run_dir=None):
     repo = Path(__file__).resolve().parent.parent
     shutil.copy2(repo / "harness/painter/run_friedrich.py", runner / "run.py")
     revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
-    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run")}, indent=2) + "\n")
+    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
 
 
@@ -108,8 +121,9 @@ def main():
     parser.add_argument("--runner-dir", type=Path, required=True)
     parser.add_argument("--studio-notes", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path)
+    parser.add_argument("--critic", action="store_true", help="a second painter visits as a critic (harness/painter/visit.ts)")
     args = parser.parse_args()
-    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None)
+    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import http.server
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -156,9 +157,9 @@ def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server)
     assert (out / "data" / PAINTER / "file" / rel).read_bytes() == kept
 
 
-def export(tmp_path, out):
+def export(tmp_path, out, *args):
     env = dict(os.environ, HOME=str(tmp_path))
-    return subprocess.run([sys.executable, os.path.join(HERE, "export_static.py"), str(out)],
+    return subprocess.run([sys.executable, os.path.join(HERE, "export_static.py"), str(out), *args],
                           env=env, capture_output=True, text=True)
 
 
@@ -981,3 +982,146 @@ def test_viewer_preserves_readable_names_and_paint_colors_from_physical_palette_
     # Swatches show the colored paint, rather than the almost-black opacity cards.
     assert all(max(int(p[k][i:i + 2], 16) for i in (1, 3, 5)) > 80
                for p in piles for k in ("thick", "thin"))
+
+
+
+def test_notebook_calls_are_events_like_journal_notes(home, server):
+    _, studio, log = home
+    log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "n1", "name": "notebook", "arguments": {"text": "Glazes want a dry ground.", "replaces": "x"}},
+        {"type": "toolCall", "id": "j1", "name": "note", "arguments": {"text": "Sky first."}}]}}))
+    status, body = server(f"/api/events?p={PAINTER}&since=0")
+    assert status == 200
+    kinds = [(e["kind"], e.get("text")) for e in json.loads(body)["events"] if e["kind"] in ("notebook", "jnote")]
+    assert kinds == [("notebook", "Glazes want a dry ground."), ("jnote", "Sky first.")]
+    with open(os.path.join(HERE, "index.html")) as fh:
+        assert "if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];" in fh.read()
+
+
+def atelier_work(root, sid, n, folder, manifest=None, card=None):
+    """A work in the atelier fixture: its run record, manifest and, once it hangs, its card."""
+    work = root / "works" / f"{sid}-{n:03d}"
+    (work / "run").mkdir(parents=True)
+    (work / "run" / "studios.json").write_text(json.dumps({"LANE1": folder}))
+    if manifest is not None:
+        (work / "manifest.json").write_text(json.dumps(dict(manifest, folder=str(root.parent.parent / folder))))
+    if card is not None:
+        (root / "studios" / sid / "cards").mkdir(parents=True, exist_ok=True)
+        (root / "studios" / sid / "cards" / f"{n:03d}.json").write_text(json.dumps(dict(card, number=n, folder=folder)))
+    return work
+
+
+@pytest.mark.parametrize("which", ["only", "skip"])
+def test_the_studio_export_selects_atelier_paintings_and_keeps_atelier_scripts_out_of_the_page(home, which):
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    other = log.parent.with_name("--Users-x-src-a-paint-studio-def456--") / log.name
+    other.parent.mkdir()
+    other.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1"))
+    atelier_work(tmp_path / "src" / "a" / "stillwet-runs" / "atelier", "claude-opus-5-5", 1, PAINTER)
+    out = tmp_path / "out"
+    r = export(tmp_path, out, f"--{which}-atelier")
+    assert r.returncode == 0, r.stderr
+    painters = [s["p"] for s in json.loads((out / "data" / "sessions.json").read_text())]
+    assert painters == ([PAINTER] if which == "only" else ["paint-studio-def456"])
+    page = (out / "index.html").read_text()
+    if which == "skip":
+        assert '<base href="/studio/">' in page and "<script>" in page
+        return
+    assert '<base href="/atelier/easel/">' in page
+    assert metadata(out / "share" / (PAINTER + ".html"))["og:url"] == f"https://stillwet.art/atelier/easel/?p={PAINTER}"
+    for name in (out / "index.html", out / "share" / (PAINTER + ".html")):
+        page = name.read_text()
+        assert "<script>" not in page  # the atelier's policy allows no inline script
+        scripts = re.findall(r'<script(?: async)? src="([^"]+)"></script>', page)
+        assert "/v/app.js" in scripts and "code-display.js" in scripts
+        code = [(out / s).read_text() for s in scripts if s.startswith("js/")]
+        assert any('plausible.init({endpoint:"/v/e"})' in c for c in code)
+        assert any("window.STUDIO_STATIC = true;" in c for c in code)
+        assert any("window.STUDIO_FEATURED=" in c for c in code)
+        assert any("const $ =" in c for c in code)  # the viewer itself
+
+
+def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch):
+    import atelier_export as A
+    import export_static as E
+    from PIL import Image
+    import io
+
+    def png(w, h, color="red"):
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), color).save(buf, "PNG")
+        return buf.getvalue()
+
+    tmp_path, studio, log = home
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1") + look("l1", png(300, 200)))
+    root = tmp_path / "src" / "a" / "stillwet-runs" / "atelier"
+    root.mkdir(parents=True)
+    (root / "studios.json").write_text(json.dumps({
+        "claude-opus-5-5": {"model": "claude-opus-5-5", "name": "Claude Opus 5.5", "harness": "pi", "since": "2026-10-20",
+                            "slug": "claude-opus-5-5", "lane": "OPUS"}}))
+    first = atelier_work(root, "claude-opus-5-5", 1, "paint-studio-aaa111",
+                         {"theme": None, "started": "2026-10-20T19:00:00Z", "sittings": 13, "canvas": [2400, 1500]},
+                         {"title": "Boot Hill, Last Light", "words": f"Painted in {tmp_path}/src/a/paint-studio-aaa111.",
+                          "finished": "2026-10-20T23:00:00Z"})
+    (first / "final").mkdir()
+    for light in ("gallery", "color", "relief"):
+        (first / "final" / f"{light}.png").write_bytes(png(2400, 1500))
+    (first / "journal.md").write_text("Sky first.\n")
+    easel = atelier_work(root, "claude-opus-5-5", 2, PAINTER, {"theme": "a harbor at night", "started": "2026-10-21T19:00:00Z"})
+    (easel / "run" / "LANE").mkdir()
+    (easel / "run" / "LANE" / "p1_sittings.json").write_text('[{"status": "running"}]')
+    notebook = root / "studios" / "claude-opus-5-5" / "notebook"
+    notebook.mkdir(parents=True)
+    (notebook / "001-before.md").write_text("Old line.\n")
+    (notebook / "001-after.md").write_text("Old line.\nNew line.\n")
+    (notebook.parent / "notebook.md").write_text("Old line.\nNew line.\n")
+
+    monkeypatch.setattr(S, "SESSIONS", str(tmp_path / ".pi" / "agent" / "sessions"))
+    monkeypatch.setattr(S, "RUNS", str(tmp_path / "src/a/stillwet-runs/**/run/studios.json"))
+    monkeypatch.setattr(S, "HOME", str(tmp_path))
+    monkeypatch.setattr(S, "USER", tmp_path.name)
+    monkeypatch.setattr(E, "ATELIER", str(root))
+    monkeypatch.setattr(E, "working_studios", lambda: {PAINTER})
+    S._lanes.update(at=0, map={})
+    out = tmp_path / "site" / "atelier" / "data"
+    A.export(str(out))
+
+    data = json.loads((out / "atelier.json").read_text())
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", data.pop("updated"))
+    opus, = data["studios"]
+    assert (opus["slug"], opus["name"], opus["since"]) == ("claude-opus-5-5", "Claude Opus 5.5", "2026-10-20")
+    assert opus["easel"] == {"n": 2, "folder": PAINTER, "state": "live", "title": None, "theme": "a harbor at night",
+                             "started": "2026-10-21T19:00:00Z", "last": "2026-09-29T10:00:00.000Z",
+                             "look": "data/claude-opus-5-5/2/look.jpg"}
+    assert opus["walls"] == [{
+        "n": 1, "title": "Boot Hill, Last Light", "words": "Painted in ~/src/a/paint-studio-aaa111.",
+        "folder": "paint-studio-aaa111", "finished": "2026-10-20T23:00:00Z", "theme": None, "sittings": 13,
+        "img": {light: f"data/claude-opus-5-5/1/{light}.jpg" for light in ("gallery", "color", "relief")},
+        "canvas": [2400, 1500], "journal": "data/claude-opus-5-5/1/journal.md"}]
+    assert opus["notebook"] == {"text": "Old line.\nNew line.\n", "after": 1, "versions": [
+        {"after": 1, "added": "New line.", "file": "data/claude-opus-5-5/notebook/1.md"}]}
+    site = out.parent
+    for rel in [opus["easel"]["look"], opus["walls"][0]["journal"], opus["notebook"]["versions"][0]["file"],
+                *opus["walls"][0]["img"].values()]:
+        assert (site / rel).is_file(), rel
+    assert Image.open(site / opus["walls"][0]["img"]["color"]).size == (1600, 1000)
+    assert (site / opus["notebook"]["versions"][0]["file"]).read_text() == "Old line.\nNew line.\n"
+    for f in out.rglob("*"):
+        if f.is_file():
+            body = f.read_bytes()
+            assert str(tmp_path).encode() not in body and tmp_path.name.lower().encode() not in body.lower()
+            assert b"plausible" not in body.lower()
+
+    # the painter stops: the easel is paused; the painting hangs: its look goes, the easel is empty
+    monkeypatch.setattr(E, "working_studios", lambda: set())
+    A.export(str(out))
+    assert json.loads((out / "atelier.json").read_text())["studios"][0]["easel"]["state"] == "paused"
+    (root / "studios" / "claude-opus-5-5" / "cards" / "002.json").write_text(json.dumps(
+        {"number": 2, "title": None, "words": "Done.", "folder": PAINTER, "finished": "2026-10-22T01:00:00Z"}))
+    A.export(str(out))
+    opus = json.loads((out / "atelier.json").read_text())["studios"][0]
+    assert opus["easel"] == {"n": None, "folder": None, "state": "empty", "title": None, "theme": None,
+                             "started": None, "last": None, "look": None}
+    assert [w["n"] for w in opus["walls"]] == [1, 2] and opus["walls"][1]["img"] == {}
+    assert not (site / "data/claude-opus-5-5/2/look.jpg").exists()

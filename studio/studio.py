@@ -408,6 +408,8 @@ def _parse(path):
                         ev.update(kind="look", text=look_text(a))
                     elif name == "note":
                         ev.update(kind="jnote", text=a.get("text", ""))
+                    elif name == "notebook":
+                        ev.update(kind="notebook", text=a.get("text", ""))
                     else:
                         ev.update(text=json.dumps(a)[:300])
                     c["calls"][x.get("id")] = len(c["events"])

@@ -901,11 +901,14 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
     serving_status(listener, status, Some(REBUILDING), || srv.s.rebuild_with_progress(|k, _| done.store(k, Ordering::Release)))?.0
 }
 
+/// Requests read while `work` ran (`serving_status`), each with its connection, in the order they came.
+type Waiting = Vec<(UnixStream, Vec<u8>)>;
+
 /// Run `work` on this thread while another thread answers `status` on the listener with
 /// `status()`. Any other request gets `refusal`, or with none is read and handed back, in the
 /// order it came, to run after `work`. Only the socket and what `status` reads cross threads:
 /// Lua (and its Rc-backed engine state) stays on this one.
-fn serving_status<R>(listener: &UnixListener, status: impl Fn() -> Result<String, String> + Sync, refusal: Option<&str>, work: impl FnOnce() -> R) -> Result<(R, Vec<(UnixStream, Vec<u8>)>), String> {
+fn serving_status<R>(listener: &UnixListener, status: impl Fn() -> Result<String, String> + Sync, refusal: Option<&str>, work: impl FnOnce() -> R) -> Result<(R, Waiting), String> {
     use std::sync::atomic::{AtomicBool, Ordering};
     let done = AtomicBool::new(false);
     struct Stop<'a>(&'a AtomicBool);
@@ -933,7 +936,7 @@ fn serving_status<R>(listener: &UnixListener, status: impl Fn() -> Result<String
     }
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let result: Result<_, String> = std::thread::scope(|scope| {
-        let worker = scope.spawn(|| -> Result<Vec<(UnixStream, Vec<u8>)>, String> {
+        let worker = scope.spawn(|| -> Result<Waiting, String> {
             let mut kept = Vec::new();
             while !done.load(Ordering::Acquire) {
                 let mut conn = match listener.accept() {

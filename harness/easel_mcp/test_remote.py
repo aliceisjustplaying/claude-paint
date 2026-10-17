@@ -112,7 +112,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
     async def test_tools_require_call_id(self):
         async with self.client() as client:
             tools = await client.list_tools()
-            self.assertEqual([tool.name for tool in tools.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
+            self.assertEqual([tool.name for tool in tools.tools], ["paint", "look", "probe", "note", "status", "log", "reference", "reference_list"])
             for tool in tools.tools:
                 self.assertIn("call_id", tool.inputSchema["required"])
             result = await client.call_tool("paint", {"lua": "a"})

@@ -242,6 +242,18 @@ pub struct Canvas {
     /// the most wet film (coats) it lays on any pixel, and its first stroke
     /// id. Transient.
     pub(crate) film_pass: Option<(f32, u32)>,
+    /// Engine 7: a knife's paint laid on wet paint stays on top of it
+    /// (`Canvas::knife`).
+    pub(crate) knife_skim: bool,
+    /// Engine 7: a blender lays the wet paint it carries only where wet paint
+    /// was when its pass began, and a little way past it (`Canvas::work`).
+    pub(crate) blend_feather: bool,
+    /// Engine 7: a brush's paint laid on wet paint stays on top of it
+    /// (`bristle::BRUSH_SKIM_COATS`).
+    pub(crate) brush_skim: bool,
+    /// While a blender pass with `blend_feather` runs: how much of the paint
+    /// a bristle carries each pixel takes (0..1, see `Canvas::receptive`).
+    pub(crate) receptive: Option<Vec<f32>>,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -295,6 +307,10 @@ impl Canvas {
             adaptive_sweep: false,
             glaze_film: false,
             film_pass: None,
+            knife_skim: false,
+            blend_feather: false,
+            brush_skim: false,
+            receptive: None,
             soak: None,
         }
     }
@@ -306,6 +322,9 @@ impl Canvas {
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
         self.glaze_film &= crate::engine7::active(v);
+        self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
+        self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
+        self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -344,6 +363,33 @@ impl Canvas {
 
     pub fn glaze_film(&self) -> bool {
         self.glaze_film
+    }
+
+    pub fn with_knife_skim(mut self, enabled: bool) -> Self {
+        self.knife_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self
+    }
+
+    pub fn knife_skim(&self) -> bool {
+        self.knife_skim
+    }
+
+    pub fn with_blend_feather(mut self, enabled: bool) -> Self {
+        self.blend_feather = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self
+    }
+
+    pub fn blend_feather(&self) -> bool {
+        self.blend_feather
+    }
+
+    pub fn with_brush_skim(mut self, enabled: bool) -> Self {
+        self.brush_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self
+    }
+
+    pub fn brush_skim(&self) -> bool {
+        self.brush_skim
     }
 
     /// Physical width of the painting in mm (default 700).

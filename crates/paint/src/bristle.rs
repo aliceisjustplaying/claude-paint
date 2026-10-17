@@ -770,8 +770,18 @@ pub(crate) struct Surf {
     /// A pass with a film ceiling (`Canvas::film_pass`): the most wet film
     /// (coats) its strokes together lay on a pixel, and its first stroke id.
     pub(crate) film: Option<(f32, u32)>,
+    /// While a blender pass runs on a canvas with the blend feather
+    /// (`Canvas::receptive`): the share (0..1) of the paint a bristle lays or
+    /// ploughs onto each pixel that the pixel takes. Null: all of it.
+    pub(crate) receptive: *const f32,
+    /// How much (coats) of the wet paint under it a brush's paint laid on it
+    /// mixes with (`BRUSH_SKIM_COATS`); 0: all of it.
+    pub(crate) skim: f32,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
+    /// Engine 8 (`crate::REACH_END`): a stroke's mark reaches its path's
+    /// end (`drag_on`).
+    pub(crate) reach_end: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -844,6 +854,29 @@ impl Surf {
                 }
             }
         }
+    }
+
+    /// `add`, for paint a brush lays from its load: with `skim` it mixes
+    /// with only the top `skim` coats of the wet paint there, and the paint
+    /// below lies buried under it, out of sight.
+    #[inline]
+    pub(crate) unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+        if self.skim <= 0.0 {
+            return unsafe { self.add(i, v, lat, hide, cure) };
+        }
+        unsafe {
+            let buried = (*self.vol.add(i) - self.skim).max(0.0);
+            *self.vol.add(i) -= buried;
+            self.add(i, v, lat, hide, cure);
+            *self.vol.add(i) += buried;
+        }
+    }
+
+    /// The share (0..1) of what a bristle lays or ploughs that pixel `i`
+    /// takes (`Surf::receptive`).
+    #[inline(always)]
+    pub(crate) unsafe fn takes(&self, i: usize) -> f32 {
+        if self.receptive.is_null() { 1.0 } else { unsafe { *self.receptive.add(i) } }
     }
 
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
@@ -961,7 +994,10 @@ impl Canvas {
             sweep_spacing: None,
             adaptive_sweep: self.adaptive_sweep,
             film: self.film_pass,
+            receptive: self.receptive.as_ref().map_or(std::ptr::null(), |r| r.as_ptr()),
+            skim: if self.brush_skim { BRUSH_SKIM_COATS } else { 0.0 },
             e7: crate::engine7::active(self.engine),
+            reach_end: self.engine >= crate::REACH_END,
         }
     }
 
@@ -1034,6 +1070,13 @@ impl Clip<'_> {
         }
     }
 }
+
+/// How deep (coats; about 6 µm) a brush's paint laid on wet paint mixes into
+/// it on a canvas with the brush skim (`Canvas::with_brush_skim`): the
+/// hairs lay the paint on the film, so only the film where the two meet
+/// blends, and a thin stroke keeps its own color. The brush still lifts wet
+/// paint into its load as it goes (`exchange`), so it gets dirty as before.
+pub(crate) const BRUSH_SKIM_COATS: f32 = 0.25;
 
 /// Pressure at which a pointed tuft's whole belly is down.
 pub(crate) const P_FULL: f32 = 0.85;
@@ -1327,8 +1370,12 @@ pub(crate) unsafe fn drag_on(
             let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
             b.bend.0 += (target.0 - b.bend.0) * rate;
             b.bend.1 += (target.1 - b.bend.1) * rate;
-            // one contact point: the belly-to-tip region of the bent bristle
-            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach.max(0.0)));
+            // one contact point: the belly-to-tip region of the bent bristle.
+            // At the path's end the hand lifts and the hairs straighten under
+            // it as they leave, so the last step draws the trailing tips up
+            // to the end (engine 8; before it the mark stopped short by the trail)
+            let lag = if k == nsteps && sf.reach_end { 0.0 } else { 0.6 };
+            contact[bi] = Some(((root.0 + b.bend.0 * lag, root.1 + b.bend.1 * lag), reach.max(0.0)));
         }
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its
@@ -1623,6 +1670,8 @@ pub(crate) unsafe fn exchange(
         let mut sum_tack = 0.0f32;
         // past a fence a lifting brush lays a thinner film too (see `Clip`)
         let mut sum_k = 0.0f32;
+        // the contact weight on pixels that take what the bristle lays
+        let mut sum_r = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -1664,6 +1713,7 @@ pub(crate) unsafe fn exchange(
                 };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
+                sum_r += wt * sf.takes(i);
                 if !sf.dry.is_null() {
                     let p = *sf.dry.add(i);
                     sum_tack += wt * crate::drying::feel(*sf.vol.add(i), p.cure, p.sub).1;
@@ -1819,19 +1869,20 @@ pub(crate) unsafe fn exchange(
                         sf.take(i, take);
                     }
                 }
+                let takes = sf.takes(i);
                 if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
+                    sf.lay(i, dep_per_w * wt * takes, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
                 } else if dep_per_w > 0.0 {
                     // a thinned load lays liquid: no more than what is left
                     // of this pixel's ceiling for this stroke, shared by all
                     // its hairs (crate::thinner); the rest stays on the hair
-                    let mut d = dep_per_w * wt;
+                    let mut d = dep_per_w * wt * takes;
                     if let Some((_, from)) = pass_film {
                         d *= film_lay(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y * w + x).0), id, d);
                     } else if capped {
@@ -1843,7 +1894,7 @@ pub(crate) unsafe fn exchange(
                     if d > 0.0 {
                         let cv = &mut *sf.cover.add(i);
                         *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                        sf.add(i, d * (1.0 - phi), &blat, bhide, bcure);
+                        sf.lay(i, d * (1.0 - phi), &blat, bhide, bcure);
                         if !sf.solv.is_null() {
                             *sf.solv.add(i) += d * phi * COAT_UM;
                         }
@@ -1894,7 +1945,7 @@ pub(crate) unsafe fn exchange(
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
-                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
+                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j);
                                 // a thinned stroke adds no more wet film to the
                                 // pixel it ploughs into than its ceiling there
                                 // allows; the solvent goes with the paint
@@ -1944,8 +1995,11 @@ pub(crate) unsafe fn exchange(
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
             br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
             br.solvent = (br.solvent - gone * phi).max(0.0);
-        } else {
+        } else if sf.receptive.is_null() {
             br.vol = (br.vol - dep_total).max(0.0);
+        } else {
+            // (what the pixels it touched didn't take stays on the hair)
+            br.vol = (br.vol - dep_total * (sum_r / sum_w).min(1.0)).max(0.0);
         }
         br.solvent += got_s;
         if got_v > 0.0 {
@@ -2548,6 +2602,11 @@ const PRESS_IN_UM: f32 = 60.0;
 /// it; finer hollows than that it bridges (`Canvas::knife`).
 const FLEX_MM: f32 = 4.0;
 
+/// How deep (coats; about 6 µm) a knife's paint laid on wet paint mixes into
+/// it when the canvas skims (`Canvas::knife`): the blade slides the paint on
+/// without stirring it in, so only the film where the two meet blends.
+const SKIM_COATS: f32 = 0.25;
+
 /// A painting knife: a flat, rigid steel blade, `width` units long, and the
 /// bead of paint it carries (coats × units², as a bristle's load). It lays
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
@@ -2619,6 +2678,25 @@ impl Knife {
     }
 }
 
+/// Lay `v` coats of the knife's paint at pixel `i` (`Surf::add`). With
+/// `skim` it mixes with only the top `SKIM_COATS` of the wet paint there; the
+/// wet paint below lies buried under it, out of sight, and the pixel takes
+/// the color of what is on top (its one color is what is seen).
+///
+/// # Safety
+/// As `Surf::add`.
+unsafe fn knife_add(sf: &Surf, i: usize, v: f32, k: &Knife, skim: bool) {
+    unsafe {
+        if !skim {
+            return sf.add(i, v, &k.lat, k.hide, k.cure);
+        }
+        let buried = (*sf.vol.add(i) - SKIM_COATS).max(0.0);
+        *sf.vol.add(i) -= buried;
+        sf.add(i, v, &k.lat, k.hide, k.cure);
+        *sf.vol.add(i) += buried;
+    }
+}
+
 impl Canvas {
     /// Drag a knife along `pts` (units), its blade held across the path or at
     /// a fixed `angle` (radians), pressed `pressure` (start, end; 0..1). The
@@ -2630,7 +2708,9 @@ impl Canvas {
     /// ridges. Where the surface lies below the blade, within the gap of it,
     /// `lay` fills it from the bead to the blade's level: a slab with a flat
     /// top, or over dry impasto paint on its peaks only. When the blade
-    /// lifts, the share `lift` of the bead stays where it last was.
+    /// lifts, the share `lift` of the bead stays where it last was. On a
+    /// canvas that skims (`with_knife_skim`) paint laid on wet paint stays
+    /// on top of it, mixing with only the film where the two meet.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
@@ -2643,6 +2723,7 @@ impl Canvas {
         // at the slab's ends, its leading edge, and where the blade's reach
         // into the hollows runs out (`tn`, a noise along and across the blade)
         let tears = self.engine >= 5;
+        let skim = self.knife_skim;
         // (the paint the tears held back under the blade: back on it at the end)
         let (mut held, mut held_solvent) = (0.0f32, 0.0f32);
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
@@ -2796,7 +2877,7 @@ impl Canvas {
                         let give = want.min(liquid / px_area * 0.25);
                         let phi = k.solvent / liquid;
                         if give > 1e-7 {
-                            sf.add(i, give * (1.0 - phi), &k.lat, k.hide, k.cure);
+                            knife_add(&sf, i, give * (1.0 - phi), k, skim);
                             if !sf.solv.is_null() { *sf.solv.add(i) += give * phi * crate::surface::COAT_UM; }
                             *sf.cover.add(i) = 1.0;
                             k.vol = (k.vol - give * (1.0 - phi) * px_area).max(0.0);
@@ -2836,7 +2917,7 @@ impl Canvas {
                     let v = leave * wgt / tw / px_area;
                     // SAFETY: as above
                     unsafe {
-                        sf.add(i, v * (1.0 - phi), &k.lat, k.hide, k.cure);
+                        knife_add(&sf, i, v * (1.0 - phi), k, skim);
                         if !sf.solv.is_null() { *sf.solv.add(i) += v * phi * crate::surface::COAT_UM; }
                         *sf.cover.add(i) = 1.0;
                         *sf.stroke.add(i) = id;
@@ -2853,5 +2934,44 @@ impl Canvas {
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);
         }
+    }
+}
+
+#[cfg(test)]
+mod knife_skim {
+    use super::*;
+    use crate::color::{hex, luminance};
+
+    /// The mean luminance of the middle of a light knife pull laid lightly
+    /// over dark knife paint, wet or dried first.
+    fn light_over_dark(skim: bool, dried: bool) -> f32 {
+        let mut c = Canvas::new(300, 1.0, hex("#e8e0d0")).with_engine(crate::engine7::ENGINE).with_knife_skim(skim);
+        let mut k = Knife::new(120.0);
+        for x in [350.0, 450.0, 550.0, 650.0] {
+            k.load(Paint::body(hex("#1c2430")), 1.0);
+            c.knife(&mut k, &[(x, 250.0), (x, 750.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+        }
+        if dried {
+            c.dry();
+        }
+        k.wipe();
+        k.load(Paint::body(hex("#f2ece0")), 1.0);
+        c.knife(&mut k, &[(500.0, 350.0), (500.0, 650.0)], (0.05, 0.05), Some(0.0), true, 0.1);
+        let (seen, w, s) = (c.seen(), c.f.w, c.f.scale);
+        let px = |u: f32| (u * s) as usize;
+        let lum: Vec<f32> = (px(420.0)..px(580.0)).flat_map(|y| (px(470.0)..px(530.0)).map(move |x| y * w + x)).map(|i| luminance(seen[i])).collect();
+        lum.iter().sum::<f32>() / lum.len() as f32
+    }
+
+    /// A loaded knife laid lightly on wet dark paint leaves its own color on
+    /// top, about as it does on the same paint dried. Without the skim (older
+    /// logs) it is stirred into the wet paint under it and goes gray.
+    #[test]
+    fn a_skimming_knife_keeps_its_light_on_wet_dark_paint() {
+        let dried = light_over_dark(true, true);
+        let wet = light_over_dark(true, false);
+        let stirred = light_over_dark(false, false);
+        assert!(wet > 0.85 * dried, "on wet {wet}, on dried {dried}");
+        assert!(stirred < 0.6 * dried, "stirred in {stirred}, on dried {dried}");
     }
 }

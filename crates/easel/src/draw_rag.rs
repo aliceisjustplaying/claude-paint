@@ -274,4 +274,24 @@ print(n, h, type(rag))"#;
         run(&mut new, CANVAS);
         assert_eq!(run(&mut new, "print(type(rag))").trim(), "function");
     }
+
+    /// With the rag lift switch (every new painting) a wipe that runs on a
+    /// full face says so in the chunk's reply; an older log's rag doesn't.
+    #[test]
+    fn a_wipe_on_a_full_face_says_so() {
+        let src = r#"work(rect(0, 0, 1000, 600), {hand="broad", pile=pile{{"bone black", 1}}, coverage=2, fill=true, seed=1})
+r = rag{width=30}
+r:wipe(rect(0, 0, 1000, 600), {pressure=0.6})
+r:wipe({{100, 300}, {900, 300}})"#;
+        let mut tubes = paint::Palette::tube_box();
+        tubes.engine = paint::engine7::ENGINE;
+        let mut old = Session::with_box(W, tubes.clone()).unwrap();
+        run(&mut old, CANVAS);
+        assert!(!run(&mut old, src).contains("rag:"));
+        tubes.rag_lift = true;
+        let mut new = Session::with_box(W, tubes).unwrap();
+        run(&mut new, CANVAS);
+        let out = run(&mut new, src);
+        assert!(out.contains("rag: the face in use is full: ") && out.contains("rag: the face in use was full when this wipe began"), "{out}");
+    }
 }

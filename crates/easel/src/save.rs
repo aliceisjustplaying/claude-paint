@@ -50,6 +50,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.limbs_join_nearest {
         kv("limbs", "nearest".to_string());
     }
+    if st.tubes.blend_at_masks {
+        kv("masks", "blend-at".to_string());
+    }
     kv("width", st.width.to_string());
     kv("seed", st.seed.to_string());
     kv("chunk", st.chunk.to_string());
@@ -184,6 +187,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.blend_feather = canvas.blend_feather();
     tubes.brush_skim = canvas.brush_skim();
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
+    tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;
     {

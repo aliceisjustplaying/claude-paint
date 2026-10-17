@@ -23,7 +23,9 @@ empty target and TIME_WARM once built.
   `session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it`,
   `session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,
-  `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` and
+  `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw`,
+  `api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded`,
+  `api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask` and
   `boxes::a_round_19_log_replays_as_before` (`#[ignore = "slow"]`, run by name:
   the round 19 log at 2400 px against `r19_default_box.png`).
 - easel integration files, whole: `smoke.rs`, `session_integrity.rs`,

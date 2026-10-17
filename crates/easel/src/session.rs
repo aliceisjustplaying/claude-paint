@@ -36,6 +36,11 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose blender and glaze meet their masks as the mask says
+/// (`paint::Palette::blend_at_masks`): every new painting. A log without it
+/// replays `soften` as a fresh ramp on the mask's 0.5 line and its unclipped
+/// blends and glazes at their strokes' full length.
+pub const BLEND_MARK: &str = "--@ blend-at-masks";
 /// A log's head line: its blender lays the wet paint it picks up only where
 /// wet paint was, and a little way past it (`paint::Canvas::with_blend_feather`).
 /// Every new painting has it.
@@ -428,6 +433,9 @@ impl Session {
         }
         if self.st.borrow().tubes.brush_skim {
             let _ = writeln!(s, "{BRUSH_SKIM_MARK}");
+        }
+        if self.st.borrow().tubes.blend_at_masks {
+            let _ = writeln!(s, "{BLEND_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1014,7 +1022,8 @@ fn box_list() -> String {
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
 /// (`LIMBS_MARK`), and likewise for the blender's feather
-/// (`BLEND_FEATHER_MARK`) and the brush's skim (`BRUSH_SKIM_MARK`).
+/// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`) and
+/// blends and glazes at masks (`BLEND_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1022,6 +1031,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.engine = paint::REACH_END;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
+        b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
         return Ok(b);
@@ -1060,6 +1070,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
     Ok(b)

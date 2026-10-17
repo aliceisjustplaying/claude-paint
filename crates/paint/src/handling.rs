@@ -405,6 +405,11 @@ impl<'a> Handling<'a> {
         self.shake = k;
         self
     }
+    /// The size of the marks at a point (units): `scale_at` there, as the
+    /// strokes are sized, or 1.
+    pub fn scale_here(&self, f: Frame, x: f32, y: f32) -> f32 {
+        scale_of(self, f, x, y)
+    }
 }
 
 /// One planned stroke.

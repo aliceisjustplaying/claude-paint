@@ -426,6 +426,22 @@ pub fn render(c: &Canvas, v: &View) -> std::result::Result<(usize, usize, Vec<u8
     render_seen(c, v, None)
 }
 
+/// Two pictures of one view, `seen` (another picture of the canvas's
+/// pixels, as `render_seen` takes it) and the canvas itself, at the same
+/// output size: if the size budget shrinks either, both are rendered again
+/// at the smaller one, so the two sit side by side at one scale.
+pub fn render_pair(c: &Canvas, v: &View, seen: &[Rgb]) -> std::result::Result<((usize, usize, Vec<u8>), (usize, usize, Vec<u8>)), String> {
+    let mut v = v.clone();
+    loop {
+        let (a, b) = (render_seen(c, &v, Some(seen))?, render(c, &v)?);
+        if (a.0, a.1) == (b.0, b.1) || v.crop.is_some() {
+            return Ok((a, b));
+        }
+        // (strictly smaller each time: the loop ends)
+        v.size = Some(a.0.max(a.1).min(b.0.max(b.1)));
+    }
+}
+
 /// `render`, from the canvas as already seen in the view's light (`seen`:
 /// `Canvas::seen` or `seen_lit`), so several views of one canvas (a survey's
 /// tiles) light it once.
@@ -771,5 +787,30 @@ mod tests {
         assert_eq!(cropped, image::imageops::crop_imm(&shown, 10, 0, 40, 40).to_image());
         assert!(View::parse(&["--mask".into(), "a,".into()]).is_err());
         assert!(View::parse(&["--palette".into(), "--mask".into(), "shape".into()]).is_err());
+    }
+
+    /// A busy picture beside a plain canvas: the noise's PNG is over the
+    /// size budget at 1600 pixels and is shrunk, and the canvas's panel is
+    /// rendered again at the same size, so both sit at one scale.
+    #[test]
+    fn a_pair_of_pictures_shares_one_size() {
+        let c = Canvas::new_window(1600, 1.25, [0.6; 3], None);
+        let mut rng = 0x2545_f491_4f6c_dd1du64;
+        let noise: Vec<Rgb> = (0..c.window().w * c.window().h)
+            .map(|_| {
+                [0, 1, 2].map(|_| {
+                    rng ^= rng << 13;
+                    rng ^= rng >> 7;
+                    rng ^= rng << 17;
+                    (rng >> 40) as f32 / (1u64 << 24) as f32
+                })
+            })
+            .collect();
+        let v = View { size: Some(1600), ..View::default() };
+        let alone = render_seen(&c, &v, Some(&noise)).unwrap();
+        assert!(alone.0 < 1600, "the noise alone is shrunk to fit the budget ({}px)", alone.0);
+        let (a, b) = render_pair(&c, &v, &noise).unwrap();
+        assert_eq!((a.0, a.1), (b.0, b.1));
+        assert!(a.0 < 1600 && a.2.len() <= 3_000_000);
     }
 }

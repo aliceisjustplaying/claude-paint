@@ -76,6 +76,13 @@ fn wide_crops_and_named_mask_overlays_are_read_only_in_every_canvas_view() {
     let (_, compared) = easel.image(&["look", "--compare", previous, "--mask", "shape"]);
     assert_eq!(compared.dimensions(), (1612, 160));
     easel.image(&["look", "--hold", "p", "--at", "300,100", "--crop", "0,0,1000,200", "--mask", "shape"]);
+    plain.save(easel.0.join("motif.png")).unwrap();
+    let (_, reference) = easel.image(&["look", "--ref", "motif.png", "--crop", "0,40,1000,140"]);
+    let (reply, reference_mask) = easel.image(&["look", "--ref", "motif.png", "--crop", "0,40,1000,140", "--mask", "shape"]);
+    assert_eq!(reference.dimensions(), reference_mask.dimensions());
+    assert_ne!(reference, reference_mask);
+    assert!(reply.contains("scale 1.2000 x 1.2000 px/unit"), "{reply}");
+    assert!(!easel.call(&["look", "--ref", "motif.png", "--mask", "missing"]).status.success());
     for args in [vec!["look", "--mask", "missing"], vec!["look", "--mask", "p"], vec!["look", "--palette", "--mask", "shape"]] {
         let result = easel.call(&args);
         assert!(!result.status.success(), "{args:?}");

@@ -172,6 +172,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
 				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
+				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
 				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
@@ -182,6 +183,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				light: Type.Optional(Type.String()),
 				survey: Type.Optional(Type.Boolean()),
 				compare: Type.Optional(Type.String()),
+				ref: Type.Optional(Type.String()),
 				hold: Type.Optional(Type.String()),
 				at: Type.Optional(Type.String()),
 				palette: Type.Optional(Type.Boolean()),
@@ -193,6 +195,13 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				let said: string;
 				lookArgs(view); // validate combinations before resolving compare paths
 				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+				if (p.ref && (p.survey || p.compare || p.hold)) throw new Error("look: ref is a look of its own: no survey, compare or hold");
+				// ref: a picture of the motif in this studio, nothing outside it (as `read`)
+				let ref = p.ref || undefined;
+				if (ref !== undefined) {
+					ref = studioPath(studio, ref);
+					if (ref === undefined) throw new Error("look: ref is the path of a picture of the motif in this studio");
+				}
 				// compare: an earlier look of this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)
 				if (compare !== undefined) {
@@ -200,7 +209,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
 				}
 				try {
-					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare })], undefined, signal);
+					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare, ref })], undefined, signal);
 				} catch (e) {
 					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
 				}

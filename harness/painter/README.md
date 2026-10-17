@@ -12,6 +12,7 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 | `pace.ts` | input tokens per minute: with `PAINTER_INPUT_TPM`, `painter.ts` holds each request until the last minute's input tokens plus its own fit that budget; and it makes a per-minute quota 429 (Google's `...PerMinute` quota ids) retryable for pi's retry, which skips errors that mention "quota exceeded" or "billing". `PAINTER_MAX_IMAGES` / `PAINTER_MAX_IMAGE_MB` set `context-images.ts`'s limits for a lane (round 18g's Gemini lane: 8 images, 1.5M tokens a minute under Google's 2M). `test/pace.test.ts` tests it |
 | `compaction.ts` | extension: `session_before_compact` with a deterministic summary, no model call; also sets the compaction thresholds (see "Settings") |
 | `summary.ts` | the summary `compaction.ts` returns; `test/summary.test.ts` tests it |
+| `notebook.ts` | the atelier's `notebook` tool (`atelier/`, listed in its `--tools` only): appends to or revises `notebook.md`, every call kept in `out/easel/notebook-revisions.jsonl`; `test/notebook.test.ts` tests it |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
 
 ## Launch

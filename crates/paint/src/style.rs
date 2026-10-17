@@ -220,7 +220,7 @@ impl Style {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
                         if header == *key {
-                            return cached.with_quarter_tiles(self.palette.quarter_tiles);
+                            return cached.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film);
                         }
                     }
                 }
@@ -264,7 +264,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c.with_quarter_tiles(self.palette.quarter_tiles)
+        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film)
     }
 }
 
@@ -451,6 +451,15 @@ impl Style {
     pub fn line_tool(&self, width: f32) -> Tool {
         Tool { width, length: width * 5.0, ..self.line.clone() }
     }
+
+    /// The film (coats) a `glaze` pass lays on a painting with the glaze film
+    /// (`Canvas::with_glaze_film`, `Handling::film`): about 7.5 µm, a
+    /// glaze brushed out thin. Its strength comes from the pile (medium,
+    /// transparent pigment) and from the number of passes.
+    pub const GLAZE_FILM: f32 = 0.3;
+    /// The film (coats) a `scumble` pass lays there: about 5 µm, a broken
+    /// veil that half hides what it crosses in body paint.
+    pub const SCUMBLE_FILM: f32 = 0.2;
 
     /// Scumbling: the body tool worked back and forth (`scrub(3)`) with
     /// strokes 10–20 units long, the brush's

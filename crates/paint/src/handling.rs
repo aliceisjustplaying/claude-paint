@@ -74,6 +74,12 @@ pub struct Handling<'a> {
     pub blender: bool,
     /// Scumble: short back-and-forth strokes instead of single pulls.
     pub scrub: usize,
+    /// Lay a thin film (coats): the pass's strokes together add at most this
+    /// much wet paint to any pixel, and what the brush can't lay stays on it,
+    /// so overlapping strokes even out instead of piling up. `coverage` is
+    /// then the share of the region the film reaches (1: all of it), not
+    /// layers of strokes. None: off (`film`).
+    pub film: Option<f32>,
     /// Clip bristle contact to the mask (crisp, cut-in edges).
     pub clip: bool,
     /// A hard limit no bristle paints outside of, whatever `clip` says (e.g.
@@ -178,6 +184,7 @@ impl<'a> Handling<'a> {
             wipe: 0.6,
             blender: false,
             scrub: 0,
+            film: None,
             clip: false,
             limit: None,
             fence: None,
@@ -353,6 +360,13 @@ impl<'a> Handling<'a> {
         self.blender = true;
         self
     }
+    /// Lay a thin film of at most `coats` per pass, its `coverage` the
+    /// share of the region it reaches (see `Handling::film`).
+    pub fn film(mut self, coats: f32) -> Self {
+        assert!(coats.is_finite() && coats > 0.0, "Handling::film must be finite and > 0, got {coats}");
+        self.film = Some(coats);
+        self
+    }
     pub fn scrub(mut self, n: usize) -> Self {
         self.scrub = n;
         self
@@ -482,7 +496,18 @@ impl Canvas {
         let f = mask.f;
         let mean_len = hd.mean_length();
         // one stroke per gap² of area gives coverage = width · length / gap²
-        let gap = (hd.tool.width * mean_len.max(hd.tool.width) / hd.coverage.max(0.05)).sqrt().max(0.5);
+        let gap = match hd.film {
+            None => (hd.tool.width * mean_len.max(hd.tool.width) / hd.coverage.max(0.05)).sqrt().max(0.5),
+            // a film's coverage is the share of the region it reaches:
+            // strokes of this footprint (a scrubbed one sweeps sideways as it
+            // goes back and forth), scattered so that they reach that share
+            Some(_) => {
+                let w = hd.tool.width;
+                let area = (mean_len.max(w) + w) * (w + hd.scrub as f32 * 0.35 * w);
+                let layers = -(1.0 - FILM_REACH * hd.coverage.min(1.0)).ln();
+                (area / layers.max(0.05)).sqrt().max(0.5)
+            }
+        };
         // marks sized across the canvas (`scale_at`): centers placed as densely
         // as the smallest marks need, then thinned where marks are larger, by
         // (smallest / here)², so each place gets the coverage asked
@@ -641,6 +666,8 @@ impl Canvas {
             _ => clip.map(Clip::Mask),
         };
         let before = self.wet.current;
+        // (a film's ceiling holds for every stroke from here to the pass's end)
+        self.film_pass = hd.film.map(|c| (c, before.wrapping_add(1).max(1)));
         let slice = self.hand_slice_secs();
         // with hand time on, the pass's first slices can set before the look
         // (baked into the dry film, no longer wet): the film before the pass
@@ -653,6 +680,7 @@ impl Canvas {
         if let Some(edge) = &hd.cut_in {
             self.cut_in_edges(mask, edge, hd, seed ^ 0xED6E, &mut rng, piles);
         }
+        self.film_pass = None;
     }
 
     /// Look and fill: find the bare spots the pass (strokes with ids above
@@ -1230,6 +1258,10 @@ fn carry_in(mask: &Mask, pts: &[(f32, f32)], c: (f32, f32), width: f32, threshol
 const DAB_SHARE: f32 = 0.6;
 /// Film (coats) under which a pixel of the region counts as bare.
 const FILL_BARE: f32 = 0.04;
+/// The share of the region a film pass (`Handling::film`) reaches at
+/// coverage 1: its strokes scattered about 3.5 deep, so the gaps between
+/// them close.
+const FILM_REACH: f32 = 0.97;
 
 /// Mask value at a point; the region continues past the canvas edges.
 /// The cells (of size `cell` units, `cw` × `ch` over the whole canvas)

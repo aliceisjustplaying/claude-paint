@@ -15,6 +15,8 @@ empty target and TIME_WARM once built.
   `drying::tests::checkpoint_mid_drying_resumes_exactly` and
   `noise::tests::worley_finds_the_true_nearest_features`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
+  `session::tests::{new_paintings_record_the_glaze_film_and_older_logs_replay_without_it,
+  a_glaze_tints_the_drawing_under_it_and_keeps_it_legible, a_scumble_at_half_coverage_leaves_gaps}`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,
   `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` and
   `boxes::a_round_19_log_replays_as_before` (`#[ignore = "slow"]`, run by name:

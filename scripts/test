@@ -101,6 +101,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  session::tests::new_paintings_record_the_glaze_film_and_older_logs_replay_without_it \
+  session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible session::tests::a_scumble_at_half_coverage_leaves_gaps \
   api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'

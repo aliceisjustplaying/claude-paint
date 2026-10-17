@@ -33,6 +33,11 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// A log's head line: its `glaze` and `scumble` passes lay a thin film,
+/// their coverage the share of the mask it reaches
+/// (`paint::Canvas::with_glaze_film`). Every new painting has it; it
+/// requires engine 7.
+pub const GLAZE_FILM_MARK: &str = "--@ glaze-film";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -409,6 +414,9 @@ impl Session {
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.glaze_film {
+            let _ = writeln!(s, "{GLAZE_FILM_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1001,6 +1009,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
         b.limbs_join_nearest = true;
+        b.glaze_film = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1026,6 +1035,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.glaze_film = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == GLAZE_FILM_MARK);
+    if b.glaze_film && !paint::engine7::active(engine) {
+        return Err(format!("the log's glaze film switch ({GLAZE_FILM_MARK}) requires engine 7"));
+    }
     Ok(b)
 }
 
@@ -1137,5 +1150,100 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+
+    /// A new painting's glaze and scumble lay a thin film
+    /// (`paint::Canvas::with_glaze_film`) and its log's head says so; a
+    /// replay of that log and a save of it do too, and a log without the line
+    /// (every painting before it) doesn't. Only engine 7 has it.
+    #[test]
+    fn new_paintings_record_the_glaze_film_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().glaze_film());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{GLAZE_FILM_MARK}\n")), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.glaze_film());
+        for (log, film) in [(text.clone(), true), (text.replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().glaze_film(), film);
+            assert_eq!(replay.program("p"), log);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting 400 px wide (1000 × 800 units): a pale ground with
+    /// `drawing` laid on it and left a month to dry, then `pass`. The
+    /// CIE L* of every pixel before and after the pass, and the change in
+    /// red minus blue (of 255).
+    fn under_a_pass(drawing: &str, pass: &str) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let mut s = Session::with_box(400, box_for(None).unwrap()).unwrap();
+        s.run("canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 0.2}}, um=120, apply=\"knife\"}}}").unwrap();
+        s.run(drawing).unwrap();
+        s.run("wait(30*24*60)").unwrap();
+        let lstar = |c: &[f32; 3]| {
+            let y = paint::color::luminance(*c);
+            if y > 216.0 / 24389.0 { 116.0 * y.cbrt() - 16.0 } else { 24389.0 / 27.0 * y }
+        };
+        let warm = |c: &[f32; 3]| 255.0 * (paint::color::linear_to_srgb(c[0]) - paint::color::linear_to_srgb(c[2]));
+        let before = s.canvas().unwrap().seen();
+        s.run(pass).unwrap();
+        let after = s.canvas().unwrap().seen();
+        (before.iter().map(lstar).collect(), after.iter().map(lstar).collect(), before.iter().zip(&after).map(|(b, a)| warm(a) - warm(b)).collect())
+    }
+
+    /// The pixels of that 400 × 320 canvas whose x lies in the middle 60
+    /// units of a 100-unit bar: the `dark` bars, or the light ones between.
+    fn bars(dark: bool) -> Vec<usize> {
+        let mid = if dark { 20.0..80.0 } else { 120.0..180.0 };
+        (8..312).flat_map(|y| (0..400).map(move |x| (y, x))).filter(|&(_, x)| mid.contains(&((x as f32 + 0.5) * 2.5 % 200.0))).map(|(y, x)| y * 400 + x).collect()
+    }
+
+    /// A glaze is a thin transparent film: over a dry drawing of dark bars a
+    /// medium-rich warm pile (92% medium) brushed over the whole canvas
+    /// shifts the color by about the same small amount everywhere and the
+    /// drawing stays legible. Before the glaze film its strokes laid the
+    /// pile's own pale color in streaks over the bars.
+    #[test]
+    fn a_glaze_tints_the_drawing_under_it_and_keeps_it_legible() {
+        let drawing = "work(mask(function(x, y) return math.floor(x / 100) % 2 == 0 and 1 or 0 end), {hand=\"body\", pile=pile{{\"bone black\", 1}, {\"raw umber\", 1}}, coverage=3, fill=true, clip=true, angle=1.5708, seed=5})";
+        let glaze = "work(everywhere(), {hand=\"glaze\", pile=pile{{\"lead white\", 0.8}, {\"yellow ochre\", 0.55}, {\"vermilion\", 0.12}, {\"bone black\", 0.1}, medium=0.92}, coverage=1, angle=0.05, seed=491})";
+        let (l0, l1, warm) = under_a_pass(drawing, glaze);
+        let mean = |v: &[f32], ix: &[usize]| ix.iter().map(|&i| v[i]).sum::<f32>() / ix.len() as f32;
+        let (dark, light) = (bars(true), bars(false));
+        let kept = (mean(&l1, &light) - mean(&l1, &dark)) / (mean(&l0, &light) - mean(&l0, &dark));
+        let dl: Vec<f32> = light.iter().map(|&i| l1[i] - l0[i]).collect();
+        let sd = (dl.iter().map(|d| d * d).sum::<f32>() / dl.len() as f32 - (dl.iter().sum::<f32>() / dl.len() as f32).powi(2)).sqrt();
+        let shift = light.iter().chain(&dark).map(|&i| warm[i]).sum::<f32>() / (light.len() + dark.len()) as f32;
+        eprintln!("glaze: contrast kept {kept}, L* change sd over the light bars {sd}, warm shift {shift}");
+        assert!(kept > 0.8, "the drawing's contrast kept: {kept}");
+        assert!(sd < 1.5, "the film is uneven over the light bars: L* change sd {sd}");
+        assert!((2.0..12.0).contains(&shift), "the warm shift (R - B, of 255): {shift}");
+    }
+
+    /// A scumble is a broken veil: at coverage 0.5 a pale body pile scumbled
+    /// over dry dark paint reaches about half of its rect and leaves the dark
+    /// showing in the gaps, and where it lands the dark shows through it.
+    /// Before the glaze film its scrubbing strokes closed over nearly all of
+    /// it.
+    #[test]
+    fn a_scumble_at_half_coverage_leaves_gaps() {
+        let drawing = "work(everywhere(), {hand=\"body\", pile=pile{{\"raw umber\", 1}, {\"bone black\", 0.3}, {\"lead white\", 0.1}}, coverage=3, fill=true, seed=5})";
+        let scumble = "work(rect(100, 100, 800, 600), {hand=\"scumble\", pile=pile{{\"lead white\", 2}, {\"yellow ochre\", 0.4}, {\"raw umber\", 0.3}}, coverage=0.5, angle=0.2, seed=41})";
+        let (l0, l1, _) = under_a_pass(drawing, scumble);
+        let inside: Vec<usize> = (48..272).flat_map(|y| (48..352).map(move |x| y * 400 + x)).collect();
+        let reached: Vec<usize> = inside.iter().copied().filter(|&i| l1[i] - l0[i] > 2.0).collect();
+        let share = reached.len() as f32 / inside.len() as f32;
+        let lift = reached.iter().map(|&i| l1[i] - l0[i]).sum::<f32>() / reached.len().max(1) as f32;
+        let under = inside.iter().map(|&i| l0[i]).sum::<f32>() / inside.len() as f32;
+        eprintln!("scumble: reached {share}, L* {under} up by {lift} where it landed");
+        assert!((0.3..0.7).contains(&share), "the scumble reached {share} of its rect at coverage 0.5");
+        assert!(lift < 0.75 * (80.0 - under), "where it lands it hides the dark: L* {under} up by {lift}");
     }
 }

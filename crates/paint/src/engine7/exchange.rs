@@ -244,8 +244,14 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let liquid = if br.solvent > 0.0 { br.vol + br.solvent } else { br.vol };
         let phi = if br.solvent > 0.0 { br.solvent / liquid } else { 0.0 };
         let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
-        let capped = phi > 0.0 && !sf.laid.is_null() && !exch;
-        let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
+        // a pass that lays a thin film (`Handling::film`): all its strokes
+        // together add no more than its ceiling to a pixel, and what the hair
+        // can't lay stays on it, as a thinned load's does (with both, the
+        // lower ceiling, for the whole pass)
+        let pass_film = sf.film.filter(|_| !sf.laid.is_null());
+        let thinned = phi > 0.0 && !sf.laid.is_null() && !exch;
+        let capped = thinned || pass_film.is_some();
+        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(if thinned { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY });
         let wet = smoothstep(0.1, 0.8, liquid / full);
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
@@ -418,7 +424,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 *sf.stroke.add(i) = id;
             } else if dep_per_w > 0.0 {
                 let mut d = dep_per_w * wt;
-                if capped {
+                if let Some((_, from)) = pass_film {
+                    d = d.min(crate::bristle::film_room(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y as usize * w + x as usize).0), id));
+                } else if capped {
                     let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                     d = d.min((cap - used).max(0.0));
                     *sf.laid_id.add(i) = id;
@@ -463,7 +471,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let j = (ty - oy) * bw_buf + tx - ox;
                 let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0));
                 let mut mm = m * sh * c.k;
-                if capped && mm > 0.0 {
+                if let Some((_, from)) = pass_film.filter(|_| mm > 0.0) {
+                    let ms = src[SOLV] / COAT_UM * mm;
+                    let room = crate::bristle::film_room(&sf, j, from, cap * c.k, id);
+                    if mm + ms > room {
+                        mm *= room / (mm + ms);
+                    }
+                } else if capped && mm > 0.0 {
                     // a thinned stroke adds no more wet film to the pixel it
                     // ploughs into than its ceiling there allows
                     let ms = src[SOLV] / COAT_UM * mm;
@@ -514,7 +528,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             film.add(j, m, &Paint7::new(sf.lean, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;
-        if phi > 0.0 {
+        if phi > 0.0 || pass_film.is_some() {
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
             br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
             br.solvent = (br.solvent - gone * phi).max(0.0);

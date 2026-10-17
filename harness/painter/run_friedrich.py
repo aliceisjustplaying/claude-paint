@@ -16,7 +16,7 @@ CONFIG = json.loads((HERE / "run-config.json").read_text())
 STUDIO = Path(CONFIG["studio"])
 SOURCE = Path(CONFIG["source"])
 RUN = Path(CONFIG["run"])
-for name in "EASEL_ROOT EASEL_SESSION EASEL_BOX EASEL_WIDTH PAINTER_SITTING_RECOVERY PAINTER_MAX_IMAGES PAINTER_MAX_IMAGE_MB PAINTER_INPUT_TPM PAINTER_LIMIT_PROBE_S PAINTER_LIMIT_GIVE_UP_H PAINTER_COMPACT_RESERVE PAINTER_COMPACTION_NOTES".split():
+for name in "EASEL_ROOT EASEL_SESSION EASEL_BOX EASEL_WIDTH PAINTER_SITTING_RECOVERY PAINTER_MAX_IMAGES PAINTER_MAX_IMAGE_MB PAINTER_INPUT_TPM PAINTER_LIMIT_PROBE_S PAINTER_LIMIT_GIVE_UP_H PAINTER_COMPACT_RESERVE PAINTER_COMPACTION_NOTES PAINTER_CRITIC".split():
     os.environ.pop(name, None)
 sys.path.insert(0, str(HERE))
 spec = importlib.util.spec_from_file_location("house_runner", HERE / "r21_chains.py")
@@ -27,7 +27,11 @@ R.BRANCH = CONFIG["source_revision"]
 R.H = SOURCE / "harness/painter"
 R.RUN = RUN
 R.HARNESS = ["--no-extensions", "-e", str(R.H / "painter.ts"), "-e", str(R.H / "compaction.ts"), "--system-prompt", str(R.H / "system_prompt.md"), "--tools", R.TOOLS, "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
-R.LANES = {"OPUS": R.lane("friedrich", R.model("anthropic", "claude-opus-5-5", "xhigh", black=True), record_kind="none", reference=False)}
+MODEL = R.model("anthropic", "claude-opus-5-5", "xhigh", black=True)
+if CONFIG.get("critic"):
+    # the critic (harness/painter/visit.ts) on the painter's model; its sessions and notes beside the run's records
+    MODEL["env"] = {**(MODEL["env"] or {}), "PAINTER_CRITIC": json.dumps({"args": (["-e", str(R.BLACK)] if MODEL["black"] else []) + MODEL["args"], "dir": str(RUN / "critic")})}
+R.LANES = {"OPUS": R.lane("friedrich", MODEL, record_kind="none", reference=False)}
 R.MY_LANES = ["OPUS"]
 assert subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "HEAD"]).decode().strip() == R.BRANCH, "prepared source revision changed"
 assert (STUDIO / "bin/box").read_text().strip() == "friedrich"

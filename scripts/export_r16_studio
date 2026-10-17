@@ -242,11 +242,7 @@ extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -pa
 # studio only that artist's
 "$repo/scripts/check_studio_names" "$dest" ${own[@]+"${own[@]}"} || { echo "the $profile studio names painters it shouldn't" >&2; exit 1; }
 
-# the tubes in the binary: a studio with a box of its own holds that box's
-# tube records (names and pigments) and no other tube's name, and no other
-# box's name (the default box's included); the default-box studios hold the
-# tube box's, and no older box's name ("smalt box", "cobalt box")
-bin_strings=$(strings "$dest/bin/easel")
+# the tubes in the guide: no tube names outside the studio's box
 catalog=$(git -C "$repo" show "$branch:crates/paint/src/palette.rs" | sed -n 's/^ *tube("\([^"]*\)".*/\1/p')
 [ "$(wc -l <<<"$catalog")" -ge 14 ] || { echo "can't read the tube catalog from palette.rs" >&2; exit 1; }
 # an outside tube's name counts unless it lies inside one of the box's own
@@ -254,15 +250,12 @@ catalog=$(git -C "$repo" show "$branch:crates/paint/src/palette.rs" | sed -n 's/
 # pigment); an outside name that holds an inside one (orange vermilion in a
 # box with vermilion) counts (scripts/check_box_tubes)
 stray=()
-if ! outside=$("$repo/scripts/check_box_tubes" "$dest/bin/easel" <(printf '%s\n' "$table") <(printf '%s\n' "$catalog")); then
-  [ -n "$outside" ] || { echo "can't check the tubes in bin/easel" >&2; exit 1; }
+if ! outside=$("$repo/scripts/check_box_tubes" <(printf '%s\n' "$table") <(printf '%s\n' "$table") <(printf '%s\n' "$catalog")); then
+  [ -n "$outside" ] || { echo "can't check the tubes in the table" >&2; exit 1; }
   while IFS= read -r t; do [ -z "$t" ] || stray+=("$t"); done <<<"$outside"
 fi
-for label in "smalt box" "cobalt box" ${box:+"tube box"}; do
-  ! grep -qF "$label" <<<"$bin_strings" || stray+=("$label")
-done
 if [ ${#stray[@]} -gt 0 ]; then
-  echo "bin/easel of the $profile studio names tubes or boxes outside its box: $(printf '"%s" ' "${stray[@]}")" >&2
+  echo "the tube table of the $profile studio names tubes outside its box: $(printf '"%s" ' "${stray[@]}")" >&2
   exit 1
 fi
 

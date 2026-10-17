@@ -74,7 +74,7 @@ REPLY_PAGE = 'Reply saved in full to {file}. Page 1 of {total}. For page 2, call
 LAST_PAGE = "Page {total} of {total}, the last page."
 SAVED = " When the reply's text is over 8,000 bytes, the whole text is saved to a file in the studio and this returns its first page."
 AGY_DESCRIPTIONS = {
-    "read": "Read a file in this studio. PNG files return an image; other files return text. A folder returns the names of what is in it, a folder's ending in /. Text over 8,000 bytes comes back one page at a time, each page ending with one line that gives the page number and the page count.",
+    "read": "Read a file in this studio. PNG files return an image; other files return text. A folder returns the names of what is in it, with / after each folder's name. Text over 8,000 bytes comes back one page at a time, each page ending with one line that gives the page number and the page count.",
     "log": "The painting so far: every chunk that ran, in order (paintings/lua/painting.lua). Text over 8,000 bytes comes back one page at a time, as with read.",
 }
 AGY_PAGE_PARAMS = {

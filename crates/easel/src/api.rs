@@ -1929,6 +1929,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             check_set_out(&st, &parts, "pile")?;
             let name = t.get::<Option<String>>("name")?;
             let given_sum: f32 = given.iter().map(|g| g.1).sum();
+            let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts.clone(), given_sum, medium, turps, oil_rate, name, "pile")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
             // knifing it takes the hand a while
@@ -1981,6 +1982,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
+            let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts, wsum, medium, solvent, oil, name, "mix")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);

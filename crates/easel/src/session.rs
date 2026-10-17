@@ -1658,6 +1658,31 @@ mod tests {
     }
 
     #[test]
+    fn mixing_and_adding_keep_the_oil_left_after_blotting() {
+        for drain in [false, true] {
+            let log = format!("--@ box sargent\n--@ engine 7\n{}", if drain { "--@ drain\n" } else { "" });
+            let tubes = box_for(Some(&log)).unwrap();
+            let zinc = tubes.tubes.iter().position(|tube| tube.name == "zinc white").unwrap();
+            let blotted = tubes.pile(vec![(zinc, 1.0)]).paint(-0.5).oil - 1.0;
+            let mut live = Session::with_box(32, tubes).unwrap();
+            live.run("canvas{size=120, aspect=1, linen=15, seed=21, ground={{pile={{\"lead white\", 1}}, um=65, apply=\"knife\"}}}").unwrap();
+            live.run(r#"p = pile{{"zinc white", 1}, blot=0.5}
+                q = pile{{"zinc white", 1}}
+                a = pile{{"zinc white", 1}, blot=0.5}
+                a:add{{"zinc white", 1}}
+                m = mix{{p, 1}, {q, 1}}
+                n = mix{{a, 1}, {q, 1}}"#).unwrap();
+            for (name, medium) in [("p", blotted), ("q", 0.0), ("a", blotted * 0.5), ("m", blotted * 0.5), ("n", blotted * 0.25)] {
+                let pile = live.lua.globals().get::<mlua::AnyUserData>(name).unwrap().borrow::<crate::api::PileU>().unwrap().clone();
+                let pile = crate::api::resolve(&live.st, pile);
+                assert!((pile.medium - medium).abs() < 1e-6, "{name}, drain {drain}: stored {} instead of {medium}", pile.medium);
+                assert!((pile.mix.paint(pile.medium).oil - (1.0 + medium)).abs() < 1e-6, "{name}, drain {drain}: its oil is conserved");
+                assert!((live.st.borrow().board.heap(pile.heap).unwrap().medium - medium).abs() < 1e-6, "{name}: the heap carries the effective blotting");
+            }
+        }
+    }
+
+    #[test]
     fn new_paintings_record_liquid_film_leveling_and_old_logs_keep_it_off() {
         let mut live = Session::with_box(80, box_for(None).unwrap()).unwrap();
         live.run("canvas{size=440, aspect=1, linen=15, seed=7, ground={{pile={{\"lead white\", 1}}, um=120, apply=\"knife\"}}}").unwrap();

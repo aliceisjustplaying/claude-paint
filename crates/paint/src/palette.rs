@@ -1099,6 +1099,10 @@ impl Palette {
 }
 
 impl Mixture {
+    pub fn effective_medium(&self, medium: f32) -> f32 {
+        if self.drain { medium.max(self.floor.min(1.0) - 1.0) } else { medium }
+    }
+
     /// This mixture as paint on the brush, thinned with `medium` (0..1).
     pub fn paint(&self, medium: f32) -> Paint {
         // (a negative medium is oil drawn out of the paint, blotted: more
@@ -1106,7 +1110,7 @@ impl Mixture {
         // drain switch no further than its drained floor: blotting paper
         // draws the oil by capillarity as an absorbent ground does,
         // `bristle::ground_drain`)
-        let medium = if self.drain { medium.max(self.floor.min(1.0) - 1.0) } else { medium };
+        let medium = self.effective_medium(medium);
         let k = (1.0 - medium).clamp(0.0, 1.5);
         // medium dilutes the pigment: K and S per coat fall with the pigment
         // concentration, the masstone stays; the paint flows (stiffness

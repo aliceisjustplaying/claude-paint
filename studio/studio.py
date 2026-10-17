@@ -688,7 +688,7 @@ def is_whole(look):
     if look is None:
         return False
     look = re.sub(r"mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)", "", look)
-    return not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)", look)
+    return not re.search(r"crop|mode|light|compare|hold|(?:^|, )(?:ref|mask) |(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",

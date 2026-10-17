@@ -105,7 +105,7 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(config["studio"], str(self.studio))
         self.assertEqual(config["run"], str(run))
         self.assertIn(str(REPO / "harness/painter/painter.ts"), config["first_sitting_cmd"])
-        self.assertIn("paint,look,note,status,log,read,reference,reference_list", config["first_sitting_cmd"])
+        self.assertIn("paint,look,probe,note,status,log,read,reference,reference_list", config["first_sitting_cmd"])
         self.assertIn("claude-opus-5-5", config["model"]["args"])
         self.assertIn("xhigh", config["model"]["args"])
         self.assertFalse(run.exists())

@@ -139,6 +139,72 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                     wait = (48 if wide else 12) * 60
                     self.assertEqual([call.args[2] for call in step.await_args_list], [100 + wait, 100 + (50 if wide else 30) * 60, 100 + wait])
 
+    async def test_status_replay_open_and_chunk_timeouts_say_what_landed(self):
+        loader = SourceFileLoader("landed_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        easel = module.Easel(self.studio)
+        replay = "rebuilding from the log (2 of 5 chunks)"
+        step = AsyncMock(side_effect=[(0, replay), (0, replay)])
+        with patch.object(easel, "step", step):
+            self.assertEqual(await easel.at(["status"]), replay)
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["status"]])
+
+        # an easel that has its socket but hasn't read the log yet is asked again, not opened
+        step = AsyncMock(side_effect=[(1, module.STARTING), (0, replay), (0, replay)])
+        with patch.object(easel, "step", step), patch.object(module.asyncio, "sleep", AsyncMock()):
+            self.assertEqual(await easel.at(["status"]), replay)
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["status"], ["status"]])
+
+        step = AsyncMock(side_effect=[(1, "no painting open: easel open"), module.asyncio.TimeoutError(), (0, "rebuilding from the log (1 of 4 chunks)")])
+        with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+            await easel.at(["look"])
+        self.assertEqual(str(raised.exception), "the easel is reopening the painting from its log and hasn't finished: rebuilding from the log (1 of 4 chunks). `status` shows how far it has got.")
+        self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["open"], ["status"]])
+
+        log = self.studio / "paintings/lua/painting.lua"
+        log.parent.mkdir(parents=True)
+        running = "painting a chunk (at line 3 of 9): 40 strokes and touches so far"
+        three = "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n"
+        ran, nothing = "the easel didn't answer within 12 minutes, but the chunk ran: it is in the log.", "the easel didn't answer within 12 minutes, and the chunk isn't in the log: it changed nothing."
+        for status, after, said in (
+            (running, None, f"the easel didn't answer within 12 minutes. The chunk is still running and isn't in the log yet: {running}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept."),
+            ("4 chunks · 2400px · no canvas yet", three + "\n--@ chunk 4\nx = 1\n", ran),
+            ("the chunk is in the log (chunk 4); the easel is finishing its reply, running for 12 min 1 s", three + "\n--@ chunk 4\nx = 1\n", ran),
+            ("3 chunks · 2400px · no canvas yet", None, nothing),
+            # a fresh scratch canvas: a new log, its setup and then the chunk, or the setup alone
+            ("2 chunks · 2400px · no canvas yet", "--@ chunk 1\ncanvas{}\n\n--@ chunk 2\nx = 1\n", ran),
+            ("1 chunks · 2400px · no canvas yet", "--@ chunk 1\ncanvas{}\n", nothing),
+        ):
+            log.write_text(three)
+            replies = [(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError(), (0, status)]
+
+            async def step(args, text, deadline, replies=replies, after=after):
+                if args[0] == "do" and after is not None:
+                    log.write_text(after)
+                reply = replies.pop(0)
+                if isinstance(reply, Exception):
+                    raise reply
+                return reply
+            with self.subTest(said=said), patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+                await easel.at(["do", "-"], "x = 1")
+            self.assertEqual(str(raised.exception), said)
+
+        # a chunk sent with CRLF line ends is kept with them: the log is read as written
+        log.write_text(three)
+        replies = [(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError(), (0, "4 chunks · 2400px · no canvas yet")]
+
+        async def step(args, text, deadline):
+            if args[0] == "do":
+                log.write_bytes((three + "\n--@ chunk 4\n").encode() + text.rstrip().encode() + b"\n")
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+            await easel.at(["do", "-"], "x = 1\r\ny = 2\r\n")
+        self.assertEqual(str(raised.exception), ran)
+
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))
         module = module_from_spec(spec_from_loader(loader.name, loader))

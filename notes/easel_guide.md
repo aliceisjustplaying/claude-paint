@@ -623,9 +623,11 @@ top of it.
 
 `look` shows you the canvas as it is now, with wet paint as laid. A whole
 view shows all of it, scaled down, like stepping back. A crop shows the
-canvas at its full detail, 2.4 pixels to a canvas unit, and may be at most
-500 units on either side. `crop: "x0,y0,x1,y1"` gives two opposite corners
-in canvas units, not a position and width/height.
+canvas at its full detail, 2.4 pixels to a canvas unit, up to 500 units
+(1200 pixels) on its longer side. A crop longer than that is scaled down to
+1200 pixels on its longer side, and the reply says how many pixels it shows
+to a canvas unit. `crop: "x0,y0,x1,y1"` gives two opposite corners in
+canvas units, not a position and width/height.
 
 | `look` with | shows |
 |---|---|
@@ -637,12 +639,14 @@ in canvas units, not a position and width/height.
 | `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
 | `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
 | `mode: "relief"`, `light: "45,15"` | the light from that azimuth (degrees: 0 from the right, 90 from the top) and elevation (0 to 90); the lower the light, the harsher; at 0 the lamp lies in the canvas's plane: flat paint gets only the room's light, ridges are lit on the lamp side; at 90 it is overhead and casts no shadow |
-| `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
+| `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side (up to 1600 pixels for the whole canvas, 1200 for a crop) |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
+| `mask: "sky"` | the mask the global `sky` holds, drawn over the view: its outline and a light fill (fainter where the mask is soft), in its own color, with its name in that color at the lower right |
+| `mask: "sky,water"` | several masks, each in its own color |
 
-The grid is drawn on the PNG only, like the squares ruled over a drawing
-to transfer it.
+The grid and the masks are drawn on the PNG only, like the squares ruled
+over a drawing to transfer it.
 
 `look` with `palette: true` shows the palette board instead of the canvas:
 each live heap's masstone and body paint, with a smear dragged across a
@@ -654,7 +658,7 @@ other option, and nothing on the canvas or the clock changes.
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
-| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `mask`, `palette`, `survey` or `compare`; a `crop` of at most 500 units a side). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect

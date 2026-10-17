@@ -7,7 +7,7 @@ import { HousePainter, jobDir, painterJob, paintingBlob } from "./painter.ts";
 import type { Painter, Run } from "./painter.ts";
 import { Posting } from "./posting.ts";
 import { Store } from "./store.ts";
-import { Streaming, streamLink } from "./streaming.ts";
+import { ShutdownError, Streaming, streamLink } from "./streaming.ts";
 import type { Config, IngestEvent, Intent, Job, JobRow, Post } from "./types.ts";
 
 interface Result { kind: "done" | "doneLimit" | "doneDry" | "failed"; width?: number; height?: number; alt?: string }
@@ -89,7 +89,12 @@ export class Engine {
     if (this.store.count("SELECT count(*) n FROM seen WHERE uri=?", post.uri)) return "duplicate";
     const age = now - Date.parse(post.createdAt);
     if (!Number.isFinite(age) || age < 0 || age > this.config.caps.requestAgeSeconds * 1000) return "stale";
-    const thread = await fetchThread(post.uri, this.config, this.fetcher);
+    const invalidated = () => !isStop && this.store.count("SELECT count(*) n FROM invalidated WHERE uri=?", post.uri) > 0;
+    if (invalidated()) return "invalidated";
+    let thread: Post[];
+    try { thread = await fetchThread(post.uri, this.config, this.fetcher); }
+    catch (error) { if (invalidated()) return "invalidated"; throw error; }
+    if (invalidated()) return "invalidated";
     const hydrated = thread.find(item => item.uri === post.uri);
     const root = thread.find(item => item.uri === post.rootUri);
     if (!hydrated || !root) return "thread_missing";
@@ -101,7 +106,7 @@ export class Engine {
     let accepted = false;
     const reason = this.store.transaction(() => {
       if (stopped(this.config, this.env)) return "kill_switch";
-      if (!isStop && this.store.count("SELECT count(*) n FROM invalidated WHERE uri=?", post.uri)) return "invalidated";
+      if (invalidated()) return "invalidated";
       if (this.store.count("SELECT count(*) n FROM seen WHERE uri=?", post.uri)) return "duplicate";
       for (const item of thread) this.store.db.prepare("INSERT OR IGNORE INTO observed VALUES (?, ?)").run(item.uri, post.rootUri);
       const remember = (reason: string): string => {
@@ -178,17 +183,20 @@ export class Engine {
         const canceled = () => this.store.jobs().find(item => item.id === row.id)?.status !== "running" ||
           this.store.optedOut(row.did, this.config) || this.config.blockedDids.includes(row.did);
         if (!existsSync(saved)) {
-          const run = await this.streaming.run(job, signal => work ? work(job, signal) : this.painter.run(job, signal, row.started ?? now), canceled);
-          if (stopped(this.config, this.env) || canceled()) return;
           let result: Result = { kind: "failed" };
           try {
+            const run = await this.streaming.run(job, signal => work ? work(job, signal) : this.painter.run(job, signal, row.started ?? now), canceled);
+            if (stopped(this.config, this.env) || canceled()) return;
             const painting = await this.painter.finish(job, run);
             if (painting === "dry") result = { kind: "doneDry" };
             else {
               writeFileSync(join(dir, "painting.jpg"), painting.bytes);
               result = { kind: painting.stopped ? "doneLimit" : "done", width: painting.width, height: painting.height, alt: painting.alt };
             }
-          } catch (error) { console.error(JSON.stringify({ event: "painting_failed", job: job.id, error: error instanceof Error ? error.message : "unknown" })); }
+          } catch (error) {
+            if (error instanceof ShutdownError || stopped(this.config, this.env) || canceled()) throw error;
+            console.error(JSON.stringify({ event: "painting_failed", job: job.id }));
+          }
           writeFileSync(saved, JSON.stringify(result) + "\n");
         }
         const result = JSON.parse(readFileSync(saved, "utf8")) as Result;
@@ -205,7 +213,10 @@ export class Engine {
           else this.store.addReply(job, "done", this.replyText(result.kind), now, embed, link);
         });
       } catch (error) {
-        if (this.config.streaming.enabled) this.store.db.prepare("UPDATE jobs SET status='canceled' WHERE id=? AND status='running'").run(row.id);
+        if (this.config.streaming.enabled && !(error instanceof ShutdownError) &&
+            (stopped(this.config, this.env) || this.store.optedOut(row.did, this.config) || this.config.blockedDids.includes(row.did))) {
+          this.store.db.prepare("UPDATE jobs SET status='canceled' WHERE id=? AND status='running'").run(row.id);
+        }
         throw error;
       } finally { this.working.delete(row.id); }
     }));

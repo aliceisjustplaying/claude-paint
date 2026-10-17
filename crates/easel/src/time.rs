@@ -75,6 +75,9 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R
     if let Some(c) = st.borrow().canvas.as_ref() {
         crate::frames::after_verb(c);
     }
+    if st.borrow().live {
+        crate::session::PROGRESS.verb(&st.borrow());
+    }
     Ok(r)
 }
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
-import { atEasel, directoryListing, easel, lookArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+import { atEasel, directoryListing, easel, logFind, lookArgs, probeArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
 test("painting headers set the waits before the new-painting width", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
@@ -135,6 +135,8 @@ test("look's options become the easel's arguments", () => {
 		assert.throws(() => lookArgs({ palette: true, ...options }), /palette takes no other option/);
 	}
 	assert.equal(toolWords("--survey --compare --light"), "survey compare light");
+	assert.equal(toolWords("look: --ref is a look of its own: no --survey, --compare or --hold"), "look: ref is a look of its own: no survey, compare or hold");
+	assert.deepEqual(lookArgs({ ref: "reference/motif.jpg", mode: "value" }), ["--ref", "reference/motif.jpg", "--mode", "value"]);
 	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
 	assert.deepEqual(lookArgs({ hold: "skyP", at: "400,320", mode: "value" }), ["--hold", "skyP", "--at", "400,320", "--mode", "value"]);
 });
@@ -143,6 +145,39 @@ test("a long log keeps its end and says what was left out", () => {
 	assert.equal(tail("abc", 5), "abc");
 	const t = tail("0123456789", 4);
 	assert.match(t, /^\(the first 6 characters are left out; read paintings\/lua\/painting\.lua for all of it\)\n6789$/);
+});
+
+test("log's find gives the lines that hold the text, numbered as in the file, with two lines around each", () => {
+	const log = ["--@ chunk", "canvas{}", "--@ chunk", "sky = pile{{\"lead white\", 4}}", "b = brush(\"flat\", 20)", "b:load(sky)", "x = 1", "y = 2", "w = 0", "z = 3", "q = 4", "Sky2 = mix{{sky, 1}}"].join("\n");
+	assert.equal(
+		logFind(log, "SKY", "paintings/lua/painting.lua"),
+		[
+			'3 lines of paintings/lua/painting.lua hold "SKY"',
+			"2- canvas{}",
+			"3- --@ chunk",
+			'4: sky = pile{{"lead white", 4}}',
+			'5- b = brush("flat", 20)',
+			"6: b:load(sky)",
+			"7- x = 1",
+			"8- y = 2",
+			"--",
+			"10- z = 3",
+			"11- q = 4",
+			"12: Sky2 = mix{{sky, 1}}",
+		].join("\n"),
+	);
+	assert.equal(logFind("a\nb", "a", "paintings/lua/scratch.lua"), '1 line of paintings/lua/scratch.lua holds "a"\n1: a\n2- b');
+	assert.equal(logFind(log, "mask", "paintings/lua/painting.lua"), 'no line of paintings/lua/painting.lua holds "mask"');
+	const many = logFind(Array.from({ length: 150 }, (_, i) => `m${i}`).join("\n"), "m", "paintings/lua/painting.lua");
+	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 are shown\)\n1: m0\n/);
+	assert.match(many, /\n100: m99\n101: m100\n102: m101$/);
+});
+
+test("probe takes a point or an area, one of the two", () => {
+	assert.deepEqual(probeArgs({ at: "10,20" }), ["--at", "10,20"]);
+	assert.deepEqual(probeArgs({ crop: "0,0,50,40" }), ["--crop", "0,0,50,40"]);
+	for (const p of [{}, { at: "1,2", crop: "0,0,5,5" }, { at: "" }]) assert.throws(() => probeArgs(p), /^Error: probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two$/);
+	assert.equal(toolWords("probe: --at 1,2,3: want x,y in canvas units"), "probe: at 1,2,3: want x,y in canvas units");
 });
 
 // With EASEL_BIN (a painter build of the easel): the tools' path through a real session.
@@ -164,6 +199,8 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 		assert.match(await atEasel(studio, ["note", "-"], "first note"), /noted/);
 		assert.match(readFileSync(join(studio, "notes", "journal.md"), "utf8"), /first note/);
 		assert.match(await atEasel(studio, ["status"], undefined), /^2 chunks/);
+		assert.match(await atEasel(studio, ["probe", ...probeArgs({ at: "100,100" })], undefined), /^at 100,100\ncolor \d+,\d+,\d+ · value \d+\nin gallery light \d+,\d+,\d+ · value \d+\ndrying: dry$/);
+		assert.match(await atEasel(studio, ["probe", ...probeArgs({ crop: "0,0,10,10" })], undefined), /^over 0,0,10,10, averaged over 24 x 24 pixels\n[\s\S]*\ndrying: dry 100%$/);
 		for (const blocked of [".gallery", ".relief"]) {
 			const ordinary = await atEasel(studio, ["look"], undefined);
 			const primary = resolve(studio, /^(.+\.png)(?: \(.*)?$/m.exec(ordinary)![1]);
@@ -235,6 +272,80 @@ test("an abort stops the tool's chain: nothing after it runs, and no listener is
 	await assert.rejects(atEasel(studio, ["do", "-"], "print(1)", ac.signal), /aborted/);
 	await assert.rejects(atEasel(studio, ["do", "-"], "print(1)", ac.signal), /aborted/);
 	assert.deepEqual(calls(studio), ["status"]);
+});
+
+test("status answers a replay of the log with its progress at once", async () => {
+	const studio = stubStudio("[ \"$1\" = status ] && echo 'rebuilding from the log (2 of 5 chunks)'");
+	try {
+		assert.equal(await atEasel(studio, ["status"], undefined), "rebuilding from the log (2 of 5 chunks)");
+		assert.deepEqual(calls(studio), ["status", "status"]);
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
+
+test("an easel that is starting is asked for its status again, not opened", async () => {
+	const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f asked ] || { touch asked; echo 'the easel is starting; retry in a moment'; exit 1; }
+ echo 'rebuilding from the log (2 of 5 chunks)'
+fi`);
+	try {
+		assert.equal(await atEasel(studio, ["status"], undefined), "rebuilding from the log (2 of 5 chunks)");
+		assert.deepEqual(calls(studio), ["status", "status", "status"]);
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
+
+test("an open that outlasts the tool's wait says how far the replay has got", async () => {
+	const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f opened ] || exit 1
+ echo 'rebuilding from the log (1 of 4 chunks)'; exit 0
+fi
+touch opened; sleep 30`);
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		await assert.rejects(atEasel(studio, ["look"], undefined), /^Error: the easel is reopening the painting from its log and hasn't finished: rebuilding from the log \(1 of 4 chunks\)\. `status` shows how far it has got\.$/);
+		assert.deepEqual(calls(studio), ["status", "open", "status"]);
+	} finally {
+		WAIT_MS.other = other;
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
+
+test("a chunk that outlasts the tool's wait is reported as running, in the log, or neither", async () => {
+	const doWait = WAIT_MS.do;
+	WAIT_MS.do = 300;
+	const ran = /^Error: the easel didn't answer within 0 minutes, but the chunk ran: it is in the log\.$/;
+	const nothing = /^Error: the easel didn't answer within 0 minutes, and the chunk isn't in the log: it changed nothing\.$/;
+	const cases: [string, RegExp][] = [
+		["echo 'painting a chunk (at line 3 of 9): 40 strokes and touches so far'", /^Error: the easel didn't answer within 0 minutes\. The chunk is still running and isn't in the log yet: painting a chunk \(at line 3 of 9\): 40 strokes and touches so far\. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept\.$/],
+		["printf '\\n--@ chunk 4\\nx = 1\\n' >> paintings/lua/painting.lua; echo '4 chunks · 2400px · no canvas yet'", ran],
+		["printf '\\n--@ chunk 4\\nx = 1\\n' >> paintings/lua/painting.lua; echo 'the chunk is in the log (chunk 4); the easel is finishing its reply, running for 1 s'", ran],
+		["echo '3 chunks · 2400px · no canvas yet'", nothing],
+		// a fresh scratch canvas: a new log, its setup and then the chunk, or the setup alone
+		["printf -- '--@ chunk 1\\ncanvas{}\\n\\n--@ chunk 2\\nx = 1\\n' > paintings/lua/painting.lua; echo '2 chunks · 2400px · no canvas yet'", ran],
+		["printf -- '--@ chunk 1\\ncanvas{}\\n' > paintings/lua/painting.lua; echo '1 chunks · 2400px · no canvas yet'", nothing],
+	];
+	try {
+		for (const [status, error] of cases) {
+			const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f asked ] || { touch asked; echo '1 chunks · 2400px · no canvas yet'; exit 0; }
+ ${status}; exit 0
+fi
+sleep 30`);
+			mkdirSync(join(studio, "paintings", "lua"), { recursive: true });
+			writeFileSync(join(studio, "paintings", "lua", "painting.lua"), "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n");
+			try {
+				await assert.rejects(atEasel(studio, ["do", "-"], "x = 1"), error);
+			} finally {
+				rmSync(studio, { recursive: true, force: true });
+			}
+		}
+	} finally {
+		WAIT_MS.do = doWait;
+	}
 });
 
 test("look's errors name the tool's options, not the easel's flags", () => {

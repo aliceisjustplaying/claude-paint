@@ -914,7 +914,7 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
             let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, or {}>)", paint::ENGINE, paint::engine7::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -1010,7 +1010,7 @@ fn box_list() -> String {
 /// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one engine 7,
+/// engine version the painting is painted with: a new one engine 8,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
 /// (`LIMBS_MARK`), and likewise for the blender's feather
@@ -1019,7 +1019,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
-        b.engine = paint::engine7::ENGINE;
+        b.engine = paint::REACH_END;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
         b.blend_feather = true;
@@ -1033,12 +1033,12 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let head = |mark: &str| text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == mark);
     let (knife_skim, blend_feather, brush_skim) = (head(KNIFE_SKIM_MARK), head(BLEND_FEATHER_MARK), head(BRUSH_SKIM_MARK));
-    if knife_skim && engine != paint::engine7::ENGINE {
-        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7"));
+    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7 or 8"));
     }
     for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
-        if on && engine != paint::engine7::ENGINE {
-            return Err(format!("the log's switch {mark:?} requires engine 7"));
+        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+            return Err(format!("the log's switch {mark:?} requires engine 7 or 8"));
         }
     }
     let logged = logged_box(text)?;
@@ -1153,11 +1153,30 @@ mod tests {
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
     }
 
+    /// A gesture keeps the pressure its points ask for up to its last point
+    /// (engine 8): a limb drawn to where it forks keeps its width there, and
+    /// meets the forks drawn from it. Before engine 8 the last 5% of every
+    /// gesture lifted off, drawing the limb down to a dotted point short of
+    /// the fork.
+    #[test]
+    fn a_gesture_keeps_its_width_to_its_last_point() {
+        let text = "--@ engine 8\n";
+        let mut s = Session::replay_with(2400, box_for(Some(text)).unwrap()).unwrap();
+        s.run(r#"canvas{size=300, aspect=4, linen=16, seed=3, ground={{pile={{"lead white", 4}, {"yellow ochre", 0.3}}, um=80, apply="knife"}}}"#).unwrap();
+        s.run(r#"local b = brush{kind="round", width=1.6, point=1, stiffness=0.5}
+            b:load(pile{{"bone black", 1}, {"raw umber", 1}}, 0.6)
+            b:gesture({{500, 220, 0.8}, {500, 150, 0.8}, {500, 80, 0.8}})"#).unwrap();
+        let c = s.canvas().unwrap();
+        let across = |y: f32| (-20..=20).map(|k| c.wet_um(500.0 + k as f32 * 0.1, y)).fold(0.0f32, f32::max);
+        let (body, end) = (across(90.0), across(80.5));
+        assert!(end >= 0.5 * body, "0.5 units before its end the gesture lays {end} µm, against {body} µm 10 units before it");
+    }
+
     /// A new painting's blender feathers (`paint::Canvas::with_blend_feather`)
     /// and its brushes skim (`paint::Canvas::with_brush_skim`), and its log's
     /// head says so; a replay of that log and a save of it do too, and a log
-    /// without the lines (every painting before them) does neither. Only
-    /// engine 7 has them.
+    /// without the lines (every painting before them) does neither.
+    /// Engines 7 and 8 have them.
     #[test]
     fn new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them() {
         let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
@@ -1173,23 +1192,36 @@ mod tests {
         live.canvas().unwrap().write_state(&mut saved, "").unwrap();
         let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
         assert!(restored.blend_feather() && restored.brush_skim());
-        let older = text.replace(&format!("{BLEND_FEATHER_MARK}\n"), "").replace(&format!("{BRUSH_SKIM_MARK}\n"), "");
-        for (log, on) in [(text.clone(), true), (older, false)] {
-            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
-            for chunk in parse_program(&log) {
-                replay.run(&chunk).unwrap();
+        for engine in [paint::engine7::ENGINE, paint::REACH_END] {
+            for (feather, skim) in [(false, false), (false, true), (true, false), (true, true)] {
+                let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                for (on, mark) in [(feather, BLEND_FEATHER_MARK), (skim, BRUSH_SKIM_MARK)] {
+                    if !on {
+                        log = log.replace(&format!("{mark}\n"), "");
+                    }
+                }
+                let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+                for chunk in parse_program(&log) {
+                    replay.run(&chunk).unwrap();
+                }
+                let c = replay.canvas().unwrap();
+                assert_eq!((c.blend_feather(), c.brush_skim()), (feather, skim));
+                assert_eq!(replay.program("p"), log);
+                let mut saved = Vec::new();
+                c.write_state(&mut saved, "").unwrap();
+                let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+                assert_eq!(restored.engine(), engine);
+                assert_eq!((restored.blend_feather(), restored.brush_skim()), (feather, skim));
+                assert!(restored.knife_skim());
             }
-            let c = replay.canvas().unwrap();
-            assert_eq!((c.blend_feather(), c.brush_skim()), (on, on));
-            assert_eq!(replay.program("p"), log);
         }
-        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
     }
 
     /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and
     /// its log's head says so; a replay of that log and a save of it skim
     /// too, and a log without the line (every painting before it) doesn't.
-    /// Only engine 7 skims.
+    /// Engines 7 and 8 can skim.
     #[test]
     fn new_paintings_record_the_knife_skim_and_older_logs_replay_without_it() {
         let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
@@ -1198,18 +1230,31 @@ mod tests {
         assert!(live.canvas().unwrap().knife_skim());
         let text = live.program("p");
         assert!(text.contains(&format!("\n{KNIFE_SKIM_MARK}\n")), "{text}");
+        assert!(text.contains("--@ engine 8\n"), "{text}");
         let mut saved = Vec::new();
         live.canvas().unwrap().write_state(&mut saved, "").unwrap();
-        assert!(Canvas::read_state(&mut &saved[..]).unwrap().0.knife_skim());
-        for (log, skims) in [(text.clone(), true), (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false)] {
+        let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+        assert!(restored.knife_skim());
+        assert_eq!(restored.engine(), paint::REACH_END);
+        for (log, skims) in [
+            (text.clone(), true),
+            (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+            (text.replace("--@ engine 8", "--@ engine 7"), true),
+            (text.replace("--@ engine 8", "--@ engine 7").replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+        ] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {
                 replay.run(&chunk).unwrap();
             }
             assert_eq!(replay.canvas().unwrap().knife_skim(), skims);
             assert_eq!(replay.program("p"), log);
+            let mut saved = Vec::new();
+            replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+            let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+            assert_eq!(restored.engine(), logged_engine(&log).unwrap());
+            assert_eq!(restored.knife_skim(), skims);
         }
-        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
     }
 
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log

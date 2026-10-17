@@ -312,9 +312,9 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
-        self.knife_skim &= v == crate::engine7::ENGINE;
-        self.blend_feather &= v == crate::engine7::ENGINE;
-        self.brush_skim &= v == crate::engine7::ENGINE;
+        self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
+        self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
+        self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -347,7 +347,7 @@ impl Canvas {
     }
 
     pub fn with_knife_skim(mut self, enabled: bool) -> Self {
-        self.knife_skim = enabled && self.engine == crate::engine7::ENGINE;
+        self.knife_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
 
@@ -356,7 +356,7 @@ impl Canvas {
     }
 
     pub fn with_blend_feather(mut self, enabled: bool) -> Self {
-        self.blend_feather = enabled && self.engine == crate::engine7::ENGINE;
+        self.blend_feather = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
 
@@ -365,7 +365,7 @@ impl Canvas {
     }
 
     pub fn with_brush_skim(mut self, enabled: bool) -> Self {
-        self.brush_skim = enabled && self.engine == crate::engine7::ENGINE;
+        self.brush_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
         self
     }
 

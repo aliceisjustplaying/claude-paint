@@ -11,7 +11,7 @@ empty target and TIME_WARM once built.
 ## What it runs
 
 - paint, by exact name: `tests::{fixture_matches_golden, drag_conserves_paint,
-  dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
+  a_stroke_reaches_its_end, dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
   `drying::tests::checkpoint_mid_drying_resumes_exactly`,
   `noise::tests::worley_finds_the_true_nearest_features`,
   `bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint`, and
@@ -19,6 +19,7 @@ empty target and TIME_WARM once built.
   a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend,
   a_blend_still_works_a_thin_wet_film_on_dry_paint}`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
+  `session::tests::a_gesture_keeps_its_width_to_its_last_point`,
   `session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it`,
   `session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,

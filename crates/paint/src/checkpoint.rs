@@ -474,7 +474,7 @@ impl Canvas {
             c.blend_feather = word & BLEND_FEATHER != 0;
             c.brush_skim = word & BRUSH_SKIM != 0;
             match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
-                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.knife_skim || c.blend_feather || c.brush_skim) || v == crate::engine7::ENGINE) => v,
+                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };

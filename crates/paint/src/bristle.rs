@@ -776,6 +776,9 @@ pub(crate) struct Surf {
     pub(crate) skim: f32,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
+    /// Engine 8 (`crate::REACH_END`): a stroke's mark reaches its path's
+    /// end (`drag_on`).
+    pub(crate) reach_end: bool,
 }
 // SAFETY: callers only run brushes concurrently on pixel sets that cannot
 // overlap (tiles separated by more than the largest stroke extent).
@@ -949,6 +952,7 @@ impl Canvas {
             receptive: self.receptive.as_ref().map_or(std::ptr::null(), |r| r.as_ptr()),
             skim: if self.brush_skim { BRUSH_SKIM_COATS } else { 0.0 },
             e7: crate::engine7::active(self.engine),
+            reach_end: self.engine >= crate::REACH_END,
         }
     }
 
@@ -1321,8 +1325,12 @@ pub(crate) unsafe fn drag_on(
             let target = (-dir.0 * trail + (ox * ct - oy * st) * spread, -dir.1 * trail + (ox * st + oy * ct) * spread);
             b.bend.0 += (target.0 - b.bend.0) * rate;
             b.bend.1 += (target.1 - b.bend.1) * rate;
-            // one contact point: the belly-to-tip region of the bent bristle
-            contact[bi] = Some(((root.0 + b.bend.0 * 0.6, root.1 + b.bend.1 * 0.6), reach.max(0.0)));
+            // one contact point: the belly-to-tip region of the bent bristle.
+            // At the path's end the hand lifts and the hairs straighten under
+            // it as they leave, so the last step draws the trailing tips up
+            // to the end (engine 8; before it the mark stopped short by the trail)
+            let lag = if k == nsteps && sf.reach_end { 0.0 } else { 0.6 };
+            contact[bi] = Some(((root.0 + b.bend.0 * lag, root.1 + b.bend.1 * lag), reach.max(0.0)));
         }
         // the track each hair of a pointed tuft lays (see `exchange`): the
         // touching hairs lie over and beside each other, so each covers its

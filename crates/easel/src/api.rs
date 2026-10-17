@@ -672,7 +672,12 @@ impl UserData for Brush {
             if let Some((a, z)) = ramps {
                 g = g.ramps(a, z);
             } else {
-                g = g.ramps(0.02, 0.05);
+                // engine 8: the pressure follows the points to the end, so a
+                // limb drawn to where it forks keeps its width there (a tip
+                // tapers where its own points' pressure falls); before it
+                // the last 5% lifted off whatever the points asked
+                let release = if b.st.borrow().tubes.engine >= paint::REACH_END { 0.0 } else { 0.05 };
+                g = g.ramps(0.02, release);
             }
             if let Some(or) = g_orient {
                 g = g.orient(or);

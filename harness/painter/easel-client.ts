@@ -257,6 +257,12 @@ export function lookArgs(p: { crop?: string; mode?: string; size?: number; grid?
 	return a;
 }
 
+/** The easel's `probe` arguments for the tool's `at` or `crop`: one of the two. */
+export function probeArgs(p: { at?: string; crop?: string }): string[] {
+	if (!p.at === !p.crop) throw new Error('probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two');
+	return p.at ? ["--at", p.at] : ["--crop", p.crop!];
+}
+
 /**
  * An easel `look` message in the tool's words: `--crop` is the look tool's `crop`, and so on, and
  * a crop's limit is in canvas units (1200 of the live canvas's 2400 pixels are 500 units), not pixels.
@@ -308,6 +314,27 @@ export function paintReply(reply: string): string {
 /** A status reply without the chunk count or the pixel width: `12 chunks · 2400px · <setup>` reads `<setup>`. */
 export function statusReply(reply: string): string {
 	return reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, "");
+}
+
+/**
+ * The lines of `log` that hold `find` (in any case), numbered as in the file `whole`: `12: ...`,
+ * with the two lines before and after each, `11- ...`, and `--` between passages apart.
+ */
+export function logFind(log: string, find: string, whole: string): string {
+	const lines = log.split("\n");
+	const want = find.toLowerCase();
+	const hits = lines.flatMap((line, i) => (line.toLowerCase().includes(want) ? [i] : []));
+	if (hits.length === 0) return `no line of ${whole} holds "${find}"`;
+	const hit = new Set(hits);
+	const out = [`${hits.length} ${hits.length === 1 ? "line" : "lines"} of ${whole} ${hits.length === 1 ? "holds" : "hold"} "${find}"${hits.length > 100 ? " (the first 100 are shown)" : ""}`];
+	let last = -1;
+	for (const i of hits.slice(0, 100)) {
+		const from = Math.max(i - 2, last + 1);
+		if (last >= 0 && from > last + 1) out.push("--");
+		for (let k = from; k <= Math.min(i + 2, lines.length - 1); k++) out.push(`${k + 1}${hit.has(k) ? ":" : "-"} ${lines[k]}`);
+		last = Math.max(last, i + 2);
+	}
+	return out.join("\n");
 }
 
 /** The log with its chunk lines unnumbered: `--@ chunk 12` reads `--@ chunk`. */

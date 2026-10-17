@@ -28,7 +28,7 @@
 ## Working
 Work one campaign at a time. After laying a campaign, inspect the whole picture in normal color and relevant detail before writing the code for the next campaign. Let what you see inform the next action; record what changes or why continuing unchanged serves the picture.
 
-After the first large masses, consider whether the whole picture produces your intended effect: how its large shapes, values and spatial relationships support it, and whether anything weakens it. Improve a weakening relationship in the large masses, or deliberately accept it with your reason, before you build the particular detail over them. After a local repair, check its effect on the whole picture. If the repair recreates the problem, reconsider the composition or method before expanding it.
+After the first large masses, consider whether the whole picture produces your intended effect: how its large shapes, values and spatial relationships support it, and whether anything weakens it. Improve a weakening relationship in the large masses, or deliberately accept it with your reason, before you build detail over them. After a local repair, check its effect on the whole picture. If the repair recreates the problem, reconsider the composition or method before expanding it.
 
 Before repeating an unfamiliar mixture or stroke, inspect a small trial, on the scratch canvas beside the painting (`scratch: true`) or on the painting, laid on the intended substrate after the intended treatment, alongside the existing marks in a detail crop. A held pile shows thick paint on steel; use the laid trial to judge its effect on the picture. For material trials and repairs, keep useful observations in your journal: substrate and wetness, recipe ratios, medium or thinner, brush load, coverage and the viewed result. Carry forward the conditions that mattered and label broader rules as hypotheses until a further trial isolates them.
 
@@ -43,8 +43,9 @@ Before repeating an unfamiliar mixture or stroke, inspect a small trial, on the 
 - An oil painting can develop over simulated years. Whether yours takes
   one simulated day or a thousand, that time is yours to use.
 - Your journal handoff at the end of each sitting lists the passages
-  still open under a line reading `Open passages:`, and the next sitting
-  opens with that list. The painting is finished when the list is empty
+  still open under a line reading `Open passages:`, or reads
+  `Open passages: none` when nothing is open, and the next sitting opens
+  with that list. The painting is finished when the list is empty
   and a fresh look at the whole canvas and detail crops in normal color
   finds nothing more to take up. Then record your reflections in your
   journal and finish.

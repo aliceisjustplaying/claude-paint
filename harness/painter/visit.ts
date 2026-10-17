@@ -67,7 +67,7 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		: `Read the painter's journal, ${JOURNAL}. The painter hasn't left you a note.`;
 	const passages = journalPassages(studio);
 	const list = passages
-		? `The painter keeps the passages it has left open in a list in its journal handoff. Its latest list, quoted as the painter wrote it:\n\n${quote(passages)}`
+		? `The painter's journal handoff lists the passages it has left open. Its latest list, quoted as the painter wrote it:\n\n${quote(passages)}`
 		: `The painter's journal has no \`${OPEN_PASSAGES}\` list yet.`;
 	const gets = occasion === "sitting"
 		? `It is saved in the studio as ${CRITIQUE}, and the painter's next sitting opens with it.`
@@ -77,8 +77,8 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		"Look at it as closely as you like: the whole canvas, detail crops, the value, squint, mirror, relief and gallery views and the palette. " + read,
 		list,
 		"Then tell the painter what you would fix and why, as one painter talking to another: what you see, what it does " +
-			"to the picture and what you would do about it, and which passage you would take up first, from its list or not. " +
-			"Your last message is what the painter gets. " + gets +
+			"to the picture and what you would do about it. Say which passage, if any, you would take up first, whether or not " +
+			"it is on the painter's list. Your last message is what the painter gets. " + gets +
 			" The painter decides what to do with it.",
 	].join("\n\n");
 }
@@ -165,7 +165,7 @@ export function passagesToTakeUp(studio: string, critic: boolean): string {
 	const parts = ["## Passages to take up"];
 	parts.push(passages
 		? `Your open passages, from your journal handoff (${JOURNAL}), quoted as you wrote them:\n\n${quote(passages)}`
-		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Your handoff is in your journal, quoted below.`);
+		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Any passages your last handoff left open are in your journal, quoted below under "Your journal".`);
 	const path = join(studio, CRITIQUE);
 	if (critic && existsSync(path)) {
 		parts.push(`The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. You decide what to take from them.\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);

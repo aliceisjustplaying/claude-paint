@@ -36,6 +36,13 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// A log's head line: its blender lays the wet paint it picks up only where
+/// wet paint was, and a little way past it (`paint::Canvas::with_blend_feather`).
+/// Every new painting has it.
+pub const BLEND_FEATHER_MARK: &str = "--@ blend-feather";
+/// A log's head line: a brush's paint laid on wet paint stays on top of it
+/// (`paint::Canvas::with_brush_skim`). Every new painting has it.
+pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -415,6 +422,12 @@ impl Session {
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.blend_feather {
+            let _ = writeln!(s, "{BLEND_FEATHER_MARK}");
+        }
+        if self.st.borrow().tubes.brush_skim {
+            let _ = writeln!(s, "{BRUSH_SKIM_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1000,7 +1013,8 @@ fn box_list() -> String {
 /// engine version the painting is painted with: a new one engine 7,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
-/// (`LIMBS_MARK`).
+/// (`LIMBS_MARK`), and likewise for the blender's feather
+/// (`BLEND_FEATHER_MARK`) and the brush's skim (`BRUSH_SKIM_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1008,6 +1022,8 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.engine = paint::engine7::ENGINE;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
+        b.blend_feather = true;
+        b.brush_skim = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1015,9 +1031,15 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
     }
-    let knife_skim = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == KNIFE_SKIM_MARK);
+    let head = |mark: &str| text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == mark);
+    let (knife_skim, blend_feather, brush_skim) = (head(KNIFE_SKIM_MARK), head(BLEND_FEATHER_MARK), head(BRUSH_SKIM_MARK));
     if knife_skim && engine != paint::engine7::ENGINE {
         return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7"));
+    }
+    for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
+        if on && engine != paint::engine7::ENGINE {
+            return Err(format!("the log's switch {mark:?} requires engine 7"));
+        }
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -1038,6 +1060,8 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.blend_feather = blend_feather;
+    b.brush_skim = brush_skim;
     Ok(b)
 }
 
@@ -1127,6 +1151,39 @@ mod tests {
         assert_eq!(s.program("painting"), text);
         let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) { "137bcdd02d9ccf64" } else { "2d2bc0a5b6922d4a" };
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
+    }
+
+    /// A new painting's blender feathers (`paint::Canvas::with_blend_feather`)
+    /// and its brushes skim (`paint::Canvas::with_brush_skim`), and its log's
+    /// head says so; a replay of that log and a save of it do too, and a log
+    /// without the lines (every painting before them) does neither. Only
+    /// engine 7 has them.
+    #[test]
+    fn new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        let c = live.canvas().unwrap();
+        assert!(c.blend_feather() && c.brush_skim());
+        let text = live.program("p");
+        for mark in [BLEND_FEATHER_MARK, BRUSH_SKIM_MARK] {
+            assert!(text.contains(&format!("\n{mark}\n")), "{text}");
+        }
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+        assert!(restored.blend_feather() && restored.brush_skim());
+        let older = text.replace(&format!("{BLEND_FEATHER_MARK}\n"), "").replace(&format!("{BRUSH_SKIM_MARK}\n"), "");
+        for (log, on) in [(text.clone(), true), (older, false)] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            let c = replay.canvas().unwrap();
+            assert_eq!((c.blend_feather(), c.brush_skim()), (on, on));
+            assert_eq!(replay.program("p"), log);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 7", "--@ engine 5"))).is_err());
     }
 
     /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and

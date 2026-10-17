@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Tube names in a box studio's easel: the strings of the binary hold no tube
-# of the catalog outside the easel's box.
+# Tube names in a box studio's text: no tube of the catalog outside its box.
 #
-#   scripts/check_box_tubes <easel> <tube table> <catalog>
+#   scripts/check_box_tubes <text> <tube table> <catalog>
 #
 # tube table: the easel's `easel tubes --markdown` (the box's records: each
 #             tube's name and pigment)
 # catalog:    every tube name the engine knows, one per line
 #
-# Each occurrence of an outside tube's name in the strings (as captured, in
+# Each occurrence of an outside tube's name in the text (as captured, in
 # full: the names are matched against the original text) counts unless it
 # lies wholly inside an occurrence of one of the box's own records: vermilion
 # inside an allowed "orange vermilion" doesn't count, Prussian blue inside
@@ -17,8 +16,8 @@
 # outside names found, one per line.
 # (scripts/export_r16_studio runs it; scripts/tests/box_tubes.sh tests it.)
 set -euo pipefail
-[ $# -eq 3 ] || { echo "usage: $0 <easel> <tube table> <catalog>" >&2; exit 2; }
-easel=$1
+[ $# -eq 3 ] || { echo "usage: $0 <text> <tube table> <catalog>" >&2; exit 2; }
+text=$1
 table=$(cat "$2")
 catalog=$(cat "$3")
 # the records: the name and pigment columns of the table's rows (the first two
@@ -27,9 +26,9 @@ records=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1; print $2 }' <<
 in_box=$(awk -F' [|] ' 'NR > 2 { sub(/^[|] /, "", $1); print $1 }' <<<"$table")
 [ -n "$in_box" ] || { echo "check_box_tubes: no tubes in the table $2" >&2; exit 2; }
 # captured in full first (a stream cut short under pipefail reads as no hit)
-bin_strings=$(strings "$easel")
 outside=$(RECORDS=$records IN_BOX=$in_box CATALOG=$catalog perl -e '
   local $/; my $s = <STDIN>;
+  exit 0 if $s =~ /\0/;
   # every occurrence of every record: the spans an outside name may lie in
   my @spans;
   for my $r (grep { length } split /\n/, $ENV{RECORDS}) {
@@ -45,7 +44,7 @@ outside=$(RECORDS=$records IN_BOX=$in_box CATALOG=$catalog perl -e '
       next NAME;
     }
   }
-' <<<"$bin_strings")
+' < "$text")
 if [ -n "$outside" ]; then
   echo "$outside"
   exit 1

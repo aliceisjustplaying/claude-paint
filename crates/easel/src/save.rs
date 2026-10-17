@@ -181,6 +181,8 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
     tubes.knife_skim = canvas.knife_skim();
+    tubes.blend_feather = canvas.blend_feather();
+    tubes.brush_skim = canvas.brush_skim();
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;

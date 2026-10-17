@@ -13,11 +13,15 @@ empty target and TIME_WARM once built.
 - paint, by exact name: `tests::{fixture_matches_golden, drag_conserves_paint,
   a_stroke_reaches_its_end, dry_is_idempotent_and_clears_wet, fixture_is_deterministic_across_thread_counts}`,
   `drying::tests::checkpoint_mid_drying_resumes_exactly`,
-  `noise::tests::worley_finds_the_true_nearest_features` and
-  `bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint`.
+  `noise::tests::worley_finds_the_true_nearest_features`,
+  `bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint`, and
+  the blender's feather and the brush skim: `handling::wet_edges::{a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops,
+  a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend,
+  a_blend_still_works_a_thin_wet_film_on_dry_paint}`.
 - easel, by exact name: `session::tests::engine_2_logs_replay_as_before`,
   `session::tests::a_gesture_keeps_its_width_to_its_last_point`,
   `session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it`,
+  `session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them`,
   `api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges`,
   `api::draw_rag::tests::an_older_log_sees_the_globals_it_saw` and
   `boxes::a_round_19_log_replays_as_before` (`#[ignore = "slow"]`, run by name:

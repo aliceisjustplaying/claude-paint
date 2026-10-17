@@ -767,6 +767,13 @@ pub(crate) struct Surf {
     pub(crate) laid_id: *mut u32,
     pub(crate) sweep_spacing: Option<f32>,
     pub(crate) adaptive_sweep: bool,
+    /// While a blender pass runs on a canvas with the blend feather
+    /// (`Canvas::receptive`): the share (0..1) of the paint a bristle lays or
+    /// ploughs onto each pixel that the pixel takes. Null: all of it.
+    pub(crate) receptive: *const f32,
+    /// How much (coats) of the wet paint under it a brush's paint laid on it
+    /// mixes with (`BRUSH_SKIM_COATS`); 0: all of it.
+    pub(crate) skim: f32,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
     /// Engine 8 (`crate::REACH_END`): a stroke's mark reaches its path's
@@ -846,6 +853,29 @@ impl Surf {
         }
     }
 
+    /// `add`, for paint a brush lays from its load: with `skim` it mixes
+    /// with only the top `skim` coats of the wet paint there, and the paint
+    /// below lies buried under it, out of sight.
+    #[inline]
+    pub(crate) unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+        if self.skim <= 0.0 {
+            return unsafe { self.add(i, v, lat, hide, cure) };
+        }
+        unsafe {
+            let buried = (*self.vol.add(i) - self.skim).max(0.0);
+            *self.vol.add(i) -= buried;
+            self.add(i, v, lat, hide, cure);
+            *self.vol.add(i) += buried;
+        }
+    }
+
+    /// The share (0..1) of what a bristle lays or ploughs that pixel `i`
+    /// takes (`Surf::receptive`).
+    #[inline(always)]
+    pub(crate) unsafe fn takes(&self, i: usize) -> f32 {
+        if self.receptive.is_null() { 1.0 } else { unsafe { *self.receptive.add(i) } }
+    }
+
     /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
     /// left bare (as `wait` judges it) holds no film to have one.
     #[inline]
@@ -919,6 +949,8 @@ impl Canvas {
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
             sweep_spacing: None,
             adaptive_sweep: self.adaptive_sweep,
+            receptive: self.receptive.as_ref().map_or(std::ptr::null(), |r| r.as_ptr()),
+            skim: if self.brush_skim { BRUSH_SKIM_COATS } else { 0.0 },
             e7: crate::engine7::active(self.engine),
             reach_end: self.engine >= crate::REACH_END,
         }
@@ -993,6 +1025,13 @@ impl Clip<'_> {
         }
     }
 }
+
+/// How deep (coats; about 6 µm) a brush's paint laid on wet paint mixes into
+/// it on a canvas with the brush skim (`Canvas::with_brush_skim`): the
+/// hairs lay the paint on the film, so only the film where the two meet
+/// blends, and a thin stroke keeps its own color. The brush still lifts wet
+/// paint into its load as it goes (`exchange`), so it gets dirty as before.
+pub(crate) const BRUSH_SKIM_COATS: f32 = 0.25;
 
 /// Pressure at which a pointed tuft's whole belly is down.
 pub(crate) const P_FULL: f32 = 0.85;
@@ -1580,6 +1619,8 @@ pub(crate) unsafe fn exchange(
         let mut sum_tack = 0.0f32;
         // past a fence a lifting brush lays a thinner film too (see `Clip`)
         let mut sum_k = 0.0f32;
+        // the contact weight on pixels that take what the bristle lays
+        let mut sum_r = 0.0f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
@@ -1621,6 +1662,7 @@ pub(crate) unsafe fn exchange(
                 };
                 wts[(y - y0) * bw + (x - x0)] = wt;
                 sum_w += wt;
+                sum_r += wt * sf.takes(i);
                 if !sf.dry.is_null() {
                     let p = *sf.dry.add(i);
                     sum_tack += wt * crate::drying::feel(*sf.vol.add(i), p.cure, p.sub).1;
@@ -1775,19 +1817,20 @@ pub(crate) unsafe fn exchange(
                         sf.take(i, take);
                     }
                 }
+                let takes = sf.takes(i);
                 if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                     // the share of the pixel this paint covers: its contact
                     // (a fine hair's own share of the tuft's width, where
                     // the hairs of a gathered point lie over each other)
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    sf.add(i, dep_per_w * wt, &blat, bhide, bcure);
+                    sf.lay(i, dep_per_w * wt * takes, &blat, bhide, bcure);
                     *sf.stroke.add(i) = id;
                 } else if dep_per_w > 0.0 {
                     // a thinned load lays liquid: no more than what is left
                     // of this pixel's ceiling for this stroke, shared by all
                     // its hairs (crate::thinner); the rest stays on the hair
-                    let mut d = dep_per_w * wt;
+                    let mut d = dep_per_w * wt * takes;
                     if capped {
                         let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                         d = d.min((cap - used).max(0.0));
@@ -1797,7 +1840,7 @@ pub(crate) unsafe fn exchange(
                     if d > 0.0 {
                         let cv = &mut *sf.cover.add(i);
                         *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                        sf.add(i, d * (1.0 - phi), &blat, bhide, bcure);
+                        sf.lay(i, d * (1.0 - phi), &blat, bhide, bcure);
                         if !sf.solv.is_null() {
                             *sf.solv.add(i) += d * phi * COAT_UM;
                         }
@@ -1848,7 +1891,7 @@ pub(crate) unsafe fn exchange(
                                 let j = (ty - oy) * bw_buf + tx - ox;
                                 // a clipped stroke can't push paint past its mask:
                                 // only the accepted share moves, the rest stays
-                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0);
+                                let m = m * share * clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j);
                                 // a thinned stroke adds no more wet film to the
                                 // pixel it ploughs into than its ceiling there
                                 // allows; the solvent goes with the paint
@@ -1894,8 +1937,11 @@ pub(crate) unsafe fn exchange(
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);
             br.vol = (br.vol - gone * (1.0 - phi)).max(0.0);
             br.solvent = (br.solvent - gone * phi).max(0.0);
-        } else {
+        } else if sf.receptive.is_null() {
             br.vol = (br.vol - dep_total).max(0.0);
+        } else {
+            // (what the pixels it touched didn't take stays on the hair)
+            br.vol = (br.vol - dep_total * (sum_r / sum_w).min(1.0)).max(0.0);
         }
         br.solvent += got_s;
         if got_v > 0.0 {

@@ -177,14 +177,14 @@ export async function atEasel(studio: string, args: string[], input: string | un
 		// what landed: the chunk still running (its progress), in the log, or neither
 		const s = await easel(studio, ["status"], undefined, signal, 10_000);
 		if (signal?.aborted) throw new Error("Operation aborted");
-		const minutes = `the easel didn't answer within ${Math.round(wait / 60_000)} minutes`;
-		if (s.timedOut || s.code !== 0) throw new Error(`${minutes}; \`log\` shows whether the chunk ran`);
-		const now = s.out.trim();
+		const stopped = "`paint` stopped waiting for the easel's answer";
+		if (s.timedOut || s.code !== 0) throw new Error(`${stopped}; \`log\` shows whether the chunk ran`);
+		const now = progressReply(s.out.trim());
 		if (now.startsWith("painting a chunk")) {
-			throw new Error(`${minutes}. The chunk is still running and isn't in the log yet: ${now}. \`status\` shows how far it has got while it runs; once it ends, \`log\` shows whether it was kept.`);
+			throw new Error(`${stopped}. The chunk is still running and isn't in the log yet: ${now}. \`status\` shows how far it has got while it runs; once it ends, \`log\` shows whether it was kept.`);
 		}
-		if (kept(log, before, input)) throw new Error(`${minutes}, but the chunk ran: it is in the log.`);
-		throw new Error(`${minutes}, and the chunk isn't in the log: it changed nothing.`);
+		if (kept(log, before, input)) throw new Error(`${stopped}, but the chunk ran: it is in the log.`);
+		throw new Error(`${stopped}, and the chunk isn't in the log: it changed nothing.`);
 	}
 	const text = r.out.trimEnd();
 	if (r.code !== 0) throw new Error(text || "the easel gave no answer");
@@ -313,7 +313,24 @@ export function paintReply(reply: string): string {
 
 /** A status reply without the chunk count or the pixel width: `12 chunks · 2400px · <setup>` reads `<setup>`. */
 export function statusReply(reply: string): string {
-	return reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, "");
+	return progressReply(reply.replace(/^\d+ chunks? · /, "").replace(/^\d+px · /, ""));
+}
+
+/**
+ * A running chunk's progress built only from what the painter may hear: that the chunk is painting
+ * or in the log, and the painting's own time. The easel's line numbers, mark counts, chunk number and
+ * running time are left out whatever their wording: `painting a chunk (at line 8 of 20): 100 strokes
+ * and touches so far, 5 s on the painting's clock (now day 1, 09:00), running for 12 min 3 s` reads
+ * `painting a chunk: it has taken 5 s of the painting's time so far, and the painting's clock reads day 1, 09:00`.
+ */
+export function progressReply(reply: string): string {
+	return reply
+		.replace(/^painting a chunk\b.*$/m, (line) => {
+			const spent = line.match(/(\d+(?: min \d+)? s) on the painting's clock \(now (day \d+, \d\d:\d\d)\)/);
+			if (spent) return `painting a chunk: it has taken ${spent[1]} of the painting's time so far, and the painting's clock reads ${spent[2]}`;
+			return line.startsWith("painting a chunk: starting") ? "painting a chunk: starting" : "painting a chunk";
+		})
+		.replace(/^the chunk is in the log\b.*$/m, "the chunk is in the log; the easel is finishing its reply");
 }
 
 /**

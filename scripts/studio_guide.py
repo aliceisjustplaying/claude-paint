@@ -26,7 +26,7 @@ def rewrite(text, watercolor=False, critic=False, reference_library=False, noteb
         "ask_critic": "| `ask_critic` | asks the critic to visit now. The critic looks at the painting and reads your journal and your note, then writes back what it would fix and why. Its notes are the reply and are saved as `notes/critic.md`. `note`: what you'd like the critic to know or look at; it stays in `notes/to_critic.md` for later visits until you leave another |",
         "notebook": "| `notebook` | adds to your notebook, `notebook.md`, which carries over from one painting to the next; to revise it, give the exact passage as `replaces` and `text` takes its place |",
     })
-    tools = ["paint", "look", "probe", "note", "status", "log", "read"]
+    tools = ["paint", "look"] + (["probe"] if "probe" in rows else []) + ["note", "status", "log", "read"]
     if reference_library:
         tools += ["reference", "reference_list"]
     if critic:

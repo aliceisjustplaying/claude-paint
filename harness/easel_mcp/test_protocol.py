@@ -185,6 +185,21 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                 await easel.at(["do", "-"], "x = 1")
             self.assertEqual(str(raised.exception), said)
 
+        # a chunk sent with CRLF line ends is kept with them: the log is read as written
+        log.write_text(three)
+        replies = [(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError(), (0, "4 chunks · 2400px · no canvas yet")]
+
+        async def step(args, text, deadline):
+            if args[0] == "do":
+                log.write_bytes((three + "\n--@ chunk 4\n").encode() + text.rstrip().encode() + b"\n")
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        with patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+            await easel.at(["do", "-"], "x = 1\r\ny = 2\r\n")
+        self.assertEqual(str(raised.exception), ran)
+
     async def test_background_display_paths_are_not_renamed(self):
         loader = SourceFileLoader("display_test_server", str(SERVER))
         module = module_from_spec(spec_from_loader(loader.name, loader))

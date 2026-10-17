@@ -147,7 +147,9 @@ STARTING = "the easel is starting; retry in a moment"
 
 def log_text(log):
     try:
-        return log.read_text()
+        # as written: the easel keeps a chunk's own line ends, CRLF included
+        with open(log, newline="") as f:
+            return f.read()
     except OSError:
         return ""
 

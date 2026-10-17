@@ -12,7 +12,7 @@
  * critic's sessions, a copy of every visit's notes and of every note the painter left, and its log.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { studioPath } from "./easel-client.ts";
 import { JOURNAL } from "./journal.ts";
@@ -71,14 +71,38 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 	].join("\n\n");
 }
 
-/** pi's arguments for a visit; here is this folder. */
-export function criticArgs(studio: string, critic: Critic, occasion: Occasion, here = import.meta.dirname): string[] {
+/** pi's arguments for a visit; sessions is the visit's own session folder, here is this folder. */
+export function criticArgs(studio: string, critic: Critic, occasion: Occasion, sessions: string, here = import.meta.dirname): string[] {
 	return ["--print", "--no-extensions", "-e", join(here, "critic.ts"), "--system-prompt", join(here, "critic_system_prompt.md"),
 		"--tools", "look,read", "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve", "--no-mcp",
-		"--session-dir", join(critic.dir, "sessions"), ...critic.args, visitMessage(studio, occasion)];
+		"--session-dir", sessions, ...critic.args, visitMessage(studio, occasion)];
 }
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
+
+/**
+ * The visit's reply from its session: the last assistant message that is text with no pending tool
+ * call (the house runner's session_reply). On the Anthropic/pi-black path pi --print has left stdout
+ * empty while the session kept the text (notes/handoff-2026-10-02.md), so the session comes first.
+ */
+export function sessionReply(sessions: string): string | undefined {
+	if (!existsSync(sessions)) return undefined;
+	for (const f of readdirSync(sessions).filter((f) => f.endsWith(".jsonl")).sort().reverse()) {
+		for (const line of readFileSync(join(sessions, f), "utf8").split("\n").reverse()) {
+			let m: { role?: string; stopReason?: string; content?: { type?: string; text?: string }[] } | undefined;
+			try {
+				m = JSON.parse(line).message;
+			} catch {
+				continue;
+			}
+			if (m?.role !== "assistant" || m.stopReason === "error" || m.stopReason === "aborted" || !Array.isArray(m.content)) continue;
+			if (m.content.some((p) => p.type === "toolCall")) continue;
+			const text = m.content.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n").trim();
+			if (text) return text;
+		}
+	}
+	return undefined;
+}
 
 /** Keep the painter's note to the critic (ask_critic's note) for this and later visits. */
 export function leaveNote(studio: string, critic: Critic, note: string): void {
@@ -91,9 +115,10 @@ export function leaveNote(studio: string, critic: Critic, note: string): void {
 export async function visit(studio: string, critic: Critic, occasion: Occasion, signal?: AbortSignal, pi = "pi"): Promise<string> {
 	mkdirSync(critic.dir, { recursive: true });
 	const started = stamp();
+	const sessions = join(critic.dir, "sessions", started);
 	const { code, out, err } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
-		const p = spawn(pi, criticArgs(studio, critic, occasion), { cwd: studio, stdio: ["ignore", "pipe", "pipe"], detached: true });
+		const p = spawn(pi, criticArgs(studio, critic, occasion, sessions), { cwd: studio, stdio: ["ignore", "pipe", "pipe"], detached: true });
 		const kill = () => {
 			try {
 				process.kill(-p.pid!, "SIGTERM");
@@ -111,7 +136,7 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	});
 	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: exit ${code}, ${out.trim().length} characters\n${err}`);
 	if (signal?.aborted) throw new Error("Operation aborted");
-	const reply = out.trim();
+	const reply = (code === 0 ? sessionReply(sessions) : undefined) ?? out.trim();
 	if (code !== 0 || !reply) throw new Error(`the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}`);
 	const notes = `${HEADER[occasion]}\n\n${reply}\n`;
 	writeFileSync(join(studio, CRITIQUE), notes);

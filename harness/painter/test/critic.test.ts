@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { criticArgs, criticFromEnv, criticReadable, sittingCritique, visit, visitMessage } from "../visit.ts";
+import { criticArgs, criticFromEnv, criticReadable, sessionReply, sittingCritique, visit, visitMessage } from "../visit.ts";
 
 const HERE = join(import.meta.dirname, "..");
 
@@ -40,9 +40,9 @@ test("a visit's message says what there is to read and where the notes go", () =
 	assert.match(visitMessage(s, "sitting"), /just ended a sitting[\s\S]*The painter hasn't left you a note\.[\s\S]*next sitting opens with it/);
 	writeFileSync(join(s, "notes/to_critic.md"), "the sky?\n");
 	assert.match(visitMessage(s, "asked"), /asked you to visit[\s\S]*its note to you, notes\/to_critic\.md\.[\s\S]*as soon as you finish/);
-	const args = criticArgs(s, { args: ["--model", "m"], dir: "/c" }, "asked", "/h");
+	const args = criticArgs(s, { args: ["--model", "m"], dir: "/c" }, "asked", "/c/sessions/v", "/h");
 	assert.deepEqual(args.slice(0, 12), ["--print", "--no-extensions", "-e", "/h/critic.ts", "--system-prompt", "/h/critic_system_prompt.md", "--tools", "look,read", "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]);
-	assert.deepEqual(args.slice(-4, -1), ["/c/sessions", "--model", "m"]);
+	assert.deepEqual(args.slice(-4, -1), ["/c/sessions/v", "--model", "m"]);
 });
 
 test("a visit writes the critic's notes to the studio and keeps a copy; a failed one changes nothing", async () => {
@@ -62,6 +62,20 @@ test("a visit writes the critic's notes to the studio and keeps a copy; a failed
 	assert.equal(sittingCritique(studio()), "");
 });
 
+test("a visit's reply comes from its session when pi printed nothing", async () => {
+	const s = studio();
+	const dir = scratch("critic-session-");
+	const quiet = join(dir, "quiet-pi");
+	// a pi that saves the reply in its session (--session-dir is the argument after it) and prints nothing
+	writeFileSync(quiet, `#!/bin/sh
+while [ "$1" != "--session-dir" ]; do shift; done
+mkdir -p "$2"
+printf '%s\\n' '{"message":{"role":"assistant","content":[{"type":"toolCall","name":"look"}]}}' '{"message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"Lift the sky."}]}}' '{"message":{"role":"assistant","stopReason":"error","content":[{"type":"text","text":"overloaded"}]}}' > "$2/a.jsonl"
+`, { mode: 0o755 });
+	assert.equal(await visit(s, { args: [], dir }, "sitting", undefined, quiet), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
+	assert.equal(sessionReply(join(dir, "missing")), undefined);
+});
+
 test("the critic visits at the end of a sitting, and the next sitting opens with its notes", () => {
 	const tmp = process.env.TMPDIR;
 	assert.ok(tmp, "set TMPDIR to a scratch directory");
@@ -78,7 +92,7 @@ test("the critic visits at the end of a sitting, and the next sitting opens with
 	const requests = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
 	assert.deepEqual(requests.map((r) => r.find((m) => m.role === "user")!.text.slice(0, 40)), ["Your brief is in BRIEF.md.", "The painter has just ended a sitting at "]);
 	assert.equal(readFileSync(join(s, "notes/critic.md"), "utf8"), "From the critic's visit at the end of a sitting:\n\ndone\n");
-	assert.equal(readdirSync(join(dir, "critic/sessions")).length, 1);
+	assert.equal(readdirSync(join(dir, "critic/sessions")).length, 1);   // one visit, its own session folder
 	assert.equal(readdirSync(join(dir, "sessions")).length, 1);   // the critic's session isn't among the painter's
 	writeFileSync(out, "");
 	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1" });

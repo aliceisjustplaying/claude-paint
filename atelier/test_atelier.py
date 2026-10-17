@@ -51,7 +51,10 @@ def world(tmp_path, monkeypatch):
             Image.new("RGB", (240, 150), "teal").save(command[2])
             Path(command[2]).with_suffix(".lua").write_text("the finished log")
             save = Path(command[1]).parents[2] / "out/easel/painting/live.ckpt"
-            save.rename(save.with_name("live.ckpt.zst"))
+            if save.exists():
+                save.rename(save.with_name("live.ckpt.zst"))
+            else:
+                assert save.with_name("live.ckpt.zst").exists()
             return done()
         if name == "replay_easel":
             return done("/replay/easel\n")
@@ -199,6 +202,48 @@ def test_a_failed_replay_check_hangs_nothing(world):
         world.finish(OPUS)
     assert not (world.home(OPUS) / "cards").exists()
     assert len(world.on_easel(OPUS)) == 1
+
+
+@pytest.mark.parametrize("failure", ["walls", "history", "commit", "card"])
+def test_interrupted_finish_can_be_retried(world, monkeypatch, failure):
+    world.start(OPUS, prepare=True)
+    work, folder = painted(world, OPUS)
+    home = world.home(OPUS)
+    real_write = A.write
+
+    def fail(*args):
+        raise OSError("interrupted finish")
+
+    def write(path, data):
+        if path == home / ("walls/list.md" if failure == "walls" else "cards/001.json"):
+            fail()
+        return real_write(path, data)
+
+    with monkeypatch.context() as patch:
+        if failure in ("walls", "card"):
+            patch.setattr(A, "write", write)
+        else:
+            patch.setattr(world, failure, fail)
+        with pytest.raises(OSError, match="interrupted finish"):
+            world.finish(OPUS)
+
+    assert not (home / "cards/001.json").exists()
+    assert world.on_easel(OPUS) == [work]
+    with pytest.raises(A.Refused, match="painting 1 hasn't hung"):
+        world.start(OPUS, prepare=True)
+    assert world.finish(OPUS) == work
+    card = json.loads((home / "cards/001.json").read_text())
+    assert card["number"] == 1
+    assert (home / "walls/list.md").read_text() == A.render_walls([card])
+    assert (work / "journal.md").read_bytes() == (folder / "notes/journal.md").read_bytes()
+    assert (work / "painting.lua").read_bytes() == (folder / "paintings/lua/painting.lua").read_bytes()
+    assert json.loads((work / "manifest.json").read_text())["finished"] == card["finished"]
+    record = Path("stillwet-runs/atelier/studios") / OPUS / "cards/001.json"
+    committed = subprocess.run(["git", "-C", str(world.data), "show", f"HEAD:{record}"], capture_output=True, text=True, check=True)
+    assert json.loads(committed.stdout) == card
+    assert world.on_easel(OPUS) == []
+    with pytest.raises(A.Refused, match="no painting on the easel"):
+        world.finish(OPUS)
 
 
 def test_walls_list_without_a_title():

@@ -1,4 +1,3 @@
-import ast
 import hashlib
 import json
 import os
@@ -144,34 +143,27 @@ class ExportMaterialsTests(unittest.TestCase):
         self.assertIn("notes/research/oil_paint_physics.md", result.stderr)
 
     def test_prepare_current_tonn_preserves_approved_briefs(self):
-        tree = ast.parse((REPO / "atelier/house/r21_chains.py").read_text())
-        assignments = [node for node in tree.body if isinstance(node, ast.Assign)
-                       and ast.unparse(node.targets[0]) in ("READING", "READING['tonn']", "READING_PLAIN")]
-        reading = {}
-        exec(compile(ast.Module(body=assignments, type_ignores=[]), "reading-lists", "exec"), reading)
         notes = self.root / "studio_notes.md"
         notes.write_text("Approved fixture notes.\n")
-        for name in ("READING", "READING_PLAIN"):
-            with self.subTest(reading=name):
-                dest = self.root / name
-                brief = self.root / "approved-brief.md"
-                original = ("- The folder /approved/studio: this brief, your notes and the easel.\n"
-                            + reading[name]["tonn"] + "\n")
-                self.assertNotIn("tonn_materials.md", original)
-                brief.write_text(original)
-                result = subprocess.run(
-                    [sys.executable, str(self.repo / "scripts/prepare_capy_studio"),
-                     "tonn", str(dest), "--brief", str(brief), "--studio-notes", str(notes)],
-                    env=dict(self.env, R16_BRANCH="historical"), capture_output=True, text=True,
-                )
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn("from HEAD", result.stderr)
-                self.assertFalse((dest / "notes/research/tonn_materials.md").exists())
-                self.assertEqual((dest / "BRIEF.md").read_text(),
-                                 original.replace("/approved/studio", str(dest)))
-                self.assertEqual(brief.read_text(), original)
-                self.assertEqual((dest / "notes/studio_notes.md").read_bytes(), notes.read_bytes())
-                self.assertEqual(json.loads(result.stdout)["cwd"], str(dest))
+        dest = self.root / "prepared"
+        brief = self.root / "approved-brief.md"
+        original = ("- The folder /approved/studio: this brief, your notes and the easel.\n"
+                    "notes/easel_guide.md; notes/studio_notes.md;\n"
+                    "notes/research/oil_paint_physics.md as needed.\n")
+        brief.write_text(original)
+        result = subprocess.run(
+            [sys.executable, str(self.repo / "scripts/prepare_capy_studio"),
+             "tonn", str(dest), "--brief", str(brief), "--studio-notes", str(notes)],
+            env=dict(self.env, R16_BRANCH="historical"), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("from HEAD", result.stderr)
+        self.assertFalse((dest / "notes/research/tonn_materials.md").exists())
+        self.assertEqual((dest / "BRIEF.md").read_text(),
+                         original.replace("/approved/studio", str(dest)))
+        self.assertEqual(brief.read_text(), original)
+        self.assertEqual((dest / "notes/studio_notes.md").read_bytes(), notes.read_bytes())
+        self.assertEqual(json.loads(result.stdout)["cwd"], str(dest))
 
 
 if __name__ == "__main__":

@@ -243,7 +243,13 @@ impl Session {
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
         let skip = self.prelude.as_ref().unwrap().1.clone();
-        let heap: Table = snap_f.call((skip, self.lua.globals(), strings))?;
+        let sr = &self._serials;
+        sr.uncapped.set(true);
+        sr.marking.set(true);
+        let heap = snap_f.call::<Table>((skip, self.lua.globals(), strings));
+        sr.marking.set(false);
+        sr.uncapped.set(false);
+        let heap = heap?;
         let mut s = self.st.borrow_mut();
         let brushes = s.live_brushes().into_iter().map(|b| {
             let h = b.borrow().clone();
@@ -264,7 +270,11 @@ impl Session {
     /// still differ in contents, traversal order or raw length after restoration (see `stale`).
     fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
-        let mismatches = restore_f.call::<usize>(snap.heap.clone())?;
+        // not marking: what restore makes is the painting's again
+        self._serials.uncapped.set(true);
+        let mismatches = restore_f.call::<usize>(snap.heap.clone());
+        self._serials.uncapped.set(false);
+        let mismatches = mismatches?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -337,6 +347,7 @@ impl Session {
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
+        self._serials.capped.set(false);
         // Everything that can fail before the chunk is kept is inside this guard: the chunk,
         // prelude.lua's check, putting its hand time on the clock and reading the globals it
         // left. A failure anywhere in it is a failed chunk, rolled back below.
@@ -356,6 +367,10 @@ impl Session {
             Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
             Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
+        let globals = if self._serials.capped.get() { None } else { globals };
+        if fail.is_none() && self._serials.capped.get() {
+            fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));
+        }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
         // below reinstates the deadline because it can run Lua work.
@@ -652,14 +667,41 @@ fn describe(v: &Value) -> String {
 /// are also listed by address.
 pub struct Serials {
     next: Cell<i64>,
+    /// bytes the state holds now, headers included; past LUA_MAX_BYTES an
+    /// allocation fails and Lua raises "not enough memory"
+    used: Cell<usize>,
+    cap: Cell<usize>,
+    /// bytes of `used` in blocks the pre-chunk snapshot made (marked `SNAP`),
+    /// counted as they are freed or resized: the cap leaves them out, so a
+    /// chunk has the room a replay (which takes no snapshot) has
+    held: Cell<usize>,
+    /// while the easel snapshots or restores: no cap, so a painting the cap
+    /// allowed can always be snapshotted and a failed chunk always put back
+    uncapped: Cell<bool>,
+    /// while the easel snapshots: new blocks are the snapshot's (`SNAP`)
+    marking: Cell<bool>,
+    /// set when the cap refused an allocation; `run` fails a chunk that hit
+    /// it, even one that caught the error or that Lua's emergency collection
+    /// recovered from, since only a live session's heap holds its snapshot
+    capped: Cell<bool>,
     /// userdata and thread blocks: user address -> (serial, size)
     inner: RefCell<BTreeMap<usize, (i64, usize)>>,
 }
 
 const HDR: usize = 16;
+/// The most a session's Lua state may hold. A chunk that builds something huge
+/// (a giant string.rep, a loop filling a table) then errors and is rolled back
+/// instead of swapping the machine. The snapshot a live session takes before
+/// each chunk is outside it (`Serials::held`), so a live painting can hold
+/// up to about twice this. Even so live and replayed heaps differ a little,
+/// so a chunk that meets the cap fails however it handles that
+/// (`Serials::capped`): no kept chunk ever met it.
+const LUA_MAX_BYTES: usize = 2 << 30;
 const PLAIN: i64 = 0;
 const AT_START: i64 = 1;
 const LISTED: i64 = 2;
+/// With the kind: a block made while the easel snapshotted (`Serials::held`).
+const SNAP: i64 = 4;
 
 fn layout(size: usize) -> Layout {
     // SAFETY (for callers): 16 is a power of two and Lua's sizes are far from isize::MAX
@@ -677,10 +719,21 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             if nsize == 0 {
                 return std::ptr::null_mut();
             }
+            if nsize.saturating_add(HDR) > h.room() {
+                h.capped.set(true);
+                return std::ptr::null_mut();
+            }
             let b = std::alloc::alloc(layout(nsize));
             if b.is_null() {
                 return b as *mut c_void;
             }
+            h.used.set(h.used.get() + nsize + HDR);
+            let snap = if h.marking.get() {
+                h.held.set(h.held.get() + nsize + HDR);
+                SNAP
+            } else {
+                0
+            };
             // a new object: `osize` is its type
             let kind = match osize as i32 {
                 LUA_TTABLE | LUA_TFUNCTION => AT_START,
@@ -694,7 +747,7 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             }
             let hd = b as *mut i64;
             *hd = n;
-            *hd.add(1) = kind;
+            *hd.add(1) = kind | snap;
             let p = b.add(HDR);
             if kind == LISTED {
                 h.inner.borrow_mut().insert(p as usize, (n, nsize));
@@ -702,20 +755,44 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             return p as *mut c_void;
         }
         let b = (ptr as *mut u8).sub(HDR);
+        let kind = *(b as *const i64).add(1);
         if nsize == 0 {
-            if *(b as *const i64).add(1) == LISTED {
+            if kind & !SNAP == LISTED {
                 h.inner.borrow_mut().remove(&(ptr as usize));
             }
             std::alloc::dealloc(b, layout(osize));
+            h.used.set(h.used.get().saturating_sub(osize + HDR));
+            if kind & SNAP != 0 {
+                h.held.set(h.held.get().saturating_sub(osize + HDR));
+            }
+            return std::ptr::null_mut();
+        }
+        if nsize > osize && nsize - osize > h.room() {
+            h.capped.set(true);
             return std::ptr::null_mut();
         }
         // only arrays and buffers are reallocated, never objects
         let nb = std::alloc::realloc(b, layout(osize), nsize + HDR);
-        if nb.is_null() { nb as *mut c_void } else { nb.add(HDR) as *mut c_void }
+        if nb.is_null() {
+            return nb as *mut c_void;
+        }
+        h.used.set(h.used.get().saturating_sub(osize) + nsize);
+        if kind & SNAP != 0 {
+            h.held.set(h.held.get().saturating_sub(osize) + nsize);
+        }
+        nb.add(HDR) as *mut c_void
     }
 }
 
 impl Serials {
+    /// What the cap still allows a chunk to allocate.
+    fn room(&self) -> usize {
+        if self.uncapped.get() {
+            return usize::MAX;
+        }
+        self.cap.get().saturating_sub(self.used.get().saturating_sub(self.held.get()))
+    }
+
     /// `id(v)`: the serial of a table, closure, userdata or thread; nil for
     /// values and light C functions (library functions have no block).
     fn id_fn(&self, lua: &Lua) -> mlua::Result<Function> {
@@ -745,7 +822,7 @@ impl Serials {
 /// (see `Serials`).
 fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
-    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()) });
+    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap: Cell::new(LUA_MAX_BYTES), held: Cell::new(0), uncapped: Cell::new(false), marking: Cell::new(false), capped: Cell::new(false) });
     unsafe {
         let ud = &*serials as *const Serials as *mut c_void;
         let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
@@ -1288,5 +1365,73 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+}
+
+/// The Lua memory cap (LUA_MAX_BYTES, Serials::held, Serials::capped).
+#[cfg(all(test, tube_box))]
+mod memory_cap_tests {
+    use super::*;
+
+    const W: usize = 160;
+
+    const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
+
+    /// A chunk that asks for more memory than the cap errors and leaves the
+    /// session as it was, instead of swapping the machine. 8 GB is past
+    /// LUA_MAX_BYTES, a constant, so this never allocates it.
+    #[test]
+    fn a_runaway_allocation_errors() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run("x = string.rep('x', 8 * 1024 * 1024 * 1024)").unwrap_err();
+        assert!(e.contains("memory"), "{e}");
+        s.run("assert(x == nil)").unwrap();
+    }
+
+    /// A chunk that catches the cap's error still fails: a live heap holds a
+    /// snapshot a replay's doesn't, so what the cap refused live a replay
+    /// might allow, and the chunk would paint differently there.
+    #[test]
+    fn a_caught_runaway_allocation_still_fails_the_chunk() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run("ok = pcall(string.rep, 'x', 8 * 1024 * 1024 * 1024)").unwrap_err();
+        assert!(e.contains("memory"), "{e}");
+        assert!(!s.globals.contains_key("ok"), "the failed chunk's globals were kept");
+        s.run("assert(ok == nil)").unwrap();
+        assert_eq!(s.log.len(), 2, "the failed chunk was logged");
+    }
+
+    /// A painting that fits under the cap can still be snapshotted, so the
+    /// next chunk runs (and can let the big table go) though heap and
+    /// snapshot together are past the cap.
+    #[test]
+    fn a_painting_near_the_cap_can_still_paint() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run("t = {} for i = 1, 2000000 do t[i] = i end").unwrap();
+        s._serials.cap.set(s._serials.used.get() + (1 << 20));
+        s.run("assert(#t == 2000000) t = nil").unwrap();
+        s.run("u = 1").unwrap();
+        assert_eq!(s.log.len(), 4);
+    }
+
+    /// The snapshot's credit is the snapshot's blocks as they are now: its
+    /// temporaries, once collected, are no longer credited, and none is left
+    /// once the snapshot is gone.
+    #[test]
+    fn the_snapshot_credit_follows_its_blocks() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run("t = {} for i = 1, 20000 do t[i] = {i} end").unwrap();
+        let snap = s.snap().unwrap();
+        let taken = s._serials.held.get();
+        assert!(taken > 0);
+        s.lua.gc_collect().unwrap();
+        assert!(s._serials.held.get() < taken, "the snapshot's collected temporaries are still credited");
+        drop(snap);
+        s.lua.gc_collect().unwrap();
+        assert_eq!(s._serials.held.get(), 0, "credit left after the snapshot is gone");
     }
 }

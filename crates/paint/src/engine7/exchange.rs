@@ -14,7 +14,7 @@
 //! - the capsule's contact list is gathered once into the thread's window,
 //!   so the second pass visits only the pixels the hair touches, with their
 //!   fluidity read once;
-//! - pickup and plough sum paint as packed 16-float vectors (volume, latent
+//! - pickup and plough sum paint as packed 21-float vectors (volume, latent
 //!   color, properties, cure, cover, solvent), which the compiler lays out
 //!   in vector registers;
 //! - the plough gathers what it moves per destination pixel and lays it
@@ -106,15 +106,17 @@ fn ramp(e0: f32, inv: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// A pixel's paint, packed (`window::PACK` layout) with volume 1.
+/// A pixel's paint, packed (`window::PACK` layout) with volume 1: its
+/// color, the properties `hd` of the paint that leaves it (`Surf::take`'s)
+/// and `cure`.
 #[inline(always)]
-unsafe fn packed(sf: &Surf, i: usize, cure: f32) -> [f32; PACK] {
+unsafe fn packed(sf: &Surf, i: usize, hd: &Prop, cure: f32) -> [f32; PACK] {
     unsafe {
-        let (l, hd) = (&*sf.lat.add(i), &*sf.hide.add(i));
+        let l = &*sf.lat.add(i);
         let mut p = [0.0f32; PACK];
         p[VOL] = 1.0;
         p[LAT0..LAT0 + LAT].copy_from_slice(l);
-        p[HIDE0..HIDE0 + 5].copy_from_slice(hd);
+        p[HIDE0..HIDE0 + hd.len()].copy_from_slice(hd);
         p[CURE] = cure;
         p
     }
@@ -387,7 +389,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let pickup = tool.pickup * (0.35 + 0.65 * spent * spent.sqrt());
 
         let film = Film::of(sf);
-        let laying = Paint7::new(sf.lean, &br.lat, br.hide, br.cure);
+        let laying = Paint7::new(sf.lean, sf.drain, &br.lat, br.hide, br.cure);
         let mut got = [0.0f32; PACK];
         let mut got_s = 0.0f32;
         let mut laid_liq = 0.0f32;
@@ -411,7 +413,6 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 };
                 if tk > 0.0 {
                     let cure = if dry { (*sf.dry.add(i)).cure } else { 0.0 };
-                    accumulate(&mut got, &packed(sf, i, cure), tk * px_area);
                     if !sf.solv.is_null() {
                         let sv = &mut *sf.solv.add(i);
                         if *sv > 0.0 {
@@ -421,7 +422,10 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                             got_s += ts / COAT_UM * px_area;
                         }
                     }
-                    sf.take(i, tk);
+                    // (the paint lifted: with the drain switch from the top
+                    // down, `bristle::take_from`; without, the film's)
+                    let hp = sf.take(i, tk);
+                    accumulate(&mut got, &packed(sf, i, &hp, cure), tk * px_area);
                 }
             }
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
@@ -461,13 +465,13 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
             let to = &throw[((px - a.0) * nx + (py - a.1) * ny < 0.0) as usize][..n_to];
-            // the source's paint per coat moved: its color, cure, the cover
-            // it brings (fine tools) and its solvent (µm), in the film's
-            // proportions (m ≤ v, so these never move more than is there)
             let sol_um = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) };
-            let mut src = packed(sf, i, if dry { (*sf.dry.add(i)).cure } else { 0.0 });
-            src[COVER] = if fine { *sf.cover.add(i) / v.max(1e-9) } else { 0.0 };
-            src[SOLV] = if sol_um > 0.0 && v > 0.0 { sol_um / v } else { 0.0 };
+            let cure = if dry { (*sf.dry.add(i)).cure } else { 0.0 };
+            let (src_solv, src_cover) = (if sol_um > 0.0 && v > 0.0 { sol_um / v } else { 0.0 }, if fine { *sf.cover.add(i) / v.max(1e-9) } else { 0.0 });
+            // where it goes and how much, before any of it leaves (`take`
+            // says what paint leaves, so it lands after)
+            let mut moves = [(0usize, 0usize, 0usize, 0.0f32); 4];
+            let mut n_moves = 0;
             let mut out_m = 0.0f32;
             for &(ddx, ddy, sh) in to {
                 let (tx, ty) = (x as isize + ddx, y as isize + ddy);
@@ -479,11 +483,11 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j));
                 let mut mm = m * sh * c.k;
                 if let Some((_, from)) = pass_film.filter(|_| mm > 0.0) {
-                    mm *= crate::bristle::film_lay(&sf, j, from, cap * c.k, id, mm * (1.0 + src[SOLV] / COAT_UM));
+                    mm *= crate::bristle::film_lay(&sf, j, from, cap * c.k, id, mm * (1.0 + src_solv / COAT_UM));
                 } else if capped && mm > 0.0 {
                     // a thinned stroke adds no more wet film to the pixel it
                     // ploughs into than its ceiling there allows
-                    let ms = src[SOLV] / COAT_UM * mm;
+                    let ms = src_solv / COAT_UM * mm;
                     let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
                     let room = (cap - used).max(0.0);
                     let f = if mm + ms > room { room / (mm + ms) } else { 1.0 };
@@ -494,16 +498,30 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 if mm <= 0.0 {
                     continue;
                 }
-                accumulate(&mut c.a, &src, mm);
+                moves[n_moves] = (tx, ty, j, mm);
+                n_moves += 1;
                 out_m += mm;
             }
             if out_m > 0.0 {
                 if sol_um > 0.0 {
-                    let left = (sol_um - src[SOLV] * out_m).max(0.0);
+                    let left = (sol_um - src_solv * out_m).max(0.0);
                     *sf.solv.add(i) = left;
                     sf.film_give(i, (sol_um - left) / COAT_UM);
                 }
-                sf.take(i, out_m);
+                // the source's paint per coat moved: its color, the paint
+                // that leaves (with the drain switch from the top down, all
+                // of the contact's plough off it at once: as much oil as
+                // engine 5's take per target, shared evenly among them), the
+                // cure it had, the cover it brings (fine tools) and its
+                // solvent (µm), in the film's proportions (m ≤ v, so these
+                // never move more than is there)
+                let hp = sf.take(i, out_m);
+                let mut src = packed(sf, i, &hp, cure);
+                src[COVER] = src_cover;
+                src[SOLV] = src_solv;
+                for &(tx, ty, j, mm) in &moves[..n_moves] {
+                    accumulate(&mut win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands")).a, &src, mm);
+                }
                 ploughed += out_m * px_area;
             }
         }
@@ -521,8 +539,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;
             }
-            let mut hide: Prop = [0.0; 5];
-            for k in 0..5 {
+            let mut hide: Prop = [0.0; 10];
+            for k in 0..hide.len() {
                 hide[k] = c.a[HIDE0 + k] * inv;
             }
             if c.a[SOLV] > 0.0 {
@@ -530,7 +548,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             let cj = &mut *sf.cover.add(j);
             *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + c.a[COVER]).min(1.0) } else { 1.0 };
-            film.add(j, m, &Paint7::new(sf.lean, &lat, hide, c.a[CURE] * inv));
+            film.add(j, m, &Paint7::new(sf.lean, sf.drain, &lat, hide, c.a[CURE] * inv));
         }
         let had = br.vol + br.solvent;
         if phi > 0.0 || pass_film.is_some() {
@@ -548,8 +566,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             for k in 0..LAT {
                 got_l[k] = got[LAT0 + k] / got_v;
             }
-            let mut got_h: Prop = [0.0; 5];
-            for k in 0..5 {
+            let mut got_h: Prop = [0.0; 10];
+            for k in 0..got_h.len() {
                 got_h[k] = got[HIDE0 + k] / got_v;
             }
             br.cure = mix_cure(br.cure, br.vol, got[CURE] / got_v, got_v);
@@ -558,5 +576,162 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
         Some(AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::bristle::{Gesture, Held, Tool};
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+    use crate::mask::Mask;
+    use crate::surface::COAT_UM;
+    use crate::wet::{LAT, Paint};
+
+    /// 400 px across 150 mm: r40's pitch (900 mm at 2400 px).
+    fn canvas(engine: u32) -> Canvas {
+        Canvas::new(400, 1.25, hex("#e8e0d0")).with_size_mm(150.0).with_engine(engine)
+    }
+
+    /// A wet film of `coats` of `paint` over the units rectangle `r`.
+    fn film(c: &mut Canvas, r: (f32, f32, f32, f32), paint: Paint, coats: f32) {
+        let (w, s) = (c.f.w, c.f.scale);
+        let (lat, prop) = (paint.latent(), paint.prop());
+        for y in (r.1 * s) as usize..((r.3 * s) as usize).min(c.f.h) {
+            for x in (r.0 * s) as usize..((r.2 * s) as usize).min(w) {
+                let i = y * w + x;
+                c.wet.vol[i] = coats;
+                c.wet.lat[i] = lat;
+                c.wet.hide[i] = prop;
+            }
+        }
+        c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
+    }
+
+    /// Paint, each pigment and solvent on the canvas and in the brush,
+    /// in the brush's units (units² × coats).
+    fn totals(c: &Canvas, held: &Held) -> (f64, [f64; LAT], f64) {
+        let pa = 1.0 / (c.f.scale as f64 * c.f.scale as f64);
+        let (mut v, mut p, mut s) = (0.0f64, [0.0f64; LAT], 0.0f64);
+        for i in 0..c.wet.vol.len() {
+            let vi = c.wet.vol[i] as f64 * pa;
+            v += vi;
+            for k in 0..LAT {
+                p[k] += c.wet.lat[i][k] as f64 * vi;
+            }
+            s += c.wet.solv.get(i).copied().unwrap_or(0.0) as f64 / COAT_UM as f64 * pa;
+        }
+        for b in &held.bristles {
+            v += b.vol as f64;
+            for k in 0..LAT {
+                p[k] += b.lat[k] as f64 * b.vol as f64;
+            }
+            s += b.solvent as f64;
+        }
+        (v, p, s)
+    }
+
+    fn assert_conserved(before: (f64, [f64; LAT], f64), after: (f64, [f64; LAT], f64), what: &str) {
+        let rel = |a: f64, b: f64| (a - b).abs() / a.abs().max(b.abs()).max(1e-9);
+        assert!(rel(before.0, after.0) < 2e-4, "{what}: paint {} -> {}", before.0, after.0);
+        for k in 0..LAT {
+            assert!((before.1[k] - after.1[k]).abs() < 2e-4 * before.0.max(1e-9), "{what}: pigment {k} {} -> {}", before.1[k], after.1[k]);
+        }
+        assert!(rel(before.2, after.2) < 2e-4 || (before.2 - after.2).abs() < 1e-9, "{what}: solvent {} -> {}", before.2, after.2);
+    }
+
+    fn assert_non_negative(c: &Canvas, held: &Held, what: &str) {
+        assert!(c.wet.vol.iter().all(|&v| v >= -1e-7 && v.is_finite()), "{what}: canvas paint below zero");
+        assert!(c.wet.solv.iter().all(|&v| v >= -1e-5 && v.is_finite()), "{what}: canvas solvent below zero");
+        assert!(held.bristles.iter().all(|b| b.vol >= 0.0 && b.solvent >= 0.0 && b.vol.is_finite()), "{what}: brush below zero");
+    }
+
+    /// One fixture: a canvas set up by `setup`, a brush, and its strokes,
+    /// painted with `engine`. Checks conservation and non-negativity of
+    /// every stroke in engine 7.
+    fn paint(engine: u32, setup: &dyn Fn(&mut Canvas), mut held: Held, strokes: &[Gesture], clip: Option<&dyn Fn(&Canvas) -> Mask>) -> (Canvas, Held) {
+        let mut c = canvas(engine);
+        setup(&mut c);
+        held = held.with_engine(engine);
+        let mask = clip.map(|f| f(&c));
+        for g in strokes {
+            let before = totals(&c, &held);
+            c.drag(&mut held, g, mask.as_ref());
+            if engine == 7 {
+                // (an absorbent ground takes oil out of the paint, in engine 5
+                // as in 7: nothing to conserve there)
+                if !c.absorb_any {
+                    assert_conserved(before, totals(&c, &held), "engine 7 stroke");
+                }
+                assert_non_negative(&c, &held, "engine 7 stroke");
+            }
+        }
+        (c, held)
+    }
+
+    /// How far apart two paintings' wet films are: the paint moved between
+    /// them over the paint there (L1).
+    fn film_gap(a: &Canvas, b: &Canvas) -> f32 {
+        let d: f64 = a.wet.vol.iter().zip(&b.wet.vol).map(|(x, y)| (x - y).abs() as f64).sum();
+        let t: f64 = a.wet.vol.iter().map(|x| x.abs() as f64).sum();
+        (d / t.max(1e-12)) as f32
+    }
+
+    fn brush_vol(h: &Held) -> f32 {
+        h.bristles.iter().map(|b| b.vol).sum()
+    }
+
+    const RED: &str = "#b8321e";
+
+    const BLUE: &str = "#203c8c";
+
+    /// Engine 5 and 7 on the same fixture: both paintings, and how far
+    /// apart their films and brushes are.
+    fn both(setup: &dyn Fn(&mut Canvas), held: impl Fn() -> Held, strokes: &[Gesture], clip: Option<&dyn Fn(&Canvas) -> Mask>) -> ((Canvas, Held), (Canvas, Held)) {
+        let five = paint(5, setup, held(), strokes, clip);
+        let seven = paint(7, setup, held(), strokes, clip);
+        (five, seven)
+    }
+
+    /// With the drain switch, on an absorbent ground (paint laid fluid, the
+    /// ground draining the film as its pigment packs, paint lifted and
+    /// ploughed from the top down): engine 7 lays, lifts, ploughs and drains
+    /// as engine 5 does, and the switch is on in both (the ground fills, a
+    /// packed layer grows).
+    #[test]
+    fn the_drain_switch_drains_as_in_engine_5() {
+        let setup = |c: &mut Canvas| {
+            *c = canvas(c.engine()).with_drain(true);
+            c.ground_finish(0.7);
+            film(c, (0.0, 0.0, 500.0, 800.0), Paint { oil: 1.3, ..Paint::body(hex(RED)) }, 0.8);
+        };
+        let strokes: Vec<Gesture> = (0..4).map(|k| Gesture::new(vec![(150.0, 200.0 + 90.0 * k as f32), (450.0, 230.0 + 90.0 * k as f32), (850.0, 190.0 + 90.0 * k as f32)])).collect();
+        let held = || {
+            let mut h = Held::new(Tool::filbert(60.0), 12);
+            h.load(Paint::body(hex(BLUE)), 1.0);
+            h
+        };
+        let ((c5, h5), (c7, h7)) = both(&setup, held, &strokes, None);
+        // the film's oil and packed paint (coats·px), and what the ground took
+        let sums = |c: &Canvas| {
+            let (mut oil, mut packed) = (0.0f64, 0.0f64);
+            for (v, hd) in c.wet.vol.iter().zip(&c.wet.hide) {
+                oil += (*v * hd[4]) as f64;
+                packed += (*v * hd[7]) as f64;
+            }
+            (oil, packed, c.absorb.iter().map(|&a| a as f64).sum::<f64>())
+        };
+        let (s5, s7) = (sums(&c5), sums(&c7));
+        let mut fresh = canvas(7).with_drain(true);
+        fresh.ground_finish(0.7);
+        let full: f64 = fresh.absorb.iter().map(|&a| a as f64).sum();
+        eprintln!("drain: oil, packed, ground left: engine 5 {s5:?}, engine 7 {s7:?} of {full}; film gap {}, brush {} vs {}", film_gap(&c5, &c7), brush_vol(&h5), brush_vol(&h7));
+        assert!(c7.drain() && s7.1 > 0.0 && s7.2 < 0.99 * full, "engine 7 drained nothing");
+        let rel = |a: f64, b: f64| (a - b).abs() / a.abs().max(1e-9);
+        assert!(rel(s5.0, s7.0) < 0.02 && rel(s5.1, s7.1) < 0.05 && rel(full - s5.2, full - s7.2) < 0.05, "{s5:?} vs {s7:?}");
+        assert!(film_gap(&c5, &c7) < 0.05);
+        assert!((brush_vol(&h5) - brush_vol(&h7)).abs() < 0.05 * brush_vol(&h5));
+        let pk = |h: &Held| h.bristles.iter().map(|b| b.hide[7]).fold(0.0f32, f32::max);
+        assert_eq!((pk(&h5), pk(&h7)), (0.0, 0.0), "paint taken up is broken up and fluid");
     }
 }

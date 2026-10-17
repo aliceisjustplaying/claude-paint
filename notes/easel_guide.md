@@ -69,9 +69,17 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   cloth there (`"raw"`), and whether paint lies on it.
 - A ground layer's `absorbent=true` (or 0..1) makes it a chalk and glue
   ground: it draws oil out of the paint laid straight on it until its pores
-  are full, so thin paint there goes lean, stiff, quick to set and matte,
-  while thick paint barely notices. Paint that has dried over it seals it.
-  An oil ground (the default) absorbs nothing and is semi-matte.
+  are full, so thin paint there goes lean, quick to set and matte, while
+  thick paint barely notices. The pigment packs from the ground up: the
+  paint above keeps its oil, its flow and its gloss until the packed layer
+  reaches the surface, and how far a thin film drains is its pigment's
+  (fine pigments keep the oil they pack with and dry semi-matte; coarse
+  ones, such as smalt, drain further and dry matte). Each box's tubes hold
+  as much oil as its period ground them with. Paint that has dried over it
+  seals it. An oil ground (the default) absorbs nothing and is semi-matte.
+  (A painting begun before the drain, whose log's head has no `--@ drain`
+  line, keeps the older ground: it draws oil from the paint just laid,
+  leaving it stiffer.)
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -120,7 +128,9 @@ little slower) or `"poppy"` (dries much slower, yellows least).
 first, which draws out that share of its own oil (0 to 0.5):
 `pile({{"<tube>", <parts>}, blot=0.3})`. Blotted paint is leaner, a little
 more opaque and much stiffer: it holds the ridges and furrows of the brush
-as it dries. A pile takes either medium or blot.
+as it dries. The paper draws no more than the pigment lets go: a paint
+already ground stiff, or of a fine pigment that holds its oil, gives up
+less than you ask. A pile takes either medium or blot.
 
 **The palette board.** Every pile is a heap on the board beside the easel.
 

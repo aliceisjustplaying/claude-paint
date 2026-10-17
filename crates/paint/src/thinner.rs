@@ -184,7 +184,7 @@ pub fn exchange_kj() -> (f32, f32) {
 /// constant. A power of two, so quarter minutes fall on it exactly.
 pub const FLOW_TICKS: u32 = 64;
 
-type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32);
+type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32, f32);
 
 #[derive(Default)]
 struct FlowScratch {
@@ -279,6 +279,16 @@ impl Canvas {
     pub(crate) fn spread(&mut self, dt: f32, solvent: &mut Vec<usize>) {
         if solvent.is_empty() { return; }
         let (w, h) = (self.f.w, self.f.h);
+        // the drain switch: paint packed on an absorbent ground
+        // (`bristle::ground_drain`) stays where it is; only the liquid above
+        // it flows, the paint in it as rich as the film's surface
+        // (`bristle::surface_oil`)
+        let drain = self.drain;
+        let packed = |wet: &crate::wet::Wet, i: usize| if drain { wet.hide[i][7].clamp(0.0, 1.0) } else { 0.0 };
+        // and paint the flow brings to a pixel is laid there as a brush lays
+        // it (`Surf::add`): fluid, and drained by the ground under it while
+        // its pores take oil, from that pixel's absorbency
+        let soaks = drain && self.engine >= 4 && self.absorb_any;
         let dx = self.px_mm();
         let timed = self.wet.clock.px.len() == w * h;
         // the mobility (mm²/min) of each pixel in the dirty box
@@ -291,7 +301,9 @@ impl Canvas {
             let fl = if timed { crate::drying::fluid(cure) } else { 1.0 };
             spread_mm2_min(s / (v + s)) * fl * thin_film((v + s) * COAT_UM)
         };
-        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i], wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
+        // (with the drain switch, of the liquid above any packed paint, which
+        // doesn't flow; the sparse set below is built from it)
+        let mob = |wet: &crate::wet::Wet, i: usize| -> f32 { mob_of(wet.vol[i] * (1.0 - packed(wet, i)), wet.solv[i] / COAT_UM, if timed { wet.clock.px[i].cure } else { 0.0 }) };
         // the largest mobility, and the box of the pixels that have any
         // (only they can give liquid; each substep reaches one pixel further)
         let wet = &self.wet;
@@ -331,6 +343,7 @@ impl Canvas {
             let (rw, rh) = (x1 - x0, y1 - y0);
             let wet = &self.wet;
             let height = &self.height;
+            let absorb = &self.absorb;
             let sparse = active.len() < rw * rh / 8;
             indices.clear();
             if sparse {
@@ -356,7 +369,9 @@ impl Canvas {
                     let (x, y) = (i % w, i / w);
                     let l = wet.vol[i] + wet.solv[i] / COAT_UM;
                     let m = mob(wet, i);
-                    if m <= 0.0 || l <= 0.0 {
+                    // (what can leave: the liquid above any packed paint)
+                    let lm = l - wet.vol[i] * packed(wet, i);
+                    if m <= 0.0 || l <= 0.0 || lm <= 0.0 {
                         return [0.0; 4];
                     }
                     let z = height[i] + l * COAT_UM;
@@ -373,8 +388,8 @@ impl Canvas {
                             }
                         }
                     }
-                    if sum > MAX_OUT * l {
-                        let f = MAX_OUT * l / sum;
+                    if sum > MAX_OUT * lm {
+                        let f = MAX_OUT * lm / sum;
                         for v in &mut q {
                             *v *= f;
                         }
@@ -405,6 +420,20 @@ impl Canvas {
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
                     let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                    let pk = packed(wet, i);
+                    if pk > 0.0 && gone > 0.0 {
+                        // the liquid left from above the packed paint, which
+                        // stays: the film's packed share grows, its oil falls
+                        // by the surface paint's
+                        let lm = l - v * pk;
+                        let (pl, sl) = (gone * v * (1.0 - pk) / lm, gone * s / lm);
+                        (pv, ps) = ((v - pl).max(0.0), (s - sl).max(0.0));
+                        if pv > 1e-9 {
+                            let top = crate::bristle::surface_oil(&hide);
+                            hide[4] = ((hide[4] * v - top * pl) / pv).max(0.0);
+                            hide[7] = (pk * v / pv).min(1.0);
+                        }
+                    }
                     let mut changed = gone > 0.0;
                     let (mut qin, mut thin) = (0.0f32, 0.0f32);
                     // from the left neighbor (its rightward flow), the right
@@ -418,25 +447,37 @@ impl Canvas {
                             continue;
                         }
                         let j = fy * w + fx;
-                        let lj = wet.vol[j] + wet.solv[j] / COAT_UM;
+                        // (the liquid above any packed paint, which came)
+                        let vj = wet.vol[j] * (1.0 - packed(wet, j));
+                        let lj = vj + wet.solv[j] / COAT_UM;
                         if lj <= 0.0 {
                             continue;
                         }
-                        let (qp, qs) = (q * wet.vol[j] / lj, q * (wet.solv[j] / COAT_UM) / lj);
+                        let (qp, qs) = (q * vj / lj, q * (wet.solv[j] / COAT_UM) / lj);
                         if qp > 0.0 {
                             qin += qp;
                             thin += qp * th_of(j);
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
-                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], wet.hide[j]);
+                            let hj = wet.hide[j];
+                            let hj = if drain { let mut h = crate::bristle::fluid_of(hj); h[4] = crate::bristle::surface_oil(&hj); h } else { hj };
+                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], hj);
                         }
                         ps += qs;
                         changed = true;
+                    }
+                    // (the drain switch: the ground here drains the film the
+                    // paint came into, as `Surf::add` does; what is left of
+                    // its pores goes back with the rest)
+                    let mut cap = if soaks { absorb[i] } else { 0.0 };
+                    if soaks && qin > 0.0 {
+                        pv = crate::bristle::ground_drain(&mut cap, pv, &mut hide);
                     }
                     let cure = if pv <= 0.0 { 0.0 } else { cure };
                     // (the drying thickness a bare pixel takes, by amount)
                     let own = th_of(i);
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
-                    (pv, ps, lat, hide, cure, changed, mob_of(pv, ps, cure), th_in)
+                    let flowing = if drain { pv * (1.0 - hide[7].clamp(0.0, 1.0)) } else { pv };
+                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in, cap)
                 })
                 .collect_into_vec(&mut next);
             // the largest mobility now: every pixel that has any is in the
@@ -447,7 +488,7 @@ impl Canvas {
             active.extend(next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))));
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in)) in next.iter().copied().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap)) in next.iter().copied().enumerate() {
                 if !changed {
                     continue;
                 }
@@ -463,6 +504,9 @@ impl Canvas {
                 self.wet.solv[i] = ps * COAT_UM;
                 self.wet.lat[i] = lat;
                 self.wet.hide[i] = hide;
+                if soaks {
+                    self.absorb[i] = cap;
+                }
                 if was_bare && pv >= 1e-5 {
                     self.wet.cover[i] = 1.0;
                 }
@@ -505,5 +549,107 @@ impl Canvas {
             return 0.0;
         }
         self.wet.clock.px.get(i).map_or(0.0, |p| p.cure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::canvas::Canvas;
+    use crate::color::hex;
+    use crate::wet::Paint;
+
+    fn canvas(engine: u32) -> Canvas {
+        let mut c = Canvas::new(120, 1.0, hex("#d8cdb8")).with_engine(engine);
+        c.prime(hex("#b9a98c"), 0.9, 40.0, 0.6, 0.0, 7);
+        c
+    }
+
+    fn sienna(t: f32) -> Paint {
+        let p = Paint::new(hex("#9a5a2a"), 0.85, 0.8);
+        if t > 0.0 { p.with_thinner(t) } else { p }
+    }
+
+    /// With the drain switch the flow's sparse set (`spread`'s `active` and
+    /// its mobilities, built from `mob`) reads each film's packed share: two
+    /// lone spots of paint packed through, under solvent, give up only their
+    /// solvent, which still flows (they are in the set); half packed, they
+    /// keep their packed paint and what leaves is the liquid above it, leaner
+    /// in paint than an unpacked film's (and, thinner, it flows faster);
+    /// without the switch the packed share is not read. (Two spots 60 px apart: the set is sparse, 2 of a box
+    /// some 60 × 3 px.)
+    #[test]
+    fn the_sparse_flow_set_moves_only_the_liquid_above_packed_paint() {
+        let run = |drain: bool, pk: f32| {
+            let mut c = canvas(5).with_drain(drain);
+            c.wet.ensure_solvent();
+            let w = c.f.w;
+            let y = c.f.h / 2;
+            let lat = sienna(0.0).latent();
+            let spots = [y * w + 30, y * w + 90];
+            for &i in &spots {
+                c.wet.vol[i] = 2.0;
+                c.wet.solv[i] = super::COAT_UM;
+                c.wet.lat[i] = lat;
+                c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, pk, 0.5, 0.0];
+                c.wet.stroke[i] = 1;
+            }
+            let mut solvent: Vec<usize> = spots.to_vec();
+            c.spread(10.0, &mut solvent);
+            let moved: f64 = spots.iter().flat_map(|&i| [i - 1, i + 1, i - w, i + w]).map(|j| c.wet.vol[j] as f64).sum();
+            let solv: f64 = spots.iter().flat_map(|&i| [i - 1, i + 1, i - w, i + w]).map(|j| c.wet.solv[j] as f64).sum();
+            (c.wet.vol.clone(), spots.map(|i| c.wet.vol[i]), moved, solv)
+        };
+        let (_, kept, moved, solv) = run(true, 1.0);
+        assert!(kept == [2.0, 2.0] && moved == 0.0 && solv > 0.0, "packed through: only the solvent leaves ({kept:?} {moved} {solv})");
+        let (fluid, half) = (run(true, 0.0), run(true, 0.5));
+        assert!(fluid.2 > 0.0 && half.2 > 0.0 && half.1.iter().all(|&v| v >= 1.0 - 1e-6), "half packed keeps its packed paint: {:?}", half.1);
+        assert!(half.2 / half.3 < fluid.2 / fluid.3, "the liquid above packed paint is leaner: {} < {}", half.2 / half.3, fluid.2 / fluid.3);
+        assert!(run(false, 1.0).0 == fluid.0, "without the switch the packed share is not read");
+    }
+
+    /// With the drain switch, thinned paint that flows off a film whose
+    /// ground is saturated onto bare absorbent ground is laid there as a
+    /// brush lays it (`Surf::add`): the ground drains it (`ground_drain`),
+    /// so its packed share rises and the ground's absorbency there falls by
+    /// the oil it took, and the paint is thinner by that oil. Without the
+    /// switch the flow doesn't read the absorbency: it moves the paint as on
+    /// an oil ground and leaves the absorbency as it was; with the switch on
+    /// an oil ground it flows as without it.
+    #[test]
+    fn paint_the_flow_brings_onto_absorbent_ground_drains_there() {
+        let run = |drain: bool, absorbent: f32| {
+            let mut c = canvas(5).with_drain(drain);
+            c.ground_finish(absorbent);
+            c.wet.ensure_solvent();
+            let (w, y) = (c.f.w, c.f.h / 2);
+            let lat = sienna(0.0).latent();
+            let src = y * w + 60;
+            // (thick paint under as much solvent: the ground under it took
+            // all it could)
+            c.wet.vol[src] = 3.0;
+            c.wet.solv[src] = 3.0 * super::COAT_UM;
+            c.wet.lat[src] = lat;
+            c.wet.hide[src] = [0.8, 0.0, 1.0, 0.0, 0.9, 0.7, 0.6, 0.0, 0.5, 0.0];
+            c.wet.stroke[src] = 1;
+            c.absorb[src] = 0.0;
+            let mut solvent = vec![src];
+            c.spread(10.0, &mut solvent);
+            let near: Vec<usize> = [src - 1, src + 1, src - w, src + w].into();
+            (c.wet.vol.clone(), c.wet.solv.clone(), c.wet.hide.clone(), c.absorb.clone(), near)
+        };
+        let full = crate::canvas::ABSORB_COATS;
+        let (vol, _, hide, absorb, near) = run(true, 1.0);
+        for &j in &near {
+            assert!(vol[j] > 0.0 && hide[j][7] > 0.5 && absorb[j] < full - 1e-4, "drained where it came: {} coats packed {} absorbency {}", vol[j], hide[j][7], absorb[j]);
+            assert!(hide[j][4] < 0.9, "leaner: {:?}", hide[j]);
+        }
+        let (off, oil) = (run(false, 1.0), run(false, 0.0));
+        assert!(off.0 == oil.0 && off.1 == oil.1 && off.2 == oil.2, "without the switch the absorbency is not read");
+        assert!(off.3.iter().filter(|&&a| a != full).count() == 1, "nor changed (but under the source, set saturated)");
+        for &j in &near {
+            assert!(off.2[j][7] == 0.0 && vol[j] < off.0[j], "unpacked, and thicker by the oil: {} > {}", off.0[j], vol[j]);
+        }
+        let on_oil = run(true, 0.0);
+        assert!(on_oil.0 == oil.0 && on_oil.1 == oil.1 && on_oil.2 == oil.2, "on an oil ground the switch changes nothing here");
     }
 }

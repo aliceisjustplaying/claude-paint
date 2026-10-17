@@ -176,3 +176,168 @@ fn fixture_matches_golden() {
     assert!(maximum <= 2 && changed * 1_000 < pixels,
             "cross-platform golden image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <0.1% pixels and <=2/255 per channel");
 }
+
+/// The drain switch: an absorbent ground drains a film to its drained
+/// floor, as far as its pores allow: the pigment packs from the ground up,
+/// the paint above keeping all its oil, so the surface's oil is the paint's
+/// until the packed layer reaches it. What a brush takes off comes from the
+/// top.
+#[test]
+fn an_absorbent_ground_drains_a_film_from_the_ground_up() {
+    use crate::bristle::{ground_drain, surface_oil, take_from};
+    // (a tube paint 40% oil by volume)
+    let fresh = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, 0.0, 0.4, 0.0];
+    // two coats of tube paint: pigment 1.2 coats, oil 0.8, of which the
+    // ground can take 0.8 × (1 − 0.6) = 0.32, 0.16 a coat. Taking 0.1
+    // packs 0.625 coats of it into 0.525 coats at the floor's oil
+    let (mut hd, mut cap) = (fresh, 0.1);
+    let t = ground_drain(&mut cap, 2.0, &mut hd);
+    assert!((t - 1.9).abs() < 1e-5 && cap == 0.0, "{t} {cap}");
+    assert!((hd[7] - 0.525 / 1.9).abs() < 1e-5 && (hd[4] - (0.525 * 0.6 + 1.375) / 1.9).abs() < 1e-5, "{hd:?}");
+    assert!((surface_oil(&hd) - 1.0).abs() < 1e-5, "the surface keeps its oil: {hd:?}");
+    assert_eq!(hd[1], fresh[1], "the paint above the packed layer keeps its stiffness");
+    // more pores than the film can give: down to the floor, all packed
+    let mut cap = 1.0;
+    let t = ground_drain(&mut cap, t, &mut hd);
+    assert!((t - 1.68).abs() < 1e-5 && (cap - 0.78).abs() < 1e-5, "{t} {cap}");
+    assert!((hd[4] - 0.6).abs() < 1e-5 && (hd[7] - 1.0).abs() < 1e-5 && (surface_oil(&hd) - 0.6).abs() < 1e-5, "{hd:?}");
+    assert_eq!(ground_drain(&mut cap, t, &mut hd), t, "nothing below the floor");
+    // nearly packed through, the surface still has the paint's own oil
+    let nearly = [0.8, 0.6, 1.0, 0.0, 0.9995 * 0.6 + 0.0005, 0.7, 0.6, 0.9995, 0.4, 0.0];
+    assert!((surface_oil(&nearly) - 1.0).abs() < 2e-3, "{}", surface_oil(&nearly));
+    // packed through, it dries as lean as stiff paste (with the switch only)
+    assert!(crate::drying::lean_of(true, &hd) == 1.0 && crate::drying::lean_of(false, &hd) == hd[1], "{hd:?}");
+    // a coarse pigment's floor is below its packed oil: it drains further
+    let (mut coarse, mut cap) = ([0.8, 0.6, 1.0, 0.0, 1.0, 0.8, 0.15, 0.0, 0.4, 0.0], 1.0);
+    ground_drain(&mut cap, 2.0, &mut coarse);
+    assert!((coarse[4] - 0.15).abs() < 1e-5, "{coarse:?}");
+    // a brush takes the top first: the paint above the packed layer, as rich
+    // as the surface; the film's packed share grows
+    let (mut hd, mut cap) = (fresh, 0.16);
+    ground_drain(&mut cap, 2.0, &mut hd);
+    let (vol, f) = (2.0 - 0.16, hd[7]);
+    // an oilier tube paint (60% oil by volume, as an oily earth's) gives
+    // up more oil a coat as it packs to the same share of its own
+    let (mut oily, mut cap) = ([0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, 0.0, 0.6, 0.0], 1.0);
+    let thinner = 2.0 - ground_drain(&mut cap, 2.0, &mut oily);
+    assert!(thinner > 0.32 + 0.1 && (oily[4] - 0.6).abs() < 1e-5, "{thinner} {oily:?}");
+    let got = take_from(&mut hd, vol, 0.4);
+    assert!((got[4] - 1.0).abs() < 1e-5 && got[7] == 0.0, "{got:?}");
+    assert!((hd[7] - f * vol / (vol - 0.4)).abs() < 1e-5 && (surface_oil(&hd) - 1.0).abs() < 1e-4, "{hd:?}");
+}
+
+/// The drain switch on a chalk ground: a thin film of smalt, coarser than
+/// the ground's pores, drains below its packed oil and dries matte; one of
+/// Prussian blue, finer, keeps its packed layer saturated and dries
+/// glossier; a film too thick for the ground to drain keeps its surface's
+/// oil and dries about as glossy as on an oil ground. The paint keeps its
+/// stiffness (engine 4's draw, without the switch, stiffens it).
+#[test]
+#[cfg(tube_box)]
+fn an_absorbent_ground_drains_paint_as_its_pigment_packs() {
+    use crate::palette::Palette;
+    let pal = Palette::tube_box();
+    let run = |tube: &str, absorbent: f32, passes: usize| {
+        let i = pal.tubes.iter().position(|t| t.name == tube).unwrap();
+        let mut c = Canvas::new(300, 1.0, [0.8; 3]).with_drain(true);
+        c.ground_finish(absorbent);
+        for _ in 0..passes {
+            let mut h = Held::new(Tool::filbert(60.0), 3);
+            h.load(pal.pile(vec![(i, 1.0)]).laid(0.0), if passes > 1 { 1.0 } else { 0.4 });
+            c.drag(&mut h, &Gesture::new(vec![(100.0, 500.0), (900.0, 500.0)]).pressure(0.9, 0.9), None);
+        }
+        let i = c.f.index(500.0, 500.0);
+        let (vol, hd) = (c.wet.vol[i], c.wet.hide[i]);
+        c.dry();
+        eprintln!("{tube} absorbent {absorbent} passes {passes}: {vol} coats {hd:?} gloss {}", c.gloss[i]);
+        (vol, hd, c.gloss[i])
+    };
+    let (smalt, smalt_oil) = (run("smalt", 1.0, 1), run("smalt", 0.0, 1));
+    let prussian = run("Prussian blue", 1.0, 1);
+    assert!(smalt.1[7] > 0.95 && prussian.1[7] > 0.95, "thin films pack through: {smalt:?} {prussian:?}");
+    assert!(smalt.1[4] < 0.2 && smalt.2 < 0.1, "smalt drains below its packed oil, matte: {smalt:?}");
+    assert!(prussian.2 > smalt.2 + 0.1, "Prussian blue keeps its packed layer: {prussian:?} {smalt:?}");
+    assert!((smalt.1[1] - smalt_oil.1[1]).abs() < 1e-5, "stiffness: {smalt:?} {smalt_oil:?}");
+    let (thick, thick_oil) = (run("smalt", 1.0, 8), run("smalt", 0.0, 8));
+    assert!(thick.1[7] < 0.7 && thick.2 > thick_oil.2 - 0.05, "a thick film keeps its surface: {thick:?} {thick_oil:?}");
+}
+
+/// The drain switch: only the fluid share of a film levels (`settle_for`'s
+/// `fluid`): over the weave a film packed through follows the relief under
+/// it, as even as it was laid; a fluid one gathers in the hollows.
+#[test]
+fn a_packed_film_follows_the_relief() {
+    let film = |fluid: Option<f32>| {
+        // (80 mm over 300 px: the threads resolved; a fluid glaze's body)
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+        let (w, h) = (c.f.w, c.f.h);
+        let add = vec![30.0f32; w * h];
+        let stiff = vec![0.0f32; w * h];
+        let sets = vec![crate::surface::SET_TIME; w * h];
+        let fl = fluid.map(|f| vec![f; w * h]);
+        c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, fl.as_deref())
+    };
+    let spread = |t: &[f32]| t.iter().fold((f32::MAX, 0f32), |(a, b), &x| (a.min(x), b.max(x)));
+    let (packed, fluid) = (spread(&film(Some(0.0))), spread(&film(None)));
+    assert!(packed.1 - packed.0 < 0.01, "packed through: an even film {packed:?}");
+    assert!(fluid.1 - fluid.0 > 1.0, "fluid: it gathers in the hollows {fluid:?}");
+    assert_eq!(spread(&film(Some(1.0))), fluid);
+}
+
+/// The drain switch: a stroke baked with packed edges beside a still-fluid
+/// center (`settle_for`'s `fluid`, as `bake` passes it, `1 − Prop[7]`): the
+/// packed edges keep the thickness they packed at, however the fluid
+/// center levels and is conserved beside them; a half-packed band keeps at
+/// least its packed layer and its liquid levels over it; the stroke's total
+/// is the paint laid. With nothing packed it bakes as without the switch.
+#[test]
+fn baking_leaves_packed_paint_where_it_packed() {
+    // (80 mm over 300 px over the weave, as `a_packed_film_follows_the_relief`)
+    let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+    let (w, h) = (c.f.w, c.f.h);
+    // across the stroke (x 100..200): packed through, half packed, fluid
+    let band = |x: usize| match x {
+        100..110 | 190..200 => Some((12.0f32, 0.0f32)),
+        110..120 | 180..190 => Some((20.0, 0.5)),
+        120..180 => Some((40.0, 1.0)),
+        _ => None,
+    };
+    let (mut add, mut fluid) = (vec![0.0f32; w * h], vec![1.0f32; w * h]);
+    for y in 100..200 {
+        for x in 0..w {
+            if let Some((a, f)) = band(x) {
+                add[y * w + x] = a;
+                fluid[y * w + x] = f;
+            }
+        }
+    }
+    let stiff = vec![0.0f32; w * h];
+    let sets = vec![crate::surface::SET_TIME; w * h];
+    let height = c.height.clone();
+    let t = c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, Some(&fluid));
+    let (mut lo, mut hi) = (f32::MAX, 0f32);
+    for y in 100..200 {
+        for x in 100..200 {
+            let i = y * w + x;
+            match band(x) {
+                Some((a, f)) if f == 0.0 => {
+                    assert!(t[i] == a, "a packed edge keeps its thickness: {} at ({x}, {y})", t[i]);
+                    // (and its surface follows the relief under it)
+                    assert!((c.height[i] - height[i] - a).abs() < 1e-3, "({x}, {y})");
+                }
+                Some((a, f)) if f < 1.0 => assert!(t[i] >= a * (1.0 - f), "a half-packed band keeps its packed layer: {} at ({x}, {y})", t[i]),
+                _ => (lo, hi) = (lo.min(t[i]), hi.max(t[i])),
+            }
+        }
+    }
+    assert!(hi - lo > 1.0, "the fluid center levels: {lo}..{hi}");
+    let (laid, kept): (f64, f64) = (add.iter().map(|&v| v as f64).sum(), t.iter().map(|&v| v as f64).sum());
+    assert!(((kept - laid) / laid).abs() < 1e-5, "paint is conserved: {kept} of {laid}");
+    // with nothing packed: bit for bit as without the switch
+    let flat = |fl: Option<&[f32]>| {
+        let mut c = Canvas::new(300, 1.0, hex("#c8b89a")).with_size_mm(80.0).with_linen(crate::surface::Linen::fine(3));
+        let t = c.settle_for((0, 0, w, h), &add, &stiff, &sets, true, fl);
+        (t, c.height)
+    };
+    assert!(flat(Some(&vec![1.0; w * h])) == flat(None));
+}

@@ -367,17 +367,22 @@ pub struct Held {
     /// Painting with engine 4 or later: its `Debug` gives each bristle's
     /// paint its solvent and oil too. Not printed itself.
     shows_oil: bool,
+    /// Painting on a canvas that drains (`Canvas::with_drain`): and the
+    /// pigment's packing, `Prop`'s last five (`with_packing`).
+    shows_packing: bool,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
 /// thinner, field for field, plus `solvent` when `show` (engine 3); the
-/// paint's properties without solvent and oil unless `oil` (engine 4).
-struct BristleText<'a>(&'a Bristle, bool, bool);
+/// paint's properties without solvent and oil unless `oil` (engine 4), and
+/// without the pigment's packing (`Prop`'s last five) unless `packing` (the
+/// drain switch, `Canvas::with_drain`).
+struct BristleText<'a>(&'a Bristle, bool, bool, bool);
 
 impl std::fmt::Debug for BristleText<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let b = self.0;
-        let hide: &[f32] = if self.2 { &b.hide } else { &b.hide[..3] };
+        let hide: &[f32] = if self.3 { &b.hide } else if self.2 { &b.hide[..5] } else { &b.hide[..3] };
         let mut d = f.debug_struct("Bristle");
         d.field("rx", &b.rx)
             .field("ry", &b.ry)
@@ -399,7 +404,7 @@ impl std::fmt::Debug for BristleText<'_> {
 
 impl std::fmt::Debug for Bristle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        BristleText(self, true, true).fmt(f)
+        BristleText(self, true, true, true).fmt(f)
     }
 }
 
@@ -409,13 +414,13 @@ impl std::fmt::Debug for Bristle {
 /// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
 impl std::fmt::Debug for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct List<'a>(&'a [Bristle], bool, bool);
+        struct List<'a>(&'a [Bristle], bool, bool, bool);
         impl std::fmt::Debug for List<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2))).finish()
+                f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2, self.3))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil)).finish()
+        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing)).finish()
     }
 }
 
@@ -478,13 +483,13 @@ impl Held {
                     prev: [None, None],
                     vol: 0.0,
                     lat: [0.0; LAT],
-                    hide: [0.5, 0.5, 1.0, 0.0, 1.0],
+                    hide: [0.5, 0.5, 1.0, 0.0, 1.0, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0],
                     cure: 0.0,
                     solvent: 0.0,
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -493,6 +498,13 @@ impl Held {
     pub fn with_engine(mut self, v: u32) -> Self {
         self.shows_solvent = v >= 3;
         self.shows_oil = v >= 4;
+        self
+    }
+
+    /// The brush of a painting whose canvas drains (`Canvas::with_drain`):
+    /// its `Debug` gives each bristle's paint the pigment's packing too.
+    pub fn with_packing(mut self, on: bool) -> Self {
+        self.shows_packing = on;
         self
     }
 
@@ -527,12 +539,12 @@ impl Held {
                 let v = amount * full * k * if crate::thinner::exchange() { (1.0 - t).powf(crate::thinner::exchange_kj().1) } else { 1.0 };
                 let vp = v * (1.0 - t);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
                 b.solvent += v * t;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
         }
     }
 
@@ -557,12 +569,12 @@ impl Held {
                 let v = amount * full * k;
                 let vp = v * (1.0 - paint.thinner);
                 b.cure = mix_cure(b.cure, b.vol, 0.0, vp);
-                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+                mix_into(&mut b.vol, &mut b.lat, &mut b.hide, vp, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
                 b.solvent += v * paint.thinner;
                 continue;
             }
             b.cure = mix_cure(b.cure, b.vol, 0.0, amount * full * k);
-            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil]);
+            mix_into(&mut b.vol, &mut b.lat, &mut b.hide, amount * full * k, &lat, [scatter, paint.stiff, paint.drying, paint.solvent, paint.oil, paint.packed, paint.floor, 0.0, paint.oil_volume, 0.0]);
         }
     }
 
@@ -759,6 +771,11 @@ pub(crate) struct Surf {
     /// The ground's remaining absorbency per pixel (coats of oil; null when
     /// none of it is absorbent or before engine 4).
     pub(crate) absorb: *mut f32,
+    /// The drain switch (`Canvas::with_drain`): the ground drains the film
+    /// as its pigment packs (`ground_drain`), and paint is taken from the
+    /// top down (`take_from`); without it, it draws from the paint just laid
+    /// (`ground_draw`).
+    pub(crate) drain: bool,
     /// Solvent in the open film, and each pixel's wet film laid by the
     /// stroke `laid_id` against its ceiling (`Wet::solv`, `Wet::laid`):
     /// null before engine 3.
@@ -826,6 +843,10 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
+            // (the drain switch: paint laid is fluid however packed it was
+            // where the brush took it up; the film's packed share, by
+            // volume, thins)
+            let hide = if self.drain { fluid_of(hide) } else { hide };
             for k in 0..hd.len() {
                 hd[k] += (hide[k] - hd[k]) * a;
             }
@@ -837,21 +858,11 @@ impl Surf {
             *vol = t;
             // engine 4: an absorbent ground under the film draws oil out of
             // the paint just laid, until its pores are full: a thin wash goes
-            // lean (stiff, matte, quick to set), thick paint barely notices
+            // lean (stiff, matte, quick to set), thick paint barely notices.
+            // With the drain switch it drains the film as its pigment packs,
+            // from the ground up (`ground_drain`)
             if !self.absorb.is_null() {
-                let cap = &mut *self.absorb.add(i);
-                if *cap > 0.0 {
-                    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
-                    let take = (*cap).min(0.8 * oil_in);
-                    if take > 0.0 {
-                        *cap -= take;
-                        let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
-                        let lean = (take / film_oil).min(0.9);
-                        hd[4] *= 1.0 - lean;
-                        hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
-                        *vol = (t - take).max(0.0);
-                    }
-                }
+                *vol = if self.drain { ground_drain(&mut *self.absorb.add(i), t, hd) } else { ground_draw(&mut *self.absorb.add(i), v, t, hd) };
             }
         }
     }
@@ -861,14 +872,21 @@ impl Surf {
     /// below lies buried under it, out of sight.
     #[inline]
     pub(crate) unsafe fn lay(&self, i: usize, v: f32, lat: &Latent, hide: Prop, cure: f32) {
+        if self.drain && v <= 0.0 {
+            return;
+        }
         if self.skim <= 0.0 {
             return unsafe { self.add(i, v, lat, hide, cure) };
         }
         unsafe {
             let buried = (*self.vol.add(i) - self.skim).max(0.0);
+            let below = (self.drain && buried > 0.0).then(|| skim_top(&mut *self.hide.add(i), *self.vol.add(i), buried));
             *self.vol.add(i) -= buried;
             self.add(i, v, lat, hide, cure);
             *self.vol.add(i) += buried;
+            if let Some(below) = below {
+                restore_buried(&mut *self.hide.add(i), &below, buried / *self.vol.add(i));
+            }
         }
     }
 
@@ -879,17 +897,21 @@ impl Surf {
         if self.receptive.is_null() { 1.0 } else { unsafe { *self.receptive.add(i) } }
     }
 
-    /// Lift `v` coats off pixel `i`. The paint left keeps its cure; a pixel
-    /// left bare (as `wait` judges it) holds no film to have one.
+    /// Lift `v` coats off pixel `i`, and return the properties of the paint
+    /// lifted (with the drain switch from the top down, `take_from`;
+    /// without, the film's). The paint left keeps its cure; a pixel left
+    /// bare (as `wait` judges it) holds no film to have one.
     #[inline]
-    pub(crate) unsafe fn take(&self, i: usize, v: f32) {
+    pub(crate) unsafe fn take(&self, i: usize, v: f32) -> Prop {
         unsafe {
             self.film_give(i, v);
             let vol = &mut *self.vol.add(i);
+            let got = if self.drain { take_from(&mut *self.hide.add(i), *vol, v) } else { *self.hide.add(i) };
             *vol -= v;
             if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
                 (*self.dry.add(i)).cure = 0.0;
             }
+            got
         }
     }
 
@@ -988,6 +1010,7 @@ impl Canvas {
             clump: self.engine >= 4,
             lean: self.engine >= 4,
             absorb: if self.engine >= 4 && self.absorb_any { self.absorb.as_mut_ptr() } else { std::ptr::null_mut() },
+            drain: self.drain,
             solv: if self.wet.solv.len() == n { self.wet.solv.as_mut_ptr() } else { std::ptr::null_mut() },
             laid: if self.wet.laid.len() == n { self.wet.laid.as_mut_ptr() } else { std::ptr::null_mut() },
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
@@ -1126,7 +1149,7 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 5], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 10], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
         ts += b.solvent;
@@ -1144,7 +1167,7 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     for l in &mut lat {
         *l /= tv;
     }
-    hide = [hide[0] / tv, hide[1] / tv, hide[2] / tv, hide[3] / tv, hide[4] / tv];
+    hide = hide.map(|h| h / tv);
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
     let share_s = k * ts / bristles.len() as f32;
@@ -1807,7 +1830,7 @@ pub(crate) unsafe fn exchange(
 
         let mut got_v = 0.0f32;
         let mut got_l = [0.0f32; LAT];
-        let mut got_h: Prop = [0.0; 5];
+        let mut got_h: Prop = [0.0; 10];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
@@ -1847,10 +1870,6 @@ pub(crate) unsafe fn exchange(
                         for k in 0..LAT {
                             got_l[k] += l[k] * tv;
                         }
-                        let hp = *sf.hide.add(i);
-                        for k in 0..hp.len() {
-                            got_h[k] += hp[k] * tv;
-                        }
                         if !sf.dry.is_null() {
                             got_c += (*sf.dry.add(i)).cure * tv;
                         }
@@ -1866,7 +1885,10 @@ pub(crate) unsafe fn exchange(
                                 got_s += ts / COAT_UM * px_area;
                             }
                         }
-                        sf.take(i, take);
+                        let hp = sf.take(i, take);
+                        for k in 0..hp.len() {
+                            got_h[k] += hp[k] * tv;
+                        }
                     }
                 }
                 let takes = sf.takes(i);
@@ -1928,11 +1950,12 @@ pub(crate) unsafe fn exchange(
                             1
                         };
                         // the source's paint, read once: nothing below writes
-                        // lat or hide at `i` (`take` lowers its volume, `add`
-                        // writes `j != i`). Its cure is read per destination:
-                        // `take` zeroes it when the film goes bare (see the
-                        // kernel_traps tests)
-                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
+                        // lat at `i` (`take` lowers its volume and, with the
+                        // drain switch, its packed share, and returns the
+                        // paint it lifts; `add` writes `j != i`). Its cure is
+                        // read per destination: `take` zeroes it when the
+                        // film goes bare (see the kernel_traps tests)
+                        let l = *sf.lat.add(i);
                         for &(tx, ty, share) in &to[..n_to] {
                             if share <= 0.0 {
                                 continue;
@@ -1980,7 +2003,7 @@ pub(crate) unsafe fn exchange(
                                     // (its film there thins but still covers it)
                                     let cj = &mut *sf.cover.add(j);
                                     *cj = if fine { ((if *sf.vol.add(j) < 1e-6 { 0.0 } else { *cj }) + (m / v.max(1e-9)).min(1.0) * *sf.cover.add(i)).min(1.0) } else { 1.0 };
-                                    sf.take(i, m);
+                                    let hd = sf.take(i, m);
                                     sf.add(j, m, &l, hd, cure);
                                 }
                             }
@@ -2591,8 +2614,126 @@ mod kernel_traps {
     }
 }
 
-/// The share of a tube paint's volume that is oil (about 30–45%).
+/// The share of a tube paint's volume that is oil, as engine 4's draw
+/// takes it (`ground_draw`). Real tube paint is 45–75% oil by volume; the
+/// drain switch takes each paint's own (`Paint::oil_volume`, `ground_drain`).
 pub(crate) const OIL_SHARE: f32 = 0.4;
+
+/// An absorbent ground draws oil out of `v` coats of paint just laid on a
+/// film now `t` coats thick (engine 4), until its pores (`cap`, coats of oil
+/// it can still take) are full: up to 0.8 of the oil laid, the film's oil
+/// share (`hide[4]`) falling and its stiffness rising by what it lost.
+/// Returns the film's thickness after.
+pub(crate) fn ground_draw(cap: &mut f32, v: f32, t: f32, hd: &mut Prop) -> f32 {
+    // (without the drain switch; with it the ground drains the film,
+    // `ground_drain`)
+    if *cap <= 0.0 {
+        return t;
+    }
+    let oil_in = v * OIL_SHARE * hd[4].max(0.0);
+    let take = (*cap).min(0.8 * oil_in);
+    if take <= 0.0 {
+        return t;
+    }
+    *cap -= take;
+    let film_oil = (t * OIL_SHARE * hd[4].max(0.0)).max(1e-9);
+    let lean = (take / film_oil).min(0.9);
+    hd[4] *= 1.0 - lean;
+    hd[1] = (hd[1] * (1.0 + lean) * (1.0 + lean)).min(1.0);
+    (t - take).max(0.0)
+}
+
+/// The drain switch (`Canvas::with_drain`): an absorbent ground drains the
+/// wet film over it, `t` coats of paint whose properties are `hd`, until its
+/// pores (`cap`, coats of oil) are full or the paint is down to its drained
+/// floor (`hd[6]`, of the oil `hd[4]` counts). Its capillary pull, far
+/// stronger than a hand's pressure, takes the oil at once, and the pigment
+/// packs from the ground up as a filter cake does: the packed share of the
+/// film (`hd[7]`, of its thickness) holds the floor's oil, the paint above
+/// it keeps all its own, and the surface keeps its gloss and its flow until
+/// the packed layer reaches it (`Canvas::bake`). The film's oil (`hd[4]`) is
+/// the two's, by volume, as paint mixes. Returns the film's thickness after.
+pub(crate) fn ground_drain(cap: &mut f32, t: f32, hd: &mut Prop) -> f32 {
+    if *cap <= 0.0 || t <= 0.0 {
+        return t;
+    }
+    let (floor, packed) = (hd[6].max(0.0), hd[7].clamp(0.0, 1.0));
+    let top = surface_oil(hd);
+    if packed >= 1.0 || top <= floor {
+        return t;
+    }
+    // each coat of the paint above gives up this much oil as it packs (its
+    // pigment, a share 1 − q of its tube paint's volume, holds q/(1 − q) of
+    // oil per unit of `oil`; q is the tube's own, `Paint::oil_volume`)
+    let q = hd[8].clamp(0.05, 0.95);
+    let r = q * (top - floor) / (1.0 - q + q * top);
+    let fluid = t * (1.0 - packed);
+    let take = (*cap).min(fluid * r);
+    if take <= 0.0 {
+        return t;
+    }
+    *cap -= take;
+    // the paint that packed, the packed layer it adds to, the film after
+    let u = (take / r).min(fluid);
+    let (left, under) = ((t - take).max(1e-9), packed * t + u - take);
+    hd[7] = (under / left).clamp(0.0, 1.0);
+    hd[4] = ((under * floor + (fluid - u) * top) / left).max(0.0);
+    t - take
+}
+
+/// The drain switch: `v` coats taken off a film `vol` coats thick whose
+/// properties are `hd`, from the top down: the paint above its packed layer
+/// first, at the surface's oil, then the packed paint, at its drained
+/// floor's. Leaves `hd` the film's after and returns the paint taken, broken
+/// up and fluid (none of it packed).
+pub(crate) fn take_from(hd: &mut Prop, vol: f32, v: f32) -> Prop {
+    let mut got = fluid_of(*hd);
+    let packed = hd[7].clamp(0.0, 1.0);
+    if packed <= 0.0 || vol <= 0.0 || v <= 0.0 {
+        return got;
+    }
+    let (o, floor, top) = (hd[4].max(0.0), hd[6].max(0.0), surface_oil(hd));
+    let v = v.min(vol);
+    let from_top = v.min(vol * (1.0 - packed));
+    let from_packed = v - from_top;
+    got[4] = (top * from_top + floor.min(o) * from_packed) / v;
+    let left = vol - v;
+    if left > 1e-9 {
+        hd[4] = ((o * vol - got[4] * v) / left).max(0.0);
+        hd[7] = ((packed * vol - from_packed) / left).clamp(0.0, 1.0);
+    }
+    got
+}
+
+/// Paint `hd` broken up and fluid: none of it packed (the drain switch:
+/// paint laid, or taken up and laid again, `ground_drain`).
+#[inline]
+pub(crate) fn fluid_of(hd: Prop) -> Prop {
+    let mut h = hd;
+    h[7] = 0.0;
+    h
+}
+
+pub(crate) fn skim_top(hd: &mut Prop, vol: f32, buried: f32) -> Prop {
+    let mut below = *hd;
+    *hd = take_from(&mut below, vol, vol - buried);
+    below
+}
+
+pub(crate) fn restore_buried(hd: &mut Prop, below: &Prop, share: f32) {
+    for k in 4..hd.len() {
+        hd[k] += (below[k] - hd[k]) * share;
+    }
+}
+
+/// The oil at the surface of a film whose properties are `hd`: the paint's
+/// own above its packed layer (`ground_drain`; the drain switch).
+pub(crate) fn surface_oil(hd: &Prop) -> f32 {
+    let (o, floor, packed) = (hd[4].max(0.0), hd[6].max(0.0), hd[7].clamp(0.0, 1.0));
+    // (the surface is the paint above until the packed layer reaches it; at
+    // the last ten-thousandth the division is no longer exact in f32)
+    if packed < 1.0 - 1e-4 { ((o - packed * floor) / (1.0 - packed)).max(floor.min(o)) } else { o }
+}
 
 /// How far (µm) below the paint under a knife's blade it is pressed into the
 /// hollows of the surface (`Canvas::knife`).
@@ -2611,7 +2752,7 @@ const SKIM_COATS: f32 = 0.25;
 /// bead of paint it carries (coats × units², as a bristle's load). It lays
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
 /// ridges and a bead where it lifts, and scrapes wet paint off.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Knife {
     pub width: f32,
     vol: f32,
@@ -2619,6 +2760,25 @@ pub struct Knife {
     lat: Latent,
     hide: Prop,
     cure: f32,
+    /// On a canvas that drains (`Canvas::with_drain`): its `Debug` gives the
+    /// paint's packing too (`with_packing`). Not printed itself.
+    shows_packing: bool,
+}
+
+/// As derived, but the paint's properties without the pigment's packing
+/// (`Prop`'s last five) unless `shows_packing` (the drain switch): a knife
+/// without it prints as it always did (`easel run --state-digest` hashes it).
+impl std::fmt::Debug for Knife {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Knife")
+            .field("width", &self.width)
+            .field("vol", &self.vol)
+            .field("solvent", &self.solvent)
+            .field("lat", &self.lat)
+            .field("hide", &if self.shows_packing { &self.hide[..] } else { &self.hide[..5] })
+            .field("cure", &self.cure)
+            .finish()
+    }
 }
 
 impl Knife {
@@ -2637,7 +2797,13 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 5], cure: 0.0 }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 10], cure: 0.0, shows_packing: false }
+    }
+    /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
+    /// its `Debug` gives the paint's packing too.
+    pub fn with_packing(mut self, on: bool) -> Self {
+        self.shows_packing = on;
+        self
     }
     /// A full load: a bead along the blade twice its length deep and 12
     /// coats (300 µm) thick (about a millilitre on a 4 cm blade).
@@ -2665,7 +2831,7 @@ impl Knife {
         }
         let color = mixbox::latent_to_linear_float_rgb(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { solvent: self.hide[3], oil: self.hide[4], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
@@ -2690,10 +2856,41 @@ unsafe fn knife_add(sf: &Surf, i: usize, v: f32, k: &Knife, skim: bool) {
         if !skim {
             return sf.add(i, v, &k.lat, k.hide, k.cure);
         }
-        let buried = (*sf.vol.add(i) - SKIM_COATS).max(0.0);
-        *sf.vol.add(i) -= buried;
-        sf.add(i, v, &k.lat, k.hide, k.cure);
-        *sf.vol.add(i) += buried;
+        Surf { skim: SKIM_COATS, ..*sf }.lay(i, v, &k.lat, k.hide, k.cure);
+    }
+}
+
+#[cfg(test)]
+mod skim_packing_tests {
+    use super::*;
+
+    #[test]
+    fn skimming_keeps_the_packed_paint_buried_under_it() {
+        for path in ["brush", "engine7", "knife"] {
+            let mut c = Canvas::new(2, 1.0, [0.3; 3]).with_engine(7).with_drain(true);
+            c.wet.vol[0] = 1.0;
+            c.wet.hide[0] = [0.8, 0.6, 1.0, 0.0, 0.4, 0.7, 0.4, 1.0, 0.4, 0.0];
+            let mut sf = c.surf();
+            sf.skim = SKIM_COATS;
+            let paint = crate::Paint { oil: 1.0, packed: 0.7, floor: 0.4, oil_volume: 0.4, ..crate::Paint::body([1.0; 3]) };
+            let mut knife = Knife::new(20.0);
+            knife.load(paint, 1.0);
+            for pass in 0..=3 {
+                let added = if pass == 0 { 0.0 } else { 0.25 };
+                unsafe {
+                    match path {
+                        "brush" => sf.lay(0, added, &knife.lat, knife.hide, 0.0),
+                        "engine7" => crate::engine7::add::Film::of(&sf).lay(0, added, &crate::engine7::add::Paint7::new(sf.lean, sf.drain, &knife.lat, knife.hide, 0.0), sf.skim),
+                        _ => knife_add(&sf, 0, added, &knife, true),
+                    }
+                }
+                let (vol, hd) = (c.wet.vol[0], c.wet.hide[0]);
+                assert!((vol - (1.0 + 0.25 * pass as f32)).abs() < 1e-6, "{path}: volume {vol}");
+                let packed = if pass == 0 { 1.0 } else { 1.0 - SKIM_COATS };
+                assert!((vol * hd[7] - packed).abs() < 1e-6, "{path}: packed paint {} at pass {pass}", vol * hd[7]);
+                assert!((vol * hd[4] - (0.4 + 0.25 * pass as f32)).abs() < 1e-6, "{path}: oil {} at pass {pass}", vol * hd[4]);
+            }
+        }
     }
 }
 
@@ -2826,9 +3023,9 @@ impl Canvas {
                         if ex <= 1e-7 {
                             continue;
                         }
-                        let (l, hd) = (*sf.lat.add(i), *sf.hide.add(i));
+                        let l = *sf.lat.add(i);
                         let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
-                        sf.take(i, ex);
+                        let hd = sf.take(i, ex);
                         if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }
                         // pressed out past the blade's end into a ridge (off
                         // the canvas's edge there is nowhere to press it: it

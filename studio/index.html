@@ -696,6 +696,7 @@ function kindOf(e) {
     const on = e.scratch ? ' on the scratch canvas' : '';
     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + on : (e.err ? `paints${on}, but its code has an error` : 'paints' + on)]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
+  if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
     if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
@@ -921,7 +922,7 @@ function journal(i, scroll) {
         html = '🪑 ' + esc(sitLabel(e)) + (gap > 120 ? ' <span>· after ' + ago(gap).replace(' ago', '') + ' away</span>' : ''); }
       else { const c = kindOf(e);
         if (c && !(e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')))) {
-          const title = esc(e.kind === 'cmd' || e.kind === 'jnote' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
+          const title = esc(e.kind === 'cmd' || e.kind === 'jnote' || e.kind === 'notebook' ? e.text.slice(0, 2000) : e.kind === 'paint' ? e.code.slice(0, 2000) : (e.path || ''));
           html = '<span class="chip ' + c[0] + '" title="' + title + '"' + (e.kind === 'image' ? ' data-i="' + k + '"' : '') + '>' + c[1] + ' ' + esc(c[2]) + '</span>';
           const w = waitChip(e, k);
           if (w) html += '<span class="chip ' + w[0] + '" title="' + esc(w[3]) + '">' + w[1] + ' ' + esc(w[2]) + '</span>';

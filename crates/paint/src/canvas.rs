@@ -724,3 +724,37 @@ mod review_lighting_tests {
         assert!(graze[behind][0] <= graze[front][0], "grazing: nothing behind the ridge is lit by the lamp");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // From engine 4 a liquid film bridges the fine relief under it (surface.rs,
+    // `BRIDGE_UM`): a thick film of thinned liquid has a level top over the
+    // weave, where the same thickness of dry paint keeps the weave's texture.
+    // Outside the film the two surfaces are the same.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
+        let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
+        let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
+        let w = liquid.f.w;
+        let band = |i: usize| (40..120).contains(&(i % w));
+        liquid.wet.solv = vec![0.0; liquid.height.len()];
+        for i in 0..liquid.height.len() {
+            if band(i) {
+                liquid.wet.solv[i] = 600.0;
+                raised.height[i] += 600.0;
+            }
+        }
+        let (l, r) = (liquid.wet_surface(), raised.wet_surface());
+        // the band's relief away from its edges: the mean step between neighbours along a row
+        let relief = |s: &[f32]| {
+            let steps: Vec<f32> = (0..s.len()).filter(|&i| (50..109).contains(&(i % w))).map(|i| (s[i + 1] - s[i]).abs()).collect();
+            steps.iter().sum::<f32>() / steps.len() as f32
+        };
+        assert!(relief(&r) > 0.0, "the ground has a weave to level");
+        assert!(relief(&l) < 0.5 * relief(&r), "a liquid film levels the weave: {} against dry paint's {}", relief(&l), relief(&r));
+        for i in (0..l.len()).filter(|&i| !band(i)) {
+            assert_eq!(l[i], r[i], "outside the film, pixel {i}");
+        }
+    }
+}

@@ -1,6 +1,7 @@
 # Watercolor easel
 
-The studio has five MCP tools: `paint`, `look`, `note`, `status` and `log`.
+The studio has seven MCP tools: `paint`, `look`, `note`, `status`, `log`, `reference` and `reference_list`.
+`reference_list` lists the reference library's entries by `id` and title; `reference` with `query` finds the entries that hold all its words, and with `id` reads one a page at a time, following `next_page` until it is null.
 `paint` runs a chunk of Lua. A chunk that succeeds keeps the paper, your
 named brush loads and the material clock for the next chunk. A chunk that
 fails leaves the committed painting as it was. Each chunk starts in a fresh

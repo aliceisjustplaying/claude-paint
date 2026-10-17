@@ -2,8 +2,7 @@
 # Export every studio profile from a branch and check each from outside:
 # the export's own checks pass, the studio holds its box (bin/box) or none,
 # the guide's tube table is what the studio's easel prints for its box, the
-# default-box studios' guides are the committed guide byte for byte, and a
-# box studio's guide differs from the committed one only in the table.
+# guides match the committed guide, except for a box studio's tube table.
 #
 #   R16_BRANCH=<branch> scripts/tests/export_profiles.sh [profile...]
 #
@@ -20,7 +19,6 @@ work=$(mktemp -d "$TMPDIR/export-profiles.XXXXXX")
 unset EASEL_BOX
 head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
 table_of() { awk -v head="$head" '$0 == head { on = 1 } on && !/^\|/ { exit } on { print }' "$1"; }
-committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
 # the profiles named on the command line, else all of them (the two newest only where R16_BRANCH has them)
 profiles=("$@")
 if [ ${#profiles[@]} -eq 0 ]; then
@@ -34,10 +32,12 @@ fi
 for profile in "${profiles[@]}"; do
   dest=$work/$profile
   "$repo/scripts/export_r16_studio" "$profile" "$dest" >"$work/$profile.log" 2>&1 || { cat "$work/$profile.log" >&2; echo "$profile: the export failed" >&2; exit 1; }
+  git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md" > "$work/$profile.guide.md"
+  committed=$(cat "$work/$profile.guide.md")
   case $profile in blank) box= ;; *) box=$profile ;; esac
   if [ -z "$box" ]; then
     [ ! -e "$dest/bin/box" ] || { echo "$profile: has a bin/box" >&2; exit 1; }
-    [ "$(cat "$dest/notes/easel_guide.md")" = "$committed" ] || { echo "$profile: the guide isn't the committed one" >&2; exit 1; }
+    cmp -s "$dest/notes/easel_guide.md" "$work/$profile.guide.md" || { echo "$profile: the guide isn't the committed one" >&2; exit 1; }
   else
     [ "$(cat "$dest/bin/box")" = "$box" ] || { echo "$profile: bin/box isn't $box" >&2; exit 1; }
     if [ "$profile" = tonn ] && ! git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/tonn_materials.md" 2>/dev/null; then

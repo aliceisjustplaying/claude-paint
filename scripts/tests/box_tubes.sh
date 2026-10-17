@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# scripts/check_box_tubes on fixture easels (text files standing in for the
-# binary's strings) and fixture boxes:
+# scripts/check_box_tubes on fixture text and fixture boxes:
 # - a box that holds vermilion: an "orange vermilion" or a "Chinese
 #   vermilion" in the easel is an outside tube, though it holds an inside
 #   name (the check matches outside names against the strings as they are);
@@ -58,4 +57,7 @@ expect fail orange $'lead whitevermilionorange vermilion' vermilion
 expect pass antwerp $'lead white\nAntwerp blue\nPrussian blue extended with alumina'
 expect fail antwerp $'lead white\nAntwerp blue\nPrussian blue extended with alumina\nPrussian blue' "Prussian blue"
 expect fail antwerp $'Antwerp blue\nbone black' "bone black"
-echo "box_tubes: $n fixture easels checked as expected ($work)"
+printf 'lead white\0Chinese vermilion\0' > "$work/binary"
+"$check" "$work/binary" "$work/vermilion.md" "$work/catalog"
+"$check" "$work/antwerp.md" "$work/antwerp.md" "$work/catalog"
+echo "box_tubes: $n fixture texts, a binary and a tube table checked as expected ($work)"

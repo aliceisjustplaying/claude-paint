@@ -52,7 +52,7 @@ function tail(text: string, max: number, file: string): string {
 }
 
 /** Every line of `text` as a Markdown quote, so none of it can read as one of the summary's own headings. */
-function quote(text: string): string {
+export function quote(text: string): string {
 	return text.split(/\r\n|\r|\n/).map((l) => (l ? `> ${l}` : ">")).join("\n");
 }
 

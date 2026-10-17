@@ -355,9 +355,11 @@ carries, so they cover rather than tint.
 **What stays inside the mask.** `work` plans its strokes from the mask:
 each stroke is anchored in it, but its path can begin outside and cross
 the edge. By default `detail` and `blend` keep their paint inside the
-mask. The other hands (`body`, `broad`, `hatch`, `glaze`, `scumble`) can
-carry paint past the edge onto whatever is there, by as much as a stroke's
-length (a `glaze` stroke is 120–300 units by default). `clip=true` keeps
+mask, soft where the mask is soft. `glaze`, and `blend` with
+`clip=false`, carry paint past the edge by half a brush at most, fading
+out. The other hands (`body`, `broad`, `hatch`, `scumble`) can carry
+paint past the edge onto whatever is there, by as much as a stroke's
+length. `clip=true` keeps
 every bristle inside the mask; `clip=` another mask keeps them inside that
 one instead. `edge=` (below) shapes how the passage meets the edge, with
 an overrun that varies and can reach beyond it.
@@ -410,6 +412,10 @@ m:grow(units)   m:shrink(units)   m:offset(units)   m:rim(width, soft)
 m:distance()   m:band(lo, hi, soft)   m:times(fn or mask)   m:map(function(v) return v * v end)
 m:at(x, y)   m:area()
 ```
+
+`m:soften(units)` gives a hard edge a ramp that many units wide and leaves
+a mask that is already graded (a function, a blur) at least as soft as it
+was.
 
 Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
 `below` selects larger y values, toward the bottom of the canvas;

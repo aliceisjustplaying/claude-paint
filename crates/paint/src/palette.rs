@@ -386,6 +386,18 @@ pub struct Palette {
     pub limbs_join_nearest: bool,
     /// The `glaze` and `scumble` hands lay a thin film (`Canvas::with_glaze_film`): new paintings.
     pub glaze_film: bool,
+    /// A blend or glaze meets its mask as the mask says: `soften` keeps a
+    /// graded mask's own ramp where it is the wider one, and an unclipped
+    /// blender or glaze reaches half a brush past its mask, not a stroke's
+    /// length: new paintings.
+    pub blend_at_masks: bool,
+    pub knife_skim: bool,
+    /// Engine 7: a blender lays wet paint only where wet paint was, and a
+    /// little way past it (`Canvas::with_blend_feather`): new paintings.
+    pub blend_feather: bool,
+    /// Engine 7: a brush's paint laid on wet paint stays on top of it
+    /// (`Canvas::with_brush_skim`): new paintings.
+    pub brush_skim: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -393,7 +405,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, glaze_film: self.glaze_film, ..Palette::new(self.name, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -407,7 +419,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, glaze_film: false, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, blend_at_masks: false, glaze_film: false, knife_skim: false, blend_feather: false, brush_skim: false, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -416,7 +428,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, glaze_film: self.glaze_film, ..Palette::new(self.name, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -530,7 +542,7 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, glaze_film: self.glaze_film, ..Palette::new(self.name, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, blend_at_masks: self.blend_at_masks, glaze_film: self.glaze_film, knife_skim: self.knife_skim, blend_feather: self.blend_feather, brush_skim: self.brush_skim, ..Palette::new(self.name, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.

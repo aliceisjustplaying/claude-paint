@@ -419,6 +419,11 @@ impl<'a> Handling<'a> {
         self.shake = k;
         self
     }
+    /// The size of the marks at a point (units): `scale_at` there, as the
+    /// strokes are sized, or 1.
+    pub fn scale_here(&self, f: Frame, x: f32, y: f32) -> f32 {
+        scale_of(self, f, x, y)
+    }
 }
 
 /// One planned stroke.
@@ -970,7 +975,12 @@ impl Canvas {
         };
         let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.into_iter().chain(p.dip2.map(|(paint, _, _)| paint))), &secs);
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
+        if hd.blender && self.blend_feather {
+            self.receptive = Some(self.receptive(&tool));
+        }
         self.paint_pass(pass, |surf, ti, first_id| {
+            // (a blender lays back paint it lifted: it mixes as it always did)
+            let surf = if hd.blender { crate::bristle::Surf { skim: 0.0, ..surf } } else { surf };
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
@@ -1024,8 +1034,48 @@ impl Canvas {
             }
             b
         });
+        self.receptive = None;
+    }
+
+    /// Where a blender pass may lay the wet paint it carries
+    /// (`with_blend_feather`): per pixel of the buffers, the share (0..1) of
+    /// what a bristle lays or ploughs there that the pixel takes. Wet paint
+    /// open when the pass begins takes all of it; dry paint and bare ground
+    /// take it only within about `FEATHER_OF_TRAIL` of the hair's trail
+    /// from open paint, less the
+    /// farther out, so the blender feathers a wet edge onto dry paint a
+    /// little way and stops. What isn't taken stays on the hair, to be laid
+    /// back in wet paint or wiped off. Paint the pass lays doesn't open more
+    /// of the canvas to it: the map is the pass's, fixed when it begins.
+    fn receptive(&self, tool: &Tool) -> Vec<f32> {
+        let (w, h) = (self.f.w, self.f.h);
+        let n = w * h;
+        let px = &self.wet.clock.px;
+        let open: Vec<f32> = (0..n)
+            .map(|i| {
+                let fl = if px.len() == n { crate::drying::fluid(px[i].cure) } else { 1.0 };
+                fl * crate::smoothstep(0.0, OPEN_COATS, self.wet.vol[i])
+            })
+            .collect();
+        // two box passes of radius r spread an edge by √(2r(r+1)/3) pixels:
+        // pick r for the feather (as `film_thickness` does)
+        let q = FEATHER_OF_TRAIL * tool.length * self.f.scale;
+        let r = ((0.5 * ((1.0 + 6.0 * q * q).sqrt() - 1.0)).round() as usize).max(1);
+        let near = crate::surface::box_blur(&crate::surface::box_blur(&open, w, h, r), w, h, r);
+        // (a straight edge blurs to one half on the edge: twice that is the
+        // whole of it on the edge, falling off past it)
+        near.iter().zip(&open).map(|(&b, &o)| (2.0 * b).min(1.0).max(o)).collect()
     }
 }
+
+/// How far past open paint a blender still lays the wet paint it carries
+/// onto dry paint (`Canvas::receptive`), about one standard deviation, as a
+/// share of how far its hair trails: a broad badger feathers a halo out a
+/// few mm, a small one softens a feature's edge in place.
+const FEATHER_OF_TRAIL: f32 = 1.0 / 6.0;
+/// Wet paint this thick (coats) or more counts as open paint for the
+/// blender's feather; thinner films (a glaze, a scumble) count in proportion.
+const OPEN_COATS: f32 = 0.05;
 
 /// Footprint and the per-stroke choices (pressure, fade, the pile of paint,
 /// the load) for a stroke along `pts` centered at `c`.
@@ -1544,5 +1594,130 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
             }
             phases.iter().flat_map(|&p| (0..tw * th).filter(move |&t| parity(t) == p)).collect()
         }
+    }
+}
+
+#[cfg(all(test, tube_box))]
+mod wet_edges {
+    use super::Handling;
+    use crate::bristle::{Gesture, Held, Tool};
+    use crate::canvas::Canvas;
+    use crate::color::{hex, luminance};
+    use crate::mask::Mask;
+    use crate::style::Style;
+    use crate::wet::Paint;
+
+    fn canvas(feather: bool, skim: bool) -> Canvas {
+        Canvas::new(500, 1.0, hex("#e8e0d0")).with_engine(crate::engine7::ENGINE).with_blend_feather(feather).with_brush_skim(skim)
+    }
+
+    fn rect(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> Mask {
+        Mask::from_fn(c.f, move |x, y| if (x0..x1).contains(&x) && (y0..y1).contains(&y) { 1.0 } else { 0.0 })
+    }
+
+    fn fill(c: &mut Canvas, m: &Mask, color: &str, seed: u64) {
+        let rgb = hex(color);
+        c.work(m, &Handling::new(Tool::filbert(16.0)).color(move |_, _| rgb).paint(0.9, 0.9).load(0.8).coverage(3.0).angle(|_, _| 1.57).clip(true), seed);
+    }
+
+    /// Mean luminance of x0..x1 (units), y 350..650.
+    fn lum(c: &Canvas, x0: f32, x1: f32) -> f32 {
+        let (seen, w, s) = (c.seen(), c.f.w, c.f.scale);
+        let px = |u: f32| (u * s) as usize;
+        let l: Vec<f32> = (px(350.0)..px(650.0)).flat_map(|y| (px(x0)..px(x1)).map(move |x| y * w + x)).map(|i| luminance(seen[i])).collect();
+        l.iter().sum::<f32>() / l.len() as f32
+    }
+
+    /// Dark paint dried, a wet light band over x 300..400 on it, and the
+    /// style's blend over x 250..550 (the band and 150 units of the dried
+    /// paint beside it): the luminance just past the band's edge, 50 to 150
+    /// units past it, and of the dried paint there before the blend.
+    fn blend_off_the_edge(feather: bool) -> (f32, f32, f32) {
+        let mut c = canvas(feather, false);
+        let ground = rect(&c, 100.0, 100.0, 900.0, 900.0);
+        fill(&mut c, &ground, "#1c2430", 1);
+        c.dry();
+        let band = rect(&c, 300.0, 300.0, 400.0, 700.0);
+        fill(&mut c, &band, "#f2ece0", 2);
+        let dried = lum(&c, 450.0, 550.0);
+        let region = rect(&c, 250.0, 300.0, 550.0, 700.0);
+        c.work(&region, &Style::oil().blend().unwrap(), 3);
+        (lum(&c, 400.0, 406.0), lum(&c, 450.0, 550.0), dried)
+    }
+
+    /// A blender over a wet passage that meets dried paint feathers the wet
+    /// edge a little way onto the dried paint and stops. Without the
+    /// feather (older logs) it lays the wet paint it picks up all the way
+    /// across the dried paint to the mask's edge.
+    #[test]
+    fn a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops() {
+        let (edge, far, dried) = blend_off_the_edge(true);
+        assert!(edge > dried + 0.05, "feathered: the edge {edge}, the dried paint {dried}");
+        assert!(far < dried + 0.01, "feathered: 50 to 150 units out {far}, the dried paint {dried}");
+        let (_, far, dried) = blend_off_the_edge(false);
+        assert!(far > dried + 0.08, "unfeathered: 50 to 150 units out {far}, the dried paint {dried}");
+    }
+
+    /// Thin dark lines drawn into a wet light layer, then a gentle blend
+    /// (coverage 1): the contrast of the lines (gap minus line luminance)
+    /// after drawing and after the blend.
+    fn lines_then_blend(skim: bool) -> (f32, f32) {
+        let mut c = canvas(true, skim);
+        let layer = rect(&c, 200.0, 200.0, 800.0, 800.0);
+        fill(&mut c, &layer, "#ece2c8", 1);
+        let mut held = Held::new(Tool { point: 0.8, ..Tool::round_sable(2.4) }, 5);
+        let xs: Vec<f32> = (0..8).map(|i| 280.0 + 60.0 * i as f32).collect();
+        for &x in &xs {
+            held.wipe(1.0);
+            held.load(Paint::body(hex("#141210")), 0.7);
+            c.drag(&mut held, &Gesture::new(vec![(x, 260.0), (x, 740.0)]).pressure(0.6, 0.6), None);
+        }
+        let contrast = |c: &Canvas| xs.iter().map(|&x| lum(c, x + 22.0, x + 32.0) - lum(c, x - 1.5, x + 1.5)).sum::<f32>() / xs.len() as f32;
+        let drawn = contrast(&c);
+        c.work(&layer, &Style::oil().blend().unwrap().coverage(1.0).angle(|_, _| 0.0), 3);
+        (drawn, contrast(&c))
+    }
+
+    /// A thin stroke laid into wet paint keeps its own value, and one
+    /// gentle blend softens it without erasing it. Without the skim (older
+    /// logs) the stroke is mixed into the whole depth of the wet paint as it
+    /// is laid, and the blend leaves next to nothing of it.
+    #[test]
+    fn a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend() {
+        let (drawn, blended) = lines_then_blend(true);
+        let (drawn_mixed, blended_mixed) = lines_then_blend(false);
+        assert!(drawn > 2.5 * drawn_mixed, "drawn: skimmed {drawn}, mixed {drawn_mixed}");
+        assert!(blended > 0.5 * drawn, "skimmed: drawn {drawn}, blended {blended}");
+        assert!(blended > 2.5 * blended_mixed, "blended: skimmed {blended}, mixed {blended_mixed}");
+    }
+
+    /// A blend over a thin wet scumble on dried paint still works the film:
+    /// with the feather (the film is open paint) it evens the scumble about
+    /// as it did without.
+    #[test]
+    fn a_blend_still_works_a_thin_wet_film_on_dry_paint() {
+        let spread = |feather: bool| {
+            let mut c = canvas(feather, false);
+            let ground = rect(&c, 100.0, 100.0, 900.0, 900.0);
+            fill(&mut c, &ground, "#e4d8bc", 1);
+            c.dry();
+            let film = rect(&c, 250.0, 250.0, 750.0, 750.0);
+            let st = Style::oil();
+            c.work(&film, &st.scumble().color(|_, _| hex("#3a3040")).paint(0.6, 0.5).load(0.3).coverage(0.8), 2);
+            let sd = |c: &Canvas| {
+                let (seen, w, s) = (c.seen(), c.f.w, c.f.scale);
+                let px = |u: f32| (u * s) as usize;
+                let l: Vec<f32> = (px(350.0)..px(650.0)).flat_map(|y| (px(350.0)..px(650.0)).map(move |x| y * w + x)).map(|i| luminance(seen[i])).collect();
+                let m = l.iter().sum::<f32>() / l.len() as f32;
+                (l.iter().map(|v| (v - m) * (v - m)).sum::<f32>() / l.len() as f32).sqrt()
+            };
+            let before = sd(&c);
+            c.work(&film, &st.blend().unwrap(), 3);
+            (before, sd(&c))
+        };
+        let (before, feathered) = spread(true);
+        let (_, plain) = spread(false);
+        assert!(feathered < 0.8 * before, "feathered: sd {before} -> {feathered}");
+        assert!(feathered < 1.25 * plain, "feathered {feathered}, plain {plain}");
     }
 }

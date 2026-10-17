@@ -672,7 +672,12 @@ impl UserData for Brush {
             if let Some((a, z)) = ramps {
                 g = g.ramps(a, z);
             } else {
-                g = g.ramps(0.02, 0.05);
+                // engine 8: the pressure follows the points to the end, so a
+                // limb drawn to where it forks keeps its width there (a tip
+                // tapers where its own points' pressure falls); before it
+                // the last 5% lifted off whatever the points asked
+                let release = if b.st.borrow().tubes.engine >= paint::REACH_END { 0.0 } else { 0.05 };
+                g = g.ramps(0.02, release);
             }
             if let Some(or) = g_orient {
                 g = g.orient(or);
@@ -1082,7 +1087,10 @@ impl UserData for M {
             Ok(wrap((*a.0).clone().roughen(seed.unwrap_or(1), period.unwrap_or(40.0), amount, edge.unwrap_or(0.0))))
         });
         // m:soften(units): a soft edge that many units wide
-        m.add_method("soften", |_, a, w: f32| Ok(wrap(a.0.soften(move |_, _| w))));
+        m.add_method("soften", |lua, a, w: f32| {
+            let graded = lua.app_data_ref::<S>().is_some_and(|st| st.borrow().tubes.blend_at_masks);
+            Ok(wrap(if graded { a.0.soften_graded(move |_, _| w) } else { a.0.soften(move |_, _| w) }))
+        });
         m.add_method("offset", |_, a, d: f32| Ok(wrap(a.0.offset(d))));
         m.add_method("grow", |_, a, d: f32| Ok(wrap(a.0.dilate(d))));
         m.add_method("shrink", |_, a, d: f32| Ok(wrap(a.0.erode(d))));
@@ -1289,6 +1297,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
     #[cfg(not(feature = "replay"))]
     check_keys(&o, WORK_KEYS, "work")?;
+    let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
     let f = frame(st)?;
@@ -1503,6 +1512,19 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         v => h = h.sweep(f32::from_lua_value(v)?),
     }
+    // an unclipped blender or glaze carries past its mask by half a brush (as
+    // the marks are sized there), not by a stroke's length (a clip mask of the
+    // painter's own says how far); what is in front still limits it, once
+    let limit = if st.borrow().tubes.blend_at_masks && !h.clip && (blending || hand == "glaze") && !matches!(o.get::<Value>("clip")?, Value::UserData(_)) {
+        let (half, hd) = (h.tool.width * 0.5, &h);
+        let reach = region.reach(|x, y| half * hd.scale_here(f, x, y));
+        Some(std::sync::Arc::new(match limit {
+            Some(l) => reach.mul(&l),
+            None => reach,
+        }))
+    } else {
+        limit
+    };
     if let Some(l) = limit {
         h = h.limit(l);
     }
@@ -2267,5 +2289,108 @@ mod tests {
              assert(odd, 'wide ranges reach every integer')
              assert(math.type(math.random(0)) == 'integer')")
         .unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "replay"))]
+mod blend_at_masks_tests {
+    use crate::session::{Session, box_for};
+
+    const CANVAS: &str = r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",3},{"yellow ochre",1}}, um=120, apply="knife"}}}"#;
+
+    fn new_painting() -> Session {
+        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s
+    }
+
+    fn older_log() -> Session {
+        let mut s = Session::replay_with(320, box_for(Some("--@ engine 7
+")).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s
+    }
+
+    /// Mean linear luminance of the canvas over x0..x1, y0..y1 (units).
+    fn lum(s: &Session, (x0, y0, x1, y1): (f32, f32, f32, f32)) -> f32 {
+        let c = s.canvas().unwrap();
+        let (f, px) = (c.window(), c.seen());
+        let (mut sum, mut n) = (0.0, 0.0);
+        for y in (y0 * f.scale) as usize..(y1 * f.scale) as usize {
+            for x in (x0 * f.scale) as usize..(x1 * f.scale) as usize {
+                let p = px[y * f.w + x];
+                sum += 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+                n += 1.0;
+            }
+        }
+        sum / n
+    }
+
+    /// A smoothstep ramp from y 200 to 300 softened by one unit, read at
+    /// y 225 and 275 (the ramp there: 0.16 and 0.84).
+    const RAMP: &str = r#"local m = mask(function(x, y) return smoothstep(200, 300, y) end):soften(1)
+print(string.format("%.3f %.3f", m:at(500, 225), m:at(500, 275)))"#;
+
+    fn ramp(s: &mut Session) -> Vec<f32> {
+        s.run(RAMP).unwrap().out.split_whitespace().map(|v| v.parse().unwrap()).collect()
+    }
+
+    /// In a new painting `soften` keeps a graded mask graded: it used to
+    /// threshold the mask at 0.5 and lay its own ramp there, so a soft
+    /// function mask came out as a hard line at its midpoint. A save keeps
+    /// this; a log from before replays its line.
+    #[test]
+    fn soften_keeps_a_graded_mask_graded() {
+        let mut s = new_painting();
+        let [lo, hi] = ramp(&mut s)[..] else { panic!() };
+        assert!((lo - 0.156).abs() < 0.02 && (hi - 0.844).abs() < 0.02, "the softened ramp is no longer graded ({lo}, {hi})");
+
+        let path = std::env::temp_dir().join(format!("easel-masks-{}.ckpt", std::process::id()));
+        let program = s.program("painting");
+        assert!(program.contains(crate::session::BLEND_MARK), "a new painting's log doesn't name its masks' blending");
+        assert_eq!(s.canvas().unwrap().engine(), paint::REACH_END);
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        let _ = std::fs::remove_file(&path);
+        assert!(restored.st.borrow().tubes.blend_at_masks);
+        let c = restored.canvas().unwrap();
+        assert_eq!(c.engine(), paint::REACH_END);
+        assert!(c.knife_skim() && c.blend_feather() && c.brush_skim());
+        drop(c);
+        assert!((ramp(&mut restored)[0] - 0.156).abs() < 0.02, "a restored save thresholds a softened ramp");
+
+        let [lo, hi] = ramp(&mut older_log())[..] else { panic!() };
+        assert!(lo < 0.01 && hi > 0.99, "an older log no longer replays its softened ramp as a line ({lo}, {hi})");
+    }
+
+    /// A wet dark band across a light ground, then an unclipped blend over
+    /// the band in diagonal strokes and an unclipped glaze down a narrow
+    /// strip. Returns how much darker the ground got 70 to 150 units above
+    /// the band, and 60 to 140 units beside the strip (shares of its
+    /// luminance).
+    fn reach(s: &mut Session) -> (f32, f32) {
+        s.run(r#"dk = pile{{"raw umber",2},{"bone black",1},{"lead white",0.3}}
+work(rect(100, 400, 800, 40), {hand="body", pile=dk, angle=0, coverage=3, fill=true, clip=true, seed=3})"#)
+            .unwrap();
+        let (above, beside) = ((300.0, 250.0, 700.0, 330.0), (560.0, 600.0, 640.0, 900.0));
+        let (a0, b0) = (lum(s, above), lum(s, beside));
+        s.run(r#"blend(rect(100, 400, 800, 40), {angle=-0.6, clip=false, seed=5})
+blend(rect(100, 400, 800, 40), {angle=0.6, clip=false, seed=6})
+work(rect(495, 600, 10, 300), {hand="glaze", pile=dk, angle=0, coverage=1.5, seed=7})"#)
+            .unwrap();
+        (1.0 - lum(s, above) / a0, 1.0 - lum(s, beside) / b0)
+    }
+
+    /// In a new painting an unclipped blender or glaze reaches half a brush
+    /// past its mask: it used to run its strokes their whole length (120 to
+    /// 300 units) past it, dragging the paint it picked up over whatever
+    /// lay there. A log from before replays its long reach.
+    #[test]
+    fn an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask() {
+        let (above, beside) = reach(&mut new_painting());
+        assert!(above < 0.01, "the unclipped blend carried paint 70 units past its mask ({above})");
+        assert!(beside < 0.01, "the unclipped glaze carried paint 60 units past its mask ({beside})");
+        let (above, beside) = reach(&mut older_log());
+        assert!(above > 0.02 && beside > 0.02, "an older log no longer replays its long reach ({above}, {beside})");
     }
 }

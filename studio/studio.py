@@ -683,11 +683,12 @@ def look_text(args):
 
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison, not a held knife and not the scratch canvas."""
+    not the palette, not a survey's tile, not a comparison, not a held knife, not the motif pinned beside it and not
+    the scratch canvas."""
     if look is None:
         return False
     look = re.sub(r"mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)", "", look)
-    return not re.search(r"crop|mode|light|compare|hold|(?:palette|survey|scratch) (?!False)", look)
+    return not re.search(r"crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)", look)
 
 
 # a closing reply that begins with the painting's title: "**The Silent Shore**", "### *Hünengrab im Abendlicht* (...)",
@@ -752,9 +753,10 @@ GLANCE_CACHE_SIZE = 256
 
 def _glance_file(path):
     """One session file, scanned from where the last scan stopped: its image count, its newest whole look and its
-    last picture (each as (index in the file, byte offset of the line, which image in the line)) and its last words.
-    Images are counted as parse() counts them, so the indices match the stream's. Reference pictures (read from
-    the studio's reference/) are counted but are never the whole look or the last picture."""
+    last picture from before the look tool (each as (index in the file, byte offset of the line, which image in the
+    line)) and its last words. Images are counted as parse() counts them, so the indices match the stream's.
+    Reference pictures (read from the studio's reference/) are counted but are never the whole look or the last
+    picture; nor are a look's other pictures (a survey's tile, a comparison, a held knife)."""
     with _lock("g:" + path):
         g = _glances.get(path)
         size = os.path.getsize(path)
@@ -819,7 +821,8 @@ def _glance_file(path):
 
 def glance(files):
     """A painter's picture and title for the picker: {"look": its newest whole look (or, before the look tool, the
-    last picture it saw; never a reference picture; None if it has seen none of its own) as a stream image index,
+    last picture it read; never a reference picture or a look's other pictures; None if it has seen none of its own)
+    as a stream image index,
     "title": from its last words or None}, and where that look's bytes are, for /api/glance."""
     gs, base, look, src, last, lsrc = [_glance_file(f) for f in files], 0, None, None, None, None
     version, last_version = None, None

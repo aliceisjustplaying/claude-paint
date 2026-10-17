@@ -69,8 +69,7 @@ def studio_path(studio, value):
 
 PAGE_BYTES = 8000
 READ_PAGE = 'Page {n} of {total}. For page {next}, call read with {{"path": {path}, "page": {next}}}'
-LOG_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": false, "page": {next}}}'
-LOG_SCRATCH_PAGE = 'Page {n} of {total}. For page {next}, call log with {{"scratch": true, "page": {next}}}'
+LOG_PAGE = "Page {n} of {total}. For page {next}, call log with {call}"
 REPLY_PAGE = 'Reply saved in full to {file}. Page 1 of {total}. For page 2, call read with {{"path": {path}, "page": 2}}'
 LAST_PAGE = "Page {total} of {total}, the last page."
 SAVED = " When the reply's text is over 8,000 bytes, the whole text is saved to a file in the studio and this returns its first page."

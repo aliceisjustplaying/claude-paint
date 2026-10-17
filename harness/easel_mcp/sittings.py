@@ -11,7 +11,7 @@ from uuid import uuid4
 from mcp import types
 
 from painting_chunks import WATERCOLOR_METHODS, WATERCOLOR_VERBS, count_painting_chunks
-from server import LOG_PAGE, LOG_SCRATCH_PAGE, READ_PAGE, REPLY_PAGE, Easel, page_of, studio_path, text_pages
+from server import LOG_PAGE, READ_PAGE, REPLY_PAGE, Easel, page_of, studio_path, text_pages
 
 
 def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
@@ -78,15 +78,17 @@ class SittingEasel(Easel):
     async def call(self, name, params):
         if name == "read":
             path = studio_path(self.studio, params["path"])
-            if path is not None and path.is_dir():
-                return [types.TextContent(type="text", text="\n".join(sorted(entry.name + ("/" if entry.is_dir() else "") for entry in path.iterdir())) or "empty folder")]
-            if path is None or not path.is_file():
+            folder = path is not None and path.is_dir()
+            if path is None or not (folder or path.is_file()):
                 raise ValueError("read: the path must be a file or a folder in this studio")
-            if path.suffix.lower() == ".png":
+            if not folder and path.suffix.lower() == ".png":
                 if self.page_bytes:
                     return pi_image(path.read_bytes())
                 return [types.ImageContent(type="image", mimeType="image/png", data=base64.b64encode(path.read_bytes()).decode())]
-            text = path.read_text()
+            if folder:
+                text = "\n".join(sorted(entry.name + ("/" if entry.is_dir() else "") for entry in path.iterdir())) or "empty folder"
+            else:
+                text = path.read_text()
             if self.page_bytes:
                 shown = str(path.relative_to(self.studio))
                 text = page_of(text, params.get("page"), lambda n, total: READ_PAGE.format(n=n, total=total, path=json.dumps(shown), next=n + 1), "read", self.page_bytes)
@@ -128,8 +130,8 @@ class SittingEasel(Easel):
         if self.page_bytes and name == "paint":
             result[0] = types.TextContent(type="text", text=self.reply(result[0].text))
         if self.page_bytes and name == "log":
-            more = LOG_SCRATCH_PAGE if params.get("scratch") else LOG_PAGE
-            result[0] = types.TextContent(type="text", text=page_of(result[0].text, params.get("page"), lambda n, total: more.format(n=n, total=total, next=n + 1), "log", self.page_bytes))
+            again = {"scratch": bool(params.get("scratch")), **({"find": params["find"]} if params.get("find") else {})}
+            result[0] = types.TextContent(type="text", text=page_of(result[0].text, params.get("page"), lambda n, total: LOG_PAGE.format(n=n, total=total, next=n + 1, call=json.dumps({**again, "page": n + 1}, ensure_ascii=False)), "log", self.page_bytes))
         if name == "status":
             remaining = "untimed" if self.sitting_seconds is None else f"{max(0, self.sitting_seconds - (time.time() - self.state['started'])):.0f} of {self.sitting_seconds:.0f} seconds left"
             result.append(types.TextContent(type="text", text=f"Sitting {self.state['sitting']}, {remaining}"))

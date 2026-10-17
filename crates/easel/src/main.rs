@@ -109,6 +109,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
+             [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel probe --at x,y | --crop x0,y0,x1,y1   the paint there: color and value (sRGB 0-255), in gallery light too, and its drying
@@ -130,6 +131,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
+             [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
   easel probe --at x,y | --crop x0,y0,x1,y1   the paint there: color and value (sRGB 0-255), in gallery light too, and its drying
@@ -1215,7 +1217,7 @@ impl Server {
             let p = new_look(&session_dir(&self.name), &png.2)?;
             return Ok(format!("{} ({}x{}, {:.2}s)\n", p.display(), png.0, png.1, t0.elapsed().as_secs_f64()));
         }
-        let (mut hold, mut at) = (None::<String>, None::<String>);
+        let (mut hold, mut at, mut reference) = (None::<String>, None::<String>, None::<PathBuf>);
         let mut i = 0;
         while i < args.len() {
             match args[i].as_str() {
@@ -1233,12 +1235,22 @@ impl Server {
                     compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
                     i += 1;
                 }
+                "--ref" => {
+                    reference = Some(PathBuf::from(args.get(i + 1).ok_or("--ref needs a picture of the motif (a file in the studio)")?));
+                    i += 1;
+                }
                 a => rest.push(a.to_string()),
             }
             i += 1;
         }
         if survey && compare.is_some() {
             return Err("look: --survey and --compare are two looks; ask for one".into());
+        }
+        if let Some(r) = reference {
+            if survey || compare.is_some() || hold.is_some() || at.is_some() {
+                return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
+            }
+            return self.reference(&rest, &r);
         }
         // --hold <pile> --at x,y: the loaded knife held up to the canvas (speculative: `hold_look`)
         if hold.is_some() || at.is_some() {
@@ -1456,6 +1468,74 @@ impl Server {
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
         let p = new_look(&session_dir(&self.name), &bytes)?;
         Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
+    }
+
+    /// The motif beside the canvas, as a painter pins a photograph or a study
+    /// beside the easel: the picture (a file in the studio) fitted to the
+    /// canvas's shape (centered, cropped to its aspect), on the left; the
+    /// same view of the canvas on the right. Both go through the view's
+    /// crop, size, modes and grid alike, so a passage is set beside the same
+    /// part of the motif. It is only looked at: nothing of it reaches the
+    /// painting, its log or its randomness.
+    fn reference(&mut self, args: &[String], pic: &Path) -> Result<String, String> {
+        let mut a = args.to_vec();
+        if !a.iter().any(|x| x == "--size" || x == "--crop") {
+            a.extend(["--size".to_string(), "800".to_string()]);
+        }
+        let v = look::View::parse(&a)?;
+        if v.palette {
+            return Err("look: --ref sets the motif beside the canvas, not the palette".into());
+        }
+        let studio = root().canonicalize().map_err(|e| e.to_string())?;
+        let pic = if pic.is_absolute() { pic.to_path_buf() } else { studio.join(pic) };
+        let real = pic.canonicalize().map_err(|e| format!("--ref {}: {e}", pic.display()))?;
+        if !real.starts_with(&studio) {
+            return Err(format!("--ref {}: the motif is a picture in this studio ({})", pic.display(), studio.display()));
+        }
+        use image::ImageDecoder;
+        let im = (|| -> image::ImageResult<image::RgbImage> {
+            let mut decoder = image::ImageReader::open(&real)?.into_decoder()?;
+            let orientation = decoder.orientation()?;
+            let mut im = image::DynamicImage::from_decoder(decoder)?;
+            im.apply_orientation(orientation);
+            Ok(im.into_rgb8())
+        })().map_err(|e| format!("--ref {}: {e}", pic.display()))?;
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let (f, whole) = (c.window(), c.frame());
+        // the picture fitted to the canvas's shape: scaled to cover it, centered
+        let (iw, ih) = (im.width() as f32, im.height() as f32);
+        let k = (iw / whole.w as f32).min(ih / whole.h as f32);
+        let (ox, oy) = (0.5 * (iw - k * whole.w as f32), 0.5 * (ih - k * whole.h as f32));
+        let lin: Vec<f32> = (0..=255).map(|b| paint::color::srgb_to_linear(b as f32 / 255.0)).collect();
+        let at = |x: f32, y: f32| -> [f32; 3] {
+            // (bilinear between the picture's pixels)
+            let (x, y) = ((x - 0.5).clamp(0.0, iw - 1.0), (y - 0.5).clamp(0.0, ih - 1.0));
+            let (x0, y0) = (x.floor() as u32, y.floor() as u32);
+            let (x1, y1) = ((x0 + 1).min(im.width() - 1), (y0 + 1).min(im.height() - 1));
+            let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+            let p = |xx: u32, yy: u32| im.get_pixel(xx, yy).0.map(|b| lin[b as usize]);
+            let (a, b, cc, d) = (p(x0, y0), p(x1, y0), p(x0, y1), p(x1, y1));
+            [0, 1, 2].map(|q| (a[q] * (1.0 - fx) + b[q] * fx) * (1.0 - fy) + (cc[q] * (1.0 - fx) + d[q] * fx) * fy)
+        };
+        let motif: Vec<[f32; 3]> = (0..f.w * f.h)
+            .map(|i| {
+                let (x, y) = ((i % f.w + f.x0) as f32 + 0.5, (i / f.w + f.y0) as f32 + 0.5);
+                at(ox + x * k, oy + y * k)
+            })
+            .collect();
+        // (one scale for both: the size budget may shrink a busy photograph's panel)
+        let ((_, _, left), (_, _, right)) = look::render_pair(&c, &v, &motif)?;
+        drop(c);
+        let (l, r) = (image::load_from_memory(&left).map_err(|e| e.to_string())?.to_rgb8(), image::load_from_memory(&right).map_err(|e| e.to_string())?.to_rgb8());
+        let gap = 12;
+        let h = l.height().max(r.height());
+        let mut both = image::RgbImage::from_pixel(l.width() + gap + r.width(), h, image::Rgb([24, 24, 28]));
+        image::imageops::replace(&mut both, &l, 0, 0);
+        image::imageops::replace(&mut both, &r, (l.width() + gap) as i64, 0);
+        let mut bytes = Vec::new();
+        both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        let p = new_look(&session_dir(&self.name), &bytes)?;
+        Ok(format!("{} ({}x{}): left the motif ({}), right the canvas\n", p.display(), both.width(), h, pic.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.
@@ -2202,4 +2282,18 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
     let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
     format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
+}
+
+#[cfg(test)]
+mod tests {
+    /// A motif for `look --ref` is often a photograph: the easel reads JPEG
+    /// as well as PNG.
+    #[test]
+    fn a_jpeg_motif_can_be_read() {
+        let im = image::RgbImage::from_fn(16, 12, |x, y| image::Rgb([(x * 16) as u8, (y * 20) as u8, 128]));
+        let mut jpg = Vec::new();
+        im.write_to(&mut std::io::Cursor::new(&mut jpg), image::ImageFormat::Jpeg).unwrap();
+        let back = image::load_from_memory(&jpg).unwrap().to_rgb8();
+        assert_eq!(back.dimensions(), (16, 12));
+    }
 }

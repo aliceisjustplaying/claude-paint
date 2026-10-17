@@ -9,7 +9,7 @@
         <string>run</string>
         <string>studio/studio.py</string>
         <string>--host</string>
-        <string>100.82.115.34</string>
+        <string>@TAILNET_IP@</string>
         <string>--port</string>
         <string>8765</string>
     </array>

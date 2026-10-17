@@ -2,7 +2,7 @@
   "state": "launched, first successful tools verified",
   "started_local": "2026-10-05 12:52:33 BST",
   "studio": "paint-studio-d95ea6",
-  "viewer": "http://m3p.tailec2dc.ts.net:8768/?p=paint-studio-d95ea6",
+  "viewer": "http://private-viewer.invalid:8768/?p=paint-studio-d95ea6",
   "source_commit": "e017df8e0394fbe520b41ddac112e69e46621cd2",
   "provider": "anthropic",
   "model": "claude-opus-5-5",

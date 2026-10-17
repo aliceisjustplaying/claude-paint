@@ -71,7 +71,7 @@ A+B candidate (`scripts/test_thinner_acceptance --card`).
   the new studio to the `--skip` list in `~/src/a/stillwet/sync-studio.sh`,
   verify with a trial export, then restart the sync. Without this the
   painter is published to the public stillwet site.
-- Tailnet viewer `http://m3p.tailec2dc.ts.net:8765/` returned 200 (lane E
+- Tailnet viewer `http://private-viewer.invalid:8765/` returned 200 (lane E
   restarted the LaunchAgent with bootout/bootstrap).
 - Guide statements to re-verify after integration are listed in LAUNCH.md
   (thinner ceiling lines 126-131, flow 132-138, 145-147, brushes 169-171,

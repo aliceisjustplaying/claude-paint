@@ -34,7 +34,7 @@
   ],
   "commit": "86e02b7fab6569f4da83b6a34f171d5aba8f0d46",
   "productionURL": "https://stillwet.art/studio/",
-  "privatePreviewURL": "http://100.82.115.34:8770/studio/",
+  "privatePreviewURL": "http://192.0.2.1:8770/studio/",
   "review": {
     "model": "GPT-6.1 Sol",
     "reasoning": "high",

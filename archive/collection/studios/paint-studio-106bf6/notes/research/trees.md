@@ -25,7 +25,7 @@
 - **The branch-area rule.** A mother branch of diameter *d* splitting into daughters *dᵢ* obeys *d*^Δ = Σ *dᵢ*^Δ on average. Measured Δ is between 1.8 and 2.3 for many species (Δ = 2 means cross-sectional area is conserved). *Arithmetic from the rule:* with Δ = 2, two equal daughters are each about 0.71 of the mother's diameter. A daughter with a quarter of the area has half the diameter, and the mother continuing past it drops only to about 0.87 of its former diameter.
 - **Why: two explanations.** The *pipe model* (Shinozaki et al. 1964) pictures a tree as a bundle of unit pipes, each connecting a set of leaves to the roots. So the stem area at a height tracks the leaves above it. Below the crown, the pipes of branches long since shed stay in the trunk as "disused pipes." That is why trunks keep thickening toward the base even where no branches remain. Eloy objects that the conducting sapwood can be as little as 5% of a mature trunk's cross-section. He shows instead that the rule follows if a self-similar tree skeleton sizes its diameters to resist wind. Whatever the cause, cross-sections sum roughly at forks.
 - **When the rule bends.** Models depart from the rule as side branches get heavier or leave at wider angles. In real branches the departure is small. Beech branches fit a constant-stress design best; fir branches often follow the area rule. *My inference:* a heavy, near-horizontal limb is somewhat thicker at its base than the area rule alone would give.
-- **What a junction is.** The cambium runs continuously from trunk to branch. In the upper junction, though, its cells are oriented at "approximately right angles" to the normal direction. Early in the season the branch xylem turns downward at the branch base and "encircles it to form a collar." Later in the season a collar of trunk xylem envelops it. "The branch is structurally attached to the trunk by a series of trunk collars that envelop the branch collars every growing season." Water enters and leaves the branch through the branch collar. Outwardly there is a branch collar on the underside of the branch base and a branch bark ridge on top, running roughly parallel to the branch angle.
+- **What a junction is.** The cambium runs continuously from trunk to branch. In the upper junction, though, its cells are oriented at "approximately right angles" to the normal direction. Early in the season the branch xylem turns downward at the branch base and "encircles it to form a collar." Later in the season a collar of trunk xylem envelops it. "The branch is structurally attached to the trunk by a […]." [SHIGO] Water enters and leaves the branch through the branch collar. Outwardly there is a branch collar on the underside of the branch base and a branch bark ridge on top, running roughly parallel to the branch angle.
 - **Why a side branch never starts thinner than it is farther out.** *My inference, from and:* at its base a branch carries the pipes for every leaf beyond it, and each year's collar adds wood there first. Its cross-section therefore shrinks outward, stepwise at each fork and gradually between forks, and never the other way. A branch drawn as a constant-width rod, or narrower where it leaves the trunk, contradicts both.
 - **Angle of attachment.** Wide, U-shaped unions are strong. Narrow V-shaped unions "often form included bark," a wedge of inward-rolled bark between two stems. Codominant stems of about equal size from one point often do the same. When a leader is damaged, several branches may become codominant.
 - **Dead branches and stubs.** Around a dead branch, the collar and branch bark ridge "continue to grow" and can be told apart from the dead wood. *General knowledge:* over years a living collar can form a sleeve around a dead stub.
@@ -35,7 +35,7 @@
 
 ### 3.1 Oak (*Quercus robur*, pedunculate; *Q. petraea*, sessile)
 
-- **Habit.** In *Q. robur* the main trunk "tends to disappear in the crown, developing irregular boughs with twisting branches." *Q. petraea* usually keeps a main stem with boughs that gradually decrease in size. Heights are usually about 30 m, with diameters up to 1 m. Individuals can live over 1000 years and reach 3–4 m in diameter. The crown is round.
+- **Habit.** In *Q. robur* the main trunk "tends to disappear in the crown, developing irregular boughs with […]." [JRC-Q] *Q. petraea* usually keeps a main stem with boughs that gradually decrease in size. Heights are usually about 30 m, with diameters up to 1 m. Individuals can live over 1000 years and reach 3–4 m in diameter. The crown is round.
 - **Twigs and buds.** Twigs are moderate in thickness and yellow-brown. Buds are "angled, short and round". **General knowledge:** oak buds cluster at the shoot tip, so several shoots start from one point, which gives oak its crooked, clustered branching.
 - **Twig shedding (cladoptosis).** In cladoptosis an abscission layer forms and the twig "is shed cleanly," as leaves are. In oak, most shed twigs are one year old and leafless. They fall in autumn and mostly come from vigorously growing trees, so the shedding is not a sign of drought or age. In a 165-year-old stand, weak shoots had 27% lower hydraulic conductance, with bottlenecks at nodes and abscission zones.
 - **Bark.** Gray and fissured into rectangular elongated blocks, thicker in *Q. robur*. "Deeply fissured with age".
@@ -45,14 +45,14 @@
 
 - **Habit.** Usually single-stemmed, with silver-gray bark. Typical life span 150–300 years. It keeps growing fast into late maturity and is the most shade-tolerant broadleaf in its range. A stocky trunk and round crown.
 - **Twigs and buds.** Twigs are "slender, zigzag, light brown." Buds are long (about 2.5 cm), slender and "widely divergent from stems". Beech was Roloff's model species for the long-shoot/short-shoot vitality stages.
-- **Bark.** "Smooth, thin, and dark gray-blue … smooth even on the largest stems, may be mottled". The thin bark protects poorly against fire and stripping.
+- **Bark.** "Smooth, thin, and dark gray-blue … smooth even on the largest […]" [VT beech]. The thin bark protects poorly against fire and stripping.
 - **Taper.** Japanese beech branches fit a uniform-stress design best.
 
 ### 3.3 Birch (*Betula pendula*, silver; *B. pubescens*, downy)
 
 - **Habit.** Short-lived (commonly 90–100 years, rarely 150), relatively small, with a light canopy. The crown is open and pyramidal, "with distinctly drooping fine branches". In *B. pendula* the branches droop; in *B. pubescens* they grow upward or horizontally.
 - **Twigs.** "Slender, reddish brown … noticeably drooping," with slender pointed buds.
-- **Bark.** Brown when young, then "silvery-white, with horizontal dark grey lenticels, that with age darkens and develops fissures." Young trees show dark scars where shoots dropped. At the base the tree "develops thick bark which splits into narrow, vertical furrows which are nearly black".
+- **Bark.** Brown when young, then "silvery-white, with horizontal dark grey lenticels, that with age darkens […]." [JRC-B] Young trees show dark scars where shoots dropped. At the base the tree "develops thick bark which splits into narrow, vertical furrows which […]" [VT birch].
 
 ### 3.4 Lime (*Tilia cordata*, small-leaved; *T. platyphyllos*, large-leaved)
 
@@ -74,7 +74,7 @@
 
 ### 3.7 Norway spruce (*Picea abies*)
 
-- **Habit.** A straight, regular trunk up to 50–60 m, usually living 200–300 years. "The crown is regularly conic, columnar, with whorled, short and stout branches, the upper level ascending and the lower drooping". Free-standing trees keep green branches down to the ground. Branches are inclined to hanging, as an adaptation to snow load.
+- **Habit.** A straight, regular trunk up to 50–60 m, usually living 200–300 years. "The crown is regularly conic, columnar, with whorled, short and […]" [JRC-PA]. Free-standing trees keep green branches down to the ground. Branches are inclined to hanging, as an adaptation to snow load.
 - **Branching types.** Young spruces branch in flat "plates" up to about 20 years. After that they develop either the *Plattenfichte* type, with horizontal second-order branches, or the *Kammfichte* ("comb spruce") type, whose second- and higher-order branches hang down like a fringe. A third type is the *Bürstenfichte* ("brush spruce"). Comb spruces dominate on well-supplied sites. Plate spruces dominate on poor bogs and at extreme altitudes.
 - **Bark.** Orange-brown. Red-brown and scaly, later gray with flaking scales or plates. Drops of resin are common on trunk and branches.
 
@@ -83,3 +83,9 @@
 - **Habit.** 23–27 m on average, sometimes over 40 m. It lives 400 years or more. Crowns are rounded when young and round-topped when old. The trunk is often twisted, depending on seed origin. In some conifers, flattening and broadening of the crown may be the only sign of old-age retrenchment.
 - **Bark.** The upper stem is "a distinct reddish-orange," while the lower part is "furrowed brown to grey-brown and becomes deeply fissured". "Upper crowns always show orange peeling bark".
 - **Needles.** In pairs, twisted.
+
+## Sources
+
+- **[SHIGO]** Shigo, A.L., "How tree branches are attached to trunks," *Canadian Journal of Botany* 63 (1985), pp.1391–1401 (abstract). https://doi.org/10.1139/b85-193
+- **[JRC-Q] [JRC-B] [JRC-PA]** San-Miguel-Ayanz, J. et al. (eds.), *European Atlas of Forest Tree Species* (2016). Chapters: Eaton et al., *Quercus robur and Q. petraea*; Beck et al., *Betula*; Caudullo et al., *Picea abies*. https://forest.jrc.ec.europa.eu/media/atlas/ + Quercus_robur_petraea.pdf, Betula_spp.pdf, Picea_abies.pdf
+- **[VT beech] [VT birch]** Virginia Tech Dendrology fact sheets: beech ID=121, birch 15. https://dendro.cnre.vt.edu/dendrology/syllabus/factsheet.cfm?ID=121 (change the ID)

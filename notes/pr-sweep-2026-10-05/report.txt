@@ -92,7 +92,7 @@ PR 6 was excluded from edits and confirmed merged at 2026-10-04T23:33:45Z:
 https://github.com/aliceisjustplaying/claude-paint/pull/6
 The integration includes its merged main SHA.
 
-Private preview: http://100.82.115.34:8766/ (m3p Tailscale IP), HTTP 200 verified.
+Private preview: http://192.0.2.1:8766/ (remote-mac Tailscale IP), HTTP 200 verified.
 Candidate studio files are retained in notes/pr-sweep-preview/studio; the server remains running.
 Other-Mac HTTP verification was blocked by SSH host-key verification.
 Own temporary worktrees, build directories and sampler PNGs were removed.

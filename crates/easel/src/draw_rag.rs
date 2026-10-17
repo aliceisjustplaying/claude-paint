@@ -29,14 +29,10 @@ fn no_canvas() -> mlua::Error {
 fn full_note(r: &Rag, strokes: Option<(usize, usize)>) -> String {
     let cloth = r.soaked >= FULL;
     match (strokes, cloth) {
-        (Some((full, n)), false) => format!("rag: the face in use is full: {full} of {n} strokes began on it and lifted almost nothing (load {:.2}). A refold (r:refold(), or refold= in the wipe) turns out a cleaner face.
-", r.load),
-        (Some((full, n)), true) => format!("rag: the whole cloth is full: {full} of {n} strokes lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.
-", r.load, r.soaked),
-        (None, false) => format!("rag: the face in use was full when this wipe began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.
-", r.load),
-        (None, true) => format!("rag: the whole cloth is full, so this wipe lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.
-", r.load, r.soaked),
+        (Some((full, n)), false) => format!("rag: the face in use is full: {full} of {n} strokes began on it and lifted almost nothing (load {:.2}). A refold (r:refold(), or refold= in the wipe) turns out a cleaner face.\n", r.load),
+        (Some((full, n)), true) => format!("rag: the whole cloth is full: {full} of {n} strokes lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
+        (None, false) => format!("rag: the face in use was full when this wipe began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.\n", r.load),
+        (None, true) => format!("rag: the whole cloth is full, so this wipe lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
     }
 }
 

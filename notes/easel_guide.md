@@ -72,14 +72,14 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   are full, so thin paint there goes lean, quick to set and matte, while
   thick paint barely notices. The pigment packs from the ground up: the
   paint above keeps its oil, its flow and its gloss until the packed layer
-  reaches the surface, and how far a thin film drains is its pigment's
-  (fine pigments keep the oil they pack with and dry semi-matte; coarse
-  ones, such as smalt, drain further and dry matte). Each box's tubes hold
-  as much oil as its period ground them with. Paint that has dried over it
-  seals it. An oil ground (the default) absorbs nothing and is semi-matte.
-  (A painting begun before the drain, whose log's head has no `--@ drain`
-  line, keeps the older ground: it draws oil from the paint just laid,
-  leaving it stiffer.)
+  reaches the surface. How far a thin film drains depends on its pigment:
+  fine pigments keep the oil they pack with and dry semi-matte; coarse
+  ones, such as smalt, drain further and dry matte. Each tube holds as
+  much oil as paint of its day was ground with. Paint that has dried over
+  the ground seals it. An oil ground (the default) absorbs nothing and is
+  semi-matte. (A painting whose log's head has no `--@ drain` line keeps
+  the older ground: it draws oil from the paint just laid, leaving it
+  stiffer.)
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -130,7 +130,8 @@ first, which draws out that share of its own oil (0 to 0.5):
 more opaque and much stiffer: it holds the ridges and furrows of the brush
 as it dries. The paper draws no more than the pigment lets go: a paint
 already ground stiff, or of a fine pigment that holds its oil, gives up
-less than you ask. A pile takes either medium or blot.
+less than you ask. (On a painting whose log's head has no `--@ drain`
+line, the paper draws the full share.) A pile takes either medium or blot.
 
 **The palette board.** Every pile is a heap on the board beside the easel.
 

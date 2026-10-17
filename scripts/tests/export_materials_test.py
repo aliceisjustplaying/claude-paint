@@ -62,7 +62,7 @@ class ExportMaterialsTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.repo = self.root / "repo"
-        for name in ("export_r16_studio", "prepare_capy_studio", "strip_sources", "studio_guide.py",
+        for name in ("export_r16_studio", "prepare_capy_studio", "strip_sources",
                      "check_studio_names", "check_box_tubes", "tests/export_profiles.sh"):
             path = self.repo / "scripts" / name
             path.parent.mkdir(parents=True, exist_ok=True)

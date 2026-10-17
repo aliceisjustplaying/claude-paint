@@ -191,7 +191,11 @@ cp "$built" "$dest/bin/easel"
 notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
 # Older rounds may not have the techniques handbook.
 ! git -C "$repo" cat-file -e "$branch:notes/techniques.md" 2>/dev/null || notes+=(notes/techniques.md)
-[ -z "$materials" ] || notes+=("notes/research/$materials")
+if [ -n "$materials" ]; then
+  if [ "$profile" != tonn ] || git -C "$repo" cat-file -e "$branch:notes/research/$materials" 2>/dev/null; then
+    notes+=("notes/research/$materials")
+  fi
+fi
 git -C "$repo" archive --format=tar "$branch" -- "${notes[@]}" | tar -x -C "$dest"
 if [ "$profile" = cezanne ]; then
   git -C "$repo" archive --format=tar "$branch" -- notes/cezanne_techniques.md notes/research/cezanne_oil_paint_physics.md | tar -x -C "$dest"

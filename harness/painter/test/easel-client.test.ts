@@ -141,6 +141,13 @@ test("look's options become the easel's arguments", () => {
 	assert.deepEqual(lookArgs({ hold: "skyP", at: "400,320", mode: "value" }), ["--hold", "skyP", "--at", "400,320", "--mode", "value"]);
 });
 
+test("mask overlays pass named masks through the look client", () => {
+	assert.deepEqual(lookArgs({ crop: "0,100,1000,200", mask: "shape,soft", size: 300 }),
+		["--crop", "0,100,1000,200", "--mask", "shape,soft", "--size", "300"]);
+	assert.equal(toolWords("look --mask shape: no global mask with that name"), "look mask shape: no global mask with that name");
+	assert.throws(() => lookArgs({ palette: true, mask: "shape" }), /palette takes no other option/);
+});
+
 test("a long log keeps its end and says what was left out", () => {
 	assert.equal(tail("abc", 5), "abc");
 	const t = tail("0123456789", 4);
@@ -497,6 +504,19 @@ test("a look is renamed at random and shown without the machine's seconds", asyn
 	assert.equal(said, `${path} (1000x714)`);
 	assert.equal(readFileSync(join(s, path), "utf8"), "png");
 	assert.ok(!existsSync(join(s, "out", "look-0012.png")));
+});
+
+test("a renamed crop keeps its measurement scale", async () => {
+	const s = mkdtempSync(join(tmpdir(), "studio-"));
+	try {
+		mkdirSync(join(s, "out"));
+		writeFileSync(join(s, "out", "look-0012.png"), "png");
+		const { said, paths } = renameLooks(s, "out/look-0012.png (1200x216, 0.04s); scale 1.2000 x 1.2000 px/unit");
+		assert.equal(paths.length, 1);
+		assert.equal(said, `${paths[0]} (1200x216); scale 1.2000 x 1.2000 px/unit`);
+	} finally {
+		rmSync(s, { recursive: true, force: true });
+	}
 });
 
 test("background display revisions keep their stable paths while pending or complete", async () => {

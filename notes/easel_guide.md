@@ -652,9 +652,11 @@ top of it.
 
 `look` shows you the canvas as it is now, with wet paint as laid. A whole
 view shows all of it, scaled down, like stepping back. A crop shows the
-canvas at its full detail, 2.4 pixels to a canvas unit, and may be at most
-500 units on either side. `crop: "x0,y0,x1,y1"` gives two opposite corners
-in canvas units, not a position and width/height.
+canvas at its full detail, 2.4 pixels to a canvas unit, when it fits within
+1200 pixels a side; a wider crop is scaled down to fit, and `size` sets a
+smaller limit. The reply gives the scale in pixels per canvas unit.
+`crop: "x0,y0,x1,y1"` gives two opposite corners in canvas units, not a
+position and width/height.
 
 | `look` with | shows |
 |---|---|
@@ -669,6 +671,7 @@ in canvas units, not a position and width/height.
 | `mode: "value,squint"`, `size: 600` | modes combine; `size` sets the long side |
 | `grid: true` | a squared grid in canvas units, labeled along the edges |
 | `crop: "300,200,500,350"`, `grid: 10` | a window with a grid every 10 units |
+| `mask: "<name>"` | the named global mask's outline and a light fill over the view; several names may be comma-separated |
 
 The grid is drawn on the PNG only, like the squares ruled over a drawing
 to transfer it.

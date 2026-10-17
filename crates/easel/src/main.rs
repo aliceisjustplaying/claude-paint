@@ -2,7 +2,7 @@
 //!
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N] [--mask name[,name]]
 //!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
@@ -106,7 +106,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000] [--mask name[,name]]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
@@ -128,7 +128,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
                       (a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,edges,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000] [--mask name[,name]]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
@@ -1083,7 +1083,9 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
     }
     let seen_as = |crop: [f32; 4]| look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
-    let (_, _, png) = look::render(&c, &seen_as(crop))?;
+    let mut passage_view = seen_as(crop);
+    passage_view.overlays = v.overlays.clone();
+    let (_, _, png) = look::render(&c, &passage_view)?;
     let mut passage = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     // the knife: its paint laid thick on a steel blade, on a board of its own with the
     // painting's pixels to the unit, millimetres to the unit and engine
@@ -1106,6 +1108,13 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (x0, x1) = (px(crop[0], f.x0, f.x0 + f.w), px(crop[2], f.x0, f.x0 + f.w));
     let (y0, y1) = (px(crop[1], f.y0, f.y0 + f.h), px(crop[3], f.y0, f.y0 + f.h));
     let (kx, ky) = (passage.width() as f32 / (x1 - x0) as f32, passage.height() as f32 / (y1 - y0) as f32);
+    let shown = |n: i64| if f.scale > 2.4 { ((n as f32 * 2.4 / f.scale).round() as u32).max(1) } else { n as u32 };
+    let ratio = passage.width().max(passage.height()) as f32 / shown((x1 - x0).max(y1 - y0)) as f32;
+    let blade_img = if ratio < 1.0 {
+        image::imageops::resize(&blade_img, (blade_img.width() as f32 * ratio).round().max(1.0) as u32, (blade_img.height() as f32 * ratio).round().max(1.0) as u32, image::imageops::FilterType::Lanczos3)
+    } else {
+        blade_img
+    };
     let x = (((at.0 * f.scale).round() as i64 - x0) as f32 * kx).round() as i64;
     let y = (((at.1 * f.scale).round() as i64 - y0) as f32 * ky).round() as i64 - blade_img.height() as i64 / 2;
     image::imageops::overlay(&mut passage, &blade_img, x, y);
@@ -1305,6 +1314,12 @@ impl Server {
         Ok(format!("the live canvas is in {}\n", png.display()))
     }
 
+    fn view(&self, args: &[String]) -> Result<look::View, String> {
+        let mut v = look::View::parse(args)?;
+        v.overlays = v.mask.iter().map(|name| self.s.mask(name)).collect::<Result<_, _>>()?;
+        Ok(v)
+    }
+
     fn look(&mut self, args: &[String], path: Option<PathBuf>) -> Result<String, String> {
         // --survey: the whole canvas at full detail, in tiles; --compare <png>: an
         // earlier look beside this one (taken out before the view's own arguments)
@@ -1366,11 +1381,13 @@ impl Server {
             if p.len() != 2 {
                 return Err(format!("--at {at}: want x,y in units"));
             }
-            let v = look::View::parse(&rest)?;
+            let v = self.view(&rest)?;
             let t0 = Instant::now();
             let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
-            return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
+            let c = self.s.canvas().unwrap();
+            let scale = look::crop_scale(c.window(), &v, w, h)?;
+            return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}{scale}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
         }
         if survey {
             return self.survey(&rest);
@@ -1379,7 +1396,7 @@ impl Server {
             return self.compare(&rest, &prev);
         }
         let args = &rest[..];
-        let v = look::View::parse(args)?;
+        let v = self.view(args)?;
         let t0 = Instant::now();
         if v.palette {
             let (w, h, png) = palette_look(&self.s)?;
@@ -1402,8 +1419,9 @@ impl Server {
                     }
                     None => display::new_look(&session_dir(&self.name), &png)?,
                 };
+                let scale = look::crop_scale(optics.frame(), &v, w, h)?;
                 let publication = display::Publication::new(vec![(v, path.clone())])?;
-                reply = Some(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()));
+                reply = Some(format!("{} ({w}x{h}, {:.2}s){scale}\n", path.display(), t0.elapsed().as_secs_f64()));
                 Ok(Box::new(move |cancel| publication.render(optics, cancel)))
             })?;
             return Ok(reply.unwrap());
@@ -1418,7 +1436,8 @@ impl Server {
                 (w, h, new_look(&session_dir(&self.name), &png)?)
             }
         };
-        let reply = format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64());
+        let scale = look::crop_scale(c.window(), &v, w, h)?;
+        let reply = format!("{} ({w}x{h}, {:.2}s){scale}\n", path.display(), t0.elapsed().as_secs_f64());
         look::companions(&c, &[(v, path)]);
         Ok(reply)
     }
@@ -1431,7 +1450,7 @@ impl Server {
         }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
-        let view = look::View::parse(args)?;
+        let view = self.view(args)?;
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px as a crop is shown, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
@@ -1443,9 +1462,8 @@ impl Server {
             for r in 0..rows {
                 for k in 0..cols {
                     let crop = format!("{},{},{},{}", k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th);
-                    let mut a = args.to_vec();
-                    a.extend(["--crop".to_string(), crop.clone()]);
-                    let v = look::View::parse(&a)?;
+                    let mut v = view.clone();
+                    v.crop = Some([k as f32 * tw, r as f32 * th, (k + 1) as f32 * tw, (r + 1) as f32 * th]);
                     let (w, h, png) = look::render_pixels(c.window(), &v, seen)?;
                     let p = if stable { display::new_look(&session_dir(&self.name), &png)? } else { new_look(&session_dir(&self.name), &png)? };
                     out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
@@ -1545,7 +1563,7 @@ impl Server {
         if !a.iter().any(|x| x == "--size" || x == "--crop") {
             a.extend(["--size".to_string(), "800".to_string()]);
         }
-        let v = look::View::parse(&a)?;
+        let v = self.view(&a)?;
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (_, _, png) = look::render(&c, &v)?;
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
@@ -1571,7 +1589,8 @@ impl Server {
         let mut bytes = Vec::new();
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
         let p = new_look(&session_dir(&self.name), &bytes)?;
-        Ok(format!("{} ({}x{}): left {}, right now\n", p.display(), both.width(), h, prev.display()))
+        let scale = look::crop_scale(c.window(), &v, now.width() as usize, h as usize)?;
+        Ok(format!("{} ({}x{}): left {}, right now{scale}\n", p.display(), both.width(), h, prev.display()))
     }
 
     /// The motif beside the canvas, as a painter pins a photograph or a study
@@ -1586,7 +1605,7 @@ impl Server {
         if !a.iter().any(|x| x == "--size" || x == "--crop") {
             a.extend(["--size".to_string(), "800".to_string()]);
         }
-        let v = look::View::parse(&a)?;
+        let v = self.view(&a)?;
         if v.palette {
             return Err("look: --ref sets the motif beside the canvas, not the palette".into());
         }
@@ -1628,7 +1647,8 @@ impl Server {
             })
             .collect();
         // (one scale for both: the size budget may shrink a busy photograph's panel)
-        let ((_, _, left), (_, _, right)) = look::render_pair(&c, &v, &motif)?;
+        let ((_, _, left), (w, h, right)) = look::render_pair(&c, &v, &motif)?;
+        let scale = look::crop_scale(f, &v, w, h)?;
         drop(c);
         let (l, r) = (image::load_from_memory(&left).map_err(|e| e.to_string())?.to_rgb8(), image::load_from_memory(&right).map_err(|e| e.to_string())?.to_rgb8());
         let gap = 12;
@@ -1639,7 +1659,7 @@ impl Server {
         let mut bytes = Vec::new();
         both.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
         let p = new_look(&session_dir(&self.name), &bytes)?;
-        Ok(format!("{} ({}x{}): left the motif ({}), right the canvas\n", p.display(), both.width(), h, pic.display()))
+        Ok(format!("{} ({}x{}): left the motif ({}), right the canvas{scale}\n", p.display(), both.width(), h, pic.display()))
     }
 
     /// The log on disk is the one the session wrote, and holds everything it ran.

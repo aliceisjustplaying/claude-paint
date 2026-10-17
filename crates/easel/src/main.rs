@@ -112,6 +112,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
+  easel probe --at x,y | --crop x0,y0,x1,y1   the paint there: color and value (sRGB 0-255), in gallery light too, and its drying
   easel log           the painting so far (= paintings/lua/painting.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -133,6 +134,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
              [--ref <picture>]   the motif (a photo or study in the studio) beside the canvas, same view
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
   easel look --palette   the palette board: every heap knifed out thick and smeared thin across a black stripe
+  easel probe --at x,y | --crop x0,y0,x1,y1   the paint there: color and value (sRGB 0-255), in gallery light too, and its drying
   easel log           the session so far (= paintings/lua/<name>.lua)
   easel status        chunks, width, canvas
   easel globals       the painting's globals, one a line: chunk that last set it, name, what it holds
@@ -204,7 +206,7 @@ fn main() -> ExitCode {
             print_usage();
             Ok(())
         }
-        "do" | "look" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
+        "do" | "look" | "probe" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
         // replaying the log to compare it with the live canvas is the runner's, after the
         // painter's session (scripts/check_painting); the painter build has no `check`
         #[cfg(feature = "replay")]
@@ -1369,6 +1371,69 @@ impl Server {
         Ok(out)
     }
 
+    /// The paint at a point (`--at x,y`) or averaged over a window (`--crop x0,y0,x1,y1`), in
+    /// units: its color and value in 8-bit sRGB as a plain look and a value look show them,
+    /// the same in the gallery's light, and its drying stage (over a window, each stage's share).
+    fn probe(&self, args: &[String]) -> Result<String, String> {
+        let numbers = |s: &str, n: usize| {
+            let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().ok()?;
+            (p.len() == n && p.iter().all(|v| v.is_finite())).then_some(p)
+        };
+        let (place, [x0, y0, x1, y1]) = match args {
+            [a, s] if a == "--at" => {
+                let p = numbers(s, 2).ok_or(format!("probe: --at {s}: want x,y in canvas units"))?;
+                (format!("at {},{}", p[0], p[1]), [p[0], p[1], p[0], p[1]])
+            }
+            [a, s] if a == "--crop" => {
+                let p = numbers(s, 4).ok_or(format!("probe: --crop {s}: want x0,y0,x1,y1 in canvas units (opposite corners)"))?;
+                (format!("over {},{},{},{}", p[0], p[1], p[2], p[3]), [p[0].min(p[2]), p[1].min(p[3]), p[0].max(p[2]), p[1].max(p[3])])
+            }
+            _ => return Err("probe: want --at x,y or --crop x0,y0,x1,y1 (canvas units)".into()),
+        };
+        let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
+        let f = c.window();
+        // (to half a pixel: a canvas's height in units is its pixels', which needn't be round)
+        let (w, h) = (c.width(), c.height());
+        if x0 < 0.0 || y0 < 0.0 || x1 > w + 0.5 / f.scale || y1 > h + 0.5 / f.scale {
+            let round = |v: f32| (v * 100.0).round() / 100.0;
+            return Err(format!("probe: {place} is outside the canvas (0,0 to {},{})", round(w), round(h)));
+        }
+        // the pixels under the point, or every pixel the window touches
+        let span = |a: f32, b: f32, lo: usize, n: usize| {
+            let i = ((a * f.scale).floor() as usize).saturating_sub(lo).min(n - 1);
+            (i, ((b * f.scale).ceil() as usize).saturating_sub(lo).clamp(i + 1, n))
+        };
+        let ((px0, px1), (py0, py1)) = (span(x0, x1, f.x0, f.w), span(y0, y1, f.y0, f.h));
+        let (plain, lit, stages) = (c.seen(), c.seen_lit(GALLERY_LIGHT.0, GALLERY_LIGHT.1, 1.0), c.stages());
+        let (mut sums, mut counts) = ([[0.0f64; 3]; 2], [0usize; 4]);
+        for y in py0..py1 {
+            for x in px0..px1 {
+                let i = y * f.w + x;
+                for (sum, seen) in sums.iter_mut().zip([&plain, &lit]) {
+                    for q in 0..3 {
+                        sum[q] += seen[i][q] as f64;
+                    }
+                }
+                counts[stages[i] as usize] += 1;
+            }
+        }
+        let n = (px1 - px0) * (py1 - py0);
+        let level = |v: f64| (paint::color::linear_to_srgb(v as f32) * 255.0).round().clamp(0.0, 255.0) as u8;
+        let color = |sum: [f64; 3]| {
+            let rgb = sum.map(|v| v / n as f64);
+            let value = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+            format!("{},{},{} · value {}", level(rgb[0]), level(rgb[1]), level(rgb[2]), level(value))
+        };
+        let names = ["open", "setting", "tacky", "dry"];
+        let drying = if n == 1 {
+            names[counts.iter().position(|&k| k == 1).unwrap()].to_string()
+        } else {
+            names.iter().zip(counts).filter(|(_, k)| *k > 0).map(|(s, k)| format!("{s} {}%", (100.0 * k as f64 / n as f64).round())).collect::<Vec<_>>().join(", ")
+        };
+        let what = if n == 1 { place } else { format!("{place}, averaged over {} x {} pixels", px1 - px0, py1 - py0) };
+        Ok(format!("{what}\ncolor {}\nin gallery light {}\ndrying: {drying}\n", color(sums[0]), color(sums[1])))
+    }
+
     /// An earlier look (left) beside the same view of the canvas now (right), at
     /// the same height, for judging what a change did.
     fn compare(&mut self, args: &[String], prev: &Path) -> Result<String, String> {
@@ -1506,7 +1571,7 @@ impl Server {
         if !scratch {
             return self.serve_cmd(cmd, &args, payload);
         }
-        if !matches!(cmd, "do" | "look" | "status" | "log" | "globals" | "save") {
+        if !matches!(cmd, "do" | "look" | "probe" | "status" | "log" | "globals" | "save") {
             return Err(format!("{cmd} is the painting's: it takes no --scratch"));
         }
         self.ready()?;
@@ -1618,6 +1683,7 @@ impl Server {
                 Err(e) => Err(format!("{e}\n(the chunk failed and changed nothing)")),
             },
             "look" => self.look(args, None),
+            "probe" => self.probe(args),
             "log" => Ok(self.s.program(&self.name)),
             "save" => {
                 // save [path] [--light az,el | --gallery]: lit on the paint's relief, or color only

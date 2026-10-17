@@ -64,6 +64,11 @@ elif command == "look":
             companion.parent.mkdir(exist_ok=True)
             companion.write_bytes(path.read_bytes())
         print(str(path.relative_to(root)) + " (1x1, 0.01s)")
+elif command == "probe":
+    if args[-1] == "9,9":
+        print("probe: --at 9,9 is outside the canvas (0,0 to 1000,800)")
+        sys.exit(1)
+    print("at 1,2\\ncolor 10,20,30 · value 18\\nin gallery light 11,21,31 · value 19\\ndrying: dry")
 elif command == "note":
     text = sys.stdin.read()
     path = root / "notes/journal.md"
@@ -185,7 +190,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_initialize_and_tool_wording(self):
         self.assertEqual(self.initialized.serverInfo.name, "easel")
         listed = await self.session.list_tools()
-        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "note", "status", "log", "reference", "reference_list"])
+        self.assertEqual([tool.name for tool in listed.tools], ["paint", "look", "probe", "note", "status", "log", "reference", "reference_list"])
         source = SERVER.parent.parent.joinpath("painter/easel-tools.ts").read_text()
         for tool in listed.tools:
             block = source.split(f'name: "{tool.name}"', 1)[1].split("parameters:", 1)[0].split("description:", 1)[1]
@@ -305,6 +310,39 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.content[0].text, "[scratch canvas]\ntest canvas")
         reply = await self.session.call_tool("log", {"scratch": True})
         self.assertEqual(reply.content[0].text, "[scratch canvas]\n--@ chunk\ncanvas{}\n--@ chunk\nwait(1)")
+
+    @connected
+    async def test_probe_point_area_and_errors(self):
+        reply = await self.session.call_tool("probe", {"at": "1,2"})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[0].text, "at 1,2\ncolor 10,20,30 · value 18\nin gallery light 11,21,31 · value 19\ndrying: dry")
+        reply = await self.session.call_tool("probe", {"crop": "0,0,50,40", "scratch": True})
+        self.assertTrue(reply.content[0].text.startswith("[scratch canvas]\nat 1,2\n"))
+        reply = await self.session.call_tool("probe", {"at": "9,9"})
+        self.assertTrue(reply.isError)
+        self.assertEqual(reply.content[0].text, "probe: at 9,9 is outside the canvas (0,0 to 1000,800)")
+        calls = [json.loads(line)["args"] for line in (self.studio / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual([call for call in calls if call[0] == "probe"], [["probe", "--at", "1,2"], ["probe", "--scratch", "--crop", "0,0,50,40"], ["probe", "--at", "9,9"]])
+        for arguments in ({}, {"at": "1,2", "crop": "0,0,5,5"}, {"crop": ""}):
+            reply = await self.session.call_tool("probe", arguments)
+            self.assertTrue(reply.isError)
+            self.assertEqual(reply.content[0].text, 'probe: give at: "x,y" or crop: "x0,y0,x1,y1", one of the two')
+        self.assertEqual(len(calls), len((self.studio / "calls.jsonl").read_text().splitlines()))
+
+    @connected
+    async def test_log_find_numbers_lines_with_context(self):
+        (self.studio / "log-output.txt").write_text("--@ chunk 1\ncanvas{}\n--@ chunk 2\nsky = pile{{'lead white', 4}}\na = 1\nb = 2\nw = 0\nc = 3\nd = 4\nmix{{SKY, 1}}")
+        reply = await self.session.call_tool("log", {"find": "Sky"})
+        self.assertFalse(reply.isError)
+        self.assertEqual(reply.content[0].text, "\n".join([
+            '2 lines of paintings/lua/painting.lua hold "Sky"',
+            "2- canvas{}", "3- --@ chunk", "4: sky = pile{{'lead white', 4}}", "5- a = 1", "6- b = 2",
+            "--", "8- c = 3", "9- d = 4", "10: mix{{SKY, 1}}",
+        ]))
+        reply = await self.session.call_tool("log", {"find": "canvas", "scratch": True})
+        self.assertEqual(reply.content[0].text, '[scratch canvas]\n1 line of paintings/lua/scratch.lua holds "canvas"\n1- --@ chunk\n2: canvas{}\n3- --@ chunk\n4- sky = pile{{\'lead white\', 4}}')
+        reply = await self.session.call_tool("log", {"find": "mask"})
+        self.assertEqual(reply.content[0].text, 'no line of paintings/lua/painting.lua holds "mask"')
 
     @connected
     async def test_open_failure_does_not_retry(self):

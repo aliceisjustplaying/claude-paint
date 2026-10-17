@@ -252,6 +252,20 @@ def test_walls_list_without_a_title():
                                      "## 1. Boot Hill, Last Light\n\nwalls/1.png\n\none\n\n## 2\n\nwalls/2.png\n\ntwo\n")
 
 
+def test_pending_card_keeps_record_redaction_and_live_reply(world):
+    world.start(OPUS, prepare=True)
+    work, _ = painted(world, OPUS)
+    reply = REPLY + f"\nNotebook: {Path.home()}/notebook.md\n"
+    (work / "run" / A.STUDIOS[OPUS]["lane"] / "p1_final.txt").write_text(reply)
+    world.finish(OPUS)
+    card = json.loads((world.home(OPUS) / "cards/001.json").read_text())
+    assert card["words"] == reply
+    record = Path("stillwet-runs/atelier/studios") / OPUS / "cards/001.json"
+    committed = subprocess.run(["git", "-C", str(world.data), "show", f"HEAD:{record}"], capture_output=True, text=True, check=True)
+    assert str(Path.home()) not in committed.stdout
+    assert json.loads(committed.stdout)["words"] == reply.replace(str(Path.home()), "~")
+
+
 def test_run_configures_the_house_loop_with_the_atelier_texts(world, monkeypatch):
     work = world.start(OPUS, prepare=True)
     monkeypatch.setenv("PAINTER_COMPACTION_NOTES", "1")

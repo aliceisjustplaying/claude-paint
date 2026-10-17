@@ -339,7 +339,8 @@ class Atelier:
                 copy = target / path.relative_to(self.root)
                 copy.parent.mkdir(parents=True, exist_ok=True)
                 copy.write_bytes(path.read_bytes().replace(str(Path.home()).encode(), b"~"))
-            write_json(target / home.relative_to(self.root) / "cards" / f"{n:03d}.json", card)
+            card_record = json.dumps(card, indent=1, ensure_ascii=False) + "\n"
+            write(target / home.relative_to(self.root) / "cards" / f"{n:03d}.json", card_record.replace(str(Path.home()), "~"))
             run(["git", "-C", self.data, "add", "--", target], check=True, capture_output=True)
             run(["git", "-C", self.data, "commit", "-q", "-m", f"atelier: {sid} painting {n} hangs"], check=True, capture_output=True)
 

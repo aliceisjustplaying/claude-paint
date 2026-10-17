@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { criticArgs, criticFromEnv, criticReadable, sessionReply, sittingCritique, visit, visitMessage } from "../visit.ts";
+import { criticArgs, criticFromEnv, criticReadable, passagesToTakeUp, sessionReply, sittingCritique, visit, visitMessage } from "../visit.ts";
 
 const HERE = join(import.meta.dirname, "..");
 
@@ -43,6 +43,23 @@ test("a visit's message says what there is to read and where the notes go", () =
 	const args = criticArgs(s, { args: ["--model", "m"], dir: "/c" }, "asked", "/c/sessions/v", "/h");
 	assert.deepEqual(args.slice(0, 12), ["--print", "--no-extensions", "-e", "/h/critic.ts", "--system-prompt", "/h/critic_system_prompt.md", "--tools", "look,read", "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]);
 	assert.deepEqual(args.slice(-4, -1), ["/c/sessions/v", "--model", "m"]);
+});
+
+test("a visit's message quotes the painter's open passages and asks which the critic would take up first", () => {
+	const s = studio();
+	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter[\s\S]*Say which passage, if any, you would take up first, whether or not it is on the painter's list\./);
+	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n- day 2, 18:00: handoff\n  Open passages:\n  - the far shore: flat\n");
+	assert.match(visitMessage(s, "asked"), /Its latest list, quoted as the painter wrote it:\n\n> Open passages:\n> - the far shore: flat\n\nThen tell the painter/);
+});
+
+test("a later sitting's passages to take up: the open passages, then the critic's notes", () => {
+	const s = studio();
+	assert.equal(passagesToTakeUp(s, true), "## Passages to take up\n\nYour journal has no `Open passages:` list yet. Any passages your last handoff left open are in your journal, quoted below under \"Your journal\".");
+	writeFileSync(join(s, "notes/journal.md"), "- day 2, 18:00: Open passages:\n  - the far shore: flat\n");
+	writeFileSync(join(s, "notes/critic.md"), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
+	assert.equal(passagesToTakeUp(s, false), "## Passages to take up\n\nYour open passages, from your journal handoff (notes/journal.md), quoted as you wrote them:\n\n> Open passages:\n> - the far shore: flat");
+	assert.equal(passagesToTakeUp(s, true), passagesToTakeUp(s, false) +
+		"\n\nThe critic's notes from its last visit (notes/critic.md), quoted as the critic wrote them. You decide what to take from them.\n\n> From the critic's visit at the end of a sitting:\n>\n> Lift the sky.");
 });
 
 test("a visit writes the critic's notes to the studio and keeps a copy; a failed one changes nothing", async () => {
@@ -98,4 +115,11 @@ test("the critic visits at the end of a sitting, and the next sitting opens with
 	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1" });
 	const [next] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
 	assert.match(next.find((m) => m.role === "user")!.text, /^You're back at the easel\.\n\n## BRIEF\.md[\s\S]*## The critic's notes \(notes\/critic\.md\)\n\nQuoted as the critic wrote them:\n\n> From the critic's visit at the end of a sitting:\n>\n> done$/);
+	writeFileSync(out, "");
+	writeFileSync(join(s, "notes/journal.md"), "- day 2, 18:00: Open passages:\n  - the far shore: flat\n");
+	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1", PAINTER_OPEN_PASSAGES: "1" });
+	const [opened] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
+	const text = opened.find((m) => m.role === "user")!.text;
+	assert.match(text, /^## Passages to take up\n\nYour open passages[^\n]*\n\n> Open passages:\n> - the far shore: flat\n\nThe critic's notes from its last visit[^\n]*\n\n> From the critic's visit at the end of a sitting:\n>\n> done\n\nYou're back at the easel\.\n\n## BRIEF\.md/);
+	assert.doesNotMatch(text, /## The critic's notes/);
 });

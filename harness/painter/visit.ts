@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { studioPath } from "./easel-client.ts";
-import { JOURNAL } from "./journal.ts";
+import { JOURNAL, OPEN_PASSAGES, openPassages } from "./journal.ts";
 import { quote } from "./summary.ts";
 
 export const CRITIQUE = "notes/critic.md";
@@ -51,6 +51,12 @@ export function criticReadable(studio: string, path: string): string | undefined
 	return rel === JOURNAL || rel === TO_CRITIC || (rel.startsWith("out/easel/") && rel.endsWith(".png")) ? real : undefined;
 }
 
+/** The journal's latest list of open passages (journal.ts), or undefined. */
+function journalPassages(studio: string): string | undefined {
+	const path = join(studio, JOURNAL);
+	return existsSync(path) ? openPassages(readFileSync(path, "utf8")) : undefined;
+}
+
 /** The message that opens a visit. */
 export function visitMessage(studio: string, occasion: Occasion): string {
 	const why = occasion === "sitting"
@@ -59,14 +65,20 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 	const read = existsSync(join(studio, TO_CRITIC))
 		? `Read the painter's journal, ${JOURNAL}, and its note to you, ${TO_CRITIC}.`
 		: `Read the painter's journal, ${JOURNAL}. The painter hasn't left you a note.`;
+	const passages = journalPassages(studio);
+	const list = passages
+		? `The painter's journal handoff lists the passages it has left open. Its latest list, quoted as the painter wrote it:\n\n${quote(passages)}`
+		: `The painter's journal has no \`${OPEN_PASSAGES}\` list yet.`;
 	const gets = occasion === "sitting"
 		? `It is saved in the studio as ${CRITIQUE}, and the painter's next sitting opens with it.`
 		: `The painter reads it as soon as you finish, and it is saved in the studio as ${CRITIQUE}.`;
 	return [
 		why,
 		"Look at it as closely as you like: the whole canvas, detail crops, the value, squint, mirror, relief and gallery views and the palette. " + read,
+		list,
 		"Then tell the painter what you would fix and why, as one painter talking to another: what you see, what it does " +
-			"to the picture and what you would do about it. Your last message is what the painter gets. " + gets +
+			"to the picture and what you would do about it. Say which passage, if any, you would take up first, whether or not " +
+			"it is on the painter's list. Your last message is what the painter gets. " + gets +
 			" The painter decides what to do with it.",
 	].join("\n\n");
 }
@@ -142,6 +154,23 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	writeFileSync(join(studio, CRITIQUE), notes);
 	writeFileSync(join(critic.dir, `${started}-${occasion}.md`), notes);
 	return notes;
+}
+
+/**
+ * What opens a later sitting with PAINTER_OPEN_PASSAGES=1 (the house runner from r41), before the runner's
+ * message: the journal's latest list of open passages and, with a critic, its latest notes.
+ */
+export function passagesToTakeUp(studio: string, critic: boolean): string {
+	const passages = journalPassages(studio);
+	const parts = ["## Passages to take up"];
+	parts.push(passages
+		? `Your open passages, from your journal handoff (${JOURNAL}), quoted as you wrote them:\n\n${quote(passages)}`
+		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Any passages your last handoff left open are in your journal, quoted below under "Your journal".`);
+	const path = join(studio, CRITIQUE);
+	if (critic && existsSync(path)) {
+		parts.push(`The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. You decide what to take from them.\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);
+	}
+	return parts.join("\n\n");
 }
 
 /** What a later sitting's opening adds after the summary: the critic's latest notes, if there are any. */

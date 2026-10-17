@@ -249,15 +249,15 @@
     "id": "pigments",
     "title": "Pigment behavior and documented estimates",
     "source": "notes/research/every_materials.md",
-    "sha256": "e477b5e2c3b31f596fb7084e25a9578dddb71744bd2897f6b99894e346d483c3",
+    "sha256": "feef526070607b936c4fb112111be51dccc266884b4f3d85b93a199a9f322ef5",
     "lines": [
       [
-        29,
-        260
+        30,
+        268
       ],
       [
-        268,
-        276
+        276,
+        285
       ]
     ],
     "keywords": [

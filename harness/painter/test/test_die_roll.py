@@ -1,8 +1,8 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import runpy
-import subprocess
 import tempfile
 import types
 import unittest
@@ -141,8 +141,7 @@ class SittingTests(unittest.TestCase):
 
 class PreparationTests(unittest.TestCase):
     def test_opt_out_is_byte_identical_and_opt_in_adds_only_section_and_runtime(self):
-        old = {"__file__": str(REPO / "scripts/prepare_friedrich_studio"), "__name__": "old_prepare"}
-        exec(subprocess.check_output(["git", "-C", str(REPO), "show", "08edd574:scripts/prepare_friedrich_studio"]), old)
+        baseline = json.loads((Path(__file__).parent / "fixtures/prepare-baseline.json").read_text())
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             studio, house, runner = (root / name for name in ("studio", "house", "runner"))
@@ -160,13 +159,15 @@ class PreparationTests(unittest.TestCase):
                 (house / name).write_text("plain\n")
             for critic in (False, True):
                 snapshots = []
-                for prepare, flag in ((old["prepare"], None), (PREPARE["prepare"], False), (PREPARE["prepare"], True)):
-                    prepare(studio, house, runner, house / "studio_notes.md", critic=critic, **({"die_roll": flag} if flag is not None else {}))
+                for flag in (False, True):
+                    PREPARE["prepare"](studio, house, runner, house / "studio_notes.md", critic=critic, die_roll=flag)
                     snapshots.append({str(p.relative_to(root)): p.read_bytes() for directory in (studio, runner) for p in directory.rglob("*") if p.is_file()})
                     (studio / "BRIEF.md").unlink()
                     PREPARE["shutil"].rmtree(runner)
-                self.assertEqual(snapshots[0], snapshots[1])
-                off, on = snapshots[1:]
+                off, on = snapshots
+                revision = json.loads(off["runner/run-config.json"])["source_revision"]
+                normalized = {name: hashlib.sha256(data.replace(str(root).encode(), b"/fixture").replace(str(REPO).encode(), b"/repo").replace(revision.encode(), b"<revision>")).hexdigest() for name, data in off.items()}
+                self.assertEqual(normalized, baseline["with_critic" if critic else "without_critic"])
                 self.assertEqual(on["studio/BRIEF.md"], off["studio/BRIEF.md"].replace(b"## Working\n", PREPARE["DIE_ROLL_SECTION"].encode() + b"## Working\n"))
                 self.assertEqual(on["runner/brief_template.md"], template.replace("## Working\n", PREPARE["DIE_ROLL_SECTION"] + "## Working\n").encode())
                 self.assertTrue(json.loads(on["runner/run-config.json"])["die_roll"])
@@ -174,6 +175,8 @@ class PreparationTests(unittest.TestCase):
                 namespace = {"__name__": "generated", "t": {"profile": "other"}, "PAINTER_MSG": "start", "DIE_ROLL_OPENING": "The die picked concept 3: Picture 3.", "n": 1}
                 exec(on["runner/r21_chains.py"], namespace)
                 self.assertEqual(namespace["paint"](1, 0, False), "The die picked concept 3: Picture 3.\n\nstart")
+                self.assertEqual(namespace["paint"](2, 0, False), "The die picked concept 3: Picture 3.\n\nstart")
+                self.assertEqual(namespace["paint"](2, 0, True), "start")
                 self.assertEqual(namespace["paint"](2, 1, False), "later")
 
 

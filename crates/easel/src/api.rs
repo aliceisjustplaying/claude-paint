@@ -68,11 +68,14 @@ pub struct Studio {
     pub tubes: Rc<Palette>,
     /// The palette board: the heaps knifed out on it (board.rs).
     pub board: crate::board::Board,
+    /// The running chunk is a live session's (not a replay's): its verbs report progress
+    /// (session.rs `PROGRESS`).
+    pub live: bool,
 }
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), tubes: Rc::new(tubes), board: Default::default() }
+        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -798,8 +801,11 @@ impl UserData for PileU {
             let tubes = st.borrow().tubes.clone();
             let add = tube_parts(&tubes, &t, "p:add")?;
             check_set_out(&st, &add, "p:add")?;
-            st.borrow_mut().board.add(p.heap, &add, medium).map_err(mlua::Error::runtime)?;
-            let now = resolve(&st, p.clone(), None);
+            {
+                let s = &mut *st.borrow_mut();
+                s.board.add(p.heap, &add, medium, &s.tubes).map_err(mlua::Error::runtime)?;
+            }
+            let now = resolve(&st, p.clone());
             time::knife(&st, now.mix.color);
             Ok(now)
         });
@@ -817,7 +823,7 @@ impl UserData for PileU {
 impl PileU {
     fn current(&self) -> Self {
         match &self.st {
-            Some(st) => resolve(st, self.clone(), None),
+            Some(st) => resolve(st, self.clone()),
             None => self.clone(),
         }
     }
@@ -952,17 +958,25 @@ pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
 /// brush carrying `carry` of the last paint (board.rs). A heap untouched since
 /// it was knifed is the pile exactly as knifed.
 pub(crate) fn pile_now(st: &S, v: &Value, what: &str, carry: f32) -> Result<PileU> {
-    Ok(resolve(st, pile_of(v, what)?, Some(carry)))
+    let p = pile_of(v, what)?;
+    visit(st, &p, carry, what)?;
+    Ok(resolve(st, p))
 }
 
-/// The pile as its heap is on the board now; `visit`: the hand goes to it
-/// first, with a brush carrying that much of the last paint.
-pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
+/// The hand goes to the pile's heap with a brush carrying `carry` of the last paint (board.rs
+/// `visit`): a heap scraped off is knifed again, which a full palette may refuse.
+fn visit(st: &S, p: &PileU, carry: f32, what: &str) -> Result<()> {
+    if p.heap == 0 {
+        return Ok(());
+    }
+    let s = &mut *st.borrow_mut();
+    s.board.visit(p.heap, carry).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
+}
+
+/// The pile as its heap is on the board now.
+pub(crate) fn resolve(st: &S, p: PileU) -> PileU {
     if p.heap == 0 {
         return p;
-    }
-    if let Some(carry) = visit {
-        st.borrow_mut().board.visit(p.heap, carry);
     }
     let s = st.borrow();
     let Some(h) = s.board.heap(p.heap) else { return p };
@@ -975,6 +989,13 @@ pub(crate) fn resolve(st: &S, p: PileU, visit: Option<f32>) -> PileU {
     mix.solvent = solvent;
     mix.oil_rate = oil_rate;
     PileU { mix, medium, parts, thinner: p.thinner.map(|_| thinner), ..p }
+}
+
+/// Knife a new heap on the board (board.rs `knife`), which a full palette may refuse.
+#[allow(clippy::too_many_arguments)]
+fn knife(st: &S, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>, what: &str) -> Result<u64> {
+    let s = &mut *st.borrow_mut();
+    s.board.knife(parts, given_sum, medium, solvent, oil_rate, name).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, what)))
 }
 
 /// Tubes in parts as given, `{{"tube name", parts}, ...}`, not normalised.
@@ -1897,7 +1918,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             check_set_out(&st, &parts, "pile")?;
             let name = t.get::<Option<String>>("name")?;
             let given_sum: f32 = given.iter().map(|g| g.1).sum();
-            let heap = st.borrow_mut().board.knife(parts.clone(), given_sum, medium, turps, oil_rate, name);
+            let heap = knife(&st, parts.clone(), given_sum, medium, turps, oil_rate, name, "pile")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
@@ -1919,7 +1940,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let (mut wsum, mut medium, mut solvent, mut thinner, mut oil) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                let p = resolve(&st, pile_of(&e.get::<Value>(1)?, "mix")?, Some(0.35));
+                let p = pile_of(&e.get::<Value>(1)?, "mix")?;
+                visit(&st, &p, 0.35, "mix")?;
+                let p = resolve(&st, p);
                 let w: f32 = e.get::<Option<f32>>(2)?.unwrap_or(1.0);
                 if !(w > 0.0 && w.is_finite()) {
                     return err("mix: each heap's share is > 0");
@@ -1947,7 +1970,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
-            let heap = st.borrow_mut().board.knife(parts, wsum, medium, solvent, oil, name);
+            let heap = knife(&st, parts, wsum, medium, solvent, oil, name, "mix")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
@@ -1959,7 +1982,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let st = st.clone();
         g.set("palette", lua.create_function(move |_, t: Option<Table>| {
             if let Some(t) = &t {
-                check_keys(t, &["dirty", "set_out", "clean"], "palette")?;
+                check_keys(t, &["dirty", "set_out", "clean", "scrape"], "palette")?;
                 if let Some(d) = num(t, "dirty")? {
                     if !(0.0..=1.0).contains(&d) {
                         return err("palette: dirty is how dirty the board is kept, 0 (clean) to 1");
@@ -1978,6 +2001,15 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 }
                 if t.get::<Option<bool>>("clean")?.unwrap_or(false) {
                     st.borrow_mut().board.clean();
+                }
+                if let Some(list) = t.get::<Option<Table>>("scrape")? {
+                    let piles = list.sequence_values::<Value>().map(|v| pile_of(&v?, "palette scrape")).collect::<Result<Vec<_>>>()?;
+                    if piles.iter().any(|p| p.heap == 0) {
+                        return err("palette: scrape takes piles knifed on this palette");
+                    }
+                    for p in piles {
+                        st.borrow_mut().board.scrape(p.heap);
+                    }
                 }
             }
             let s = st.borrow();

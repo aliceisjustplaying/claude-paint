@@ -158,6 +158,27 @@ def look_args(view):
     return args
 
 
+REPLAY = re.compile(r"rebuilding from the log \((\d+) of (\d+) chunks\)")
+# `status` from an easel that is starting, before it has read the log (main.rs `STARTING`)
+STARTING = "the easel is starting; retry in a moment"
+
+
+def log_text(log):
+    try:
+        # as written: the easel keeps a chunk's own line ends, CRLF included
+        with open(log, newline="") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def kept(log, before, lua):
+    """Whether `lua` was kept as a new chunk: the log changed since `before` and its last chunk is
+    `lua` as the easel keeps it. A fresh scratch canvas replaces its log, so chunks aren't counted."""
+    now = log_text(log)
+    return now != before and re.split(r"^--@ chunk \d+\n", now, flags=re.MULTILINE)[-1] == (lua or "").rstrip() + "\n"
+
+
 def image_limits():
     limits = []
     for name, default, minimum in (("PAINTER_MAX_IMAGES", 20, 1), ("PAINTER_MAX_IMAGE_MB", 12, 0.001)):
@@ -225,7 +246,7 @@ class Easel:
             raise
         return proc.returncode, out.decode(errors="replace")
 
-    async def ensure_open(self, deadline):
+    async def ensure_open(self, deadline, answer_replay=False):
         if (self.studio / "bin/watercolor-studio").is_file():
             return False
         opened = rebuilding = False
@@ -236,13 +257,23 @@ class Easel:
             try:
                 code, out = await self.step(args, None, progress_deadline)
             except asyncio.TimeoutError:
+                if opened and not rebuilding:
+                    # an open that outlasts the tool: the easel answers how far its replay of the log has got
+                    try:
+                        code, out = await self.step(["status"], None, time.monotonic() + 10)
+                    except asyncio.TimeoutError:
+                        code, out = 1, ""
+                    if code == 0 and REPLAY.fullmatch(out.strip()):
+                        raise ValueError(f"the easel is reopening the painting from its log and hasn't finished: {out.strip()}. `status` shows how far it has got.") from None
                 raise ValueError("the easel rebuild stalled without progress" if rebuilding else "the easel didn't open in time" if opened else "the easel isn't answering") from None
-            progress = re.fullmatch(r"rebuilding from the log \((\d+) of (\d+) chunks\)", out.strip())
+            progress = REPLAY.fullmatch(out.strip())
             if progress:
                 k, n = map(int, progress.groups())
                 if code or k > n or k < completed or (total is not None and n != total):
                     raise ValueError(f"the easel returned invalid rebuild progress: {out.strip()}")
                 total = n
+                if answer_replay:
+                    return True
                 if not rebuilding or k > completed:
                     completed = k
                     # a chunk may take 40 minutes to replay at 4800 px: the easel's own stall is 50 there
@@ -250,6 +281,13 @@ class Easel:
                 rebuilding = True
                 if time.monotonic() >= progress_deadline:
                     raise ValueError("the easel rebuild stalled without progress")
+                await asyncio.sleep(min(0.1, progress_deadline - time.monotonic()))
+                args = ["status"]
+                continue
+            if code and out.strip() == STARTING:
+                # the easel has its socket but hasn't read the log yet: its progress is a moment away
+                if time.monotonic() >= progress_deadline:
+                    raise ValueError("the easel isn't answering")
                 await asyncio.sleep(min(0.1, progress_deadline - time.monotonic()))
                 args = ["status"]
                 continue
@@ -263,12 +301,29 @@ class Easel:
     async def at(self, args, text=None):
         wait = (48 if self.wide() else 12) * 60 if args[0] == "do" else 3 * 60
         deadline = time.monotonic() + wait
-        if await self.ensure_open(deadline):
+        if await self.ensure_open(deadline, args[0] == "status"):
             deadline = time.monotonic() + wait
+        log = self.studio / "paintings/lua" / ("scratch.lua" if "--scratch" in args else "painting.lua")
+        before = log_text(log) if args[0] == "do" else ""
         try:
             code, out = await self.step(args, text, deadline)
         except asyncio.TimeoutError:
-            raise ValueError("the easel didn't answer; `log` shows whether the chunk ran") from None
+            if args[0] != "do" or (self.studio / "bin/watercolor-studio").is_file():
+                raise ValueError("the easel didn't answer; `log` shows whether the chunk ran") from None
+            # what landed: the chunk still running (its progress), in the log, or neither
+            minutes = f"the easel didn't answer within {round(wait / 60)} minutes"
+            try:
+                code, now = await self.step(["status"], None, time.monotonic() + 10)
+            except asyncio.TimeoutError:
+                code, now = 1, ""
+            now = now.strip()
+            if code:
+                raise ValueError(f"{minutes}; `log` shows whether the chunk ran") from None
+            if now.startswith("painting a chunk"):
+                raise ValueError(f"{minutes}. The chunk is still running and isn't in the log yet: {now}. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept.") from None
+            if kept(log, before, text):
+                raise ValueError(f"{minutes}, but the chunk ran: it is in the log.") from None
+            raise ValueError(f"{minutes}, and the chunk isn't in the log: it changed nothing.") from None
         out = out.rstrip()
         if code:
             raise ValueError(out or "the easel gave no answer")
@@ -416,7 +471,7 @@ def tool_definitions(studio, sittings=False, agy=False):
                     definition["inputSchema"]["properties"][key]["description"] = "true: use separate scratch paper, with the painting's size, kind and seed, its own brushes, clock and log" if key == "scratch" else "with scratch: true, keep the old scratch sheet's log and checkpoint and start a fresh sheet before this chunk"
     if sittings:
         definitions += json.loads(Path(__file__).with_name("sitting-tools.json").read_text())
-        next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left."
+        next(tool for tool in definitions if tool["name"] == "status")["description"] = "The canvas's setup and the current sitting: its number and, when the sitting is timed, the seconds left. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done."
     if agy:
         for definition in definitions:
             name = definition["name"]

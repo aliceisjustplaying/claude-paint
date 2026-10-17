@@ -144,7 +144,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 		...defineTool({
 			name: "status",
 			label: "status",
-			description: "The canvas's setup.",
+			description: "The canvas's setup. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done.",
 			parameters: Type.Object({ scratch }),
 			async execute(_id, p, signal) {
 				return text(tag(p, statusReply(await atEasel(studio, ["status", ...on(p)], undefined, signal))));

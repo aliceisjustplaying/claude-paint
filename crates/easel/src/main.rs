@@ -568,7 +568,9 @@ fn open(args: &[String]) -> Result<(), String> {
     let name = open_name(args)?;
     let dir = session_dir(&name);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    if let Ok((ok, st)) = request(&name, "status", &[], &[]) {
+    if let Ok((ok, st)) = request(&name, "status", &[], &[])
+        && !replaying(&st)
+    {
         if !ok {
             return Err(st);
         }
@@ -627,7 +629,9 @@ fn open(args: &[String]) -> Result<(), String> {
             shown = end;
             last_progress = Instant::now();
         }
-        if let Ok((true, st)) = request(&name, "status", &[], &[]) {
+        if let Ok((true, st)) = request(&name, "status", &[], &[])
+            && !replaying(&st)
+        {
             set_current(&name)?;
             print!("easel {name:?} open: {st}");
             return Ok(());
@@ -644,6 +648,15 @@ fn open(args: &[String]) -> Result<(), String> {
         }
     }
 }
+
+/// Whether a `status` answer is a replay's progress (`replay_status`): the server is reopening
+/// or rebuilding the painting from its log.
+fn replaying(status: &str) -> bool {
+    status.starts_with("rebuilding from the log (") || status.starts_with(STARTING)
+}
+
+/// `status` before the server has read the log it replays.
+const STARTING: &str = "the easel is starting; retry in a moment";
 
 /// The session's lock for `serve`, held until it exits: the one `open` passed on its
 /// stdin, else taken here. A session that has a server already gets no second one.
@@ -726,30 +739,62 @@ fn serve(args: &[String]) -> Result<(), String> {
         return Err("easel: fatal: no width option (a log replays at its own width; a file `width` beside the easel, or EASEL_WIDTH, sets a new painting's)".into());
     }
     let _lock = serve_lock(&name).map_err(|e| format!("easel: fatal: {e}"))?;
-    let mut srv = Server::resume(name.clone()).map_err(|e| format!("easel: fatal: {e}"))?;
     let sock = sock_path(&name);
     // the lock is ours: a socket there is a dead server's
     let _ = std::fs::remove_file(&sock);
     let l = UnixListener::bind(&sock).map_err(|e| format!("easel: fatal: bind {}: {e}", sock.display()))?;
+    // the log replays with `status` answering how far it has got; other requests wait for it
+    let (done, total) = (std::sync::atomic::AtomicUsize::new(0), std::sync::atomic::AtomicUsize::new(usize::MAX));
+    let resumed = serving_status(&l, || replay_status(&done, &total), None, || {
+        Server::resume(name.clone(), &|k, n| {
+            total.store(n, std::sync::atomic::Ordering::Release);
+            done.store(k, std::sync::atomic::Ordering::Release);
+        })
+    });
+    let (mut srv, waiting) = match resumed {
+        Ok((Ok(srv), waiting)) => (srv, waiting),
+        Ok((Err(e), waiting)) => {
+            let _ = std::fs::remove_file(&sock);
+            for (mut conn, _) in waiting {
+                let _ = conn.write_all(format!("err
+{e}
+").as_bytes());
+            }
+            return Err(format!("easel: fatal: {e}"));
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&sock);
+            return Err(format!("easel: fatal: {e}"));
+        }
+    };
     let _ = std::io::stdout().flush();
     // the check running on its own thread, if any (check.rs; replay build only)
     #[cfg(feature = "replay")]
     let mut checking: Option<check::Job> = None;
+    // requests that came while the log replayed or a chunk ran, read and waiting their turn
+    let mut pending = std::collections::VecDeque::from(waiting);
 
-    for conn in l.incoming() {
-        let Ok(mut conn) = conn else { continue };
-        // a request is a few KB sent at once: a client that stalls mid-request must not hold
-        // the one thread that serves every request
-        let _ = conn.set_read_timeout(Some(Duration::from_secs(60)));
-        let req = match read_request(&mut conn) {
-            Ok(r) => r,
-            Err(e) => {
-                let _ = conn.write_all(format!("err\nthe easel couldn't read the request: {e}\n").as_bytes());
-                eprintln!("request dropped: {e}");
-                continue;
+    loop {
+        let (mut conn, req) = match pending.pop_front() {
+            Some(p) => p,
+            None => {
+                let Ok((mut conn, _)) = l.accept() else { continue };
+                // a request is a few KB sent at once: a client that stalls mid-request must not hold
+                // the one thread that serves every request
+                let _ = conn.set_read_timeout(Some(Duration::from_secs(60)));
+                match read_request(&mut conn) {
+                    Ok(r) => {
+                        let _ = conn.set_read_timeout(None);
+                        (conn, r)
+                    }
+                    Err(e) => {
+                        let _ = conn.write_all(format!("err\nthe easel couldn't read the request: {e}\n").as_bytes());
+                        eprintln!("request dropped: {e}");
+                        continue;
+                    }
+                }
             }
         };
-        let _ = conn.set_read_timeout(None);
         let text = String::from_utf8_lossy(&req).to_string();
         let (head, payload) = text.split_once('\n').unwrap_or((&text, ""));
         let mut parts = head.split('\t').map(|s| s.to_string());
@@ -776,7 +821,27 @@ fn serve(args: &[String]) -> Result<(), String> {
             continue;
         }
         let t0 = Instant::now();
-        let r = srv.handle(&cmd, &args, payload);
+        let r = if cmd == "do" {
+            // while the chunk runs, `status` answers how far it has got; other requests wait
+            session::PROGRESS.clear();
+            let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
+            // once the chunk is kept, the log on disk has grown past `written`: `report` says so
+            let status = || {
+                if session::PROGRESS.kept() == 0 {
+                    validate_log(&name, &written)?;
+                }
+                Ok(session::PROGRESS.report(t0.elapsed()))
+            };
+            match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
+                Ok((r, waiting)) => {
+                    pending.extend(waiting);
+                    r
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            srv.handle(&cmd, &args, payload)
+        };
         let reply = match &r {
             Ok(b) => format!("ok\n{b}"),
             Err(e) => format!("err\n{e}\n"),
@@ -792,6 +857,9 @@ fn serve(args: &[String]) -> Result<(), String> {
             #[cfg(feature = "replay")]
             if let Some(j) = checking.take() {
                 j.stop();
+            }
+            for (mut conn, _) in pending.drain(..) {
+                let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
             }
             let _ = std::fs::remove_file(&sock);
             break;
@@ -822,11 +890,36 @@ fn serve(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Only the socket and immutable integrity witness cross threads. Lua (and its
-/// Rc-backed engine state) stays on the serving thread throughout the replay.
+/// What a request other than `status` gets while the log replays after a failed chunk.
+const REBUILDING: &str = "the easel is rebuilding from the log; retry after it finishes";
+
+/// `status` while the log replays: how many of its chunks have (`total` unset: not begun).
+fn replay_status(done: &std::sync::atomic::AtomicUsize, total: &std::sync::atomic::AtomicUsize) -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+    match total.load(Ordering::Acquire) {
+        usize::MAX => Err(STARTING.into()),
+        n => Ok(format!("rebuilding from the log ({} of {n} chunks)", done.load(Ordering::Acquire))),
+    }
+}
+
+/// Rebuild the session from its log (session.rs `stale`), answering `status` with its progress.
 fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(), String> {
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    let completed = AtomicUsize::new(0);
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (done, total) = (AtomicUsize::new(0), AtomicUsize::new(srv.s.log.len()));
+    let (name, written) = (srv.name.clone(), srv.written.clone().ok_or("session integrity: uninitialized log")?);
+    let status = || validate_log(&name, &written).and_then(|()| replay_status(&done, &total));
+    serving_status(listener, status, Some(REBUILDING), || srv.s.rebuild_with_progress(|k, _| done.store(k, Ordering::Release)))?.0
+}
+
+/// Requests read while `work` ran (`serving_status`), each with its connection, in the order they came.
+type Waiting = Vec<(UnixStream, Vec<u8>)>;
+
+/// Run `work` on this thread while another thread answers `status` on the listener with
+/// `status()`. Any other request gets `refusal`, or with none is read and handed back, in the
+/// order it came, to run after `work`. Only the socket and what `status` reads cross threads:
+/// Lua (and its Rc-backed engine state) stays on this one.
+fn serving_status<R>(listener: &UnixListener, status: impl Fn() -> Result<String, String> + Sync, refusal: Option<&str>, work: impl FnOnce() -> R) -> Result<(R, Waiting), String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
     let done = AtomicBool::new(false);
     struct Stop<'a>(&'a AtomicBool);
     impl Drop for Stop<'_> {
@@ -834,29 +927,27 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
             self.0.store(true, Ordering::Release);
         }
     }
-    // An absolute request deadline also bounds clients that trickle bytes.
+    // An absolute request deadline also bounds clients that trickle bytes; a request to be
+    // refused is given up when `work` ends, one to be handed back is read to its end.
     struct Reader<'a> {
         conn: &'a mut UnixStream,
         until: Instant,
-        done: &'a AtomicBool,
+        done: Option<&'a AtomicBool>,
     }
     impl Read for Reader<'_> {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             let remaining = self.until.saturating_duration_since(Instant::now());
-            if remaining.is_zero() || self.done.load(Ordering::Acquire) {
-                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "rebuild request deadline reached"));
+            if remaining.is_zero() || self.done.is_some_and(|d| d.load(Ordering::Acquire)) {
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "request deadline reached"));
             }
             self.conn.set_read_timeout(Some(remaining))?;
             self.conn.read(buf)
         }
     }
-    let total = srv.s.log.len();
-
-    let name = &srv.name;
-    let written = srv.written.as_deref().ok_or("session integrity: uninitialized log")?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-    let result = std::thread::scope(|scope| {
-        let worker = scope.spawn(|| -> Result<(), String> {
+    let result: Result<_, String> = std::thread::scope(|scope| {
+        let worker = scope.spawn(|| -> Result<Waiting, String> {
+            let mut kept = Vec::new();
             while !done.load(Ordering::Acquire) {
                 let mut conn = match listener.accept() {
                     Ok((conn, _)) => conn,
@@ -867,38 +958,47 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
                     Err(e) => return Err(e.to_string()),
                 };
                 // A stalled reader/writer must neither block status indefinitely nor
-                // keep the scoped helper alive after replay finishes.
+                // keep the scoped helper alive after `work` finishes.
                 conn.set_nonblocking(false).map_err(|e| e.to_string())?;
-                let _ = conn.set_read_timeout(Some(Duration::from_millis(100)));
                 let _ = conn.set_write_timeout(Some(Duration::from_millis(100)));
-                let mut reader = Reader { conn: &mut conn, until: Instant::now() + Duration::from_millis(100), done: &done };
-                let reply = match read_request(&mut reader) {
-                    Err(e) => format!("err\n{e}\n"),
-                    Ok(req) => match validate_log(name, written) {
+                let wait = if refusal.is_some() { Duration::from_millis(100) } else { Duration::from_secs(10) };
+                let mut reader = Reader { conn: &mut conn, until: Instant::now() + wait, done: refusal.is_some().then_some(&done) };
+                let req = match read_request(&mut reader) {
+                    Ok(req) => req,
+                    Err(e) => {
+                        let _ = conn.write_all(format!("err\n{e}\n").as_bytes());
+                        continue;
+                    }
+                };
+                let head = req.split(|b| *b == b'\n').next().unwrap_or_default();
+                let reply = if head.split(|b| *b == b'\t').next() == Some(b"status".as_slice()) {
+                    match status() {
+                        Ok(s) => format!("ok\n{s}\n"),
                         Err(e) => format!("err\n{e}\n"),
-                        Ok(()) => {
-                            let head = req.split(|b| *b == b'\n').next().unwrap_or_default();
-                            if head.split(|b| *b == b'\t').next() == Some(b"status".as_slice()) {
-                                format!("ok\nrebuilding from the log ({} of {total} chunks)\n", completed.load(Ordering::Acquire))
-                            } else {
-                                "err\nthe easel is rebuilding from the log; retry after it finishes\n".into()
-                            }
-                        }
-                    },
+                    }
+                } else if let Some(r) = refusal {
+                    format!("err\n{r}\n")
+                } else {
+                    let _ = conn.set_read_timeout(None);
+                    let _ = conn.set_write_timeout(None);
+                    kept.push((conn, req));
+                    continue;
                 };
                 let _ = conn.write_all(reply.as_bytes());
             }
-            Ok(())
+            Ok(kept)
         });
         let stop = Stop(&done);
-        let replay = srv.s.rebuild_with_progress(|k, _| completed.store(k, Ordering::Release));
+        let r = work();
         drop(stop);
         worker.thread().unpark();
-        let served = worker.join().map_err(|_| "rebuild status listener panicked".to_string())?;
-        replay.and(served)
+        let kept = worker.join().map_err(|_| "the status listener panicked".to_string())??;
+        Ok((r, kept))
     });
     let blocking = listener.set_nonblocking(false).map_err(|e| e.to_string());
-    result.and(blocking)
+    let r = result?;
+    blocking?;
+    Ok(r)
 }
 
 /// The session's committed record: the log as the session last wrote it.
@@ -1060,14 +1160,16 @@ impl Server {
         validate_log(&self.name, self.written.as_deref().ok_or("session integrity: uninitialized log")?)
     }
 
-    fn resume(name: String) -> Result<Self, String> {
+    /// Reopen the session `name` from its log, reporting the chunks replayed (`progress`:
+    /// done, of how many; zero first).
+    fn resume(name: String, progress: &dyn Fn(usize, usize)) -> Result<Self, String> {
         let display = if display::enabled() { Some(std::rc::Rc::new(display::Pool::configured()?)) } else { None };
-        Self::resume_as(name, None, display)
+        Self::resume_as(name, None, display, progress)
     }
 
     /// `resume`; a new session's box and width are `like`'s when given (the scratch canvas
     /// takes the painting's), else the configured box and the name's width.
-    fn resume_as(name: String, like: Option<&Session>, display: Option<std::rc::Rc<display::Pool>>) -> Result<Self, String> {
+    fn resume_as(name: String, like: Option<&Session>, display: Option<std::rc::Rc<display::Pool>>, progress: &dyn Fn(usize, usize)) -> Result<Self, String> {
         let lp = log_path(&name);
         #[cfg(feature = "state-store")]
         let committed = if like.is_none() && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
@@ -1111,6 +1213,7 @@ impl Server {
         if let Some(text) = text {
             srv.written = Some(text.clone());
             let chunks = parse_program(&text);
+            progress(0, chunks.len());
             // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
             srv.s.set_replaying(true);
             for (i, chunk) in chunks.iter().enumerate() {
@@ -1118,6 +1221,7 @@ impl Server {
                 eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
                 srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
                 eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
+                progress(i + 1, chunks.len());
             }
             srv.s.set_replaying(false);
             srv.replayed = chunks.len();
@@ -1611,7 +1715,7 @@ impl Server {
         if !(log_path(&name).exists() || witness_path(&name).exists()) {
             return String::new();
         }
-        match Server::resume_as(name.clone(), Some(&self.s), self.display.clone()) {
+        match Server::resume_as(name.clone(), Some(&self.s), self.display.clone(), &|_, _| {}) {
             Ok(sc) => {
                 self.scratch = Some(Box::new(sc));
                 String::new()
@@ -1635,7 +1739,7 @@ impl Server {
         let name = scratch_name(&self.name);
         self.scratch = None;
         let aside = put_aside(&name)?;
-        let mut sc = Server::resume_as(name, Some(&self.s), self.display.clone())?;
+        let mut sc = Server::resume_as(name, Some(&self.s), self.display.clone(), &|_, _| {})?;
         sc.run_own(&src)?;
         self.scratch = Some(Box::new(sc));
         Ok(match aside {
@@ -1654,6 +1758,7 @@ impl Server {
                 Ok(ran) => {
                     let note = self.save_log()?;
                     let n = self.s.log.len();
+                    session::PROGRESS.keep(n);
                     let mut out = note;
                     out.push_str(&ran.out);
                     out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));

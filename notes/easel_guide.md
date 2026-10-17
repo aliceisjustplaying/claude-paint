@@ -18,7 +18,10 @@ Three things hold for every session:
 
 ## Starting
 
-The studio holds one painting, and the easel is open on it. Its tools:
+The studio holds one painting, and the easel is open on it. When the easel
+opens on a painting that has a log, it rebuilds the painting by replaying
+the log; until it has finished, `status` answers how many of its chunks are
+done. Its tools:
 
 | tool | what it does |
 |---|---|
@@ -26,7 +29,7 @@ The studio holds one painting, and the easel is open on it. Its tools:
 | `look` | shows you the canvas as it is now, or your palette (see [Looking](#looking)) |
 | `probe` | gives the paint at a point (`at: "x,y"`) or averaged over an area (`crop: "x0,y0,x1,y1"`) in numbers: its color and value from 0 to 255 as a look shows them, the same in the gallery's light, and whether it is open, setting, tacky or dry; it can't tell which piles the paint came from |
 | `note` | adds an entry to your journal (see [The journal](#the-journal)) |
-| `status` | the canvas's setup |
+| `status` | the canvas's setup; while a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done |
 | `log` | the painting so far: every chunk that ran, each after a line `--@ chunk`; with `find: "<text>"`, only the lines that hold that text, each with its line number and the two lines before and after it |
 
 The first chunk is `canvas{}` (see [The canvas](#the-canvas)). `read` reads the files in this folder: your brief and
@@ -100,8 +103,10 @@ transparent and more fluid, and slower to dry. It is added oil only. What a pile
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
 hand is a little uneven: each brushload takes slightly different
-proportions (about 6%). The palette has room for 16 piles; the oldest is
-scraped off to make room.
+proportions (about 6%). The palette has room for 16 piles. A 17th is an
+error that lists the piles on the palette, oldest first; nothing is scraped
+off to make room. (A painting whose log has no `--@ full-palette-refuses`
+line scrapes the oldest off instead.)
 
 `turps` thins the pile with that share of turpentine (0 to 0.9):
 `pile({{"<tube>", <parts>}, turps=0.6})`. It flows on the brush and
@@ -134,6 +139,9 @@ as it dries. A pile takes either medium or blot.
   a scraped heap is knifed fresh first.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
+- `palette{scrape={p1, p2, ...}}` scrapes those piles off the board. A pile
+  scraped off is knifed fresh the next time it is used, if the palette has
+  room for it.
 - `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
   palette: a pile of any other is an error.
 - `palette{dirty=<0..1>}` keeps the board as dirty as painters do. A brush
@@ -675,6 +683,13 @@ each campaign, and compare before and after.
 
 ## How chunks behave
 
+- **A long chunk.** `paint` waits 12 minutes for a chunk to finish (48 on a
+  4800 px canvas). If it stops waiting first, its reply says whether the
+  chunk is still running, with how far it has got, or whether it is in the
+  log. While a chunk runs, `status` answers how far it has got: the line it
+  is at, its strokes and touches so far, the painting time they have taken
+  and how long it has been running. Once the chunk is in the log and the
+  easel is still finishing its reply, `status` says that instead.
 - **Option types.** Each option takes the type shown in this guide.
   Options documented as `function(x, y)` accept a Lua function; numeric
   options take the computed number.

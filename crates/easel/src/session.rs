@@ -1099,7 +1099,7 @@ mod tests {
             };
             let before = state(&live);
             let log = live.program("caught-memory-limit");
-            let error = paint::crack::with_traction_memory_reserved_for_test(924 << 20, || {
+            let error = paint::crack::with_traction_memory_reserved_for_test(960 << 20, || {
                 assert!(prepared.check_traction_memory().is_ok());
                 live.run(&format!("junk = 42; local ok = {call}; assert(not ok)")).unwrap_err()
             });

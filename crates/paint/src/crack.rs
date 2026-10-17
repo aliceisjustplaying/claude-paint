@@ -343,6 +343,14 @@ fn principal(s: [f32; 3]) -> (f32, f32, V2) {
     (m + r, m - r, [th.cos(), th.sin()])
 }
 
+/// σ1 / (r · strength): `principal(s).0` without the direction.
+#[inline]
+fn ratio_of(s: [f32; 3], strength: f32, r: f32) -> f32 {
+    let m = 0.5 * (s[0] + s[1]);
+    let rr = (0.25 * (s[0] - s[1]).powi(2) + s[2] * s[2]).sqrt();
+    (m + rr) / (r * strength)
+}
+
 /// Normal stress across a plane with unit normal n.
 #[inline]
 fn normal_stress(s: [f32; 3], n: V2) -> f32 {
@@ -356,6 +364,182 @@ fn relief(d: f32, l: f32) -> f32 {
     let x = d / l;
     let lc = 1.0 / (1.0 + RELAX_CUT * RELAX_CUT);
     ((1.0 / (1.0 + x * x) - lc) / (1.0 - lc)).max(0.0)
+}
+
+/// A chord prepared for relaxation, with its box of grid cells.
+struct Chord {
+    a: V2,
+    ab: V2,
+    l2: f32,
+    nrm: V2,
+    free_tip: bool,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+}
+
+/// Where the line y = `cy` meets the capsule of radius `r` around the
+/// segment a → a + ab (unit normal `n`): an x interval, slightly widened
+/// (so it holds every point within `r`, rounding aside), or None.
+fn capsule_row(a: V2, ab: V2, n: V2, cy: f32, r: f32) -> Option<(f32, f32)> {
+    let r = r * 1.001 + 1e-4;
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    for e in [a, addv(a, ab)] {
+        let dy = cy - e[1];
+        if dy.abs() < r {
+            let w = (r * r - dy * dy).sqrt();
+            lo = lo.min(e[0] - w);
+            hi = hi.max(e[0] + w);
+        }
+    }
+    // the strip: 0 ≤ t ≤ 1 along ab and |n·(p − a)| < r, both linear in x
+    let dy = cy - a[1];
+    let mut s = (f32::NEG_INFINITY, f32::INFINITY);
+    let mut keep = true;
+    for (k, c, l, h) in [(ab[0], dy * ab[1], 0.0, dot(ab, ab)), (n[0], n[1] * dy, -r, r)] {
+        // l ≤ k (x − a.x) + c ≤ h
+        if k.abs() < 1e-9 {
+            keep &= c >= l && c <= h;
+        } else {
+            let (u, v) = ((l - c) / k, (h - c) / k);
+            s.0 = s.0.max(u.min(v) + a[0]);
+            s.1 = s.1.min(u.max(v) + a[0]);
+        }
+    }
+    if keep && s.0 <= s.1 {
+        lo = lo.min(s.0);
+        hi = hi.max(s.1);
+    }
+    (lo <= hi).then_some((lo, hi))
+}
+
+/// Grid cells a relaxation must visit before its rows go to the thread pool.
+const PAR_RELAX: usize = 1 << 16;
+
+/// A growable list in fixed chunks: growing never moves or doubles it, so
+/// it holds at most one chunk more than it needs.
+struct Chunked<T> {
+    chunks: Vec<Vec<T>>,
+    len: usize,
+}
+
+const CHUNK: usize = 1 << 14;
+
+impl<T> Chunked<T> {
+    fn new() -> Self {
+        Chunked { chunks: Vec::new(), len: 0 }
+    }
+    fn len(&self) -> usize {
+        self.len
+    }
+    fn push(&mut self, budget: &mut Budget, v: T) {
+        if self.len == self.chunks.len() * CHUNK {
+            budget.push(&mut self.chunks, Vec::new());
+            let last = self.chunks.last_mut().unwrap();
+            budget.reserve(last, CHUNK);
+        }
+        self.chunks[self.len / CHUNK].push(v);
+        self.len += 1;
+    }
+    fn pop(&mut self) {
+        if self.len > 0 {
+            self.len -= 1;
+            self.chunks[self.len / CHUNK].pop();
+        }
+    }
+    /// Bytes charged for it.
+    fn charged(&self) -> usize {
+        Budget::charged::<Vec<T>>(self.chunks.capacity()) + self.chunks.iter().map(|c| Budget::charged::<T>(c.capacity())).sum::<usize>()
+    }
+}
+
+impl<T> std::ops::Index<usize> for Chunked<T> {
+    type Output = T;
+    #[inline]
+    fn index(&self, i: usize) -> &T {
+        &self.chunks[i / CHUNK][i % CHUNK]
+    }
+}
+
+impl<T> std::ops::IndexMut<usize> for Chunked<T> {
+    #[inline]
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        &mut self.chunks[i / CHUNK][i % CHUNK]
+    }
+}
+
+const NONE: u32 = u32::MAX;
+
+/// Up to three segment ids of one index cell, and the next bucket.
+#[derive(Clone, Copy)]
+struct Bucket {
+    ids: [u32; 3],
+    next: u32,
+}
+
+/// The segment index: per cell, a chain of buckets of segment ids in the
+/// order they were added (4 bytes a cell, 16 a bucket, instead of a Vec).
+struct Index {
+    head: Vec<u32>,
+    pool: Chunked<Bucket>,
+}
+
+impl Index {
+    fn add(&mut self, budget: &mut Budget, c: usize, id: u32) {
+        let fresh = Bucket { ids: [id, NONE, NONE], next: NONE };
+        let mut b = self.head[c];
+        if b == NONE {
+            self.head[c] = self.pool.len() as u32;
+            self.pool.push(budget, fresh);
+            return;
+        }
+        while self.pool[b as usize].next != NONE {
+            b = self.pool[b as usize].next;
+        }
+        if let Some(slot) = self.pool[b as usize].ids.iter_mut().find(|v| **v == NONE) {
+            *slot = id;
+            return;
+        }
+        let n = self.pool.len() as u32;
+        self.pool.push(budget, fresh);
+        self.pool[b as usize].next = n;
+    }
+
+    /// Drop `id` if it is the last one in cell `c`.
+    fn pop_if_last(&mut self, c: usize, id: u32) {
+        let (mut prev, mut b) = (NONE, self.head[c]);
+        if b == NONE {
+            return;
+        }
+        while self.pool[b as usize].next != NONE {
+            prev = b;
+            b = self.pool[b as usize].next;
+        }
+        let ids = &mut self.pool[b as usize].ids;
+        let Some(j) = ids.iter().rposition(|v| *v != NONE) else { return };
+        if ids[j] == id {
+            ids[j] = NONE;
+            if j == 0 && prev != NONE {
+                self.pool[prev as usize].next = NONE;
+            }
+        }
+    }
+
+    #[inline]
+    fn for_each(&self, c: usize, mut f: impl FnMut(u32)) {
+        let mut b = self.head[c];
+        while b != NONE {
+            let bk = &self.pool[b as usize];
+            for &id in &bk.ids {
+                if id == NONE {
+                    return;
+                }
+                f(id);
+            }
+            b = bk.next;
+        }
+    }
 }
 
 struct Seg {
@@ -424,15 +608,15 @@ struct Builder {
     ic: f32,
     ix: usize,
     iy: usize,
-    cells: Vec<Vec<u32>>,
-    segs: Vec<Seg>,
+    cells: Index,
+    segs: Chunked<Seg>,
     arms: Vec<ArmState>,
     ncracks: u32,
-    // relaxation scratch
-    mark: Vec<u32>,
-    best: Vec<(f32, V2)>,
-    touched: Vec<u32>,
+    // relaxation scratch (reused)
     chords: Vec<(V2, V2, bool)>,
+    prep: Vec<Chord>,
+    /// Bytes charged for the per-row relaxation scratch (one row per thread).
+    row_charge: usize,
     /// Current strength factor (strength / mean stress).
     r: f32,
     /// Step limit per growth (fatigue pass).
@@ -451,6 +635,8 @@ struct Builder {
 pub(crate) struct Budget {
     limit: Option<usize>,
     used: usize,
+    /// The most `used` has been.
+    peak: usize,
     size: V2,
 }
 
@@ -508,7 +694,7 @@ pub(crate) fn speculatively<R>(run: impl FnOnce() -> R) -> std::thread::Result<R
 
 impl Budget {
     pub(crate) fn limited(size: V2, limit: usize) -> Self {
-        let mut budget = Self { limit: Some(limit), used: 0, size };
+        let mut budget = Self { limit: Some(limit), used: 0, peak: 0, size };
         if !size.iter().all(|v| v.is_finite() && *v > 0.0) { budget.refused(); }
         budget.charge::<u8>(1 << 20);
         #[cfg(any(test, feature = "test-memory-budget"))]
@@ -518,6 +704,10 @@ impl Budget {
 
     pub(crate) fn used(&self) -> usize {
         self.used
+    }
+
+    pub(crate) fn peak(&self) -> usize {
+        self.peak
     }
 
     fn error(&self) -> String {
@@ -542,18 +732,39 @@ impl Budget {
         let bytes = count.checked_mul(std::mem::size_of::<T>()).and_then(|n| n.checked_add(64));
         let Some(used) = bytes.and_then(|n| self.used.checked_add(n)).filter(|&n| n <= limit) else { self.refused() };
         self.used = used;
+        self.peak = self.peak.max(used);
     }
 
+    /// Grow `values` to hold `additional` more. Charged as live memory: the
+    /// growth of its capacity (plus 64 bytes the first time), and the old
+    /// buffer must also fit while both exist during the move.
     pub(crate) fn reserve<T>(&mut self, values: &mut Vec<T>, additional: usize) {
         let Some(needed) = values.len().checked_add(additional) else { self.refused() };
         if needed <= values.capacity() { return; }
-        if self.limit.is_none() {
+        let Some(limit) = self.limit else {
             values.reserve(additional);
             return;
-        }
-        let capacity = needed.max(values.capacity().saturating_mul(2)).max(4);
-        self.charge::<T>(capacity);
+        };
+        let size = std::mem::size_of::<T>();
+        let old = values.capacity();
+        let capacity = needed.max(old.saturating_mul(2)).max(4);
+        let grow = (capacity - old).checked_mul(size).and_then(|n| n.checked_add(if old == 0 { 64 } else { 0 }));
+        let Some(used) = grow.and_then(|n| self.used.checked_add(n)) else { self.refused() };
+        let Some(peak) = used.checked_add(old * size).filter(|&n| n <= limit) else { self.refused() };
+        self.used = used;
+        self.peak = self.peak.max(peak);
         if values.try_reserve_exact(capacity - values.len()).is_err() { self.refused(); }
+    }
+
+    /// Bytes charged for a Vec of `capacity` `T`s grown by `reserve` or
+    /// `filled` (what `release` may give back once it is dropped).
+    pub(crate) fn charged<T>(capacity: usize) -> usize {
+        if capacity == 0 { 0 } else { capacity * std::mem::size_of::<T>() + 64 }
+    }
+
+    /// Give back memory charged earlier that has been freed.
+    pub(crate) fn release(&mut self, bytes: usize) {
+        if self.limit.is_some() { self.used = self.used.saturating_sub(bytes); }
     }
 
     pub(crate) fn push<T>(&mut self, values: &mut Vec<T>, value: T) {
@@ -667,9 +878,10 @@ impl Builder {
         let ic = (0.25 * s).max(step);
         let ix = (size[0] / ic).ceil() as usize + 1;
         let iy = (size[1] / ic).ceil() as usize + 1;
-        let cells = budget.filled(ix.checked_mul(iy).unwrap_or_else(|| budget.refused()), Vec::new());
-        let mark = budget.filled(n, 0);
-        let best = Vec::new();
+        let cells = Index { head: budget.filled(ix.checked_mul(iy).unwrap_or_else(|| budget.refused()), NONE), pool: Chunked::new() };
+        // relaxation works a row at a time: one row of scratch per thread
+        let row_charge = Budget::charged::<(f32, V2, bool)>(gx) * (rayon::current_num_threads() + 1);
+        budget.charge::<u8>(row_charge);
         Builder {
             budget,
             size,
@@ -688,13 +900,12 @@ impl Builder {
             ix,
             iy,
             cells,
-            segs: Vec::new(),
+            segs: Chunked::new(),
             arms: Vec::new(),
             ncracks: 0,
-            mark,
-            best,
-            touched: Vec::new(),
             chords: Vec::new(),
+            prep: Vec::new(),
+            row_charge,
             r: R_FIRST,
             limit: None,
             seed,
@@ -737,11 +948,11 @@ impl Builder {
 
     fn add_seg(&mut self, a: V2, b: V2, who: Who) {
         let id = self.segs.len() as u32;
-        self.budget.push(&mut self.segs, Seg { a, b, crack: who.crack, arm: who.arm, k: who.k });
+        self.segs.push(&mut self.budget, Seg { a, b, crack: who.crack, arm: who.arm, k: who.k });
         let lo = [a[0].min(b[0]), a[1].min(b[1])];
         let hi = [a[0].max(b[0]), a[1].max(b[1])];
         for c in self.index_cells(lo, hi) {
-            self.budget.push(&mut self.cells[c], id);
+            self.cells.add(&mut self.budget, c, id);
         }
     }
 
@@ -752,10 +963,10 @@ impl Builder {
         let hi = [p[0].max(q[0]) + eps, p[1].max(q[1]) + eps];
         let mut best: Option<(f32, V2, u32)> = None;
         for c in self.index_cells(lo, hi) {
-            for &id in &self.cells[c] {
+            self.cells.for_each(c, |id| {
                 let sg = &self.segs[id as usize];
                 if who.skips(sg) {
-                    continue;
+                    return;
                 }
                 if let Some(t) = cross(p, q, sg.a, sg.b) {
                     if best.is_none_or(|b| t < b.0) {
@@ -769,7 +980,7 @@ impl Builder {
                         best = Some((1.0 + dot(d, d).sqrt(), x, sg.crack));
                     }
                 }
-            }
+            });
         }
         best.map(|b| (b.1, b.2))
     }
@@ -914,14 +1125,15 @@ impl Builder {
 
     /// Relax the stress around chords of crack just laid (`(a, b, tip)`;
     /// `tip`: b is a free tip, and the stress ahead of it is not relaxed).
+    /// Each grid cell takes the nearest chord (the first of equals) within
+    /// reach; rows are independent, so they are relaxed in parallel when
+    /// there are many, with the same result.
     fn relax(&mut self, chords: &[(V2, V2, bool)]) {
-        for &i in &self.touched {
-            self.mark[i as usize] = 0;
-        }
-        self.touched.clear();
-        self.best.clear();
         let l = RELAX * self.s;
         let reach = RELAX_CUT * l;
+        let mut prep = std::mem::take(&mut self.prep);
+        prep.clear();
+        let (mut ymin, mut ymax, mut work) = (usize::MAX, 0, 0usize);
         for &(a, b, free_tip) in chords {
             let ab = sub(b, a);
             let l2 = dot(ab, ab);
@@ -933,12 +1145,47 @@ impl Builder {
             let y0 = (((a[1].min(b[1]) - reach) / self.gc - 0.5).floor().max(0.0)) as usize;
             let x1 = ((((a[0].max(b[0]) + reach) / self.gc - 0.5).ceil().max(0.0)) as usize).min(self.gx - 1);
             let y1 = ((((a[1].max(b[1]) + reach) / self.gc - 0.5).ceil().max(0.0)) as usize).min(self.gy - 1);
-            for y in y0..=y1 {
-                let cy = (y as f32 + 0.5) * self.gc;
-                for x in x0..=x1 {
-                    let c = [(x as f32 + 0.5) * self.gc, cy];
+            if x0 > x1 || y0 > y1 {
+                continue;
+            }
+            ymin = ymin.min(y0);
+            ymax = ymax.max(y1);
+            work += (x1 - x0 + 1) * (y1 - y0 + 1);
+            self.budget.push(&mut prep, Chord { a, ab, l2, nrm, free_tip, x0, x1, y0, y1 });
+        }
+        if prep.is_empty() {
+            self.prep = prep;
+            return;
+        }
+        let (gx, gc) = (self.gx, self.gc);
+        let rows = &mut self.sig[ymin * gx..(ymax + 1) * gx];
+        let relax_row = |row: usize, sig: &mut [[f32; 3]], best: &mut Vec<(f32, V2, bool)>| {
+            let y = ymin + row;
+            let (mut xa, mut xb) = (usize::MAX, 0);
+            for c in prep.iter().filter(|c| c.y0 <= y && y <= c.y1) {
+                xa = xa.min(c.x0);
+                xb = xb.max(c.x1);
+            }
+            if xa > xb {
+                return;
+            }
+            best.clear();
+            best.resize(xb - xa + 1, (0.0, [0.0; 2], false));
+            let cy = (y as f32 + 0.5) * gc;
+            for ch in prep.iter().filter(|c| c.y0 <= y && y <= c.y1) {
+                let (a, ab, l2) = (ch.a, ch.ab, ch.l2);
+                // only cells near the chord's capsule on this row can be in
+                // reach; the cells kept are tested exactly as before
+                let Some((xl, xr)) = capsule_row(a, ab, ch.nrm, cy, reach) else { continue };
+                let xs = ((xl / gc - 0.5).floor() - 1.0).max(ch.x0 as f32);
+                let xe = ((xr / gc - 0.5).ceil() + 1.0).min(ch.x1 as f32);
+                if !(xs <= xe) {
+                    continue;
+                }
+                for x in xs as usize..=xe as usize {
+                    let c = [(x as f32 + 0.5) * gc, cy];
                     let tr = dot(sub(c, a), ab) / l2;
-                    if free_tip && tr > 1.0 {
+                    if ch.free_tip && tr > 1.0 {
                         continue;
                     }
                     let p = addv(a, mul(ab, tr.clamp(0.0, 1.0)));
@@ -947,38 +1194,43 @@ impl Builder {
                     if dd >= reach * reach {
                         continue;
                     }
-                    let i = y * self.gx + x;
-                    if self.mark[i] == 0 {
-                        self.mark[i] = self.best.len() as u32 + 1;
-                        self.budget.push(&mut self.best, (dd, nrm));
-                        self.budget.push(&mut self.touched, i as u32);
-                    } else {
-                        let best = &mut self.best[self.mark[i] as usize - 1];
-                        if dd < best.0 {
-                            *best = (dd, nrm);
-                        }
+                    let b = &mut best[x - xa];
+                    if !b.2 || dd < b.0 {
+                        *b = (dd, ch.nrm, true);
                     }
                 }
             }
-        }
-        for (&i, &(d2, n)) in self.touched.iter().zip(&self.best) {
-            let i = i as usize;
-            let r = relief(d2.sqrt(), l);
-            if r <= 0.0 {
-                continue;
+            for (j, &(d2, n, set)) in best.iter().enumerate() {
+                if !set {
+                    continue;
+                }
+                let r = relief(d2.sqrt(), l);
+                if r <= 0.0 {
+                    continue;
+                }
+                // σ' = Q σ Q, Q = I − a n nᵀ: the normal stress falls by (1 − r),
+                // shear across the crack by √(1 − r), the stress along it stays
+                let a = 1.0 - (1.0 - r).max(0.0).sqrt();
+                let cell = &mut sig[xa + j];
+                let s = *cell;
+                let v = [s[0] * n[0] + s[2] * n[1], s[2] * n[0] + s[1] * n[1]];
+                let nv = dot(n, v);
+                *cell = [
+                    s[0] - 2.0 * a * n[0] * v[0] + a * a * nv * n[0] * n[0],
+                    s[1] - 2.0 * a * n[1] * v[1] + a * a * nv * n[1] * n[1],
+                    s[2] - a * (n[0] * v[1] + v[0] * n[1]) + a * a * nv * n[0] * n[1],
+                ];
             }
-            // σ' = Q σ Q, Q = I − a n nᵀ: the normal stress falls by (1 − r),
-            // shear across the crack by √(1 − r), the stress along it stays
-            let a = 1.0 - (1.0 - r).max(0.0).sqrt();
-            let s = self.sig[i];
-            let v = [s[0] * n[0] + s[2] * n[1], s[2] * n[0] + s[1] * n[1]];
-            let nv = dot(n, v);
-            self.sig[i] = [
-                s[0] - 2.0 * a * n[0] * v[0] + a * a * nv * n[0] * n[0],
-                s[1] - 2.0 * a * n[1] * v[1] + a * a * nv * n[1] * n[1],
-                s[2] - a * (n[0] * v[1] + v[0] * n[1]) + a * a * nv * n[0] * n[1],
-            ];
+        };
+        if work >= PAR_RELAX {
+            rows.par_chunks_mut(gx).enumerate().for_each_init(Vec::new, |best, (row, sig)| relax_row(row, sig, best));
+        } else {
+            let mut best = Vec::new();
+            for (row, sig) in rows.chunks_mut(gx).enumerate() {
+                relax_row(row, sig, &mut best);
+            }
         }
+        self.prep = prep;
     }
 
     /// Relax around arms that just grew (their new segment ranges). The
@@ -1012,10 +1264,7 @@ impl Builder {
     }
 
     fn ratio(&self, i: usize) -> f32 {
-        let s = self.sig[i];
-        let m = 0.5 * (s[0] + s[1]);
-        let r = (0.25 * (s[0] - s[1]).powi(2) + s[2] * s[2]).sqrt();
-        (m + r) / (self.r * self.strength[i])
+        ratio_of(self.sig[i], self.strength[i], self.r)
     }
 
     /// Start a crack at grid cell i: two arms back to back.
@@ -1064,7 +1313,6 @@ impl Builder {
     }
 
     fn run(mut self) -> (Network, Budget) {
-        let mut candidates = Vec::new();
         for g in 0..GENERATIONS {
             let f = g as f32 / (GENERATIONS - 1) as f32;
             self.r = R_FIRST * (R_LAST / R_FIRST).powf(f);
@@ -1078,13 +1326,40 @@ impl Builder {
                 }
             }
             // then new cracks, strongest stress / strength first
-            candidates.clear();
-            for i in 0..self.gx * self.gy {
-                let q = self.ratio(i);
-                if q > 1.0 { self.budget.push(&mut candidates, (q.to_bits(), Reverse(i as u32))); }
-            }
-            let mut heap = BinaryHeap::from(std::mem::take(&mut candidates));
-            while let Some((qb, Reverse(i))) = heap.pop() {
+            let r = self.r;
+            let count = self.sig.par_iter().zip(self.strength.par_iter()).filter(|&(&s, &st)| ratio_of(s, st, r) > 1.0).count();
+            let mut candidates = Vec::new();
+            self.budget.reserve(&mut candidates, count);
+            // the pool collects in pieces before appending them in order
+            let pieces = Budget::charged::<(u32, Reverse<u32>)>(count);
+            self.budget.charge::<u8>(pieces);
+            candidates.par_extend(self.sig.par_iter().zip(self.strength.par_iter()).enumerate().filter_map(|(i, (&s, &st))| {
+                let q = ratio_of(s, st, r);
+                (q > 1.0).then_some((q.to_bits(), Reverse(i as u32)))
+            }));
+            self.budget.release(pieces);
+            let cand_charge = Budget::charged::<(u32, Reverse<u32>)>(candidates.capacity());
+            // A max-heap of every candidate, popped in key order, is the
+            // candidates sorted once (keys are unique) merged with a small
+            // heap of the requeued ones: the same order, without a pass
+            // through a big, cache-cold heap per pop.
+            candidates.par_sort_unstable_by(|x, y| y.cmp(x));
+            let mut requeued: BinaryHeap<(u32, Reverse<u32>)> = BinaryHeap::new();
+            let mut requeue_charge = 0;
+            let mut cur = 0;
+            loop {
+                let next = match (candidates.get(cur), requeued.peek()) {
+                    (None, None) => break,
+                    (Some(&c), None) => c,
+                    (None, Some(&h)) => h,
+                    (Some(&c), Some(&h)) => c.max(h),
+                };
+                if cur < candidates.len() && candidates[cur] == next {
+                    cur += 1;
+                } else {
+                    requeued.pop();
+                }
+                let (qb, Reverse(i)) = next;
                 let i = i as usize;
                 let q = self.ratio(i);
                 if q <= 1.0 {
@@ -1092,18 +1367,36 @@ impl Builder {
                 }
                 if q.to_bits() < qb {
                     // relaxed since it was queued: requeue at its new rank
-                    heap.push((q.to_bits(), Reverse(i as u32)));
+                    if requeued.len() == requeued.capacity() {
+                        let old = requeued.capacity();
+                        let grow = Budget::charged::<(u32, Reverse<u32>)>(old.max(4)) + Budget::charged::<(u32, Reverse<u32>)>(old);
+                        self.budget.charge::<u8>(grow);
+                        requeue_charge += grow;
+                        requeued.reserve_exact(old.max(4));
+                    }
+                    requeued.push((q.to_bits(), Reverse(i as u32)));
                     continue;
                 }
                 self.nucleate(i, g as u8);
             }
-            candidates = heap.into_vec();
+            drop(requeued);
+            drop(candidates);
+            self.budget.release(requeue_charge);
+            self.budget.release(cand_charge);
         }
-        drop(candidates);
         self.fatigue();
+        // the stress grid, the segment index and scratch are freed here
+        let mut freed = Budget::charged::<[f32; 3]>(self.gx * self.gy) + Budget::charged::<f32>(self.gx * self.gy) + self.row_charge;
+        freed += Budget::charged::<u32>(self.cells.head.len()) + self.cells.pool.charged();
+        freed += self.segs.charged() + Budget::charged::<Chord>(self.prep.capacity()) + Budget::charged::<(V2, V2, bool)>(self.chords.capacity());
+        let (cells, segs, sig, strength) = (std::mem::replace(&mut self.cells, Index { head: Vec::new(), pool: Chunked::new() }), std::mem::replace(&mut self.segs, Chunked::new()), std::mem::take(&mut self.sig), std::mem::take(&mut self.strength));
+        drop((cells, segs, sig, strength));
+        self.budget.release(freed);
         let mut arms = Vec::new();
         self.budget.reserve(&mut arms, self.arms.len());
+        let states = Budget::charged::<ArmState>(self.arms.capacity());
         arms.extend(self.arms.into_iter().map(|a| a.arm));
+        self.budget.release(states);
         (Network { size_mm: self.size, arms }, self.budget)
     }
 
@@ -1129,9 +1422,7 @@ impl Builder {
                     let lo = [a[0].min(b[0]), a[1].min(b[1])];
                     let hi = [a[0].max(b[0]), a[1].max(b[1])];
                     for c in self.index_cells(lo, hi) {
-                        if self.cells[c].last() == Some(&(si as u32)) {
-                            self.cells[c].pop();
-                        }
+                        self.cells.pop_if_last(c, si as u32);
                     }
                     self.segs.pop();
                 }
@@ -1206,13 +1497,14 @@ fn stress_grid(size: V2, island: f32, grid: f32) -> (f32, usize, usize) {
 pub(crate) fn check_network_grid(size: V2, domain: V2, island: f32, grid: f32, limit: usize) -> Result<(), String> {
     let budget = Budget::limited(size, limit);
     let (_, gx, gy) = stress_grid(domain, island, grid);
-    let per_cell = std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<f32>() + std::mem::size_of::<u32>();
+    // stress and strength per grid cell, and the segment index's cell heads
+    let per_cell = std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<f32>();
     let ic = 0.25 * island.max(0.2);
     let ix = ((domain[0] / ic).ceil() as usize).saturating_add(1);
     let iy = ((domain[1] / ic).ceil() as usize).saturating_add(1);
-    let index_bytes = ix.checked_mul(iy).and_then(|n| n.checked_mul(std::mem::size_of::<Vec<u32>>()));
+    let heads = ix.checked_mul(iy).and_then(|n| n.checked_mul(std::mem::size_of::<u32>()));
     let bytes = gx.checked_mul(gy).and_then(|n| n.checked_mul(per_cell))
-        .and_then(|n| n.checked_add(index_bytes?)).and_then(|n| n.checked_add(budget.used));
+        .and_then(|n| n.checked_add(heads?)).and_then(|n| n.checked_add(budget.used));
     if bytes.is_some_and(|n| n <= limit) { Ok(()) } else { Err(budget.error()) }
 }
 

@@ -385,7 +385,7 @@ fn overlap_budget_is_independent_of_a_warm_region_cache() {
     film(&mut warm, undercoat(), 200.0, patch, 1);
     warm.dry();
     film(&mut warm, topcoat(), 25.0, patch, 2);
-    let cost = warm.traction_net([0, 0], 0).memory_cost;
+    let cost = warm.traction_net([0, 0], 0).build_cost;
     let mut cold = warm.clone();
     for c in [&mut warm, &mut cold] {
         crate::crack::with_traction_memory_reserved_for_test(NETWORK_MEMORY_BUDGET - cost - (2 << 20), || c.wait(60.0 * DAY));

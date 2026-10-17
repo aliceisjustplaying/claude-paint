@@ -324,7 +324,11 @@ pub(crate) struct DryNet {
     size_mm: [f32; 2],
     tile: [usize; 2],
     origin_mm: [f32; 2],
+    /// Bytes it holds once built.
     memory_cost: usize,
+    /// Most bytes its build held at once (the stress grid and segment index
+    /// are freed before it is done).
+    build_cost: usize,
     seed: u64,
     /// Segments: ends (mm), relative opening at each end, generation.
     segs: Vec<([f32; 2], [f32; 2], f32, f32, u8)>,
@@ -361,13 +365,18 @@ impl DryNet {
         let budget = Self::budget(size_mm, reserved);
         let (net, mut budget) = network_with_budget(&k, size_mm, origin_mm, tile_mm, [0.7, 0.7], NETWORK_GRID, budget, true);
         let mut segs = Vec::new();
+        let total: usize = net.arms.iter().map(|a| a.pts.len().saturating_sub(1)).sum();
+        budget.reserve(&mut segs, total);
+        let mut along = Vec::new();
         for a in &net.arms {
             let n = a.pts.len();
             if n < 2 {
                 continue;
             }
             // length along the arm, for the taper to a free end
-            let mut along = budget.filled(n, 0.0f32);
+            along.clear();
+            budget.reserve(&mut along, n);
+            along.resize(n, 0.0f32);
             for j in 1..n {
                 along[j] = along[j - 1] + ((a.pts[j][0] - a.pts[j - 1][0]).powi(2) + (a.pts[j][1] - a.pts[j - 1][1]).powi(2)).sqrt();
             }
@@ -386,6 +395,7 @@ impl DryNet {
         }
         let cell = 2.0f32;
         let (cols, rows) = (((tile_mm[0] / cell).ceil() as usize).max(1), ((tile_mm[1] / cell).ceil() as usize).max(1));
+        drop(along);
         let mut cells = budget.filled(cols * rows, Vec::new());
         for (si, &(a, b, ..)) in segs.iter().enumerate() {
             let (x0, x1) = (
@@ -409,6 +419,7 @@ impl DryNet {
             tile,
             origin_mm,
             memory_cost: budget.used() - reserved,
+            build_cost: budget.peak() - reserved,
             seed,
             segs,
             cell,
@@ -718,7 +729,7 @@ impl Canvas {
                     // the regions still held count against the rebuild
                     None => DryNet::new(size_mm, seed, tile_of(g.0), reserved + alive),
                 };
-                cost = cost.max(net.memory_cost);
+                cost = cost.max(net.build_cost);
                 sample(&net, g.1, &mut best);
                 last = Some(net);
             }

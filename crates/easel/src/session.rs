@@ -13,6 +13,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 /// Marks the start of a chunk in a session file.
@@ -33,6 +34,9 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose full palette board refuses a new heap instead of scraping off the
+/// oldest (board.rs): every new painting. A log without it replays with the oldest scraped off.
+pub const FULL_PALETTE_MARK: &str = "--@ full-palette-refuses";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -67,6 +71,77 @@ pub fn chunk_limit_for(width: usize) -> Duration {
 }
 /// Lua instructions between two looks at the clock.
 const HOOK_EVERY: u32 = 1_000_000;
+
+/// How far the chunk a live session is running has got, for `status` while it runs (main.rs
+/// `serving_status`). A process runs one chunk at a time; replays leave it alone. Written on
+/// the session's thread, read on the thread that answers `status`.
+pub struct Progress {
+    /// The chunk's lines, and the line of it running when last seen (0: not seen yet). The
+    /// line is looked at with the clock (`HOOK_EVERY`), so not inside one long verb.
+    lines: AtomicUsize,
+    line: AtomicUsize,
+    /// Strokes and touches (`paint::Tally`) and the painting's clock (minutes, f64 bits) when
+    /// the chunk began and after its last verb.
+    marks0: AtomicU64,
+    marks: AtomicU64,
+    clock0: AtomicU64,
+    clock: AtomicU64,
+}
+
+pub static PROGRESS: Progress = Progress { lines: AtomicUsize::new(0), line: AtomicUsize::new(0), marks0: AtomicU64::new(0), marks: AtomicU64::new(0), clock0: AtomicU64::new(0), clock: AtomicU64::new(0) };
+
+impl Progress {
+    fn begin(&self, lines: usize, st: &Studio) {
+        let marks = st.canvas.as_ref().map_or(0, |c| { let t = c.tally(); t.strokes + t.touches });
+        self.lines.store(lines, Ordering::Relaxed);
+        self.line.store(0, Ordering::Relaxed);
+        self.marks0.store(marks, Ordering::Relaxed);
+        self.marks.store(marks, Ordering::Relaxed);
+        self.clock0.store(st.clock.to_bits(), Ordering::Relaxed);
+        self.clock.store(st.clock.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Before a chunk is asked for: nothing of the last one's is reported.
+    pub fn clear(&self) {
+        self.lines.store(0, Ordering::Relaxed);
+        self.line.store(0, Ordering::Relaxed);
+        self.marks0.store(0, Ordering::Relaxed);
+        self.marks.store(0, Ordering::Relaxed);
+        self.clock0.store(0, Ordering::Relaxed);
+        self.clock.store(0, Ordering::Relaxed);
+    }
+
+    /// After a verb of a live chunk (time.rs `verb`).
+    pub fn verb(&self, st: &Studio) {
+        if let Some(c) = st.canvas.as_ref() {
+            let t = c.tally();
+            self.marks.store(t.strokes + t.touches, Ordering::Relaxed);
+        }
+        self.clock.store(st.clock.to_bits(), Ordering::Relaxed);
+    }
+
+    /// The running chunk's progress, `elapsed` after it began, as `status` answers it.
+    pub fn report(&self, elapsed: Duration) -> String {
+        let (line, lines) = (self.line.load(Ordering::Relaxed), self.lines.load(Ordering::Relaxed));
+        let marks = self.marks.load(Ordering::Relaxed).saturating_sub(self.marks0.load(Ordering::Relaxed));
+        let clock = f64::from_bits(self.clock.load(Ordering::Relaxed));
+        let spent = (clock - f64::from_bits(self.clock0.load(Ordering::Relaxed))).max(0.0) * 60.0;
+        if lines == 0 {
+            return format!("painting a chunk: starting, running for {}", minutes_seconds(elapsed.as_secs_f64()));
+        }
+        let at = if line > 0 { format!("at line {line} of {lines}") } else { format!("{lines} lines") };
+        format!(
+            "painting a chunk ({at}): {marks} strokes and touches so far, {} on the painting's clock (now {}), running for {}",
+            minutes_seconds(spent), crate::time::time_of_day(clock), minutes_seconds(elapsed.as_secs_f64())
+        )
+    }
+}
+
+/// `14 min 20 s`, `40 s`.
+fn minutes_seconds(secs: f64) -> String {
+    let s = secs.round() as u64;
+    if s < 60 { format!("{s} s") } else { format!("{} min {} s", s / 60, s % 60) }
+}
 
 pub struct Chunk {
     pub src: String,
@@ -184,11 +259,27 @@ impl Session {
         let deadline = Rc::new(Cell::new(None::<Instant>));
         let d = deadline.clone();
         let limit_min = chunk_limit_for(width).as_secs() / 60;
-        lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |_, _| match d.get() {
+        lua.set_hook(mlua::HookTriggers::new().every_nth_instruction(HOOK_EVERY), move |lua, _| match d.get() {
             Some(t) if Instant::now() > t => Err(mlua::Error::runtime(format!(
                 "the chunk ran longer than {limit_min} minutes and was stopped; nothing it did was kept"
             ))),
-            _ => Ok(mlua::VmState::Continue),
+            // a live chunk: the line of it running (its outermost frame; a function an
+            // earlier chunk made is that chunk's)
+            Some(_) => {
+                let mut line = None;
+                for level in 0..200 {
+                    let Some(found) = lua.inspect_stack(level, |f| {
+                        let chunk = f.source().source.is_some_and(|s| s.trim_start_matches(['=', '@']).starts_with("chunk "));
+                        chunk.then(|| f.current_line()).flatten()
+                    }) else { break };
+                    line = found.or(line);
+                }
+                if let Some(l) = line {
+                    PROGRESS.line.store(l, Ordering::Relaxed);
+                }
+                Ok(mlua::VmState::Continue)
+            }
+            None => Ok(mlua::VmState::Continue),
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
@@ -316,6 +407,10 @@ impl Session {
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
+        self.st.borrow_mut().live = !self.replay;
+        if !self.replay {
+            PROGRESS.begin(src.lines().count(), &self.st.borrow());
+        }
         let t0 = Instant::now();
         // text only: mlua would take a chunk starting with Lua's binary signature as bytecode
         let chunk = self.lua.load(src.as_str()).set_name(format!("chunk {n}")).set_mode(mlua::chunk::ChunkMode::Text);
@@ -410,6 +505,9 @@ impl Session {
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
         }
+        if self.st.borrow().tubes.full_palette_refuses {
+            let _ = writeln!(s, "{FULL_PALETTE_MARK}");
+        }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
         }
@@ -487,7 +585,7 @@ impl Session {
                 // the live board's dirt, ordering or last-carried paint.
                 let st = self.st.borrow();
                 let mut board = st.board.clone();
-                board.visit(p.heap, 0.0);
+                let _ = board.visit(p.heap, 0.0);
                 let mut projected = p.clone();
                 if let Some(h) = board.heap(p.heap).filter(|h| h.changed) {
                     projected.mix = st.tubes.pile(h.fractions());
@@ -994,13 +1092,15 @@ fn box_list() -> String {
 /// engine version the painting is painted with: a new one engine 7,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
-/// (`LIMBS_MARK`).
+/// (`LIMBS_MARK`). New paintings' full palette refuses a new heap; an existing one's as its
+/// log says (`FULL_PALETTE_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
         b.limbs_join_nearest = true;
+        b.full_palette_refuses = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1026,6 +1126,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     Ok(b)
 }
 

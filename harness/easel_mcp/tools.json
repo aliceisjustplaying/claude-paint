@@ -94,7 +94,7 @@
   },
   {
     "name": "status",
-    "description": "The canvas's setup.",
+    "description": "The canvas's setup. While a chunk is still running, how far it has got; while the easel rebuilds the painting from its log, how many of its chunks are done.",
     "inputSchema": {
       "type": "object",
       "properties": {

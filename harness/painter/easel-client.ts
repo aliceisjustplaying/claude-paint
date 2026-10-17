@@ -86,8 +86,14 @@ async function step(studio: string, args: string[], input: string | undefined, s
 	return r;
 }
 
-/** Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. */
-export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other): Promise<boolean> {
+/** The easel's answer to `status` while it rebuilds the painting from its log: chunks done, of how many. */
+const REPLAY = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/;
+
+/**
+ * Open if needed, waiting for replay readiness. Returns whether a rebuild was awaited. With
+ * `answerReplay` (the status tool), a replay's progress is the answer: it returns at once.
+ */
+export async function ensureOpen(studio: string, signal?: AbortSignal, deadline = Date.now() + WAIT_MS.other, answerReplay = false): Promise<boolean> {
 	let r = await step(studio, ["status"], undefined, signal, deadline);
 	let opened = false;
 	let rebuilding = false;
@@ -95,8 +101,16 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	let total: number | undefined;
 	let progressDeadline = deadline;
 	for (;;) {
+		if (r.timedOut && opened && !rebuilding) {
+			// an open that outlasts the tool: the easel answers how far its replay of the log has got
+			const s = await easel(studio, ["status"], undefined, signal, 10_000);
+			if (signal?.aborted) throw new Error("Operation aborted");
+			if (!s.timedOut && s.code === 0 && REPLAY.test(s.out.trim())) {
+				throw new Error(`the easel is reopening the painting from its log and hasn't finished: ${s.out.trim()}. \`status\` shows how far it has got.`);
+			}
+		}
 		if (r.timedOut) throw new Error(rebuilding ? "the easel rebuild stalled without progress" : opened ? "the easel didn't open in time" : "the easel isn't answering");
-		const progress = /^rebuilding from the log \((\d+) of (\d+) chunks\)$/.exec(r.out.trim());
+		const progress = REPLAY.exec(r.out.trim());
 		if (progress) {
 			const k = Number(progress[1]);
 			const n = Number(progress[2]);
@@ -104,6 +118,7 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 				throw new Error(`the easel returned invalid rebuild progress: ${r.out.trim()}`);
 			}
 			total = n;
+			if (answerReplay) return true;
 			if (!rebuilding || k > completed) {
 				completed = k;
 				progressDeadline = Date.now() + (wideStudio(studio) ? WIDE_WAIT_MS.rebuild : WAIT_MS.rebuild);
@@ -122,14 +137,36 @@ export async function ensureOpen(studio: string, signal?: AbortSignal, deadline 
 	}
 }
 
+/** The chunks in a log: its `--@ chunk` lines (0 if there is no log yet). */
+function chunksIn(log: string): number {
+	try {
+		return readFileSync(log, "utf8").match(/^--@ chunk/gm)?.length ?? 0;
+	} catch {
+		return 0;
+	}
+}
+
 /** Run an easel command at an open easel; a failure becomes the tool's error, with the easel's words. */
 export async function atEasel(studio: string, args: string[], input: string | undefined, signal?: AbortSignal): Promise<string> {
 	const wait = args[0] === "do" ? (wideStudio(studio) ? WIDE_WAIT_MS.do : WAIT_MS.do) : WAIT_MS.other;
 	let deadline = Date.now() + wait;
-	if (await ensureOpen(studio, signal, deadline)) deadline = Date.now() + wait;
+	if (await ensureOpen(studio, signal, deadline, args[0] === "status")) deadline = Date.now() + wait;
+	const log = join(studio, "paintings", "lua", args.includes("--scratch") ? "scratch.lua" : "painting.lua");
+	const before = args[0] === "do" ? chunksIn(log) : 0;
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
-		throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		if (args[0] !== "do") throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		// what landed: the chunk still running (its progress), in the log, or neither
+		const s = await easel(studio, ["status"], undefined, signal, 10_000);
+		if (signal?.aborted) throw new Error("Operation aborted");
+		const minutes = `the easel didn't answer within ${Math.round(wait / 60_000)} minutes`;
+		if (s.timedOut || s.code !== 0) throw new Error(`${minutes}; \`log\` shows whether the chunk ran`);
+		const now = s.out.trim();
+		if (now.startsWith("painting a chunk")) {
+			throw new Error(`${minutes}. The chunk is still running and isn't in the log yet: ${now}. \`status\` shows how far it has got while it runs; once it ends, \`log\` shows whether it was kept.`);
+		}
+		if (chunksIn(log) > before) throw new Error(`${minutes}, but the chunk ran: it is in the log.`);
+		throw new Error(`${minutes}, and the chunk isn't in the log: it changed nothing.`);
 	}
 	const text = r.out.trimEnd();
 	if (r.code !== 0) throw new Error(text || "the easel gave no answer");

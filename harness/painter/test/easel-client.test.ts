@@ -237,6 +237,61 @@ test("an abort stops the tool's chain: nothing after it runs, and no listener is
 	assert.deepEqual(calls(studio), ["status"]);
 });
 
+test("status answers a replay of the log with its progress at once", async () => {
+	const studio = stubStudio("[ \"$1\" = status ] && echo 'rebuilding from the log (2 of 5 chunks)'");
+	try {
+		assert.equal(await atEasel(studio, ["status"], undefined), "rebuilding from the log (2 of 5 chunks)");
+		assert.deepEqual(calls(studio), ["status", "status"]);
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
+
+test("an open that outlasts the tool's wait says how far the replay has got", async () => {
+	const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f opened ] || exit 1
+ echo 'rebuilding from the log (1 of 4 chunks)'; exit 0
+fi
+touch opened; sleep 30`);
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		await assert.rejects(atEasel(studio, ["look"], undefined), /^Error: the easel is reopening the painting from its log and hasn't finished: rebuilding from the log \(1 of 4 chunks\)\. `status` shows how far it has got\.$/);
+		assert.deepEqual(calls(studio), ["status", "open", "status"]);
+	} finally {
+		WAIT_MS.other = other;
+		rmSync(studio, { recursive: true, force: true });
+	}
+});
+
+test("a chunk that outlasts the tool's wait is reported as running, in the log, or neither", async () => {
+	const doWait = WAIT_MS.do;
+	WAIT_MS.do = 300;
+	const cases: [string, RegExp][] = [
+		["echo 'painting a chunk (at line 3 of 9): 40 strokes and touches so far'", /^Error: the easel didn't answer within 0 minutes\. The chunk is still running and isn't in the log yet: painting a chunk \(at line 3 of 9\): 40 strokes and touches so far\. `status` shows how far it has got while it runs; once it ends, `log` shows whether it was kept\.$/],
+		["printf '\\n--@ chunk 2\\nx = 1\\n' >> paintings/lua/painting.lua; echo '2 chunks · 2400px · no canvas yet'", /^Error: the easel didn't answer within 0 minutes, but the chunk ran: it is in the log\.$/],
+		["echo '1 chunks · 2400px · no canvas yet'", /^Error: the easel didn't answer within 0 minutes, and the chunk isn't in the log: it changed nothing\.$/],
+	];
+	try {
+		for (const [status, error] of cases) {
+			const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f asked ] || { touch asked; echo '1 chunks · 2400px · no canvas yet'; exit 0; }
+ ${status}; exit 0
+fi
+sleep 30`);
+			mkdirSync(join(studio, "paintings", "lua"), { recursive: true });
+			writeFileSync(join(studio, "paintings", "lua", "painting.lua"), "--@ chunk 1\nx = 0\n");
+			try {
+				await assert.rejects(atEasel(studio, ["do", "-"], "x = 1"), error);
+			} finally {
+				rmSync(studio, { recursive: true, force: true });
+			}
+		}
+	} finally {
+		WAIT_MS.do = doWait;
+	}
+});
+
 test("look's errors name the tool's options, not the easel's flags", () => {
 	assert.equal(toolWords("--crop exceeds 1200 pixels per side; choose a smaller crop (crops stay 1:1)"), "a crop may be at most 500 units on either side; choose a smaller crop");
 	assert.equal(toolWords("--mode x: normal, value, squint, mirror"), "mode x: normal, value, squint, mirror");

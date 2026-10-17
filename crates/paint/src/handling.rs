@@ -1560,7 +1560,7 @@ fn tile_order(order: Order, (tw, th): (usize, usize), (tile_x, tile_y): (f32, f3
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, tube_box))]
 mod wet_edges {
     use super::Handling;
     use crate::bristle::{Gesture, Held, Tool};

@@ -25,6 +25,9 @@ pub const BOX_MARK: &str = "--@ box";
 /// the head of its session file. A log without it was painted with engine 1:
 /// every log before the version was recorded.
 pub const ENGINE_MARK: &str = "--@ engine";
+/// A log's head line: its knife's paint laid on wet paint stays on top of it
+/// (`paint::Canvas::with_knife_skim`). Every new painting has it.
+pub const KNIFE_SKIM_MARK: &str = "--@ knife-skim";
 /// Marks a sketch: a painting painted at `SKETCH_WIDTH`, not the live width.
 /// A log replays at the width it was painted at, whatever its file is named.
 pub const SKETCH_MARK: &str = "--@ sketch";
@@ -33,6 +36,18 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose blender and glaze meet their masks as the mask says
+/// (`paint::Palette::blend_at_masks`): every new painting. A log without it
+/// replays `soften` as a fresh ramp on the mask's 0.5 line and its unclipped
+/// blends and glazes at their strokes' full length.
+pub const BLEND_MARK: &str = "--@ blend-at-masks";
+/// A log's head line: its blender lays the wet paint it picks up only where
+/// wet paint was, and a little way past it (`paint::Canvas::with_blend_feather`).
+/// Every new painting has it.
+pub const BLEND_FEATHER_MARK: &str = "--@ blend-feather";
+/// A log's head line: a brush's paint laid on wet paint stays on top of it
+/// (`paint::Canvas::with_brush_skim`). Every new painting has it.
+pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -228,7 +243,13 @@ impl Session {
         let (snap_f, _) = self.heap.as_ref().unwrap();
         let strings = self.lua.load("return getmetatable('')").eval::<Value>().ok();
         let skip = self.prelude.as_ref().unwrap().1.clone();
-        let heap: Table = snap_f.call((skip, self.lua.globals(), strings))?;
+        let sr = &self._serials;
+        sr.uncapped.set(true);
+        sr.marking.set(true);
+        let heap = snap_f.call::<Table>((skip, self.lua.globals(), strings));
+        sr.marking.set(false);
+        sr.uncapped.set(false);
+        let heap = heap?;
         let mut s = self.st.borrow_mut();
         let brushes = s.live_brushes().into_iter().map(|b| {
             let h = b.borrow().clone();
@@ -249,7 +270,11 @@ impl Session {
     /// still differ in contents, traversal order or raw length after restoration (see `stale`).
     fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
-        let mismatches = restore_f.call::<usize>(snap.heap.clone())?;
+        // not marking: what restore makes is the painting's again
+        self._serials.uncapped.set(true);
+        let mismatches = restore_f.call::<usize>(snap.heap.clone());
+        self._serials.uncapped.set(false);
+        let mismatches = mismatches?;
         for (b, h) in &snap.brushes {
             *b.borrow_mut() = h.clone();
         }
@@ -322,6 +347,7 @@ impl Session {
         let (check, guard) = { let p = self.prelude.as_ref().unwrap(); (p.2.clone(), p.3.clone()) };
         let deadline = (!self.replay).then(|| t0 + self.chunk_limit);
         self.deadline.set(deadline);
+        self._serials.capped.set(false);
         // Everything that can fail before the chunk is kept is inside this guard: the chunk,
         // prelude.lua's check, putting its hand time on the clock and reading the globals it
         // left. A failure anywhere in it is a failed chunk, rolled back below.
@@ -341,6 +367,10 @@ impl Session {
             Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
             Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
+        let globals = if self._serials.capped.get() { None } else { globals };
+        if fail.is_none() && self._serials.capped.get() {
+            fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));
+        }
         // Rollback must finish even after the chunk exhausted its deadline. The
         // private restore uses raw operations and runs no painter code; collection
         // below reinstates the deadline because it can run Lua work.
@@ -407,8 +437,20 @@ impl Session {
         if self.st.borrow().tubes.adaptive_sweep {
             let _ = writeln!(s, "--@ adaptive-sweep");
         }
+        if self.st.borrow().tubes.knife_skim {
+            let _ = writeln!(s, "{KNIFE_SKIM_MARK}");
+        }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.blend_feather {
+            let _ = writeln!(s, "{BLEND_FEATHER_MARK}");
+        }
+        if self.st.borrow().tubes.brush_skim {
+            let _ = writeln!(s, "{BRUSH_SKIM_MARK}");
+        }
+        if self.st.borrow().tubes.blend_at_masks {
+            let _ = writeln!(s, "{BLEND_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -625,14 +667,41 @@ fn describe(v: &Value) -> String {
 /// are also listed by address.
 pub struct Serials {
     next: Cell<i64>,
+    /// bytes the state holds now, headers included; past LUA_MAX_BYTES an
+    /// allocation fails and Lua raises "not enough memory"
+    used: Cell<usize>,
+    cap: Cell<usize>,
+    /// bytes of `used` in blocks the pre-chunk snapshot made (marked `SNAP`),
+    /// counted as they are freed or resized: the cap leaves them out, so a
+    /// chunk has the room a replay (which takes no snapshot) has
+    held: Cell<usize>,
+    /// while the easel snapshots or restores: no cap, so a painting the cap
+    /// allowed can always be snapshotted and a failed chunk always put back
+    uncapped: Cell<bool>,
+    /// while the easel snapshots: new blocks are the snapshot's (`SNAP`)
+    marking: Cell<bool>,
+    /// set when the cap refused an allocation; `run` fails a chunk that hit
+    /// it, even one that caught the error or that Lua's emergency collection
+    /// recovered from, since only a live session's heap holds its snapshot
+    capped: Cell<bool>,
     /// userdata and thread blocks: user address -> (serial, size)
     inner: RefCell<BTreeMap<usize, (i64, usize)>>,
 }
 
 const HDR: usize = 16;
+/// The most a session's Lua state may hold. A chunk that builds something huge
+/// (a giant string.rep, a loop filling a table) then errors and is rolled back
+/// instead of swapping the machine. The snapshot a live session takes before
+/// each chunk is outside it (`Serials::held`), so a live painting can hold
+/// up to about twice this. Even so live and replayed heaps differ a little,
+/// so a chunk that meets the cap fails however it handles that
+/// (`Serials::capped`): no kept chunk ever met it.
+const LUA_MAX_BYTES: usize = 2 << 30;
 const PLAIN: i64 = 0;
 const AT_START: i64 = 1;
 const LISTED: i64 = 2;
+/// With the kind: a block made while the easel snapshotted (`Serials::held`).
+const SNAP: i64 = 4;
 
 fn layout(size: usize) -> Layout {
     // SAFETY (for callers): 16 is a power of two and Lua's sizes are far from isize::MAX
@@ -650,10 +719,21 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             if nsize == 0 {
                 return std::ptr::null_mut();
             }
+            if nsize.saturating_add(HDR) > h.room() {
+                h.capped.set(true);
+                return std::ptr::null_mut();
+            }
             let b = std::alloc::alloc(layout(nsize));
             if b.is_null() {
                 return b as *mut c_void;
             }
+            h.used.set(h.used.get() + nsize + HDR);
+            let snap = if h.marking.get() {
+                h.held.set(h.held.get() + nsize + HDR);
+                SNAP
+            } else {
+                0
+            };
             // a new object: `osize` is its type
             let kind = match osize as i32 {
                 LUA_TTABLE | LUA_TFUNCTION => AT_START,
@@ -667,7 +747,7 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             }
             let hd = b as *mut i64;
             *hd = n;
-            *hd.add(1) = kind;
+            *hd.add(1) = kind | snap;
             let p = b.add(HDR);
             if kind == LISTED {
                 h.inner.borrow_mut().insert(p as usize, (n, nsize));
@@ -675,20 +755,44 @@ unsafe extern "C" fn counting_alloc(ud: *mut c_void, ptr: *mut c_void, osize: us
             return p as *mut c_void;
         }
         let b = (ptr as *mut u8).sub(HDR);
+        let kind = *(b as *const i64).add(1);
         if nsize == 0 {
-            if *(b as *const i64).add(1) == LISTED {
+            if kind & !SNAP == LISTED {
                 h.inner.borrow_mut().remove(&(ptr as usize));
             }
             std::alloc::dealloc(b, layout(osize));
+            h.used.set(h.used.get().saturating_sub(osize + HDR));
+            if kind & SNAP != 0 {
+                h.held.set(h.held.get().saturating_sub(osize + HDR));
+            }
+            return std::ptr::null_mut();
+        }
+        if nsize > osize && nsize - osize > h.room() {
+            h.capped.set(true);
             return std::ptr::null_mut();
         }
         // only arrays and buffers are reallocated, never objects
         let nb = std::alloc::realloc(b, layout(osize), nsize + HDR);
-        if nb.is_null() { nb as *mut c_void } else { nb.add(HDR) as *mut c_void }
+        if nb.is_null() {
+            return nb as *mut c_void;
+        }
+        h.used.set(h.used.get().saturating_sub(osize) + nsize);
+        if kind & SNAP != 0 {
+            h.held.set(h.held.get().saturating_sub(osize) + nsize);
+        }
+        nb.add(HDR) as *mut c_void
     }
 }
 
 impl Serials {
+    /// What the cap still allows a chunk to allocate.
+    fn room(&self) -> usize {
+        if self.uncapped.get() {
+            return usize::MAX;
+        }
+        self.cap.get().saturating_sub(self.used.get().saturating_sub(self.held.get()))
+    }
+
     /// `id(v)`: the serial of a table, closure, userdata or thread; nil for
     /// values and light C functions (library functions have no block).
     fn id_fn(&self, lua: &Lua) -> mlua::Result<Function> {
@@ -718,7 +822,7 @@ impl Serials {
 /// (see `Serials`).
 fn fixed_lua(libs: StdLib) -> mlua::Result<(Lua, *mut mlua::ffi::lua_State, Box<Serials>)> {
     use mlua::ffi;
-    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()) });
+    let serials = Box::new(Serials { next: Cell::new(1), inner: RefCell::new(BTreeMap::new()), used: Cell::new(0), cap: Cell::new(LUA_MAX_BYTES), held: Cell::new(0), uncapped: Cell::new(false), marking: Cell::new(false), capped: Cell::new(false) });
     unsafe {
         let ud = &*serials as *const Serials as *mut c_void;
         let state = ffi::lua_newstate(counting_alloc, ud, ffi::luaL_makeseed_(std::ptr::null_mut()));
@@ -895,7 +999,7 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
             let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, or {}>)", paint::ENGINE, paint::engine7::ENGINE));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -991,22 +1095,38 @@ fn box_list() -> String {
 /// for one box, which has no default box: that box). An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one engine 7,
+/// engine version the painting is painted with: a new one engine 8,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
-/// (`LIMBS_MARK`).
+/// (`LIMBS_MARK`), and likewise for the blender's feather
+/// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`) and
+/// blends and glazes at masks (`BLEND_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
-        b.engine = paint::engine7::ENGINE;
+        b.engine = paint::REACH_END;
+        b.knife_skim = true;
         b.limbs_join_nearest = true;
+        b.blend_at_masks = true;
+        b.blend_feather = true;
+        b.brush_skim = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
     let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
+    }
+    let head = |mark: &str| text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == mark);
+    let (knife_skim, blend_feather, brush_skim) = (head(KNIFE_SKIM_MARK), head(BLEND_FEATHER_MARK), head(BRUSH_SKIM_MARK));
+    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7 or 8"));
+    }
+    for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
+        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+            return Err(format!("the log's switch {mark:?} requires engine 7 or 8"));
+        }
     }
     let logged = logged_box(text)?;
     let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
@@ -1025,7 +1145,11 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.engine = engine;
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
+    b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
+    b.blend_feather = blend_feather;
+    b.brush_skim = brush_skim;
     Ok(b)
 }
 
@@ -1117,6 +1241,110 @@ mod tests {
         assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
     }
 
+    /// A gesture keeps the pressure its points ask for up to its last point
+    /// (engine 8): a limb drawn to where it forks keeps its width there, and
+    /// meets the forks drawn from it. Before engine 8 the last 5% of every
+    /// gesture lifted off, drawing the limb down to a dotted point short of
+    /// the fork.
+    #[test]
+    fn a_gesture_keeps_its_width_to_its_last_point() {
+        let text = "--@ engine 8\n";
+        let mut s = Session::replay_with(2400, box_for(Some(text)).unwrap()).unwrap();
+        s.run(r#"canvas{size=300, aspect=4, linen=16, seed=3, ground={{pile={{"lead white", 4}, {"yellow ochre", 0.3}}, um=80, apply="knife"}}}"#).unwrap();
+        s.run(r#"local b = brush{kind="round", width=1.6, point=1, stiffness=0.5}
+            b:load(pile{{"bone black", 1}, {"raw umber", 1}}, 0.6)
+            b:gesture({{500, 220, 0.8}, {500, 150, 0.8}, {500, 80, 0.8}})"#).unwrap();
+        let c = s.canvas().unwrap();
+        let across = |y: f32| (-20..=20).map(|k| c.wet_um(500.0 + k as f32 * 0.1, y)).fold(0.0f32, f32::max);
+        let (body, end) = (across(90.0), across(80.5));
+        assert!(end >= 0.5 * body, "0.5 units before its end the gesture lays {end} µm, against {body} µm 10 units before it");
+    }
+
+    /// A new painting's blender feathers (`paint::Canvas::with_blend_feather`)
+    /// and its brushes skim (`paint::Canvas::with_brush_skim`), and its log's
+    /// head says so; a replay of that log and a save of it do too, and a log
+    /// without the lines (every painting before them) does neither.
+    /// Engines 7 and 8 have them.
+    #[test]
+    fn new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        let c = live.canvas().unwrap();
+        assert!(c.blend_feather() && c.brush_skim());
+        let text = live.program("p");
+        for mark in [BLEND_FEATHER_MARK, BRUSH_SKIM_MARK] {
+            assert!(text.contains(&format!("\n{mark}\n")), "{text}");
+        }
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+        assert!(restored.blend_feather() && restored.brush_skim());
+        for engine in [paint::engine7::ENGINE, paint::REACH_END] {
+            for (feather, skim) in [(false, false), (false, true), (true, false), (true, true)] {
+                let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                for (on, mark) in [(feather, BLEND_FEATHER_MARK), (skim, BRUSH_SKIM_MARK)] {
+                    if !on {
+                        log = log.replace(&format!("{mark}\n"), "");
+                    }
+                }
+                let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+                for chunk in parse_program(&log) {
+                    replay.run(&chunk).unwrap();
+                }
+                let c = replay.canvas().unwrap();
+                assert_eq!((c.blend_feather(), c.brush_skim()), (feather, skim));
+                assert_eq!(replay.program("p"), log);
+                let mut saved = Vec::new();
+                c.write_state(&mut saved, "").unwrap();
+                let (restored, _) = Canvas::read_state(&mut &saved[..]).unwrap();
+                assert_eq!(restored.engine(), engine);
+                assert_eq!((restored.blend_feather(), restored.brush_skim()), (feather, skim));
+                assert!(restored.knife_skim());
+            }
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+    }
+
+    /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and
+    /// its log's head says so; a replay of that log and a save of it skim
+    /// too, and a log without the line (every painting before it) doesn't.
+    /// Engines 7 and 8 can skim.
+    #[test]
+    fn new_paintings_record_the_knife_skim_and_older_logs_replay_without_it() {
+        let canvas = "canvas{size=440, aspect=1.25, linen=15, seed=7, ground={{pile={{\"lead white\", 3}, {\"yellow ochre\", 1}}, um=120, apply=\"knife\"}}}";
+        let mut live = Session::with_box(240, box_for(None).unwrap()).unwrap();
+        live.run(canvas).unwrap();
+        assert!(live.canvas().unwrap().knife_skim());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{KNIFE_SKIM_MARK}\n")), "{text}");
+        assert!(text.contains("--@ engine 8\n"), "{text}");
+        let mut saved = Vec::new();
+        live.canvas().unwrap().write_state(&mut saved, "").unwrap();
+        let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+        assert!(restored.knife_skim());
+        assert_eq!(restored.engine(), paint::REACH_END);
+        for (log, skims) in [
+            (text.clone(), true),
+            (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+            (text.replace("--@ engine 8", "--@ engine 7"), true),
+            (text.replace("--@ engine 8", "--@ engine 7").replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+        ] {
+            let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().knife_skim(), skims);
+            assert_eq!(replay.program("p"), log);
+            let mut saved = Vec::new();
+            replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+            let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+            assert_eq!(restored.engine(), logged_engine(&log).unwrap());
+            assert_eq!(restored.knife_skim(), skims);
+        }
+        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+    }
+
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
     /// names.
     fn replay_fixture(name: &str) -> (Session, String) {
@@ -1137,5 +1365,73 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+}
+
+/// The Lua memory cap (LUA_MAX_BYTES, Serials::held, Serials::capped).
+#[cfg(all(test, tube_box))]
+mod memory_cap_tests {
+    use super::*;
+
+    const W: usize = 160;
+
+    const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
+
+    /// A chunk that asks for more memory than the cap errors and leaves the
+    /// session as it was, instead of swapping the machine. 8 GB is past
+    /// LUA_MAX_BYTES, a constant, so this never allocates it.
+    #[test]
+    fn a_runaway_allocation_errors() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run("x = string.rep('x', 8 * 1024 * 1024 * 1024)").unwrap_err();
+        assert!(e.contains("memory"), "{e}");
+        s.run("assert(x == nil)").unwrap();
+    }
+
+    /// A chunk that catches the cap's error still fails: a live heap holds a
+    /// snapshot a replay's doesn't, so what the cap refused live a replay
+    /// might allow, and the chunk would paint differently there.
+    #[test]
+    fn a_caught_runaway_allocation_still_fails_the_chunk() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        let e = s.run("ok = pcall(string.rep, 'x', 8 * 1024 * 1024 * 1024)").unwrap_err();
+        assert!(e.contains("memory"), "{e}");
+        assert!(!s.globals.contains_key("ok"), "the failed chunk's globals were kept");
+        s.run("assert(ok == nil)").unwrap();
+        assert_eq!(s.log.len(), 2, "the failed chunk was logged");
+    }
+
+    /// A painting that fits under the cap can still be snapshotted, so the
+    /// next chunk runs (and can let the big table go) though heap and
+    /// snapshot together are past the cap.
+    #[test]
+    fn a_painting_near_the_cap_can_still_paint() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run("t = {} for i = 1, 2000000 do t[i] = i end").unwrap();
+        s._serials.cap.set(s._serials.used.get() + (1 << 20));
+        s.run("assert(#t == 2000000) t = nil").unwrap();
+        s.run("u = 1").unwrap();
+        assert_eq!(s.log.len(), 4);
+    }
+
+    /// The snapshot's credit is the snapshot's blocks as they are now: its
+    /// temporaries, once collected, are no longer credited, and none is left
+    /// once the snapshot is gone.
+    #[test]
+    fn the_snapshot_credit_follows_its_blocks() {
+        let mut s = Session::new(W).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run("t = {} for i = 1, 20000 do t[i] = {i} end").unwrap();
+        let snap = s.snap().unwrap();
+        let taken = s._serials.held.get();
+        assert!(taken > 0);
+        s.lua.gc_collect().unwrap();
+        assert!(s._serials.held.get() < taken, "the snapshot's collected temporaries are still credited");
+        drop(snap);
+        s.lua.gc_collect().unwrap();
+        assert_eq!(s._serials.held.get(), 0, "credit left after the snapshot is gone");
     }
 }

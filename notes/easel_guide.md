@@ -344,9 +344,11 @@ valid ones.
 **What stays inside the mask.** `work` plans its strokes from the mask:
 each stroke is anchored in it, but its path can begin outside and cross
 the edge. By default `detail` and `blend` keep their paint inside the
-mask. The other hands (`body`, `broad`, `hatch`, `glaze`, `scumble`) can
-carry paint past the edge onto whatever is there, by as much as a stroke's
-length (a `glaze` stroke is 120–300 units by default). `clip=true` keeps
+mask, soft where the mask is soft. `glaze`, and `blend` with
+`clip=false`, carry paint past the edge by half a brush at most, fading
+out. The other hands (`body`, `broad`, `hatch`, `scumble`) can carry
+paint past the edge onto whatever is there, by as much as a stroke's
+length. `clip=true` keeps
 every bristle inside the mask; `clip=` another mask keeps them inside that
 one instead. `edge=` (below) shapes how the passage meets the edge, with
 an overrun that varies and can reach beyond it.
@@ -399,6 +401,10 @@ m:grow(units)   m:shrink(units)   m:offset(units)   m:rim(width, soft)
 m:distance()   m:band(lo, hi, soft)   m:times(fn or mask)   m:map(function(v) return v * v end)
 m:at(x, y)   m:area()
 ```
+
+`m:soften(units)` gives a hard edge a ramp that many units wide and leaves
+a mask that is already graded (a function, a blur) at least as soft as it
+was.
 
 Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
 `below` selects larger y values, toward the bottom of the canvas;
@@ -655,6 +661,7 @@ other option, and nothing on the canvas or the clock changes.
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
+| `ref: "<a picture in the studio>"` | the motif (a photograph, a study) pinned beside the easel: fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges), on the left, beside the same view of the canvas: the same crop, size, mode and grid |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
 
 A survey can arrive in a partial batch to fit the painter's image budget.

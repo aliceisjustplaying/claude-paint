@@ -135,6 +135,8 @@ test("look's options become the easel's arguments", () => {
 		assert.throws(() => lookArgs({ palette: true, ...options }), /palette takes no other option/);
 	}
 	assert.equal(toolWords("--survey --compare --light"), "survey compare light");
+	assert.equal(toolWords("look: --ref is a look of its own: no --survey, --compare or --hold"), "look: ref is a look of its own: no survey, compare or hold");
+	assert.deepEqual(lookArgs({ ref: "reference/motif.jpg", mode: "value" }), ["--ref", "reference/motif.jpg", "--mode", "value"]);
 	assert.deepEqual(lookArgs({ compare: "out/easel/painting/a.png" }), ["--compare", "out/easel/painting/a.png"]);
 	assert.deepEqual(lookArgs({ hold: "skyP", at: "400,320", mode: "value" }), ["--hold", "skyP", "--at", "400,320", "--mode", "value"]);
 });

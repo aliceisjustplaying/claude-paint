@@ -65,6 +65,25 @@ impl Film {
         Film { vol: sf.vol, lat: sf.lat, hide: sf.hide, dry: if sf.cure_now { sf.dry } else { std::ptr::null_mut() }, absorb: sf.absorb }
     }
 
+    /// `add`, for paint a brush lays from its load (`Surf::lay`): with
+    /// `skim` > 0 it mixes with only the top `skim` coats of the wet paint
+    /// at `i`, the rest lying buried under it.
+    ///
+    /// # Safety
+    /// As `add`.
+    #[inline(always)]
+    pub(crate) unsafe fn lay(&self, i: usize, v: f32, p: &Paint7, skim: f32) {
+        unsafe {
+            if skim <= 0.0 {
+                return self.add(i, v, p);
+            }
+            let buried = (*self.vol.add(i) - skim).max(0.0);
+            *self.vol.add(i) -= buried;
+            self.add(i, v, p);
+            *self.vol.add(i) += buried;
+        }
+    }
+
     /// Lay `v` coats of `p` at pixel `i`, as engine 5's `Surf::add` does.
     ///
     /// # Safety

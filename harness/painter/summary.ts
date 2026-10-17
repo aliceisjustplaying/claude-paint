@@ -1,10 +1,12 @@
 /**
  * The painter's compaction summary (compaction.ts), without pi imports so node --test can load it.
- * See compaction.ts for what it holds.
+ * See compaction.ts for what it holds. An atelier studio (one with notebook.md) also gets its notebook,
+ * quoted like the journal, after the journal.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atEasel, renameLook } from "./easel-client.ts";
+import { NOTEBOOK } from "./notebook.ts";
 
 /** A statement, not an instruction: the sections after it say what they hold. */
 export const HEADER = "Earlier parts of this session were condensed.";
@@ -19,6 +21,12 @@ export const CARRIES_OVER =
 	"sitting. The studio's notes are still there to read, and paintings/lua/painting.lua holds the painting's chunks " +
 	"(`log` shows its latest part). This happens again each time the session grows this large, and what you write " +
 	"in your journal with `note` comes through each time.";
+
+/** compaction.ts's summary when buildSummary fails: where the painter's own files are. */
+export function fallbackSummary(cwd: string): string {
+	const files = existsSync(join(cwd, NOTEBOOK)) ? `BRIEF.md, ${NOTEBOOK} and notes/journal.md` : "BRIEF.md and notes/journal.md";
+	return `${HEADER}\n\n${files} are in the studio.`;
+}
 
 const MAX_BRIEF_CHARS = 60_000;
 const MAX_JOURNAL_CHARS = 120_000;
@@ -44,7 +52,7 @@ function tail(text: string, max: number, file: string): string {
 }
 
 /** Every line of `text` as a Markdown quote, so none of it can read as one of the summary's own headings. */
-function quote(text: string): string {
+export function quote(text: string): string {
 	return text.split(/\r\n|\r|\n/).map((l) => (l ? `> ${l}` : ">")).join("\n");
 }
 
@@ -145,6 +153,18 @@ export async function buildSummary(cwd: string, entries: readonly unknown[], sig
 	else {
 		parts.push("Your own notes, quoted as you wrote them:");
 		parts.push(tail(quote(journal.text.trimEnd()), MAX_JOURNAL_CHARS, "notes/journal.md"));
+	}
+
+	// an atelier studio's notebook (notebook.ts); house studios have none, and their summary is unchanged
+	if (existsSync(join(cwd, NOTEBOOK))) {
+		const notebook = readText(join(cwd, NOTEBOOK))!;
+		parts.push(`## Your notebook (${NOTEBOOK})`);
+		if (notebook.note) parts.push(`(${notebook.note})`);
+		else if (!notebook.text.trim()) parts.push("(no entries yet)");
+		else {
+			parts.push("Your own notes, quoted as you wrote them:");
+			parts.push(tail(quote(notebook.text.trimEnd()), MAX_JOURNAL_CHARS, NOTEBOOK));
+		}
 	}
 
 	parts.push("## Your globals");

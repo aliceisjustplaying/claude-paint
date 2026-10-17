@@ -235,6 +235,7 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    pub(crate) liquid_film_levels: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -308,6 +309,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            liquid_film_levels: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -325,6 +327,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.liquid_film_levels &= v >= 4;
         self.glaze_film &= crate::engine7::active(v);
         self.rag_lift &= crate::engine7::active(v);
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
@@ -368,6 +371,15 @@ impl Canvas {
 
     pub fn glaze_film(&self) -> bool {
         self.glaze_film
+    }
+
+    pub fn with_liquid_film_levels(mut self, enabled: bool) -> Self {
+        self.liquid_film_levels = enabled && self.engine >= 4;
+        self
+    }
+
+    pub fn liquid_film_levels(&self) -> bool {
+        self.liquid_film_levels
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {
@@ -722,5 +734,39 @@ mod review_lighting_tests {
         assert!(graze[front][0] < low[front][0] * 0.6, "grazing: flat paint gets only the room's light");
         assert!(graze[face][0] > graze[front][0] * 1.5, "grazing: the ridge's face toward the lamp is lit");
         assert!(graze[behind][0] <= graze[front][0], "grazing: nothing behind the ridge is lit by the lamp");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // From engine 4 a liquid film bridges the fine relief under it (surface.rs,
+    // `BRIDGE_UM`): a thick film of thinned liquid has a level top over the
+    // weave, where the same thickness of dry paint keeps the weave's texture.
+    // Outside the film the two surfaces are the same.
+    #[test]
+    #[cfg(tube_box)]
+    fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
+        let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4).with_liquid_film_levels(true);
+        let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
+        let w = liquid.f.w;
+        let band = |i: usize| (40..120).contains(&(i % w));
+        liquid.wet.solv = vec![0.0; liquid.height.len()];
+        for i in 0..liquid.height.len() {
+            if band(i) {
+                liquid.wet.solv[i] = 600.0;
+                raised.height[i] += 600.0;
+            }
+        }
+        let (l, r) = (liquid.wet_surface(), raised.wet_surface());
+        // the band's relief away from its edges: the mean step between neighbours along a row
+        let relief = |s: &[f32]| {
+            let steps: Vec<f32> = (0..s.len()).filter(|&i| (50..109).contains(&(i % w))).map(|i| (s[i + 1] - s[i]).abs()).collect();
+            steps.iter().sum::<f32>() / steps.len() as f32
+        };
+        assert!(relief(&r) > 0.0, "the ground has a weave to level");
+        assert!(relief(&l) < 0.5 * relief(&r), "a liquid film levels the weave: {} against dry paint's {}", relief(&l), relief(&r));
+        for i in (0..l.len()).filter(|&i| !band(i)) {
+            assert_eq!(l[i], r[i], "outside the film, pixel {i}");
+        }
     }
 }

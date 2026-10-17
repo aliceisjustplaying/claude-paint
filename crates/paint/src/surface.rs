@@ -280,8 +280,10 @@ impl Canvas {
 
     /// The surface with the wet paint on it, as the painter's raking light
     /// sees it (`seen_lit`): the dry height plus each wet film's paint and solvent thickness.
-    /// Paint bridges the fine relief under it as a set film does (engine 4,
-    /// `BRIDGE_UM`); clear solvent adds height without changing the underlying relief.
+    /// The liquid film, paint and the solvent in it alike, bridges the fine
+    /// relief under it (engine 4, `BRIDGE_UM`): a liquid's surface levels as
+    /// surface tension pulls it flat, the thinner the liquid the sooner, so a
+    /// thinned film is no less level than its paint alone would be.
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
@@ -301,7 +303,7 @@ impl Canvas {
                 if a <= 0.0 {
                     return self.height[i];
                 }
-                let keep = (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
+                let keep = if self.liquid_film_levels { (-a / BRIDGE_UM).exp() } else { (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp() };
                 fine[i] + (self.height[i] - fine[i]) * keep + a
             })
             .collect()
@@ -573,4 +575,50 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     // fiber fuzz
     let grit = vnoise(x0 * 3.1, y0 * 3.1, seed + 19) - 0.5;
     l.crown_um * (a.max(b) + 0.06 * grit)
+}
+
+#[cfg(all(test, tube_box))]
+mod liquid_film_tests {
+    use super::*;
+
+    #[test]
+    fn absent_switch_keeps_the_old_surface_and_lighting_through_checkpoints() {
+        for engine in [4, 5, 7, 8] {
+            let mut c = crate::Style::oil().prepare(80, 1.0, 3).with_engine(engine);
+            c.wet.solv = vec![0.0; c.height.len()];
+            for i in 0..c.height.len() {
+                c.wet.vol[i] = (i % 7) as f32 * 0.3;
+                c.wet.solv[i] = (i % 11) as f32 * 30.0;
+            }
+            assert!(!c.liquid_film_levels());
+            let (w, h) = (c.f.w, c.f.h);
+            let Bands { r1, .. } = Bands::at(c.px_mm());
+            let fine = box_blur(&box_blur(&c.height, w, h, r1), w, h, r1);
+            let expected: Vec<f32> = (0..w * h).map(|i| {
+                let a = c.wet.vol[i] * COAT_UM + c.wet.solv[i];
+                if a <= 0.0 {
+                    return c.height[i];
+                }
+                let keep = (-c.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
+                fine[i] + (c.height[i] - fine[i]) * keep + a
+            }).collect();
+            assert_eq!(c.wet_surface(), expected);
+            let old_lit = c.seen_lit(315.0, 55.0, 1.0);
+            for levels in [false, true] {
+                let c = c.clone().with_liquid_film_levels(levels);
+                let mut saved = Vec::new();
+                c.write_state(&mut saved, "").unwrap();
+                let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+                assert_eq!(restored.liquid_film_levels(), levels);
+                assert_eq!(restored.wet_surface(), c.wet_surface());
+                assert_eq!(restored.seen_lit(315.0, 55.0, 1.0), c.seen_lit(315.0, 55.0, 1.0));
+                if levels {
+                    assert_ne!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
+                } else {
+                    assert_eq!(restored.wet_surface(), expected);
+                    assert_eq!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
+                }
+            }
+        }
+    }
 }

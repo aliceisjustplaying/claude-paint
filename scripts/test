@@ -111,6 +111,8 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   look::tests::crops_of_any_span_are_bounded_and_report_the_actual_scale \
   look::tests::fitting_crops_keep_their_pixels_and_whole_views_keep_their_size \
   look::tests::masks_overlay_fill_and_outlines_in_crop_and_mirror_coordinates \
+  session::tests::new_paintings_record_the_glaze_film_and_older_logs_replay_without_it \
+  session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible session::tests::a_scumble_at_half_coverage_leaves_gaps \
   session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it \
   api::draw_rag::tests::a_wipe_on_a_full_face_says_so \
   session::tests::a_gesture_keeps_its_width_to_its_last_point \

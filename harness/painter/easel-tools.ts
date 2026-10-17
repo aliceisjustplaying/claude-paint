@@ -68,7 +68,8 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			label: "paint",
 			description:
 				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
-				"A chunk that stops with an error changes nothing.",
+				"A chunk that stops with an error changes nothing. " +
+				"In `work`, `coverage` counts layers of strokes over each point, except for the `glaze` and `scumble` hands, where it is the share of the mask their thin film reaches (1: all of it).",
 			parameters: Type.Object({
 				lua: Type.String({ description: "the chunk" }),
 				scratch,
@@ -194,7 +195,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
 				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at full detail up to 1200 pixels a side; larger crops are scaled down. The reply gives the scale in pixels per canvas unit. " +
 				"mask: a global mask's name (or several, comma-separated), shown as outlines and a light fill over the view. " +
-				"mode: \"value\", \"squint\", \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
+				"mode: \"value\" (the picture in grays, its lightness alone, in the gallery light), \"squint\", \"edges\" (the picture's edges drawn over a dim gray of it: orange where an edge is hard, blue where it is soft, brighter the more the lightness changes across it; hard and soft as they read at the size of this image), \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
 				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +

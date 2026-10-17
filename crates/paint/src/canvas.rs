@@ -235,6 +235,13 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
+    /// coverage is the share of the passage it reaches (`Handling::film`).
+    pub(crate) glaze_film: bool,
+    /// The `work` pass under way with a film ceiling (`Handling::film`):
+    /// the most wet film (coats) it lays on any pixel, and its first stroke
+    /// id. Transient.
+    pub(crate) film_pass: Option<(f32, u32)>,
     /// Engine 7: a rag keeps what it lifts, and a mask wipe lifts only
     /// inside its mask (`rag`).
     pub(crate) rag_lift: bool,
@@ -301,6 +308,8 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            glaze_film: false,
+            film_pass: None,
             rag_lift: false,
             knife_skim: false,
             blend_feather: false,
@@ -316,6 +325,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.glaze_film &= crate::engine7::active(v);
         self.rag_lift &= crate::engine7::active(v);
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
         self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
@@ -349,6 +359,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_glaze_film(mut self, enabled: bool) -> Self {
+        self.glaze_film = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn glaze_film(&self) -> bool {
+        self.glaze_film
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

@@ -1,7 +1,7 @@
 //! Looking at the canvas: bounded PNGs an agent can read. The look shows
 //! the paint on the canvas as it is now (the dry picture with the wet
 //! paint on it as laid), whole or a window of it, and a few ways a painter
-//! looks at a picture: in grays, squinting and in a mirror. A grid in
+//! looks at a picture: in grays, squinting, by its edges and in a mirror. A grid in
 //! canvas units can be laid over the look, as a painter squares up a
 //! drawing; it never touches the canvas.
 
@@ -15,8 +15,11 @@ use std::sync::Arc;
 pub struct View {
     /// Crop in canvas units (x0, y0, x1, y1).
     pub crop: Option<[f32; 4]>,
+    /// Luminance only; lit by the gallery light unless another light is asked for.
     pub value: bool,
     pub squint: bool,
+    /// Where the picture's edges are and how hard each is (`edges`).
+    pub edges: bool,
     pub mirror: bool,
     /// Longest side, px (whole: 1000, capped at 1600; crop: capped at 1200).
     pub size: Option<usize>,
@@ -31,7 +34,7 @@ pub struct View {
     pub overlays: Vec<Arc<paint::Mask>>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N --mask name[,name] | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,edges,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N --mask name[,name] | --palette";
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
@@ -42,7 +45,7 @@ fn is_num(s: Option<&String>) -> bool {
 
 impl View {
     pub fn display_eligible(&self) -> bool {
-        !(self.value || self.squint || self.mirror || self.light.is_some() || self.palette)
+        !(self.value || self.squint || self.edges || self.mirror || self.light.is_some() || self.palette)
     }
 
     /// Parse look arguments (see `LOOK_ARGS`).
@@ -74,10 +77,11 @@ impl View {
                             "normal" | "" => {}
                             "value" | "gray" => v.value = true,
                             "squint" | "blur" => v.squint = true,
+                            "edges" | "edge" => v.edges = true,
                             "mirror" => v.mirror = true,
                             "relief" | "raking" => v.light = Some(v.light.unwrap_or(RAKING)),
                             "gallery" => v.light = Some(v.light.unwrap_or(crate::GALLERY_LIGHT)),
-                            o => return Err(format!("--mode {o}: normal, value, squint, mirror, relief, gallery (comma-separated)")),
+                            o => return Err(format!("--mode {o}: normal, value, squint, edges, mirror, relief, gallery (comma-separated)")),
                         }
                     }
                 }
@@ -111,8 +115,11 @@ impl View {
             }
             i += 1;
         }
-        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some() || !v.mask.is_empty()) {
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.edges || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some() || !v.mask.is_empty()) {
             return Err("look: --palette takes no other option".into());
+        }
+        if (v.value || v.edges) && v.light.is_none() {
+            v.light = Some(crate::GALLERY_LIGHT);
         }
         Ok(v)
     }
@@ -546,6 +553,9 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
                 *p = [l; 3];
             }
         }
+        if v.edges {
+            img = edges(&img, ow, oh);
+        }
         if v.mirror {
             for row in img.chunks_mut(ow) {
                 row.reverse();
@@ -676,6 +686,90 @@ pub fn palette(rows: &[(String, String, paint::Paint)], ground: Rgb) -> std::res
     Ok((w, h, png))
 }
 
+/// CIE lightness (0 to 1) of a luminance: equal steps of it look equal.
+fn lightness(y: f32) -> f32 {
+    let d = 6.0f32 / 29.0;
+    let f = if y > d * d * d { y.cbrt() } else { y / (3.0 * d * d) + 4.0 / 29.0 };
+    1.16 * f - 0.16
+}
+
+/// The edges view's colors (linear RGB): a hard edge, a soft one.
+const HARD: Rgb = [1.0, 0.26, 0.0];
+const SOFT: Rgb = [0.03, 0.3, 1.0];
+/// An edge whose change of lightness spans an sd of at most `HARD_PX` look pixels is hard,
+/// one of at least `SOFT_PX` soft.
+const HARD_PX: f32 = 1.0;
+const SOFT_PX: f32 = 3.0;
+/// Lightness steps across an edge below `FAINT` aren't drawn; from `CLEAR` they're drawn at full strength.
+const FAINT: f32 = 0.04;
+const CLEAR: f32 = 0.25;
+
+/// The edges view, measured on the look's own pixels, so an edge is hard or soft as it reads
+/// at the size it is shown. The picture's lightness is blurred twice (sd `s1` and `s2` px):
+/// across an edge whose change spans an sd of `w` px, the gradient's peak is
+/// step / sqrt(2π (w² + s²)), so the ratio of the two peaks gives `w` whatever the step,
+/// and the coarse peak gives the step whatever `w`. The fine peak is the steepest within
+/// 3 px across the edge: a thin line's two edges are each as hard as a step's, though the
+/// coarse blur merges them into crests either side of it. Each edge is drawn along the coarse
+/// gradient's crest, 3 px wide, over the picture darkened to a dim gray: orange where it is
+/// hard, blue where it is soft, the stronger the larger the step.
+fn edges(img: &[Rgb], w: usize, h: usize) -> Vec<Rgb> {
+    let l: Vec<Rgb> = img.iter().map(|p| [lightness(luminance(*p)); 3]).collect();
+    let (s1, s2) = (2f32.sqrt(), 12f32.sqrt());
+    let (fine, coarse) = (blur(&l, w, h, 1.0), blur(&l, w, h, 5.0));
+    let grad = |b: &[Rgb], x: usize, y: usize| {
+        let at = |x: usize, y: usize| b[y * w + x][0];
+        ((at((x + 1).min(w - 1), y) - at(x.saturating_sub(1), y)) / 2.0, (at(x, (y + 1).min(h - 1)) - at(x, y.saturating_sub(1))) / 2.0)
+    };
+    let g: Vec<(f32, f32)> = (0..w * h).map(|i| grad(&coarse, i % w, i / w)).collect();
+    let f: Vec<f32> = (0..w * h).map(|i| { let (x, y) = grad(&fine, i % w, i / w); x.hypot(y) }).collect();
+    let inside = |x: i64, y: i64| x >= 0 && y >= 0 && x < w as i64 && y < h as i64;
+    let mag = |x: i64, y: i64| if inside(x, y) { let (gx, gy) = g[y as usize * w + x as usize]; gx.hypot(gy) } else { 0.0 };
+    let bg: Vec<Rgb> = img.iter().map(|p| [luminance(*p) * 0.12; 3]).collect();
+    let mut out = bg.clone();
+    let mut strength = vec![0.0f32; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (gx, gy) = g[y * w + x];
+            let m = gx.hypot(gy);
+            if m <= 0.0 {
+                continue;
+            }
+            let dx = if gx.abs() >= 0.4142 * gy.abs() { gx.signum() as i64 } else { 0 };
+            let dy = if gy.abs() >= 0.4142 * gx.abs() { gy.signum() as i64 } else { 0 };
+            let (xi, yi) = (x as i64, y as i64);
+            if m < mag(xi + dx, yi + dy) || m <= mag(xi - dx, yi - dy) {
+                continue;
+            }
+            let sharpest = (-3..=3)
+                .map(|k| ((xi as f32 + k as f32 * gx / m).round() as i64, (yi as f32 + k as f32 * gy / m).round() as i64))
+                .filter(|&(u, v)| inside(u, v))
+                .map(|(u, v)| f[v as usize * w + u as usize])
+                .fold(0.0, f32::max);
+            let r = sharpest / m;
+            let width = if r > 1.0 { ((s2 * s2 - r * r * s1 * s1) / (r * r - 1.0)).max(0.0).sqrt() } else { f32::INFINITY };
+            let wd = width.min(3.0 * s2);
+            let step = m * (std::f32::consts::TAU * (wd * wd + s2 * s2)).sqrt();
+            let a = ((step - FAINT) / (CLEAR - FAINT)).clamp(0.0, 1.0);
+            if a <= 0.0 {
+                continue;
+            }
+            let t = ((width - HARD_PX) / (SOFT_PX - HARD_PX)).clamp(0.0, 1.0);
+            let c: Rgb = std::array::from_fn(|q| HARD[q] + (SOFT[q] - HARD[q]) * t);
+            for py in y.saturating_sub(1)..(y + 2).min(h) {
+                for px in x.saturating_sub(1)..(x + 2).min(w) {
+                    let j = py * w + px;
+                    if a > strength[j] {
+                        strength[j] = a;
+                        out[j] = std::array::from_fn(|q| bg[j][q] + (c[q] - bg[j][q]) * a);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Three box blurs ≈ a Gaussian of sd `r`.
 fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
     let k = ((r * 0.6).round() as usize).max(1);
@@ -787,6 +881,65 @@ mod tests {
         assert_eq!(cropped, image::imageops::crop_imm(&shown, 10, 0, 40, 40).to_image());
         assert!(View::parse(&["--mask".into(), "a,".into()]).is_err());
         assert!(View::parse(&["--palette".into(), "--mask".into(), "shape".into()]).is_err());
+    }
+
+    fn args(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The edges view of a 200 x 60 strip whose lightness runs across it as `y(x)` (linear luminance).
+    fn edges_of(y: impl Fn(usize) -> f32) -> image::RgbImage {
+        let (w, h) = (200, 60);
+        let px: Vec<Rgb> = (0..w * h).map(|i| [y(i % w); 3]).collect();
+        let f = paint::Frame { w, h, scale: 1.0, x0: 0, y0: 0, full_w: w, full_h: h };
+        let (_, _, png) = render_pixels(f, &View::parse(&args(&["--mode", "edges"])).unwrap(), &px).unwrap();
+        image::load_from_memory(&png).unwrap().to_rgb8()
+    }
+
+    /// The most strongly colored pixel of the strip's middle row.
+    fn edge_pixel(im: &image::RgbImage) -> [u8; 3] {
+        let row = (0..im.width()).map(|x| im.get_pixel(x, 30).0);
+        row.max_by_key(|p| p[0].abs_diff(p[2])).unwrap()
+    }
+
+    #[test]
+    fn value_and_edges_are_seen_in_the_gallery_light() {
+        let plain = View::parse(&[]).unwrap();
+        assert!(plain.light.is_none() && !plain.value && !plain.edges && plain.display_eligible());
+        for m in ["value", "gray", "edges", "value,squint"] {
+            let v = View::parse(&args(&["--mode", m])).unwrap();
+            assert_eq!(v.light, Some(crate::GALLERY_LIGHT), "{m}");
+            assert!(!v.display_eligible(), "{m}");
+        }
+        assert_eq!(View::parse(&args(&["--mode", "value,relief"])).unwrap().light, Some(RAKING));
+        assert_eq!(View::parse(&args(&["--mode", "edges", "--light", "45,15"])).unwrap().light, Some((45.0, 15.0)));
+        assert!(View::parse(&args(&["--palette", "--mode", "edges"])).is_err());
+
+        // the value look is the luminance of the canvas lit as `seen_lit(115, 55, 1)`, not of its unlit colors
+        let c = Canvas::new(300, 1.0, paint::hex("#b08a5a")).with_linen(paint::Linen::fine(3));
+        let value = View::parse(&args(&["--mode", "value"])).unwrap();
+        let unlit = View { value: true, ..View::default() };
+        let lit = c.seen_lit(115.0, 55.0, 1.0);
+        let shown = render(&c, &value).unwrap().2;
+        assert!(shown == render_pixels(c.window(), &value, &lit).unwrap().2);
+        assert!(shown != render(&c, &unlit).unwrap().2, "the gallery light changes what the value look shows");
+        let im = image::load_from_memory(&shown).unwrap().to_rgb8();
+        assert!(im.pixels().all(|p| p[0] == p[1] && p[1] == p[2]), "the value look is gray");
+    }
+
+    #[test]
+    fn a_hard_edge_shows_orange_and_a_soft_one_blue() {
+        let hard = edge_pixel(&edges_of(|x| if x < 100 { 0.05 } else { 0.6 }));
+        assert!(hard[0] > 200 && hard[2] < 60, "a sharp step is drawn hard: {hard:?}");
+        let soft = edge_pixel(&edges_of(|x| 0.05 + 0.55 * ((x as f32 - 70.0) / 60.0).clamp(0.0, 1.0)));
+        assert!(soft[2] > 200 && soft[0] < 60, "a 60 px ramp is drawn soft: {soft:?}");
+        // a thin dark line is two hard edges close together, not soft ones on either side
+        let line = edges_of(|x| if (99..102).contains(&x) { 0.05 } else { 0.6 });
+        assert!(line.pixels().all(|p| p[2] <= p[0]), "{:?}", line.pixels().find(|p| p[2] > p[0]));
+        assert!(edge_pixel(&line)[0] > 200);
+        // a step too slight to see draws nothing: the picture stays a dim gray
+        let faint = edges_of(|x| if x < 100 { 0.3 } else { 0.31 });
+        assert!(faint.pixels().all(|p| p[0] == p[1] && p[1] == p[2] && p[0] < 110), "{:?}", edge_pixel(&faint));
     }
 
     /// A busy picture beside a plain canvas: the noise's PNG is over the

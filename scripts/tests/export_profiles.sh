@@ -2,8 +2,8 @@
 # Export every studio profile from a branch and check each from outside:
 # the export's own checks pass, the studio holds its box (bin/box) or none,
 # the guide's tube table is what the studio's easel prints for its box, the
-# default-box studios' guides are the committed guide byte for byte, and a
-# box studio's guide differs from the committed one only in the table.
+# default-box studios' guides differ only in their tool descriptions, and a
+# box studio's guide also has its box's tube table.
 #
 #   R16_BRANCH=<branch> scripts/tests/export_profiles.sh [profile...]
 #
@@ -20,7 +20,12 @@ work=$(mktemp -d "$TMPDIR/export-profiles.XXXXXX")
 unset EASEL_BOX
 head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
 table_of() { awk -v head="$head" '$0 == head { on = 1 } on && !/^\|/ { exit } on { print }' "$1"; }
-committed=$(git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md")
+git -C "$repo" show "$R16_BRANCH:notes/easel_guide.md" > "$work/guide.md"
+if git -C "$repo" cat-file -e "$R16_BRANCH:notes/reference-library/manifest.json" 2>/dev/null; then
+  touch "$work/reference-library.json"
+fi
+uv run --no-project python "$repo/scripts/studio_guide.py" "$work/guide.md"
+committed=$(cat "$work/guide.md")
 # the profiles named on the command line, else all of them (the two newest only where R16_BRANCH has them)
 profiles=("$@")
 if [ ${#profiles[@]} -eq 0 ]; then

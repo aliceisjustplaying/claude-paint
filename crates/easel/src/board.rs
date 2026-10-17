@@ -17,7 +17,8 @@
 
 use paint::Palette;
 
-/// Heaps that stay on the board; the oldest beyond this is scraped off.
+/// Heaps the board holds. Beyond this a new heap is refused (`Board::refuses_full`: new
+/// paintings) or the oldest is scraped off (older paintings, which replay as they were painted).
 pub const LIVE: usize = 16;
 /// The most dirt a heap takes before it is all dirt the brush finds (share of its volume).
 const DIRT_CAP: f32 = 0.5;
@@ -92,7 +93,13 @@ pub struct Board {
     /// The mixing area's smears: fractions of tubes, and how much there is (0..1).
     pub residue: Vec<(usize, f32)>,
     pub residue_amount: f32,
+    /// A full board refuses a new heap (`Full`) instead of scraping off the oldest.
+    pub refuses_full: bool,
 }
+
+/// The board is full and refuses a new heap (`Board::full` says so).
+#[derive(Debug)]
+pub struct Full;
 
 /// `a` moved toward `b` by `t` (both fractions summing to 1).
 fn blend(a: &[(usize, f32)], b: &[(usize, f32)], t: f32) -> Vec<(usize, f32)> {
@@ -111,7 +118,10 @@ impl Board {
     /// Knife a new heap of these parts (fractions summing to 1; the parts'
     /// sum as given). Returns its id. On a dirty board the mixing area's
     /// smears seep into it.
-    pub fn knife(&mut self, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>) -> u64 {
+    pub fn knife(&mut self, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, name: Option<String>) -> Result<u64, Full> {
+        if self.refuses_full && self.live().len() >= LIVE {
+            return Err(Full);
+        }
         self.next_id += 1;
         let id = self.next_id;
         let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
@@ -122,7 +132,7 @@ impl Board {
         }
         self.heaps.push(h);
         self.scrape_old();
-        id
+        Ok(id)
     }
 
     fn scrape_old(&mut self) {
@@ -150,14 +160,26 @@ impl Board {
         self.heaps.iter_mut().find(|h| h.id == id)
     }
 
-    fn reknife(&mut self, id: u64) {
+    fn reknife(&mut self, id: u64) -> Result<(), Full> {
         if let Some(pos) = self.heaps.iter().position(|h| h.id == id && h.scraped) {
+            if self.refuses_full && self.live().len() >= LIVE {
+                return Err(Full);
+            }
             let mut h = self.heaps.remove(pos);
             h.scraped = false;
             h.dirt.clear();
             h.changed = h.added;
             self.heaps.push(h);
             self.scrape_old();
+        }
+        Ok(())
+    }
+
+    /// Scrape heap `id` off the board. Used again, it is knifed fresh, as the oldest heap
+    /// scraped off a full board is.
+    pub fn scrape(&mut self, id: u64) {
+        if let Some(h) = self.heap_mut(id) {
+            h.scraped = true;
         }
     }
 
@@ -166,14 +188,14 @@ impl Board {
     /// heap; the hand then carries this heap's paint, and the mixing area's
     /// smears follow it. A scraped heap is knifed again, fresh. Nothing
     /// happens on a clean board.
-    pub fn visit(&mut self, id: u64, carry: f32) {
-        self.reknife(id);
+    pub fn visit(&mut self, id: u64, carry: f32) -> Result<(), Full> {
+        self.reknife(id)?;
         if self.dirty <= 0.0 {
-            return;
+            return Ok(());
         }
         let dirty = self.dirty;
         let last = self.last.clone();
-        let Some(h) = self.heap_mut(id) else { return };
+        let Some(h) = self.heap_mut(id) else { return Ok(()) };
         if let Some((lp, _)) = &last {
             let own = h.fractions();
             // what differs from the heap is what dirties it
@@ -197,16 +219,17 @@ impl Board {
         self.residue = if self.residue_amount <= 0.0 { fr.clone() } else { blend(&self.residue, &fr, RESIDUE_FOLLOW) };
         self.residue_amount = (self.residue_amount + RESIDUE_FOLLOW).min(1.0);
         self.last = Some((fr, medium));
+        Ok(())
     }
 
     /// Knife more tube paint into heap `id`: `add` in the heap's own parts
     /// (as its recipe was given), with the added paint's `medium` (0: from the tube).
-    pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32) -> Result<(), String> {
+    pub fn add(&mut self, id: u64, add: &[(usize, f32)], medium: f32, tubes: &Palette) -> Result<(), String> {
         if self.heap(id).is_none() {
             return Err("p:add: that pile is no longer on the palette".into());
         }
         // An add re-knifes a scraped heap fresh, at the newest position.
-        self.reknife(id);
+        self.reknife(id).map_err(|Full| self.full(tubes, "p:add: that pile was scraped off, and knifing it again needs room"))?;
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
@@ -265,7 +288,7 @@ impl Board {
             }
         );
         for (n, h) in self.live().iter().enumerate() {
-            let recipe = h.fractions().iter().filter(|p| p.1 >= 0.005).map(|&(i, f)| format!("{} {:.2}", tubes.tubes[i].name, f)).collect::<Vec<_>>().join(" + ");
+            let recipe = recipe(h, tubes);
             s += &format!(
                 "  {}. {}{}: {}{}\n",
                 n + 1,
@@ -277,4 +300,22 @@ impl Board {
         }
         s
     }
+
+    /// Why a full board refuses a heap (`what`: the verb, and why it needed one): the heaps
+    /// on it, oldest first, and how one is scraped off.
+    pub fn full(&self, tubes: &Palette, what: &str) -> String {
+        let heaps: Vec<String> = self.live().iter().map(|h| match &h.name {
+            Some(n) => format!("{n:?} ({})", recipe(h, tubes)),
+            None => recipe(h, tubes),
+        }).collect();
+        format!(
+            "{what}: the palette is full. It holds {LIVE} piles and takes no more until one is scraped off. On it now, oldest first: {}. palette{{scrape={{p1, p2}}}} scrapes off the piles p1 and p2.",
+            heaps.join("; ")
+        )
+    }
+}
+
+/// A heap's recipe now: its tubes' shares, its dirt included.
+fn recipe(h: &Heap, tubes: &Palette) -> String {
+    h.fractions().iter().filter(|p| p.1 >= 0.005).map(|&(i, f)| format!("{} {:.2}", tubes.tubes[i].name, f)).collect::<Vec<_>>().join(" + ")
 }

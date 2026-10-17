@@ -3,7 +3,6 @@ import base64
 import io
 import json
 import math
-import os
 from pathlib import Path
 import re
 import time
@@ -12,7 +11,7 @@ from uuid import uuid4
 from mcp import types
 
 from painting_chunks import WATERCOLOR_METHODS, WATERCOLOR_VERBS, count_painting_chunks
-from server import LOG_PAGE, READ_PAGE, REPLY_PAGE, Easel, page_of, studio_path, text_pages
+from server import LOG_PAGE, READ_PAGE, REPLY_PAGE, Easel, critic_cli, page_of, studio_path, text_pages
 
 
 def pi_image(data, max_side=2000, max_bytes=4.5 * 1024 * 1024, quality=80):
@@ -116,7 +115,7 @@ class SittingEasel(Easel):
             self.save()
             journal = self.journal()
             message = Path(__file__).with_name("sitting-message.txt").read_text().strip()
-            if os.environ.get("PAINTER_CRITIC") and self.state.get("critic_opening"):
+            if critic_cli(self.studio) and self.state.get("critic_opening"):
                 message = self.state["critic_opening"] + "\n\n" + message
             text = f"{message}\n\nSitting {self.state['sitting']}\nPainting clock: {clock}\n\nYour journal (notes/journal.md):\n{journal}"
             return [types.TextContent(type="text", text=self.reply(text)), *look]
@@ -146,7 +145,7 @@ class SittingEasel(Easel):
         return result
 
     async def visit_critic(self):
-        if not os.environ.get("PAINTER_CRITIC"):
+        if not critic_cli(self.studio):
             return
         from critic import visit
         if self.state.get("critic_sitting") == self.state["sitting"]:

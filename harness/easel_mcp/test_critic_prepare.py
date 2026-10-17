@@ -93,6 +93,13 @@ class CriticPrepareTests(unittest.TestCase):
         self.assertEqual((self.studio / "notes/easel_guide.md").read_bytes(), self.originals["notes/easel_guide.md"] + PI_READING.encode())
         self.assertFalse((self.studio / "notes/watercolor_easel_guide.md").exists())
 
+    def test_watercolor_does_not_gain_critic_guide_text(self):
+        (self.studio / "bin/easel").unlink()
+        (self.studio / "bin/watercolor-studio").touch()
+        self.prepare({"PAINTER_CRITIC": CRITIC})
+        for name, text in self.originals.items():
+            self.assertEqual((self.studio / name).read_bytes(), text)
+
 
 if __name__ == "__main__":
     unittest.main()

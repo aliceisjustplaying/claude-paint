@@ -51,7 +51,7 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     env = {"PAINTER_CRITIC_CLI": str(repo / "harness/painter/visit-cli.ts")}
     if "PAINTER_CRITIC" in os.environ:
         env["PAINTER_CRITIC"] = os.environ["PAINTER_CRITIC"]
-    if env.get("PAINTER_CRITIC"):
+    if env.get("PAINTER_CRITIC") and (studio / "bin/easel").is_file() and not (studio / "bin/watercolor-studio").is_file():
         for name in ("easel_guide.md", "watercolor_easel_guide.md"):
             guide = studio / "notes" / name
             if guide.is_file():

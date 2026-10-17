@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import runpy
+import shutil
 import sys
 import time
 import unittest
@@ -217,6 +218,35 @@ class CriticTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(result.content[0].text.startswith("You're back at the easel."))
         self.assertFalse((self.critic / "calls.jsonl").exists())
         self.assertFalse((self.studio / "notes/critic.md").exists())
+
+    async def test_other_exported_runtimes_ignore_inherited_critic_switch(self):
+        params = self.parameters()
+        runtime = self.studio / "bin/mcp"
+        runtime.mkdir()
+        for name in ("server.py", "references.py", "tools.json"):
+            shutil.copy2(SERVER.with_name(name), runtime / name)
+        params.args = [str(runtime / "server.py"), "--studio", str(self.studio)]
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                self.assertNotIn("ask_critic", [tool.name for tool in (await session.list_tools()).tools])
+                self.assertFalse((await session.call_tool("status", {})).isError)
+        self.assertFalse((self.critic / "calls.jsonl").exists())
+
+    async def test_watercolor_has_no_critic_tool_or_end_visit(self):
+        params = self.parameters()
+        (self.studio / "bin/easel").unlink()
+        binary = self.studio / "bin/watercolor-studio"
+        binary.write_text(test_agy.WATERCOLOR_FAKE.format(python=sys.executable, png=test_agy.PNG))
+        binary.chmod(0o755)
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                self.assertNotIn("ask_critic", [tool.name for tool in (await session.list_tools()).tools])
+                result = await session.call_tool("end_sitting", {})
+                self.assertFalse(result.isError, result.content)
+                self.assertTrue(result.content[0].text.startswith("You're back at the easel."))
+        self.assertFalse((self.critic / "calls.jsonl").exists())
 
 
 if __name__ == "__main__":

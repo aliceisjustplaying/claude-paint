@@ -385,6 +385,10 @@ class Easel:
         return f"revised in {path}\n"
 
     async def call(self, name, params):
+        if name == "ask_critic" and os.environ.get("PAINTER_CRITIC"):
+            from critic import visit
+            result = await visit(self.studio, "asked", params.get("note"))
+            return [types.TextContent(type="text", text=result["notes"])]
         if name in ("reference", "reference_list"):
             lookup = reference if name == "reference" else reference_list
             result = lookup(studio_path(self.studio, "notes/reference-library.json"), params)
@@ -469,6 +473,8 @@ class Easel:
 
 def tool_definitions(studio, sittings=False, agy=False):
     definitions = json.loads(Path(__file__).with_name("tools.json").read_text())
+    if os.environ.get("PAINTER_CRITIC"):
+        definitions += json.loads(Path(__file__).with_name("critic-tools.json").read_text())
     if (studio / "bin/watercolor-studio").is_file():
         definitions = [definition for definition in definitions if definition["name"] != "probe"]
         for definition in definitions:
@@ -550,7 +556,7 @@ async def main():
     async def call_tool(name, arguments):
         async with easel.lock:
             stopped = asyncio.Event()
-            heartbeat = asyncio.create_task(keepalive(server.request_context, stopped)) if name == "end_sitting" else None
+            heartbeat = asyncio.create_task(keepalive(server.request_context, stopped)) if name in ("end_sitting", "ask_critic") else None
             try:
                 if recorded:
                     return await recorded.call(name, dict(arguments, call_id=str(uuid4())), cancel_on_disconnect=True)

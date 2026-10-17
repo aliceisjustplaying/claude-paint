@@ -127,6 +127,8 @@ check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
+check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
+check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"
 check atelier "cd atelier && $pytest -rs ." "$passed"
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"

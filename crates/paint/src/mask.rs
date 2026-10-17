@@ -219,6 +219,25 @@ impl Mask {
         let inside: Vec<bool> = self.data.par_iter().map(|&v| v >= 0.5).collect();
         soften_region(self.f, inside, width)
     }
+
+    /// `soften`, keeping the mask's own ramp wherever it is the wider one:
+    /// each pixel takes the softer of the two values (the one nearer 0.5, on
+    /// its side of the edge). A hard mask gets the new ramp; a graded one
+    /// (a function, a blur, a softer soften) keeps its grading.
+    pub fn soften_graded(&self, width: impl Fn(f32, f32) -> f32 + Sync) -> Mask {
+        let mut out = self.soften(width);
+        out.data.par_iter_mut().zip(&self.data).for_each(|(r, &v)| *r = if v >= 0.5 { r.min(v) } else { r.max(v) });
+        out
+    }
+
+    /// How far a brush worked over the region carries past it: 1 in the
+    /// region, falling to 0 over `d` units out from its edge (the 0.5 line),
+    /// and never below the mask's own value.
+    pub fn reach(&self, d: f32) -> Mask {
+        let (sd, _) = self.signed_distance_px();
+        let k = (d * self.f.scale).max(1.0);
+        Mask { f: self.f, data: sd.into_par_iter().zip(self.data.par_iter()).map(|(v, &m)| (1.0 - crate::smoothstep(0.0, k, -v)).max(m)).collect() }
+    }
 }
 
 /// Signed distance in pixels (+ inside) to the edge of a region given pixel

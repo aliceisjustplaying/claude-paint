@@ -33,6 +33,11 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose blender and glaze meet their masks as the mask says
+/// (`paint::Palette::blend_at_masks`): every new painting. A log without it
+/// replays `soften` as a fresh ramp on the mask's 0.5 line and its unclipped
+/// blends and glazes at their strokes' full length.
+pub const BLEND_MARK: &str = "--@ blend-at-masks";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -409,6 +414,9 @@ impl Session {
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.blend_at_masks {
+            let _ = writeln!(s, "{BLEND_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -994,13 +1002,14 @@ fn box_list() -> String {
 /// engine version the painting is painted with: a new one engine 7,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
-/// (`LIMBS_MARK`).
+/// (`LIMBS_MARK`), and likewise for blends and glazes at masks (`BLEND_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
         b.limbs_join_nearest = true;
+        b.blend_at_masks = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1026,6 +1035,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     Ok(b)
 }
 

@@ -652,4 +652,24 @@ mod tests {
         let on_oil = run(true, 0.0);
         assert!(on_oil.0 == oil.0 && on_oil.1 == oil.1 && on_oil.2 == oil.2, "on an oil ground the switch changes nothing here");
     }
+
+    #[test]
+    fn drained_flow_conserves_integrated_scattering() {
+        let mut c = canvas(5).with_drain(true);
+        c.ground_finish(1.0);
+        c.wet.ensure_solvent();
+        let src = (c.f.h / 2) * c.f.w + c.f.w / 2;
+        c.wet.vol[src] = 3.0;
+        c.wet.solv[src] = 3.0 * super::COAT_UM;
+        c.wet.lat[src] = sienna(0.0).latent();
+        c.wet.hide[src] = [0.8, 0.0, 1.0, 0.0, 0.9, 0.7, 0.6, 0.0, 0.5, 0.0];
+        c.wet.stroke[src] = 1;
+        c.absorb[src] = 0.0;
+        let mut solvent = vec![src];
+        c.spread(10.0, &mut solvent);
+        let mass: f64 = c.wet.vol.iter().zip(&c.wet.hide).map(|(&v, h)| (v * h[0]) as f64).sum();
+        let volume: f32 = c.wet.vol.iter().sum();
+        assert!(volume < 3.0 - 1e-4);
+        assert!((mass - 2.4).abs() < 1e-6, "2.4 -> {mass}");
+    }
 }

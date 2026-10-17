@@ -226,6 +226,63 @@ fn an_absorbent_ground_drains_a_film_from_the_ground_up() {
     assert!((hd[7] - f * vol / (vol - 0.4)).abs() < 1e-5 && (surface_oil(&hd) - 1.0).abs() < 1e-4, "{hd:?}");
 }
 
+#[test]
+fn ground_drain_conserves_integrated_scattering() {
+    use crate::bristle::ground_drain;
+    for t in [1e-7, 0.1, 1.0, 3.0] {
+        for scatter in [0.01, 1.0, 8.0] {
+            for capacity in [0.0, 0.05, 10.0] {
+                let mut hd = [scatter, 0.5, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, 0.5, 0.0];
+                let mut cap = capacity;
+                let mass = t * scatter;
+                let left = ground_drain(&mut cap, t, &mut hd);
+                assert!((left * hd[0] - mass).abs() <= mass * 1e-6, "{t} coats, capacity {capacity}: {mass} -> {}", left * hd[0]);
+                assert!((t - left - (capacity - cap)).abs() < 1e-6);
+                let packed = hd;
+                let again = ground_drain(&mut cap, left, &mut hd);
+                assert_eq!((again, hd), (left, packed));
+            }
+        }
+    }
+}
+
+#[test]
+fn drained_deposition_keeps_its_pigment_when_wet_and_baked() {
+    for engine in [5, 7] {
+        let mut c = Canvas::new(2, 1.0, [0.8; 3]).with_engine(engine).with_drain(true);
+        c.ground_finish(1.0);
+        let paint = Paint { scatter: 1.0, oil: 1.0, packed: 0.7, floor: 0.4, oil_volume: 0.5, ..Paint::body([0.2, 0.3, 0.4]) };
+        let (lat, hd) = (paint.latent(), paint.prop());
+        let mut mass = 0.0;
+        for v in [1.0, 0.2, 0.4] {
+            let sf = c.surf();
+            for i in 0..c.wet.vol.len() {
+                unsafe {
+                    if engine == 7 {
+                        crate::engine7::add::Film::of(&sf).add(i, v, &crate::engine7::add::Paint7::new(sf.lean, sf.drain, &lat, hd, 0.0));
+                    } else {
+                        sf.add(i, v, &lat, hd, 0.0);
+                    }
+                }
+            }
+            mass += v * paint.scatter;
+            assert!((c.wet.vol[0] * c.wet.hide[0][0] - mass).abs() < 1e-6, "engine {engine}: {mass} -> {}", c.wet.vol[0] * c.wet.hide[0][0]);
+        }
+        assert!(c.wet.vol[0] < 1.6);
+        c.wet.cover.fill(1.0);
+        c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
+        let color = mixbox::latent_to_linear_float_rgb(&lat);
+        let expected = crate::pigment::Pigment::masstone(color, mass).over([0.8; 3], 1.0);
+        let wet = c.look_px(0);
+        c.dry();
+        assert_eq!(c.wet.vol[0], 0.0);
+        for channel in 0..3 {
+            assert!((wet[channel] - expected[channel]).abs() < 1e-6, "engine {engine}: wet {wet:?} != {expected:?}");
+            assert!((c.px[0][channel] - expected[channel]).abs() < 1e-6, "engine {engine}: baked {:?} != {expected:?}", c.px[0]);
+        }
+    }
+}
+
 /// The drain switch on a chalk ground: a thin film of smalt, coarser than
 /// the ground's pores, drains below its packed oil and dries matte; one of
 /// Prussian blue, finer, keeps its packed layer saturated and dries

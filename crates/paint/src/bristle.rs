@@ -2676,6 +2676,7 @@ pub(crate) fn ground_drain(cap: &mut f32, t: f32, hd: &mut Prop) -> f32 {
     // the paint that packed, the packed layer it adds to, the film after
     let u = (take / r).min(fluid);
     let (left, under) = ((t - take).max(1e-9), packed * t + u - take);
+    hd[0] *= t / (t - take);
     hd[7] = (under / left).clamp(0.0, 1.0);
     hd[4] = ((under * floor + (fluid - u) * top) / left).max(0.0);
     t - take

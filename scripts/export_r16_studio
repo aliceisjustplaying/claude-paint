@@ -123,6 +123,7 @@ if [ "$profile" = watercolor ]; then
   cp "$built" "$dest/bin/watercolor-studio"
   git -C "$repo" show "$branch:experiments/watercolor/THIRD_PARTY_NOTICES.md" > "$dest/bin/THIRD_PARTY_NOTICES.md"
   git -C "$repo" show "$branch:notes/watercolor_easel_guide.md" > "$dest/notes/watercolor_easel_guide.md"
+  uv run --no-project python "$repo/scripts/studio_guide.py" "$dest/notes/watercolor_easel_guide.md" --watercolor
   cp "$dest/notes/watercolor_easel_guide.md" "$dest/notes/easel_guide.md"
   git -C "$repo" archive --format=tar "$branch" -- notes/watercolor_techniques.md notes/research/watercolor_physics.md | tar -x -C "$dest"
   "$repo/scripts/strip_sources" "$dest/notes/research/watercolor_physics.md" < /dev/null || { echo "can't strip the sources from the watercolor physics note" >&2; exit 1; }
@@ -232,6 +233,7 @@ if [ -z "$box" ] && ! git -C "$repo" show "$branch:notes/easel_guide.md" | cmp -
   echo "the $profile studio's guide differs from the committed guide" >&2
   exit 1
 fi
+uv run --no-project python "$repo/scripts/studio_guide.py" "$guide"
 
 # nothing but those
 extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -path ./bin/width ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)

@@ -312,8 +312,8 @@ change:
 | `body` (default) | filbert 9 | 20–60 units |
 | `detail` | round 2.2 | 4–14 units, clipped to the mask |
 | `hatch` | round 2.6 | 5–12 units, nearly straight, side by side, clumped |
-| `glaze` | soft filbert 26 | 120–300 units, light pressure |
-| `scumble` | filbert 9 | 10–20 units, worked back and forth |
+| `glaze` | soft filbert 26 | 120–300 units, light pressure; a thin film (below) |
+| `scumble` | filbert 9 | 10–20 units, worked back and forth; a thin, broken veil (below) |
 | `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40% |
 
 | option | meaning |
@@ -321,7 +321,7 @@ change:
 | `pile` | the pile every stroke dips into (every hand but `blend`) |
 | `tool` | `"filbert 8"`, `{kind=, width=, ...}` or a brush |
 | `length` | `{min, max}` stroke length in units |
-| `coverage` | layers of strokes over each point on average |
+| `coverage` | layers of strokes over each point on average; for `glaze` and `scumble`, the share of the mask their film reaches (below) |
 | `angle` | stroke direction: a number or `function(x, y)` |
 | `pressure`, `ramps` | `{min, max}` pressure; attack and release fractions |
 | `dips` | `{strokes per trip to the palette, load, wipe before dipping}` |
@@ -339,6 +339,18 @@ change:
 Where an option takes `function(x, y)`, it is sampled every 2 units over
 the area and interpolated. A mistyped option is an error that lists the
 valid ones.
+
+**Glaze and scumble.** A `glaze` pass lays a thin film, about 7.5 µm,
+wherever its strokes reach. Where strokes overlap, the film gets no
+thicker. What shows through it depends on the pile: the more medium, the
+more transparent the film; transparent tubes tint what is under it, and
+white veils it. Each further pass adds another film. A `scumble` pass
+lays a thinner film, about 5 µm, as a broken veil; laid with body paint,
+it hides part of what it crosses. For both hands, `coverage` is the share
+of the mask the film reaches: 1 reaches all of it, 0.5 about half, and the
+rest is left as it was. A coverage above 1 reaches no further and makes
+the film no stronger. The other hands lay as much paint as the brush
+carries, so they cover rather than tint.
 
 **What stays inside the mask.** `work` plans its strokes from the mask:
 each stroke is anchored in it, but its path can begin outside and cross

@@ -235,6 +235,13 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
+    /// coverage is the share of the passage it reaches (`Handling::film`).
+    pub(crate) glaze_film: bool,
+    /// The `work` pass under way with a film ceiling (`Handling::film`):
+    /// the most wet film (coats) it lays on any pixel, and its first stroke
+    /// id. Transient.
+    pub(crate) film_pass: Option<(f32, u32)>,
     /// The bare cloth of a raw canvas (None: a primed canvas): `soak`.
     pub(crate) soak: Option<Box<crate::soak::Soak>>,
 }
@@ -286,6 +293,8 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            glaze_film: false,
+            film_pass: None,
             soak: None,
         }
     }
@@ -296,6 +305,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.glaze_film &= crate::engine7::active(v);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -325,6 +335,15 @@ impl Canvas {
 
     pub fn adaptive_sweep(&self) -> bool {
         self.adaptive_sweep
+    }
+
+    pub fn with_glaze_film(mut self, enabled: bool) -> Self {
+        self.glaze_film = enabled && crate::engine7::active(self.engine);
+        self
+    }
+
+    pub fn glaze_film(&self) -> bool {
+        self.glaze_film
     }
 
     /// Physical width of the painting in mm (default 700).

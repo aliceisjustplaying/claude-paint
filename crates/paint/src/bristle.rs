@@ -767,6 +767,9 @@ pub(crate) struct Surf {
     pub(crate) laid_id: *mut u32,
     pub(crate) sweep_spacing: Option<f32>,
     pub(crate) adaptive_sweep: bool,
+    /// A pass with a film ceiling (`Canvas::film_pass`): the most wet film
+    /// (coats) its strokes together lay on a pixel, and its first stroke id.
+    pub(crate) film: Option<(f32, u32)>,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
 }
@@ -857,6 +860,26 @@ impl Surf {
     }
 }
 
+/// What a pass with a film ceiling (`Surf::film`) may still lay at pixel
+/// `k` (coats): the ceiling `cap` (the caller scales it by the clip's
+/// weight there, so a soft mask lays a thinner film) less the film it has added there since it
+/// first reached the pixel (`Wet::laid` holds the pixel's film then), so
+/// paint a later stroke of the pass picks up may be laid again. Records the
+/// stroke `id` as the pixel's latest (pass `from` on).
+///
+/// # Safety
+/// `k` is inside `sf`'s window, its ceiling buffers are allocated, and no
+/// other thread touches the pixel.
+pub(crate) unsafe fn film_room(sf: &Surf, k: usize, from: u32, cap: f32, id: u32) -> f32 {
+    unsafe {
+        if *sf.laid_id.add(k) < from {
+            *sf.laid.add(k) = *sf.vol.add(k);
+        }
+        *sf.laid_id.add(k) = id;
+        (*sf.laid.add(k) + cap - *sf.vol.add(k)).max(0.0)
+    }
+}
+
 impl Canvas {
     pub(crate) fn surf(&mut self) -> Surf {
         // the raw views below index 0..w*h: every buffer must be that long
@@ -916,6 +939,7 @@ impl Canvas {
             laid_id: if self.wet.laid_id.len() == n { self.wet.laid_id.as_mut_ptr() } else { std::ptr::null_mut() },
             sweep_spacing: None,
             adaptive_sweep: self.adaptive_sweep,
+            film: self.film_pass,
             e7: crate::engine7::active(self.engine),
         }
     }
@@ -1557,8 +1581,14 @@ pub(crate) unsafe fn exchange(
         // (the exchange experiment drops the ceiling and the per-stroke
         // allowance for a thinned hair, `crate::thinner::set_exchange`)
         let exch = phi > 0.0 && !sf.laid.is_null() && crate::thinner::exchange();
-        let capped = phi > 0.0 && !sf.laid.is_null() && !exch;
-        let cap = if capped { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY };
+        // a pass that lays a thin film (`Handling::film`): all its strokes
+        // together add no more than its ceiling to a pixel, and what the hair
+        // can't lay stays on it, as a thinned load's does (with both, the
+        // lower ceiling, for the whole pass)
+        let pass_film = sf.film.filter(|_| !sf.laid.is_null());
+        let thinned = phi > 0.0 && !sf.laid.is_null() && !exch;
+        let capped = thinned || pass_film.is_some();
+        let cap = pass_film.map_or(f32::INFINITY, |f| f.0).min(if thinned { crate::thinner::stroke_limit_um(phi) / COAT_UM } else { f32::INFINITY });
         let wet = smoothstep(0.1, 0.8, liquid / full);
         let wick = if tool.point > 0.0 { tool.point * smoothstep(0.02, 0.25, liquid / full) } else { 0.0 }.max(WET_REACH * wet);
         let th = 1.0 - reach.max(wick) * 1.6;
@@ -1780,7 +1810,9 @@ pub(crate) unsafe fn exchange(
                     // of this pixel's ceiling for this stroke, shared by all
                     // its hairs (crate::thinner); the rest stays on the hair
                     let mut d = dep_per_w * wt;
-                    if capped {
+                    if let Some((_, from)) = pass_film {
+                        d = d.min(film_room(&sf, i, from, cap * clip.map_or(1.0, |c| c.at(y * w + x).0), id));
+                    } else if capped {
                         let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                         d = d.min((cap - used).max(0.0));
                         *sf.laid_id.add(i) = id;
@@ -1848,7 +1880,11 @@ pub(crate) unsafe fn exchange(
                                 let sol = if sf.solv.is_null() { 0.0 } else { *sf.solv.add(i) / COAT_UM };
                                 let vi = *sf.vol.add(i);
                                 let ms = if sol > 0.0 && vi > 0.0 { (sol * m / vi).min(sol) } else { 0.0 };
-                                let (m, ms) = if capped && j != i && m > 0.0 {
+                                let (m, ms) = if let Some((_, from)) = pass_film.filter(|_| j != i && m > 0.0) {
+                                    let room = film_room(&sf, j, from, cap * clip.map_or(1.0, |c| c.at(ty * w + tx).0), id);
+                                    let f = if m + ms > room { room / (m + ms) } else { 1.0 };
+                                    (m * f, ms * f)
+                                } else if capped && j != i && m > 0.0 {
                                     let used = if *sf.laid_id.add(j) == id { *sf.laid.add(j) } else { 0.0 };
                                     let room = (cap - used).max(0.0);
                                     let f = if m + ms > room { room / (m + ms) } else { 1.0 };
@@ -1880,7 +1916,7 @@ pub(crate) unsafe fn exchange(
                 }
             }
         }
-        if phi > 0.0 {
+        if phi > 0.0 || pass_film.is_some() {
             // the hair loses what it laid (and in a crop, the share laid
             // outside the window), paint and solvent in its proportions
             let gone = (laid_liq + dep_total * (1.0 - share.min(1.0))).min(liquid);

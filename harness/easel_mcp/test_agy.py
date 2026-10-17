@@ -20,6 +20,7 @@ from mcp.client.stdio import stdio_client
 import yaml
 
 from test_protocol import FAKE, PNG, SERVER
+from server import log_find
 from painting_chunks import classify
 
 WATERCOLOR_FAKE = '''#!{python}
@@ -157,6 +158,18 @@ class AgyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(beyond.isError)
                 log, _ = await pages("log", {})
                 self.assertEqual(log, (self.studio / "log-output.txt").read_text().replace("--@ chunk 1", "--@ chunk").rstrip())
+                long_log = "--@ chunk 1\n" + ("dab(b, 1, 1) -- " + "é" * 200 + "\n") * 150
+                (self.studio / "log-output.txt").write_text(long_log)
+                found, _ = await pages("log", {"find": "dab"})
+                self.assertEqual(found, log_find(long_log.replace("--@ chunk 1", "--@ chunk").rstrip(), "dab", "paintings/lua/painting.lua"))
+                first = (await session.call_tool("log", {"find": "dab", "scratch": True})).content[0].text
+                self.assertTrue(first.endswith('call log with {"scratch": true, "find": "dab", "page": 2}'), first[-200:])
+                names = sorted(f"{i:03d}-{'0' * 32}.png" for i in range(300))
+                (self.studio / "notes/looks").mkdir()
+                for name in names:
+                    (self.studio / "notes/looks" / name).touch()
+                listing, _ = await pages("read", {"path": "notes/looks"})
+                self.assertEqual(listing, "\n".join(names))
                 from PIL import Image
                 Image.effect_noise((2916, 1746), 64).convert("RGB").save(self.studio / "notes/photo.png")
                 photo = await session.call_tool("read", {"path": "notes/photo.png"})

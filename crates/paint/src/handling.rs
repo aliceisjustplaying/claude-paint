@@ -943,7 +943,7 @@ impl Canvas {
         let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.into_iter().chain(p.dip2.map(|(paint, _, _)| paint))), &secs);
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         if hd.blender && self.blend_feather {
-            self.receptive = Some(self.receptive());
+            self.receptive = Some(self.receptive(&tool));
         }
         self.paint_pass(pass, |surf, ti, first_id| {
             // (a blender lays back paint it lifted: it mixes as it always did)
@@ -1008,12 +1008,13 @@ impl Canvas {
     /// (`with_blend_feather`): per pixel of the buffers, the share (0..1) of
     /// what a bristle lays or ploughs there that the pixel takes. Wet paint
     /// open when the pass begins takes all of it; dry paint and bare ground
-    /// take it only within about `FEATHER_MM` of open paint, less the
+    /// take it only within about `FEATHER_OF_TRAIL` of the hair's trail
+    /// from open paint, less the
     /// farther out, so the blender feathers a wet edge onto dry paint a
     /// little way and stops. What isn't taken stays on the hair, to be laid
     /// back in wet paint or wiped off. Paint the pass lays doesn't open more
     /// of the canvas to it: the map is the pass's, fixed when it begins.
-    fn receptive(&self) -> Vec<f32> {
+    fn receptive(&self, tool: &Tool) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let n = w * h;
         let px = &self.wet.clock.px;
@@ -1024,8 +1025,8 @@ impl Canvas {
             })
             .collect();
         // two box passes of radius r spread an edge by √(2r(r+1)/3) pixels:
-        // pick r for FEATHER_MM (as `film_thickness` does)
-        let q = FEATHER_MM / self.px_mm();
+        // pick r for the feather (as `film_thickness` does)
+        let q = FEATHER_OF_TRAIL * tool.length * self.f.scale;
         let r = ((0.5 * ((1.0 + 6.0 * q * q).sqrt() - 1.0)).round() as usize).max(1);
         let near = crate::surface::box_blur(&crate::surface::box_blur(&open, w, h, r), w, h, r);
         // (a straight edge blurs to one half on the edge: twice that is the
@@ -1034,9 +1035,11 @@ impl Canvas {
     }
 }
 
-/// How far (mm, about one standard deviation) past open paint a blender
-/// still lays the wet paint it carries onto dry paint (`Canvas::receptive`).
-const FEATHER_MM: f32 = 3.0;
+/// How far past open paint a blender still lays the wet paint it carries
+/// onto dry paint (`Canvas::receptive`), about one standard deviation, as a
+/// share of how far its hair trails: a broad badger feathers a halo out a
+/// few mm, a small one softens a feature's edge in place.
+const FEATHER_OF_TRAIL: f32 = 1.0 / 6.0;
 /// Wet paint this thick (coats) or more counts as open paint for the
 /// blender's feather; thinner films (a glaze, a scumble) count in proportion.
 const OPEN_COATS: f32 = 0.05;

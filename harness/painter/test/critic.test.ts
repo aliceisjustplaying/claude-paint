@@ -47,14 +47,14 @@ test("a visit's message says what there is to read and where the notes go", () =
 
 test("a visit's message quotes the painter's open passages and asks which the critic would take up first", () => {
 	const s = studio();
-	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter[\s\S]*which passage you would take up first, from its list or not\./);
+	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter[\s\S]*Say which passage, if any, you would take up first, whether or not it is on the painter's list\./);
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n- day 2, 18:00: handoff\n  Open passages:\n  - the far shore: flat\n");
 	assert.match(visitMessage(s, "asked"), /Its latest list, quoted as the painter wrote it:\n\n> Open passages:\n> - the far shore: flat\n\nThen tell the painter/);
 });
 
 test("a later sitting's passages to take up: the open passages, then the critic's notes", () => {
 	const s = studio();
-	assert.equal(passagesToTakeUp(s, true), "## Passages to take up\n\nYour journal has no `Open passages:` list yet. Your handoff is in your journal, quoted below.");
+	assert.equal(passagesToTakeUp(s, true), "## Passages to take up\n\nYour journal has no `Open passages:` list yet. Any passages your last handoff left open are in your journal, quoted below under \"Your journal\".");
 	writeFileSync(join(s, "notes/journal.md"), "- day 2, 18:00: Open passages:\n  - the far shore: flat\n");
 	writeFileSync(join(s, "notes/critic.md"), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
 	assert.equal(passagesToTakeUp(s, false), "## Passages to take up\n\nYour open passages, from your journal handoff (notes/journal.md), quoted as you wrote them:\n\n> Open passages:\n> - the far shore: flat");

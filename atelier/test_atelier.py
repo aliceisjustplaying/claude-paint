@@ -39,7 +39,7 @@ def world(tmp_path, monkeypatch):
             for sub in ("bin", "notes/research", "paintings/lua"):
                 (dest / sub).mkdir(parents=True)
             (dest / "bin/easel").write_bytes(b"the painter's easel")
-            (dest / "notes/easel_guide.md").write_text((A.REPO / "notes/easel_guide.md").read_text())
+            (dest / "notes/easel_guide.md").write_text("guide\n")
             (dest / "notes/journal.md").write_text("")
             (dest / "notes/reference-library.json").write_text("[]")
             assert options["env"]["R16_BRANCH"] == real(["git", "-C", A.REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -273,12 +273,7 @@ def test_run_configures_the_house_loop_with_the_atelier_texts(world, monkeypatch
     assert "PAINTER_COMPACTION_NOTES" not in R.os.environ
     assert (house.PAINTER_MSG, house.SITTING_MESSAGE, house.CONTINUE_MESSAGE) == tuple(A.text(f"{m}_message.md") for m in ("launch", "sitting", "continue"))
     assert house.HARNESS[house.HARNESS.index("--system-prompt") + 1] == str(A.TEXTS / "system_prompt.md")
-    assert house.HARNESS[house.HARNESS.index("--tools") + 1] == "paint,look,probe,note,status,log,read,notebook"
-    folder = Path(json.loads((work / "manifest.json").read_text())["folder"])
-    guide = (folder / "notes/easel_guide.md").read_text()
-    assert "| `notebook` |" in guide
-    assert "| `reference` |" not in guide
-    assert "| `reference_list` |" not in guide
+    assert house.HARNESS[house.HARNESS.index("--tools") + 1] == "paint,look,note,status,log,read,notebook"
     model = house.LANES["OPUS"]["model"]
     assert model["args"] == ["--provider", "anthropic", "--model", "claude-opus-5-5", "--thinking", "xhigh"] and model["black"]
     assert house.painter_cmd(model, house.PAINTER_MSG)[-1] == A.text("launch_message.md")

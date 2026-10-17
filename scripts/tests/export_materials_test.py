@@ -62,7 +62,7 @@ class ExportMaterialsTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.repo = self.root / "repo"
-        for name in ("export_r16_studio", "prepare_capy_studio", "strip_sources", "studio_guide.py",
+        for name in ("export_r16_studio", "prepare_capy_studio", "strip_sources",
                      "check_studio_names", "check_box_tubes", "tests/export_profiles.sh"):
             path = self.repo / "scripts" / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +72,7 @@ class ExportMaterialsTests(unittest.TestCase):
         fixtures = self.root / "revisions"
         for ref in ("HEAD", "historical"):
             revision = fixtures / ref
-            self.write(revision / "notes/easel_guide.md", "| tool | what it does |\n|---|---|\n" +
-                       "".join(f"| `{name}` | fixture tool |\n" for name in ("paint", "look", "probe", "note", "status", "log")) + "\n" + TABLE)
+            self.write(revision / "notes/easel_guide.md", TABLE)
             self.write(revision / "notes/techniques.md", "Fixture techniques.\n")
             self.write(revision / "notes/research/oil_paint_physics.md", "Fixture physics.\n")
             self.write(revision / "THIRD_PARTY_NOTICES.md", "Fixture notices.\n")

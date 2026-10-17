@@ -11,7 +11,7 @@
 use crate::api::{S, check_keys, err, mask_of, num, points, seed_of};
 use crate::time::{self, Verb};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
-use paint::rag::{PAD_MM, Rag, RagPass, pace};
+use paint::rag::{FULL, PAD_MM, Rag, RagPass, pace};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,6 +21,23 @@ const BLOT_KEYS: &[&str] = &["pressure", "seed"];
 
 fn no_canvas() -> mlua::Error {
     mlua::Error::runtime("no canvas yet: call canvas{} first")
+}
+
+/// What the chunk's reply says when a wipe ran on a full face (`FULL`), with
+/// the rag lift switch: `strokes` is how many of a mask wipe's strokes began
+/// on one, of how many (None: a wipe along a path that began on one).
+fn full_note(r: &Rag, strokes: Option<(usize, usize)>) -> String {
+    let cloth = r.soaked >= FULL;
+    match (strokes, cloth) {
+        (Some((full, n)), false) => format!("rag: the face in use is full: {full} of {n} strokes began on it and lifted almost nothing (load {:.2}). A refold (r:refold(), or refold= in the wipe) turns out a cleaner face.
+", r.load),
+        (Some((full, n)), true) => format!("rag: the whole cloth is full: {full} of {n} strokes lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.
+", r.load, r.soaked),
+        (None, false) => format!("rag: the face in use was full when this wipe began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.
+", r.load),
+        (None, true) => format!("rag: the whole cloth is full, so this wipe lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.
+", r.load, r.soaked),
+    }
 }
 
 /// A rag in the painter's hand.
@@ -115,7 +132,10 @@ impl UserData for RagU {
                     let pass = RagPass { pressure: pr[0], angle, passes: passes as u32, refold, seed: sd };
                     time::verb(&u.st, Verb::Pass, |s| {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-                        c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
+                        let (n, full) = c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
+                        if c.rag_lift() && full > 0 {
+                            s.out.push_str(&full_note(&u.rag.borrow(), Some((full, n))));
+                        }
                         Ok(())
                     })
                 }
@@ -134,7 +154,11 @@ impl UserData for RagU {
                     let sd = seed(&u.st, lua, o.as_ref())?;
                     time::verb(&u.st, Verb::Marks, |s| {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                        let full = u.rag.borrow().load >= FULL;
                         c.rag_wipe(&mut u.rag.borrow_mut(), &pts, &pr, sd);
+                        if c.rag_lift() && full {
+                            s.out.push_str(&full_note(&u.rag.borrow(), None));
+                        }
                         Ok(())
                     })
                 }

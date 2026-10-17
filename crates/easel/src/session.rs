@@ -33,6 +33,10 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// A log's head line: its rag keeps what it lifts and a mask wipe stays
+/// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
+/// it.
+pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -409,6 +413,9 @@ impl Session {
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.rag_lift {
+            let _ = writeln!(s, "{RAG_LIFT_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1001,6 +1008,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
         b.engine = paint::engine7::ENGINE;
         b.limbs_join_nearest = true;
+        b.rag_lift = true;
         return Ok(b);
     };
     let engine = logged_engine(text)?;
@@ -1026,6 +1034,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
+    if b.rag_lift && !paint::engine7::active(engine) {
+        return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7"));
+    }
     Ok(b)
 }
 

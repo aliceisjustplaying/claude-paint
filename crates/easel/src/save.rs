@@ -180,6 +180,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     let mut tubes = crate::session::box_for(Some(&logged))?;
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
+    tubes.rag_lift = canvas.rag_lift();
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?;

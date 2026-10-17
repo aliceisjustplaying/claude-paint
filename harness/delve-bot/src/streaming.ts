@@ -16,6 +16,8 @@ export interface LivestreamRecord {
   endedAt?: string;
 }
 
+export class ShutdownError extends Error {}
+
 let active = false;
 let lastMicros = 0n;
 function tid(): string {
@@ -101,8 +103,11 @@ export class Streaming {
       const poll = setInterval(() => { if (stopped(this.config, this.env) || canceled()) controller.abort(); }, 100);
       try {
         const result = await work(controller.signal);
-        if (controller.signal.reason === "shutdown") throw new Error("interrupted_by_shutdown");
+        if (controller.signal.reason === "shutdown") throw new ShutdownError("interrupted_by_shutdown");
         return result;
+      } catch (error) {
+        if (controller.signal.reason === "shutdown") throw new ShutdownError("interrupted_by_shutdown");
+        throw error;
       } finally { clearInterval(poll); settle(); }
     }
     const title = (JSON.parse(readFileSync(new URL("../assets/replies.json", import.meta.url), "utf8")) as Record<string, string>)["streamTitle"]!;
@@ -151,9 +156,12 @@ export class Streaming {
       const ended = capture && new Promise<never>((_, reject) => void capture!.finished.then(() => { throw new Error("capture_ended"); })
         .catch((error: unknown) => { if (controller.signal.reason !== "time") reject(error); }));
       const result = await Promise.race([work(controller.signal), abort, ...(ended ? [ended] : [])]);
-      if (stopped(this.config, this.env) || canceled()) throw new Error("stream_canceled");
+      if (controller.signal.reason === "shutdown" || stopped(this.config, this.env) || canceled()) throw new Error("stream_canceled");
       return result;
-    } catch { throw new Error("stream_job_failed_or_canceled"); }
+    } catch {
+      if (controller.signal.reason === "shutdown") throw new ShutdownError("stream_job_failed_or_canceled");
+      throw new Error("stream_job_failed_or_canceled");
+    }
     finally {
       clearTimeout(timer); clearTimeout(grace); clearInterval(poll);
       controller.abort();

@@ -42,6 +42,7 @@ pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
 /// (`paint::Canvas::with_glaze_film`). Every new painting has it; it
 /// requires engine 7 or 8.
 pub const GLAZE_FILM_MARK: &str = "--@ glaze-film";
+pub const LIQUID_FILM_LEVELS_MARK: &str = "--@ liquid-film-levels";
 /// Marks a painting whose full palette board refuses a new heap instead of scraping off the
 /// oldest (board.rs): every new painting. A log without it replays with the oldest scraped off.
 pub const FULL_PALETTE_MARK: &str = "--@ full-palette-refuses";
@@ -576,6 +577,9 @@ impl Session {
         }
         if self.st.borrow().tubes.glaze_film {
             let _ = writeln!(s, "{GLAZE_FILM_MARK}");
+        }
+        if self.st.borrow().tubes.liquid_film_levels {
+            let _ = writeln!(s, "{LIQUID_FILM_LEVELS_MARK}");
         }
         if self.st.borrow().tubes.rag_lift {
             let _ = writeln!(s, "{RAG_LIFT_MARK}");
@@ -1250,6 +1254,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.knife_skim = true;
         b.limbs_join_nearest = true;
         b.glaze_film = true;
+        b.liquid_film_levels = true;
         b.full_palette_refuses = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
@@ -1292,6 +1297,10 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.knife_skim = knife_skim;
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
     b.glaze_film = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == GLAZE_FILM_MARK);
+    b.liquid_film_levels = head(LIQUID_FILM_LEVELS_MARK);
+    if b.liquid_film_levels && engine < 4 {
+        return Err(format!("the log's liquid film leveling switch ({LIQUID_FILM_LEVELS_MARK}) requires engine 4 or later"));
+    }
     if b.glaze_film && !paint::engine7::active(engine) {
         return Err(format!("the log's glaze film switch ({GLAZE_FILM_MARK}) requires engine 7 or 8"));
     }
@@ -1560,6 +1569,37 @@ mod tests {
             h = h.wrapping_mul(0x100_0000_01b3);
         }
         format!("{h:016x}")
+    }
+
+    #[test]
+    fn new_paintings_record_liquid_film_leveling_and_old_logs_keep_it_off() {
+        let mut live = Session::with_box(80, box_for(None).unwrap()).unwrap();
+        live.run("canvas{size=440, aspect=1, linen=15, seed=7, ground={{pile={{\"lead white\", 1}}, um=120, apply=\"knife\"}}}").unwrap();
+        assert!(live.canvas().unwrap().liquid_film_levels());
+        let text = live.program("p");
+        assert!(text.contains(&format!("\n{LIQUID_FILM_LEVELS_MARK}\n")));
+        for (log, levels) in [(text.clone(), true), (text.replace(&format!("{LIQUID_FILM_LEVELS_MARK}\n"), ""), false)] {
+            let b = box_for(Some(&log)).unwrap();
+            assert_eq!(b.clone().liquid_film_levels, levels);
+            assert_eq!(b.only(&["lead white"]).liquid_film_levels, levels);
+            let mut replay = Session::replay_with(80, b).unwrap();
+            for chunk in parse_program(&log) {
+                replay.run(&chunk).unwrap();
+            }
+            assert_eq!(replay.canvas().unwrap().liquid_film_levels(), levels);
+            assert_eq!(replay.program("p"), log);
+            let mut saved = Vec::new();
+            replay.canvas().unwrap().write_state(&mut saved, "").unwrap();
+            let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
+            assert_eq!(restored.liquid_film_levels(), levels);
+            assert_eq!(restored.seen_lit(315.0, 55.0, 1.0), replay.canvas().unwrap().seen_lit(315.0, 55.0, 1.0));
+            assert!(restored.glaze_film() && restored.rag_lift() && restored.knife_skim() && restored.blend_feather() && restored.brush_skim());
+        }
+        for engine in [4, 5, 7, 8] {
+            assert!(box_for(Some(&format!("--@ engine {engine}\n{LIQUID_FILM_LEVELS_MARK}\n"))).unwrap().liquid_film_levels);
+            assert!(!box_for(Some(&format!("--@ engine {engine}\n--@ chunk 1\n{LIQUID_FILM_LEVELS_MARK}\n"))).unwrap().liquid_film_levels);
+        }
+        assert!(box_for(Some(&format!("--@ engine 3\n{LIQUID_FILM_LEVELS_MARK}\n"))).is_err());
     }
 
     /// A new painting's glaze and scumble lay a thin film

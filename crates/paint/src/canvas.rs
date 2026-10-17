@@ -235,6 +235,7 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
+    pub(crate) liquid_film_levels: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -308,6 +309,7 @@ impl Canvas {
             engine: crate::ENGINE,
             quarter_tiles: false,
             adaptive_sweep: false,
+            liquid_film_levels: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -325,6 +327,7 @@ impl Canvas {
         self.engine = v;
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
+        self.liquid_film_levels &= v >= 4;
         self.glaze_film &= crate::engine7::active(v);
         self.rag_lift &= crate::engine7::active(v);
         self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
@@ -368,6 +371,15 @@ impl Canvas {
 
     pub fn glaze_film(&self) -> bool {
         self.glaze_film
+    }
+
+    pub fn with_liquid_film_levels(mut self, enabled: bool) -> Self {
+        self.liquid_film_levels = enabled && self.engine >= 4;
+        self
+    }
+
+    pub fn liquid_film_levels(&self) -> bool {
+        self.liquid_film_levels
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {
@@ -734,7 +746,7 @@ mod tests {
     #[test]
     #[cfg(tube_box)]
     fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
-        let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
+        let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4).with_liquid_film_levels(true);
         let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
         let w = liquid.f.w;
         let band = |i: usize| (40..120).contains(&(i % w));

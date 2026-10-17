@@ -672,7 +672,12 @@ impl UserData for Brush {
             if let Some((a, z)) = ramps {
                 g = g.ramps(a, z);
             } else {
-                g = g.ramps(0.02, 0.05);
+                // engine 8: the pressure follows the points to the end, so a
+                // limb drawn to where it forks keeps its width there (a tip
+                // tapers where its own points' pressure falls); before it
+                // the last 5% lifted off whatever the points asked
+                let release = if b.st.borrow().tubes.engine >= paint::REACH_END { 0.0 } else { 0.05 };
+                g = g.ramps(0.02, release);
             }
             if let Some(or) = g_orient {
                 g = g.orient(or);
@@ -2343,9 +2348,15 @@ print(string.format("%.3f %.3f", m:at(500, 225), m:at(500, 275)))"#;
         let path = std::env::temp_dir().join(format!("easel-masks-{}.ckpt", std::process::id()));
         let program = s.program("painting");
         assert!(program.contains(crate::session::BLEND_MARK), "a new painting's log doesn't name its masks' blending");
+        assert_eq!(s.canvas().unwrap().engine(), paint::REACH_END);
         crate::save::write(&s, &program, &path).unwrap();
         let mut restored = crate::save::read(&path).unwrap().session;
         let _ = std::fs::remove_file(&path);
+        assert!(restored.st.borrow().tubes.blend_at_masks);
+        let c = restored.canvas().unwrap();
+        assert_eq!(c.engine(), paint::REACH_END);
+        assert!(c.knife_skim() && c.blend_feather() && c.brush_skim());
+        drop(c);
         assert!((ramp(&mut restored)[0] - 0.156).abs() < 0.02, "a restored save thresholds a softened ramp");
 
         let [lo, hi] = ramp(&mut older_log())[..] else { panic!() };

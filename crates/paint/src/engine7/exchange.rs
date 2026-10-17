@@ -285,6 +285,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let inv_seg2 = if seg2 > 1e-8 { 1.0 / seg2 } else { 0.0 };
         let dry = !sf.dry.is_null();
         let mut ct = Contact::default();
+        // the contact weight on pixels that take what the bristle lays
+        let mut sum_r = 0.0f32;
         for y in y0..y1 {
             let py = y as f32 + 0.5;
             let row = (y - oy) * bw_buf;
@@ -329,6 +331,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 if wt > 0.0 {
                     win.hits.push(Hit { i, x: x as u32, y: y as u32, fl });
                     win.weights.push(wt);
+                    sum_r += wt * sf.takes(i);
                 }
             }
         }
@@ -369,7 +372,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         } else {
             dep_total
         };
-        let budget = Budget { paint: dep_total * (1.0 - phi), solvent: dep_total * phi };
+        // (what the pixels it touched didn't take stays on the hair)
+        let kept = if sf.receptive.is_null() { 1.0 } else { (sum_r / sum_w).min(1.0) };
+        let budget = Budget { paint: dep_total * kept * (1.0 - phi), solvent: dep_total * phi };
         let share = if windowed { ct.coverage / capsule_cover(a, b, rb, fine, (cx0, cy0, cx1, cy1)).max(1e-6) } else { 1.0 };
         let dep_per_w = dep_total * share.min(1.0) / sum_w / px_area;
         let spent = (1.0 - liquid / full).clamp(0.0, 1.0);
@@ -385,6 +390,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let weights = std::mem::take(&mut win.weights);
         // pass 2: pickup, deposit and plough, pixel after pixel
         for (&Hit { i, x, y, fl }, &wt) in hits.iter().zip(&weights) {
+            let takes = sf.takes(i);
             let v = *sf.vol.add(i);
             if *sf.touched.add(i) != id {
                 *sf.touched.add(i) = id;
@@ -414,10 +420,10 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
                 let cv = &mut *sf.cover.add(i);
                 *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                film.add(i, dep_per_w * wt, &laying);
+                film.lay(i, dep_per_w * wt * takes, &laying, sf.skim);
                 *sf.stroke.add(i) = id;
             } else if dep_per_w > 0.0 {
-                let mut d = dep_per_w * wt;
+                let mut d = dep_per_w * wt * takes;
                 if capped {
                     let used = if *sf.laid_id.add(i) == id { *sf.laid.add(i) } else { 0.0 };
                     d = d.min((cap - used).max(0.0));
@@ -427,7 +433,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 if d > 0.0 {
                     let cv = &mut *sf.cover.add(i);
                     *cv = if fine { ((if *sf.vol.add(i) < 1e-6 { 0.0 } else { *cv }) + wt * excl).min(1.0) } else { 1.0 };
-                    film.add(i, d * (1.0 - phi), &laying);
+                    film.lay(i, d * (1.0 - phi), &laying, sf.skim);
                     if !sf.solv.is_null() {
                         *sf.solv.add(i) += d * phi * COAT_UM;
                     }
@@ -461,7 +467,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 }
                 let (tx, ty) = (tx as usize, ty as usize);
                 let j = (ty - oy) * bw_buf + tx - ox;
-                let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0));
+                let c = win.cell(tx, ty, j, || clip.map_or(1.0, |c| c.at(ty * w + tx).0) * sf.takes(j));
                 let mut mm = m * sh * c.k;
                 if capped && mm > 0.0 {
                     // a thinned stroke adds no more wet film to the pixel it

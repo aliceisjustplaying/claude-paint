@@ -519,16 +519,17 @@ takes the paint nearly to the ground. Its folds still leave streaks.
 Dampness (`r.damp`) halves every three minutes of painting time. Refolding
 retains the cloth's dampness; another dip adds spirits.
 
-`r.load` is how full the part in use is (0 clean, 1 full): the fuller,
-the less it lifts. One part holds about as much paint as a 20 µm wash
-covering twenty squares the width of the pad; thicker paint fills it over
-a smaller area, so a wipe over a big wet area can fill it in its first
-few strokes. A wipe that runs on a full part lifts almost nothing, and the
-chunk's reply says so (`rag: the face in use is full: ...`).
-`r:refold()` turns a cleaner part outward, though every part holds at
-least what has soaked through the whole cloth (`r.soaked`, 0..1); `rag()`
-takes a fresh one. These numbers can be read, not set. Over a mask,
-`refold=` refolds whenever the load passes that value.
+The part of the cloth in use is its face. `r.load` is how full the face
+is (0 clean, 1 full): the fuller, the less it lifts. One face holds about
+as much paint as a 20 µm wash covering twenty squares the width of the
+pad; thicker paint fills it over a smaller area, so a wipe over a big wet
+area can fill it in its first few strokes. A wipe that runs on a full face
+lifts almost nothing, and the chunk's reply says so
+(`rag: the face in use is full: ...`). `r:refold()` turns a cleaner face
+outward, though every face holds at least what has soaked through the
+whole cloth (`r.soaked`, 0..1); `rag()` takes a fresh one. These numbers
+can be read, not set. Over a mask, `refold=` refolds whenever the load
+passes that value.
 
 Over a mask, `wipe` lays wipes side by side across it in `angle`'s
 direction, back and forth, each starting and stopping a little inside the
@@ -696,13 +697,13 @@ each campaign, and compare before and after.
 
 ## How chunks behave
 
-- **A long chunk.** `paint` waits 12 minutes for a chunk to finish (48 on a
-  4800 px canvas). If it stops waiting first, its reply says whether the
-  chunk is still running, with how far it has got, or whether it is in the
-  log. While a chunk runs, `status` answers how far it has got: the line it
-  is at, its strokes and touches so far, the painting time they have taken
-  and how long it has been running. Once the chunk is in the log and the
-  easel is still finishing its reply, `status` says that instead.
+- **A long chunk.** If `paint` stops waiting before a chunk finishes, its
+  reply says whether the chunk is still running, with how far it has got,
+  or whether it is in the log. While a chunk runs, `status` answers how
+  far it has got: the line it is at, its strokes and touches so far, the
+  painting time they have taken and how long it has been running. Once the
+  chunk is in the log and the easel is still finishing its reply, `status`
+  says that instead.
 - **Option types.** Each option takes the type shown in this guide.
   Options documented as `function(x, y)` accept a Lua function; numeric
   options take the computed number.

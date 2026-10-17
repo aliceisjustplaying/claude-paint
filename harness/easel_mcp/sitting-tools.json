@@ -6,7 +6,7 @@
   },
   {
     "name": "read",
-    "description": "Read a file in this studio. PNG files return an image; other files return text. A folder returns the names of what is in it, a folder's ending in /.",
+    "description": "Read a file in this studio. PNG files return an image; other files return text. A folder returns the names of what is in it, with / after each folder's name.",
     "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": false}
   }
 ]

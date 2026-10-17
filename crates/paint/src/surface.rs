@@ -275,7 +275,7 @@ impl Canvas {
     /// thin fluid paint gathers in the valleys and thins on the peaks.
     pub(crate) fn settle(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32]) -> Vec<f32> {
         let sets = vec![SET_TIME; add.len()];
-        self.settle_for(rect, add, stiff, &sets, false)
+        self.settle_for(rect, add, stiff, &sets, false, None)
     }
 
     /// The surface with the wet paint on it, as the painter's raking light
@@ -284,9 +284,16 @@ impl Canvas {
     /// relief under it (engine 4, `BRIDGE_UM`): a liquid's surface levels as
     /// surface tension pulls it flat, the thinner the liquid the sooner, so a
     /// thinned film is no less level than its paint alone would be.
+    /// With the drain switch only the paint still liquid bridges it: a
+    /// packed layer follows the relief (`settle_for`).
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
+        // (the drain switch: the paint still liquid, above a packed layer)
+        let liquid = |i: usize| {
+            let paint = self.wet.vol[i] * COAT_UM;
+            if self.drain { paint - paint * self.wet.hide[i][7].clamp(0.0, 1.0) } else { paint }
+        };
         if self.engine < 4 {
             return self.height.par_iter().zip(&wet).map(|(a, b)| a + b).collect();
         }
@@ -303,15 +310,24 @@ impl Canvas {
                 if a <= 0.0 {
                     return self.height[i];
                 }
-                let keep = if self.liquid_film_levels { (-a / BRIDGE_UM).exp() } else { (-self.wet.vol[i] * COAT_UM / BRIDGE_UM).exp() };
+                let bridge = if self.liquid_film_levels { liquid(i) + self.wet.solv.get(i).copied().unwrap_or(0.0) } else { liquid(i) };
+                let keep = (-bridge / BRIDGE_UM).exp();
                 fine[i] + (self.height[i] - fine[i]) * keep + a
             })
             .collect()
     }
 
     /// `settle`, with each pixel's paint leveling for its own time `sets`
-    /// (s): how long it stayed fluid (see `drying`).
-    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool) -> Vec<f32> {
+    /// (s): how long it stayed fluid (see `drying`). With `fluid`, only that
+    /// share of each pixel's film flows (the drain switch: the rest has
+    /// packed on an absorbent ground, `bristle::ground_drain`). The packed
+    /// layer is a filter cake bonded to the ground: it follows the relief
+    /// and keeps its thickness, and the liquid above it levels over its top,
+    /// its depth setting how fast (as depth cubed) and how much of the relief
+    /// under it it bridges. Only the liquid is rescaled and conserved, so no
+    /// pixel ends below its packed layer, and the film returned is the two's.
+    /// Where nothing has packed (`fluid` 1) it is as without `fluid`.
+    pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool, fluid: Option<&[f32]>) -> Vec<f32> {
         // far below any film is nothing at all (see ADD_EPS_UM): zero it so
         // float residue can't pose as paint in the ratios below
         let clean: Vec<f32>;
@@ -320,6 +336,18 @@ impl Canvas {
             &clean[..]
         } else {
             add
+        };
+        // (the drain switch: each pixel's packed layer, which stays as it
+        // is, and the liquid above it, which levels; a liquid far below any
+        // film is none, see ADD_EPS_UM: that pixel is packed through)
+        let split: Option<(Vec<f32>, Vec<f32>)> = fluid.map(|f| {
+            let liquid: Vec<f32> = add.iter().zip(f).map(|(&a, &f)| if a * f < ADD_EPS_UM { 0.0 } else { a * f }).collect();
+            let packed = add.iter().zip(&liquid).map(|(&a, &l)| a - l).collect();
+            (packed, liquid)
+        });
+        let (liq, under): (&[f32], Option<&[f32]>) = match &split {
+            Some((p, l)) => (&l[..], Some(&p[..])),
+            None => (add, None),
         };
         let (x0, y0, x1, y1) = rect;
         let (rw, rh) = (x1 - x0, y1 - y0);
@@ -348,7 +376,7 @@ impl Canvas {
         out.par_chunks_mut(rw).enumerate().for_each(|(y, row)| {
             for x in 0..rw {
                 let i = y * rw + x;
-                let a = add[i];
+                let a = liq[i];
                 if a <= 0.0 {
                     row[x] = 0.0;
                     continue;
@@ -360,15 +388,22 @@ impl Canvas {
                 let d1 = shrink(s[i] - l1[i], k1, c1);
                 let d2 = shrink(l1[i] - l2[i], k2, c2);
                 let lev = l2[i] + d1 + d2;
-                // the wet film can move sideways but not dig into what's under it
-                row[x] = (lev - old[i]).max(0.0);
+                // the wet film can move sideways but not dig into what's
+                // under it (with the drain switch, the liquid levels over
+                // the packed layer's top)
+                let base = match under {
+                    Some(p) if p[i] > 0.0 => old[i] + p[i],
+                    _ => old[i],
+                };
+                row[x] = (lev - base).max(0.0);
             }
         });
         // conserve paint: the leveled shape says where the wet film gathers,
         // but only the paint that was put down can move, and only nearby.
         // Rescale by the ratio of paint laid to paint kept, both averaged
         // over the leveling distance, so each neighborhood keeps its volume.
-        box_blur_into(add, rw, rh, r2, mid);
+        // (With the drain switch only the liquid is laid, kept and moved.)
+        box_blur_into(liq, rw, rh, r2, mid);
         box_blur_into(mid, rw, rh, r2, laid);
         box_blur_into(&out, rw, rh, r2, mid);
         box_blur_into(mid, rw, rh, r2, kept);
@@ -376,16 +411,27 @@ impl Canvas {
             // (a ratio of blur residues is not a ratio: it can overflow and
             // turn 0 × ∞ into NaN, which then paints full masstone)
             let r = laid[i] / kept[i];
-            if add[i] <= 0.0 {
+            if liq[i] <= 0.0 {
                 *o = 0.0;
             } else if kept[i] > laid[i] * 1e-3 && r.is_finite() && (*o * r).is_finite() {
                 *o *= r;
             } else {
                 // everything drained away: nowhere to pool, keep it in place
-                *o = add[i];
+                *o = liq[i];
             }
         });
-        conserve_total(add, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        conserve_total(liq, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        // (the drain switch: the liquid, which bridges the relief, and the
+        // film, the packed layer under it plus the liquid)
+        let liquid = under.map(|p| {
+            let l = out.clone();
+            out.par_iter_mut().zip(p).for_each(|(o, &p)| {
+                if p > 0.0 {
+                    *o += p;
+                }
+            });
+            l
+        });
         self.raise(rect, &old, add, &out);
         // engine 4: a thick film bridges the fine relief under it (the weave,
         // the ground's brush marks): its top is shaped by the brush, not by
@@ -399,8 +445,10 @@ impl Canvas {
                 for x in 0..rw {
                     let i = y * rw + x;
                     if add[i] > 0.0 {
-                        // (by the film as it leveled here: thin on a peak it drained from)
-                        let keep = (-out[i].max(0.0) / BRIDGE_UM).exp();
+                        // (by the film as it leveled here: thin on a peak it
+                        // drained from; with the drain switch its liquid)
+                        let depth = liquid.as_ref().map_or(out[i], |l| l[i]);
+                        let keep = (-depth.max(0.0) / BRIDGE_UM).exp();
                         self.height[(y0 + y) * w + x0 + x] -= (old[i] - fine[i]) * (1.0 - keep);
                     }
                 }

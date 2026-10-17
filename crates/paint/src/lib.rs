@@ -102,6 +102,16 @@ pub use shape::Shape;
 ///   reimplements for speed. A log asks for it with `--@ engine 7`.
 /// - 8: engine 7, and a stroke's mark reaches the end of its path
 ///   (`REACH_END`, `bristle::drag_on`).
+///
+/// A switch rides on engine 5 and 7 without a number of its own (an easel
+/// log's head names it; a log without it replays as it was painted):
+/// - the drain switch (`Canvas::with_drain`, `--@ drain`): an absorbent
+///   ground drains paint as its pigment allows (`bristle::ground_drain`): to
+///   the oil left when the pigment packs, and below it only for pigments
+///   coarser than the ground's pores, the packed layer growing up from the
+///   ground while the surface keeps its oil, flow and gloss; a rag's smear
+///   is drained as a brush's paint is, and blotting stops at the drained
+///   floor (notes/research/pigment_oil.md).
 pub const ENGINE: u32 = 5;
 
 /// Engine 8: a brush stroke's mark reaches the end of its path. Before it

@@ -1820,7 +1820,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     sty.raw = f.color;
                 }
                 let width = st.borrow().width;
-                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+                // (the drain switch rides on the box, `session::DRAIN_MARK`;
+                // the ground is prepared alike either way)
+                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_drain(tubes.drain);
                 if let Some(f) = &fabric {
                     c.raw_canvas(f.clone(), seed);
                 }
@@ -1927,6 +1929,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             check_set_out(&st, &parts, "pile")?;
             let name = t.get::<Option<String>>("name")?;
             let given_sum: f32 = given.iter().map(|g| g.1).sum();
+            let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts.clone(), given_sum, medium, turps, oil_rate, name, "pile")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
             // knifing it takes the hand a while
@@ -1979,6 +1982,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             mix.solvent = solvent;
             mix.oil_rate = oil;
             let name = t.get::<Option<String>>("name")?;
+            let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts, wsum, medium, solvent, oil, name, "mix")?;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);
@@ -2148,8 +2152,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 (v, _) => tool_of(v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
-            let engine = st1.borrow().tubes.engine;
-            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine)));
+            let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
+            let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(drain)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
             Ok(Brush { held, st: st1.clone() })
         })?)?;
@@ -2171,7 +2175,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(2.0..=200.0).contains(&width) {
                 return err("knife{width=}: the blade's length in units, 2 to 200");
             }
-            let k = Rc::new(RefCell::new(paint::Knife::new(width)));
+            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_packing(st1.borrow().tubes.drain)));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             Ok(KnifeU { k, st: st1.clone() })
         })?)?;

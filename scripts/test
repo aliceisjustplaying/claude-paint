@@ -127,6 +127,7 @@ check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check atelier "cd atelier && $pytest -rs ." "$passed"
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
+check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'

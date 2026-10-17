@@ -40,7 +40,11 @@ for profile in "${profiles[@]}"; do
     [ "$(cat "$dest/notes/easel_guide.md")" = "$committed" ] || { echo "$profile: the guide isn't the committed one" >&2; exit 1; }
   else
     [ "$(cat "$dest/bin/box")" = "$box" ] || { echo "$profile: bin/box isn't $box" >&2; exit 1; }
-    [ -s "$dest/notes/research/${profile//-/_}_materials.md" ] || { echo "$profile: no materials note" >&2; exit 1; }
+    if [ "$profile" = tonn ] && ! git -C "$repo" cat-file -e "$R16_BRANCH:notes/research/tonn_materials.md" 2>/dev/null; then
+      [ ! -e "$dest/notes/research/tonn_materials.md" ] || { echo "$profile: unexpected materials note" >&2; exit 1; }
+    else
+      [ -s "$dest/notes/research/${profile//-/_}_materials.md" ] || { echo "$profile: no materials note" >&2; exit 1; }
+    fi
     ! grep -lE '^## Sources|\[[A-Z]{2}[^]]*\]' "$dest"/notes/research/*.md || { echo "$profile: sources left in a painter's note" >&2; exit 1; }
     # the guide outside the table is the committed guide's
     strip() { awk -v head="$head" '$0 == head { skip = 1; next } skip && /^\|/ { next } { skip = 0; print }'; }

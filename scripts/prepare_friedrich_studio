@@ -30,6 +30,10 @@ READING = (
     "until it is null to read the full text."
 )
 TOOLS = "paint,look,probe,note,status,log,read,reference,reference_list"
+DIE_ROLL_SECTION = (
+    "## Choosing the picture\n"
+    "Before you paint, write eight different pictures you could make from this brief in notes/concepts.md, numbered 1 to 8, each in a sentence or two. After each one, write your estimate of how many painters out of a hundred given this brief would make that picture. The studio sets aside the two with the highest estimates, rolls a die among the other six and tells you which one is yours. You make every decision from there, and the picture can develop wherever the painting takes it.\n\n"
+)
 # --critic (harness/painter/visit.ts): a second painter visits as a critic
 CRITIC_READING = (
     "\n\n"
@@ -42,7 +46,7 @@ CRITIC_READING = (
 )
 
 
-def corrected_runner(source, tools=TOOLS, reading=READING):
+def corrected_runner(source, tools=TOOLS, reading=READING, die_roll=False):
     lines = source.splitlines(keepends=True)
     changes = []
     found = set()
@@ -75,13 +79,25 @@ def corrected_runner(source, tools=TOOLS, reading=READING):
     for start, end, replacement in sorted(changes + entrypoint, reverse=True):
         lines[start - 1:end] = [replacement]
     result = "".join(lines)
+    if die_roll:
+        tree = ast.parse(result)
+        hooks = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "stem" for t in node.targets)
+                 and 'p{n}_s{k}' in ast.get_source_segment(result, node)]
+        if len(hooks) != 1:
+            raise ValueError("house runner differs: expected one sitting opener")
+        lines = result.splitlines(keepends=True)
+        hook = hooks[0]
+        indent = " " * hook.col_offset
+        lines.insert(hook.lineno - 1, indent + 'if k == 1 and not cont:\n' + indent + '    msg = DIE_ROLL_OPENING + "\\n\\n" + msg\n')
+        result = "".join(lines)
     if "friedrich_painter.md" in result or "notes/research/trees.md" in result:
         raise ValueError("house runner still supplies the retired required reading")
     ast.parse(result)
     return result
 
 
-def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
+def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die_roll=False):
     if (studio / "bin/box").read_text().strip() != "friedrich":
         raise ValueError("expected an exported Friedrich studio")
     if (studio / "out").exists() or any((studio / "paintings/lua").iterdir()) or (studio / "notes/journal.md").read_text():
@@ -93,11 +109,15 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
     if not (studio / "notes/reference-library.json").is_file():
         raise ValueError("export the reference library before preparing the brief")
     tools, reading = (TOOLS + ",ask_critic", READING + CRITIC_READING) if critic else (TOOLS, READING)
-    source = corrected_runner((house / "r21_chains.py").read_text(), tools, reading)
+    source = corrected_runner((house / "r21_chains.py").read_text(), tools, reading, die_roll)
     template = (house / "brief_template.md").read_text()
     for placeholder in ("{OPENING}", "{STUDIO}", "{READING}"):
         if template.count(placeholder) != 1:
             raise ValueError("house brief template differs: " + placeholder)
+    if die_roll:
+        if template.count("## Working\n") != 1:
+            raise ValueError("house brief template differs: Working")
+        template = template.replace("## Working\n", DIE_ROLL_SECTION + "## Working\n")
     brief = template.replace("{OPENING}", OPENING).replace("{STUDIO}", str(studio)).replace("{READING}", reading)
     strip = runpy.run_path(str(Path(__file__).with_name("strip_sources")))["strip"]
     runner.mkdir(parents=True)
@@ -108,9 +128,18 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
     (studio / "notes/studio_notes.md").write_text(notes)
     (runner / "studio_notes.md").write_text(notes)
     repo = Path(__file__).resolve().parent.parent
+    if die_roll:
+        (runner / "brief_template.md").write_text(template)
+        shutil.copy2(repo / "harness/painter/die_roll.py", runner / "die_roll.py")
     shutil.copy2(repo / "harness/painter/run_friedrich.py", runner / "run.py")
+    if die_roll:
+        entrypoint = (runner / "run.py").read_text()
+        hook = '    if R.paint("OPUS", 1, STUDIO, RUN / "OPUS") is None:\n'
+        if entrypoint.count(hook) != 1:
+            raise ValueError("prepared entrypoint differs: expected one paint call")
+        (runner / "run.py").write_text(entrypoint.replace(hook, '    from die_roll import choose\n    R.DIE_ROLL_OPENING = choose(R, MODEL, STUDIO, RUN)\n' + hook))
     revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
-    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {})}, indent=2) + "\n")
+    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {}), **({"die_roll": True} if die_roll else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
     guide = studio / "notes/easel_guide.md"
     if critic and guide.is_file():
@@ -130,8 +159,9 @@ def main():
     parser.add_argument("--studio-notes", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--critic", action="store_true", help="a second painter visits as a critic (harness/painter/visit.ts)")
+    parser.add_argument("--die-roll", action="store_true", help="write eight concepts in sitting 0, then roll among the six least common")
     args = parser.parse_args()
-    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic)
+    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic, args.die_roll)
 
 
 if __name__ == "__main__":

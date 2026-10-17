@@ -1365,6 +1365,15 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         "blend" => sty.blend().ok_or_else(|| mlua::Error::runtime("this style has no blender"))?,
         o => return err(format!("hand {o:?}: broad, body, detail, hatch, glaze, scumble or blend")),
     };
+    // a painting with the glaze film: the glaze and the scumble lay a thin
+    // film, their coverage the share of the mask it reaches
+    if st.borrow().canvas.as_ref().is_some_and(|c| c.glaze_film()) {
+        match hand.as_str() {
+            "glaze" => h = h.film(paint::Style::GLAZE_FILM),
+            "scumble" => h = h.film(paint::Style::SCUMBLE_FILM),
+            _ => {}
+        }
+    }
     if let Some(t) = o.get::<Option<Value>>("tool")? {
         h.tool = tool_of(&t)?;
     }

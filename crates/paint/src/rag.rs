@@ -1267,6 +1267,20 @@ mod tests {
     use super::*;
     use crate::wet::OIL_VOLUME;
 
+    #[test]
+    fn a_drained_rag_smear_conserves_integrated_scattering() {
+        let mut c = Canvas::new(2, 1.0, [0.3; 3]).with_engine(5).with_drain(true);
+        c.ground_finish(1.0);
+        let pl = Pool { hide: [1.0, 0.6, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, 0.5, 0.0], ..Pool::default() };
+        let mut mass = 0.0;
+        for v in [1.0, 0.2, 0.4] {
+            c.rag_lay(0, v, &pl, 0.0);
+            mass += v * pl.hide[0];
+            assert!((c.wet.vol[0] * c.wet.hide[0][0] - mass).abs() < 1e-6, "{mass} -> {}", c.wet.vol[0] * c.wet.hide[0][0]);
+        }
+        assert!(c.wet.vol[0] < 1.6);
+    }
+
     /// With the drain switch an absorbent ground drains what a rag smears
     /// onto it, as it drains paint a brush lays (`bristle::ground_drain`):
     /// on bare absorbent ground the smear loses oil down toward its drained

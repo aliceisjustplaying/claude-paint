@@ -113,9 +113,13 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
     (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
     guide = studio / "notes/easel_guide.md"
-    if guide.is_file():
-        rewrite = runpy.run_path(str(repo / "scripts/studio_guide.py"))["rewrite"]
-        guide.write_text(rewrite(guide.read_text(), reference_library=True, critic=critic))
+    if critic and guide.is_file():
+        text = guide.read_text()
+        table = "| tool | what it does |\n|---|---|\n"
+        start = text.index(table) + len(table)
+        end = text.index("\n\n", start) + 1
+        description = json.loads((repo / "harness/easel_mcp/critic-tools.json").read_text())[0]["description"]
+        guide.write_text(text[:end] + f"| `ask_critic` | {description} |\n" + text[end:])
 
 
 def main():

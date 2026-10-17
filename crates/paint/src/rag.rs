@@ -1137,3 +1137,96 @@ pub fn plan_region(m: &Mask, w: f32, ang: f32, shift: f32, rng: &mut Rng) -> Vec
     }
     out
 }
+
+
+#[cfg(test)]
+mod rag_lift {
+    use super::*;
+    use crate::color::{hex, luminance};
+    use crate::{Knife, Paint};
+
+    /// A 400 px canvas, light ground, with dark knife paint (wet) pulled
+    /// down at each of `xs` from y 200 to 800.
+    fn dark_wet(lift: bool, xs: &[f32]) -> Canvas {
+        let mut c = Canvas::new(400, 1.0, hex("#e8e0d0")).with_engine(crate::engine7::ENGINE).with_rag_lift(lift);
+        let mut k = Knife::new(120.0);
+        for &x in xs {
+            k.load(Paint::body(hex("#1c2430")), 1.0);
+            c.knife(&mut k, &[(x, 200.0), (x, 800.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+        }
+        c
+    }
+
+    /// The wet film (µm) of each pixel in the box (units), and their mean
+    /// luminance.
+    fn film(c: &Canvas, b: (f32, f32, f32, f32)) -> (Vec<f32>, f32) {
+        let (w, s) = (c.f.w, c.f.scale);
+        let px = |u: f32| (u * s) as usize;
+        let seen = c.seen();
+        let ix: Vec<usize> = (px(b.1)..px(b.3)).flat_map(|y| (px(b.0)..px(b.2)).map(move |x| y * w + x)).collect();
+        let lum = ix.iter().map(|&i| luminance(seen[i])).sum::<f32>() / ix.len() as f32;
+        (ix.iter().map(|&i| c.wet.vol[i].max(0.0) * COAT_UM).collect(), lum)
+    }
+
+    /// A rag dipped in spirits wiped from a wet dark passage on across bare
+    /// ground: the passage's film thins and the ground's color comes back
+    /// through it, and none of what the rag took comes down on the ground it
+    /// goes on over. Without the switch (older logs) the face smears some of
+    /// it back there.
+    #[test]
+    fn a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along() {
+        for lift in [true, false] {
+            let mut c = dark_wet(lift, &[330.0, 430.0]);
+            let core = (330.0, 480.0, 430.0, 520.0);
+            let beyond = (560.0, 440.0, 860.0, 560.0);
+            let (f0, l0) = film(&c, core);
+            let (_, ground) = film(&c, beyond);
+            let mut r = Rag::new(80.0, 7);
+            let now = c.now_min();
+            r.dip(0.5, now, c.tally_mut());
+            c.rag_wipe(&mut r, &[(250.0, 500.0), (900.0, 500.0)], &[0.6], 11);
+            let (f1, l1) = film(&c, core);
+            let (fb, _) = film(&c, beyond);
+            let (t0, t1) = (f0.iter().sum::<f32>(), f1.iter().sum::<f32>());
+            let laid = fb.iter().sum::<f32>() / fb.len() as f32;
+            if lift {
+                assert!(t1 < 0.3 * t0, "the passage's film {t0} -> {t1} µm·px");
+                assert!(l1 - l0 > 0.5 * (ground - l0), "luminance {l0} -> {l1}, ground {ground}");
+                assert_eq!(laid, 0.0, "film laid on the bare ground beyond: {laid} µm");
+            } else {
+                assert!(laid > 0.0, "older logs smear some back: {laid} µm");
+            }
+        }
+    }
+
+    /// A wipe over a mask laid on a wider wet film lifts inside the mask and
+    /// leaves the film outside it as it was. Without the switch the pad's
+    /// rim reaches past the mask and lifts there too.
+    #[test]
+    fn a_mask_wipe_lifts_nothing_outside_its_mask() {
+        for lift in [true, false] {
+            let mut c = dark_wet(lift, &[260.0, 360.0, 460.0, 560.0, 660.0, 740.0]);
+            let m = Mask::from_fn(c.frame(), |x, y| if (400.0..600.0).contains(&x) && (400.0..600.0).contains(&y) { 1.0 } else { 0.0 });
+            let around = (330.0, 330.0, 670.0, 670.0);
+            let inside = (420.0, 420.0, 580.0, 580.0);
+            let (f0, _) = film(&c, around);
+            let (i0, _) = film(&c, inside);
+            let mut r = Rag::new(60.0, 3);
+            c.rag_region(&mut r, &m, &RagPass { pressure: 0.6, angle: 0.0, passes: 1, refold: Some(0.5), seed: 5 });
+            let (f1, _) = film(&c, around);
+            let (i1, _) = film(&c, inside);
+            let (w, s) = (((670.0 - 330.0) * c.f.scale) as usize, c.f.scale);
+            let outside = |k: usize| {
+                let (x, y) = (330.0 + ((k % w) as f32 + 0.5) / s, 330.0 + ((k / w) as f32 + 0.5) / s);
+                !(400.0..600.0).contains(&x) || !(400.0..600.0).contains(&y)
+            };
+            let moved: f32 = (0..f0.len()).filter(|&k| outside(k)).map(|k| (f1[k] - f0[k]).abs()).sum();
+            assert!(i1.iter().sum::<f32>() < 0.5 * i0.iter().sum::<f32>(), "inside the mask the film thins");
+            if lift {
+                assert_eq!(moved, 0.0, "film outside the mask changed by {moved} µm·px");
+            } else {
+                assert!(moved > 0.0, "older logs lift past the mask");
+            }
+        }
+    }
+}

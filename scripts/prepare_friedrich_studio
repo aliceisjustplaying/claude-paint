@@ -29,7 +29,7 @@ READING = (
     "Read a result with `reference` by its id; follow next_page\n"
     "until it is null to read the full text."
 )
-TOOLS = "paint,look,note,status,log,read,reference,reference_list"
+TOOLS = "paint,look,probe,note,status,log,read,reference,reference_list"
 # --critic (harness/painter/visit.ts): a second painter visits as a critic
 CRITIC_READING = (
     "\n\n"
@@ -112,6 +112,9 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False):
     revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
     (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
+    rewrite = runpy.run_path(str(repo / "scripts/studio_guide.py"))["rewrite"]
+    guide = studio / "notes/easel_guide.md"
+    guide.write_text(rewrite(guide.read_text(), critic=critic, reference_library=True))
 
 
 def main():

@@ -468,6 +468,14 @@ impl Session {
             .collect()
     }
 
+    pub fn mask(&self, name: &str) -> Result<std::sync::Arc<paint::Mask>, String> {
+        let found = self.globals.get(name).filter(|(_, c)| *c > 0).map(|(v, _)| v);
+        if let Some(Value::UserData(u)) = found && let Ok(m) = u.borrow::<api::M>() {
+            return Ok(std::sync::Arc::new((*m.0).clone()));
+        }
+        Err(format!("look --mask {name}: no global mask with that name"))
+    }
+
     /// What the global `name` puts on a knife held up to the canvas (the look
     /// `--hold`): a knife's own load, with its blade's length and how full it
     /// is, or a pile as its heap is on the board now, as a fresh full load on

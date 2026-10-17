@@ -17,6 +17,8 @@ does; this says how to use them. What you paint is yours to choose.
 - **Coordinates.** A look's pixels are not canvas units. Use `grid: true` (or
   a crop with `grid: 10`) to read positions off a look before you aim a mask
   at something you saw.
+  `mask: "<name>"` shows a saved global mask's outline and a light fill over
+  the view; several names may be comma-separated.
 
 ## Before another pass: a decision checklist
 

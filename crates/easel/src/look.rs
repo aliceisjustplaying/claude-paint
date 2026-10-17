@@ -9,6 +9,7 @@ use image::ImageEncoder;
 use paint::color::luminance;
 use paint::{Canvas, Rgb};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Clone, Default)]
 pub struct View {
@@ -17,7 +18,7 @@ pub struct View {
     pub value: bool,
     pub squint: bool,
     pub mirror: bool,
-    /// Whole-view longest side, px (None: 1000, capped at 1600). Crops are shown at `LOOK_SCALE` px a unit (a 2400 px canvas's own).
+    /// Longest side, px (whole: 1000, capped at 1600; crop: capped at 1200).
     pub size: Option<usize>,
     /// Coordinate grid: Some(0) picks the step from the zoom.
     pub grid: Option<f32>,
@@ -26,9 +27,11 @@ pub struct View {
     pub light: Option<(f32, f32)>,
     /// The palette instead of the canvas (`palette`).
     pub palette: bool,
+    pub mask: Vec<String>,
+    pub overlays: Vec<Arc<paint::Mask>>,
 }
 
-const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N | --palette";
+const LOOK_ARGS: &str = "--crop x0,y0,x1,y1 --mode value,squint,mirror,relief,gallery --light azimuth,elevation --grid [step] --size N --mask name[,name] | --palette";
 
 /// The relief look's default light: from the upper left, raking at 25°.
 const RAKING: (f32, f32) = (135.0, 25.0);
@@ -95,11 +98,20 @@ impl View {
                     }
                 }
                 "--palette" => v.palette = true,
+                "--mask" => {
+                    for name in next()?.split(',') {
+                        let name = name.trim();
+                        if name.is_empty() {
+                            return Err("--mask needs a mask name (or several, comma-separated)".into());
+                        }
+                        v.mask.push(name.to_string());
+                    }
+                }
                 o => return Err(format!("look: unknown argument {o:?} ({LOOK_ARGS})")),
             }
             i += 1;
         }
-        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some()) {
+        if v.palette && (v.crop.is_some() || v.value || v.squint || v.mirror || v.light.is_some() || v.size.is_some() || v.grid.is_some() || !v.mask.is_empty()) {
             return Err("look: --palette takes no other option".into());
         }
         Ok(v)
@@ -348,7 +360,7 @@ fn draw_grid(img: &mut Img, m: &Map, step: f32, fs: i64) -> std::result::Result<
 /// The pixels to a canvas unit a crop is shown at (the 2400 px canvas's own).
 const LOOK_SCALE: f32 = 2.4;
 
-/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops are shown at `LOOK_SCALE`, at most 1200 px per side.
+/// Render a PNG to `out`: whole views fit 1600 px and 3 MB; crops fit 1200 px per side.
 pub fn look(c: &Canvas, v: &View, out: &Path) -> std::result::Result<(usize, usize), String> {
     let (w, h, png) = render(c, v)?;
     if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
@@ -432,13 +444,9 @@ pub fn render_seen(c: &Canvas, v: &View, seen: Option<&[Rgb]>) -> std::result::R
     render_pixels(c.window(), v, px)
 }
 
-pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Result<(usize, usize, Vec<u8>), String> {
-    if f.w.checked_mul(f.h) != Some(px.len()) {
-        return Err("look: optical pixels do not match the captured frame".into());
-    }
-    // crop: units -> whole-canvas pixels -> pixels of the held window
+fn crop_bounds(f: paint::Frame, v: &View) -> Result<(usize, usize, usize, usize), String> {
     let (wx0, wy0, wx1, wy1) = (f.x0, f.y0, f.x0 + f.w, f.y0 + f.h);
-    let (x0, y0, x1, y1) = match v.crop {
+    let bounds = match v.crop {
         None => (wx0, wy0, wx1, wy1),
         Some([a, b, cc, d]) => {
             let s = f.scale;
@@ -450,26 +458,56 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
             r
         }
     };
+    Ok(bounds)
+}
+
+pub fn crop_scale(f: paint::Frame, v: &View, w: usize, h: usize) -> Result<String, String> {
+    if v.crop.is_none() {
+        return Ok(String::new());
+    }
+    let (x0, y0, x1, y1) = crop_bounds(f, v)?;
+    Ok(format!("; scale {:.4} x {:.4} px/unit", w as f32 * f.scale / (x1 - x0) as f32, h as f32 * f.scale / (y1 - y0) as f32))
+}
+
+fn draw_masks(img: &mut Img, map: &Map, masks: &[Arc<paint::Mask>]) {
+    let colors = [[1.0, 0.15, 0.65], [0.0, 0.85, 1.0], [0.85, 1.0, 0.1]];
+    for (i, mask) in masks.iter().enumerate() {
+        let color = colors[i % colors.len()];
+        let sample = |x: i64, y: i64| {
+            let (u, v) = map.from(x as f32 + 0.5, y as f32 + 0.5);
+            mask.sample(u, v).clamp(0.0, 1.0)
+        };
+        for y in 0..img.h {
+            for x in 0..img.w {
+                let a = sample(x as i64, y as i64);
+                img.blend(x as i64, y as i64, color, 0.14 * a);
+                let inside = a >= 0.5;
+                let edge = [(x as i64 - 1, y as i64), (x as i64 + 1, y as i64), (x as i64, y as i64 - 1), (x as i64, y as i64 + 1)].iter().any(|&(xx, yy)| {
+                    (sample(xx, yy) >= 0.5) != inside
+                });
+                if edge {
+                    img.blend(x as i64, y as i64, color, 0.9);
+                }
+            }
+        }
+    }
+}
+
+pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Result<(usize, usize, Vec<u8>), String> {
+    if f.w.checked_mul(f.h) != Some(px.len()) {
+        return Err("look: optical pixels do not match the captured frame".into());
+    }
+    let (wx0, wy0) = (f.x0, f.y0);
+    let (x0, y0, x1, y1) = crop_bounds(f, v)?;
     let (cw, ch) = (x1 - x0, y1 - y0);
     let long = cw.max(ch);
     // a crop is shown at LOOK_SCALE px to a unit whatever the canvas's own width:
     // a painting begun at 4800 px looks to its painter as one begun at 2400 does
     let shown = |n: usize| if f.scale > LOOK_SCALE { ((n as f32 * LOOK_SCALE / f.scale).round() as usize).max(1) } else { n };
-    if v.crop.is_some() && (shown(cw) > 1200 || shown(ch) > 1200) {
-        let units = 1200.0 / f.scale.min(LOOK_SCALE);
-        let side = (units / 2.0).floor().max(1.0);
-        let a = wx0 as f32 / f.scale;
-        let b = wy0 as f32 / f.scale;
-        return Err(format!(
-            "--crop exceeds 1200 pixels per side (a crop is shown at 2.4 pixels a unit); coordinates are canvas units, x0,y0,x1,y1 (opposite corners). At this canvas resolution each side may span at most {units:.2} units; example: --crop {a:.2},{b:.2},{:.2},{:.2}",
-            a + side,
-            b + side
-        ));
-    }
     if long == 0 || cw == 0 || ch == 0 {
         return Err("look: canvas is empty".into());
     }
-    let mut size = if v.crop.is_some() { shown(long) } else { v.size.unwrap_or(1000).clamp(1, 1600) };
+    let mut size = if v.crop.is_some() { shown(long).min(v.size.unwrap_or(1200).clamp(1, 1200)) } else { v.size.unwrap_or(1000).clamp(1, 1600) };
     loop {
         // Average down from the original canvas on each attempt; never enlarge.
         let (ow, oh, img): (usize, usize, Vec<Rgb>) = if long > size {
@@ -509,6 +547,7 @@ pub fn render_pixels(f: paint::Frame, v: &View, px: &[Rgb]) -> std::result::Resu
         };
         let fs = if ow.max(oh) >= 1500 { 3 } else { 2 };
         let mut im = Img { w: ow, h: oh, px: img };
+        draw_masks(&mut im, &map, &v.overlays);
         if let Some(step) = v.grid {
             draw_grid(&mut im, &map, step, fs)?;
         }
@@ -655,4 +694,82 @@ fn blur(img: &[Rgb], w: usize, h: usize, r: f32) -> Vec<Rgb> {
         }
     }
     a
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(args: &[&str]) -> View {
+        View::parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap()
+    }
+
+    #[test]
+    fn crops_of_any_span_are_bounded_and_report_the_actual_scale() {
+        for width in [600, 2400, 4800] {
+            let f = paint::Frame::new(width, width / 5, width as f32 / 1000.0);
+            let px = vec![[0.2, 0.3, 0.4]; f.w * f.h];
+            let v = view(&["--crop", "0,0,1000,100"]);
+            let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+            let expected = width.min(1200);
+            assert_eq!((w, h), (expected, expected / 10));
+            assert_eq!(crop_scale(f, &v, w, h).unwrap(), format!("; scale {:.4} x {:.4} px/unit", expected as f32 / 1000.0, expected as f32 / 1000.0));
+            let small = view(&["--crop", "0,0,1000,100", "--size", "300"]);
+            assert_eq!(render_pixels(f, &small, &px).unwrap().0, 300);
+            let capped = view(&["--crop", "0,0,1000,100", "--size", "9999"]);
+            assert_eq!(render_pixels(f, &capped, &px).unwrap().0, expected);
+        }
+        let f = paint::Frame::new(120, 2400, 2.4);
+        let px = vec![[0.2; 3]; f.w * f.h];
+        let v = view(&["--crop", "-10,-10,50,1000"]);
+        let (w, h, _) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (60, 1200));
+        assert_eq!(crop_scale(f, &v, w, h).unwrap(), "; scale 1.2000 x 1.2000 px/unit");
+        assert!(render_pixels(f, &view(&["--crop", "100,0,200,100"]), &px).is_err());
+    }
+
+    #[test]
+    fn fitting_crops_keep_their_pixels_and_whole_views_keep_their_size() {
+        let f = paint::Frame::new(100, 60, 0.1);
+        let px: Vec<Rgb> = (0..f.w * f.h).map(|i| [i as f32 / 6000.0, 0.2, 0.3]).collect();
+        let v = view(&["--crop", "100,100,300,300"]);
+        let (w, h, png) = render_pixels(f, &v, &px).unwrap();
+        assert_eq!((w, h), (20, 20));
+        let expected: Vec<Rgb> = (10..30).flat_map(|y| px[y * 100 + 10..y * 100 + 30].iter().copied()).collect();
+        assert_eq!(image::load_from_memory(&png).unwrap().to_rgb8().as_raw(), &crate::output::rgb8(&expected, w));
+        let f = paint::Frame::new(2400, 24, 2.4);
+        let px = vec![[0.3; 3]; f.w * f.h];
+        assert_eq!(render_pixels(f, &View::default(), &px).unwrap().0, 1000);
+        assert_eq!(render_pixels(f, &view(&["--size", "2000"]), &px).unwrap().0, 1600);
+        assert_eq!(render_pixels(f, &view(&["--crop", "0,0,500,10"]), &px).unwrap().0, 1200);
+        assert_eq!(render_pixels(f, &view(&["--crop", "0,0,200,10"]), &px).unwrap().0, 480);
+        assert!(crop_scale(f, &View::default(), 1000, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn masks_overlay_fill_and_outlines_in_crop_and_mirror_coordinates() {
+        let f = paint::Frame::new(100, 60, 0.1);
+        let px = vec![[0.2; 3]; f.w * f.h];
+        let mut v = view(&["--mask", "shape, soft"]);
+        assert_eq!(v.mask, ["shape", "soft"]);
+        v.overlays = vec![
+            Arc::new(paint::Mask::from_fn(f, |x, y| if (200.0..400.0).contains(&x) && (100.0..300.0).contains(&y) { 1.0 } else { 0.0 })),
+            Arc::new(paint::Mask::from_fn(f, |x, y| if (600.0..800.0).contains(&x) && (100.0..300.0).contains(&y) { 0.25 } else { 0.0 })),
+        ];
+        let original = image::load_from_memory(&render_pixels(f, &View::default(), &px).unwrap().2).unwrap().to_rgb8();
+        let shown = image::load_from_memory(&render_pixels(f, &v, &px).unwrap().2).unwrap().to_rgb8();
+        assert_eq!(shown.get_pixel(5, 5), original.get_pixel(5, 5));
+        assert_ne!(shown.get_pixel(30, 20), original.get_pixel(30, 20));
+        assert_ne!(shown.get_pixel(70, 20), original.get_pixel(70, 20));
+        assert!(shown.get_pixel(20, 20)[0] > shown.get_pixel(30, 20)[0]);
+        let mut mirrored = v.clone();
+        mirrored.mirror = true;
+        let mirrored = image::load_from_memory(&render_pixels(f, &mirrored, &px).unwrap().2).unwrap().to_rgb8();
+        assert_eq!(mirrored, image::imageops::flip_horizontal(&shown));
+        v.crop = Some([100.0, 0.0, 500.0, 400.0]);
+        let cropped = image::load_from_memory(&render_pixels(f, &v, &px).unwrap().2).unwrap().to_rgb8();
+        assert_eq!(cropped, image::imageops::crop_imm(&shown, 10, 0, 40, 40).to_image());
+        assert!(View::parse(&["--mask".into(), "a,".into()]).is_err());
+        assert!(View::parse(&["--palette".into(), "--mask".into(), "shape".into()]).is_err());
+    }
 }

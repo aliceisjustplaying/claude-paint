@@ -58,6 +58,20 @@
 //! Every other canvas writes version 8 or 9 as before, so a reader that
 //! doesn't know version 10 refuses a raw canvas instead of loading it
 //! without its cloth. A section of any other version is refused too.
+//!
+//! A canvas with the drain switch on (`Canvas::with_drain`, engine 4's
+//! materials and later) is version 14 (`PAINTC14`): version 11's bytes after
+//! the magic, then, after the solvent, the drain section: a `DRAN` mark and
+//! the section's own version (1, `DRAIN_V`), a word saying whether a soak
+//! section follows (1: a raw canvas, whose soak section then ends the file
+//! as in version 12; 0: the drain section is the file's last), and the rest
+//! of each buffer pixel's wet paint (`crate::wet::Prop`'s last five: its
+//! packed oil, drained floor, the share of the film packed on an absorbent
+//! ground, its tube paint's oil by volume and its wax), five f32 each, row
+//! major. The section is there exactly when the switch is on, and so says
+//! it is: a canvas without it is written as before, and a reader that
+//! doesn't know version 14 refuses a draining canvas instead of loading it
+//! without its packing. (Version 13 is left to the paper's section.)
 
 use crate::canvas::{Canvas, Frame};
 use crate::surface::Linen;
@@ -74,9 +88,15 @@ const MAGIC10: &[u8; 8] = b"PAINTC10";
 const MAGIC11: &[u8; 8] = b"PAINTC11";
 /// Engine 4 materials followed by the raw canvas's soak section.
 const MAGIC12: &[u8; 8] = b"PAINTC12";
+/// Version 11 with the drain section (`Canvas::with_drain`), and a raw
+/// canvas's soak section after it if there is one.
+const MAGIC14: &[u8; 8] = b"PAINTC14";
 /// Marks the soak section ("SOAK"), and its version.
 const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
+/// Marks the drain section ("DRAN"), and its version.
+const DRAIN_MARK: u64 = 0x4e415244;
+const DRAIN_V: u64 = 1;
 const QUARTER_TILES: u64 = 1 << 33;
 const ADAPTIVE_SWEEP: u64 = 1 << 34;
 const GLAZE_FILM: u64 = 1 << 36;
@@ -188,7 +208,7 @@ pub fn read_header(r: &mut impl Read) -> io::Result<String> {
     read_magic_header(r).map(|(_, h)| h)
 }
 
-/// The format version (7–12) and the header. An engine-3 canvas in a
+/// The format version (7–12 or 14) and the header. An engine-3 canvas in a
 /// PAINTCK8 file whose header says so (`engine=3`, as an easel save's
 /// does) is refused here, before anything else is read.
 fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
@@ -201,6 +221,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC10 => 10,
         m if m == MAGIC11 => 11,
         m if m == MAGIC12 => 12,
+        m if m == MAGIC14 => 14,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
     };
     let n = get_u64(r)? as usize;
@@ -227,7 +248,12 @@ impl Canvas {
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
         }
+        // (the drain switch: version 14 holds version 11's bytes)
+        if self.drain && self.engine < 4 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "the drain switch drains engine 4's oil: this canvas is set to an older engine"));
+        }
         let version = match (self.engine, self.soak.is_some()) {
+            _ if self.drain => 14,
             (3, true) => 10,
             (3, false) => 9,
             (4.., true) => 12,
@@ -235,6 +261,7 @@ impl Canvas {
             _ => 8,
         };
         w.write_all(match version {
+            14 => MAGIC14,
             12 => MAGIC12,
             11 => MAGIC11,
             10 => MAGIC10,
@@ -278,8 +305,8 @@ impl Canvas {
         put_all(w, wt.lat.iter().flat_map(|l| *l))?;
         if version >= 11 {
             // (engine 4's five properties: the pigment's packing, `Prop`'s
-            // last five, stays in memory, and reads back as paint naming no
-            // tubes)
+            // last five, is the drain section's, version 14; without it, it
+            // reads back as paint naming no tubes)
             put_all(w, wt.hide.iter().flat_map(|h| [h[0], h[1], h[2], h[3], h[4]]))?;
         } else {
             // (three properties, as before engine 4: its paint is a tube's in oil)
@@ -337,6 +364,14 @@ impl Canvas {
             } else {
                 put_all(w, std::iter::repeat_n(0.0f32, n))?;
             }
+        }
+        // the drain section (version 14): whether a soak section follows,
+        // and the pigment's packing per pixel
+        if version == 14 {
+            put_u64(w, DRAIN_MARK)?;
+            put_u64(w, DRAIN_V)?;
+            put_u64(w, u64::from(self.soak.is_some()))?;
+            put_all(w, wt.hide.iter().flat_map(|h| [h[5], h[6], h[7], h[8], h[9]]))?;
         }
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
@@ -414,7 +449,8 @@ impl Canvas {
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
         wet.lat = lat.as_chunks::<LAT>().0.to_vec();
-        // (the pigment's packing is not written: paint naming no tubes')
+        // (the pigment's packing is the drain section's, version 14; else
+        // paint naming no tubes')
         let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
         wet.hide = if version >= 11 {
             get_all(r, n * 5)?.as_chunks::<5>().0.iter().map(|h| [h[0], h[1], h[2], h[3], h[4], p, f, 0.0, q, 0.0]).collect()
@@ -500,7 +536,7 @@ impl Canvas {
             }
         } else {
             if c.engine >= 4 {
-                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11 or PAINTC12"));
+                return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11, PAINTC12 or PAINTC14"));
             }
             // (an older engine's canvas: an oil ground's gloss, nothing absorbent)
             c.gloss = vec![crate::canvas::OIL_GROUND_GLOSS; n];
@@ -521,8 +557,41 @@ impl Canvas {
             }
             (false, false) => {}
         }
+        // the drain section (version 14): the switch, the pigment's packing
+        // per pixel, and whether a soak section follows
+        let raw = match version {
+            10 | 12 => true,
+            14 => {
+                if get_u64(r)? != DRAIN_MARK {
+                    return Err(bad("checkpoint drain mark is wrong"));
+                }
+                match get_u64(r)? {
+                    DRAIN_V => {}
+                    v => return Err(bad(&format!("checkpoint drain section is version {v}; this easel reads version {DRAIN_V} only"))),
+                }
+                let raw = match get_u64(r)? {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(bad("checkpoint drain section's soak flag is invalid")),
+                };
+                let pack = get_all(r, n * 5)?;
+                // (the ground's drain would carry a non-finite one on)
+                if !pack.iter().all(|v| v.is_finite()) {
+                    return Err(bad("checkpoint paint packing is invalid"));
+                }
+                for (h, k) in c.wet.hide.iter_mut().zip(pack.as_chunks::<5>().0) {
+                    h[5..].copy_from_slice(k);
+                }
+                c.drain = true;
+                if !raw && r.read(&mut [0u8; 1])? != 0 {
+                    return Err(bad("checkpoint has trailing data"));
+                }
+                raw
+            }
+            _ => false,
+        };
         // raw formats go on with the soak section, which ends the file
-        if version == 10 || version == 12 {
+        if raw {
             if !c.f.is_whole() {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
@@ -535,5 +604,64 @@ impl Canvas {
             return Err(bad("version-7 checkpoint has trailing data"));
         }
         Ok((c, header))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn set(b: &mut [u8], pos: usize, v: u64) {
+        b[pos..pos + 8].copy_from_slice(&v.to_le_bytes());
+    }
+
+    fn load(b: Vec<u8>) -> io::Result<Canvas> {
+        Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
+    }
+
+    /// A canvas with the drain switch is written as version 14: version 11's
+    /// bytes, then the drain section, so it keeps the switch and all ten
+    /// properties of its wet paint, and is rewritten as it was read; the
+    /// same canvas without the switch is version 11 as before. The section
+    /// is refused with a wrong mark or version, a soak flag other than 0 or
+    /// 1, a non-finite packing or data after it, and the switch is refused
+    /// on a canvas before engine 4.
+    #[test]
+    fn the_drain_switch_has_its_own_format() {
+        let canvas = |drain: bool| {
+            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(5).with_drain(drain);
+            c.absorb.iter_mut().for_each(|a| *a = 0.3);
+            c.wet.vol[0] = 1.5;
+            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let (off, on) = (canvas(false), canvas(true));
+        assert_eq!((&off[..8], &on[..8]), (&b"PAINTC11"[..], &b"PAINTC14"[..]));
+        assert!(on[8..off.len()] == off[8..], "version 11's bytes, then the drain section");
+        let n = 4;
+        assert_eq!(on.len(), off.len() + 24 + n * 5 * 4);
+        let d = load(on.clone()).unwrap();
+        assert!(d.drain && d.absorb_any && d.wet.hide[0] == [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2]);
+        let mut again = Vec::new();
+        d.write_state(&mut again, "").unwrap();
+        assert!(again == on, "rewritten as it was read");
+        assert!(!load(off.clone()).unwrap().drain);
+        let at = off.len();
+        for (pos, v) in [(at, 0u64), (at + 8, 2), (at + 16, 2)] {
+            let mut b = on.clone();
+            set(&mut b, pos, v);
+            assert!(load(b).is_err(), "byte {pos} = {v}");
+        }
+        let mut b = on.clone();
+        b[at + 24..at + 28].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(load(b).is_err(), "a NaN packing");
+        let mut b = on.clone();
+        b.push(0);
+        assert!(load(b).is_err(), "trailing data");
+        let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(3).with_drain(true);
+        assert!(c.write_state(&mut Vec::new(), "").is_err());
     }
 }

@@ -75,7 +75,7 @@ pub fn asks(o: &Table) -> Result<bool> {
 
 const PALETTES: &str = "friedrich_1820, friedrich_early, friedrich_1820_greens, friedrich_early_greens";
 
-fn palette_named(name: &str, engine: u32) -> Result<Palette> {
+fn palette_named(name: &str, engine: u32, drain: bool) -> Result<Palette> {
     let mut p = match name {
         "friedrich_1820" | "friedrich" => Palette::cobalt_box(),
         "friedrich_early" => Palette::smalt_box(),
@@ -84,6 +84,7 @@ fn palette_named(name: &str, engine: u32) -> Result<Palette> {
         o => return err(format!("palette {o:?}: {PALETTES}")),
     };
     p.engine = engine;
+    p.drain = drain;
     Ok(p)
 }
 
@@ -118,12 +119,12 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
     if st.borrow().canvas.is_some() {
         return err("the canvas is already set up (canvas{} is the first chunk)");
     }
-    let engine = st.borrow().tubes.engine;
+    let (engine, drain) = (st.borrow().tubes.engine, st.borrow().tubes.drain);
     let name: String = o.get::<Option<String>>("style")?.unwrap_or_else(|| "friedrich".into());
     let palname = o.get::<Option<String>>("palette")?;
     let mut sty = match name.as_str() {
-        "friedrich" => friedrich(palette_named(palname.as_deref().unwrap_or("friedrich_1820"), engine)?),
-        "friedrich_early" => friedrich_early(palette_named(palname.as_deref().unwrap_or("friedrich_early"), engine)?),
+        "friedrich" => friedrich(palette_named(palname.as_deref().unwrap_or("friedrich_1820"), engine, drain)?),
+        "friedrich_early" => friedrich_early(palette_named(palname.as_deref().unwrap_or("friedrich_early"), engine, drain)?),
         o => return err(format!("style {o:?}: friedrich or friedrich_early")),
     };
     sty.palette.quarter_tiles = st.borrow().tubes.quarter_tiles;
@@ -139,7 +140,7 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
     }
     let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
     let width = st.borrow().width;
-    let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+    let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_drain(drain);
     let h = c.height();
     let pal = Pal(Rc::new(sty.palette.clone()));
     {
@@ -466,7 +467,10 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
         Ok(Col(paint::shift(rgb_of(&c)?, dl, da.unwrap_or(0.0), db.unwrap_or(0.0))))
     })?)?;
     let engine = st.borrow().tubes.engine;
-    g.set("palette", lua.create_function(move |_, name: String| Ok(Pal(Rc::new(palette_named(&name, engine)?))))?)?;
+    // (the drain switch read when it is called: it may be set after the
+    // globals, `Session::with_drain`)
+    let st1 = st.clone();
+    g.set("palette", lua.create_function(move |_, name: String| Ok(Pal(Rc::new(palette_named(&name, engine, st1.borrow().tubes.drain)?))))?)?;
     let st1 = st.clone();
     g.set("paint", lua.create_function(move |_, (c, o): (Value, Option<Table>)| {
         let _ = &st1;

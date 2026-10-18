@@ -66,9 +66,10 @@ For another launcher, set `PAINTER_INBOX_DIR` to the run directory and
 painter's environment after the harness reads them. Persistent pi sessions
 are required for delivery receipts.
 
-Tests: `uv run --no-project python harness/painter/test/inbox_test.py -v`
-and `node --test harness/painter/test/inbox.test.ts` (with `pi` on PATH and
-`TMPDIR` pointing to scratch). Both run in `scripts/test`.
+Tests: `scripts/test` runs the Python inbox tests and
+`test/inbox-hooks.test.ts`. The real-pi integration check is
+`node --test harness/painter/test/inbox.test.ts` (with `pi` on PATH and
+`TMPDIR` pointing to scratch), like the other pi integration checks here.
 
 ## Launch commands
 

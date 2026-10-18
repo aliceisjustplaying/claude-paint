@@ -169,13 +169,15 @@ struct Identity {
     build: [u8; 32],
     source: [u8; 32],
     width: usize,
-    environment: Vec<(String, String)>,
+    environment: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 impl Identity {
     fn new(source: &str, width: usize) -> Result<Self, String> {
+        use std::os::unix::ffi::OsStrExt;
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| e.to_string())?;
-        let mut environment: Vec<_> = std::env::vars().filter(|(k, _)| k.starts_with("PAINT_") || matches!(k.as_str(), "EASEL_BOX" | "EASEL_WIDTH")).collect();
+        let mut environment: Vec<_> = std::env::vars_os().filter(|(k, _)| k.as_bytes().starts_with(b"PAINT_") || matches!(k.as_bytes(), b"EASEL_BOX" | b"EASEL_WIDTH"))
+            .map(|(k, v)| (k.as_bytes().to_vec(), v.as_bytes().to_vec())).collect();
         environment.sort();
         Ok(Self { build: Sha256::digest(executable).into(), source: Sha256::digest(source.as_bytes()).into(), width, environment })
     }
@@ -191,14 +193,21 @@ struct Saved {
 }
 
 fn atomic(path: &Path, f: impl FnOnce(&mut std::fs::File) -> Result<(), String>) -> Result<(), String> {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let mut part = path.as_os_str().to_os_string();
-    part.push(format!(".{}-{}.part", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    let part = PathBuf::from(part);
+    let mut opened = None;
+    for serial in 0..128 {
+        let mut part = path.as_os_str().to_os_string();
+        part.push(format!(".{}-{serial}.part", std::process::id()));
+        let part = PathBuf::from(part);
+        match std::fs::OpenOptions::new().create_new(true).write(true).read(true).open(&part) {
+            Ok(file) => { opened = Some((part, file)); break; }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("{}: {e}", part.display())),
+        }
+    }
+    let (part, mut file) = opened.ok_or_else(|| format!("{}: no exclusive temporary filename available", path.display()))?;
     let result = (|| {
-        let mut file = std::fs::OpenOptions::new().create_new(true).write(true).read(true).open(&part).map_err(|e| e.to_string())?;
         f(&mut file)?;
         file.sync_all().map_err(|e| e.to_string())?;
         std::fs::rename(&part, path).map_err(|e| e.to_string())?;
@@ -520,5 +529,35 @@ print(counter,rand(),drying(300,300))
         let result = s.run("pcall(function() wait(2) end)");
         TRACE.with(|t| *t.borrow_mut() = Trace::default());
         assert!(result.err().unwrap().contains("exhausted effect trace"));
+    }
+
+    #[test]
+    fn exclusive_temporary_collisions_never_delete_existing_files() {
+        let dir = Temp::new();
+        let target = dir.0.join("progress.json");
+        let part = |n| PathBuf::from(format!("{}.{}-{n}.part", target.display(), std::process::id()));
+        std::fs::write(part(0), b"existing source").unwrap();
+        atomic(&target, |f| f.write_all(b"new progress").map_err(|e| e.to_string())).unwrap();
+        assert_eq!(std::fs::read(part(0)).unwrap(), b"existing source");
+        assert_eq!(std::fs::read(&target).unwrap(), b"new progress");
+        assert!(!part(1).exists());
+        for n in 1..128 { std::fs::write(part(n), b"existing checkpoint").unwrap(); }
+        assert!(atomic(&target, |_| Ok(())).is_err());
+        for n in 0..128 { assert!(part(n).exists()); }
+        assert_eq!(std::fs::read(&target).unwrap(), b"new progress");
+    }
+
+    #[test]
+    fn unrelated_non_utf8_environment_is_ignored() {
+        use std::os::unix::ffi::OsStringExt;
+        if std::env::var_os("REPLAY_TEST_NON_UTF8").is_some() {
+            Identity::new(SOURCE, 64).unwrap();
+            return;
+        }
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored"])
+            .env("REPLAY_TEST_NON_UTF8", std::ffi::OsString::from_vec(vec![0xff]))
+            .status().unwrap();
+        assert!(status.success());
     }
 }

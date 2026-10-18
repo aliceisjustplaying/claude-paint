@@ -4,6 +4,7 @@
 # dependencies = ["pillow"]
 # ///
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -176,6 +177,7 @@ class CheckpointTests(unittest.TestCase):
                 out = self.out / str(compressed)
 
                 def render(command, **kwargs):
+                    self.assertNotIn("EASEL_BOX", kwargs["env"])
                     self.assertEqual(command[:3], [str(self.easel), "render-checkpoint", str(checkpoint)])
                     self.assertEqual(command[4:], ["--mode", "gallery" if "gallery.png" in command[3] else "color",
                                                    "--log", str(self.log)])
@@ -188,13 +190,35 @@ class CheckpointTests(unittest.TestCase):
                     path.write_bytes(b"verified clip fixture")
                     return {"verified": True}
 
-                with patch.object(exporter.subprocess, "run", side_effect=render) as run, \
+                with patch.dict(os.environ, {"EASEL_BOX": "hopper"}), \
+                     patch.object(exporter.subprocess, "run", side_effect=render) as run, \
                      patch.object(exporter, "encode_clip", side_effect=encode), \
                      patch.object(exporter.shutil, "which", return_value="fixture"):
                     self.assertEqual(exporter.export(self.studio, self.easel, "friedrich", "test", out),
                                      {"verified": True})
                 self.assertEqual(run.call_count, 2)
                 self.assertEqual((out / "test-gallery.png").read_bytes(), b"full resolution PNG fixture")
+
+    def test_explicit_live_export_ignores_a_stale_checkpoint_without_opening(self):
+        def save(command, **kwargs):
+            self.assertEqual(command[:2], [str(self.easel), "save"])
+            self.assertEqual(command[3:], ["--gallery"] if "gallery.png" in command[2] else [])
+            self.assertNotIn("EASEL_BOX", kwargs["env"])
+            Path(command[2]).write_bytes(b"current live PNG fixture")
+            return subprocess.CompletedProcess(command, 0)
+
+        def encode(sequence, path, work):
+            path.write_bytes(b"verified live clip fixture")
+            return {"verified": True}
+
+        with patch.dict(os.environ, {"EASEL_BOX": "hopper"}), \
+             patch.object(exporter.subprocess, "run", side_effect=save) as run, \
+             patch.object(exporter, "encode_clip", side_effect=encode), \
+             patch.object(exporter.shutil, "which", return_value="fixture"):
+            self.assertEqual(exporter.export(self.studio, self.easel, "friedrich", "test", self.out, live=True),
+                             {"verified": True})
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual((self.out / "test-plain.png").read_bytes(), b"current live PNG fixture")
 
     def test_checkpoint_validation_failure_never_falls_back_to_live_or_replay(self):
         with patch.object(exporter.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "render-checkpoint")) as run, \

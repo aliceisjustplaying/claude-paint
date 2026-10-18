@@ -6,7 +6,7 @@
 """Export a finished studio without opening or replaying it.
 
     uv run --script scripts/export_painting.py NAME OUT --studio STUDIO
-        [--easel PATH] [--profile PROFILE]
+        [--easel PATH] [--profile PROFILE] [--live]
 
 Profile defaults to STUDIO/bin/box. Recorded Gallery JPEGs and frames/index.tsv
 (chunk, hand_s, painted) must already exist in out/easel/painting/frames.
@@ -15,7 +15,9 @@ The clip uses the existing 1000px-wide framing, 15 Gallery-final frames,
 495 process frames and 90 final frames (Gallery for Friedrich, plain otherwise).
 PNG exports keep the canvas's full resolution. Closed studios render live.ckpt
 (or live.ckpt.zst), validated against paintings/lua/painting.lua, using a
-render-checkpoint-capable --easel. Otherwise save connects to the running studio.
+render-checkpoint-capable --easel. --live uses client-only save instead, including
+after a studio reopens and its previous checkpoint becomes stale. Without a
+checkpoint, save connects to the running studio.
 No finishing is applied. A failed render or connection never starts a replay.
 """
 
@@ -118,7 +120,7 @@ def encode_clip(sequence, path, work):
     return verify_clip(path)
 
 
-def export(studio, easel, profile, name, destination):
+def export(studio, easel, profile, name, destination, live=False):
     if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
         raise ValueError("name must contain only letters, digits, _ or -")
     studio = studio.expanduser().resolve(strict=True)
@@ -138,14 +140,15 @@ def export(studio, easel, profile, name, destination):
             raise ValueError(f"missing {command}")
     session = studio / "out/easel/painting"
     process = recorded_frames(session / "frames")
-    checkpoint = next((session / filename for filename in ("live.ckpt", "live.ckpt.zst")
-                       if (session / filename).is_file()), None)
+    checkpoint = None if live else next((session / filename for filename in ("live.ckpt", "live.ckpt.zst")
+                                        if (session / filename).is_file()), None)
     log = (studio / "paintings/lua/painting.lua").resolve(strict=True) if checkpoint else None
     names = [f"{name}-gallery.png", f"{name}-plain.png", f"{name}-timelapse.mp4"]
     for filename in names:
         if (destination / filename).exists():
             raise ValueError(f"output already exists: {destination / filename}")
     env = dict(os.environ, EASEL_ROOT=str(studio), EASEL_SESSION="painting")
+    env.pop("EASEL_BOX", None)
     with tempfile.TemporaryDirectory(prefix="export-", dir=session) as temporary:
         work = Path(temporary)
         gallery, plain, clip = [work / filename for filename in names]
@@ -170,9 +173,10 @@ def main():
     parser.add_argument("--studio", type=Path, required=True)
     parser.add_argument("--easel", type=Path, help="defaults to STUDIO/bin/easel")
     parser.add_argument("--profile", help="defaults to STUDIO/bin/box")
+    parser.add_argument("--live", action="store_true", help="save from the running studio, ignoring older checkpoints")
     args = parser.parse_args()
     try:
-        info = export(args.studio, args.easel, args.profile, args.name, args.out)
+        info = export(args.studio, args.easel, args.profile, args.name, args.out, live=args.live)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"export_painting: {error}\n")
     print(json.dumps(info, indent=2))

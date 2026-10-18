@@ -17,7 +17,7 @@ export function registerInbox(pi: ExtensionAPI) {
 	const call = (operation: string, target?: object): Message[] => {
 		if (!existsSync(join(run, "painter-inbox.json"))) return [];
 		return JSON.parse(execFileSync("uv", ["run", "--no-project", "python", helper, operation, run,
-			...(target ? [JSON.stringify(target)] : [])], { encoding: "utf8" }));
+			...(target ? [JSON.stringify(target)] : [])], { encoding: "utf8", maxBuffer: Number.POSITIVE_INFINITY }));
 	};
 	const receive = (session: string | undefined, tool_call: string | null, tool: string | null) => {
 		if (!existsSync(join(run, "painter-inbox.json"))) return [];

@@ -11,7 +11,7 @@
 //! Also what a stick held up to the picture would touch (`stick_contact`),
 //! for the easel's hold look.
 
-use crate::canvas::Canvas;
+use crate::canvas::{Canvas, Frame};
 use crate::color::Rgb;
 use crate::graphite::cover;
 use crate::mask::Mask;
@@ -31,6 +31,13 @@ pub struct Sheet {
     /// The pastel caught on it, for the look: coverage and color.
     pub(crate) a: Vec<f32>,
     pub(crate) r: Vec<Rgb>,
+}
+
+impl Sheet {
+    pub(crate) fn covers_whole_pixel(&self, f: Frame, i: usize) -> bool {
+        let (x, y) = (i % f.full_w, i / f.full_w);
+        x >= f.x0 && y >= f.y0 && x < f.x0 + f.w && y < f.y0 + f.h && self.over[(y - f.y0) * f.w + x - f.x0]
+    }
 }
 
 impl Canvas {
@@ -128,7 +135,8 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
-    use crate::canvas::Canvas;
+    use crate::canvas::{Canvas, Crop};
+    use crate::graphite::{Lead, hand_line};
     use crate::mask::Mask;
     use crate::paper::Paper;
     use crate::pastel::{Pose, Stick, StrokePoint};
@@ -172,6 +180,63 @@ mod tests {
             }
         }
         m
+    }
+
+    fn graphite_and_sheet_mask(crop: Option<Crop>) -> (Canvas, Mask) {
+        let mut c = Canvas::new_window(160, 1.0, [0.8; 3], crop).with_size_mm(150.0);
+        let line = hand_line(&[(100.0, 500.0), (900.0, 500.0)], &[0.6], false, true, 0.0, 5);
+        c.draw(&Lead::pencil("2B").unwrap(), &line, 0.0, 9);
+        let window = c.window();
+        let covered = Mask::from_fn(c.frame(), |x, y| if x < 500.0 && window.holds(x, y) { 1.0 } else { 0.0 });
+        let guide = c.drawing_guide();
+        for covered_value in [0.0, 1.0] {
+            assert!(guide.data.iter().zip(&covered.data).any(|(&g, &m)| g > 0.0 && m == covered_value));
+        }
+        (c, covered)
+    }
+
+    #[test]
+    fn a_sheet_protects_the_drawing_guide_from_erasing() {
+        for crop in [None, Some(Crop { units: [200.0, 200.0, 800.0, 800.0], margin: 0.0 })] {
+            let (mut c, covered) = graphite_and_sheet_mask(crop);
+            let all = Mask::full(c.frame());
+            let mut expected = c.clone();
+            expected.erase(&covered.clone().invert(), 1.0);
+            c.lay_sheet(&covered, 150.0, 8.0, [0.85; 3]).unwrap();
+            c.erase(&all, 1.0);
+            assert_eq!(c.drawing_guide().data, expected.drawing_guide().data);
+            assert_eq!(c.pixels(), expected.pixels());
+            assert!(c.lift_sheet());
+            c.erase(&all, 1.0);
+            expected.erase(&all, 1.0);
+            assert_eq!(c.drawing_guide().data, expected.drawing_guide().data);
+            assert_eq!(c.pixels(), expected.pixels());
+        }
+    }
+
+    #[test]
+    fn a_sheet_keeps_fixative_off_the_drawing_guide() {
+        for crop in [None, Some(Crop { units: [200.0, 200.0, 800.0, 800.0], margin: 0.0 })] {
+            let (base, covered) = graphite_and_sheet_mask(crop);
+            let all = Mask::full(base.frame());
+            for mask in [None, Some(Mask::from_fn(base.frame(), |x, _| if x < 650.0 { 1.0 } else { 0.0 }))] {
+                let mut expected = base.clone();
+                let open = mask.clone().unwrap_or_else(|| all.clone()).mul(&covered.clone().invert());
+                expected.fix_drawing(Some(&open));
+                let mut c = base.clone();
+                c.lay_sheet(&covered, 150.0, 8.0, [0.85; 3]).unwrap();
+                c.fix_drawing(mask.as_ref());
+                assert_eq!(
+                    c.drawing.as_ref().unwrap().cells.iter().map(|c| c.floor).collect::<Vec<_>>(),
+                    expected.drawing.as_ref().unwrap().cells.iter().map(|c| c.floor).collect::<Vec<_>>()
+                );
+                assert!(c.lift_sheet());
+                c.erase(&all, 1.0);
+                expected.erase(&all, 1.0);
+                assert_eq!(c.drawing_guide().data, expected.drawing_guide().data);
+                assert_eq!(c.pixels(), expected.pixels());
+            }
+        }
     }
 
     /// A sheet over the left half: strokes across it leave the picture under

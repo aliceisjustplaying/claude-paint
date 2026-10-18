@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 spec = importlib.util.spec_from_file_location("inbox", Path(__file__).resolve().parents[1] / "inbox.py")
@@ -60,6 +61,27 @@ class InboxTests(unittest.TestCase):
         self.persist(messages)
         inbox.receive(self.run)
         self.assertEqual(self.records()[0]["delivery"]["state"], "delivered")
+
+    def test_receipt_written_just_before_receiver_death_is_not_lost(self):
+        inbox.send(self.run, "Race.")
+        inbox.receive(self.run, self.target())
+        messages = self.records()
+
+        def died(pid):
+            self.persist(messages)
+            return ""
+
+        with patch.object(inbox, "process_start", died):
+            self.assertEqual(inbox.receive(self.run, self.target("call-2")), [])
+        self.assertEqual(self.records()[0]["delivery"]["state"], "delivered")
+
+    def test_large_backlog_does_not_repeat_the_opening_in_each_record(self):
+        with inbox.locked(self.run) as messages:
+            messages.extend({"id": str(i), "timestamp": inbox.timestamp(), "text": "x" * 3000} for i in range(200))
+        pending = inbox.receive(self.run, self.target(None))
+        self.assertEqual(len(pending), 200)
+        self.assertNotIn("opening", pending[0]["delivery"])
+        self.assertLess(len(json.dumps(pending)), 800000)
 
     def test_concurrent_receivers_do_not_steal_live_attachment(self):
         inbox.send(self.run, "One message.")

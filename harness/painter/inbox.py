@@ -3,6 +3,7 @@ import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -66,7 +67,8 @@ def witnessed(message):
         if delivery["tool_call"] is None:
             content = m.get("content", [])
             text = content if isinstance(content, str) else "\n".join(b.get("text", "") for b in content if b.get("type") == "text")
-            if m.get("role") == "user" and text.startswith(delivery["opening"]):
+            if (m.get("role") == "user" and hashlib.sha256(text[:delivery["opening_chars"]].encode()).hexdigest()
+                    == delivery["opening_hash"]):
                 with Path(delivery["session"]).open("rb") as session:
                     os.fsync(session.fileno())
                 return datetime.fromtimestamp(m["timestamp"] / 1000, timezone.utc).isoformat() if "timestamp" in m else delivery["attached_at"]
@@ -87,6 +89,7 @@ def reconcile(messages):
         delivery = message.get("delivery")
         if not delivery or delivery["state"] == "delivered":
             continue
+        alive = process_start(delivery["pid"]) == delivery["process_start"]
         delivered_at = witnessed(message)
         if delivered_at:
             delivery["state"] = "delivered"
@@ -94,9 +97,10 @@ def reconcile(messages):
             delivery.pop("pid", None)
             delivery.pop("process_start", None)
             delivery.pop("offset", None)
-            delivery.pop("opening", None)
+            delivery.pop("opening_hash", None)
+            delivery.pop("opening_chars", None)
             continue
-        if process_start(delivery["pid"]) != delivery["process_start"]:
+        if not alive:
             message.pop("delivery")
 
 
@@ -124,7 +128,9 @@ def receive(run, target=None):
             if not delivery["process_start"]:
                 raise ValueError("inbox receiver is no longer running")
             if target["tool_call"] is None:
-                delivery["opening"] = framed(pending) + "\n\n"
+                opening = framed(pending) + "\n\n"
+                delivery["opening_hash"] = hashlib.sha256(opening.encode()).hexdigest()
+                delivery["opening_chars"] = len(opening)
             for message in pending:
                 message["delivery"] = dict(delivery)
         return pending
@@ -140,7 +146,8 @@ def main():
     if args.operation == "send":
         print(json.dumps(send(run, args.value or ""), ensure_ascii=False))
     else:
-        print(json.dumps(receive(run, json.loads(args.value) if args.value else None), ensure_ascii=False))
+        messages = receive(run, json.loads(args.value) if args.value else None)
+        print(json.dumps([{"id": m["id"], "text": m["text"]} for m in messages], ensure_ascii=False))
 
 
 if __name__ == "__main__":

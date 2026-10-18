@@ -63,3 +63,14 @@ test("between-sitting messages precede the complete opening and retain images", 
 	handlers.agent_end();
 	assert.deepEqual(log().map((m: any) => [m.delivery.state, m.delivery.tool_call]), [["delivered", null], ["delivered", null]]);
 });
+
+test("a backlog larger than the default subprocess buffer still reaches the opening", () => {
+	const { handlers, ctx, run, log } = harness();
+	writeFileSync(join(run, "painter-inbox.json"), JSON.stringify(Array.from({ length: 40 }, (_, i) => ({
+		id: String(i), timestamp: new Date(0).toISOString(), text: "x".repeat(30000),
+	}))));
+	const reply = handlers.input({ text: "Opening." }, ctx);
+	assert.ok(reply.text.length > 1024 * 1024);
+	assert.equal(reply.text.split("End of message.").length - 1, 40);
+	assert.equal(log().filter((m: any) => m.delivery.state === "attaching").length, 40);
+});

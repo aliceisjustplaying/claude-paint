@@ -51,7 +51,8 @@ Reflectance is linear RGB and therefore is not an sRGB gray swatch value.
 | Powder | .040 | — | — | loose | 6 | .95 | 0 |
 
 Thin and thick change geometry, not chemistry. Pencils use the existing
-sharpened core. Natural charcoal's zero adhered share leaves all volume
+sharpened core at an estimated 4 mm diameter; the compressed stick's 8 mm
+diameter is also an estimate. Natural charcoal's zero adhered share leaves all volume
 available to the finger and eraser. Compressed cores leave an adhered fraction
 in the tooth and shed less. Fixative still binds the remaining loose dust.
 The material's effective lift coefficient travels with its deposited color.

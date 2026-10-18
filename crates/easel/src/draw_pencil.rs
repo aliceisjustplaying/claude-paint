@@ -936,7 +936,8 @@ mod tests {
                 let mut old = Session::with_box(W, tubes).unwrap().with_paper(paper).unwrap();
                 assert_eq!(run(&mut old, "print(charcoal, charcoal_powder)").trim(), "nil\tnil");
                 if paper {
-                    assert!(old.run(r#"canvas{size=80,paper={preset="bristol"}}"#).unwrap_err().contains("paper: unknown option \"preset\""));
+                    let error = old.run(r#"canvas{size=80,aspect=1,paper={preset="bristol"}}"#).unwrap_err();
+                    assert!(error.contains("paper: unknown option \"preset\""), "{error}");
                 }
             }
         }

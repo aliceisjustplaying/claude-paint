@@ -1405,6 +1405,28 @@ pub fn root() -> PathBuf {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_subnormal_blend_stays_finite_through_a_scrape_and_wait() {
+        let log = "--@ box every\n--@ engine 8\n--@ knife-skim\n--@ limbs-join-nearest\n--@ blend-feather\n--@ brush-skim\n--@ blend-at-masks\n--@ glaze-film\n--@ liquid-film-levels\n--@ rag-lift\n--@ full-palette-refuses\n--@ drain\n";
+        let mut s = Session::replay_with(320, box_for(Some(log)).unwrap()).unwrap();
+        s.run(r#"canvas{size=700,aspect=4/3,linen={16,14},ground={{pile={{"lead white",1}},um=70,apply="knife"}}}
+            p=pile{{"lead white",1}}
+            m=rect(580,270,130,200)
+            work(m,{hand="body",pile=p,tool={kind="filbert",width=8,lay=2.5},coverage=2.5,fill=true,clip=m})"#).unwrap();
+        for chunk in [
+            "soft=m*mask(function(x,y) return x<640 and 1 or 1e-40 end)\nblend(soft,{angle=0,seed=1})",
+            "k=knife{width=8}\nk:scrape({{644,350},{644,390}},{pressure=1,angle=0})",
+            "wait(1)",
+        ] {
+            s.run(chunk).unwrap();
+            for field in s.canvas().unwrap().state_fields() {
+                if let paint::state_dump::Values::F32(values) = field.values {
+                    assert!(values.iter().all(|v| v.is_finite()), "{} after {chunk}", field.name);
+                }
+            }
+        }
+    }
+
 
     #[cfg(tube_box)]
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;

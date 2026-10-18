@@ -552,6 +552,7 @@ p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide a
 p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
 p:line(pts, {pressure=0.5})    -- a pencil's call: pressure as force (5 N at 1), held at 60°
 smudge(pts, {force=1, pad=})   -- a finger drawn along a path (pad: a stump's few mm²)
+smudge(mask, {angle=30, passes=2, pattern=})      -- a fingertip in loose circles over an area (pad<=60: a stump, strokes)
 fix(mask)                      -- binds what is there, and darkens it a little
 feel(x, y)                     -- what a fingertip feels there
 ```
@@ -588,6 +589,17 @@ feel(x, y)                     -- what a fingertip feels there
 - **The finger** picks up loose pastel and lays it down along its path as fine
   grains pressed into the pores: colors drag into each other and the passage
   covers more for its thickness. It leaves fixed pastel where it is.
+  Given a mask, `smudge` works the finger over the area as a pastellist
+  does: a fingertip at 0.6 N in loose circles 15 mm across drifting along
+  lanes at `angle` (degrees, as an azimuth), a stump (`pad` up to 60 mm²) at
+  1 N in straight strokes there and back along each lane
+  (`pattern="circles"|"strokes"` overrides), two passes, the second across
+  the first. It presses `force` × the mask and lifts where the mask fades
+  out; in circles a soft-edged mask softens the blend only through the
+  contact's size, which changes little, so for a blend that fades out use
+  `pattern="strokes"` or a smaller mask. It is the same finger as along a
+  path, not a blur: what it picks up it carries on. Sources and which
+  numbers are estimates: notes/research/pastel_blending.md.
 - **Color.** A stick is its pigments as they look dry: absorption as in oil,
   scattering raised by the contrast between each pigment and air (much for
   ultramarine, Prussian blue, the lakes and the earths' clays; little for

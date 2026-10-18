@@ -897,6 +897,43 @@ mod tests {
         assert!(load(bytes).is_err());
     }
 
+    #[test]
+    fn drained_masking_sheets_keep_each_support() {
+        for drain in [false, true] {
+            for support in 0..3 {
+                let mut c = Canvas::new_window(32, 1.0, [0.5; 3], None).with_drain(drain);
+                match support {
+                    1 => c = c.with_paper(crate::paper::Paper::drawing(2)),
+                    2 => c.raw_canvas(crate::soak::Fabric::cotton_duck(), 2),
+                    _ => {}
+                }
+                c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
+                let m = crate::mask::Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
+                c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
+                c.sheet_catch(&[(0, 2.0)], [0.7, 0.2, 0.1]);
+                let mut bytes = Vec::new();
+                c.write_state(&mut bytes, "").unwrap();
+                assert_eq!(&bytes[..8], if drain { MAGIC17 } else { MAGIC15 });
+                let r = load(bytes.clone()).unwrap();
+                assert_eq!(r.drain, drain);
+                assert_eq!(r.is_raw(), c.is_raw());
+                assert_eq!(r.paper, c.paper);
+                assert_eq!(r.micro, c.micro);
+                assert_eq!(r.sheet, c.sheet);
+                assert_eq!(r.pixels(), c.pixels());
+                if drain {
+                    assert_eq!(r.wet.hide, c.wet.hide);
+                }
+                let mut again = Vec::new();
+                r.write_state(&mut again, "").unwrap();
+                assert_eq!(again, bytes);
+                assert!(load(bytes[..bytes.len() - 1].to_vec()).is_err());
+                bytes.push(0);
+                assert!(load(bytes).is_err());
+            }
+        }
+    }
+
     fn rejected(b: Vec<u8>, what: &str) {
         match load(b) {
             Ok(_) => panic!("{what}: accepted"),

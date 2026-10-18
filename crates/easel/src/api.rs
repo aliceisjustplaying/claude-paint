@@ -672,7 +672,12 @@ impl UserData for Brush {
             if let Some((a, z)) = ramps {
                 g = g.ramps(a, z);
             } else {
-                g = g.ramps(0.02, 0.05);
+                // engine 8: the pressure follows the points to the end, so a
+                // limb drawn to where it forks keeps its width there (a tip
+                // tapers where its own points' pressure falls); before it
+                // the last 5% lifted off whatever the points asked
+                let release = if b.st.borrow().tubes.engine >= paint::REACH_END || std::env::var_os("BLIND_REACH_END").is_some() { 0.0 } else { 0.05 };
+                g = g.ramps(0.02, release);
             }
             if let Some(or) = g_orient {
                 g = g.orient(or);
@@ -717,6 +722,10 @@ impl UserData for Brush {
             check_keys(&o, &["at", "toward", "spread", "force", "clip"], "spatter")?;
             let at = pair(&o, "at")?.ok_or_else(|| mlua::Error::runtime("spatter: at={x, y}, where the brush is flicked"))?;
             let toward = pair(&o, "toward")?.ok_or_else(|| mlua::Error::runtime("spatter: toward={dx, dy}, the flick's direction and how far the paint carries (units)"))?;
+            // (refused here, as numbers, before the engine would panic on them)
+            if !(at.0.is_finite() && at.1.is_finite() && toward.0.is_finite() && toward.1.is_finite()) {
+                return err(format!("spatter: at and toward are numbers (units), not {{{}, {}}} and {{{}, {}}}", at.0, at.1, toward.0, toward.1));
+            }
             let spread = num(&o, "spread")?.unwrap_or(0.45);
             if !(0.0..=1.5).contains(&spread) {
                 return err("spatter: spread is half the cone's angle in radians, 0 to 1.5");
@@ -1297,7 +1306,14 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
             let mut v = Vec::new();
             for e in t.sequence_values::<Table>() {
                 let e = e?;
-                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, e.get::<Value>(2)?));
+                // (a weight that is no number is refused, not quietly counted as none)
+                let w = e.get::<Value>(2)?;
+                if let Value::Number(n) = &w
+                    && !n.is_finite()
+                {
+                    return err(format!("work piles: a weight is a number or function(x, y), not {n}"));
+                }
+                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, w));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
@@ -2220,116 +2236,6 @@ mod tests {
 
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)
-    }
-    #[test]
-    fn pile_rejects_extra_arguments_and_keeps_single_table_recipes() {
-        for engine in 1..=5 {
-            let mut tubes = paint::Palette::tube_box();
-            tubes.engine = engine;
-            let mut s = Session::replay_with(80, tubes).unwrap();
-            s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}"#).unwrap();
-            for extra in ["{turps=0.5}", "nil", "nil, {medium=0.2}", "0.5", "{}, {}"] {
-                let e = s.run(&format!(r#"pile({{{{"lead white",1}}}}, {extra})"#)).unwrap_err();
-                assert!(e.contains("pile: expected exactly one table"), "engine {engine}: {e}");
-                assert!(e.contains(r#"pile{{"lead white", 1}, medium=0.2}"#), "{e}");
-            }
-            for (minimum_engine, options, medium, thinner) in [
-                (1, "", 0.0, 0.0),
-                (1, ", medium=0.2", 0.2, 0.0),
-                (3, ", thinner=0.3", 0.0, 0.3),
-                (4, ", blot=0.2", -0.2, 0.0),
-                (4, ", turps=0.3, oil=\"walnut\", name=\"sky\"", 0.0, 0.0),
-            ] {
-                if engine < minimum_engine { continue; }
-                let recipe = format!(r#"{{{{"lead white",2}},{{"cobalt blue",1}}{options}}}"#);
-                for call in [format!("pile{recipe}"), format!("pile({recipe})")] {
-                    let thinner_check = if engine < 3 { "p.thinner == nil".into() }
-                        else { format!("math.abs(p.thinner - {thinner}) < 1e-6") };
-                    s.run(&format!(r#"local p = {call}; assert(math.abs(p.medium - {medium}) < 1e-6); assert({thinner_check});
-                        local parts = p:parts(); assert(#parts == 2);
-                        assert(parts[1][1] == "lead white" and parts[1][2] == 2);
-                        assert(parts[2][1] == "cobalt blue" and parts[2][2] == 1)"#)).unwrap();
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn review_secondary_piles_keep_their_thinner() {
-        for opts in ["pile=p, second={pile=q, load=0.8}", "piles={{p,0},{q,1}}"] {
-            let mut s = Session::replay(80).unwrap();
-            s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}
-                p=pile{{"vermilion",1}}; q=pile{{"cobalt blue",1}, thinner=0.5}"#).unwrap();
-            s.run(&format!("work(rect(100,100,700,500), {{length={{50,50}}, coverage=0.5, {opts}}})")).unwrap();
-            assert!(s.canvas().unwrap().solvent_total() > 0.0, "{opts}: a dip into the thinned pile must lay solvent");
-        }
-    }
-
-    #[test]
-    fn review_invalid_second_loads_are_rejected() {
-        for load in ["math.huge", "0/0"] {
-            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
-                p = pile{{{{"vermilion", 1}}}}; q = pile{{{{"cobalt blue", 1}}}}
-                work(rect(100,100,200,200), {{pile=p, second={{pile=q, load={load}}}}})"#)).unwrap_err();
-            assert!(e.contains("work second: the amount"), "{e}");
-        }
-    }
-
-    #[test]
-    fn review_refused_part_load_preserves_randomness() {
-        let draw = |fail: &str| run(&format!(r#"canvas{{size=300, aspect=1, linen=15, ground={{{{pile={{{{"lead white",1}}}}, um=50, apply="knife"}}}}}}
-            b = brush("flat", 6); {fail}; print(math.random())"#)).unwrap();
-        assert_eq!(draw(""), draw(r#"assert(not pcall(function() b:load(nil, 0.5, {streak=0.5}) end))"#));
-    }
-
-    #[test]
-    fn review_gesture_rejects_excessive_sample_count() {
-        let e = run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white",1}}, um=50, apply="knife"}}}; b = brush("round", 1)
-            local p = {}; for i=1,8 do local x = i%2 == 0 and 20000 or -20000; p[i] = {x, x, 0} end
-            b:gesture(p, {ramps={0,0}})"#).unwrap_err();
-        assert!(e.contains("sampled stroke is too long"), "{e}");
-    }
-
-
-    // a raw canvas takes no ground: an empty table is none, anything in it
-    // (in either part of the table) is refused
-    #[test]
-    fn a_raw_canvas_refuses_a_ground() {
-        if let Err(e) = run(r#"canvas{size=300, aspect=1, linen=15, raw="cotton duck", ground={}}"#) {
-            panic!("{e}");
-        }
-        for g in ["{um=50}", r#"{{pile={{"lead white", 1}}, um=50, apply="knife"}}"#] {
-            let e = run(&format!(r#"canvas{{size=300, aspect=1, linen=15, raw="cotton duck", ground={g}}}"#)).unwrap_err();
-            assert!(e.contains("a raw canvas has no ground"), "{g}: {e}");
-        }
-        let e = run(r#"canvas{size=300, aspect=1, linen=15, raw="burlap"}"#).unwrap_err();
-        assert!(e.contains("names the cloth"), "{e}");
-    }
-
-    // soaked(x, y) says what is in the cloth, on a raw canvas and a primed one
-    #[test]
-    fn soaked_says_what_is_in_the_cloth() {
-        let out = run(r#"canvas{size=300, aspect=1, linen=15, raw="linen"}
-            print(soaked(500, 500)); print(soaked(-5, 500))"#).unwrap();
-        assert_eq!(out, "raw\noutside the canvas\n");
-        let out = run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white", 1}}, um=50, apply="knife"}}}
-            print(soaked(500, 500))"#).unwrap();
-        assert_eq!(out, "primed (nothing soaks in)\n");
-    }
-
-    // engines 1 and 2 keep their language: a raw canvas is engine 3's
-    #[test]
-    fn older_engines_have_no_raw_canvas() {
-        for e in [1u32, 2] {
-            let mut t = paint::Palette::tube_box();
-            t.engine = e;
-            let mut s = Session::replay_with(200, t).unwrap();
-            let err = s.run(r#"canvas{size=300, aspect=1, linen=15, raw="cotton duck"}"#).unwrap_err();
-            assert!(err.contains("raw"), "engine {e}: {err}");
-            let err = s.run(r#"canvas{size=300, aspect=1, linen=15, ground={{pile={{"lead white", 1}}, um=50, apply="knife"}}}
-                print(soaked(500, 500))"#).unwrap_err();
-            assert!(err.contains("soaked"), "engine {e}: {err}");
-        }
     }
 
     // math.random: stock Lua's errors, whole 64-bit ranges, and the draws

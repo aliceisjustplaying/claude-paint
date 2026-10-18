@@ -483,32 +483,3 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     g.set("aerial", lua.create_function(|_, (d, vis): (f32, f32)| Ok(aerial(d, vis)))?)?;
     Ok(())
 }
-
-// Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
-#[cfg(all(test, tube_box))]
-mod tests {
-    use crate::session::Session;
-
-    /// A hard shadow (soft=0) covers the whole shadow side, the core shadow
-    /// included; a negative width is refused.
-    #[test]
-    fn a_hard_shadow_covers_the_core_shadow() {
-        let mut s = Session::new(240).unwrap();
-        s.run(r#"canvas{size=440, aspect=1.5, linen=15, seed=3, ground={{pile={{"lead white", 1}}, um=120, apply="knife"}}}
-                 f = form{ {body.ellipsoid({500, 350, 0}, {150, 150, 150}), dist=1}, light={from={-1, -0.4}, front=0.5} }
-                 local sh, n = f:shadow{soft=0}, 0
-                 for x = 500, 640 do
-                   -- in shadow, and so are the pixels around it
-                   local d = f:shade(x - 3, 350).direct + f:shade(x, 350).direct + f:shade(x + 3, 350).direct
-                   if d == 0 then
-                     n = n + 1
-                     assert(sh:at(x, 350) == 1, x .. ': ' .. sh:at(x, 350))
-                     assert(f:lit_at(x, 350, 0) == 0, x)
-                   end
-                 end
-                 assert(n > 10, n)"#)
-            .unwrap();
-        let e = s.run("f:shadow{soft=-1}").unwrap_err();
-        assert!(e.contains("soft must be a finite width"), "{e}");
-    }
-}

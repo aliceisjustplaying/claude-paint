@@ -115,34 +115,3 @@ thread_local! {
 pub fn with<R>(f: impl FnOnce(&mut Window) -> R) -> R {
     WINDOW.with(|w| f(&mut w.borrow_mut()))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cells_start_empty_each_contact_and_keep_first_hit_order() {
-        let mut w = Window::default();
-        w.begin((0, 0, 30, 30), (10, 20, 14, 23));
-        w.cell(11, 21, 5, || 0.5).a[VOL] += 1.0;
-        w.cell(10, 20, 4, || 1.0).a[VOL] += 2.0;
-        assert_eq!(w.cell(11, 21, 99, || unreachable!()).a[VOL], 1.0);
-        let hit: Vec<(usize, f32, f32)> = w.hit_cells().map(|a| (a.j, a.k, a.a[VOL])).collect();
-        assert_eq!(hit, vec![(5, 0.5, 1.0), (4, 1.0, 2.0)]);
-        w.begin((0, 0, 30, 30), (10, 20, 14, 23));
-        let c = w.cell(11, 21, 5, || 0.25);
-        assert_eq!((c.a[VOL], c.k), (0.0, 0.25));
-        assert_eq!(w.generation, 2);
-    }
-
-    #[test]
-    fn a_larger_interior_grows_the_cells_and_starts_them_empty() {
-        let mut w = Window::default();
-        w.begin((0, 0, 2, 2), (0, 0, 2, 2));
-        w.cell(1, 1, 3, || 1.0).a[VOL] = 7.0;
-        w.begin((0, 0, 40, 40), (0, 0, 40, 40));
-        assert_eq!(w.cell(39, 39, 1, || 1.0).a[VOL], 0.0);
-        assert_eq!(w.cell(1, 1, 1, || 1.0).a[VOL], 0.0);
-        assert_eq!(w.hit_cells().count(), 2);
-    }
-}

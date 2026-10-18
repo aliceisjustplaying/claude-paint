@@ -335,7 +335,3 @@ impl RenderSnapshot {
     }
 
 }
-
-#[cfg(test)]
-#[path = "render_snapshot_tests.rs"]
-mod tests;

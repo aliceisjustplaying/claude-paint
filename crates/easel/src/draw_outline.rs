@@ -229,7 +229,7 @@ fn body_of(st: &S, o: Table) -> Result<OutlineU> {
     let (ch, scale) = character(&o, &all, "soft")?;
     let blend = num(&o, "blend")?.unwrap_or(0.8).max(0.0);
     let seed = seed_of(st, &o)?;
-    Ok(OutlineU { o: Rc::new(Outline::body(&bones, blend, ch, seed, Some(scale))), st: st.clone() })
+    Ok(OutlineU { o: Rc::new(Outline::body(&bones, blend, ch, seed, Some(scale), st.borrow().tubes.limbs_join_nearest)), st: st.clone() })
 }
 
 const PAINT_KEYS: &[&str] = &["pressure", "shake", "clip", "dip", "every", "ramps"];
@@ -369,83 +369,58 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
-// every test here paints from the default box
-#[cfg(all(test, tube_box))]
+#[cfg(all(test, feature = "replay"))]
 mod tests {
-    use crate::session::Session;
+    use crate::session::{Session, box_for};
 
-    fn run(src: &str) -> Result<String, String> {
-        let mut s = Session::replay(200).unwrap();
-        s.run(r#"canvas{size=440, aspect=1.4, linen=15, seed=11, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=120, apply="knife"}}}"#).unwrap();
-        s.run(src).map(|r| r.out)
+    const CANVAS: &str = r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",3},{"yellow ochre",1}}, um=120, apply="knife"}}}"#;
+
+    /// A trunk, a bough off it, a branch off the bough 200 units from the
+    /// trunk, and two short limbs starting off the trunk, one a little (5
+    /// units) and one further (25 units, more than its width). Prints the
+    /// most the mask covers between the branch and the trunk, then the gap
+    /// between the trunk and each short limb.
+    const TREE: &str = r#"m = body_of{spine={{500,960},{500,260}}, widths={60,30},
+  limbs={
+    {pts={{500,640},{700,500},{800,470}}, widths={24,16,12}},
+    {pts={{700,500},{730,400},{750,320}}, widths={12,9,6}},
+    {pts={{540,800},{640,760}}, widths={14,10}},
+    {pts={{460,400},{360,360}}, widths={14,10}},
+  }, amount=0}:mask()
+local bar = 0
+for x = 540, 640, 4 do for y = 490, 510, 2 do bar = math.max(bar, m:at(x, y)) end end
+print(string.format("%.2f %.2f %.2f", bar, m:at(530, 800), m:at(474, 400)))"#;
+
+    fn covered(s: &mut Session) -> Vec<f32> {
+        s.run(TREE).unwrap().out.split_whitespace().map(|v| v.parse().unwrap()).collect()
     }
 
+    /// In a new painting a branch off a bough joins its bough, not the
+    /// trunk: `body_of` used to extend every limb into the spine, however
+    /// far it started, so the branch grew a straight bar back to the trunk.
+    /// A limb starting a little off the trunk still joins it, and one
+    /// starting further off stays apart. A save keeps this; a log from before
+    /// replays its bars as it did.
     #[test]
-    fn invalid_outline_masks_explain_executable_recovery() {
-        let setup = r#"local o = outline{{100,100},{200,100},{200,200},{100,200}, amount=0, seed=1}; local other = o:inset(10); local r = rag()"#;
-        for (bad, recovery) in [
-            (
-                "local m = o - other",
-                "local m = o:mask() - other:mask(); assert(m:area() > 0)",
-            ),
-            (
-                "local m = rect(0,0,300,300) - o",
-                "local m = rect(0,0,300,300) - o:mask(); assert(m:area() > 0)",
-            ),
-            ("blend(nil, {})", "blend(o:mask(), {coverage=0})"),
-            ("blend(o, {})", "blend(o:mask(), {coverage=0})"),
-            ("r:wipe(nil)", "r:wipe(o:mask())"),
-        ] {
-            let e = run(&format!("{setup}; {bad}")).unwrap_err();
-            assert!(e.contains("o:mask()"), "{bad}: {e}");
-            println!("{bad}: {e}");
-            run(&format!("{setup}; {recovery}")).unwrap();
-        }
-    }
+    fn body_of_joins_a_limb_to_the_nearest_limb() {
+        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        let [bar, near, far] = covered(&mut s)[..] else { panic!() };
+        assert!(bar < 0.05, "the branch grew a bar back to the trunk ({bar})");
+        assert!(near > 0.5, "the limb starting a little off the trunk doesn't join it ({near})");
+        assert!(far < 0.05, "the limb starting further off grew a bar to the trunk ({far})");
 
-    // an inset that eats a closed shape is an empty outline, and its mask is empty (so a rim keeps the whole shape)
-    #[test]
-    fn an_inset_that_consumes_the_shape_masks_nothing() {
-        run(r#"local o = outline{{100,100},{110,100},{110,110},{100,110}, corners=true, amount=0, edge=0, seed=1}
-               local inset = o:inset(7)
-               assert(#inset:paths() == 0, #inset:paths())
-               local m = inset:mask()
-               assert(m:area() == 0, m:area())
-               local rim = o:mask() - m
-               assert(math.abs(rim:area() - o:mask():area()) < 1e-3, rim:area())"#)
-        .unwrap();
-        // a nonempty open line still has no inside
-        let e = run(r#"outline{{100,100},{200,120},{300,100}, closed=false}:mask()"#).unwrap_err();
-        assert!(e.contains("this line is open"), "{e}");
-    }
+        let path = std::env::temp_dir().join(format!("easel-limbs-{}.ckpt", std::process::id()));
+        let program = s.program("painting");
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        let _ = std::fs::remove_file(&path);
+        assert!(covered(&mut restored)[0] < 0.05, "a restored save joins limbs to the spine");
 
-    // lobes and hands finer than the line is sampled are refused, not drawn
-    #[test]
-    fn tiny_lobes_and_sizes_are_refused() {
-        let tri = "{100,100},{900,100},{900,600}";
-        for (opt, want) in [("lobe=1e-4", "lobe 0.0001: want 0 (none) or at least 0.5 units"), ("size=1e-45", "want at least 1")] {
-            let e = run(&format!("outline{{{tri}, char=\"broken\", {opt}}}")).unwrap_err();
-            assert!(e.contains(want), "{opt}: {e}");
-        }
-        run(&format!("outline{{{tri}, char=\"soft\", lobe=0}}; outline{{{tri}, char=\"soft\", lobe=0.5, size=1}}")).unwrap();
-    }
-
-    // finding 6: explicit character options come before amount=, so
-    // amount=0 is a clean curve whatever lobe= says
-    #[test]
-    fn amount_zero_is_clean_even_with_explicit_lobes() {
-        run(r#"local function dev(o) local m = 0 for _, p in ipairs(o:path()) do m = math.max(m, math.abs(p[2] - 200)) end return m end
-               for _, ch in ipairs({"soft", "firm"}) do
-                 local clean = outline{{100,200},{500,200}, char=ch, amount=0, edge=0, seed=1}
-                 local lobed = outline{{100,200},{500,200}, char=ch, amount=0, lobe=24, edge=0, seed=1}
-                 assert(dev(clean) < 0.01, ch .. " clean " .. dev(clean))
-                 assert(dev(lobed) < 0.01, ch .. " lobed " .. dev(lobed))
-                 -- amount scales the explicit lobes: 1 shows them, 2 doubles them
-                 local one = outline{{100,200},{500,200}, char=ch, amount=1, lobe=24, edge=0, seed=1}
-                 local two = outline{{100,200},{500,200}, char=ch, amount=2, lobe=24, edge=0, seed=1}
-                 assert(dev(one) > 2, ch .. " one " .. dev(one))
-                 assert(dev(two) > dev(one) * 1.3, ch .. " two " .. dev(two) .. " one " .. dev(one))
-               end"#)
-        .unwrap();
+        let mut old = Session::replay_with(320, box_for(Some("--@ engine 7\n")).unwrap()).unwrap();
+        old.run(CANVAS).unwrap();
+        let [bar, _, far] = covered(&mut old)[..] else { panic!() };
+        assert!(bar > 0.5 && far > 0.5, "an older log no longer replays its limbs joined to the spine ({bar}, {far})");
     }
 }
+

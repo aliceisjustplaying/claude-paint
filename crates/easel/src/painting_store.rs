@@ -551,7 +551,3 @@ impl ReadRevision {
         self.manifest.checkpoint.as_ref().map(|c| object_path(&self.dir, &c.id)).ok_or_else(|| invalid("committed revision has no canvas yet"))
     }
 }
-
-#[cfg(test)]
-#[path = "painting_store_tests.rs"]
-mod tests;

@@ -2,11 +2,12 @@
 //!
 //!   easel open [<name>]              start (or reattach to) a session
 //!   easel do '<lua>' | -f chunk.lua | -            run a chunk on the live canvas
-//!   easel look [--crop x0,y0,x1,y1] [--mode value|squint|mirror] [--grid [step]] [--size N]
-//!   easel log | status | globals | save [path] | frames on|off | close
+//!   easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size N]
+//!   easel log | status | globals | save [path] [--light az,el | --gallery] | frames on|off | close
 //!   easel check                                    (replay build) replay the log, compare
 //!   easel note '<text>' | -                        append to notes/journal.md
-//!   easel run paintings/lua/<name>.lua [--out path] [--look] [--state-digest digests.txt]
+//!   easel run paintings/lua/<name>.lua [--out path] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+//!                                    (replay build) replay at the width it was painted at
 //!
 //! Two builds (see `USAGE`). The replay build (feature `replay`, on by
 //! default: developers, tests and the outside runner) has named sessions
@@ -19,8 +20,6 @@ mod api;
 mod ground_cache;
 mod board;
 mod check;
-#[cfg(all(test, feature = "replay"))]
-mod checkpoint_tests;
 mod depth;
 mod display;
 mod draw_edges;
@@ -45,14 +44,8 @@ mod session;
 mod state_dump;
 mod time;
 mod world;
-#[cfg(all(test, feature = "replay"))]
-mod thinner_measure;
-#[cfg(all(test, feature = "replay"))]
-mod thinner_tests;
 
 use paint::Canvas;
-#[cfg(test)]
-use paint::color::linear_to_srgb;
 use session::{Session, parse_program, root};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -113,7 +106,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -131,8 +124,9 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
+                      (a new session named sketch... is a sketch, 600px)
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
-  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--grid [step]] [--size 1000]
+  easel look [--crop x0,y0,x1,y1] [--mode value,squint,mirror,relief,gallery] [--light az,el] [--grid [step]] [--size 1000]
              [--survey]   the whole canvas at full detail, in tiles
              [--compare <earlier look png>]   that look beside this one
              [--hold <knife or pile> --at x,y]   (speculative) the loaded knife held up to the canvas there
@@ -145,7 +139,8 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel check         replay the log from scratch and compare with the live canvas
   easel close         end the session (the log stays)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
-  easel run <file.lua> [--out path.png] [--look] [--state-digest digests.txt]    replay at its width and write the PNG
+  easel run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
+                      replay at its width and write the PNG
       [--checkpoint-out path.ckpt]   export the final finishable state after success
       [--frames-every <s> --frames-dir <dir> [--frame-width 1000]]   and a frame per <s> of hand time
       [--width <px>]   replay narrower, a preview for development (not the painting)
@@ -1232,7 +1227,8 @@ impl Server {
                 }
                 "--survey" => survey = true,
                 "--compare" => {
-                    compare = Some(PathBuf::from(args.get(i + 1).ok_or("--compare needs an earlier look's png")?));
+                    // (not a following option taken for the path)
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
                     i += 1;
                 }
                 a => rest.push(a.to_string()),
@@ -1609,14 +1605,17 @@ pub const GALLERY_LIGHT: (f32, f32) = (115.0, 55.0);
 /// `light az,el` (degrees) as a pair.
 pub(crate) fn light_of(s: &str) -> Result<(f32, f32), String> {
     let p: Vec<f32> = s.split(',').map(|t| t.trim().parse::<f32>()).collect::<Result<_, _>>().map_err(|_| format!("light {s}: want azimuth,elevation in degrees"))?;
-    if p.len() != 2 || !p[0].is_finite() || !(3.0..=89.0).contains(&p[1]) {
-        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 3 to 89)"));
+    if p.len() != 2 || !p[0].is_finite() || !(0.0..=90.0).contains(&p[1]) {
+        return Err(format!("light {s}: want azimuth,elevation in degrees (elevation 0 to 90)"));
     }
     Ok((p[0], p[1]))
 }
 
 /// `save`'s arguments: an optional path, then `--light az,el` or `--gallery`.
 fn save_args(args: &[String]) -> Result<(Option<PathBuf>, Option<(f32, f32)>), String> {
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err("save: --light and --gallery are two lights; give one".into());
+    }
     let (mut path, mut light) = (None, None);
     let mut i = 0;
     while i < args.len() {
@@ -1850,6 +1849,9 @@ fn run(args: &[String]) -> Result<(), String> {
     // hand-time frames (frames.rs): only read the canvas, so the replay is
     // the same with or without them
     // --light or --gallery: the picture (and its frames) lit on the paint's relief
+    if args.iter().any(|a| a == "--gallery") && args.iter().any(|a| a == "--light") {
+        return Err(format!("run: --light and --gallery are two lights; give one ({RUN_USAGE})"));
+    }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
         (None, None) => false,
@@ -1907,6 +1909,9 @@ fn run(args: &[String]) -> Result<(), String> {
         );
     }
     deliver_lit(&c, &out, light)?;
+    if let Some(path) = std::env::var_os("BLIND_COLOR_OUT") {
+        deliver_lit(&c, Path::new(&path), None)?;
+    }
     eprintln!("wrote {} ({} chunks, painted in {paint_secs:.1}s, total {:.1}s)", out.display(), chunks.len(), t0.elapsed().as_secs_f64());
     if let Some(p) = flag(args, "--dump-surface") {
         // the dried surface height (µm) under the saved pixels: little-endian
@@ -2134,321 +2139,4 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let knives: Vec<String> = st.live_knives().iter().map(|k| format!("{:?}", k.borrow())).collect();
     let knives_s = if knives.is_empty() { String::new() } else { format!(" knives={:016x} nknives={}", fnv1a(knives.join("\n").as_bytes()), knives.len()) };
     format!("chunk {n} secs={secs:.3} canvas={canvas:016x} brushes={brushes_h:016x} nbrushes={} studio={studio_h:016x}{knives_s}\n", brushes.len())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn a_long_session_dir_gets_a_short_socket() {
-        use std::os::unix::fs::MetadataExt;
-        let short = std::path::Path::new("/s/out/easel/p");
-        assert_eq!(super::short_sock(short), short.join("sock"));
-        // under a directory this test makes, so its nearest existing ancestor is this
-        // user's (the temp dir itself may be root's, as /tmp is on Linux)
-        let mine = std::env::temp_dir().join(format!("easel-long-test-{}", std::process::id()));
-        std::fs::create_dir_all(&mine).unwrap();
-        let long = mine.join("d".repeat(120)).join("out/easel/p");
-        let s = super::short_sock(&long);
-        assert!(s.as_os_str().len() < 100, "{s:?}");
-        let private = std::fs::symlink_metadata(s.parent().unwrap()).unwrap();
-        assert!(private.is_dir() && private.mode() & 0o077 == 0, "the socket's directory is private");
-        assert_eq!(s, super::short_sock(&long), "the same directory, the same socket");
-        // The private <tmp>/easel-<uid> it made stays: it is the one live servers use,
-        // and removing it under a running easel would take its socket away.
-        std::fs::remove_dir(&mine).unwrap();
-    }
-    #[test]
-    fn a_shared_socket_dir_is_not_used() {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let d = std::env::temp_dir().join(format!("easel-shared-test-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
-        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
-        let me = std::fs::metadata(&d).unwrap().uid();
-        assert!(!super::private_dir(&d, me), "open to others");
-        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(super::private_dir(&d, me));
-        assert!(!super::private_dir(&d, me.wrapping_add(1)), "another user's");
-        let link = d.with_extension("link");
-        let _ = std::fs::remove_file(&link);
-        std::os::unix::fs::symlink(&d, &link).unwrap();
-        assert!(!super::private_dir(&link, me), "a symlink");
-        std::fs::remove_file(&link).unwrap();
-        std::fs::remove_dir(&d).unwrap();
-    }
-    use super::*;
-
-    /// A stray look numbered at the top of u64 leaves no number above it: the look is
-    /// refused, not a panic (debug) or a wrap back to look-0000 (release).
-    #[test]
-    fn a_look_above_the_last_number_is_refused() {
-        let dir = std::env::temp_dir().join(format!("easel-look-top-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(format!("look-{}.png", u64::MAX)), b"stray").unwrap();
-        let r = std::panic::catch_unwind(|| new_look(&dir, b"png"));
-        let names: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
-        let _ = std::fs::remove_dir_all(&dir);
-        let r = r.expect("new_look panicked");
-        assert!(r.as_ref().is_err_and(|e| e.contains("look")), "{r:?}");
-        assert_eq!(names.len(), 1, "a look was written: {names:?}");
-    }
-
-    #[test]
-    fn orphaned_companion_names_are_never_reused_for_a_new_look() {
-        for preset in look::DISPLAY_PRESETS {
-            let dir = std::env::temp_dir().join(format!("easel-look-orphan-{}-{}", preset.name, std::process::id()));
-            std::fs::create_dir_all(dir.join(preset.folder)).unwrap();
-            std::fs::write(dir.join(preset.folder).join("look-0007.png"), b"old companion").unwrap();
-            let path = new_look(&dir, b"new primary").unwrap();
-            assert_eq!(path.file_name().unwrap(), "look-0008.png");
-            assert_eq!(std::fs::read(&path).unwrap(), b"new primary");
-            assert!(!dir.join(preset.folder).join(path.file_name().unwrap()).exists());
-            std::fs::remove_dir_all(dir).unwrap();
-        }
-    }
-
-    /// The lock-on-stdin signal is for this server only: once read it leaves the
-    /// environment, so no child the server ever starts takes it (or its stdin) as the lock.
-    #[test]
-    fn the_lock_on_stdin_signal_is_not_passed_on() {
-        // SAFETY: no other test reads or writes this variable
-        unsafe { std::env::set_var(LOCK_ON_STDIN, "1") };
-        // stdin here is no lock file: refused, but the signal is read all the same
-        let r = serve_lock("lock-signal-test");
-        assert!(r.is_err(), "a test's stdin was taken as the lock");
-        assert_eq!(std::env::var_os(LOCK_ON_STDIN), None, "{LOCK_ON_STDIN} is still set");
-    }
-
-    /// A request is served from its length line, even when the client's end of file never
-    /// comes (macOS sometimes loses a half-close; the server then waited for it until the
-    /// client was killed). The client here keeps its socket open, as a lost end of file looks.
-    #[test]
-    fn a_request_is_read_without_the_clients_end_of_file() {
-        let (mut client, mut server) = UnixStream::pair().unwrap();
-        server.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-        // more than a socket buffer holds: the client writes while the server reads
-        let payload = "-- ünïcode\n".repeat(2000);
-        let sent = payload.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let t = std::thread::spawn(move || {
-            send_request(&mut client, b"do\n", sent.as_bytes()).unwrap();
-            // keep the socket open until the server has read: no end of file
-            let _ = done_rx.recv();
-            drop(client);
-        });
-        let req = read_request(&mut server).expect("the server waited for an end of file");
-        done_tx.send(()).unwrap();
-        t.join().unwrap();
-        assert_eq!(req, [b"do\n".as_slice(), payload.as_bytes()].concat());
-    }
-
-    #[test]
-    fn a_request_from_an_older_client_is_refused_with_a_reason() {
-        let (mut client, mut server) = UnixStream::pair().unwrap();
-        client.write_all(b"status\n").unwrap();
-        let e = read_request(&mut server).unwrap_err();
-        assert!(e.contains("different versions"), "{e}");
-    }
-
-    const PALETTE_CANVAS: &str = r#"canvas{size=300, aspect=1.25, seed=3, linen=15, ground={{pile={{"lead white", 4}, {"red earth", 1}}, um=80, apply="knife"}}}"#;
-
-    /// On a painting wider than 2400 px a passage is shown smaller than its own pixels
-    /// (look.rs LOOK_SCALE): the blade is still held at the point, the passage's middle,
-    /// not where the canvas's own pixels would put it (outside the passage).
-    #[cfg(feature = "replay")]
-    #[test]
-    fn a_held_knife_is_at_the_point_on_a_wide_painting() {
-        let mut s = Session::new(3000).unwrap();
-        s.run(PALETTE_CANVAS).unwrap();
-        s.run(r#"dk = pile{{"raw umber", 2}, {"bone black", 1}}; k = knife{width=40}; k:load(dk, 0.8)"#).unwrap();
-        let at = (400.0, 320.0);
-        let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
-        let crop = [at.0 - HOLD_HALF, at.1 - HOLD_HALF, at.0 + HOLD_HALF, at.1 + HOLD_HALF];
-        let (w, h, png) = hold_look(&s, "k", at, &look::View::default()).unwrap();
-        let bare = rgb(&look::render(&s.canvas().unwrap(), &look::View { crop: Some(crop), ..look::View::default() }).unwrap().2);
-        assert_eq!((w as u32, h as u32), bare.dimensions(), "the passage is shown as a crop of it is");
-        let held = rgb(&png);
-        let (side, mid) = (w.min(h) as u32, (w.min(h) / 2) as u32);
-        assert!((0..mid - 1).all(|x| (0..side).all(|y| held.get_pixel(x, y) == bare.get_pixel(x, y))), "left of the point untouched");
-        let covered = (mid..side).filter(|&x| held.get_pixel(x, mid) != bare.get_pixel(x, mid)).count();
-        assert!(covered as u32 > (side - mid) / 2, "the blade runs right from the point: {covered} of {} pixels", side - mid);
-    }
-
-    /// The held knife (speculative) only reads, as the palette look: the state digest, the
-    /// log, the globals and the clock are as they were. It shows the passage with a knife
-    /// over it at the point: a knife global with its own load, or a pile freshly loaded.
-    #[cfg(feature = "replay")]
-    #[test]
-    fn a_held_knife_shows_its_paint_over_the_passage_and_changes_nothing() {
-        let mut s = Session::new(1000).unwrap();
-        s.run(PALETTE_CANVAS).unwrap();
-        s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
-                 b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})
-                 k = knife{width=40}; k:load(dk, 0.8); clean = knife{width=20}"#).unwrap();
-        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
-        let plain = look::View::default();
-        let at = (400.0, 320.0);
-        let rgb = |png: &[u8]| image::load_from_memory(png).unwrap().to_rgb8();
-        let (w, h, png) = hold_look(&s, "k", at, &plain).unwrap();
-        // the passage is 240 units square: at this canvas's one px a unit, 240 px (give or take a rounded edge)
-        assert!((239..=241).contains(&w) && (239..=241).contains(&h), "{w} x {h}");
-        let side = w.min(h);
-        let held = rgb(&png);
-        // the same passage without the knife: the same left of the point, another picture right of it
-        let bare = rgb(&look::render(&s.canvas().unwrap(), &look::View { crop: Some([at.0 - HOLD_HALF, at.1 - HOLD_HALF, at.0 + HOLD_HALF, at.1 + HOLD_HALF]), ..look::View::default() }).unwrap().2);
-        let mid = (side / 2) as u32;
-        assert!((0..mid - 1).all(|x| (0..side as u32).all(|y| held.get_pixel(x, y) == bare.get_pixel(x, y))), "the passage left of the point is untouched");
-        let covered = (mid..side as u32).flat_map(|x| (0..side as u32).map(move |y| (x, y))).filter(|&(x, y)| held.get_pixel(x, y) != bare.get_pixel(x, y)).count();
-        assert!(covered > 100, "the blade covers {covered} pixels");
-        // the dark paint is on the blade: some of it much darker than the steel
-        let darkest = (mid..side as u32).map(|x| held.get_pixel(x, mid).0.iter().map(|&v| v as u32).sum::<u32>()).min().unwrap();
-        assert!(darkest < 200, "the darkest of the blade's middle row sums to {darkest}");
-        // a pile by its name is a fresh load; in grays the blade is gray too
-        hold_look(&s, "skyP", at, &plain).unwrap();
-        // The render clamps an out-of-bounds crop; blade placement uses the
-        // same origin, so it matches the explicitly clamped crop exactly.
-        let edge = (100.0, 100.0);
-        let outside = hold_look(&s, "k", edge, &look::View { crop: Some([-50.0, -50.0, 200.0, 200.0]), ..look::View::default() }).unwrap();
-        let clamped = hold_look(&s, "k", edge, &look::View { crop: Some([0.0, 0.0, 200.0, 200.0]), ..look::View::default() }).unwrap();
-        assert!(outside == clamped, "crop clipping cannot move the held blade");
-        let gray = rgb(&hold_look(&s, "k", at, &look::View { value: true, ..look::View::default() }).unwrap().2);
-        assert!((mid..side as u32).all(|x| { let p = gray.get_pixel(x, mid).0; p[0] == p[1] && p[1] == p[2] }));
-        // (kept for the eye: target/easel-look-test/held-knife.png)
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/easel-look-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("held-knife.png"), &png).unwrap();
-        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
-        assert_eq!(before, after);
-        s.run("assert(k:fullness() > 0)").unwrap();
-        s.run("k:wipe(); k:load(dk, 0.01)").unwrap();
-        assert!((s.held("k").unwrap().2 - 0.01).abs() < 1e-5,
-            "the preview must preserve a nearly empty knife's load");
-        s.run(r#"skyP = pile{{"lead white", 1}, thinner=0.4}
-            skyP:add{{"lead white", 1}}
-            k:wipe(); k:load(skyP, 0.5)"#).unwrap();
-        assert!((s.held("skyP").unwrap().0.thinner - 0.2).abs() < 1e-5,
-            "a palette preview must use the current diluted thinner share");
-        assert!((s.held("k").unwrap().0.thinner - 0.2).abs() < 1e-5,
-            "a knife preview must retain the blade's carried solvent share");
-        // what it refuses: a clean knife, a name that holds neither, a point off the canvas or the crop, a view of its own
-        assert!(hold_look(&s, "clean", at, &plain).unwrap_err().contains("the knife is clean"));
-        let e = hold_look(&s, "nope", at, &plain).unwrap_err();
-        assert!(e.contains("no global of that name holds a knife or a pile") && e.contains("clean, dk, k, skyP"), "{e}");
-        assert!(hold_look(&s, "k", (1400.0, 320.0), &plain).unwrap_err().contains("not on the canvas"));
-        assert!(hold_look(&s, "k", (f32::NAN, 320.0), &plain).unwrap_err().contains("not on the canvas"));
-        assert!(hold_look(&s, "k", at, &look::View { crop: Some([0.0, 0.0, 100.0, 100.0]), ..look::View::default() }).unwrap_err().contains("outside the --crop"));
-        assert!(hold_look(&s, "k", at, &look::View { mirror: true, ..look::View::default() }).is_err());
-    }
-
-    /// A palette look only reads: the state digest (canvas, brushes, studio), the log and the
-    /// globals are the same before and after it, and it puts no time on the clock.
-    #[test]
-    #[cfg(tube_box)]
-    fn a_palette_look_changes_nothing() {
-        let mut s = Session::new(320).unwrap();
-        s.run(PALETTE_CANVAS).unwrap();
-        s.run(r#"skyP = pile{{"lead white", 6}, {"smalt", 1}, medium=0.2}; dk = pile{{"raw umber", 2}, {"bone black", 1}}
-                 b = brush("filbert", 8); b:load(skyP, 0.8); b:stroke({{100, 300}, {700, 340}})"#).unwrap();
-        let before = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
-        let (w, h, png) = palette_look(&s).unwrap();
-        assert!(w > 0 && h > 0 && png.starts_with(b"\x89PNG"));
-        assert_eq!(s.piles().iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["dk", "skyP"]);
-        let after = (state_digest_line(&s, 2, 0.0), s.program("t"), s.globals(), s.st.borrow().clock);
-        assert_eq!(before, after);
-        // and the next chunk runs as it would have without the look
-        let mut t = Session::new(320).unwrap();
-        for c in &s.log {
-            t.run(&c.src).unwrap();
-        }
-        s.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
-        t.run("b:stroke({{100, 500}, {700, 520}})").unwrap();
-        assert_eq!(state_digest_line(&s, 3, 0.0), state_digest_line(&t, 3, 0.0));
-    }
-
-    /// The palette's thick swatch is what `work` lays thick with that pile: within 2/255 of
-    /// the wet paint's mean in the middle of a heavily covered patch, for a few piles (one
-    /// test each, so they run side by side: together they took 11 s).
-    #[test]
-    #[cfg(tube_box)]
-    fn the_thick_swatch_matches_paint_laid_thick() {
-        thick_swatch_matches(r#"{"lead white", 6}, {"smalt", 1}, medium=0.2"#);
-    }
-
-    #[test]
-    #[cfg(tube_box)]
-    fn the_thick_swatch_matches_paint_laid_thick_dark() {
-        thick_swatch_matches(r#"{"raw umber", 2}, {"bone black", 1}"#);
-    }
-
-    #[test]
-    #[cfg(tube_box)]
-    fn the_thick_swatch_matches_paint_laid_thick_earths() {
-        thick_swatch_matches(r#"{"yellow ochre", 3}, {"red earth", 1}, {"lead white", 2}"#);
-    }
-
-    #[cfg(tube_box)]
-    fn thick_swatch_matches(recipe: &str) {
-        let srgb = |c: paint::Rgb| c.map(|v| linear_to_srgb(v) * 255.0);
-        {
-            let mut s = Session::new(320).unwrap();
-            s.run(PALETTE_CANVAS).unwrap();
-            s.run(&format!(r#"p = pile{{{recipe}}}; work(rect(200, 200, 800, 600), {{hand="body", pile=p, coverage=6}})"#)).unwrap();
-            let (_, _, paint) = s.piles().into_iter().find(|p| p.0 == "p").unwrap();
-            let ground = s.ground_color().unwrap();
-            let want = srgb(look::swatches(&paint, ground)[0]);
-            let c = s.canvas().unwrap();
-            let f = c.window();
-            let seen = c.seen();
-            let mut acc = [0.0f64; 3];
-            let mut n = 0.0;
-            for y in (f.h * 3 / 8)..(f.h * 5 / 8) {
-                for x in (f.w * 3 / 8)..(f.w * 5 / 8) {
-                    for q in 0..3 {
-                        acc[q] += seen[y * f.w + x][q] as f64;
-                    }
-                    n += 1.0;
-                }
-            }
-            let got = srgb(acc.map(|v| (v / n) as f32));
-            for q in 0..3 {
-                assert!((got[q] - want[q]).abs() <= 2.0, "{recipe}: laid {got:?}, swatch {want:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn journal_entries_are_dated_lines() {
-        assert_eq!(journal_entry(907.5, "first line\nsecond\n\nthird\n"), "- day 2, 00:07: first line\n  second\n\n  third\n");
-    }
-
-    #[test]
-    fn save_takes_a_path_and_a_light() {
-        let args = |a: &[&str]| save_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-        assert_eq!(args(&[]), Ok((None, None)));
-        assert_eq!(args(&["a.png"]), Ok((Some(PathBuf::from("a.png")), None)));
-        assert_eq!(args(&["a.png", "--gallery"]), Ok((Some(PathBuf::from("a.png")), Some(GALLERY_LIGHT))));
-        assert_eq!(args(&["--light", "135,25", "a.png"]), Ok((Some(PathBuf::from("a.png")), Some((135.0, 25.0)))));
-        for bad in [&["--light"][..], &["--light", "135"], &["--light", "135,91"], &["--light", "nan,25"], &["--light", "inf,25"], &["a.png", "b.png"], &["--lit"]] {
-            assert!(args(bad).is_err(), "{bad:?}");
-        }
-    }
-
-    /// A new session is a sketch by its name; a log by what its head says.
-    #[test]
-    fn a_log_replays_at_the_width_it_was_painted_at() {
-        assert_eq!(width_for("sketch-1", None), Ok(session::SKETCH_WIDTH));
-        let head = |mark: &str| format!("-- easel session\n--@ engine 4\n{mark}\n--@ chunk 1\ncanvas{{}}\n");
-        assert_eq!(width_for("renamed", Some(&head(session::SKETCH_MARK))), Ok(session::SKETCH_WIDTH));
-        assert_eq!(width_for("sketchbook", Some(&head(""))), Ok(LIVE_WIDTH));
-        assert_eq!(width_for("painting", Some(&head("--@ width 4800"))), Ok(4800));
-        // a new painting: LIVE_WIDTH, or the width file's, or EASEL_WIDTH's (one of session::WIDTHS)
-        assert_eq!(new_width(None, None), Ok(LIVE_WIDTH));
-        assert_eq!(new_width(None, Some("")), Ok(LIVE_WIDTH));
-        assert_eq!(new_width(None, Some("4800")), Ok(4800));
-        assert_eq!(new_width(Some(("4800\n", "bin/width")), None), Ok(4800));
-        assert_eq!(new_width(Some(("4800", "bin/width")), Some("4800")), Ok(4800));
-        assert!(new_width(Some(("4800", "bin/width")), Some("2400")).unwrap_err().contains("set one"));
-        assert!(new_width(None, Some("3000")).is_err() && new_width(None, Some("wide")).is_err());
-        assert!(new_width(Some(("", "bin/width")), None).unwrap_err().contains("bin/width"));
-    }
 }

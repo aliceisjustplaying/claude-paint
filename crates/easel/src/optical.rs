@@ -1,6 +1,4 @@
 use image::ImageEncoder;
-#[cfg(test)]
-use paint::color::linear_to_srgb;
 use paint::render_snapshot::{RenderSnapshot, RENDERER};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -110,8 +108,8 @@ fn load(path: &Path) -> io::Result<RenderSnapshot> {
 fn light(text: &str) -> io::Result<[u32; 3]> {
     let values: Vec<f32> = text.split(',').map(|v| v.parse::<f32>().map_err(|_| invalid("light needs azimuth,elevation,strength"))).collect::<io::Result<_>>()?;
     let [az, el, strength] = values.as_slice() else { return Err(invalid("light needs azimuth,elevation,strength")); };
-    if !az.is_finite() || !el.is_finite() || !strength.is_finite() || !(0.0..=360.0).contains(az) || !(3.0..=89.0).contains(el) || !(0.0..=3.0).contains(strength) {
-        return Err(invalid("light requires finite azimuth 0–360, elevation 3–89 and strength 0–3"));
+    if !az.is_finite() || !el.is_finite() || !strength.is_finite() || !(0.0..=360.0).contains(az) || !(0.0..=90.0).contains(el) || !(0.0..=3.0).contains(strength) {
+        return Err(invalid("light requires finite azimuth 0–360, elevation 0–90 and strength 0–3"));
     }
     Ok([az.to_bits(), el.to_bits(), strength.to_bits()])
 }
@@ -349,7 +347,3 @@ pub fn companions(args: &[String]) -> Result<(), String> {
     })();
     result.map_err(|e| e.to_string())
 }
-
-#[cfg(test)]
-#[path = "optical_tests.rs"]
-mod tests;

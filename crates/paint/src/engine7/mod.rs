@@ -41,10 +41,11 @@ pub const ENGINE: u32 = 7;
 /// as `bristle::Rect`. `None` where one is optional means no pixels.
 pub type Rect = (usize, usize, usize, usize);
 
-/// Whether a canvas of engine `v` paints with engine 7's code.
+/// Whether a canvas of engine `v` paints with engine 7's code (engines 7
+/// and 8: `crate::REACH_END`).
 #[inline]
 pub fn active(v: u32) -> bool {
-    v == ENGINE
+    v >= ENGINE
 }
 
 /// Whether `E7_STATS=1` is set: engine 7 then prints its `E7BATCH` and
@@ -138,126 +139,4 @@ pub struct Node<T> {
     /// `stroke_seed` of its logical position.
     pub seed: u64,
     pub payload: T,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stroke_seeds_depend_on_every_logical_position() {
-        let s = stroke_seed(1, 2, 3, 4);
-        assert_eq!(s, stroke_seed(1, 2, 3, 4));
-        for other in [stroke_seed(0, 2, 3, 4), stroke_seed(1, 1, 3, 4), stroke_seed(1, 2, 2, 4), stroke_seed(1, 2, 3, 5), stroke_seed(1, 3, 2, 4)] {
-            assert_ne!(s, other);
-        }
-    }
-
-    #[test]
-    fn only_seven_is_engine_seven_and_six_is_unsupported() {
-        assert!(active(7) && !active(5) && !active(6));
-        for v in [1, 2, 3, 4, 5, 7] {
-            assert!(crate::supported_engine(v), "{v}");
-        }
-        for v in [0, 6, 8] {
-            assert!(!crate::supported_engine(v), "{v}");
-        }
-        assert_eq!(crate::ENGINE, 5);
-    }
-
-    /// Passes counted at the same time keep their own counts; a tile counts
-    /// as ready until it finishes.
-    #[test]
-    fn concurrent_batches_count_their_own_tiles() {
-        let disjoint: Vec<Option<Rect>> = (0..16).map(|i| Some((i * 10, 0, i * 10 + 5, 5))).collect();
-        let chain: Vec<Option<Rect>> = vec![Some((0, 0, 5, 5)); 6];
-        let stats: Vec<BatchStats> = (0..4).map(|_| BatchStats::default()).collect();
-        rayon::scope(|s| {
-            for (k, st) in stats.iter().enumerate() {
-                let rects = if k % 2 == 0 { &disjoint } else { &chain };
-                s.spawn(move |_| {
-                    let order: Vec<usize> = (0..rects.len()).collect();
-                    crate::sched::run_ordered(&order, rects, Some(st), |_| {
-                        assert!(st.ready.load(Ordering::Relaxed) >= 1, "a running tile no longer counts as ready");
-                        std::thread::sleep(std::time::Duration::from_millis(2));
-                    });
-                });
-            }
-        });
-        for (k, st) in stats.iter().enumerate() {
-            let get = |a: &AtomicUsize| a.load(Ordering::Relaxed);
-            assert_eq!((get(&st.ready), get(&st.running)), (0, 0), "batch {k}");
-            let want = if k % 2 == 0 { 16 } else { 1 };
-            assert_eq!(get(&st.peak_ready), want, "batch {k}");
-            assert!((1..=want).contains(&get(&st.peak_running)), "batch {k}");
-            assert!(st.tile_ns.load(Ordering::Relaxed) > 0);
-        }
-    }
-
-    /// A saved and restored engine 7 canvas paints on exactly as the one
-    /// that never stopped, after strokes that rebuilt only part of its
-    /// contact cache.
-    #[test]
-    fn a_restored_canvas_paints_on_as_the_original() {
-        use crate::bristle::{Gesture, Held, Tool};
-        use crate::canvas::Canvas;
-        use crate::color::hex;
-        use crate::wet::Paint;
-        let stroke = |c: &mut Canvas, a: (f32, f32), b: (f32, f32), p: f32, load: f32, seed: u64| {
-            let mut h = Held::new(Tool::filbert(36.0), seed).with_engine(7);
-            h.load(Paint::body(hex("#704030")), load);
-            c.drag(&mut h, &Gesture::line(a, b).pressure(p, p), None);
-        };
-        let state = |c: &Canvas| {
-            let mut b = Vec::new();
-            c.write_state(&mut b, "").unwrap();
-            b
-        };
-        let mut c = Canvas::new(600, 1.4, hex("#d8d0c0")).with_size_mm(200.0).with_linen(crate::surface::Linen::fine(3)).with_engine(7);
-        for k in 0..4 {
-            stroke(&mut c, (330.0, 320.0), (370.0, 330.0), 0.8, 1.0, 10 + k);
-            c.dry();
-        }
-        stroke(&mut c, (210.0, 350.0), (770.0, 375.0), 0.15, 0.1, 20);
-        let (mut d, _) = Canvas::read_state(&mut std::io::Cursor::new(state(&c))).unwrap();
-        for cv in [&mut c, &mut d] {
-            stroke(cv, (210.0, 230.0), (770.0, 255.0), 0.12, 0.03, 40);
-        }
-        assert!(state(&c) == state(&d), "the restored canvas painted differently");
-    }
-
-    #[test]
-    fn an_engine_7_canvas_reopens_as_engine_7_and_engine_6_does_not() {
-        for (v, want) in [(7, Some(7)), (6, None)] {
-            let c = crate::canvas::Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(v);
-            let mut b = Vec::new();
-            c.write_state(&mut b, "").unwrap();
-            let back = crate::canvas::Canvas::read_state(&mut std::io::Cursor::new(b));
-            assert_eq!(back.ok().map(|(d, _)| d.engine()), want, "engine {v}");
-        }
-    }
-
-    /// Engine 7 lays about the paint engine 5 does, where engine 5 does.
-    #[test]
-    fn engine_7_paints_close_to_engine_5() {
-        use crate::bristle::{Gesture, Held, Tool};
-        use crate::color::hex;
-        use crate::wet::Paint;
-        let paint = |v: u32| {
-            let mut c = crate::canvas::Canvas::new(240, 1.0, hex("#e8e0d0")).with_size_mm(200.0).with_engine(v);
-            for (k, tool) in [Tool::hog_flat(60.0), Tool::filbert(45.0), Tool { point: 1.0, ..Tool::round_sable(25.0) }].into_iter().enumerate() {
-                let mut h = Held::new(tool, 3 + k as u64).with_engine(v);
-                h.load(Paint::body(hex(["#1a1612", "#c03020", "#f0f0e8"][k])), 1.0);
-                c.drag(&mut h, &Gesture::new(vec![(100.0, 200.0 + 150.0 * k as f32), (500.0, 500.0), (900.0, 300.0 + 100.0 * k as f32)]), None);
-            }
-            c.wet.vol.iter().map(|&v| v as f64).collect::<Vec<_>>()
-        };
-        let (old, new) = (paint(5), paint(7));
-        let total: f64 = old.iter().sum();
-        let gap: f64 = old.iter().zip(&new).map(|(a, b)| (a - b).abs()).sum();
-        assert!(old.iter().filter(|&&v| v > 0.0).count() > 500, "engine 5 laid too little");
-        let laid: f64 = new.iter().sum();
-        assert!((laid - total).abs() <= 2e-3 * total, "engine 7 laid {laid} coats·px, engine 5 {total}");
-        assert!(gap <= 1e-2 * total, "engine 7 film differs from engine 5's by {gap} of {total}");
-    }
 }

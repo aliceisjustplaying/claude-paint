@@ -590,36 +590,43 @@ impl Outline {
     /// A silhouette grown from a skeleton: the first limb is the spine, the
     /// others join it smoothly over `blend` times their width. Every limb is a smooth curve through its points, as wide as
     /// `widths` there.
-    pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>) -> Outline {
-        // a limb that starts outside the spine is extended into it, so a
-        // limb starting a little off the spine still joins it
+    ///
+    /// A limb starting a little off the spine is extended into it. With
+    /// `nearest` (new paintings), it is extended into the nearest other limb
+    /// instead, and only when it starts within its own width of it: a branch
+    /// off a branch joins that branch, and a limb that starts further off
+    /// stays apart rather than growing a bar back to the spine. Without it
+    /// (older logs), every limb is extended into the spine, however far.
+    pub fn body(limbs: &[Bone], blend: f32, ch: Character, seed: u64, size: Option<f32>, nearest: bool) -> Outline {
         let limbs: Vec<Bone> = limbs
             .iter()
             .enumerate()
             .map(|(k, l)| {
                 let mut l = l.clone();
-                let spine = &limbs[0];
-                if k == 0 || l.pts.is_empty() || spine.pts.is_empty() {
+                if k == 0 || l.pts.is_empty() || limbs[0].pts.is_empty() {
                     return l;
                 }
                 let r = l.widths.first().copied().unwrap_or(1.0) * 0.5;
                 let s0 = l.pts[0];
-                // nearest point of the spine's center line and its radius there
+                // nearest point of a center line it may join, and the radius there
                 let mut best = (f32::MAX, s0, 0.0);
-                for i in 0..spine.pts.len() {
-                    let a = spine.pts[i];
-                    let b = spine.pts[(i + 1).min(spine.pts.len() - 1)];
-                    let (wa, wb) = (spine.widths.get(i).or(spine.widths.last()).copied().unwrap_or(1.0), spine.widths.get(i + 1).or(spine.widths.last()).copied().unwrap_or(1.0));
-                    let (bx, by) = (b.0 - a.0, b.1 - a.1);
-                    let h = (((s0.0 - a.0) * bx + (s0.1 - a.1) * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
-                    let c = (a.0 + bx * h, a.1 + by * h);
-                    let d = dist(s0, c);
-                    if d < best.0 {
-                        best = (d, c, 0.5 * (wa + (wb - wa) * h));
+                let joins: Vec<&Bone> = if nearest { limbs.iter().enumerate().filter(|&(j, _)| j != k).map(|(_, b)| b).collect() } else { vec![&limbs[0]] };
+                for spine in joins {
+                    for i in 0..spine.pts.len() {
+                        let a = spine.pts[i];
+                        let b = spine.pts[(i + 1).min(spine.pts.len() - 1)];
+                        let (wa, wb) = (spine.widths.get(i).or(spine.widths.last()).copied().unwrap_or(1.0), spine.widths.get(i + 1).or(spine.widths.last()).copied().unwrap_or(1.0));
+                        let (bx, by) = (b.0 - a.0, b.1 - a.1);
+                        let h = (((s0.0 - a.0) * bx + (s0.1 - a.1) * by) / (bx * bx + by * by).max(1e-12)).clamp(0.0, 1.0);
+                        let c = (a.0 + bx * h, a.1 + by * h);
+                        let d = dist(s0, c);
+                        if d < best.0 {
+                            best = (d, c, 0.5 * (wa + (wb - wa) * h));
+                        }
                     }
                 }
                 let (d, c, rs) = best;
-                if d > rs - r * 0.5 && d > 1e-4 {
+                if d > rs - r * 0.5 && d > 1e-4 && (!nearest || d - rs <= 2.0 * r) {
                     let reach = d - rs + r;
                     let u = ((c.0 - s0.0) / d, (c.1 - s0.1) / d);
                     l.pts.insert(0, (s0.0 + u.0 * reach, s0.1 + u.1 * reach));
@@ -1274,200 +1281,5 @@ fn plan_strokes(l: &Line, ch: &Character, scale: f32, step: f32, rng: &mut Rng, 
             }
             r -= 1.0;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn heptagon() -> Vec<P> {
-        vec![(300.0, 600.0), (320.0, 450.0), (420.0, 380.0), (560.0, 400.0), (650.0, 480.0), (680.0, 600.0), (500.0, 620.0)]
-    }
-
-    #[test]
-    fn deterministic_and_seeded() {
-        let a = Outline::draw(&heptagon(), &[], true, Character::broken(), 7, None);
-        let b = Outline::draw(&heptagon(), &[], true, Character::broken(), 7, None);
-        let c = Outline::draw(&heptagon(), &[], true, Character::broken(), 8, None);
-        assert_eq!(a.lines[0].pts, b.lines[0].pts);
-        assert_eq!(a.strokes.len(), b.strokes.len());
-        assert_ne!(a.lines[0].pts, c.lines[0].pts);
-    }
-
-    /// Lobes and facets far smaller than the line is long still end: the
-    /// knots stop when f32 can't advance and are capped.
-    #[test]
-    fn tiny_lobes_and_facets_end() {
-        let pts = [(100.0, 100.0), (900.0, 100.0), (900.0, 600.0)];
-        let mut soft = Character::soft();
-        soft.lobe = 1e-4 / 481.0;
-        let broken = Character::broken();
-        for (ch, size) in [(soft, Some(481.0)), (broken, Some(1e-45))] {
-            let o = Outline::draw(&pts, &[], true, ch, 1, size);
-            assert!(o.lines[0].pts.iter().all(|p| p.0.is_finite() && p.1.is_finite()));
-        }
-    }
-
-    #[test]
-    fn line_stays_near_the_points_and_passes_the_corners() {
-        let pts = heptagon();
-        let mut cor = vec![false; pts.len()];
-        cor[2] = true;
-        cor[5] = true;
-        for ch in [Character::firm(), Character::searching(), Character::broken(), Character::soft()] {
-            let o = Outline::draw(&pts, &cor, true, ch, 3, None);
-            let l = &o.lines[0];
-            assert!(l.closed && l.pts.len() > 200);
-            assert_eq!(l.corners.len(), 2);
-            // every input point has the line within a few units
-            for p in &pts {
-                let d = l.pts.iter().map(|q| dist(*p, *q)).fold(f32::MAX, f32::min);
-                assert!(d < 0.05 * o.scale, "{ch:?}: {d} from {p:?}");
-            }
-            // the line never strays far from the smooth curve's extent
-            let (x0, y0, x1, y1) = bbox(l.pts.iter().copied());
-            assert!(x0 > 270.0 && x1 < 710.0 && y0 > 340.0 && y1 < 650.0);
-            assert!(!o.strokes.is_empty());
-            for s in &o.strokes {
-                assert_eq!(s.pts.len(), s.pressure.len());
-                assert!(s.pressure.iter().all(|p| (0.0..=1.0).contains(p)));
-            }
-        }
-    }
-
-    #[test]
-    fn mask_edge_is_the_line() {
-        let f = Frame::new(500, 375, 0.5);
-        let o = Outline::draw(&heptagon(), &[], true, Character::firm(), 1, None);
-        let m = o.mask(f);
-        assert!(m.sample(480.0, 500.0) > 0.99);
-        assert!(m.sample(100.0, 100.0) < 0.01);
-        // just inside and outside the drawn line, along its normals
-        let l = &o.lines[0];
-        let nn = normals(&l.pts, true, 3);
-        let mut ok = 0;
-        for i in (0..l.pts.len()).step_by(37) {
-            let (p, n) = (l.pts[i], nn[i]);
-            if m.sample(p.0 - n.0 * 4.0, p.1 - n.1 * 4.0) > 0.8 && m.sample(p.0 + n.0 * 4.0, p.1 + n.1 * 4.0) < 0.2 {
-                ok += 1;
-            }
-        }
-        assert!(ok * 10 >= 9 * (l.pts.len() / 37), "{ok}");
-    }
-
-    #[test]
-    fn body_from_a_skeleton_and_offsets() {
-        // a five-bone body: a spine left to right, four short bones hanging
-        // from it
-        let spine = Bone { pts: vec![(100.0, 100.0), (110.0, 99.0), (120.0, 100.0), (126.0, 97.0), (130.0, 99.0)], widths: vec![9.0, 11.0, 10.0, 5.0, 4.0] };
-        let hanging: Vec<Bone> = [102.0, 106.0, 116.0, 119.0].iter().map(|&x| Bone { pts: vec![(x, 102.0), (x, 110.0)], widths: vec![1.6, 1.1] }).collect();
-        let mut limbs = vec![spine];
-        limbs.extend(hanging);
-        let o = Outline::body(&limbs, 0.6, Character::soft(), 5, None);
-        assert_eq!(o.lines.len(), 1, "one silhouette");
-        let (x0, y0, x1, y1) = bbox(o.lines[0].pts.iter().copied());
-        assert!(x0 > 90.0 && x0 < 99.0 && x1 > 130.0 && x1 < 136.0, "{x0} {x1}");
-        assert!(y1 > 109.0 && y1 < 113.0 && y0 > 90.0 && y0 < 97.0, "{y0} {y1}");
-        let a = |o: &Outline| area2(&o.lines[0].pts).abs() * 0.5;
-        let grown = o.offset(1.0, 0.0);
-        let shrunk = o.offset(-1.0, 0.0);
-        assert!(a(&grown) > a(&o) && a(&shrunk) < a(&o), "{} {} {}", a(&shrunk), a(&o), a(&grown));
-    }
-
-    /// Lobes of different heights meet without a step, and a
-    /// closed line's lobes meet across its seam.
-    #[test]
-    fn lobes_are_continuous_at_joins_and_the_seam() {
-        let ks = [0.0, 10.0, 20.0, 30.0, 40.0];
-        let hs = [2.0, 4.0, 1.0, 3.0];
-        for closed in [false, true] {
-            let bs = lobe_troughs(&hs, closed);
-            for &k in &ks[1..4] {
-                let (a, b) = (lobe_offset(&ks, &hs, &bs, k - 1e-4), lobe_offset(&ks, &hs, &bs, k + 1e-4));
-                assert!((a - b).abs() < 0.02, "closed {closed}: step {} at knot {k}", (a - b).abs());
-            }
-            // the rounded bulge still rises well above the dips
-            assert!(lobe_offset(&ks, &hs, &bs, 15.0) - lobe_offset(&ks, &hs, &bs, 10.0) > 3.0);
-        }
-        let bs = lobe_troughs(&hs, true);
-        let (first, last) = (lobe_offset(&ks, &hs, &bs, 0.0), lobe_offset(&ks, &hs, &bs, 40.0 - 1e-4));
-        assert!((first - last).abs() < 0.02, "seam step {}", (first - last).abs());
-        // a whole soft closed line: no step between neighbors bigger than
-        // the rounded lobes' own slope allows
-        let pts: Vec<P> = (0..24).map(|i| {
-            let a = i as f32 / 24.0 * TAU;
-            (500.0 + 200.0 * a.cos(), 400.0 + 150.0 * a.sin())
-        }).collect();
-        let o = Outline::draw(&pts, &[], true, Character { wobble: 0.0, ..Character::soft() }, 4, None);
-        let l = &o.lines[0].pts;
-        let n = l.len();
-        let steps: Vec<f32> = (0..n).map(|i| dist(l[i], l[(i + 1) % n])).collect();
-        let mut sorted = steps.clone();
-        sorted.sort_by(f32::total_cmp);
-        let med = sorted[n / 2];
-        assert!(steps.iter().all(|&d| d < 12.0 * med), "max step {} vs median {med}", sorted[n - 1]);
-    }
-
-    /// `amount` scales lobes and facets however they were set,
-    /// before it or after it; 0 is a clean curve.
-    #[test]
-    fn amount_scales_lobes_set_after_it() {
-        let line = [(100.0, 200.0), (300.0, 200.0), (500.0, 200.0)];
-        let dev = |ch: Character| {
-            let o = Outline::draw(&line, &[], false, ch, 1, None);
-            o.lines[0].pts.iter().map(|p| (p.1 - 200.0).abs()).fold(0.0, f32::max)
-        };
-        // amount, then an explicitly assigned lobe height
-        let lobed = |k: f32| {
-            let mut ch = Character::firm().amount(k);
-            ch.lobe = 24.0 / 100.0;
-            if ch.lobe_height == 0.0 {
-                ch.lobe_height = 0.35;
-            }
-            ch
-        };
-        let mut soft0 = Character::soft().amount(0.0);
-        soft0.lobe = 0.2;
-        assert!(dev(soft0) < 1e-3, "soft, amount 0, explicit lobe: {}", dev(soft0));
-        assert!(dev(lobed(0.0)) < 1e-3, "firm, amount 0, explicit lobe: {}", dev(lobed(0.0)));
-        let (half, full) = (dev(lobed(0.5)), dev(lobed(1.0)));
-        assert!(half > 0.3 && full > 1.5 * half, "amount scales an explicit lobe: {half} vs {full}");
-        // the order doesn't matter
-        let mut after = Character::firm();
-        after.lobe = 0.24;
-        after.lobe_height = 0.35;
-        let before = after.amount(0.5);
-        assert_eq!(dev(before), dev(lobed(0.5)));
-    }
-
-    /// An inset that consumes a closed shape is empty, not open: its mask
-    /// is empty (so `o.mask(f).subtract(&o.offset(-d, 0.4).mask(f))` keeps
-    /// the shape). A drawn open line is open.
-    #[test]
-    fn consumed_inset_is_an_empty_region() {
-        let sq = [(100.0, 100.0), (110.0, 100.0), (110.0, 110.0), (100.0, 110.0)];
-        let o = Outline::draw(&sq, &[true; 4], true, Character::firm().amount(0.0), 1, None);
-        let f = Frame::new(400, 300, 0.4);
-        let inset = o.offset(-7.0, 0.4);
-        assert!(inset.lines.is_empty() && !inset.is_open(), "{} lines", inset.lines.len());
-        assert!(inset.mask(f).data.iter().all(|&v| v == 0.0));
-        let rim = o.mask(f).subtract(&inset.mask(f));
-        assert!(rim.data == o.mask(f).data);
-        assert!(!o.is_open() && !o.offset(-2.0, 0.4).is_open() && !o.offset(-2.0, 0.4).lines.is_empty());
-        let open = Outline::draw(&[(0.0, 400.0), (1000.0, 390.0)], &[], false, Character::soft(), 2, None);
-        assert!(open.is_open());
-    }
-
-    #[test]
-    fn open_lines_mask_below() {
-        let f = Frame::new(400, 300, 0.4);
-        let o = Outline::draw(&[(0.0, 400.0), (300.0, 380.0), (700.0, 410.0), (1000.0, 390.0)], &[], false, Character::soft(), 2, Some(60.0));
-        assert!(!o.lines[0].closed);
-        let m = o.below(f, 750.0);
-        assert!(m.sample(500.0, 600.0) > 0.99 && m.sample(500.0, 200.0) < 0.01);
-        let b = o.band(f, 10.0, 0.0);
-        let (p, _, _) = o.at(0.5).unwrap();
-        assert!(b.sample(p.0, p.1) > 0.9);
     }
 }

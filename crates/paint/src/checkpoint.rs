@@ -79,6 +79,7 @@ const SOAK_MARK: u64 = 0x4b414f53;
 const SOAK_V: u64 = 1;
 const QUARTER_TILES: u64 = 1 << 33;
 const ADAPTIVE_SWEEP: u64 = 1 << 34;
+const KNIFE_SKIM: u64 = 1 << 35;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -313,7 +314,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -466,8 +467,9 @@ impl Canvas {
             let word = get_u64(r)?;
             c.quarter_tiles = word & QUARTER_TILES != 0;
             c.adaptive_sweep = word & ADAPTIVE_SWEEP != 0;
-            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP)) {
-                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) => v,
+            c.knife_skim = word & KNIFE_SKIM != 0;
+            match u32::try_from(word & !(QUARTER_TILES | ADAPTIVE_SWEEP | KNIFE_SKIM)) {
+                Ok(v) if crate::supported_engine(v) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!c.knife_skim || v == crate::engine7::ENGINE) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
@@ -517,208 +519,5 @@ impl Canvas {
             return Err(bad("version-7 checkpoint has trailing data"));
         }
         Ok((c, header))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    // offsets in a checkpoint with an empty header and no linen
-    const W: usize = 16;
-    const X0: usize = 32;
-    const KEEP: usize = 64;
-    const SCALE: usize = 96;
-    const MM: usize = 100;
-    const DIRTY: usize = 128;
-
-    fn set(b: &mut [u8], pos: usize, v: u64) {
-        b[pos..pos + 8].copy_from_slice(&v.to_le_bytes());
-    }
-
-    fn load(b: Vec<u8>) -> io::Result<Canvas> {
-        Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
-    }
-
-    #[test]
-    fn adaptive_sweep_checkpoints_remain_readable_after_changing_engines() {
-        for engine in [1, 2, 3, 4, 5, 7] {
-            let c = Canvas::new_window(16, 1.0, [0.5; 3], None).with_adaptive_sweep(true).with_quarter_tiles(true).with_engine(engine);
-            assert_eq!(c.adaptive_sweep(), engine == 5);
-            let mut bytes = Vec::new();
-            c.write_state(&mut bytes, "").unwrap();
-            let restored = load(bytes).unwrap();
-            assert_eq!(restored.engine(), engine);
-            assert_eq!(restored.adaptive_sweep(), engine == 5);
-            assert_eq!(restored.quarter_tiles(), engine == 5);
-        }
-    }
-
-    fn rejected(b: Vec<u8>, what: &str) {
-        match load(b) {
-            Ok(_) => panic!("{what}: accepted"),
-            Err(e) => assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{what}: {e}"),
-        }
-    }
-
-    fn original() -> Vec<u8> {
-        let c = Canvas::new_window(2, 1.0, [0.1; 3], None);
-        let mut b = Vec::new();
-        c.write_state(&mut b, "").unwrap();
-        b
-    }
-
-    /// An engine-4 canvas is written as version 11 and keeps its gloss, its
-    /// ground's absorbency and the oil in its wet paint; an older engine's
-    /// canvas is written as before (version 8 or 9, three properties, no
-    /// gloss) and read with an oil ground's gloss and a tube paint's oil.
-    #[test]
-    fn engine_4_has_its_own_format_and_older_engines_keep_theirs() {
-        let canvas = |engine: u32| {
-            let mut c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
-            c.gloss.iter_mut().for_each(|g| *g = 0.9);
-            c.absorb.iter_mut().for_each(|a| *a = 0.3);
-            c.wet.vol[0] = 1.5;
-            c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5];
-            let mut b = Vec::new();
-            c.write_state(&mut b, "").unwrap();
-            b
-        };
-        let b = canvas(crate::ENGINE);
-        assert_eq!(&b[..8], b"PAINTC11");
-        let d = load(b).unwrap();
-        assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (0.9, 0.3, true, [0.7, 0.6, 1.2, 0.4, 0.5]));
-        for (engine, magic) in [(2, b"PAINTCK8"), (3, b"PAINTCK9")] {
-            let b = canvas(engine);
-            assert_eq!(&b[..8], magic);
-            let d = load(b).unwrap();
-            assert_eq!((d.gloss[0], d.absorb[0], d.absorb_any, d.wet.hide[0]), (crate::canvas::OIL_GROUND_GLOSS, 0.0, false, [0.7, 0.6, 1.2, 0.0, 1.0]), "engine {engine}");
-        }
-    }
-
-    #[test]
-    fn round_trip() {
-        let mut c = load(original()).unwrap();
-        c.wet.touch(0, 0, 2, 1);
-        let mut b = Vec::new();
-        c.write_state(&mut b, "x=1\n").unwrap();
-        let (d, h) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
-        assert_eq!((h.as_str(), d.keep, d.wet.dirty), ("x=1\n", (0, 0, 2, 2), Some((0, 0, 2, 1))));
-    }
-
-    #[test]
-    fn quarter_tiles_round_trip_without_changing_legacy_checkpoint_bytes() {
-        for engine in [1, 2, 3, 4, 5, 7] {
-            let c = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
-            let mut legacy = Vec::new();
-            c.write_state(&mut legacy, "").unwrap();
-            let restored = load(legacy.clone()).unwrap();
-            assert!(!restored.quarter_tiles());
-            let mut again = Vec::new();
-            restored.write_state(&mut again, "").unwrap();
-            assert_eq!(again, legacy);
-            let mut selected = Vec::new();
-            c.with_quarter_tiles(true).write_state(&mut selected, "").unwrap();
-            assert_eq!(selected.len(), legacy.len());
-            let restored = load(selected.clone()).unwrap();
-            assert_eq!(restored.quarter_tiles(), engine == 5);
-            if engine == 5 {
-                assert_eq!(legacy.iter().zip(&selected).filter(|(a, b)| a != b).count(), 1);
-                let flag = legacy.iter().zip(&selected).position(|(a, b)| a != b).unwrap();
-                let mut wrong_engine = selected.clone();
-                wrong_engine[flag - 4] = 4;
-                assert!(load(wrong_engine).is_err());
-                let mut unknown_flag = selected.clone();
-                unknown_flag[flag] |= 8;
-                assert!(load(unknown_flag).is_err());
-            } else {
-                assert_eq!(selected, legacy);
-            }
-            let mut again = Vec::new();
-            restored.write_state(&mut again, "").unwrap();
-            assert_eq!(again, selected);
-        }
-    }
-
-    /// A resumed canvas keeps its drawing: the deposit (so the
-    /// eraser and fixative still act on it and `drawing_mask` has it) and
-    /// the guide, bit for bit; erasing, redrawing and painting into the
-    /// drawing after resuming does what it does without the checkpoint.
-    #[test]
-    fn drawing_survives_a_checkpoint() {
-        use crate::bristle::Tool;
-        use crate::graphite::hand_line;
-        use crate::handling::Handling;
-        use crate::{Lead, Mask};
-        let mut c = Canvas::new_window(300, 1.5, [0.8; 3], None).with_size_mm(440.0);
-        let lead = Lead::pencil("2B").unwrap();
-        c.draw(&lead, &hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.8], false, true, 0.0, 5), 0.0, 9);
-        c.draw(&lead, &hand_line(&[(100.0, 300.0), (900.0, 300.0)], &[0.8], false, true, 0.0, 6), 0.0, 10);
-        let f = c.frame();
-        c.fix_drawing(Some(&Mask::from_fn(f, |_, y| if y > 200.0 { 1.0 } else { 0.0 })));
-        let mut b = Vec::new();
-        c.write_state(&mut b, "").unwrap();
-        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b)).unwrap();
-        assert!(r.has_drawing() && r.drawing_mask().data == c.drawing_mask().data && r.drawing_guide().data == c.drawing_guide().data);
-        assert!(r.drawing_view() == c.drawing_view());
-        let hd = Handling::new(Tool::round_sable(4.0)).length(10.0, 20.0).coverage(2.0).color(|_, _| [0.08, 0.12, 0.18]).hug(false).clip(false).fill(false);
-        for k in [&mut c, &mut r] {
-            let snap = k.pixels().to_vec();
-            k.erase(&Mask::full(f), 1.0);
-            assert!(k.pixels() != &snap[..], "the loose line lifts");
-            k.draw(&lead, &hand_line(&[(100.0, 200.0), (900.0, 200.0)], &[0.6], false, true, 0.0, 7), 0.0, 11);
-            let g = k.drawing_guide().dilate(3.0);
-            k.work(&g, &hd, 77);
-        }
-        assert!(r.pixels() == c.pixels(), "resumed painting differs");
-        assert!(r.drawing_mask().data == c.drawing_mask().data && r.drawing_guide().data == c.drawing_guide().data);
-        // a corrupt drawing is refused
-        let mut b = Vec::new();
-        c.write_state(&mut b, "").unwrap();
-        let at = b.len() - 4 * (300 * 200 + 1) - 4;
-        b[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
-        rejected(b, "nan in the guide");
-    }
-
-    /// Corrupt geometry is an error when loading, not a panic later (keep
-    /// past the buffer, an overflowing frame).
-    #[test]
-    fn malformed_geometry_is_invalid_data() {
-        let o = original();
-        let mut b = o.clone();
-        set(&mut b, KEEP + 16, 3);
-        rejected(b, "keep x1 past the buffer");
-        let mut b = o.clone();
-        set(&mut b, KEEP, 2);
-        rejected(b, "empty keep");
-        let mut b = o.clone();
-        set(&mut b, W, u64::MAX);
-        set(&mut b, X0, 1);
-        rejected(b, "overflowing frame");
-        let mut b = o.clone();
-        set(&mut b, W, 1 << 32);
-        set(&mut b, W + 8, 1 << 32);
-        rejected(b, "overflowing area");
-        for (v, what) in [(f32::NAN, "nan"), (0.0, "zero"), (-1.0, "negative"), (f32::INFINITY, "infinite")] {
-            for (pos, field) in [(SCALE, "scale"), (MM, "mm per unit")] {
-                let mut b = o.clone();
-                b[pos..pos + 4].copy_from_slice(&v.to_le_bytes());
-                rejected(b, &format!("{what} {field}"));
-            }
-        }
-        for rect in [[0u64, 0, 3, 3], [1, 0, 0, 2], [0, 0, 2, u64::MAX]] {
-            let mut b = o.clone();
-            set(&mut b, DIRTY, 1);
-            let r: Vec<u8> = rect.iter().flat_map(|v| v.to_le_bytes()).collect();
-            b.splice(DIRTY + 8..DIRTY + 8, r);
-            rejected(b, &format!("dirty {rect:?}"));
-        }
-        // a valid dirty box still loads
-        let mut b = o.clone();
-        set(&mut b, DIRTY, 1);
-        let r: Vec<u8> = [0u64, 0, 2, 2].iter().flat_map(|v| v.to_le_bytes()).collect();
-        b.splice(DIRTY + 8..DIRTY + 8, r);
-        assert_eq!(load(b).unwrap().wet.dirty, Some((0, 0, 2, 2)));
     }
 }

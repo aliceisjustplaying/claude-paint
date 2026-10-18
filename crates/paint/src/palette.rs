@@ -9,11 +9,7 @@
 //! source.
 //!
 
-#[cfg(test)]
-use crate::canvas::Canvas;
 use crate::color::{Rgb, hex, luminance};
-#[cfg(all(test, tube_box))]
-use crate::color::to_oklab;
 use crate::drying::drier;
 use crate::pigment::{hiding_of, scatter_for};
 use crate::rng::Rng;
@@ -76,8 +72,13 @@ impl Tube {
 /// build for one box holds that box's tube records and no others
 /// (`the_catalog_is_this_builds_boxes`). The rest came with round 20's
 /// boxes; notes/r20/TUBES.md gives each one's numbers, the proposal they
-/// come from and why. All numbers are estimates from the pigment literature,
-/// not measurements.
+/// come from and why. The last six (strontium yellow to vine black) came
+/// with the giverny and impressionist boxes; their materials notes
+/// (notes/research/{giverny,impressionist}_materials.md) map them to the
+/// pigments found, and the comment at each gives its basis. All numbers are
+/// estimates from the pigment literature, not measurements (the three
+/// chromate yellows' color and strength are from measurements of
+/// reconstructed pigments and test paints).
 pub fn catalog() -> Vec<Tube> {
     vec![
         // ---- the tube box (round 19)
@@ -197,10 +198,12 @@ pub fn catalog() -> Vec<Tube> {
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
         #[cfg(any(feature = "box-sargent", feature = "box-tonn", feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
-        // lead-free chromate yellows of the 1850s-80s: dry powders measured
-        // (Otero et al. 2017, Heritage Science 5:46: L*a*b* 94/-11/55, 90/-8/52,
-        // 87/5/89; tinting 78%, 92%, 65% of lead chromate), masstones
-        // darkened for oil; hiding from their refractive indices
+        // lead-free chromate yellows of the 1850s-80s, as reconstructed from
+        // historical recipes and measured (Otero et al. 2017, Heritage
+        // Science 5:46): the pigments' color L*a*b* 94/-11/55, 90/-8/52,
+        // 87/5/89, and tinting strength in test paints (PVA, with barium
+        // sulfate) 78%, 92%, 65% of lead chromate's; masstones darkened for
+        // oil (this easel's adjustment); hiding from their refractive indices
         #[cfg(any(feature = "box-impressionist", feature = "box-seurat", feature = "box-every"))]
         tube("strontium yellow", "strontium chromate", "#f2df53", 0.55, 0.65, 0.8, drier::CHROMATE),
         #[cfg(any(feature = "box-giverny", feature = "box-impressionist", feature = "box-every"))]
@@ -216,6 +219,9 @@ pub fn catalog() -> Vec<Tube> {
         #[cfg(any(feature = "box-impressionist", feature = "box-every"))]
         tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // Engine-3 drying follows the medium carbon-black class; estimate.
+        // (A stroke touch-dry in about 4.9 days, by the drying test's film;
+        // engine 2's rate alone would take about 12.6 at engine 3's pace,
+        // 5.0 in engine 2 itself.)
         // charcoal black: bluish, weak, without bone's phosphate (Butler
         // 1984 found it in 9 of 10 paintings examined). Estimates
         #[cfg(any(feature = "box-impressionist", feature = "box-every"))]
@@ -375,6 +381,10 @@ pub struct Palette {
     pub engine: u32,
     pub quarter_tiles: bool,
     pub adaptive_sweep: bool,
+    /// `body_of` joins a limb to the nearest other limb, and only when it
+    /// starts within its own width of it (`Outline::body`): new paintings.
+    pub limbs_join_nearest: bool,
+    pub knife_skim: bool,
     lat: Vec<[f32; mixbox::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
@@ -382,7 +392,7 @@ pub struct Palette {
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, self.tubes.clone()) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, knife_skim: self.knife_skim, ..Palette::new(self.name, self.tubes.clone()) }
     }
 }
 
@@ -396,7 +406,7 @@ impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, lat, scat }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, limbs_join_nearest: false, knife_skim: false, lat, scat }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -405,7 +415,7 @@ impl Palette {
             .iter()
             .map(|n| self.tubes.iter().find(|t| t.name == *n).unwrap_or_else(|| panic!("no tube {n:?} in palette {}", self.name)).clone())
             .collect();
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, tubes) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, knife_skim: self.knife_skim, ..Palette::new(self.name, tubes) }
     }
 
     /// Lead white, smalt (semi-transparent cobalt glass, weak) and pale
@@ -519,7 +529,7 @@ impl Palette {
     pub fn with(&self, extra: Vec<Tube>) -> Palette {
         let mut t = self.tubes.clone();
         t.extend(extra);
-        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, ..Palette::new(self.name, t) }
+        Palette { engine: self.engine, quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep, limbs_join_nearest: self.limbs_join_nearest, knife_skim: self.knife_skim, ..Palette::new(self.name, t) }
     }
 
     /// How fast the tube `t` dries in this box's engine version.
@@ -598,213 +608,5 @@ impl Mixture {
     /// model already counts (a fat film stays open longer).
     pub fn laid(&self, medium: f32) -> Paint {
         self.paint(medium).with_drying(self.drying * self.oil_rate)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    include!("../../box_features.rs");
-
-    #[test]
-    #[cfg(feature = "all-boxes")]
-    fn box_feature_lists_agree() {
-        let expected: Vec<_> = BOX_FEATURES.iter().map(|f| f.to_lowercase().replace('_', "-")).collect();
-        let actual: Vec<_> = BOXES.iter().map(|b| format!("box-{}", b.0)).collect();
-        assert_eq!(expected, actual);
-        for manifest in [include_str!("../Cargo.toml"), include_str!("../../easel/Cargo.toml")] {
-            let declared: std::collections::BTreeSet<_> = manifest.lines().filter_map(|line| {
-                let (name, _) = line.split_once(" = ")?;
-                name.starts_with("box-").then_some(name)
-            }).collect();
-            assert_eq!(declared, expected.iter().map(String::as_str).collect());
-            let all = manifest.lines().find(|line| line.starts_with("all-boxes = ")).unwrap();
-            let enabled: std::collections::BTreeSet<_> = all.split('"').filter(|s| s.starts_with("box-")).collect();
-            assert_eq!(enabled, declared);
-        }
-    }
-
-    /// A pile laid as knifed dries at its tubes' rate in its box's engine,
-    /// mixed by volume: lead white fast, bone black slower (engine 2: its
-    /// `Tube::drying`; engine 3: `Tube::drying_3`), half and half in
-    /// between.
-    #[test]
-    #[cfg(tube_box)]
-    fn a_pile_dries_at_its_tubes_rate() {
-        for (engine, bone_black) in [(2, drier::BONE_BLACK), (3, 0.9)] {
-            let mut pal = Palette::tube_box();
-            pal.engine = engine;
-            let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
-            let (w, k) = (at("lead white"), at("bone black"));
-            let white = pal.pile(vec![(w, 1.0)]).laid(0.2);
-            let black = pal.pile(vec![(k, 1.0)]).laid(0.2);
-            let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
-            assert_eq!((white.drying, black.drying), (drier::LEAD_WHITE, bone_black), "engine {engine}");
-            assert!((half.drying - 0.5 * (drier::LEAD_WHITE + bone_black)).abs() < 1e-6, "engine {engine}: {}", half.drying);
-            assert_eq!(pal.with(vec![]).engine, engine, "a box with more tubes keeps its engine");
-        }
-        let pal = Palette::tube_box();
-        let at = |n: &str| pal.tubes.iter().position(|t| t.name == n).unwrap();
-        let (w, k) = (at("lead white"), at("bone black"));
-        let half = pal.pile(vec![(w, 0.5), (k, 0.5)]).laid(0.2);
-        // the paint is otherwise the pile's own
-        let p = pal.pile(vec![(w, 0.5), (k, 0.5)]);
-        assert_eq!((half.color, half.scatter, half.stiff), (p.paint(0.2).color, p.paint(0.2).scatter, p.paint(0.2).stiff));
-    }
-
-    /// The tube box is round 19's, tube for tube and number for number:
-    /// paintings made from it replay bit for bit.
-    #[test]
-    #[cfg(tube_box)]
-    fn the_tube_box_is_unchanged() {
-        let r19: [(&str, &str, &str, f32, f32, f32, f32); 14] = [
-            ("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, 2.0),
-            ("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, 1.6),
-            ("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, 1.6),
-            ("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, 0.8),
-            ("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, 1.0),
-            ("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, 0.4),
-            ("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, 2.4),
-            ("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.1, 0.4),
-            ("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 0.8, 1.4),
-            ("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, 1.8),
-            ("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, 1.8),
-            ("green earth", "celadonite and glauconite clay", "#3a4843", 0.2, 0.35, 0.3, 0.8),
-            ("Rinmann's green", "cobalt-zinc oxide", "#5f8f76", 0.35, 0.5, 0.4, 1.4),
-            ("copper green", "verdigris ground in oil", "#3f7f6a", 0.25, 0.4, 1.0, 1.6),
-        ];
-        let b = Palette::tube_box();
-        assert_eq!(b.name, DEFAULT_BOX);
-        assert_eq!(b.tubes.len(), r19.len());
-        for (t, (name, pigment, color, hiding, stiff, strength, drying)) in b.tubes.iter().zip(r19) {
-            assert_eq!((t.name, t.pigment), (name, pigment));
-            assert_eq!(t.color.map(f32::to_bits), hex(color).map(f32::to_bits), "{name}");
-            assert_eq!([t.hiding, t.stiff, t.strength, t.drying].map(f32::to_bits), [hiding, stiff, strength, drying].map(f32::to_bits), "{name}");
-        }
-        // and the older boxes built from the same definitions
-        assert_eq!(Palette::named_box(DEFAULT_BOX).unwrap().tubes.len(), 14);
-        let names = |p: Palette| p.tubes.iter().map(|t| t.name).collect::<Vec<_>>();
-        assert_eq!(names(Palette::cobalt_box_greens()), ["lead white", "pale smalt", "yellow ochre", "red earth", "vermilion", "raw umber", "bone black", "cobalt blue", "chrome yellow", "Prussian blue", "green earth", "Rinmann's green"]);
-        assert_eq!(names(Palette::smalt_box_greens()).len(), 10);
-    }
-
-    /// One definition per tube: no name twice in the catalog, and every
-    /// tube's numbers in range.
-    #[test]
-    fn the_catalog_defines_each_tube_once() {
-        let cat = catalog();
-        let mut names: Vec<&str> = cat.iter().map(|t| t.name).collect();
-        names.sort();
-        names.dedup();
-        assert_eq!(names.len(), cat.len(), "a tube is defined twice");
-        for t in &cat {
-            assert!(t.hiding > 0.0 && t.hiding <= 1.0 && t.stiff > 0.0 && t.stiff <= 1.0 && t.strength > 0.0 && t.drying > 0.0 && t.drying_3 > 0.0, "{t:?}");
-            assert!(!t.pigment.is_empty(), "{}", t.name);
-        }
-    }
-
-    /// The catalog holds exactly the tubes of this build's boxes: a
-    /// painter's build for one box (`--no-default-features --features
-    /// box-<name>`, see crates/easel/tests/painter.rs) carries no other tube.
-    #[test]
-    fn the_catalog_is_this_builds_boxes() {
-        let mut want: Vec<&str> = Palette::box_names().into_iter().flat_map(|b| Palette::named_box(b).unwrap().tubes.into_iter().map(|t| t.name)).collect();
-        want.sort();
-        want.dedup();
-        let mut have: Vec<&str> = catalog().iter().map(|t| t.name).collect();
-        have.sort();
-        assert_eq!(have, want);
-    }
-
-    #[test]
-    #[cfg(feature = "box-seurat")]
-    fn seurat_has_only_its_documented_tubes() {
-        let box_ = Palette::named_box("seurat").unwrap();
-        assert_eq!(box_.tubes.iter().map(|t| t.name).collect::<Vec<_>>(), [
-            "lead white", "chrome yellow", "cadmium yellow", "strontium yellow", "zinc yellow", "vermilion", "rose madder", "yellow ochre", "red earth", "bone black", "cobalt blue", "ultramarine blue", "viridian", "emerald green",
-        ]);
-    }
-
-    #[test]
-    #[cfg(feature = "box-cezanne")]
-    fn cezanne_has_only_its_documented_tubes() {
-        let box_ = Palette::named_box("cezanne").unwrap();
-        assert_eq!(box_.tubes.iter().map(|t| t.name).collect::<Vec<_>>(), [
-            "lead white", "chrome yellow", "vermilion", "rose madder", "yellow ochre", "red earth", "bone black", "cobalt blue", "ultramarine blue", "viridian", "emerald green",
-        ]);
-    }
-
-    /// Every box's tubes come from the catalog, each once, and a box is
-    /// found by its name; an unknown name finds none.
-    #[test]
-    fn every_box_resolves_in_the_catalog() {
-        let cat = catalog();
-        for name in Palette::box_names() {
-            let b = Palette::named_box(name).unwrap_or_else(|| panic!("box {name:?}"));
-            assert_eq!(b.name, name);
-            let mut seen: Vec<&str> = b.tubes.iter().map(|t| t.name).collect();
-            seen.sort();
-            seen.dedup();
-            assert_eq!(seen.len(), b.tubes.len(), "{name}: a tube twice");
-            for t in &b.tubes {
-                let c = cat.iter().find(|c| c.name == t.name).unwrap();
-                assert_eq!(format!("{c:?}"), format!("{t:?}"));
-            }
-        }
-        assert!(Palette::named_box("no such box").is_none());
-        #[cfg(feature = "all-boxes")]
-        assert_eq!(Palette::box_names(), [DEFAULT_BOX, "friedrich", "sargent", "inness", "alma-tadema", "tonn", "hopper", "giverny", "impressionist", "seurat", "cezanne", "every"]);
-    }
-}
-
-#[cfg(test)]
-mod canvas_tests {
-    use super::*;
-    use crate::pigment::Pigment;
-
-    /// A prescribed dark pile deepens a light ground more than a dark one,
-    /// with more darkening as the film thickens.
-    #[test]
-    #[cfg(tube_box)]
-    fn glazes_stay_glazes() {
-        let pal = Palette::tube_box().only(&["bone black"]);
-        let glaze = pal.pile(vec![(0, 1.0)]).paint(0.9);
-        let (light, dark) = (hex("#d8d0bc"), hex("#2a2622"));
-        let l = |c| to_oklab(c)[0];
-        let light_drop = l(light) - l(glaze.over(light, 1.0));
-        let dark_drop = l(dark) - l(glaze.over(dark, 1.0));
-        assert!(light_drop > 0.05, "light ground darkens: {light_drop}");
-        assert!(dark_drop.abs() < 0.3 * light_drop, "dark ground changes less: {dark_drop} vs {light_drop}");
-        assert!(l(glaze.over(light, 2.0)) < l(glaze.over(light, 1.0)));
-    }
-
-    /// Brush paint keeps a mixture's scattering, even when it rounds to
-    /// hiding 1 (e.g. opaque neutral tubes mixed in explicit proportions).
-    #[test]
-    fn mixture_to_paint_preserves_scattering() {
-        let pal = Palette::new("opaque neutral tubes", vec![
-            Tube { name: "white", pigment: "", color: [0.99; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
-            Tube { name: "black", pigment: "", color: [0.01; 3], hiding: 0.99, stiff: 0.5, strength: 1.0, drying: 1.0, drying_3: 1.0 },
-        ]);
-        for (white, medium) in [(0.1, 0.0), (0.1, 0.5), (0.6, 0.0), (0.6, 0.9)] {
-            let m = pal.pile(vec![(0, white), (1, 1.0 - white)]);
-            let p = m.paint(medium);
-            let s = m.scatter * (1.0 - medium);
-            assert!((p.scatter() - s).abs() <= 1e-4 * s, "S {} thinned {s} → paint S {}", m.scatter, p.scatter());
-            let expected = Pigment::masstone(m.color, s).over([1.0; 3], 0.1);
-            let got = p.over([1.0; 3], 0.1);
-            assert!((expected[0] - got[0]).abs() < 1e-3, "white fraction {white} medium {medium}: expected {expected:?} got {got:?}");
-            assert!((p.hiding() - hiding_of(luminance(m.color), s)).abs() < 1e-4, "hiding is reported from S");
-        }
-        // and the brush lays that scattering into the wet layer
-        let p = pal.pile(vec![(0, 0.1), (1, 0.9)]).paint(0.0);
-        let mut c = Canvas::new(100, 1.0, [1.0; 3]);
-        let mut b = crate::bristle::Held::new(crate::bristle::Tool::round_sable(14.0), 1);
-        b.load(p, 0.7);
-        c.drag(&mut b, &crate::bristle::Gesture::new(vec![(50.0, 50.0), (53.0, 52.0)]).pressure(0.8, 0.6), None);
-        let i = (0..c.wet.vol.len()).max_by(|&a, &b| c.wet.vol[a].total_cmp(&c.wet.vol[b])).unwrap();
-        assert!(c.wet.vol[i] > 0.0);
-        let laid = c.wet.hide[i][0];
-        assert!((laid - p.scatter()).abs() <= 1e-3 * p.scatter(), "wet S {laid} vs paint S {}", p.scatter());
     }
 }

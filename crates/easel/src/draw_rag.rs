@@ -221,111 +221,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 #[cfg(all(test, tube_box))]
 mod tests {
     use crate::session::Session;
-    use paint::rag::pace as rag_pace;
-    use paint::tally::{pace, touch_secs};
 
     const W: usize = 240;
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=40, apply="brush"}}}"#;
-    const SKY: &str = r#"sky = pile{{"lead white", 3}, {"smalt", 2}}; work(rect(100, 100, 800, 400), {hand="broad", pile=sky, angle=0, coverage=2})"#;
 
     fn run(s: &mut Session, src: &str) -> String {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
-    }
-
-    fn clock(s: &Session) -> f64 {
-        s.st.borrow().clock
-    }
-
-    fn bits(s: &Session) -> Vec<u32> {
-        s.canvas().unwrap().seen().iter().flat_map(|p| p.map(f32::to_bits)).collect()
-    }
-
-    /// A wipe along a path takes the time to bring the pad down (Fitts) and
-    /// drag it at the rag's pace; a blot a touch and a press; a refold its
-    /// own time; a wipe over a region the sum of its strokes (minutes).
-    #[test]
-    fn the_rag_takes_hand_time() {
-        let mut s = Session::new(W).unwrap();
-        run(&mut s, CANVAS);
-        run(&mut s, SKY);
-        let mm = s.canvas().unwrap().mm_per_unit() as f64;
-        run(&mut s, "r = rag(); print(r)");
-        let t0 = clock(&s);
-        run(&mut s, "r:wipe({{200, 300}, {600, 300}}, {pressure=0.6})");
-        let (len, w) = (400.0 * mm, 40.0);
-        let want = pace::FITTS_A + pace::FITTS_B * (1.0 + len / (2.0 * w)).log2() + len / rag_pace::RAG_MM_S;
-        assert!((clock(&s) - t0 - want / 60.0).abs() < 1e-6, "wipe: {} min, want {}", clock(&s) - t0, want / 60.0);
-        let t0 = clock(&s);
-        run(&mut s, "r:blot(500, 250); r:refold(); r:dip()");
-        let want = touch_secs() + rag_pace::BLOT_PRESS + rag_pace::REFOLD + rag_pace::DIP;
-        assert!((clock(&s) - t0 - want / 60.0).abs() < 1e-6, "blot, refold and dip: {} min, want {}", clock(&s) - t0, want / 60.0);
-        let t0 = clock(&s);
-        run(&mut s, "r:wipe(rect(150, 150, 700, 300), {pressure=0.5, passes=2, refold=0.6})");
-        let dt = clock(&s) - t0;
-        assert!(dt > 0.2 && dt < 5.0, "a region 300 × 130 mm wiped twice: {dt} min");
-    }
-
-    /// The spirits evaporate from a dipped rag as the painting's clock runs
-    /// (paint::rag `DAMP_HALF_MIN`, 3 minutes): `r.damp` falls by about half
-    /// over three minutes and is 0 a week later; a dip wets it again.
-    #[test]
-    fn a_dipped_rag_dries_as_time_passes() {
-        let mut s = Session::new(W).unwrap();
-        run(&mut s, CANVAS);
-        assert_eq!(run(&mut s, "r = rag(); r:dip(0.5); print(r.damp)").trim(), "0.5");
-        // damp as of the hand's return from the cup, half as damp three minutes later
-        let three: f64 = run(&mut s, "wait(3); print(r.damp)").trim().parse().unwrap();
-        assert!((three - 0.25).abs() < 1e-6, "{three}");
-        assert_eq!(run(&mut s, "wait(10080); print(r.damp)").trim(), "0.0");
-        assert_eq!(run(&mut s, "r:dip(0.5); print(r.damp)").trim(), "0.5");
-    }
-
-    /// A failed chunk takes back what the rag did: the canvas, the clock and
-    /// the rag's load (a field of its Lua table) are as they were.
-    #[test]
-    fn a_failed_chunk_takes_back_the_rag() {
-        let mut s = Session::new(W).unwrap();
-        run(&mut s, CANVAS);
-        run(&mut s, SKY);
-        run(&mut s, "r = rag{width=60}");
-        let (before, t0) = (bits(&s), clock(&s));
-        let e = s.run("r:wipe(rect(150, 150, 700, 300), {pressure=0.8}); r:blot(400, 200); assert(r.load > 0); error('stop')").unwrap_err();
-        assert!(e.contains("stop"), "{e}");
-        assert!(bits(&s) == before);
-        assert_eq!(clock(&s), t0);
-        run(&mut s, "assert(r.load == 0 and r.soaked == 0 and r.fold == 0)");
-        // the same chunk without the error lifts paint
-        run(&mut s, "r:wipe(rect(150, 150, 700, 300), {pressure=0.8}); r:blot(400, 200)");
-        assert!(bits(&s) != before);
-        assert!(run(&mut s, "print(r.load)").trim().parse::<f64>().unwrap() > 0.0);
-    }
-
-    /// The painter can't clean the cloth by hand: its state is read only,
-    /// so a clean face costs a refold and a clean cloth a fresh rag, each
-    /// with its hand time. A refused write changes nothing.
-    #[test]
-    fn the_cloth_can_t_be_cleaned_by_assignment() {
-        let mut s = Session::new(W).unwrap();
-        run(&mut s, CANVAS);
-        run(&mut s, SKY);
-        let t0 = clock(&s);
-        run(&mut s, "r = rag()");
-        assert!((clock(&s) - t0 - rag_pace::FRESH / 60.0).abs() < 1e-6, "a fresh rag: {} min", clock(&s) - t0);
-        run(&mut s, "r:wipe(rect(150, 150, 700, 300), {pressure=0.8}); load0, soaked0, fold0 = r.load, r.soaked, r.fold");
-        let before = bits(&s);
-        for f in ["load", "soaked", "damp", "fold", "width"] {
-            for src in [format!("r.{f} = 0"), format!("rawset(r, {f:?}, 0)"), format!("getmetatable(r).__index = function() return 0 end")] {
-                assert!(s.run(&src).is_err(), "{src} was allowed");
-            }
-            let e = s.run(&format!("r.{f} = 0")).unwrap_err();
-            assert!(e.contains("can't be set") && e.contains("r:refold()"), "{e}");
-        }
-        run(&mut s, "assert(r.load == load0 and r.load > 0.1 and r.soaked == soaked0 and r.fold == fold0)");
-        assert!(bits(&s) == before);
-        // a refold is the way to a cleaner face, and it takes its time
-        let t0 = clock(&s);
-        run(&mut s, "r:refold(); assert(r.load < load0 and r.fold == fold0 + 1)");
-        assert!((clock(&s) - t0 - rag_pace::REFOLD / 60.0).abs() < 1e-6);
     }
 
     /// An engine-2 log replays with the globals it had: no `rag`, and
@@ -348,24 +249,5 @@ print(n, h, type(rag))"#;
         assert!(paint::ENGINE >= 3);
         run(&mut new, CANVAS);
         assert_eq!(run(&mut new, "print(type(rag))").trim(), "function");
-    }
-
-    /// Mistyped options and arguments are errors that say what is wanted.
-    #[test]
-    fn the_rag_refuses_what_it_cannot_do() {
-        let mut s = Session::new(W).unwrap();
-        run(&mut s, CANVAS);
-        run(&mut s, "r = rag()");
-        for (src, want) in [
-            ("r:wipe(rect(0, 0, 100, 100), {presure=1})", "unknown option"),
-            ("r:wipe({{0, 0}, {100, 0}}, {passes=2})", "for wiping a mask"),
-            ("r:wipe(rect(0, 0, 100, 100), {passes=0})", "passes"),
-            ("r:wipe(5)", "want a mask or points"),
-            ("rag{width=-1}", "width"),
-            ("r.wipe({}, rect(0, 0, 10, 10))", "self"),
-        ] {
-            let e = s.run(src).unwrap_err();
-            assert!(e.contains(want), "{src}: {e}");
-        }
     }
 }

@@ -24,11 +24,7 @@
 //! - The engine-3 save (`Canvas::write_state`) starts with `PAINTCK9` and
 //!   ends with the solvent: one little-endian f32 per buffer pixel (µm, row
 //!   major), the last 4 × (pixel count) bytes of the file (NEW).
-#![allow(dead_code)]
-
-use paint::color::luminance;
-use paint::rag::Rag;
-use paint::{COAT_UM, Canvas, Gesture, Held, Linen, Paint, Palette, Rgb, Tool, hex};
+use paint::{COAT_UM, Canvas, Gesture, Held, Linen, Paint, Palette, Tool, hex};
 
 /// A small engine-3 canvas `px` pixels wide (1000 units, square, 700 mm)
 /// on fine linen, primed with a dry, toned ground.
@@ -118,23 +114,6 @@ pub fn solvent_um(c: &Canvas) -> Vec<f32> {
     centers(c).iter().map(|&(_, x, y)| c.solvent_um(x, y)).collect()
 }
 
-/// The wet film (paint + solvent), µm, per pixel.
-pub fn wet_film(c: &Canvas) -> Vec<f32> {
-    centers(c).iter().map(|&(_, x, y)| c.wet_um(x, y) + c.solvent_um(x, y)).collect()
-}
-
-/// Below this a film is no film (µm): the engine's own threshold for bare
-/// canvas, 1e-5 coats (`Canvas::look_px`, `drying::Canvas::wait`).
-pub const ZERO_UM: f64 = 1e-5 * COAT_UM as f64;
-/// Below this a cure is no cure: a millionth of the way to the gel point
-/// (`drying::GEL` = 0.15).
-pub const ZERO_CURE: f64 = 1.5e-7;
-
-/// The open film's cure, per pixel.
-pub fn cure(c: &Canvas) -> Vec<f32> {
-    centers(c).iter().map(|&(_, x, y)| c.cure_at(x, y)).collect()
-}
-
 /// mm³ per unit of `Canvas::wet_total` (coats × square units).
 pub fn mm3_per_total(c: &Canvas) -> f64 {
     let mmu = c.mm_per_unit() as f64;
@@ -169,126 +148,13 @@ pub fn assert_balances(what: &str, before: f64, after: f64) {
     assert!((after - before).abs() <= BALANCE_REL * scale, "{what}: {before} before, {after} after (off by {:.3e} of the total; allowed {BALANCE_REL:e})", (after - before).abs() / scale.max(f64::MIN_POSITIVE));
 }
 
-/// Two values agree: equal, or both no further from zero than `floor`, or
-/// within `rel` of the larger in magnitude (the zero rule of check 17).
-pub fn close(a: f64, b: f64, rel: f64, floor: f64) -> bool {
-    if a == b {
-        return true;
-    }
-    if a.abs() <= floor && b.abs() <= floor {
-        return true;
-    }
-    (a - b).abs() <= rel * a.abs().max(b.abs())
-}
-
-/// The canvas's complete saved state (header "").
-pub fn state(c: &Canvas) -> Vec<u8> {
-    let mut v = Vec::new();
-    c.write_state(&mut v, "").expect("write_state to memory");
-    v
-}
-
-/// A copy of `c`, through its save, with the solvent at every pixel
-/// multiplied by `k`: the same paint in the same places, with the same
-/// pigment, stiffness, cure, clock and everything else, and a different
-/// amount of solvent. It relies on the PAINTCK9 format contract
-/// (ACCEPTANCE.md, "The interface"): the solvent is the save's last
-/// 4 × pixels bytes, one f32 µm per pixel. Checks the copy saves back to
-/// exactly the same bytes outside that block, and the scaled solvent in it.
-pub fn with_solvent_scaled(c: &Canvas, k: f32) -> Canvas {
-    let orig = state(c);
-    assert_eq!(&orig[..8], b"PAINTCK9", "an engine-3 canvas saves as PAINTCK9");
-    let n = c.pixels().len();
-    assert!(orig.len() >= 8 + 4 * n, "the save is shorter than its solvent section");
-    let start = orig.len() - 4 * n;
-    let mut b = orig.clone();
-    for i in 0..n {
-        let o = start + 4 * i;
-        let v = f32::from_le_bytes(b[o..o + 4].try_into().unwrap());
-        b[o..o + 4].copy_from_slice(&(v * k).to_le_bytes());
-    }
-    let mut r: &[u8] = &b;
-    let (copy, _) = Canvas::read_state(&mut r).expect("read the edited save back");
-    let back = state(&copy);
-    assert_eq!(back.len(), b.len(), "the copy saves to the same length");
-    assert!(back[..start] == orig[..start], "the copy differs from the original outside the solvent block (first at byte {:?})", back[..start].iter().zip(&orig[..start]).position(|(x, y)| x != y));
-    assert!(back[start..] == b[start..], "the copy's solvent block is not the scaled solvent");
-    let (s0, s1) = (solvent_um(c), solvent_um(&copy));
-    for i in 0..n {
-        assert_eq!(s1[i].to_bits(), (s0[i] * k).to_bits(), "the save's last block is the solvent the canvas reports (pixel {i})");
-    }
-    copy
-}
-
-/// The pixels within `r` pixels (a square) of buffer pixel `i`.
-pub fn around(c: &Canvas, i: usize, r: usize) -> Vec<usize> {
-    let f = c.frame();
-    let (x, y) = (i % f.w, i / f.w);
-    let (x0, x1, y0, y1) = (x.saturating_sub(r), (x + r + 1).min(f.w), y.saturating_sub(r), (y + r + 1).min(f.h));
-    (y0..y1).flat_map(|yy| (x0..x1).map(move |xx| yy * f.w + xx)).collect()
-}
-
-/// The `q`-quantile (0..1) of `v`.
-pub fn quantile(v: &[f32], q: f32) -> f32 {
-    let mut s: Vec<f32> = v.to_vec();
-    s.sort_by(f32::total_cmp);
-    if s.is_empty() { f32::NAN } else { s[((s.len() - 1) as f32 * q).round() as usize] }
-}
-
-pub fn mean(v: &[f32]) -> f64 {
-    v.iter().map(|&x| x as f64).sum::<f64>() / v.len().max(1) as f64
-}
-
 pub fn median(v: &[f32]) -> f32 {
     let mut s: Vec<f32> = v.to_vec();
     s.sort_by(f32::total_cmp);
     if s.is_empty() { f32::NAN } else { s[s.len() / 2] }
 }
 
-pub fn std_dev(v: &[f32]) -> f64 {
-    let m = mean(v);
-    (v.iter().map(|&x| (x as f64 - m).powi(2)).sum::<f64>() / v.len().max(1) as f64).sqrt()
-}
-
-/// Least-squares slope of `y` on `x`.
-pub fn slope(x: &[f64], y: &[f64]) -> f64 {
-    let n = x.len() as f64;
-    let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
-    let sxy: f64 = x.iter().zip(y).map(|(a, b)| (a - mx) * (b - my)).sum();
-    let sxx: f64 = x.iter().map(|a| (a - mx).powi(2)).sum();
-    sxy / sxx
-}
-
-/// Mean open paint (µm) along a horizontal stroke at `y`, within `half`
-/// units of its center line, in bins `bin` units long from `x0` to `x1`.
-pub fn profile(c: &Canvas, y: f32, half: f32, x0: f32, x1: f32, bin: f32) -> Vec<f32> {
-    let n = ((x1 - x0) / bin).floor() as usize;
-    let (mut sum, mut cnt) = (vec![0.0f64; n], vec![0usize; n]);
-    for (_, x, yy) in in_rect(c, (x0, y - half, x0 + bin * n as f32, y + half)) {
-        let k = (((x - x0) / bin) as usize).min(n - 1);
-        sum[k] += c.wet_um(x, yy) as f64;
-        cnt[k] += 1;
-    }
-    sum.iter().zip(&cnt).map(|(s, &k)| (s / k.max(1) as f64) as f32).collect()
-}
-
-/// The paint surface (relief + open paint, solvent-free), µm, over a rect.
-pub fn paint_surface(c: &Canvas, r: (f32, f32, f32, f32)) -> Vec<f32> {
-    let h = c.surface_um();
-    in_rect(c, r).iter().map(|&(i, x, y)| h[i] + c.wet_um(x, y)).collect()
-}
-
-/// Luminance of the picture as seen (dry picture and open paint).
-pub fn seen_luminance(c: &Canvas) -> Vec<f32> {
-    c.seen().iter().map(|&p: &Rgb| luminance(p)).collect()
-}
-
 /// The thickest open paint (µm) anywhere on the canvas.
 pub fn max_paint_um(c: &Canvas) -> f32 {
     paint_um(c).into_iter().fold(0.0, f32::max)
-}
-
-/// Rag on the canvas: a fresh one `width` units across.
-pub fn rag(width: f32, seed: u64) -> Rag {
-    Rag::new(width, seed)
 }

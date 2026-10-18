@@ -703,9 +703,6 @@ impl Canvas {
             let reach = 1.0 - ((top - height[i]) / 10.0).clamp(0.0, 1.0);
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
             let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
-            // what it lifts leaves the tooth with it: the loose volume falls
-            // with the coverage taken (only a stick's pastel has any; c.a > 0)
-            c.loose *= a1 / c.a;
             let under = uncover(self.px[i], c.a, c.r);
             if c.loose > 0.0 && take > 0.0 {
                 let removable = c.a - c.floor;

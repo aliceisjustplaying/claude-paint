@@ -1142,4 +1142,36 @@ mod tests {
         let (on_erased, on_full) = (line(&mut c, &mut st.clone(), 500.0, 3.0, 55.0).volume_mm3, line(&mut kept, &mut st, 500.0, 3.0, 55.0).volume_mm3);
         assert!(on_erased > 1.2 * on_full, "an erased passage takes more: {on_erased} vs {on_full}");
     }
+
+    #[test]
+    fn the_eraser_lifts_loose_pastel_over_fixed_coverage() {
+        for coverage in [0.9, 0.995] {
+            let mut c = Canvas::new_window(32, 1.0, [0.55; 3], None).with_size_mm(8.0);
+            let i = c.pixels().len() / 2;
+            c.drawing_mut().cells[i] = Cell { a: coverage, r: [0.1; 3], lift: 0.55, loose: 10.0, ..Cell::default() };
+            c.px[i] = cover(c.px[i], coverage, [0.1; 3]);
+            c.fix_pastel(None, 0.0);
+            let px_um2 = (c.px_mm() * 1000.0).powi(2);
+            lay_crumbs(c.drawing.as_mut().unwrap(), &c.film, &mut c.px, &[(i, 1.0, false)], 5.0, [0.1; 3], &mut crate::rng::Rng::new(7), 150.0, px_um2);
+            let before = c.drawing.as_ref().unwrap().cells[i];
+            assert_eq!(before.floor, coverage);
+            assert!(before.loose > 0.0);
+            if coverage == 0.995 {
+                assert_eq!(before.a, coverage, "new crumbs at the coverage cap");
+            } else {
+                assert!(before.a > coverage, "new crumbs above the fixed floor");
+            }
+            let full = crate::Mask::full(c.frame());
+            c.erase(&full, 0.0);
+            assert_eq!(c.drawing.as_ref().unwrap().cells[i].loose, before.loose);
+            for _ in 0..8 {
+                c.erase(&full, 1.0);
+            }
+            let after = c.drawing.as_ref().unwrap().cells[i];
+            assert!(after.loose < 0.01 * before.loose, "fixed coverage {coverage} must not trap loose pastel: {} → {}", before.loose, after.loose);
+            assert_eq!(after.bound, before.bound);
+            assert_eq!(after.floor, coverage);
+            assert_eq!(after.a, coverage);
+        }
+    }
 }

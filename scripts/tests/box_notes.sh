@@ -62,8 +62,9 @@ for dest; do
       push @bad, "the box holds \"$t\", which the note names neither in its pigment table nor in §9" unless $named->($t, "$table\n$s9");
     }
     # (b) the tubes §9 maps to are in the box ("a → x, y and z (remark);")
-    while ($s9 =~ /→\s*([^;.]+)/g) {
-      (my $to = $1) =~ s/\([^)]*\)//g;
+    (my $mappings = $s9) =~ s/\([^)]*\)//g;
+    while ($mappings =~ /→\s*([^;.]+)/g) {
+      my $to = $1;
       for my $t (split /\s*,\s*|\s+and\s+/, $to) {
         $t =~ s/^\s+|\s+$//g;
         push @bad, "§9 maps to \"$t\", which is not in the box" unless $in{lc $t};

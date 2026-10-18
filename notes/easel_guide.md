@@ -603,6 +603,8 @@ lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper lai
 lift_sheet()                                              -- taken away, with what it caught
 b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
 k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the paper, takes the loose
+blow(x, y, {distance=50, speed=12})   -- a puff of air (mm from the paper; m/s from the lips)
+tap({g=100})                          -- the board's edge struck on the table (an upright sheet: g=1)
 ```
 
 - **The sheet** keeps what it covers clean. It lies a paper's thickness
@@ -612,8 +614,8 @@ k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the pap
   a wider margin than its point). Strokes and crumbs that land on the sheet
   stay on it; the finger, the eraser and fixative don't reach under it. Lay
   and lift it in one chunk. While it is down, only pastel, the finger, a dry
-  brush, the eraser and fixative work: wet paint and graphite aren't modeled
-  under a sheet and refuse.
+  brush, a puff, a tap, the eraser and fixative work: wet paint and graphite
+  aren't modeled under a sheet and refuse.
 - **A dry brush** (`b:dust`, the brush wiped clean) lifts loose pastel as
   far as its bristles' tips reach into the tooth and no deeper: a hog's tip
   (about 50 µm) reaches only the top micrometers of the pores, so what fills
@@ -633,13 +635,23 @@ k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the pap
   edge's radius in µm (a painting knife 20–500; a scalpel about 1): a
   scalpel on a short edge cuts, shaving a fiber layer and taking even fixed
   pastel. Otherwise fixed pastel stays.
+- **A puff** (`blow`) shears the surface in a ring around where it is aimed
+  (nothing at the very center): loose crumbs heaped on the tooth go easily;
+  the pores' fine grains only under a hard blow close in, and only their
+  top few micrometers. Most crumbs it lifts roll outward and settle in a
+  broad ring past where it stops lifting them; some hop further, a few
+  centimeters, and over ten from a hard blow close in; a little of the fine
+  grains settles thinly further out, and most are carried off. Crumbs
+  landing on a paper mask go with it.
+- **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
+  heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
 - **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
   `at: "x,y"` (see Looking).
 
 Pastel is there in a painting begun since it came, with paper (its log's
 head says `--@ paper`); an older painting replays as it was painted, and
-has no `pastel`, `smudge`, `feel`, `lay_sheet` or `lift_sheet`, no
-`b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
+has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
+`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 

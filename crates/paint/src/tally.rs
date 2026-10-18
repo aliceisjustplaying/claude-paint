@@ -73,6 +73,7 @@ pub mod pace {
 
 /// What the brushes did, and the hand time it took (seconds).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tally {
     /// Strokes dragged (planned passes, fill dabs, cut-in strokes, brush
     /// strokes by hand).
@@ -100,6 +101,7 @@ pub struct Tally {
 /// palette holds `PILES` at most; the oldest is scraped off for a new one.
 /// A sitting keeps one palette for its passes and held brushes (passed to `Canvas::work_with`); `Canvas::work` starts a clean one.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Piles {
     /// OKLab colors, oldest first.
     pub piles: Vec<[f32; 3]>,

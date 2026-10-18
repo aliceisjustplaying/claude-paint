@@ -29,6 +29,7 @@ pub const START_MIN: f64 = 9.0 * 60.0;
 /// The hand's state: part of the studio, snapshotted with it (a failed
 /// chunk rolls it back).
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "replay", derive(serde::Serialize, serde::Deserialize))]
 pub struct Hand {
     /// The piles on the palette: held brushes load from them and covering
     /// passes dip into them (`Canvas::work_with`); a pile knifed with
@@ -53,7 +54,33 @@ pub enum Verb {
 }
 
 /// Run a verb `f` on the studio under the hand clock's rules for its kind.
-pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+pub fn verb<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+    #[cfg(feature = "replay")]
+    {
+        let tag = match kind { Verb::Marks => "marks", Verb::Pass => "pass", Verb::Query => "query", Verb::Wait => "wait" };
+        return crate::replay_checkpoint::effect(st, tag, || verb_inner(st, kind, f));
+    }
+    #[cfg(not(feature = "replay"))]
+    verb_inner(st, kind, f)
+}
+
+#[cfg(feature = "replay")]
+pub trait EffectValue: serde::Serialize + serde::de::DeserializeOwned {}
+#[cfg(feature = "replay")]
+impl<T: serde::Serialize + serde::de::DeserializeOwned> EffectValue for T {}
+#[cfg(not(feature = "replay"))]
+pub trait EffectValue {}
+#[cfg(not(feature = "replay"))]
+impl<T> EffectValue for T {}
+
+pub fn read<R: EffectValue>(tag: &str, f: impl FnOnce() -> mlua::Result<R>) -> mlua::Result<R> {
+    #[cfg(feature = "replay")]
+    return crate::replay_checkpoint::read(tag, f);
+    #[cfg(not(feature = "replay"))]
+    { let _ = tag; f() }
+}
+
+fn verb_inner<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
     if matches!(kind, Verb::Query | Verb::Wait) {
         flush(st, true);
     }
@@ -87,6 +114,15 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R
 /// `set_hand_time`); this puts the rest. (The chunk's end calls it; verbs
 /// go through `verb`.)
 pub(crate) fn flush(st: &S, force: bool) {
+    #[cfg(feature = "replay")]
+    {
+        let _ = crate::replay_checkpoint::effect(st, if force { "flush" } else { "grain" }, || { flush_inner(st, force); Ok(()) });
+    }
+    #[cfg(not(feature = "replay"))]
+    flush_inner(st, force);
+}
+
+fn flush_inner(st: &S, force: bool) {
     let mut g = st.borrow_mut();
     let s = &mut *g;
     let Some(c) = s.canvas.as_mut() else { return };

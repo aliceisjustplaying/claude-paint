@@ -9,6 +9,7 @@ edition = "2024"
 # so the painter build has no hook at all.
 hand-hook = []
 render-snapshot = []
+replay-effects = ["dep:serde"]
 # The boxes besides the default tube box (palette.rs `BOXES`), one feature
 # each: the replay build has them all, a painter's build at most its own
 # studio's, so it names no other studio's box. On by default here (paint's
@@ -35,5 +36,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 mixbox = "2"
 noise = "0.9"
 rayon = "1"
+serde = { version = "1", features = ["derive"], optional = true }
 sha2 = "0.10"
 tiny-skia = "0.12"

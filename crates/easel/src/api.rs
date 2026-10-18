@@ -2221,7 +2221,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     paint::Stage::Setting => "setting",
                     paint::Stage::Tacky => "tacky",
                     paint::Stage::Dry => "dry",
-                })
+                }.to_string())
             })
         })?)?;
     }

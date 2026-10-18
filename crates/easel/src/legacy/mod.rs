@@ -245,7 +245,7 @@ fn color_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rg
 /// `color_over=`: {shift={dL, da, db}} or function(x, y, under) -> color,
 /// read against what is on the canvas before the pass (on the field grid).
 fn over_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<Rgb>> {
-    let under = |x: f32, y: f32| -> Result<Rgb> { Ok(st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, api::FIELD_STEP * 0.5)) };
+    let under = |x: f32, y: f32| -> Result<Rgb> { time::read("color_over", || Ok(st.borrow().canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, api::FIELD_STEP * 0.5))) };
     match v {
         Value::Table(t) => {
             let sh: Vec<f32> = t.get("shift")?;
@@ -480,8 +480,10 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
     // sample(x, y, r?): what is on the canvas there
     let st1 = st.clone();
     g.set("sample", lua.create_function(move |_, (x, y, r): (f32, f32, Option<f32>)| {
-        let s = st1.borrow();
-        Ok(Col(s.canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, r.unwrap_or(1.0))))
+        Ok(Col(time::read("sample", || {
+            let s = st1.borrow();
+            Ok(s.canvas.as_ref().ok_or_else(no_canvas)?.under(x, y, r.unwrap_or(1.0)))
+        })?))
     })?)?;
     // show(...): an overlay for looking; nothing on the canvas
     g.set("show", lua.create_function(|_, _: Variadic<Value>| Ok(()))?)?;
@@ -534,21 +536,25 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
             s.canvas.as_mut().ok_or_else(no_canvas)?.wait((h * 60.0) as f32);
             Ok(())
         })?;
+        let tally = time::read("rest_tally", || Ok(st1.borrow().canvas.as_ref().ok_or_else(no_canvas)?.tally()))?;
         let mut s = st1.borrow_mut();
         s.hand = time::Hand::default();
         let (n, _, _) = si.get();
-        si.set((n + 1, s.clock, s.canvas.as_ref().ok_or_else(no_canvas)?.tally()));
+        si.set((n + 1, s.clock, tally));
         Ok(s.clock)
     })?)?;
     let (st1, si) = (st.clone(), sitting);
     g.set("timesheet", lua.create_function(move |lua, ()| {
         time::flush(&st1, true);
+        let (sh, tally) = time::read("timesheet", || {
+            let s = st1.borrow();
+            let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
+            Ok((c.stage_shares(), c.tally()))
+        })?;
         let s = st1.borrow();
-        let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
         let (n, start, base) = si.get();
         let t: Table = lua.create_table()?;
-        let sh = c.stage_shares();
-        let k = c.tally().since(&base);
+        let k = tally.since(&base);
         t.set("clock", s.clock)?;
         t.set("sitting", s.clock - start)?;
         t.set("sittings", n)?;

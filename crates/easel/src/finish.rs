@@ -33,9 +33,10 @@ fn wet_share(c: &Canvas) -> f64 {
 
 /// Whole-picture finishing requires every film to be touch-dry.
 fn needs_dry(st: &S, what: &str) -> Result<()> {
-    let s = st.borrow();
-    let c = s.canvas.as_ref().ok_or_else(no_canvas)?;
-    let w = wet_share(c);
+    let w = time::read("wet_share", || {
+        let s = st.borrow();
+        Ok(wet_share(s.canvas.as_ref().ok_or_else(no_canvas)?))
+    })?;
     if w > 0.0 {
         let pc = if w < 0.005 { "under 1%".to_string() } else { format!("{:.0}%", 100.0 * w) };
         return err(format!("{what}: the paint is not all dry yet ({pc} of the canvas is still open, setting or tacky; drying(x, y) tells where): wait first"));

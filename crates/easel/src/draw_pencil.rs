@@ -44,6 +44,36 @@ const STROKE_KEYS: &[&str] = &["force", "alt", "azimuth", "roll", "speed"];
 /// normal 0.5–2, heavy 2–5: notes/research/pastel_stick_tribology.md §5).
 const FORCE_AT_FULL: f32 = 5.0;
 
+fn validate_pastel_path(c: &Canvas, pts: &[(f32, f32)], pad_radius_mm: Option<f32>) -> Result<()> {
+    if pts.len() > 4096 {
+        return err("pastel path: a path holds at most 4096 points");
+    }
+    let mmu = mm_per_unit(c);
+    if pts.iter().any(|&(x, y)| !x.is_finite() || !y.is_finite() || !(x * mmu).is_finite() || !(y * mmu).is_finite()) {
+        return err("pastel path: point coordinates are finite numbers");
+    }
+    let mut total = 0.0f32;
+    let mut samples = 0.0f64;
+    for w in pts.windows(2) {
+        let len = if pad_radius_mm.is_some() {
+            ((w[1].0 * mmu - w[0].0 * mmu).powi(2) + (w[1].1 * mmu - w[0].1 * mmu).powi(2)).sqrt()
+        } else {
+            ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt() * mmu
+        };
+        total += len;
+        if let Some(r) = pad_radius_mm {
+            samples += (len / (r * 0.5)).ceil().max(1.0) as f64;
+        }
+    }
+    if pad_radius_mm.is_none() {
+        samples = (total / c.px_mm()).ceil().max(1.0) as f64 + 1.0;
+    }
+    if !total.is_finite() || !samples.is_finite() || samples > 100_000.0 || (pad_radius_mm.is_none() && samples * pts.len() as f64 > 10_000_000.0) {
+        return err("pastel path: too much resampling; draw a shorter path or use fewer points");
+    }
+    Ok(())
+}
+
 /// Whether `p` is a pastel stick (`pastel(pile)`): only with the
 /// paper-and-pastel switch, so without it a pencil's methods are as they were.
 fn is_stick(st: &S, p: &Table) -> Result<bool> {
@@ -112,6 +142,11 @@ fn along(o: Option<&Table>, key: &str, n: usize, default: f32) -> Result<Vec<f32
 #[allow(clippy::too_many_arguments)]
 fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32], alt: &[f32], az: &[f32], roll: &[f32], speed: &[f32]) -> Result<f32> {
     use paint::pastel::{Pose, StrokePoint};
+    {
+        let s = st.borrow();
+        let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+        validate_pastel_path(c, pts, None)?;
+    }
     let mut stick = stick_of(p)?;
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
     // (a NaN angle finds no contact and lays nothing, without saying so)
@@ -663,6 +698,8 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             }
             crate::time::verb(&st1, crate::time::Verb::Pass, |s| {
                 let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                let radius = (pad.unwrap_or(135.0 * force.powf(0.4)) / std::f32::consts::PI).sqrt();
+                validate_pastel_path(c, &pts, Some(radius))?;
                 let secs = c.rub(&pts, force, pad, speed);
                 c.tally_mut().secs += secs as f64 + 0.5;
                 Ok(0)
@@ -739,6 +776,33 @@ mod tests {
                 assert!(result.unwrap_err().contains("hatch: unknown option \"graded\""));
             }
         }
+    }
+
+    #[test]
+    fn pastel_paths_are_bounded_before_native_resampling() {
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}})
+            p:stroke({{100, 100}, {300, 100}})"#);
+        for call in ["p:stroke(path)", "p:side(path)", "smudge(path, {pad=0.5})"] {
+            for (path, want) in [
+                ("{{100, 100}, {math.huge, 100}}", "finite numbers"),
+                ("{{100, 100}, {-math.huge, 100}}", "finite numbers"),
+                ("{{100, 100}, {0/0, 100}}", "finite numbers"),
+                ("{100, 100, 1e100, 100}", "finite numbers"),
+                ("{{-3e38, 100}, {3e38, 100}}", "too much resampling"),
+                ("{{100, 100}, {1e9, 100}}", "too much resampling"),
+                ("(function() local t = {} for i=1,4097 do t[i]={100,100} end return t end)()", "at most 4096 points"),
+                ("(function() local t = {} for i=1,4096 do t[i]={i%2*10000,100} end return t end)()", "too much resampling"),
+            ] {
+                let src = format!("local path = {path}; {call}");
+                let e = s.run(&src).unwrap_err();
+                assert!(e.contains(want), "{src}: {e}");
+            }
+        }
+        let e = s.run("local path = {} for i=1,4096 do path[i]={i*20,100} end p:stroke(path)").unwrap_err();
+        assert!(e.contains("too much resampling"), "{e}");
+        run(&mut s, "p:stroke({{100,100}, {100,100}}); smudge({{100,100}, {100,100}})");
     }
 
     /// A stick on paper: it lays, wears (its facets in the Lua heap), the

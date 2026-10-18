@@ -1,5 +1,0 @@
-pair1 foliage X=A Y=B
-pair2 rock X=A Y=B
-pair3 sky X=B Y=A
-pair4 water X=A Y=B
-pair5 baretree X=A Y=B

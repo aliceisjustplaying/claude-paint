@@ -933,4 +933,62 @@ mod tests {
         assert!(found.starts_with("paper: pastel, fixed"), "{found}");
         assert!(s.run("lift_sheet()").unwrap_err().contains("no sheet lies"));
     }
+
+    /// A dry brush and a knife's edge on pastel come with the switch: without
+    /// it a brush has exactly the methods it had (no `dust`) and a scrape
+    /// takes no `edge=`. With it
+    /// `b:dust` lifts loose pastel into the bristles (in the brush's text only
+    /// once it holds some; `b:wipe(1)` empties it), works while a sheet lies
+    /// (a knife doesn't), refuses a loaded brush; a scalpel's edge cuts into
+    /// fixed pastel where a palette knife's leaves it; the log replays bit for bit.
+    #[test]
+    fn a_dry_brush_and_a_knife_edge_on_pastel_come_with_the_switch() {
+        let mut off = Session::new(W).unwrap();
+        run(&mut off, CANVAS);
+        assert_eq!(run(&mut off, r#"local b = brush("filbert", 30) print(type(b.dust), type(b.stroke))"#).trim(), "nil\tfunction");
+        let e = off.run("knife{width=60}:scrape({{100, 100}, {300, 100}}, {edge=1})").unwrap_err();
+        assert!(e.contains(r#"unknown option "edge" (options: pressure, angle, lift)"#), "{e}");
+
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})
+            for y = 300, 500, 6 do p:stroke({{150, y}, {850, y + 10}}, {force=3, alt=50}) end
+            b = brush("filbert", 40)"#);
+        assert_eq!(run(&mut s, "print(type(b.dust))").trim(), "function");
+        let text = |s: &Session| format!("{:?}", s.st.borrow_mut().live_brushes()[0].borrow());
+        assert!(!text(&s).contains("pastel_mg"), "a clean brush's text is as it was");
+        let lifted: f32 = run(&mut s, "print(b:dust({{120, 400}, {900, 400}}))").trim().parse().unwrap();
+        assert!(lifted > 0.0, "the dry brush lifted pastel: {lifted} mm³");
+        assert!(text(&s).contains("pastel_mg"), "and holds some");
+        run(&mut s, "b:wipe(1)");
+        assert!(!text(&s).contains("pastel_mg"), "wiped clean");
+        run(&mut s, "lay_sheet(rect(0, 0, 500, 800)) b:dust({{550, 350}, {850, 350}}) lift_sheet()");
+        let e = s.run("lay_sheet(rect(0, 0, 500, 800)) knife{width=60}:scrape({{600, 300}, {800, 300}}) lift_sheet()").unwrap_err();
+        assert!(e.contains("a dry brush (b:dust)"), "{e}");
+        let e = s.run(r#"local w = brush("round", 10) w:load(pile{{"lead white", 1}}) w:dust({{100, 100}, {300, 100}})"#).unwrap_err();
+        assert!(e.contains("has paint on it"), "{e}");
+        assert!(s.run("b:dust({{100, 100}, {300, 100}}, {tip=0.5})").unwrap_err().contains("tip"));
+        assert!(s.run("knife{width=60}:scrape({{100, 100}, {300, 100}}, {edge=0})").unwrap_err().contains("edge"));
+        assert!(s.run("knife{width=60}:lay({{100, 100}, {300, 100}}, {edge=1})").unwrap_err().contains("unknown option"));
+        run(&mut s, "fix(rect(0, 0, 1000, 800))");
+        let state = |s: &Session| {
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            b
+        };
+        let px = |s: &Session| s.canvas().unwrap().pixels().to_vec();
+        let fixed = px(&s);
+        run(&mut s, "knife{width=200}:scrape({{500, 280}, {500, 520}}, {pressure=0.5, angle=0})");
+        assert!(px(&s) == fixed, "a palette knife at a light hand leaves fixed pastel as it was");
+        run(&mut s, "knife{width=10}:scrape({{500, 280}, {500, 520}}, {pressure=0.5, angle=0, edge=1})");
+        assert!(px(&s) != fixed, "a scalpel cuts into it");
+
+        let log = s.program("dry tools");
+        let mut r = Session::replay(W).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&log) {
+            r.run(&chunk).unwrap();
+        }
+        assert!(state(&r) == state(&s), "the log replays bit for bit");
+        assert_eq!(text(&r), text(&s));
+    }
 }

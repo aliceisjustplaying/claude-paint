@@ -432,8 +432,18 @@ impl UserData for KnifeU {
                     return err(format!("k:{name}: needs points"));
                 }
                 let (mut pressure, mut angle, mut lift) = (if lay { (0.5, 0.5) } else { (1.0, 1.0) }, None, if lay { 0.1 } else { 0.0 });
+                // edge=: the blade's edge radius over pastel on paper (the
+                // paper-and-pastel switch's; paint's sheet.rs `scrape_pastel`)
+                let paper = k.st.borrow().paper;
+                let mut edge = 100.0f32;
                 if let Some(o) = &o {
-                    check_keys(o, &["pressure", "angle", "lift"], &format!("k:{name}"))?;
+                    check_keys(o, if !lay && paper { &["pressure", "angle", "lift", "edge"] } else { &["pressure", "angle", "lift"] }, &format!("k:{name}"))?;
+                    if !lay && paper && let Some(e) = num(o, "edge")? {
+                        if !(1.0..=1000.0).contains(&e) {
+                            return err("k:scrape: edge is the blade's edge radius, µm (a painting knife's 20–500; a scalpel's about 1)");
+                        }
+                        edge = e;
+                    }
                     if let Some(p) = pair(o, "pressure")? {
                         pressure = p;
                     }
@@ -449,7 +459,16 @@ impl UserData for KnifeU {
                 let scale = k.st.borrow().width as f32 / 1000.0;
                 if let Err(e) = paint::Knife::check_path(&pts, scale) { return err(format!("k:{name}: {e}")); }
                 time::verb(&k.st, Verb::Marks, |s| {
-                    s.canvas.as_mut().ok_or_else(no_canvas)?.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                    c.knife(&mut k.k.borrow_mut(), &pts, pressure, angle, lay, lift);
+                    if !lay && paper {
+                        // the blade on pastel on paper: it sinks into the
+                        // sheet and takes the loose pastel above its edge,
+                        // and presses the paper (paint's sheet.rs; nothing
+                        // without paper and a drawing)
+                        let width = k.k.borrow().width;
+                        c.scrape_pastel(width, edge, &pts, pressure, angle);
+                    }
                     Ok(())
                 })
             });
@@ -750,6 +769,59 @@ impl UserData for Brush {
             Ok(format!("brush({:?} {}, {:.0}% full)", h.tool.kind, h.tool.width, 100.0 * h.fullness()).to_lowercase())
         });
     }
+}
+
+/// `b:dust(pts, {pressure=0.6, tip=})`: the brush, dry, drawn over pastel
+/// (paint's sheet.rs `dust_pastel`): loose pastel its tips reach comes away,
+/// kept in the bristles while they have room and otherwise dropped ahead of
+/// them and where they lift; what lies deeper in the tooth, and fixed pastel,
+/// stays. `tip` is the bristles' tip radius in µm (a hog's 50; finer hair
+/// reaches deeper). Returns the volume it took off the picture (into the
+/// bristles), mm³. Only with the paper-and-pastel switch (`install_paper`).
+fn add_dust<M: UserDataMethods<Brush>>(m: &mut M) {
+    m.add_method("dust", |_, b, (pts, o): (Value, Option<Table>)| {
+        let pts = points(&pts)?;
+        if pts.len() < 2 {
+            return err("b:dust: needs at least two points");
+        }
+        let (mut p, mut tip) = (0.6f32, paint::sheet::HOG_TIP_UM);
+        if let Some(o) = &o {
+            check_keys(o, &["pressure", "tip"], "b:dust")?;
+            if let Some(v) = num(o, "pressure")? {
+                // (clamp keeps a NaN: refuse it first)
+                if !v.is_finite() {
+                    return err("b:dust: pressure is a number, 0 to 1");
+                }
+                p = v.clamp(0.0, 1.0);
+            }
+            if let Some(v) = num(o, "tip")? {
+                if !(2.0..=200.0).contains(&v) {
+                    return err("b:dust: tip is the bristles' tip radius, µm (2 to 200; a hog bristle's about 50)");
+                }
+                tip = v;
+            }
+        }
+        let width = b.held.borrow().tool.mark_width(p);
+        let full_w = b.held.borrow().tool.width;
+        if b.held.borrow().fullness() > 0.02 {
+            return err("b:dust: the brush has paint on it; a dry brush brushes pastel off (b:wipe(1) first)");
+        }
+        time::verb_dry(&b.st, Verb::Pass, |s| {
+            let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            // (the path's work bounded before it is densified, as a knife's)
+            if let Err(e) = paint::Knife::check_path(&pts, c.frame().scale) {
+                return err(format!("b:dust: {e}"));
+            }
+            // what its loaded tip holds: 2 mm of it, its width by a third of that thick
+            let w_mm = full_w * c.mm_per_unit();
+            let cap = paint::sheet::BRUSH_HOLDS_MG_MM3 * w_mm * 2.0 * 0.3 * w_mm;
+            let mut held = b.held.borrow().pastel_mg;
+            let (v, secs) = c.dust_pastel(width, tip, &pts, &mut held, cap);
+            b.held.borrow_mut().pastel_mg = held;
+            c.tally_mut().secs += secs as f64;
+            Ok(v)
+        })
+    });
 }
 
 pub(crate) fn no_canvas() -> mlua::Error {
@@ -2183,7 +2255,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     // brushes
     {
         let st1 = st.clone();
-        g.set("brush", lua.create_function(move |_, (a, w): (Value, Option<f32>)| {
+        g.set("brush", lua.create_function(move |lua, (a, w): (Value, Option<f32>)| {
             let tool = match (&a, w) {
                 (Value::String(s), Some(w)) => tool_named(&s.to_str()?, w)?,
                 (v, _) => tool_of(v)?,
@@ -2192,7 +2264,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
             let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(drain)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
-            Ok(Brush { held, st: st1.clone() })
+            let b = Brush { held, st: st1.clone() };
+            // with the paper-and-pastel switch, a brush with `b:dust` too
+            // (`install_paper` registers it); without it, a brush as it was
+            if st1.borrow().paper { lua.create_any_userdata(b) } else { lua.create_userdata(b) }
         })?)?;
     }
 
@@ -2280,9 +2355,17 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 /// The verbs the paper-and-pastel switch brings (`Studio::paper`): pastel
 /// sticks, the finger, `feel` and the paper mask (draw_pencil.rs
-/// `install_paper`). Run
-/// once, after `install` and before the first chunk, when the switch is on.
+/// `install_paper`), and a dry brush over pastel (`b:dust`). Run once, after
+/// `install` and before the first chunk (before any brush is made), when the
+/// switch is on.
 pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
+    // a brush's methods are its type's: brushes made with the switch
+    // (`create_any_userdata`) take these, main's and `dust`; brushes made
+    // without it keep exactly main's (`UserData for Brush`)
+    lua.register_userdata_type::<Brush>(|reg| {
+        <Brush as UserData>::register(reg);
+        add_dust(reg);
+    })?;
     draw_pencil::install_paper(lua, st)
 }
 

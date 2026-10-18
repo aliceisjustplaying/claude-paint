@@ -601,6 +601,8 @@ feel(x, y)                     -- what a fingertip feels there
 ```lua
 lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
 lift_sheet()                                              -- taken away, with what it caught
+b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
+k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the paper, takes the loose
 ```
 
 - **The sheet** keeps what it covers clean. It lies a paper's thickness
@@ -609,16 +611,35 @@ lift_sheet()                                              -- taken away, with wh
   as sharp as the stick's angle and force make it (a stick laid flat leaves
   a wider margin than its point). Strokes and crumbs that land on the sheet
   stay on it; the finger, the eraser and fixative don't reach under it. Lay
-  and lift it in one chunk. While it is down, only pastel, the finger, the
-  eraser and fixative work: wet paint and graphite aren't modeled under a
-  sheet and refuse.
+  and lift it in one chunk. While it is down, only pastel, the finger, a dry
+  brush, the eraser and fixative work: wet paint and graphite aren't modeled
+  under a sheet and refuse.
+- **A dry brush** (`b:dust`, the brush wiped clean) lifts loose pastel as
+  far as its bristles' tips reach into the tooth and no deeper: a hog's tip
+  (about 50 µm) reaches only the top micrometers of the pores, so what fills
+  them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
+  The bristles keep what they lift until they are full (a brush a centimeter
+  wide holds a few milligrams; `b:wipe(1)` empties it); then the rest is pushed
+  ahead and left as a ridge of crumbs where the brush lifts. Over a
+  speckled passage it smears more than it cleans.
+- **The knife** (`k:scrape`) over pastel on paper: the hand's force (1–5 N by
+  `pressure`) bears along the blade's edge, so a wide palette knife presses
+  lightly and a short edge hard. The edge sinks into the paper as far as
+  the sheet's compression and its surface's stiffness allow, and takes the
+  loose pastel above that depth; a stiff blade rides the paper's high spots
+  and bridges its low ones, so a scrape is mottled. Pressed hard enough it
+  sets the paper: burnished, flatter, the pores shallower (less tooth). Its
+  drag can tear fibers loose: raised nap, more tooth there. `edge` is the
+  edge's radius in µm (a painting knife 20–500; a scalpel about 1): a
+  scalpel on a short edge cuts, shaving a fiber layer and taking even fixed
+  pastel. Otherwise fixed pastel stays.
 - **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
   `at: "x,y"` (see Looking).
 
 Pastel is there in a painting begun since it came, with paper (its log's
 head says `--@ paper`); an older painting replays as it was painted, and
-has no `pastel`, `smudge`, `feel`, `lay_sheet` or `lift_sheet`, and no stick
-to hold up. The numbers (how hard a stick is, how
+has no `pastel`, `smudge`, `feel`, `lay_sheet` or `lift_sheet`, no
+`b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 

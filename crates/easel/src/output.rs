@@ -1,4 +1,3 @@
-#[cfg(feature = "replay")]
 use image::RgbImage;
 use paint::Rgb;
 use paint::color::linear_to_srgb;
@@ -65,7 +64,6 @@ pub fn average_linear(pixels: &[Rgb], width: usize, [x0, y0, x1, y1]: [usize; 4]
     image
 }
 
-#[cfg(feature = "replay")]
 pub fn thumbnail(image: &RgbImage, width: u32, height: u32) -> RgbImage {
     let (iw, ih) = image.dimensions();
     if width == 0 || height == 0 || iw < width || ih < height {

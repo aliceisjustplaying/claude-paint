@@ -94,6 +94,7 @@ unittest=$'^Ran [1-9]\n^OK'
 rust smoke easel 'test smoke test'
 rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
+rust live-frames easel 'test live_frames test'
 rust painter-signals easel 'test painter_signals test'
 rust r19 easel 'test boxes test' a_round_19_log_replays_as_before
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
@@ -111,6 +112,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint \
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  live_frames::tests::atomic_frame_publication_keeps_the_previous_file_on_failure \
+  live_frames::tests::portrait_frames_fit_the_long_side_and_existing_frames_are_untouched \
   session::tests::a_subnormal_blend_stays_finite_through_a_scrape_and_wait \
   look::tests::crops_of_any_span_are_bounded_and_report_the_actual_scale \
   look::tests::fitting_crops_keep_their_pixels_and_whole_views_keep_their_size \
@@ -135,6 +138,7 @@ check atelier "cd atelier && $pytest -rs ." "$passed"
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
+check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'

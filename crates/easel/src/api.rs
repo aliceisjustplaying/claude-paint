@@ -36,6 +36,7 @@ pub const FIELD_STEP: f32 = 2.0;
 pub struct Studio {
     pub width: usize,
     pub canvas: Option<Canvas>,
+    pub recording_ground: u64,
     pub style: Option<Rc<Style>>,
     /// Arguments `canvas{}` was called with (for status).
     pub setup: Option<String>,
@@ -75,7 +76,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
+        Studio { width, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -1836,6 +1837,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     // the clock counts from here: the ground is the colorman's
                     time::start(&mut c);
                     s.hand = time::Hand::default();
+                    s.recording_ground = crate::live_frames::ground_signature(&c);
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     s.canvas_src = Some(format!("canvas{}", lua_src(&Value::Table(o.clone()))?));

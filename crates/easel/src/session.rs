@@ -200,6 +200,7 @@ pub struct Chunk {
 
 /// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
+    recording_ground: u64,
     canvas: Option<Canvas>,
     style: Option<Rc<Style>>,
     setup: Option<String>,
@@ -400,7 +401,7 @@ impl Session {
             let v = *r.borrow();
             (r, v)
         }).collect();
-        Ok(Snap { canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        Ok(Snap { recording_ground: s.recording_ground, canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
@@ -426,6 +427,7 @@ impl Session {
         s.style = snap.style.clone();
         s.setup = snap.setup.clone();
         s.canvas_src = snap.canvas_src.clone();
+        s.recording_ground = snap.recording_ground;
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;

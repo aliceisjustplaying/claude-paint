@@ -1,0 +1,21 @@
+BEFORE clock=39614.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=819796 mobile_pixels=819744 sum_solvent_um_px=5.925878635e4 paint_um_p50_p95_p99_max=[0.096446946, 13.635859, 315.8958, 7364.244] solvent_um_p50_p95_p99_max=[1.098813e-5, 0.06263359, 2.0872986, 31.22459] mobility_p50_p95_p99_max=[1.1995791e-9, 0.00022840133, 0.012249725, 0.03287741] fixed_film_tail_min=2728.189437 tail_xy=(658, 1059) tail_paint_um=7109.766602 tail_solvent_um=1.647756457e0
+GRID ticks=640 elapsed_min=9.993146 wall_s=127.688880 evap_age_spread_has_s=[9.401253883000006, 5.087938043999972, 113.19933106999993, 2.5458000000000013e-5] clock=39624.843750 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=571278 mobile_pixels=571270 sum_solvent_um_px=6.894007526e3 paint_um_p50_p95_p99_max=[0.13056812, 18.031796, 542.5545, 7363.756] solvent_um_p50_p95_p99_max=[9.741699e-7, 0.0015452906, 0.21473041, 13.868204] mobility_p50_p95_p99_max=[1.005102e-10, 3.3537303e-6, 0.00017612475, 0.0014590764] fixed_film_tail_min=2716.896415 tail_xy=(658, 1059) tail_paint_um=7106.512695 tail_solvent_um=1.536649823e0
+time: command terminated abnormally
+      193.76 real       199.19 user        10.18 sys
+          1444282368  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              812299  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+             1715413  involuntary context switches
+       1598616160487  instructions retired
+        578063567924  cycles elapsed
+          1443169960  peak memory footprint

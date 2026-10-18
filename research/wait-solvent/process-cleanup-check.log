@@ -1,0 +1,2 @@
+10269 /bin/zsh -lc ps -axo pid,command | rg 'research-wait|fast-replay-easel run|wait_probe /private/tmp|cargo.*claude-paint-wait' > research/wait-solvent/process-cleanup-check.log; du -sh target /private/tmp/paint-wait-research.ONLfWI research/wait-solvent > research/wait-solvent/cleanup.log; stat -f '%N owner=%u type=%HT' target /private/tmp/paint-wait-research.ONLfWI; cat research/wait-solvent/process-cleanup-check.log
+10278 rg research-wait|fast-replay-easel run|wait_probe /private/tmp|cargo.*claude-paint-wait

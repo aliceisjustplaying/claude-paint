@@ -1,0 +1,20 @@
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 11.02s
+     Running tests/thinner_physics.rs (target/debug/deps/thinner_physics-c441a2de49ccfe64)
+
+running 1 test
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 has been running for over 60 seconds
+
+thread 'c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4' (11435665) panicked at crates/paint/tests/thinner_physics.rs:616:13:
+from 0.4 min: 15 min and 15 × 1 min: cure differs at 2 pixels, e.g. [(15009, 0.0026082576, 0.0026086087), (15010, 0.0025603948, 0.0025606873)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 ... FAILED
+
+failures:
+
+failures:
+    c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 114.58s
+
+error: test failed, to rerun pass `-p paint --test thinner_physics`

@@ -1,0 +1,95 @@
+{
+  "size": [
+    2400,
+    1800
+  ],
+  "changed_pixels": 0,
+  "total_pixels": 4320000,
+  "mean_absolute_rgb_levels": 0.0,
+  "maximum_rgb_levels": 0,
+  "pixels_at_least_2": 0,
+  "cross_build_policy_pass": true,
+  "crop_px": [
+    0,
+    0,
+    512,
+    512
+  ],
+  "checkpoint_bytes": [
+    518400360,
+    518400360
+  ],
+  "checkpoint_changed_bytes": 0,
+  "fields": {
+    "rgb": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "height_um": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "film": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "wet_coats": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "latent": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "properties": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "stroke": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "touched": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "drying": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "cover": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "engine": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "gloss": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "absorbency": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    },
+    "solvent_um": {
+      "changed_values": 0,
+      "max_absolute": 0.0,
+      "mean_absolute": 0.0
+    }
+  }
+}

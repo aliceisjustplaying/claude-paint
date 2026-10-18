@@ -1,0 +1,27 @@
+BEFORE clock=39614.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=819796 mobile_pixels=819744 sum_solvent_um_px=5.925878635e4 paint_um_p50_p95_p99_max=[0.096446946, 13.635859, 315.8958, 7364.244] solvent_um_p50_p95_p99_max=[1.098813e-5, 0.06263359, 2.0872986, 31.22459] mobility_p50_p95_p99_max=[1.1995791e-9, 0.00022840133, 0.012249725, 0.03287741] fixed_film_tail_min=2728.189437 tail_xy=(658, 1059) tail_paint_um=7109.766602 tail_solvent_um=1.647756457e0
+GRID ticks=640 elapsed_min=9.993146 wall_s=86.891617 evap_age_spread_has_s=[2.885186846000004, 5.923671831999984, 70.96616485199993, 1.8077000000000054e-5] clock=39624.843750 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 348, 1586, 1355) solvent_pixels=103956 mobile_pixels=103953 sum_solvent_um_px=6.888974158e3 paint_um_p50_p95_p99_max=[3.1329014, 538.1514, 1571.9037, 7363.756] solvent_um_p50_p95_p99_max=[0.0003361017, 0.25354615, 1.654356, 13.868204] mobility_p50_p95_p99_max=[8.0131974e-7, 0.00019215126, 0.0004203279, 0.0014590764] fixed_film_tail_min=2716.896415 tail_xy=(658, 1059) tail_paint_um=7106.512695 tail_solvent_um=1.536649823e0
+GRID ticks=1280 elapsed_min=126.399396 wall_s=172.586765 evap_age_spread_has_s=[3.489051892000005, 67.12048626000015, 92.2912424709999, 3.8212999999999846e-5] clock=39741.250000 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 638, 1472, 1327) solvent_pixels=2834 mobile_pixels=2833 sum_solvent_um_px=1.386729024e2 paint_um_p50_p95_p99_max=[1110.5781, 2832.4197, 4060.4119, 7358.4014] solvent_um_p50_p95_p99_max=[2.087429e-8, 0.25721103, 0.6746521, 2.4208863] mobility_p50_p95_p99_max=[1.4272761e-13, 1.3262814e-7, 9.065853e-7, 4.125756e-6] fixed_film_tail_min=2591.062167 tail_xy=(658, 1059) tail_paint_um=7082.357910 tail_solvent_um=6.818156838e-1
+GRID ticks=1920 elapsed_min=286.399396 wall_s=252.927960 evap_age_spread_has_s=[3.5135964800000004, 144.48201597000048, 94.64618392899973, 6.313999999999922e-5] clock=39901.250000 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 672, 1468, 1324) solvent_pixels=221 mobile_pixels=221 sum_solvent_um_px=5.595593405e0 paint_um_p50_p95_p99_max=[2265.474, 4279.2246, 6281.652, 7069.965] solvent_um_p50_p95_p99_max=[4.245031e-9, 0.11004987, 0.20492974, 0.56695634] mobility_p50_p95_p99_max=[8.478172e-15, 8.198761e-8, 2.2896742e-7, 4.1744818e-7] fixed_film_tail_min=2426.452362 tail_xy=(658, 1059) tail_paint_um=7069.964844 tail_solvent_um=2.231902927e-1
+GRID ticks=2560 elapsed_min=446.399396 wall_s=347.515936 evap_age_spread_has_s=[3.5154978460000006, 236.31671828800168, 96.95335376699971, 7.821999999999796e-5] clock=40061.250000 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 1058, 1467, 1324) solvent_pixels=12 mobile_pixels=12 sum_solvent_um_px=2.885623545e-1 paint_um_p50_p95_p99_max=[3488.589, 6346.091, 6346.091, 7066.128] solvent_um_p50_p95_p99_max=[3.2121584e-8, 0.07306583, 0.07306583, 0.16379513] mobility_p50_p95_p99_max=[3.3075325e-14, 6.6188726e-8, 6.6188726e-8, 6.768865e-8] fixed_film_tail_min=2265.110752 tail_xy=(658, 1059) tail_paint_um=7066.127930 tail_solvent_um=7.306583226e-2
+GRID ticks=3049 elapsed_min=568.649396 wall_s=436.800205 evap_age_spread_has_s=[3.515829776000004, 323.0732398630035, 98.93650130499958, 8.955399999999702e-5] clock=40183.500000 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(18446744073709551615, 18446744073709551615, 0, 0) solvent_pixels=0 mobile_pixels=0 sum_solvent_um_px=0.000000000e0 paint_um_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] solvent_um_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] mobility_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] fixed_film_tail_min=0.000000 tail_xy=(0, 0) tail_paint_um=0.000000 tail_solvent_um=0.000000000e0
+GRID_DONE ticks=3049 elapsed_min=568.649396 wall_s=439.107076 evap_age_spread_has_s=[3.515829776000004, 323.0732398630035, 98.93650130499958, 8.955399999999702e-5]
+WAIT_SECONDS 439.118067
+AFTER clock=43934.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(18446744073709551615, 18446744073709551615, 0, 0) solvent_pixels=0 mobile_pixels=0 sum_solvent_um_px=0.000000000e0 paint_um_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] solvent_um_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] mobility_p50_p95_p99_max=[0.0, 0.0, 0.0, 0.0] fixed_film_tail_min=0.000000 tail_xy=(0, 0) tail_paint_um=0.000000 tail_solvent_um=0.000000000e0
+      442.56 real       332.73 user        23.51 sys
+          1507803136  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1456230  page reclaims
+                  13  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  59  voluntary context switches
+             3628479  involuntary context switches
+       3118151959746  instructions retired
+        980579593115  cycles elapsed
+          1861928760  peak memory footprint

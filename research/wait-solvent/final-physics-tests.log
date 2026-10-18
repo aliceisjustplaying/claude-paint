@@ -1,0 +1,23 @@
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 59.68s
+     Running tests/thinner_physics.rs (target/debug/deps/thinner_physics-c441a2de49ccfe64)
+
+running 13 tests
+test c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together ... ignored, slow
+test c04_control_a_wholly_unthinned_scene_balances ... ok
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... ok
+test c19_the_same_paint_with_more_or_less_solvent_looks_the_same ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+test c08_a_hundredth_of_thinner_is_a_small_change ... ok
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... ok
+test c15_solvent_does_not_slow_the_oil_cure ... ok
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume has been running for over 60 seconds
+test c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded has been running for over 60 seconds
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... ok
+test c17_a_wait_split_on_the_grid_is_exact_and_off_it_is_bounded ... ok
+
+test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 227.48s
+

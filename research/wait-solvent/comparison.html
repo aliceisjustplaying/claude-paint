@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;color:var(--foreground);font-family:var(--font-sans)}figure{margin:0 0 22px}img{display:block;width:100%;height:auto}figcaption{font-size:14px;line-height:1.5;margin-top:8px}p{font-size:14px;line-height:1.5}code{font-size:12px;color:var(--muted-foreground)}
+</style></head><body>
+<p>Stock on the left, fix on the right. Each crop surrounds the largest channel difference.</p>
+<figure><img src="/Users/alice/src/a/claude-paint-wait-research/research/wait-solvent/prefix-comparison-crop.png" alt="Stock and fixed 34-chunk replay before waiting"><figcaption><strong>Before the wait:</strong> 21 changed pixels out of 4.32 million; maximum 7 RGB levels.<br><code>prefix-comparison.json:6–11</code></figcaption></figure>
+<figure><img src="/Users/alice/src/a/claude-paint-wait-research/research/wait-solvent/replay-wait-comparison-crop.png" alt="Stock and fixed replay after a three-day wait"><figcaption><strong>After the three-day wait:</strong> 82,700 changed pixels (1.914%); maximum 49 RGB levels; mean absolute change 0.01743 levels.<br><code>replay-wait-comparison.json:6–11</code></figcaption></figure>
+<p>Both measured states fail the stock-versus-fix cross-build tolerance: one RGB level in at most 432 pixels.<br><code>notes/workflow.md:464–467</code></p>
+</body></html>

@@ -1,0 +1,6 @@
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/easel)
+    Finished `release` profile [optimized] target(s) in 4m 20s
+051a5cdff3fbbe583a9a7ddee8d5c27d28f1f72d3ab432dc457e1547f5c8bf43  research/wait-solvent/painter/bin/easel
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+    Finished `release` profile [optimized] target(s) in 1m 14s

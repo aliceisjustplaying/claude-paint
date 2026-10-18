@@ -1,0 +1,95 @@
+1000	750
+  chunk   1     2.56s
+  chunk   2     2.33s
+115.67916666666666	183.02666666666664	513.9708333333333	637.07916666666665	20.041666666666686	624.5
+  chunk   3     1.67s
+  chunk   4    11.96s
+  chunk   5    15.31s
+  chunk   6    21.41s
+  chunk   7    13.54s
+  chunk   8    29.98s
+  chunk   9    26.54s
+  chunk  10    19.32s
+day 2, 08:15
+100	50	open
+300	200	open
+150	320	open
+200	450	open
+500	450	open
+300	650	open
+700	300	open
+900	150	open
+900	650	open
+  chunk  11     0.73s
+day 4, 08:15
+100	50	setting
+300	200	tacky
+150	320	setting
+200	450	setting
+500	450	setting
+300	650	setting
+700	300	tacky
+900	150	tacky
+900	650	tacky
+  chunk  12     1.27s
+day 7, 08:15
+100	50	dry
+300	200	dry
+150	320	tacky
+200	450	tacky
+500	450	dry
+300	650	tacky
+700	300	dry
+900	150	dry
+900	650	dry
+  chunk  13     1.10s
+day 9, 08:15
+150	320	dry
+200	450	dry
+300	650	dry
+50	300	dry
+  chunk  14     0.53s
+  chunk  15    22.95s
+  chunk  16     9.89s
+  chunk  17     9.11s
+  chunk  18    12.38s
+1.0	0.79607844352722168	0.0
+  chunk  19     9.58s
+  chunk  20    32.93s
+  chunk  21    49.31s
+  chunk  22     3.52s
+setting	open	setting	open
+  chunk  23    17.23s
+tacky	setting	tacky	setting	setting	dry
+  chunk  24     1.06s
+  chunk  25   129.03s
+  chunk  26   107.25s
+  chunk  27   116.59s
+  chunk  28    49.86s
+  chunk  29    15.65s
+  chunk  30    55.86s
+100	300	tacky
+200	450	tacky
+500	450	setting
+500	320	setting
+300	650	setting
+800	300	tacky
+780	282	tacky
+430	240	dry
+  chunk  31     0.89s
+100	300	tacky
+200	450	dry
+500	450	tacky
+500	320	tacky
+300	650	dry
+800	300	dry
+780	282	dry
+600	500	tacky
+  chunk  32     0.78s
+100	300	dry
+200	450	dry
+500	450	dry
+500	320	dry
+600	500	dry
+50	280	dry
+  chunk  33     0.70s

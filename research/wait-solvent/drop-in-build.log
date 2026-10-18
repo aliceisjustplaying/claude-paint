@@ -1,0 +1,9 @@
+    Blocking waiting for file lock on build directory
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/easel)
+    Finished `release` profile [optimized] target(s) in 2m 29s
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/easel)
+    Finished `release` profile [optimized] target(s) in 3m 39s
+03615a11ddaba929d92f021297ae333e9bf1d479fdc608865ea24dfe5578bcb7  research/wait-solvent/painter/bin/easel
+c1621f9eae7c8490db9a771d9256a5c0c0fe8e7b765cc75ea1a3354da3c7a9de  research/wait-solvent/replay-easel

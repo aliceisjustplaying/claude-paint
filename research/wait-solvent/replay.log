@@ -1,0 +1,115 @@
+1000	750
+  chunk   1     1.91s
+  chunk   2     2.24s
+115.67916666666666	183.02666666666664	513.9708333333333	637.07916666666665	20.041666666666686	624.5
+  chunk   3     1.27s
+  chunk   4     8.85s
+  chunk   5    13.21s
+  chunk   6    21.44s
+  chunk   7    17.64s
+  chunk   8    32.34s
+  chunk   9    22.30s
+  chunk  10    15.26s
+day 2, 08:15
+100	50	open
+300	200	open
+150	320	open
+200	450	open
+500	450	open
+300	650	open
+700	300	open
+900	150	open
+900	650	open
+  chunk  11     0.43s
+day 4, 08:15
+100	50	setting
+300	200	tacky
+150	320	setting
+200	450	setting
+500	450	setting
+300	650	setting
+700	300	tacky
+900	150	tacky
+900	650	tacky
+  chunk  12     1.01s
+day 7, 08:15
+100	50	dry
+300	200	dry
+150	320	tacky
+200	450	tacky
+500	450	dry
+300	650	tacky
+700	300	dry
+900	150	dry
+900	650	dry
+  chunk  13     0.94s
+day 9, 08:15
+150	320	dry
+200	450	dry
+300	650	dry
+50	300	dry
+  chunk  14     0.44s
+  chunk  15    21.29s
+  chunk  16     9.94s
+  chunk  17     9.02s
+  chunk  18     9.55s
+1.0	0.79607844352722168	0.0
+  chunk  19     6.81s
+  chunk  20    30.11s
+  chunk  21    43.22s
+  chunk  22     3.13s
+setting	open	setting	open
+  chunk  23    17.10s
+tacky	setting	tacky	setting	setting	dry
+  chunk  24     1.19s
+  chunk  25   111.31s
+  chunk  26   109.55s
+  chunk  27   102.34s
+  chunk  28    47.58s
+  chunk  29    14.69s
+  chunk  30    56.97s
+100	300	tacky
+200	450	tacky
+500	450	setting
+500	320	setting
+300	650	setting
+800	300	tacky
+780	282	tacky
+430	240	dry
+  chunk  31     1.38s
+100	300	tacky
+200	450	dry
+500	450	tacky
+500	320	tacky
+300	650	dry
+800	300	dry
+780	282	dry
+600	500	tacky
+  chunk  32     0.83s
+100	300	dry
+200	450	dry
+500	450	dry
+500	320	dry
+600	500	dry
+50	280	dry
+  chunk  33     1.02s
+  chunk  34   227.15s
+wrote research/wait-solvent/before.png (34 chunks, painted in 963.5s, total 964.8s)
+      965.29 real       983.70 user        47.16 sys
+          2025472000  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             1518614  page reclaims
+                  54  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 110  voluntary context switches
+             8525523  involuntary context switches
+       7554432389344  instructions retired
+       2836122784656  cycles elapsed
+          2572142944  peak memory footprint

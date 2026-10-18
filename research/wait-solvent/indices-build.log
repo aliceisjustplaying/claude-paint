@@ -1,0 +1,15 @@
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+warning: method `evaporate` is never used
+   --> crates/paint/src/thinner.rs:241:19
+    |
+209 | impl Canvas {
+    | ----------- method in this implementation
+...
+241 |     pub(crate) fn evaporate(&mut self, dt: f32) {
+    |                   ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `paint` (lib) generated 1 warning
+   Compiling easel v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/easel)
+    Finished `iter` profile [optimized] target(s) in 24.33s

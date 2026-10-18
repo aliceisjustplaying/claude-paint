@@ -1,0 +1,23 @@
+BEFORE clock=39614.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=819796 mobile_pixels=819744 sum_solvent_um_px=5.925878635e4 paint_um_p50_p95_p99_max=[0.096446946, 13.635859, 315.8958, 7364.244] solvent_um_p50_p95_p99_max=[1.098813e-5, 0.06263359, 2.0872986, 31.22459] mobility_p50_p95_p99_max=[1.1995791e-9, 0.00022840133, 0.012249725, 0.03287741] fixed_film_tail_min=2728.189437 tail_xy=(658, 1059) tail_paint_um=7109.766602 tail_solvent_um=1.647756457e0
+GRID ticks=640 elapsed_min=9.993146 wall_s=62.979230 evap_age_spread_has_s=[3.170487042999997, 3.3445265829999813, 56.22658373699992, 0.23735813899999997] clock=39624.843750 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=571278 mobile_pixels=571270 sum_solvent_um_px=6.894007526e3 paint_um_p50_p95_p99_max=[0.13056812, 18.031796, 542.5545, 7363.756] solvent_um_p50_p95_p99_max=[9.741699e-7, 0.0015452906, 0.21473041, 13.868204] mobility_p50_p95_p99_max=[1.005102e-10, 3.3537303e-6, 0.00017612475, 0.0014590764] fixed_film_tail_min=2716.896415 tail_xy=(658, 1059) tail_paint_um=7106.512695 tail_solvent_um=1.536649823e0
+GRID ticks=1280 elapsed_min=19.993146 wall_s=137.654430 evap_age_spread_has_s=[7.660570048999996, 7.905837522999938, 121.50234247800002, 0.5151611789999999] clock=39634.843750 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 347, 1593, 1355) solvent_pixels=255569 mobile_pixels=255565 sum_solvent_um_px=3.747193723e3 paint_um_p50_p95_p99_max=[0.34413934, 32.963173, 1038.6022, 7363.2676] solvent_um_p50_p95_p99_max=[1.0271125e-7, 0.00069497275, 0.39905706, 8.699017] mobility_p50_p95_p99_max=[1.1072598e-10, 3.2036684e-7, 4.429461e-6, 7.760845e-5] fixed_film_tail_min=2705.733553 tail_xy=(658, 1059) tail_paint_um=7103.583008 tail_solvent_um=1.433027983e0
+GRID ticks=1920 elapsed_min=29.993146 wall_s=189.924875 evap_age_spread_has_s=[10.113130917999996, 11.919129689999892, 167.01231739099973, 0.7921507920000003] clock=39644.843750 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 348, 1590, 1355) solvent_pixels=79765 mobile_pixels=79762 sum_solvent_um_px=2.448683843e3 paint_um_p50_p95_p99_max=[10.672135, 770.1028, 1801.4008, 7362.7793] solvent_um_p50_p95_p99_max=[7.344868e-8, 0.07974688, 0.8758691, 7.7139378] mobility_p50_p95_p99_max=[3.1643937e-10, 1.3379422e-7, 6.867889e-7, 1.9464569e-5] fixed_film_tail_min=2694.586308 tail_xy=(658, 1059) tail_paint_um=7100.686035 tail_solvent_um=1.336349130e0
+time: command terminated abnormally
+      228.68 real       338.83 user        16.33 sys
+          1430388736  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              916629  page reclaims
+                   2  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   1  voluntary context switches
+             2967018  involuntary context switches
+       2742098629955  instructions retired
+        982800744479  cycles elapsed
+          1465304624  peak memory footprint

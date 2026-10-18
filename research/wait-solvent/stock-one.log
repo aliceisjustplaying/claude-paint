@@ -1,0 +1,21 @@
+BEFORE clock=39614.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=819796 mobile_pixels=819744 sum_solvent_um_px=5.925878635e4 paint_um_p50_p95_p99_max=[0.096446946, 13.635859, 315.8958, 7364.244] solvent_um_p50_p95_p99_max=[1.098813e-5, 0.06263359, 2.0872986, 31.22459] mobility_p50_p95_p99_max=[1.1995791e-9, 0.00022840133, 0.012249725, 0.03287741] fixed_film_tail_min=2728.189437 tail_xy=(658, 1059) tail_paint_um=7109.766602 tail_solvent_um=1.647756457e0
+WAIT_SECONDS 16.232924
+AFTER clock=39615.850604 engine=5 size=2400x1800 dirty=Some((0, 0, 2400, 1800)) solvent_box=(0, 346, 1595, 1355) solvent_pixels=818969 mobile_pixels=818937 sum_solvent_um_px=4.202976828e4 paint_um_p50_p95_p99_max=[0.0963911, 13.646767, 316.46692, 7364.1943] solvent_um_p50_p95_p99_max=[6.7177916e-6, 0.038995758, 1.5117489, 24.826027] mobility_p50_p95_p99_max=[7.334398e-10, 0.00013756644, 0.0069522825, 0.023789406] fixed_film_tail_min=2727.052754 tail_xy=(658, 1059) tail_paint_um=7109.424805 tail_solvent_um=1.636284828e0
+       18.94 real        12.18 user         1.13 sys
+          1210105856  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               97478  page reclaims
+                 125  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  73  voluntary context switches
+              117356  involuntary context switches
+        100186563075  instructions retired
+         36512033931  cycles elapsed
+          1361921416  peak memory footprint

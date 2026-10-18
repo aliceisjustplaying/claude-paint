@@ -1,0 +1,38 @@
+   Compiling paint v0.1.0 (/Users/alice/src/a/claude-paint-wait-research/crates/paint)
+    Finished `release` profile [optimized] target(s) in 2m 11s
+     Running tests/thinner_physics.rs (target/release/deps/thinner_physics-4481f93b4115180a)
+
+running 15 tests
+test c04_control_a_wholly_unthinned_scene_balances ... ok
+test c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent ... ok
+test c06_more_pressure_lays_more_paint_up_to_the_stroke_limit ... ok
+test c08_a_hundredth_of_thinner_is_a_small_change ... ok
+test c10_thinned_and_unthinned_paint_of_equal_thickness_gel_and_dry_together ... ignored, slow
+test c05_an_emptying_brush_lays_less_and_a_fuller_load_lasts_farther ... ok
+test c14_more_points_on_the_same_path_lay_the_same_paint_and_one_stroke_shares_one_limit ... ok
+test c15_solvent_does_not_slow_the_oil_cure ... ok
+test c10_a_solvent_wet_film_spreads_more_than_after_the_solvent_has_gone ... ok
+test c19_the_same_paint_with_more_or_less_solvent_looks_the_same ... ok
+test c16_brush_rag_and_spreading_carry_solvent_in_the_local_ratio ... ok
+test research_adaptive_wait_preserves_split_contract ... FAILED
+test c09_the_solvent_evaporates_and_the_film_loses_its_volume ... ok
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 has been running for over 60 seconds
+test research_relative_cutoff_preserves_split_contract has been running for over 60 seconds
+test c17_a_wait_split_on_the_minute_grid_is_exact_and_off_it_within_1e4 ... ok
+test research_relative_cutoff_preserves_split_contract ... ok
+
+failures:
+
+---- research_adaptive_wait_preserves_split_contract stdout ----
+
+thread 'research_adaptive_wait_preserves_split_contract' (11267313) panicked at crates/paint/tests/thinner_physics.rs:626:13:
+from 0.4 min: 15 min and 15 × 1 min: paint µm differs at 3930 pixels, e.g. [(7076, 0.0047469614, 0.00477496), (7077, 0.011541989, 0.011604412), (7078, 0.002970493, 0.0029882416), (7079, 0.014057588, 0.014129511), (7080, 0.01827185, 0.018368844)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    research_adaptive_wait_preserves_split_contract
+
+test result: FAILED. 13 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 133.48s
+
+error: test failed, to rerun pass `-p paint --test thinner_physics`

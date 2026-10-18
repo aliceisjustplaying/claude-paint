@@ -19,7 +19,7 @@ const LINE_KEYS: &[&str] = &["pressure", "smooth", "ruler", "tremor", "seed"];
 const SKETCH_KEYS: &[&str] = &["pressure", "passes", "wander", "smooth", "tremor", "seed"];
 const HATCH_KEYS: &[&str] = &["angle", "spacing", "length", "pressure", "seed"];
 const ERASE_KEYS: &[&str] = &["strength", "width"];
-const SMUDGE_KEYS: &[&str] = &["force", "pad", "speed"];
+const SMUDGE_KEYS: &[&str] = &["force", "pad", "speed", "angle", "passes", "pattern"];
 /// The pencils' shared metatable, in the Lua registry: `install_paper`
 /// gives it the stick's methods.
 const PENCIL_META: &str = "easel.pencil";
@@ -674,38 +674,73 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
     // smudge(pts, {force=1, pad=, speed=40}): a finger (or a stump: pad=, its
-    // contact in mm²) drawn along a path, moving loose pastel (pastel.rs `rub`)
+    // contact in mm²) drawn along a path, moving loose pastel (pastel.rs
+    // `rub`); smudge(mask, {force=, pad=, speed=, angle=30, passes=2,
+    // pattern="circles"|"strokes"}): a fingertip (or a stump) worked over an
+    // area, pressing force × the mask (pastel.rs `rub_area`; its defaults by
+    // the tool, from notes/research/pastel_blending.md)
     {
         let st1 = st.clone();
         g.set("smudge", lua.create_function(move |_, (a, o): (Value, Option<Table>)| {
+            use paint::pastel::{AreaRub, Pattern, SMUDGE_MAX_PASSES, SMUDGE_MIN_FORCE, SMUDGE_PATH_FORCE, SMUDGE_PATH_SPEED};
             if let Some(o) = &o {
                 check_keys(o, SMUDGE_KEYS, "smudge")?;
             }
             let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
-            let pts = match &a {
-                Value::Table(_) => points(&a)?,
-                _ => return err("smudge: a finger is drawn along a path, smudge(pts, {force=, pad=, speed=})"),
-            };
-            if pts.len() < 2 {
-                return err("smudge: needs at least two points");
-            }
-            let force = get("force")?.unwrap_or(1.0);
-            let pad = get("pad")?;
-            let speed = get("speed")?.unwrap_or(40.0);
-            if !(speed.is_finite() && speed > 0.0) {
+            let (force, pad, speed) = (get("force")?, get("pad")?, get("speed")?);
+            if speed.is_some_and(|v| !(v.is_finite() && v > 0.0)) {
                 return err("smudge: speed is mm/s, a number above 0");
             }
-            if !(0.05..=10.0).contains(&force) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
+            if force.is_some_and(|f| !(SMUDGE_MIN_FORCE..=10.0).contains(&f)) || pad.is_some_and(|p| !(0.5..=400.0).contains(&p)) {
                 return err("smudge: force is newtons (0.05 to 10); pad, the contact in mm² (a stump: 2–10; a fingertip: about 135 at 1 N)");
             }
-            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
-                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-                let radius = (pad.unwrap_or(135.0 * force.powf(0.4)) / std::f32::consts::PI).sqrt();
-                validate_pastel_path(c, &pts, Some(radius))?;
-                let secs = c.rub(&pts, force, pad, speed);
-                c.tally_mut().secs += secs as f64 + 0.5;
-                Ok(0)
-            })
+            let (angle, passes) = (get("angle")?, get("passes")?);
+            let pattern: Option<String> = o.as_ref().map(|o| o.get::<Option<String>>("pattern")).transpose()?.flatten();
+            match &a {
+                Value::Table(_) => {
+                    if angle.is_some() || passes.is_some() || pattern.is_some() {
+                        return err("smudge: angle=, passes= and pattern= are for an area (a mask); along a path the finger follows the points");
+                    }
+                    let pts = points(&a)?;
+                    if pts.len() < 2 {
+                        return err("smudge: needs at least two points");
+                    }
+                    let (force, speed) = (force.unwrap_or(SMUDGE_PATH_FORCE), speed.unwrap_or(SMUDGE_PATH_SPEED));
+                    crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                        let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                        let radius = (paint::pastel::pad_area(force, pad) / std::f32::consts::PI).sqrt();
+                        validate_pastel_path(c, &pts, Some(radius))?;
+                        let secs = c.rub(&pts, force, pad, speed);
+                        c.tally_mut().secs += secs as f64 + 0.5;
+                        Ok(0)
+                    })
+                }
+                Value::UserData(_) => {
+                    let m = mask_of(&a)?;
+                    if angle.is_some_and(|v| !(v.is_finite() && (-360.0..=360.0).contains(&v))) {
+                        return err("smudge: angle is the lanes' direction in degrees, -360 to 360");
+                    }
+                    let passes = match passes {
+                        None => None,
+                        Some(p) if p.fract() == 0.0 && (1.0..=SMUDGE_MAX_PASSES as f32).contains(&p) => Some(p as u32),
+                        Some(_) => return err(format!("smudge: passes is a whole number, 1 to {SMUDGE_MAX_PASSES}")),
+                    };
+                    let pattern = match pattern.as_deref() {
+                        None => None,
+                        Some("circles") => Some(Pattern::Circles),
+                        Some("strokes") => Some(Pattern::Strokes),
+                        Some(p) => return err(format!("smudge: pattern {p:?}: \"circles\" (loose circles, a fingertip's way) or \"strokes\" (straight, back and forth: a stump's)")),
+                    };
+                    let o = AreaRub { force, pad_mm2: pad, speed, angle_deg: angle, passes, pattern };
+                    crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                        let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                        let out = c.rub_area(&m, o).map_err(mlua::Error::runtime)?;
+                        c.tally_mut().secs += out.secs as f64 + 0.5;
+                        Ok(0)
+                    })
+                }
+                _ => err("smudge: a finger is drawn along a path or worked over an area, smudge(pts, {force=, pad=, speed=}) or smudge(mask, {force=, pad=, speed=, angle=, passes=, pattern=})"),
+            }
         })?)?;
     }
     // feel(x, y): what a fingertip feels there: the surface, and the pastel
@@ -926,7 +961,7 @@ mod tests {
             ("p:roll(0/0)", "degrees"),
             ("p:snap(500)", "snap"),
             ("smudge({{100, 100}, {300, 100}}, {speed=0/0})", "speed"),
-            ("smudge(rect(0, 0, 10, 10))", "path"),
+            ("smudge(5)", "a path or worked over an area"),
             ("pastel(pile{{\"lead white\", 1}}, {diameter=0/0})", "diameter"),
             ("pastel(pile{{\"lead white\", 1}}, {kind=\"crayon\"})", "kind"),
             ("pencil():stroke({{100, 100}, {300, 100}})", "pastel stick"),
@@ -947,6 +982,54 @@ mod tests {
         };
         assert!(state(&r) == state(&s), "the log replays bit for bit");
         assert_eq!(run(&mut r, "print(p)"), run(&mut s, "print(p)"));
+    }
+
+    /// An area smudge comes with the switch: `smudge(mask, {angle=,
+    /// passes=})` works the finger over the mask (the pastel inside it
+    /// moves, the hand's clock runs on), refuses `angle=` and `passes=`
+    /// along a path and bad numbers plainly, and the log replays bit for bit.
+    #[test]
+    fn smudge_works_an_area_and_replays() {
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})
+            q = pastel(pile{{"cobalt blue", 1}}, {kind="soft"})
+            for y = 300, 390, 15 do p:stroke({{150, y}, {850, y}}, {force=2.5, alt=70}) end
+            for y = 405, 495, 15 do q:stroke({{150, y}, {850, y}}, {force=2.5, alt=70}) end"#);
+        let px = |s: &Session| s.canvas().unwrap().pixels().to_vec();
+        let secs = |s: &Session| s.canvas().unwrap().tally().secs;
+        let (before, t0) = (px(&s), secs(&s));
+        run(&mut s, "smudge(rect(300, 250, 400, 300), {angle=20, passes=3})");
+        assert!(px(&s) != before, "the finger moved pastel");
+        assert!(secs(&s) > t0 + 1.0, "the hand took its time: {} s", secs(&s) - t0);
+        run(&mut s, "smudge(rect(300, 250, 400, 300), {pad=6, force=0.8})");
+        run(&mut s, r#"smudge(rect(300, 250, 400, 300), {pattern="strokes", passes=1})"#);
+        for (src, want) in [
+            ("smudge({{100, 100}, {300, 100}}, {angle=30})", "for an area"),
+            ("smudge({{100, 100}, {300, 100}}, {passes=2})", "for an area"),
+            ("smudge(rect(300, 250, 400, 300), {angle=0/0})", "angle"),
+            ("smudge(rect(300, 250, 400, 300), {passes=1.5})", "passes"),
+            ("smudge(rect(300, 250, 400, 300), {passes=0})", "passes"),
+            ("smudge(rect(300, 250, 400, 300), {force=20})", "force"),
+            ("smudge(rect(300, 250, 400, 300), {spin=1})", "unknown option"),
+            (r#"smudge(rect(300, 250, 400, 300), {pattern="zigzag"})"#, "pattern"),
+            (r#"smudge({{100, 100}, {300, 100}}, {pattern="circles"})"#, "for an area"),
+        ] {
+            let e = s.run(src).unwrap_err();
+            assert!(e.contains(want), "{src}: {e}");
+        }
+        let log = s.program("area smudge");
+        let mut r = Session::replay(W).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&log) {
+            r.run(&chunk).unwrap();
+        }
+        let state = |s: &Session| {
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            b
+        };
+        assert!(state(&r) == state(&s), "the log replays bit for bit");
+        assert_eq!(secs(&r), secs(&s));
     }
 
     /// A paper mask: laid and lifted within one chunk (a chunk that ends

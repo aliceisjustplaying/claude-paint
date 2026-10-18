@@ -39,6 +39,13 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(inbox.receive(self.run, self.target()), [])
         self.assertEqual(list(self.run.iterdir()), [])
 
+    def test_receiver_identity_is_independent_of_sender_timezone(self):
+        with patch.dict(os.environ, {"TZ": "UTC"}):
+            first = inbox.process_start(os.getpid())
+        with patch.dict(os.environ, {"TZ": "America/New_York"}):
+            self.assertEqual(inbox.process_start(os.getpid()), first)
+        self.assertTrue(first)
+
     def test_exactly_once_after_restart_between_transcript_and_commit(self):
         inbox.send(self.run, "Keep the blue.")
         process = multiprocessing.get_context("fork").Process(target=take, args=(self.run, self.session))

@@ -33,6 +33,7 @@ mod frames;
 mod legacy;
 mod look;
 mod output;
+mod live_frames;
 mod save;
 #[cfg(feature = "state-store")]
 mod painting_store;
@@ -1215,7 +1216,8 @@ impl Server {
         #[cfg(feature = "state-store")]
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames: false, written: None, replayed: 0, scratch: None, display,
+        let frames = like.is_none() && name != "scratch" && !name.ends_with("-scratch") && !name.starts_with("sketch");
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames, written: None, replayed: 0, scratch: None, display,
             #[cfg(feature = "state-store")] committed,
             #[cfg(feature = "state-store")] state_failed: false,
         };
@@ -1251,6 +1253,7 @@ impl Server {
     fn save_log(&mut self) -> Result<String, String> {
         let p = log_path(&self.name);
         let text = self.s.program(&self.name);
+        let changed = self.written.as_deref() != Some(text.as_str());
         #[cfg(feature = "state-store")]
         if self.committed.is_some() {
             if self.written.is_some() { self.validate()?; }
@@ -1265,6 +1268,7 @@ impl Server {
                     eprintln!("state store: chunk is committed but journal export needs recovery: {e}");
                 }
             }
+            if changed { self.record_frame(); }
             return Ok(String::new());
         }
         let previous = self.written.as_deref().unwrap_or("");
@@ -1286,7 +1290,19 @@ impl Server {
         f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
         std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
         self.written = Some(text);
+        if changed { self.record_frame(); }
         Ok(String::new())
+    }
+
+    fn record_frame(&self) {
+        if !self.frames { return; }
+        let n = self.s.log.len();
+        session::PROGRESS.keep(n);
+        let st = self.s.st.borrow();
+        let Some(c) = st.canvas.as_ref() else { return };
+        if let Err(e) = live_frames::write(c, st.recording_ground, &session_dir(&self.name).join("frames"), n) {
+            eprintln!("timelapse: chunk {n} committed, frame not saved: {e}");
+        }
     }
 
     /// The live canvas as a PNG, `save`'s (`live.png`, next to the committed log), its save
@@ -1783,14 +1799,6 @@ impl Server {
                     out.push_str(&ran.out);
                     out.push_str(&format!("{}\n", time::time_of_day(self.s.st.borrow().clock)));
                     out.push_str(&format!("ok · chunk {n} ({:.2} s to compute)\n", ran.secs));
-                    // the chunk is in the log: a look that fails now is reported with it, not
-                    // as a failed `do` (which would be sent again)
-                    if self.frames {
-                        let p = session_dir(&self.name).join("frames").join(format!("{n:04}.png"));
-                        if let Err(e) = self.look(&[], Some(p)) {
-                            out.push_str(&format!("(no frame saved: {e})\n"));
-                        }
-                    }
                     if args.iter().any(|a| a == "--look") {
                         match self.look(&[], None) {
                             Ok(l) => out.push_str(&l),

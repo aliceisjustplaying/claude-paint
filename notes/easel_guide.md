@@ -667,6 +667,38 @@ has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
 fast it wears, what dry pigment looks like) are estimates, not
 measurements (notes/pastel.md).
 
+**Charcoal.** A charcoal stick is a stick like a pastel's: it has every
+stick method above, and the finger, the eraser, fixative and the tools
+after them work on it as on pastel.
+
+```lua
+v = charcoal{kind="vine", size="thin"}      -- vine, Ø3 mm (size="thick": Ø8 mm); charcoal() is this
+w = charcoal{kind="willow", size="thick"}   -- willow: darker and finer than vine
+c = charcoal{kind="compressed"}             -- a compressed stick, Ø8 mm: the darkest
+q = charcoal{kind="pencil", grade="soft"}   -- a charcoal pencil's core, sharpened (grade="soft"|"medium"|"hard")
+charcoal_powder(mask, {depth=0.6, seed=})   -- loose charcoal dust laid in the tooth (depth: µm, 0–5)
+smudge(pts, {pad=4})                        -- a stump through it; a larger pad (to 400 mm²) rubs like a cloth
+b:dust(pts, {pressure=0.6})                 -- a dry brush over it, as over pastel
+```
+
+Vine and willow have no binder: they shed a lot, and all of what they lay
+stays loose for the finger and the eraser. Compressed charcoal and the
+pencils hold part of each mark in the tooth, as fixative would (the harder
+the grade, the more), so it smudges and erases less. There is no separate
+cloth: a rub with a cloth is `smudge` with a large pad. White heightening
+is a white pastel, `pastel(pile{{"lead white", 1}})`; `chalk()` is still
+black chalk.
+
+Paper comes in three presets, `canvas{paper={preset="newsprint"}}`,
+`"toned laid"` or `"bristol"`: a thin, warm 52 g/m² newsprint; a gray
+95 g/m² laid paper; a smooth 270 g/m² bristol with little tooth. Any other
+key in `paper=` overrides the preset (`laid=false`, `tone=`).
+
+Charcoal and the paper presets are there only in a painting on engine 9
+with paper (its log's head says `--@ engine 9` and `--@ paper`); any other
+painting has no `charcoal`, no `charcoal_powder` and no `preset=`. The
+numbers are estimates (notes/research/charcoal.md).
+
 ## The rag
 
 ```lua

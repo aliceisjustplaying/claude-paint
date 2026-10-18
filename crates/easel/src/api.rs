@@ -2380,8 +2380,16 @@ const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<thr
 /// (`Paper::drawing`).
 fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
     use paint::paper::{Felt, Laid, Paper};
-    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
-    let d = Paper::drawing(seed);
+    let charcoal = tubes.engine == paint::CHARCOAL;
+    if !charcoal {
+        check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    } else {
+        check_keys(t, &["preset", "grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    }
+    let (d, default_tone) = match if charcoal { t.get::<Option<String>>("preset")? } else { None } {
+        None => (Paper::drawing(seed), paint::hex("#e8e0cf")),
+        Some(name) => Paper::preset(&name, seed).ok_or_else(|| mlua::Error::runtime("paper: preset is \"newsprint\", \"toned laid\" or \"bristol\""))?,
+    };
     let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
         let v = num(t, k)?.unwrap_or(def);
         if !(lo..=hi).contains(&v) {
@@ -2404,7 +2412,8 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
         _ => return err("paper: felt= {cell=mm, depth=µm}, or false for none"),
     };
     let laid = match t.get::<Value>("laid")? {
-        Value::Nil | Value::Boolean(false) => None,
+        Value::Nil => d.laid,
+        Value::Boolean(false) => None,
         Value::Table(l) => {
             check_keys(&l, &["per_cm", "chain", "deficit"], "paper laid")?;
             let (per_cm, chain, deficit) = (num(&l, "per_cm")?.unwrap_or(10.0), num(&l, "chain")?.unwrap_or(25.0), num(&l, "deficit")?.unwrap_or(0.15));
@@ -2434,7 +2443,7 @@ fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Pape
     };
     // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})
     let tone = match t.get::<Value>("tone")? {
-        Value::Nil => paint::hex("#e8e0cf"),
+        Value::Nil => default_tone,
         Value::Table(p) => tubes.dry_color(&parts_of(tubes, &p, "paper tone")?.0),
         v => return err(format!("paper: tone= is parts of tubes ({{{{\"tube\", parts}}, ...}}), got {}", v.type_name())),
     };

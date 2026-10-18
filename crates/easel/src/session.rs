@@ -776,7 +776,8 @@ impl Session {
         }
         match v {
             Value::Table(t) if t.raw_get::<Option<String>>("kind").ok().flatten().as_deref() == Some("stick") => {
-                let s = crate::api::draw_pencil::stick_of(&t).map_err(|e| e.to_string())?;
+                let charcoal = self.st.borrow().tubes.engine == paint::CHARCOAL;
+                let s = crate::api::draw_pencil::stick_of(&t, charcoal).map_err(|e| e.to_string())?;
                 let turned = t.raw_get::<Option<f32>>("turned").ok().flatten().unwrap_or(0.0);
                 Ok((s, turned))
             }
@@ -1232,7 +1233,7 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
             let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END, paint::CHARCOAL));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -1375,11 +1376,11 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let head = |mark: &str| text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == mark);
     let (knife_skim, blend_feather, brush_skim) = (head(KNIFE_SKIM_MARK), head(BLEND_FEATHER_MARK), head(BRUSH_SKIM_MARK));
-    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::CHARCOAL) {
         return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7 or 8"));
     }
     for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
-        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
+        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::CHARCOAL) {
             return Err(format!("the log's switch {mark:?} requires engine 7 or 8"));
         }
     }

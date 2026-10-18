@@ -124,10 +124,12 @@ pub const ENGINE: u32 = 5;
 /// a few pixels before it.
 pub const REACH_END: u32 = 8;
 
+pub const CHARCOAL: u32 = 9;
+
 /// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
 /// those before it, engine 7 (`engine7`) and engine 8 (`REACH_END`). There
 /// is no engine 6.
-pub const SUPPORTED_ENGINES: [u32; 7] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END];
+pub const SUPPORTED_ENGINES: [u32; 8] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END, CHARCOAL];
 
 /// Whether engine version `v` is one this crate paints with.
 pub fn supported_engine(v: u32) -> bool {

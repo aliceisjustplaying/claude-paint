@@ -96,6 +96,43 @@ pub struct Paper {
 }
 
 impl Paper {
+    pub fn preset(name: &str, seed: u64) -> Option<(Paper, crate::Rgb)> {
+        let mut p = Paper::drawing(seed);
+        let tone = match name {
+            "newsprint" => {
+                p.grammage = 52.0;
+                p.fiber_mm = 1.6;
+                p.coarseness = 0.18;
+                p.floc = 0.65;
+                p.felt = Some(Felt { cell_mm: 0.6, depth_um: 9.0 });
+                p.calender = 0.35;
+                p.z_mpa = 22.0;
+                "#d4cbb7"
+            }
+            "toned laid" => {
+                p.grammage = 95.0;
+                p.felt = None;
+                p.laid = Some(Laid { per_cm: 10.0, chain_mm: 25.0, deficit: 0.22 });
+                p.thick_um = 8.0;
+                p.calender = 0.10;
+                "#999184"
+            }
+            "bristol" => {
+                p.grammage = 270.0;
+                p.felt = None;
+                p.thick_um = 3.0;
+                p.porosity = 0.35;
+                p.press = 0.5;
+                p.calender = 0.92;
+                p.floc = 0.25;
+                p.z_mpa = 80.0;
+                "#f4f1e9"
+            }
+            _ => return None,
+        };
+        Some((p, crate::hex(tone)))
+    }
+
     /// A 160 g/m² cotton-rich drawing paper with a felt grain: about the
     /// pastel papers of the colormen (estimates where no measurement was
     /// found; notes/research/paper_surface.md).

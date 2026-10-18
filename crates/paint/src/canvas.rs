@@ -345,9 +345,9 @@ impl Canvas {
         self.liquid_film_levels &= v >= 4;
         self.glaze_film &= crate::engine7::active(v);
         self.rag_lift &= crate::engine7::active(v);
-        self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
-        self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
-        self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END);
+        self.knife_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
+        self.blend_feather &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
+        self.brush_skim &= matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
         self
     }
     pub fn engine(&self) -> u32 {
@@ -426,7 +426,7 @@ impl Canvas {
     }
 
     pub fn with_knife_skim(mut self, enabled: bool) -> Self {
-        self.knife_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self.knife_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
         self
     }
 
@@ -435,7 +435,7 @@ impl Canvas {
     }
 
     pub fn with_blend_feather(mut self, enabled: bool) -> Self {
-        self.blend_feather = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self.blend_feather = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
         self
     }
 
@@ -444,7 +444,7 @@ impl Canvas {
     }
 
     pub fn with_brush_skim(mut self, enabled: bool) -> Self {
-        self.brush_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END);
+        self.brush_skim = enabled && matches!(self.engine, crate::engine7::ENGINE | crate::REACH_END | crate::CHARCOAL);
         self
     }
 

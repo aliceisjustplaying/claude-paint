@@ -82,7 +82,7 @@ fn is_stick(st: &S, p: &Table) -> Result<bool> {
 }
 
 /// The stick a stick table holds.
-pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
+pub(crate) fn stick_of(p: &Table, charcoal: bool) -> Result<paint::pastel::Stick> {
     use paint::pastel::{Section, Stick};
     let section: String = p.get("section")?;
     let size: f32 = p.get("size")?;
@@ -93,7 +93,18 @@ pub(crate) fn stick_of(p: &Table) -> Result<paint::pastel::Stick> {
     let ft: Table = p.get("facets")?;
     let v: Vec<f32> = ft.sequence_values::<f32>().collect::<Result<_>>()?;
     let facets = v.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?] })
+    let material = if charcoal {
+        paint::pastel::Material {
+            particle_um: p.get::<Option<f32>>("particle_um")?.unwrap_or(paint::pastel::PARTICLE_UM),
+            shed: p.get::<Option<f32>>("shed")?.unwrap_or(paint::pastel::SHED),
+            lift: p.get::<Option<f32>>("lift")?.unwrap_or(0.55),
+            binder: p.get::<Option<f32>>("binder")?.unwrap_or(0.0),
+        }
+    } else { paint::pastel::Material::default() };
+    if !(0.1..=100.0).contains(&material.particle_um) || !(0.0..=1.0).contains(&material.shed) || !(0.0..=1.0).contains(&material.lift) || !(0.0..=1.0).contains(&material.binder) {
+        return err("a stick's particle_um is 0.1 to 100 µm; its shed, lift and binder are 0 to 1");
+    }
+    Ok(Stick { section, length_mm: p.get("length")?, facets, hardness: p.get("hardness")?, wear: p.get("wear")?, color: [p.get("r")?, p.get("g")?, p.get("b")?], material })
 }
 
 /// Write a stick's wear back into its table (a part of the Lua heap: a
@@ -148,7 +159,8 @@ fn stick_stroke(lua: &Lua, st: &S, p: &Table, pts: &[(f32, f32)], force: &[f32],
         let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
         validate_pastel_path(c, pts, None)?;
     }
-    let mut stick = stick_of(p)?;
+    let charcoal = st.borrow().tubes.engine == paint::CHARCOAL;
+    let mut stick = stick_of(p, charcoal)?;
     let base_roll: f32 = p.raw_get::<Option<f32>>("turned")?.unwrap_or(0.0);
     // (a NaN angle finds no contact and lays nothing, without saying so)
     if !base_roll.is_finite() || alt.iter().chain(az).chain(roll).chain(force).chain(speed).any(|v| !v.is_finite()) {
@@ -389,10 +401,15 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         Ok(if kind == "chalk" {
             format!("black chalk (worn {worn:.0} mm)")
         } else if is_stick(&st1, &p)? {
-            let s = stick_of(&p)?;
+            let charcoal = st1.borrow().tubes.engine == paint::CHARCOAL;
+            let s = stick_of(&p, charcoal)?;
             let name: String = p.get::<Option<String>>("name")?.unwrap_or_default();
             let sec: String = p.get("section")?;
-            format!("pastel {sec} {name} ({} MPa, {:.1} mm long, {} facets)", (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
+            if charcoal && p.contains_key("particle_um")? {
+                format!("{name}, {} ({} MPa, {:.1} mm long, {} facets)", if sec == "pencil" { "sharpened" } else { &sec }, (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
+            } else {
+                format!("pastel {sec} {name} ({} MPa, {:.1} mm long, {} facets)", (s.hardness * 10.0).round() / 10.0, s.length_mm, s.facets.len())
+            }
         } else {
             format!("pencil {} (worn {worn:.0} mm)", p.get::<Option<String>>("grade")?.unwrap_or_else(|| "HB".into()))
         })
@@ -512,6 +529,63 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
     let g = lua.globals();
     let meta: Table = lua.named_registry_value(PENCIL_META)?;
     let methods: Table = meta.raw_get("__index")?;
+    if st.borrow().tubes.engine == paint::CHARCOAL {
+        let meta = meta.clone();
+        g.set("charcoal", lua.create_function(move |lua, o: Option<Table>| {
+            if let Some(o) = &o {
+                check_keys(o, &["kind", "grade", "size"], "charcoal")?;
+            }
+            let text = |key: &str, default: &str| -> Result<String> { Ok(o.as_ref().map(|o| o.get::<Option<String>>(key)).transpose()?.flatten().unwrap_or_else(|| default.into())) };
+            let kind = text("kind", "vine")?;
+            let grade = text("grade", "medium")?;
+            let size = text("size", "thin")?;
+            if !matches!(size.as_str(), "thin" | "thick") {
+                return err("charcoal: size is \"thin\" or \"thick\"");
+            }
+            if kind != "pencil" && o.as_ref().is_some_and(|o| o.contains_key("grade").unwrap_or(false)) {
+                return err("charcoal: grade is for kind=\"pencil\"");
+            }
+            if !matches!(kind.as_str(), "vine" | "willow") && o.as_ref().is_some_and(|o| o.contains_key("size").unwrap_or(false)) {
+                return err("charcoal: size is for kind=\"vine\" or \"willow\"");
+            }
+            let stick = paint::pastel::Stick::charcoal(&kind, &grade, size == "thick").ok_or_else(|| mlua::Error::runtime("charcoal: kind is \"vine\", \"willow\", \"compressed\" or \"pencil\"; a pencil's grade is \"soft\", \"medium\" or \"hard\""))?;
+            let p = lua.create_table()?;
+            p.set("kind", "stick")?;
+            p.set("section", if kind == "pencil" { "pencil" } else { "round" })?;
+            let paint::pastel::Section::Round { d_mm } = stick.section else { unreachable!() };
+            p.set("size", d_mm)?;
+            p.set("hardness", stick.hardness)?;
+            p.set("wear", stick.wear)?;
+            p.set("particle_um", stick.material.particle_um)?;
+            p.set("shed", stick.material.shed)?;
+            p.set("lift", stick.material.lift)?;
+            p.set("binder", stick.material.binder)?;
+            p.set("r", stick.color[0])?;
+            p.set("g", stick.color[1])?;
+            p.set("b", stick.color[2])?;
+            p.set("name", match kind.as_str() { "pencil" => format!("{grade} charcoal pencil"), "compressed" => "compressed charcoal".into(), _ => format!("{size} {kind} charcoal") })?;
+            p.set("worn", 0.0)?;
+            store_stick(lua, &p, &stick)?;
+            p.set_metatable(Some(meta.clone()))?;
+            Ok(p)
+        })?)?;
+        let st = st.clone();
+        g.set("charcoal_powder", lua.create_function(move |lua, (v, o): (Value, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, &["depth", "seed"], "charcoal_powder")?;
+            }
+            let mask = mask_of(&v)?;
+            let depth = o.as_ref().map(|o| num(o, "depth")).transpose()?.flatten().unwrap_or(0.6);
+            if !(0.0..=5.0).contains(&depth) {
+                return err("charcoal_powder: depth is the dust's average thickness, 0 to 5 µm");
+            }
+            let seed = seed_of(&st, &o.unwrap_or(lua.create_table()?))?;
+            crate::time::verb_dry(&st, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                Ok(c.charcoal_powder(&mask, depth, seed))
+            })
+        })?)?;
+    }
     // p:side(pts, {force=, pressure=, speed=, roll=}): the stick laid nearly
     // flat across the stroke, a piece `length` mm long (p:snap breaks one off)
     {
@@ -850,6 +924,60 @@ mod tests {
 
     fn run(s: &mut Session, src: &str) -> String {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
+    }
+
+    #[test]
+    fn charcoal_materials_are_opt_in_and_replay_with_their_wear() {
+        for engine in [5, 7, 8, 9] {
+            for paper in [false, true] {
+                if engine == paint::CHARCOAL && paper { continue; }
+                let mut tubes = paint::Palette::tube_box();
+                tubes.engine = engine;
+                let mut old = Session::with_box(W, tubes).unwrap().with_paper(paper).unwrap();
+                assert_eq!(run(&mut old, "print(charcoal, charcoal_powder)").trim(), "nil\tnil");
+                if paper {
+                    assert!(old.run(r#"canvas{size=80,paper={preset="bristol"}}"#).unwrap_err().contains("paper: unknown option \"preset\""));
+                }
+            }
+        }
+        for preset in ["newsprint", "toned laid", "bristol"] {
+            let mut tubes = paint::Palette::tube_box();
+            tubes.engine = paint::CHARCOAL;
+            tubes.knife_skim = true;
+            tubes.blend_feather = true;
+            tubes.brush_skim = true;
+            tubes.glaze_film = true;
+            tubes.rag_lift = true;
+            let mut s = Session::with_box(W, tubes.clone()).unwrap().with_paper(true).unwrap();
+            run(&mut s, &format!(r#"canvas{{size=80, aspect=1, paper={{preset="{preset}"}}, seed=13}}"#));
+            run(&mut s, r#"
+                sticks = {charcoal(), charcoal{kind="vine",size="thick"},
+                    charcoal{kind="willow"}, charcoal{kind="willow",size="thick"},
+                    charcoal{kind="compressed"}, charcoal{kind="pencil",grade="soft"},
+                    charcoal{kind="pencil",grade="medium"}, charcoal{kind="pencil",grade="hard"}}
+                for i,p in ipairs(sticks) do
+                    p:stroke({{100,i*90},{800,i*90}},{force=1.2,alt=60})
+                end
+                charcoal_powder(rect(100,800,200,100),{depth=0.3,seed=7})
+                smudge({{150,850},{500,850}},{pad=4})
+                erase(rect(400,0,200,1000))
+                w=pastel(pile{{"lead white",1}})
+                w:stroke({{650,800},{850,900}},{force=2})
+            "#);
+            let before = run(&mut s, "for _,p in ipairs(sticks) do print(p.length,table.concat(p.facets,',')) end");
+            let log = s.program("charcoal");
+            let mut replay = Session::replay_with(W, tubes).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&log) { run(&mut replay, &chunk); }
+            assert_eq!(s.st.borrow().canvas.as_ref().unwrap().pixels(), replay.st.borrow().canvas.as_ref().unwrap().pixels());
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "charcoal").unwrap();
+            let (restored, _) = paint::Canvas::read_state(&mut std::io::Cursor::new(&bytes)).unwrap();
+            assert_eq!(restored.engine(), paint::CHARCOAL);
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "charcoal").unwrap();
+            assert_eq!(bytes, again);
+            assert_eq!(run(&mut replay, "for _,p in ipairs(sticks) do print(p.length,table.concat(p.facets,',')) end"), before);
+        }
     }
 
     /// Every global's name, sorted, and the pencil's methods.

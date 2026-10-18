@@ -73,6 +73,21 @@ pub struct Stick {
     pub wear: f32,
     /// The dry color of the stick: R∞ of its pigments in air (linear RGB).
     pub color: Rgb,
+    pub material: Material,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Material {
+    pub particle_um: f32,
+    pub shed: f32,
+    pub lift: f32,
+    pub binder: f32,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self { particle_um: PARTICLE_UM, shed: SHED, lift: 0.55, binder: 0.0 }
+    }
 }
 
 /// Thickness of the particles a stroke leaves (µm): what turns a volume of
@@ -129,13 +144,13 @@ impl Stick {
             facets.push([c * a.cos(), c * a.sin(), -c, c * (r - 0.4)]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 65.0, facets, hardness, wear, color, material: Material::default() }
     }
 
     /// A square hard pastel, `side_mm` (about 6.35 mm), its end cut square.
     pub fn square(color: Rgb, soft: f32, side_mm: f32) -> Stick {
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color }
+        Stick { section: Section::Square { side_mm }, length_mm: 75.0, facets: vec![[0.0, 0.0, -1.0, 0.0]], hardness, wear, color, material: Material::default() }
     }
 
     /// A pastel pencil's core, Ø `d_mm` (4.3–4.7), sharpened by a blade to a
@@ -151,7 +166,24 @@ impl Stick {
             facets.push([s * a.cos(), s * a.sin(), -c, 0.0]);
         }
         let (hardness, wear) = Stick::mechanics(soft);
-        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color }
+        Stick { section: Section::Round { d_mm }, length_mm: 120.0, facets, hardness, wear, color, material: Material::default() }
+    }
+
+    pub fn charcoal(kind: &str, grade: &str, thick: bool) -> Option<Stick> {
+        let (gray, hardness, wear, shed, particle_um, lift, binder) = match (kind, grade) {
+            ("vine", _) => (0.055, 1.2, 0.09, 0.94, 9.0, 0.95, 0.0),
+            ("willow", _) => (0.032, 1.5, 0.08, 0.92, 6.0, 0.92, 0.0),
+            ("compressed", _) => (0.006, 5.0, 0.045, 0.55, 4.0, 0.32, 0.30),
+            ("pencil", "soft") => (0.008, 4.0, 0.05, 0.65, 4.0, 0.40, 0.20),
+            ("pencil", "medium") => (0.014, 9.0, 0.032, 0.48, 4.0, 0.30, 0.35),
+            ("pencil", "hard") => (0.025, 18.0, 0.018, 0.32, 4.0, 0.22, 0.50),
+            _ => return None,
+        };
+        let mut s = if kind == "pencil" { Stick::pencil([gray; 3], 0.5, 4.0) } else { Stick::round([gray; 3], 1.0, if kind == "compressed" || thick { 8.0 } else { 3.0 }) };
+        s.hardness = hardness;
+        s.wear = wear;
+        s.material = Material { particle_um, shed, lift, binder };
+        Some(s)
     }
 
     fn radius(&self) -> f32 {
@@ -306,6 +338,11 @@ pub struct Laid {
 /// returns how much.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32) -> f32 {
+    lay_material_crumbs(d, film, pxs, bed, vol, color, rng, dmax, px_um2, Material::default())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lay_material_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &mut [Rgb], bed: &[(usize, f32, bool)], vol: f32, color: Rgb, rng: &mut crate::rng::Rng, dmax: f32, px_um2: f32, material: Material) -> f32 {
     let mut cum = Vec::with_capacity(bed.len());
     let mut total = 0.0f32;
     for &(_, g, _) in bed {
@@ -341,14 +378,19 @@ pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &m
         }
         // pressed flat into the hollow by the face going over it: particles
         // about PARTICLE_UM thick, as the contact's own deposit
-        let q = 1.0 - (-dv / PARTICLE_UM).exp();
+        let q = 1.0 - (-dv / material.particle_um).exp();
         let under_px = uncover(pxs[i], c.a, c.r);
         let old = c.a * (1.0 - q);
         let w = old + q;
         c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * color[k]) / w.max(1e-6)).clamp(0.0, 1.0));
-        c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
+        c.lift = (old * c.lift + q * material.lift) / w.max(1e-6);
         c.a = (c.a + (1.0 - c.a) * q).min(0.995);
         c.loose += dv;
+        if material.binder > 0.0 {
+            c.loose -= dv * material.binder;
+            c.bound += dv * material.binder;
+            c.floor = (c.floor + (1.0 - c.floor) * q * material.binder).min(c.a);
+        }
         pxs[i] = cover(under_px, c.a, c.r);
     }
     lost
@@ -393,6 +435,41 @@ fn seat(o: f32, mu: f32, k: f32, hard: f32) -> (f32, f32) {
 }
 
 impl Canvas {
+    pub fn charcoal_powder(&mut self, mask: &crate::Mask, depth_um: f32, seed: u64) -> f32 {
+        self.check_mask(mask);
+        if !(depth_um > 0.0 && depth_um.is_finite()) {
+            return 0.0;
+        }
+        let f = self.f;
+        let mut bed = Vec::new();
+        let mut caught = Vec::new();
+        let mut volume = 0.0;
+        for i in 0..self.px.len() {
+            let weight = mask.data[f.whole_index(i)].clamp(0.0, 1.0);
+            if weight <= 0.0 {
+                continue;
+            }
+            if self.sheet_over(i) {
+                caught.push((i, weight * depth_um));
+            } else {
+                volume += weight * depth_um;
+                bed.push((i, weight, self.wet.vol[i] > 1e-5));
+            }
+        }
+        let color = [0.04; 3];
+        self.sheet_catch(&caught, color);
+        self.drawing_mut();
+        let film = std::mem::take(&mut self.film);
+        let mut pxs = std::mem::take(&mut self.px);
+        let px_um2 = (self.px_mm() * 1000.0).powi(2);
+        let d = self.drawing_mut();
+        let lost = lay_material_crumbs(d, &film, &mut pxs, &bed, volume, color, &mut crate::rng::Rng::new(seed), 100.0, px_um2, Material { lift: 0.95, ..Material::default() });
+        d.sticks |= volume > lost;
+        self.film = film;
+        self.px = pxs;
+        (volume - lost) * px_um2 * 1e-9
+    }
+
     /// Draw one stroke with `stick` along `pts` (resampled every pixel), the
     /// stick sinking into the tooth under each point's force, laying what
     /// it abrades and wearing. Returns what it laid and the hand time.
@@ -500,8 +577,8 @@ impl Canvas {
                             continue;
                         }
                         worn_um3 += dv;
-                        carried += dv * SHED;
-                        dv *= 1.0 - SHED;
+                        carried += dv * stick.material.shed;
+                        dv *= 1.0 - stick.material.shed;
                         caught.push((i, dv));
                         continue;
                     }
@@ -523,21 +600,26 @@ impl Canvas {
                     }
                     worn_um3 += dv;
                     // most of it comes away as crumbs under the face
-                    carried += dv * SHED;
-                    dv *= 1.0 - SHED;
+                    carried += dv * stick.material.shed;
+                    dv *= 1.0 - stick.material.shed;
                     if wetv[j] {
                         wet_um3 += dv;
                         continue;
                     }
-                    let q = 1.0 - (-dv / PARTICLE_UM).exp();
+                    let q = 1.0 - (-dv / stick.material.particle_um).exp();
                     let under_px = uncover(pxs[i], c.a, c.r);
                     let old = c.a * (1.0 - q);
                     let a1 = (c.a + (1.0 - c.a) * q).min(0.995);
                     let w = old + q;
                     c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * stick.color[k]) / w.max(1e-6)).clamp(0.0, 1.0));
-                    c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
+                    c.lift = (old * c.lift + q * stick.material.lift) / w.max(1e-6);
                     c.a = a1;
                     c.loose += dv;
+                    if stick.material.binder > 0.0 {
+                        c.loose -= dv * stick.material.binder;
+                        c.bound += dv * stick.material.binder;
+                        c.floor = (c.floor + (1.0 - c.floor) * q * stick.material.binder).min(c.a);
+                    }
                     laid = true;
                     pxs[i] = cover(under_px, c.a, c.r);
                 }
@@ -562,7 +644,7 @@ impl Canvas {
                 let to_sheet = if gp + gs > 0.0 { give * gs / (gp + gs) } else { 0.0 };
                 // (crumbs that settle on wet paint aren't laid in the tooth)
                 laid |= give - to_sheet > 0.0 && last_bed.iter().any(|b| !b.2);
-                wet_um3 += lay_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2);
+                wet_um3 += lay_material_crumbs(d, &film, &mut pxs, &last_bed, give - to_sheet, stick.color, &mut rng, crumb_max, px_um2, stick.material);
                 for &(i, g) in &last_sheet_bed {
                     caught.push((i, to_sheet * g / gs));
                 }
@@ -597,7 +679,7 @@ impl Canvas {
             let a_px_mm2 = px * px;
             let film = std::mem::take(&mut self.film);
             let mut pxs = std::mem::take(&mut self.px);
-            let lost = lay_crumbs(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, &mut rng, crumb_max, px_um2);
+            let lost = lay_material_crumbs(self.drawing_mut(), &film, &mut pxs, &last_bed, carried, stick.color, &mut rng, crumb_max, px_um2, stick.material);
             self.px = pxs;
             self.film = film;
             out.volume_mm3 -= lost * a_px_mm2 * 1e-3;
@@ -1364,6 +1446,61 @@ fn area_lanes(m: &crate::Mask, p: &Plan, down: impl Fn(f32) -> bool) -> Result<(
 mod tests {
     use super::*;
     use crate::paper::Paper;
+
+    #[test]
+    fn charcoal_sticks_wear_and_natural_charcoal_lifts_more_readily() {
+        let mut retained = Vec::new();
+        for (kind, grade, thick) in [("vine", "", false), ("vine", "", true), ("willow", "", false), ("willow", "", true), ("compressed", "", false), ("pencil", "soft", false), ("pencil", "medium", false), ("pencil", "hard", false)] {
+            let mut c = Canvas::new_window(120, 1.0, [0.55; 3], None).with_size_mm(60.0).with_paper(Paper::preset("toned laid", 4).unwrap().0);
+            let mut stick = Stick::charcoal(kind, grade, thick).unwrap();
+            let facets = stick.facets.clone();
+            let laid = line(&mut c, &mut stick, 500.0, 1.5, 60.0);
+            assert!(laid.volume_mm3 > 0.0, "{kind} {grade} lays material");
+            assert_ne!(stick.facets, facets, "{kind} {grade} wears");
+            let d = c.drawing.as_ref().unwrap();
+            let loose: f32 = d.cells.iter().map(|p| p.loose).sum();
+            let bound: f32 = d.cells.iter().map(|p| p.bound).sum();
+            assert!(loose > 0.0);
+            assert_eq!(bound > 0.0, stick.material.binder > 0.0);
+            let before = darkening(&c, 0.0, 1000.0);
+            let mask = crate::Mask::full(c.window());
+            for _ in 0..4 { c.erase(&mask, 1.0); }
+            let after = darkening(&c, 0.0, 1000.0);
+            assert!(after < before, "{kind} {grade} can be lifted");
+            retained.push(after / before);
+            c.fix_drawing(None);
+            c.fix_pastel(None, 0.15);
+            let fixed: Vec<_> = c.drawing.as_ref().unwrap().cells.iter().map(|c| (c.a, c.bound)).collect();
+            c.erase(&mask, 1.0);
+            let after: Vec<_> = c.drawing.as_ref().unwrap().cells.iter().map(|c| (c.a, c.bound)).collect();
+            assert_eq!(after, fixed);
+        }
+        assert!(retained[0] < retained[4], "vine lifts more than compressed: {retained:?}");
+        assert!(retained[2] < retained[4], "willow lifts more than compressed: {retained:?}");
+    }
+
+    #[test]
+    fn charcoal_powder_enters_the_existing_stump_brush_and_eraser_paths() {
+        let mut c = Canvas::new_window(120, 1.0, [0.55; 3], None).with_size_mm(60.0).with_paper(Paper::preset("newsprint", 4).unwrap().0);
+        let mask = crate::Mask::from_fn(c.window(), |x,y| if (200.0..400.0).contains(&x) && (350.0..650.0).contains(&y) { 1.0 } else { 0.0 });
+        let blank = c.pixels().to_vec();
+        let volume = c.charcoal_powder(&mask, 1.0, 7);
+        assert!(volume > 0.0);
+        assert_ne!(c.pixels(), blank);
+        for (i, px) in c.pixels().iter().enumerate() {
+            if mask.data[i] == 0.0 { assert_eq!(*px, blank[i]); }
+        }
+        let before = c.pixels().to_vec();
+        c.rub(&[(250.0,500.0),(650.0,500.0)], 1.0, Some(4.0), 40.0);
+        assert_ne!(c.pixels(), before);
+        assert!(c.drawing.as_ref().unwrap().cells.iter().enumerate().any(|(i,p)| mask.data[i] == 0.0 && p.loose > 0.0));
+        let mut held = 0.0;
+        c.dust_pastel(100.0, 5.0, &[(200.0,450.0),(700.0,450.0)], &mut held, 10.0);
+        assert!(held > 0.0, "the brush collects powder");
+        let before = darkening(&c, 0.0, 1000.0);
+        c.erase(&crate::Mask::full(c.window()), 1.0);
+        assert!(darkening(&c, 0.0, 1000.0) < before);
+    }
 
     fn sheet() -> Canvas {
         Canvas::new_window(600, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))

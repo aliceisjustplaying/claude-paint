@@ -338,11 +338,12 @@ impl Canvas {
             let l = |p: f32, q: f32| p + (q - p) * u;
             // angles interpolate the short way round
             let la = |p: f32, q: f32| {
-                let mut d = q - p;
-                while d > std::f32::consts::PI {
+                let tau = std::f32::consts::TAU;
+                let mut d = (q % tau - p % tau) % tau;
+                if d > std::f32::consts::PI {
                     d -= std::f32::consts::TAU;
                 }
-                while d < -std::f32::consts::PI {
+                if d < -std::f32::consts::PI {
                     d += std::f32::consts::TAU;
                 }
                 p + d * u
@@ -625,7 +626,10 @@ impl Canvas {
                             col[q] = (col[q] * load + cell.r[q] * take * a_px) / total.max(1e-9);
                         }
                         load = total;
+                        let under_px = uncover(pxs[i], cell.a, cell.r);
+                        cell.a = cell.floor + (cell.a - cell.floor).max(0.0) * (1.0 - take / cell.loose);
                         cell.loose -= take;
+                        pxs[i] = cover(under_px, cell.a, cell.r);
                         moved |= take > 0.0;
                     }
                     // lay a share of the load over the pad, as fine grains
@@ -648,6 +652,7 @@ impl Canvas {
                         let old = cell.a * (1.0 - q);
                         let wsum = old + q;
                         cell.r = [0, 1, 2].map(|k| ((old * cell.r[k] + q * col[k]) / wsum.max(1e-6)).clamp(0.0, 1.0));
+                        cell.lift = (old * cell.lift + q * 0.55) / wsum.max(1e-6);
                         cell.a = (cell.a + (1.0 - cell.a) * q).min(0.995);
                         cell.loose += per;
                         pxs[i] = cover(under_px, cell.a, cell.r);
@@ -738,6 +743,73 @@ mod tests {
             }
         }
         s
+    }
+
+    #[test]
+    fn finite_extreme_angles_finish_a_stroke() {
+        for (a, b) in [(0.0, 1e12_f32.to_radians()), (f32::MAX, -f32::MAX)] {
+            let mut c = Canvas::new_window(40, 1.0, [0.55; 3], None).with_size_mm(40.0);
+            let mut st = Stick::round([0.02; 3], 0.8, 2.0);
+            let pts = [
+                StrokePoint { x: 450.0, y: 500.0, pose: Pose { az: a, roll: -a, ..pose(1.0, 80.0) }, speed: 50.0 },
+                StrokePoint { x: 550.0, y: 500.0, pose: Pose { az: b, roll: -b, ..pose(1.0, 80.0) }, speed: 50.0 },
+            ];
+            let laid = c.stick_stroke(&mut st, &pts);
+            assert!(laid.secs > 0.0 && laid.secs.is_finite());
+            assert!(laid.volume_mm3.is_finite());
+            assert!(c.pixels().iter().flatten().all(|v| v.is_finite()));
+        }
+    }
+
+    #[test]
+    fn smudge_lightens_its_source_and_makes_erasable_deposits() {
+        let mut c = Canvas::new_window(40, 1.0, [0.55; 3], None).with_size_mm(40.0);
+        let i = 20 * 40 + 20;
+        let source = Cell { a: 0.8, r: [0.02; 3], lift: 0.55, floor: 0.3, film: 0.0, loose: 12.0, bound: 8.0 };
+        c.drawing_mut().cells[i] = source;
+        c.px[i] = cover(c.px[i], source.a, source.r);
+        let before = c.px[i];
+        c.rub(&[(475.0, 500.0), (500.0, 500.0)], 1.0, Some(std::f32::consts::PI * 4.0), 40.0);
+        let cells = &c.drawing.as_ref().unwrap().cells;
+        assert!(cells[i].a < source.a && cells[i].a >= source.floor);
+        assert!(cells[i].loose < source.loose);
+        assert_eq!(cells[i].bound, source.bound);
+        assert_eq!(cells[i].floor, source.floor);
+        assert!(c.px[i][0] > before[0]);
+        let deposits: Vec<_> = cells.iter().enumerate().filter(|&(j, cell)| j != i && cell.a > 0.0).map(|(j, cell)| {
+            assert!((cell.lift - 0.55).abs() < 1e-6);
+            (j, cell.a, cell.loose)
+        }).collect();
+        assert!(!deposits.is_empty());
+        c.erase(&crate::Mask::full(c.window().whole()), 1.0);
+        let cells = &c.drawing.as_ref().unwrap().cells;
+        for (j, coverage, loose) in deposits {
+            assert!(cells[j].a < coverage);
+            assert!(cells[j].loose < loose);
+        }
+        assert_eq!(cells[i].bound, source.bound);
+        assert!(cells[i].a >= source.floor);
+    }
+
+    #[test]
+    fn erasing_loose_pastel_preserves_bound_pigment_and_releases_the_tooth() {
+        for (coverage, floor) in [(0.8, 0.0), (0.99, 0.9), (0.995, 0.995)] {
+            let mut c = Canvas::new_window(4, 1.0, [0.55; 3], None).with_size_mm(4.0);
+            let source = Cell { a: coverage, r: [0.02; 3], lift: 0.55, floor, film: 0.0, loose: 12.0, bound: 8.0 };
+            c.drawing_mut().cells[0] = source;
+            c.px[0] = cover(c.px[0], source.a, source.r);
+            c.erase(&crate::Mask::full(c.window().whole()), 1.0);
+            let cell = c.drawing.as_ref().unwrap().cells[0];
+            assert_eq!(cell.bound, source.bound);
+            assert!(cell.a >= floor);
+            if floor > 0.0 {
+                assert_eq!(cell.a, floor);
+                assert_eq!(cell.loose, 0.0);
+            } else {
+                assert!((cell.loose / source.loose - cell.a / source.a).abs() < 1e-6);
+                assert!(cell.loose < source.loose);
+            }
+        }
     }
 
     /// Archard: a stroke lays in proportion to the force, and the stick

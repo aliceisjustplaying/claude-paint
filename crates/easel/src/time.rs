@@ -58,8 +58,8 @@ thread_local! {
 }
 
 /// `verb`, for a tool a paper mask is modeled for (paint's `sheet.rs`): a
-/// pastel stick, the finger. Other marking verbs refuse while a sheet lies
-/// on the picture.
+/// pastel stick, the finger, a dry brush. Other marking verbs refuse while a
+/// sheet lies on the picture.
 pub fn verb_dry<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
     // (put back as it was however the verb ends: a chunk's engine panic is
     // caught and the session goes on)
@@ -79,7 +79,7 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R
         flush(st, true);
     }
     if matches!(kind, Verb::Marks | Verb::Pass) && !DRY.with(|d| d.get()) && st.borrow().canvas.as_ref().is_some_and(|c| c.has_sheet()) {
-        return Err(mlua::Error::runtime("a sheet of paper lies on the picture: only pastel, the finger, the eraser and fixative are modeled with one down; lift it first (lift_sheet())"));
+        return Err(mlua::Error::runtime("a sheet of paper lies on the picture: only pastel, the finger, a dry brush (b:dust), the eraser and fixative are modeled with one down; lift it first (lift_sheet())"));
     }
     let r = {
         let mut g = st.borrow_mut();

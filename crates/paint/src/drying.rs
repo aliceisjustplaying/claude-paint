@@ -722,7 +722,7 @@ impl Canvas {
                 let i = (y0 + j) * w + x;
                 let v = vol[i];
                 let p = &mut row[x];
-                if v < 1e-5 {
+                if !(v >= 1e-5) {
                     if !(flow && v > 0.0) {
                         (p.cure, p.lev, p.seen, p.th) = (0.0, SET_TIME, 0.0, 0.0);
                     }
@@ -985,6 +985,25 @@ mod tests {
 
     fn lead_white() -> Paint {
         Paint::body(hex("#e8e4d8")).with_drying(drier::LEAD_WHITE)
+    }
+
+    #[test]
+    fn a_scraped_nan_film_can_wait_without_a_thickness_buffer() {
+        let mut c = canvas().with_engine(crate::ENGINE);
+        band(&mut c, lead_white(), 400.0, 1);
+        c.wait(0.01);
+        for p in &mut c.wet.clock.px {
+            p.cure = f32::NAN;
+        }
+        let mut knife = crate::bristle::Knife::new(8.0);
+        c.knife(&mut knife, &[(644.0, 390.0), (644.0, 410.0)], (1.0, 1.0), Some(0.0), false, 1.0);
+        assert!(c.wet.vol.iter().any(|v| v.is_nan()));
+        for v in &mut c.wet.vol {
+            if *v > 0.0 {
+                *v = f32::NAN;
+            }
+        }
+        c.wait(1.0);
     }
 
     /// A checkpoint taken while paint is drying resumes exactly.

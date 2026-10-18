@@ -674,16 +674,17 @@ impl Canvas {
     /// too (see `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
         self.check_mask(m);
+        let f = self.f;
         let Some(d) = self.drawing.as_mut() else { return };
+        let sheet = self.sheet.as_ref();
         let st = strength.clamp(0.0, 1.0);
         for (k, g) in d.guide.iter_mut().enumerate() {
             let mv = m.data[k].min(1.0);
-            if mv > 0.0 && *g > 0.0 {
+            if mv > 0.0 && *g > 0.0 && !sheet.is_some_and(|s| s.covers_whole_pixel(f, k)) {
                 let floor = d.guide_floor.as_ref().map_or(0.0, |fl| fl[k]);
                 *g = (*g * (1.0 - (st * mv * GUIDE_LIFT).min(0.97))).max(floor.min(*g));
             }
         }
-        let f = self.f;
         let rt = (0.35 / (self.mm_per_unit / f.scale)).round().max(1.0) as isize;
         let (w, h) = (f.w as isize, f.h as isize);
         let height = &self.height;
@@ -731,7 +732,7 @@ impl Canvas {
         }
         let fl = d.guide_floor.get_or_insert_with(|| vec![0.0; d.guide.len()]);
         for (k, (v, g)) in fl.iter_mut().zip(&d.guide).enumerate() {
-            if m.is_none_or(|m| m.data[k] > 0.5) {
+            if m.is_none_or(|m| m.data[k] > 0.5) && !sheet.is_some_and(|s| s.covers_whole_pixel(f, k)) {
                 *v = *g;
             }
         }

@@ -1152,35 +1152,48 @@ fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &
     if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
     }
-    let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, ..look::View::default() };
+    let seen_as = look::View { crop: Some(crop), value: v.value, squint: v.squint, light: v.light, overlays: v.overlays.clone(), ..look::View::default() };
     let (_, _, png) = look::render(&c, &seen_as)?;
     let mut img = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
     let p = paint::pastel::Pose { force: pose[0], alt: pose[1].to_radians(), az: pose[2].to_radians(), roll: (turned + pose[3]).to_radians() };
     let cells = c.stick_contact(&stick, at.0, at.1, p);
     let f = c.window();
     // (the passage as rendered: a crop past the canvas's edge is clipped, as in `hold_look`)
-    let cx0 = ((crop[0] * f.scale).round().max(0.0) as usize).clamp(f.x0, f.x0 + f.w) as i64;
-    let cy0 = ((crop[1] * f.scale).round().max(0.0) as usize).clamp(f.y0, f.y0 + f.h) as i64;
+    let px = |u: f32, lo: usize, hi: usize| ((u * f.scale).round().max(0.0) as usize).clamp(lo, hi);
+    let (cx0, cx1) = (px(crop[0], f.x0, f.x0 + f.w), px(crop[2], f.x0, f.x0 + f.w));
+    let (cy0, cy1) = (px(crop[1], f.y0, f.y0 + f.h), px(crop[3], f.y0, f.y0 + f.h));
+    let (kx, ky) = (img.width() as f32 / (cx1 - cx0) as f32, img.height() as f32 / (cy1 - cy0) as f32);
+    let mut overlay = vec![0u8; img.width() as usize * img.height() as usize];
     let col = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as f32);
     let (mut touch, mut bed) = (0usize, 0usize);
     for &(i, k) in &cells {
-        let (x, y) = ((i % f.w + f.x0) as i64 - cx0, (i / f.w + f.y0) as i64 - cy0);
-        if x < 0 || y < 0 || x >= img.width() as i64 || y >= img.height() as i64 {
+        let (x, y) = (i % f.w + f.x0, i / f.w + f.y0);
+        if x < cx0 || y < cy0 || x >= cx1 || y >= cy1 {
             continue;
-        }
-        let q = img.get_pixel_mut(x as u32, y as u32);
-        let (share, to): (f32, [f32; 3]) = match k {
-            2 => (1.0, col),
-            1 => (0.45, col),
-            _ => (0.22, [20.0, 20.0, 20.0]),
-        };
-        for ch in 0..3 {
-            q[ch] = (q[ch] as f32 * (1.0 - share) + to[ch] * share).round() as u8;
         }
         match k {
             2 => touch += 1,
             1 => bed += 1,
             _ => {}
+        }
+        let (x0, x1) = (((x - cx0) as f32 * kx).floor() as usize, (((x + 1 - cx0) as f32 * kx).ceil() as usize).min(img.width() as usize));
+        let (y0, y1) = (((y - cy0) as f32 * ky).floor() as usize, (((y + 1 - cy0) as f32 * ky).ceil() as usize).min(img.height() as usize));
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let q = &mut overlay[y * img.width() as usize + x];
+                *q = (*q).max(k + 1);
+            }
+        }
+    }
+    for (q, k) in img.pixels_mut().zip(overlay) {
+        let (share, to): (f32, [f32; 3]) = match k {
+            3 => (1.0, col),
+            2 => (0.45, col),
+            1 => (0.22, [20.0, 20.0, 20.0]),
+            _ => continue,
+        };
+        for ch in 0..3 {
+            q[ch] = (q[ch] as f32 * (1.0 - share) + to[ch] * share).round() as u8;
         }
     }
     let mm2 = c.px_mm() * c.px_mm();
@@ -1463,12 +1476,6 @@ impl Server {
         if survey && compare.is_some() {
             return Err("look: --survey and --compare are two looks; ask for one".into());
         }
-        if let Some(r) = reference {
-            if survey || compare.is_some() || hold.is_some() || at.is_some() {
-                return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
-            }
-            return self.reference(&rest, &r);
-        }
         // (a pastel stick comes with the paper-and-pastel switch: without it there is none to hold)
         let sticks = self.s.st.borrow().paper;
         if (pose.is_some() || side.is_some()) && !sticks {
@@ -1476,6 +1483,12 @@ impl Server {
         }
         if (pose.is_some() || side.is_some()) && hold.is_none() {
             return Err("look: --pose and --side hold a pastel stick: they go with --hold <stick> --at x,y".into());
+        }
+        if let Some(r) = reference {
+            if survey || compare.is_some() || hold.is_some() || at.is_some() {
+                return Err("look: --ref is a look of its own: no --survey, --compare or --hold".into());
+            }
+            return self.reference(&rest, &r);
         }
         // --hold <pile> --at x,y: the loaded knife held up to the canvas (speculative: `hold_look`)
         if hold.is_some() || at.is_some() {
@@ -2590,5 +2603,60 @@ mod tests {
         assert!(s.held_stick("nope").unwrap_err().contains("holds no pastel stick"));
         assert!(stick_hold_look(&s, "P.glow", (1400.0, 400.0), [1.5, 60.0, 45.0, 0.0], &plain).unwrap_err().contains("not on the canvas"));
         assert!(stick_hold_look(&s, "P.glow", at, [1.5, 60.0, 45.0, 0.0], &look::View { mirror: true, ..look::View::default() }).is_err());
+    }
+
+    #[cfg(feature = "replay")]
+    #[test]
+    fn a_held_stick_keeps_masks_and_scaled_contact() {
+        let mut s = Session::new(4800).unwrap().with_paper(true).unwrap();
+        let c = Canvas::new_window(4800, 1.25, [0.8; 3], Some(paint::Crop { units: [400.0, 300.0, 600.0, 500.0], margin: 0.0 }))
+            .with_size_mm(200.0).with_paper(paint::paper::Paper::drawing(3));
+        let mask = std::sync::Arc::new(paint::Mask::from_fn(c.frame(), |_, _| 1.0));
+        s.st.borrow_mut().canvas = Some(c);
+        s.run(r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})"#).unwrap();
+        let crop = [440.0, 340.0, 560.0, 460.0];
+        let v = look::View { crop: Some(crop), overlays: vec![mask], ..look::View::default() };
+        let c = s.canvas().unwrap();
+        let (stick, _) = s.held_stick("p").unwrap();
+        let pose = paint::pastel::Pose { force: 1.5, alt: 60f32.to_radians(), az: 45f32.to_radians(), roll: 0.0 };
+        let cells = c.stick_contact(&stick, 500.0, 400.0, pose);
+        let (touch, bed) = (cells.iter().filter(|(_, k)| *k == 2).count(), cells.iter().filter(|(_, k)| *k == 1).count());
+        let f = c.window();
+        let (x0, y0) = ((crop[0] * f.scale).round() as usize, (crop[1] * f.scale).round() as usize);
+        let expected: std::collections::BTreeSet<_> = cells.iter().filter(|(_, k)| *k == 2)
+            .map(|(i, _)| (((i % f.w + f.x0 - x0) / 2) as u32, ((i / f.w + f.y0 - y0) / 2) as u32)).collect();
+        let mm2 = c.px_mm().powi(2);
+        let bare = look::render(&c, &v).unwrap();
+        let plain = look::render(&c, &look::View { crop: Some(crop), ..look::View::default() }).unwrap();
+        drop(c);
+        let (w, h, png, note) = stick_hold_look(&s, "p", (500.0, 400.0), [1.5, 60.0, 45.0, 0.0], &v).unwrap();
+        assert_eq!((w, h), (288, 288));
+        assert_eq!(note, format!("touching {:.1} mm², crumbs settle over {:.1} mm² more", touch as f32 * mm2, bed as f32 * mm2));
+        let held = image::load_from_memory(&png).unwrap().to_rgb8();
+        let bare = image::load_from_memory(&bare.2).unwrap().to_rgb8();
+        let plain = image::load_from_memory(&plain.2).unwrap().to_rgb8();
+        assert_eq!(held.get_pixel(0, 0), bare.get_pixel(0, 0));
+        assert_ne!(held.get_pixel(0, 0), plain.get_pixel(0, 0));
+        let color = stick.color.map(|v| (paint::color::linear_to_srgb(v) * 255.0).round() as u8);
+        let contact: std::collections::BTreeSet<_> = held.enumerate_pixels().filter(|(_, _, p)| p.0 == color).map(|(x, y, _)| (x, y)).collect();
+        assert!(!contact.is_empty(), "the contact stays visible after downsampling");
+        assert_eq!(contact, expected, "the resized contact covers its source footprint");
+    }
+
+    #[test]
+    fn reference_looks_do_not_bypass_stick_pose_gating() {
+        for paper in [false, true] {
+            let mut server = Server {
+                name: "test".into(), build: 0, s: Session::new(160).unwrap().with_paper(paper).unwrap(),
+                frames: false, written: None, replayed: 0, scratch: None, display: None,
+                #[cfg(feature = "state-store")] committed: None,
+                #[cfg(feature = "state-store")] state_failed: false,
+            };
+            for flag in ["--pose", "--side"] {
+                let args = ["--ref", "missing.jpg", flag, "garbage"].map(String::from);
+                let e = server.look(&args, None).unwrap_err();
+                assert!(e.contains(if paper { "go with --hold" } else { "paper-and-pastel switch" }), "{e}");
+            }
+        }
     }
 }

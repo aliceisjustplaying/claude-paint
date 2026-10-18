@@ -151,6 +151,7 @@ pub fn canvas(lua: &Lua, st: &S, o: Table) -> Result<Value> {
         s.clock = 0.0;
         time::start(&mut c);
         s.hand = time::Hand::default();
+        s.recording_ground = crate::live_frames::ground_signature(&c);
         s.canvas = Some(c);
         s.style = Some(Rc::new(sty));
         let sz = num(&o, "size")?.map(|mm| format!(", size={mm}")).unwrap_or_default();

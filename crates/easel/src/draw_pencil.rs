@@ -1,7 +1,8 @@
 //! Drawing in Lua: graphite pencils and black chalk on the ground, the
 //! kneaded eraser and fixative (engine: `paint::graphite`); with the
-//! paper-and-pastel switch, pastel sticks, the finger, `feel` and a paper
-//! mask too (`install_paper`; engine: `paint::pastel`, `paint::sheet`).
+//! paper-and-pastel switch, pastel sticks, the finger, `feel`, a paper mask,
+//! a puff and a tap too (`install_paper`; engine: `paint::pastel`,
+//! `paint::sheet`).
 //!
 //! A pencil is a plain Lua table (`{grade="2B", kind="graphite", worn=0}`)
 //! with shared methods, so how far its point has worn is part of the Lua
@@ -503,7 +504,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 /// The paper-and-pastel switch's verbs (session.rs `PAPER_MARK`): the stick's
 /// methods (`p:side`, `p:stroke`, `p:roll`, `p:snap`) on the pencils' shared
-/// metatable, and the globals `pastel`, `smudge` and `feel`. Installed by
+/// metatable, and the globals `pastel`, `smudge`, `feel`, `lay_sheet`,
+/// `lift_sheet`, `blow` and `tap`. Installed by
 /// `Session::set_paper` before the first chunk, only when the switch is on,
 /// so an older log sees exactly the globals it saw.
 pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
@@ -759,6 +761,46 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             Ok(())
         })?)?;
     }
+    // blow(x, y, {distance=50, speed=12, nozzle=8}): a puff of air at the
+    // picture from `distance` mm, leaving the lips (or a bulb's nozzle,
+    // `nozzle` mm) at `speed` m/s (blowing hard: 12 on average, 6–64); tap({g=100}):
+    // the board's edge struck on the table (50–400 g; an upright sheet: 1).
+    // Paint's sheet.rs. Each returns the volume shed, mm³.
+    {
+        let st1 = st.clone();
+        g.set("blow", lua.create_function(move |_, (x, y, o): (f32, f32, Option<Table>)| {
+            if let Some(o) = &o {
+                check_keys(o, &["distance", "speed", "nozzle"], "blow")?;
+            }
+            let get = |k: &str, d: f32| -> Result<f32> { Ok(o.as_ref().map(|o| num(o, k)).transpose()?.flatten().unwrap_or(d)) };
+            let (h, u, d) = (get("distance", 50.0)?, get("speed", 12.0)?, get("nozzle", 8.0)?);
+            if !(5.0..=500.0).contains(&h) || !(1.0..=80.0).contains(&u) || !(1.0..=40.0).contains(&d) {
+                return err("blow: distance 5–500 mm, speed 1–80 m/s (a hard blow 12, peaks to 64; a bulb 20–60), nozzle 1–40 mm (lips about 8)");
+            }
+            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                let v = c.blow_pastel(x, y, h, u, d);
+                c.tally_mut().secs += 1.5;
+                Ok(v)
+            })
+        })?)?;
+        let st1 = st.clone();
+        g.set("tap", lua.create_function(move |_, o: Option<Table>| {
+            if let Some(o) = &o {
+                check_keys(o, &["g"], "tap")?;
+            }
+            let a = o.as_ref().map(|o| num(o, "g")).transpose()?.flatten().unwrap_or(100.0);
+            if !(0.1..=1000.0).contains(&a) {
+                return err("tap: g, the board's acceleration in gravities (a tapped edge 50–400; an upright sheet 1)");
+            }
+            crate::time::verb_dry(&st1, crate::time::Verb::Pass, |s| {
+                let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                let v = c.tap_pastel(a);
+                c.tally_mut().secs += 3.0;
+                Ok(v)
+            })
+        })?)?;
+    }
     Ok(())
 }
 
@@ -783,14 +825,15 @@ mod tests {
     }
 
     /// The paper-and-pastel switch brings `pastel`, `smudge`, `feel`,
-    /// `lay_sheet` and `lift_sheet` and the stick's methods, and nothing else: a session without it (an older
-    /// log) has none of them, so its walk of the globals is as it was.
+    /// `lay_sheet`, `lift_sheet`, `blow` and `tap` and the stick's methods,
+    /// and nothing else: a session without it (an older log) has none of
+    /// them, so its walk of the globals is as it was.
     #[test]
     fn pastel_comes_with_the_switch_and_only_with_it() {
         let mut off = Session::new(W).unwrap();
         run(&mut off, CANVAS);
         let (g_off, m_off) = names(&mut off);
-        assert_eq!(run(&mut off, "print(type(pastel), type(smudge), type(feel))").trim(), "nil\tnil\tnil");
+        assert_eq!(run(&mut off, "print(type(pastel), type(smudge), type(feel), type(blow), type(tap))").trim(), "nil\tnil\tnil\tnil\tnil");
         assert_eq!(m_off, "nil\tnil\tnil\tnil\tfunction");
         let e = off.run(r#"local p = pencil() p.kind = "stick" p:line({{100, 100}, {300, 120}})"#).unwrap_err();
         assert!(e.contains("pencil kind \"stick\""), "{e}");
@@ -798,7 +841,7 @@ mod tests {
         run(&mut on, CANVAS);
         let (g_on, m_on) = names(&mut on);
         let added: Vec<&String> = g_on.iter().filter(|n| !g_off.contains(n)).collect();
-        assert_eq!(added, ["feel", "lay_sheet", "lift_sheet", "pastel", "smudge"]);
+        assert_eq!(added, ["blow", "feel", "lay_sheet", "lift_sheet", "pastel", "smudge", "tap"]);
         assert!(g_off.iter().all(|n| g_on.contains(n)));
         assert_eq!(m_on, "function\tfunction\tfunction\tfunction\tfunction");
         // the easel's own: not the painting's
@@ -990,5 +1033,35 @@ mod tests {
         }
         assert!(state(&r) == state(&s), "the log replays bit for bit");
         assert_eq!(text(&r), text(&s));
+    }
+
+    /// A tap and a puff shed loose pastel (each says how much left the
+    /// picture), work while a sheet lies, refuse what no knock or breath
+    /// gives, and the log replays bit for bit.
+    #[test]
+    fn a_tap_and_a_puff_shed_pastel_and_replay() {
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})
+            for y = 300, 500, 6 do p:stroke({{150, y}, {850, y + 10}}, {force=3, alt=50}) end"#);
+        let shed: f32 = run(&mut s, "print(tap({g=1}))").trim().parse().unwrap();
+        assert!(shed > 0.0, "an upright sheet drops its biggest crumbs: {shed} mm³");
+        let blown: f32 = run(&mut s, "print(blow(500, 400, {distance=50, speed=21}))").trim().parse().unwrap();
+        assert!(blown > 0.0, "a hard puff blows pastel off: {blown} mm³");
+        run(&mut s, "lay_sheet(rect(0, 0, 500, 800)) blow(700, 400) tap() lift_sheet()");
+        assert!(s.run("blow(500, 400, {distance=1})").unwrap_err().contains("distance"));
+        assert!(s.run("blow(500, 400, {nozzel=8})").unwrap_err().contains("unknown option"));
+        assert!(s.run("tap({g=0})").unwrap_err().contains("gravities"));
+        let state = |s: &Session| {
+            let mut b = Vec::new();
+            s.canvas().unwrap().write_state(&mut b, "").unwrap();
+            b
+        };
+        let log = s.program("blow and tap");
+        let mut r = Session::replay(W).unwrap().with_paper(true).unwrap();
+        for chunk in parse_program(&log) {
+            r.run(&chunk).unwrap();
+        }
+        assert!(state(&r) == state(&s), "the log replays bit for bit");
     }
 }

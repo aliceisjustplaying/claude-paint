@@ -1,12 +1,124 @@
-# Removing loose pastel: brush pickup and a steel blade
+# Removing loose pastel: blowing, tapping, brush pickup, and a steel blade
 
-Research notes for the pastel simulator's dry-brush and knife-scrape tools. Compiled 2026-10-06. Builds on `pastel_brushing.md` (adhesion F_adh ≈ 10–150 nN per contact, size-independent for irregular grains) and `paper_surface.md` (fibers 20–40 µm wide, exponential pore depth with mean 5–15 µm, caliper 0.2–0.4 mm). Blowing and tapping (§A1–A2) belong with the tools that need them and are not here.
+Research notes for the pastel simulator's blow, tap, dry-brush and knife-scrape tools. Compiled 2026-10-06. Builds on `pastel_brushing.md` (adhesion F_adh ≈ 10–150 nN per contact, size-independent for irregular grains) and `paper_surface.md` (fibers 20–40 µm wide, exponential pore depth with mean 5–15 µm, caliper 0.2–0.4 mm).
 
 **Tags:** **[M]** measured, cited. **[D]** derived here, arithmetic shown. **[E]** estimate; tunable.
 
 **Bottom line**
+- **Blowing** removes crumbs and heaps of 50–300 µm sitting on top of the fibers. A firm puff from 5–10 cm reaches u* ≈ 0.7–2 m/s, against a threshold of about 0.2–0.9 m/s for them. Single 5 µm grains on top need u* ≈ 0.7–8 m/s, so only a close, hard blow takes some of them. Anything deeper than about half a pore width is unreachable, because the flow decays as exp(−4.2 z/w).
+- **Tapping** takes off agglomerates of about 50–250 µm and larger (tens of g needed, hundreds of g delivered). It never takes 5 µm grains, which would need 10⁴–10⁵ g. This matches the conservation finding that loss is agglomerates.
 - **A brush** saturates at roughly 0.05–0.08 g of powder per cm³ of loaded bristle volume. That is a few mg for a #8 hog brush, i.e. a full load from 1–20 cm² of pastel.
 - **A palette knife** at hand loads (0.05–0.2 N/mm) presses at 0.5–2.5 MPa. It sinks about 15–40 µm into the sheet and leaves a few to about 13 µm of permanent flattening, so it scrapes into the tooth and burnishes it. A scalpel (edge ≈ 1 µm) cuts fiber walls above about 0.1–0.8 N/mm and raises nap once its drag per fiber exceeds the fiber–fiber bond strength (about 1–6 mN).
+
+---
+
+## A1. Blowing (aerodynamic resuspension)
+
+### Thresholds
+
+**Loose bed or heap [M fit, D numbers].** Shao & Lu 2000:
+
+> u*t = √( A_N (σ_p g d + γ/(ρ_a d)) ), with σ_p = ρ_p/ρ_a, **A_N = 0.0123**, **γ = 3×10⁻⁴ N/m** (range 1.65–5×10⁻⁴), ρ_a = 1.2 kg/m³.
+
+A Mars-chamber refit on irregular simulant grains gave A_N = 2.7×10⁻³ and γ = 1.2×10⁻⁴, which shows how far the constants can move (Kruss et al. 2019). Values for ρ_p = 2500 kg/m³:
+
+| d (µm) | 1 | 2 | 5 | 10 | 20 | 50 | 100 | 200 | 300 |
+|---|---|---|---|---|---|---|---|---|---|
+| u*t (m/s) | 1.75 | 1.24 | 0.79 | 0.56 | 0.40 | 0.27 | **0.24** (min) | 0.26 | 0.29 |
+
+- At a porous crumb density of 1250 kg/m³ the values are almost unchanged below 50 µm and about 0.21 m/s at 100–300 µm.
+- The formula was fitted mostly on sand. Below 20 µm treat it as an extrapolation.
+
+**Single grain on top of a surface: moment balance [M coefficients, D numbers].** Reeks & Hall 2001 give the mean drag on a sphere of radius r in the viscous sublayer as F_D = 32 ρ_a r² u*². The particle rolls off when F_D·(r/a) ≥ F_adh, where a is the spacing of its contact asperities. Hall measured r/a ≈ 100 on polished steel.
+
+| Case | r/a | F_adh 10 nN | F_adh 150 nN |
+|---|---|---|---|
+| 5 µm grain | 100 / 10 | 0.65 / 2.0 m/s | 2.5 / 7.9 m/s |
+| 20 µm grain | 100 / 10 | 0.16 / 0.51 | 0.63 / 2.0 |
+| 100 µm crumb on fibers | 5 / 2 [E] | 0.14 / 0.23 | 0.56 / 0.88 |
+| 300 µm crumb | 5 / 2 | 0.05 / 0.08 | 0.19 / 0.29 |
+
+- The particle Reynolds number r⁺ = r u*/ν stays below 3 in every case, so the sublayer formula holds.
+- Wall shear fluctuates, so treat removal as a per-puff probability ("rock'n'roll" kinetics), not a hard cut.
+
+### What a puff delivers
+
+**Exhalation speeds [M]** (hot-wire at 25 mm from the lips, 31 people; Aston study):
+- Blowing "as hard as possible": mean **12 m/s**, 85th percentile 21 m/s, range of peaks **6–64 m/s**.
+- Spread is 55–65 % between people and 25–35 % for one person.
+- For comparison, coughing averages 4 m/s.
+
+**Rubber bulb blower [E/D].**
+- No trustworthy measurement found.
+- Squeeze pressure Δp ≈ 0.5–2 kPa gives U ≈ √(2Δp/ρ) ≈ 30–60 m/s ideal. Assume **20–60 m/s** through a 3–5 mm nozzle.
+
+**Impinging jet, peak wall shear [M]** (Phares et al. 2000, as used by Sharma et al. 2022):
+
+> τ_max = 44.6 ρ_a U_J² Re_J^(−1/2) (H/D)^(−2), at radius r = 0.09 H.
+
+- Free-jet centerline decay: U_c ≈ K·U_J·D/(H+λ), with K ≈ 4–6.2.
+- Below H/D ≈ 6 I cap τ at the H/D = 6 value (potential core) [E].
+
+| Source | H = 20 mm | 50 mm | 100 mm | 200 mm |
+|---|---|---|---|---|
+| Mean blow, 12 m/s, D 8 mm [E] | u* 1.5 m/s | 1.4 | 0.72 | 0.36 |
+| Hard blow, 21 m/s | 2.3 | 2.2 | 1.1 | 0.55 |
+| Bulb, 30 m/s, D 4 mm | 3.5 | 1.7 | 0.85 | 0.42 |
+
+- Example of the arithmetic: hard blow at 100 mm gives τ = 44.6·1.2·21²·(11200)^(−½)·12.5⁻² = 1.43 Pa, so u* = √(τ/ρ) = 1.09 m/s.
+- The peak sits on a ring about 0.1 H in radius. The footprint at 1/e is a few H/D.
+- A puff from 5–10 cm clears heaps and crumbs in a spot a few cm across, plus only the weakly held fines on top.
+
+### Particles in pores are sheltered [D]
+
+- Paper roughness is hydraulically smooth. With k = 10–30 µm and u* = 1 m/s, k⁺ = k u*/ν ≈ 0.7–2, so the pores lie inside a viscous Stokes layer.
+- Stokes flow over a slot of width w decays with depth as **exp(−4.21 z/w)**. This is Moffatt's 1964 corner-eddy solution: each counter-rotating eddy is about 1.39 w tall and about 360× weaker than the one above.
+
+| Depth z/w | 0.25 | 0.5 | 1 | 1.5 | 2 |
+|---|---|---|---|---|---|
+| τ(z)/τ_top | 0.35 | 0.12 | 0.015 | 0.0018 | 0.0002 |
+| u* multiplier needed | 1.7 | 2.9 | 8.2 | 24 | 67 |
+
+- A 5 µm grain one pore width down (z ≈ 20–40 µm) needs u* ≥ 5–60 m/s. No breath or bulb comes close, so **puffs remove only the top roughly 0.25–0.5 w (5–20 µm) of a pore's filling**.
+- **[M, qualitative] Practice agrees.** The AIC wiki says a bulb blower is not to be used on friable or powdery media, may disrupt fibers of soft papers, and "dirt may not be effectively removed".
+
+---
+
+## A2. Tapping and vibration
+
+### Inertial threshold [D]
+A particle leaves the surface when m·a > F_adh, with m = πd³ρ/6.
+
+| d | m (ρ 2.5 g/cm³) | a to detach at 10 nN | at 150 nN |
+|---|---|---|---|
+| 5 µm | 1.6×10⁻¹³ kg | 6.2×10³ g | 9.3×10⁴ g |
+| 20 µm | 1.0×10⁻¹¹ | 97 g | 1460 g |
+| 50 µm | 1.6×10⁻¹⁰ | 6 g | 93 g |
+| 100 µm | 1.3×10⁻⁹ | **0.8 g** | **12 g** |
+| 300 µm | 3.5×10⁻⁸ | 0.03 g | 0.4 g |
+
+- **Critical size:** d_c = (6F_adh/(πρa))^(1/3).
+  - At 1 g (gravity alone, sheet inverted or vertical): d_c = 92–227 µm. At 50 % crumb porosity it is 116–286 µm.
+  - At 10 g: 43–105 µm (ρ = 2500 kg/m³); 54–133 µm at 50 % porosity.
+  - At 100 g: 20–49 µm (ρ = 2500 kg/m³); 25–62 µm at 50 % porosity.
+- So **heaps and crumbs larger than about 0.1–0.3 mm drop off a vertical easel by gravity alone.**
+- In-plane acceleration (tapping the board edge) acts by rolling. That lowers the threshold by a factor a_c/r ≈ 0.02–0.1, but fines only hop to the next pore.
+
+### Accelerations available
+
+- **Tapping a board edge on a table [D/E].** Half-sine impact gives a_peak = π(1+e)v/(2τ), with v = √(2gh).
+  - Assumptions: drop h = 1–3 cm, restitution e = 0.3–0.6, contact time τ = 0.5–2 ms [E].
+  - Result: **≈ 50–400 g** at the board. A flick of a finger on the back of the board is lower and local [E, tens of g].
+  - No measured value was found (gap).
+- **Transport [M]:** shocks up to **8–10 g** (Sauvage et al. 2018). Building vibration caused loss of loosely bound pigment at 0.2–0.3 g (Thickett 2002).
+- **Sauvage vibration rig [D].**
+  - About 10⁷ cycles in "two days" implies a drive of about 58 Hz.
+  - The fixed specimens ran at 4.3 mm displacement amplitude, which gives (2πf)²X ≈ **58 g** at sheet center (29 g if the 4.3 mm was peak-to-peak).
+  - Unfixed mock-ups failed (1 % surface change) after 2.8×10⁵ cycles at the higher amplitude and 1.8×10⁶ at the lower. Some survived about 10⁷ cycles.
+  - The loss was **agglomerates**: large black 1–20 µm grains "not as well embedded"; needle-shaped pink grains did not move.
+- **[M, qualitative] Practice:** pastellists invert the board and tap its edge, or snap a finger against the back, over a tray (Pastel Today; SKH Portraits).
+
+**Simulator rule [D].** Per tap, detach any loose top-of-envelope cluster with m·a_tap > F_adh·n_contacts. Use a_tap ≈ 50–200 g as the default. Pore-held single grains never go. Fatigue (repeated taps) can be a small per-tap probability for borderline clusters, following Sauvage's S–N behavior.
 
 ---
 
@@ -102,10 +214,18 @@ Model: a Winkler (bed-of-springs) layer with Chen's curve, sheet T = 250 µm on 
 
 ## Simulator recipe
 
-1. **Brush capacity.**
+1. **Puff** at (x, y, H) with source velocity U.
+   - Compute u*(r) from Phares (ring peak at 0.09 H).
+   - For each loose top-of-envelope cluster, remove it with probability rising steeply once u* > u*t(d, F_adh, r/a) from §A1.
+   - For pore-held material at depth z below the local envelope, scale τ by exp(−4.21 z/w_pore).
+   - Removed material is airborne. Redeposit 0–20 % downstream within 1–3 H [E].
+2. **Tap** with a_tap of 50–200 g (default) or 1 g for a vertical easel.
+   - Detach clusters with ρ_eff·πd³/6·a > F_adh·n_contacts.
+   - Pore-held grains never go.
+3. **Brush capacity.**
    - Track loaded mass per brush and cap it at ≈ 0.06 g/cm³ × loaded-tip volume.
    - Pickup efficiency falls linearly to 0 at saturation. Above about 80 %, deposit back.
-2. **Knife.** Inputs: line load q, edge radius R.
+4. **Knife.** Inputs: line load q, edge radius R.
    - Compute dent depth δ₀(q, R) from the Winkler table, reduced by the fiber network's through-thickness shear: 0.17–0.80× Winkler (`paper_mechanics_and_transport.md`'s table; use its fit or table).
    - Remove all loose pastel above (envelope − δ₀) along the edge. Push 20–50 % of it ahead as a heap [E] and drop it at the stroke end.
    - Compact the remainder into pores (raise its bond to "pressed" adhesion, about ×3–10 [E]).
@@ -113,6 +233,9 @@ Model: a Winkler (bed-of-springs) layer with Chen's curve, sheet T = 250 µm on 
    - If q > q_cut(R), cut and roughen. If μq·w_f > 1–6 mN, raise nap fibers.
 
 ## Gaps (no numbers found)
+- Measured acceleration of tapping a drawing board.
+- Rubber-bulb exit velocity.
+- Breath jet diameter and duration.
 - Per-contact retention fraction of dry brushes.
 - Steel-on-paper wear rate.
 - Paper surface (not bulk) indentation hardness.
@@ -120,7 +243,16 @@ Model: a Winkler (bed-of-springs) layer with Chen's curve, sheet T = 250 µm on 
 - Any quantitative study of scraping pastel.
 
 ## Sources
+- Shao & Lu 2000, *JGR* 105:22437, doi:10.1029/2000JD900304: https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2000jd900304
+- Kruss, Musiolik, Demirci, Wurm & Teiser 2019, Mars wind erosion (A_N and γ refit): https://arxiv.org/pdf/1911.01692
+- Reeks & Hall 2001, *J. Aerosol Sci.* 32:1. Coefficients as quoted in Zhang, Reeks et al.: https://arxiv.org/pdf/1206.1939
+- Sharma, Gong, Azadi, Gans, Gondret & Sauret 2022, erosion of cohesive grains by an impinging jet (Phares formula, K, cohesive Shields number): https://arxiv.org/pdf/2206.01839
+- Breath exit velocity (Aston/ESR): https://publications.aston.ac.uk/id/eprint/31720/
+- Moffatt 1964, *J. Fluid Mech.* 18:1 (viscous eddies); review of the cavity eddies: https://www.sciencedirect.com/science/article/pii/S0898122118302360
 - AIC wiki, BPG Surface Cleaning: https://conservation-wiki.com/wiki/BPG_Surface_Cleaning ; Hinge, Tape and Adhesive Removal: https://conservation-wiki.com/wiki/BPG_Hinge,_Tape,_and_Adhesive_Removal
+- Sauvage, Wei & Martinez 2018, *Stud. Conserv.* 63 sup1: https://research.tudelft.nl/files/180898282/When_Conservation_Meets_Engineering_Predicting_the_Damaging_Effects_of_Vibrations_on_Pastel_Paintings.pdf
+- Thickett 2002, ICOM-CC: https://www.english-heritage.org.uk/siteassets/home/learn/conservation/collections-advice--guidance/vibration-rio.pdf
+- Pastel Today, dust handling: https://pasteltoday.com/2022/06/15/pastel-dust-9-practical-ways-to-deal-with-it/ ; SKH Portraits: https://skhportraits.co.uk/how-to-keep-yourself-your-pastel-art-clean-7-top-tips/
 - US 8,879,946 (fur brush 3.5 g saturation): https://patents.google.com/patent/US8879946B2/en ; US 5,652,951 (Xerox 5100, 26–30 g): https://patents.google.com/patent/US5652951A/en
 - US 7,752,702 (powder pickup 1–2 mg): https://patents.google.com/patent/US7752702B2/en ; US 9,949,560: https://patents.google.com/patent/US9949560B2/en
 - Adusumalli et al. 2010, *J. Mater. Sci.*, nanoindentation of pulp fiber walls: https://link.springer.com/article/10.1007/s10853-010-4226-9 ; in-situ SEM transverse micro-indentation (*J. Electron Microsc.* 59:345): https://academic.oup.com/jmicro/article-abstract/59/5/345/861497

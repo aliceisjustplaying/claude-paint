@@ -1,6 +1,6 @@
-# Paper mechanics: edge dents, local pore depth, nap
+# Paper mechanics and crumb transport: edge dents, local pore depth, nap, blown-off crumbs
 
-Research notes for paper as a support (crates/paint/src/paper.rs) and a blade on it (crates/paint/src/sheet.rs). Compiled 2026-10-06. Builds on `paper_surface.md` (fiber network, exponential pore depths), `pastel_removal_air_blade.md` (Winkler knife dents) and `pastel_brushing.md` (adhesion 10–150 nN per contact). Where blown-off crumbs go belongs with the tools that need it and is not here.
+Research notes for paper as a support (crates/paint/src/paper.rs), a blade on it, and where a puff blows the crumbs (crates/paint/src/sheet.rs). Compiled 2026-10-06. Builds on `paper_surface.md` (fiber network, exponential pore depths), `pastel_removal_air_blade.md` (Winkler knife dents, puff thresholds) and `pastel_brushing.md` (adhesion 10–150 nN per contact).
 
 **Tags:** **[M]** measured, cited. **[D]** derived here, arithmetic or method shown. **[E]** estimate; tunable.
 
@@ -8,6 +8,7 @@ Research notes for paper as a support (crates/paint/src/paper.rs) and a blade on
 - **Edge dents.** If the fibers' through-thickness shear stiffness is included, a knife edge at 0.05–0.5 N/mm sinks **3–32 µm**, against 9–54 µm for Winkler. That is **0.17–0.80× the Winkler depth**: the factor is smallest for sharp edges at light loads and nearest 1 for blunt edges at heavy loads. The dent spreads over a full width of **80–310 µm**, even where the contact itself is 10–200 µm. Permanent dents are 0–9 µm (Winkler gave 0–20 µm). At pen-ball pressures (>10 MPa) spreading stops mattering and Winkler with Chen's curve matches measured handwriting grooves.
 - **Pore depth.** In a random layered network the mean surface pore height is **h̄ = t·ε/(1−ε)**. It depends on *local porosity*, not on the local fiber count. Flocs leave the z-structure unchanged. From pixel to pixel, density changes alter h̄ by only about 4–15 %. Sampling a few pores per pixel causes a much larger scatter of the per-pixel mean depth, CV about 0.5–1 under an independence assumption.
 - **Nap.** Torn-free fiber ends rise to roughly **20–100 µm**, the instrument class "short fiber rising" (≤0.1 mm). They are too stiff for pastel pressure to flatten, so they add tooth. They should raise Rz much more than Ra. No measured Ra/Rz change after scraping was found.
+- **Crumbs.** A puff's footprint is far shorter than the fetch saltation needs to sustain itself (0.1–1.4 m). Bagnold's 0.8 ratio therefore does not strictly apply; only rolling crumbs and single hops occur. Rolling crumbs stop where u* falls below their stopping threshold. That is about **1.15–1.6× the entrainment radius**, so they form an annulus, at about 2–7 cm for a hard blow from 10 cm. Fines ≤5 µm stay airborne (≤10 % redeposit within 10 cm). About 15–25 % of 20 µm fines redeposit within 10 cm.
 
 ---
 
@@ -187,6 +188,95 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
 
 ---
 
+## 4. Where blown-off crumbs go
+
+### Thresholds and hysteresis
+- **[M] Impact over fluid threshold.**
+  - Field measurements: u\*_it/u\*_ft = **0.813 ± 0.018, 0.863 ± 0.027 and 0.837 ± 0.007** at three sites (Martin & Kok 2018).
+  - Theory gives 0.82 (Kok 2010b); Bagnold gave about 0.8.
+  - This ratio holds for **sustained saltation**, where splash replaces lost grains.
+- **[D] A puff cannot sustain saltation.**
+  - The saturation length is L_sat ≈ 2.2(ρ_p/ρ_a)d (Andreotti; form [M], numbers [D]).
+
+    | Crumb | L_sat |
+    |---|---|
+    | 50–300 µm at 1250 kg/m³ | 0.11–0.69 m |
+    | 50–300 µm at 2500 kg/m³ | 0.23–1.4 m |
+
+  - The footprint is a few cm, so only **rolling (creep), reptation and isolated hops** occur.
+  - **[E]** Treat the stopping threshold of a moving crumb as **0.6–0.85 × u\*_ft**. The bond is broken, and rolling resistance is about 10⁻²–10⁻³ of sliding (brushing note).
+- **[M] Hop scales** (Kok et al. 2012).
+  - 250 µm sand in steady Earth saltation: hop length **L ≈ 0.1 m**; surface grain speed **≈ 1 m/s, constant with u\***.
+  - Grains above about 500 µm only reptate, with hops **<1 cm**.
+  - Modes by size: suspension below 20 µm, short-term suspension 20–70 µm, saltation 70–500 µm.
+
+### Radial decay of the wall jet
+- **[M] Inputs.** Wall-jet maximum velocity decays as **r^(−1.1)**. Jet thickness grows linearly, δ_r ≈ 0.08–0.1 r. Skin friction c_f = 0.06(u_m δ_m/ν)^(−0.3)(r/H)^(−0.16) (Poreh, Tsuei & Cermak 1967; spread table in Colebrook-wall-jet paper).
+- **[D] Hence τ_w ∝ r^(−2.3) and u\* ∝ r^(−1.15)** beyond the stagnation zone.
+- **[E]** Apply it from the Phares peak at r ≈ 0.09H outward. This slightly overstates u\* between 0.09H and about 0.2H.
+
+**Ring of redeposited crumbs [D].**
+- A crumb is entrained where u\*(r) > u\*_ft. It rolls outward and stops where u\*(r) = u\*_stop, so
+  **r_stop/r_ft = (u\*_ft/u\*_stop)^(1/1.15) = 1.15 (ratio 0.85), 1.21 (0.8), 1.36 (0.7), 1.56 (0.6)**.
+- **Worked example:** hard blow, 21 m/s at H = 100 mm. u\*_max = 1.1 m/s at r ≈ 9 mm.
+
+  | Crumb | u\*_ft | Cleared to | Annulus |
+  |---|---|---|---|
+  | 100 µm, F_adh 150 nN, r/a 5–2 | 0.56 m/s | r ≈ 16 mm | ≈ 19 mm (ratio 0.8) |
+  | 100 µm, F_adh 10 nN | 0.14 m/s | r ≈ 54 mm | ≈ 65 mm |
+
+  With adhesion spread over a decade, **a broad annulus of rolled crumbs at about 2–7 cm**, densest at its inner edge, rings a cleared center.
+- **Hopping crumbs.**
+  - **[M] Take-off** (Jia & Wang 2020, direct simulation of aerodynamic entrainment, arXiv 2012.07393, Table 3). A lifted grain first rolls, then takes its vertical speed from striking raised grains. It leaves the bed **at a shallow angle, lognormal about 15°** (log sd 0.63 for snow, 0.74 for sand), not straight up as models had assumed. Its **speed is lognormal, mean 0.13 + 0.95 u\* m/s** for snow (0.1 + 0.62 u\* for sand), sd 0.21 of the mean. Cohesion changes neither.
+  - **[E]** A porous pastel crumb (≈1250 kg/m³, cohesive) is nearer snow (917 kg/m³) than quartz sand: take the snow fit.
+  - Settling speeds: v_s(100 µm, 1250 kg/m³) = 0.30 m/s; v_s(300 µm) = 1.4 m/s. The 100 µm crumb's response time v_s/g is 31 ms, longer than most hops: **it does not fly at the jet's speed**, so a hop can't be had as jet speed × fall time.
+  - **[D] Hops**, integrating the flight (sphere drag, Schiller–Naumann; gravity) through the near-wall wind: the log law over a bed of crumbs, z0 = d/30 (Kok et al. 2012), up to the jet's maximum ≈ 15 u\* [E], dying over the jet's upper half.
+
+    | Puff | Lifted at u\* | Hop (9 take-offs) | Mean | Rises to |
+    |---|---|---|---|---|
+    | 12 m/s from 10 cm | 0.21–0.32 m/s (ring's edge) | 1–52 mm | 15–25 mm | 3–4 mm |
+    | 12 m/s from 10 cm | 0.72 m/s (at the peak) | 13–78 mm | 53 mm | 11 mm |
+    | 21 m/s from 5 cm | 0.21–0.31 m/s | 1–64 mm | 15–26 mm | 3–4 mm |
+    | 21 m/s from 5 cm | 1–2.2 m/s (near the peak) | 24–128 mm | 77–85 mm | 15–34 mm |
+
+    Most rise above the jet into still air and coast down through it.
+  - So **hoppers land across and beyond the ring, or off the sheet**. **[E]** Assume 10–30 % of moved crumbs hop.
+- **Vertical easel.** Gravity acts along the sheet. Rolled crumbs that stop are then unstable above d_c ≈ 0.1–0.3 mm (tapping note) and fall off.
+
+### Fines (1–20 µm)
+
+| d (ρ 2500) | v_s | τ_p |
+|---|---|---|
+| 1 µm | 0.075 mm/s | 7.7 µs |
+| 5 µm | 1.9 mm/s | 0.19 ms |
+| 10 µm | 7.5 mm/s | 0.76 ms |
+| 20 µm | 30 mm/s | 3.0 ms |
+
+- **They stay airborne [D].** Turbulent velocities in a wall jet are about 0.1–0.2 u_m ≈ 0.3–3 m/s, ≫ v_s.
+- **[M fit] Deposition to a smooth wall** (Wood 1981): v_d⁺ = 0.057 Sc^(−2/3) + 4.5×10⁻⁴ τ⁺², capped at about 0.13, with τ⁺ = τ_p u\*²/ν, plus v_s on a horizontal sheet.
+- **[D] Fraction redeposited** along a 10 cm path in a 5 mm layer, with U_m ≈ 15u\* [E]:
+
+  | d | u\* = 0.3 m/s | u\* = 1 m/s |
+  |---|---|---|
+  | 1–2 µm | ~0 % | 0.3 % |
+  | 5 µm | 1 % | 9 % |
+  | 10 µm | 4.5 % | 17 % |
+  | 20 µm | 26 % | 19 % |
+
+  These are upper-side estimates, because u\* decays outward.
+- **The rest leaves as a cloud.** In still air 10 µm settles 0.3 m in about 40 s; 1–2 µm effectively does not settle. How much of the cloud returns to a horizontal sheet scales with sheet area over cloud footprint (gap).
+
+**Simulator rule** (`Canvas::blow_pastel`, crates/paint/src/sheet.rs).
+1. Lift heaped crumbs where u\* passes their threshold. The threshold is spread over 0.8–1.25 u\*_ft (adhesion varies, shear fluctuates), and the pores' fine grains go as deep as the shear reaches.
+2. 80 % of the moving crumbs (70–90 % [E]) roll. A crumb set going at threshold q·u\*_ft stops at r_th(q)·c^(−1/1.15), c its stopping ratio, 0.6–0.85 [E]: a broad ring.
+3. 20 % (10–30 % [E]) hop: Jia & Wang's take-off and the integrated flight above. A hop that lands short of where its crumb would stop rolling rolls on with the rest.
+4. Fines (1–20 µm, mass even in area, as the crumbs' size law): each size settles along the wall jet, a layer 0.09 r thick at 15 u\*, at Wood's v_d plus its settling speed, so a sector's flux falls as dQ/dr = −(v_d + v_s)/(δU) Q. After 10 cm [E] the rest leaves as a cloud.
+5. What lands on a paper mask goes with it; on wet paint, it is lost in the paint; past the sheet's edge, it is gone.
+
+Not modeled: a vertical easel (rolled crumbs falling off), the hops' lateral scatter (normal, sd 5.9°, Jia & Wang), and the cloud settling back after the puff.
+
+---
+
 ## Numbers table
 
 | Quantity | Value | Tag |
@@ -206,6 +296,12 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
 | Fiber-rising classes | long >0.1 mm, short ≤0.1 mm | M |
 | Raised-end height after scraping | 20–100 µm | D/E |
 | Force to flatten 60 / 200 µm end | ≈6 / 0.5 mN | D |
+| u\*_it/u\*_ft, field | 0.81–0.86 | M |
+| Saturation length, crumbs | 0.1–1.4 m | D |
+| u\* decay in wall jet | ∝ r^−1.15 | D (from M) |
+| Ring radius / entrainment radius | 1.15–1.56 | D/E |
+| 250 µm saltation hop / surface speed | 0.1 m / 1 m/s | M |
+| Fines redeposited within 10 cm | ≤2 µm ~0; 5 µm 1–9 %; 10 µm 5–17 %; 20 µm 19–26 % | D |
 
 ## Gaps
 - Measured dent depth and width under a known line load on drawing paper (knife, rule on a flat anvil, stylus).
@@ -215,8 +311,13 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
 - Nap density against blade load.
 - Pastel uptake against nap.
 - Blade cut depth against load.
+- Measured redeposition patterns around an air puff on a surface.
+- Return fraction of the dust cloud.
+- Cessation threshold for single rolling cohesive crumbs.
 
-**Bench check.** Press a knife edge at known load (kitchen scale) into Mi-Teintes over glass, then read dent depth and width with a dial gauge or phone photometric stereo. This calibrates G_xz.
+**Bench checks.**
+1. Press a knife edge at known load (kitchen scale) into Mi-Teintes over glass, then read dent depth and width with a dial gauge or phone photometric stereo. This calibrates G_xz.
+2. Puff over a uniform crumb layer on a black card and photograph the ring.
 
 ## Sources
 - Chen, Spiehl, Dörsam et al. 2020, JPMTR 9(2):65: https://www.jpmtr.org/index.php/journal/article/download/13/10/10
@@ -235,3 +336,10 @@ Formation adds a factor of 1.5–3 [E] (paper_surface §2). That gives **6–21 
 - Pearlstein et al. 1982, Effects of eraser treatment on paper, JAIC 22(1): https://cool.culturalheritage.org/jaic/articles/jaic22-01-001.html
 - Fiber-rising tester classes: https://www.rycobel.com/products/fiber-rising-testers
 - US 12,371,858 (raised fiber counts): https://patents.google.com/patent/US12371858B2/en
+- Kok, Parteli, Michaels & Karam 2012, Rep. Prog. Phys. 75:106901: https://sseh.uchicago.edu/doc/Kok_et_al_2012.pdf
+- Martin & Kok 2018, distinct fluid and impact thresholds: https://arxiv.org/abs/1610.10059
+- Jia & Wang 2020, Direct simulation of aerodynamic entrainment with inter-particle cohesions (take-off speed and angle, Table 3): https://arxiv.org/abs/2012.07393
+- Poreh, Tsuei & Cermak 1967 and wall-jet spread table, via: https://www.osti.gov/servlets/purl/2587227
+- Sharma et al. 2022, impinging-jet erosion (Phares τ_max): https://arxiv.org/abs/2206.01839
+- Wood 1981, J. Aerosol Sci. 12:275 (deposition-velocity fit; standard form, not re-fetched)
+- Andreotti 2004, J. Fluid Mech. 510:47 (saturation length form; not re-fetched)

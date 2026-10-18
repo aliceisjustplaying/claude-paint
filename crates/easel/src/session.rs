@@ -70,6 +70,13 @@ pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// engine of its own: it rides on engine 5 and later (`box_for`), and the
 /// box carries it (`Palette::drain`).
 pub const DRAIN_MARK: &str = "--@ drain";
+/// The paper-and-pastel switch, in the head of a session file: a painting
+/// whose log has it may be on a sheet of paper (`canvas{paper=}`, paint's
+/// `paper`), and what comes with paper is its too. A new painting has it; a
+/// log without it was painted before paper and replays as it was painted,
+/// with none of it. It names no engine of its own: it rides on engine 5
+/// and later (`box_for`).
+pub const PAPER_MARK: &str = "--@ paper";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -371,6 +378,15 @@ impl Session {
         (*self.st.borrow().tubes).clone()
     }
 
+    /// Set the paper-and-pastel switch (`PAPER_MARK`): a new painting's is
+    /// on, a replay's is its log's (`logged_paper`). Set before the first
+    /// chunk runs.
+    pub fn with_paper(self, on: bool) -> Self {
+        debug_assert!(self.log.is_empty(), "the paper-and-pastel switch is set before the first chunk");
+        self.st.borrow_mut().paper = on;
+        self
+    }
+
     /// Replaying (reopening a log): no snapshot before each chunk, since a failed chunk ends
     /// the reopen anyway, and no time limit. Off again once the log is in.
     pub fn set_replaying(&mut self, on: bool) {
@@ -450,7 +466,7 @@ impl Session {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?.with_paper(self.st.borrow().paper);
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -618,6 +634,9 @@ impl Session {
         // (our switches after main's head lines)
         if self.st.borrow().tubes.drain {
             let _ = writeln!(s, "{DRAIN_MARK}");
+        }
+        if self.st.borrow().paper {
+            let _ = writeln!(s, "{PAPER_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -1206,6 +1225,12 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+/// Whether a session file's head has the paper-and-pastel switch (a
+/// `PAPER_MARK` line before the first chunk).
+pub fn logged_paper(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == PAPER_MARK)
+}
+
 pub fn logged_quarter_tiles(text: &str) -> Result<bool, String> {
     let mut found = false;
     for l in text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)) {
@@ -1294,6 +1319,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Ok(b);
     };
     let engine = logged_engine(text)?;
+    if logged_paper(text) && engine < 5 {
+        return Err(format!("the log's {PAPER_MARK} line (the paper-and-pastel switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
     let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
@@ -1841,6 +1869,74 @@ mod tests {
         eprintln!("scumble: reached {share}, L* {under} up by {lift} where it landed");
         assert!((0.3..0.7).contains(&share), "the scumble reached {share} of its rect at coverage 0.5");
         assert!(lift < 0.75 * (80.0 - under), "where it lands it hides the dark: L* {under} up by {lift}");
+    }
+    /// The paper-and-pastel switch is read from a log's head only, needs
+    /// engine 5, and is what lets `canvas{paper=}` set up a sheet: without it
+    /// (an older painting's log) paper is refused by name; with it the log
+    /// says so, and replays, rebuilds and checkpoints the same sheet.
+    #[test]
+    #[cfg(tube_box)]
+    fn paper_comes_with_the_switch_in_the_log_s_head() {
+        assert!(logged_paper(&format!("{ENGINE_MARK} 5\n  {PAPER_MARK}  \n{MARK} 1\n")));
+        assert!(!logged_paper(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{PAPER_MARK}\n")));
+        assert!(!logged_paper(&format!("{ENGINE_MARK} 5\n{PAPER_MARK}-ish\n{MARK} 1\n")));
+        let e = box_for(Some(&format!("{ENGINE_MARK} 4\n{PAPER_MARK}\n{MARK} 1\n"))).unwrap_err();
+        assert!(e.contains(PAPER_MARK), "{e}");
+        let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+        let mut old = Session::new(96).unwrap();
+        let e = old.run(sheet).unwrap_err();
+        assert!(e.contains(PAPER_MARK), "{e}");
+        old.run(CANVAS).unwrap();
+        assert!(!logged_paper(&old.program("old")));
+        let mut live = Session::new(96).unwrap().with_paper(true);
+        live.run(sheet).unwrap();
+        let log = live.program("paper");
+        assert!(log.contains(&format!("{ENGINE_MARK} {}\n{PAPER_MARK}\n\n{MARK} 1\n", paint::ENGINE)), "{log}");
+        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(logged_paper(&log));
+        for chunk in parse_program(&log) {
+            replay.run(&chunk).unwrap();
+        }
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let bytes = state(&live);
+        assert_eq!(&bytes[..8], b"PAINTC13");
+        assert!(state(&replay) == bytes && replay.program("paper") == log);
+        live.rebuild().unwrap();
+        assert!(state(&live) == bytes && live.program("paper") == log);
+    }
+
+    /// A save keeps the paper-and-pastel switch and the sheet: read back
+    /// (`save::read`), the session has the switch, the same canvas bit for
+    /// bit (a sheet: version 13), paints on as the live one does, and writes
+    /// the switch into its log's head.
+    #[test]
+    #[cfg(all(tube_box, feature = "replay"))]
+    fn paper_survives_a_save() {
+        let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+        for setup in [CANVAS, sheet] {
+            let path = std::env::temp_dir().join(format!("easel-paper-save-{}-{}.ckpt", std::process::id(), setup.len()));
+            let mut live = Session::new(96).unwrap().with_paper(true);
+            live.run(setup).unwrap();
+            live.run("b = brush(\"round\", 6); b:load(pile{{\"raw umber\", 1}}, 0.6); b:stroke({{100, 300}, {800, 320}})").unwrap();
+            crate::save::write(&live, &live.program("t"), &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            let saved = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            assert!(restored.st.borrow().paper);
+            assert_eq!(saved(&restored), saved(&live));
+            assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == sheet);
+            restored.run("wait(1)").unwrap();
+            live.run("wait(1)").unwrap();
+            assert_eq!(saved(&restored), saved(&live));
+            assert!(logged_paper(&restored.program("t")));
+            std::fs::remove_file(path).unwrap();
+        }
     }
 }
 

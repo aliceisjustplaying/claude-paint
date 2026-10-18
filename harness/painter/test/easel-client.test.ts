@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { atEasel, easel, lookArgs, WAIT_MS, studioPath, tail, toolWords, paintReply } from "../easel-client.ts";
 
@@ -320,4 +320,29 @@ test("every look a survey names is renamed, in order", async () => {
 	assert.equal(nested.paths.length, 1);
 	assert.equal(readFileSync(join(s, nested.paths[0]), "utf8"), "0008");
 	assert.ok(nested.paths[0].startsWith(join("archive.png (old)", "")));
+});
+
+test("look renames keep hidden gallery siblings without naming them in replies", async () => {
+	const { renameLook, renameLooks } = await import("../easel-client.ts");
+	const s = mkdtempSync(join(tmpdir(), "studio-gallery-"));
+	const folder = "my archive.png (old)";
+	mkdirSync(join(s, folder, ".gallery"), { recursive: true });
+	for (const name of ["whole", "tile-a", "tile-b"]) {
+		writeFileSync(join(s, folder, `${name}.png`), name);
+		writeFileSync(join(s, folder, ".gallery", `${name}.png`), `lit ${name}`);
+	}
+	const one = renameLook(s, `${folder}/whole.png (1000x800, 0.04s)`);
+	assert.equal(one.said, `${one.path} (1000x800)`);
+	assert.equal(readFileSync(join(s, one.path), "utf8"), "whole");
+	const many = renameLooks(s, `${folder}/tile-a.png (1200x960): row 1 column 1\n${folder}/tile-b.png (1200x960): row 1 column 2\n`);
+	assert.equal(many.paths.length, 2);
+	for (const [path, name] of [[one.path, "whole"], [many.paths[0], "tile-a"], [many.paths[1], "tile-b"]]) {
+		assert.equal(readFileSync(join(s, dirname(path), ".gallery", basename(path)), "utf8"), `lit ${name}`);
+		assert.ok(!existsSync(join(s, folder, `${name}.png`)));
+		assert.ok(!existsSync(join(s, folder, ".gallery", `${name}.png`)));
+	}
+	assert.ok(!one.said.includes(".gallery"));
+	assert.ok(!many.said.includes(".gallery"));
+	assert.deepEqual(Object.keys(one).sort(), ["path", "said"]);
+	assert.deepEqual(Object.keys(many).sort(), ["paths", "said"]);
 });

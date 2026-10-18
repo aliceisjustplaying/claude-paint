@@ -1130,7 +1130,9 @@ impl Server {
                 (w, h, new_look(&session_dir(&self.name), &png)?)
             }
         };
-        Ok(format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64()))
+        let reply = format!("{} ({w}x{h}, {:.2}s)\n", path.display(), t0.elapsed().as_secs_f64());
+        look::gallery(&c, &v, &path, None);
+        Ok(reply)
     }
 
     /// The whole canvas at full detail (1:1), in tiles of at most 500 units a side,
@@ -1141,10 +1143,12 @@ impl Server {
         }
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         // (the canvas as it is seen, lit or not, once for all the tiles)
-        let seen = match look::View::parse(args)?.light {
+        let view = look::View::parse(args)?;
+        let seen = match view.light {
             Some((az, el)) => c.seen_lit(az, el, 1.0),
             None => c.seen(),
         };
+        let gallery_seen = view.gallery_eligible().then(|| c.seen_lit(GALLERY_LIGHT.0, GALLERY_LIGHT.1, 1.0));
         let (wu, hu) = (c.width(), c.height());
         // (a tile is at most 500 units: 1200 px of a live canvas, the most a crop takes)
         let cols = (wu / 500.0).ceil().max(1.0) as usize;
@@ -1159,6 +1163,7 @@ impl Server {
                 let v = look::View::parse(&a)?;
                 let (w, h, png) = look::render_seen(&c, &v, Some(&seen))?;
                 let p = new_look(&session_dir(&self.name), &png)?;
+                look::gallery(&c, &v, &p, gallery_seen.as_deref());
                 out += &format!("{} ({w}x{h}): row {} column {} ({crop})\n", p.display(), r + 1, k + 1);
             }
         }

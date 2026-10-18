@@ -81,7 +81,8 @@ def witnessed(message):
 
 
 def process_start(pid):
-    return subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, check=False).stdout.strip()
+    return subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], env={**os.environ, "LC_ALL": "C", "TZ": "UTC"},
+                          capture_output=True, text=True, check=False).stdout.strip()
 
 
 def reconcile(messages):

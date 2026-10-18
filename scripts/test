@@ -104,12 +104,14 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
   drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features \
+  drying::tests::a_scraped_nan_film_can_wait_without_a_thickness_buffer \
   bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint \
   handling::wet_edges::a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops \
   handling::wet_edges::a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend \
   handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint \
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  session::tests::a_subnormal_blend_stays_finite_through_a_scrape_and_wait \
   look::tests::crops_of_any_span_are_bounded_and_report_the_actual_scale \
   look::tests::fitting_crops_keep_their_pixels_and_whole_views_keep_their_size \
   look::tests::masks_overlay_fill_and_outlines_in_crop_and_mirror_coordinates \

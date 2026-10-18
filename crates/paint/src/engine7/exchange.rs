@@ -535,6 +535,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             }
             let j = c.j;
             let inv = 1.0 / m;
+            if !inv.is_finite() {
+                continue;
+            }
             let mut lat: Latent = [0.0; LAT];
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;

@@ -54,6 +54,7 @@ pub(crate) fn formed_film(um: f32) -> f32 {
 /// is the same whatever window it is rendered in. Convert between units and
 /// buffer pixels only through the methods below.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Frame {
     /// Pixels held (the window).
     pub w: usize,

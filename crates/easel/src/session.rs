@@ -500,6 +500,8 @@ impl Session {
             check.call::<()>(())?;
             // the hand time the chunk spent goes on the clock before it ends
             crate::time::flush(&self.st, true);
+            #[cfg(feature = "replay")]
+            crate::replay_checkpoint::check()?;
             self.next_globals(n as usize)
         }));
         self.deadline.set(None);

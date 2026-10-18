@@ -6,6 +6,7 @@ use crate::shape::Shape;
 use rayon::prelude::*;
 
 #[derive(Clone)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mask {
     pub f: Frame,
     pub data: Vec<f32>,

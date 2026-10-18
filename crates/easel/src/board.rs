@@ -30,6 +30,7 @@ const RESIDUE_FOLLOW: f32 = 0.12;
 const SEEP: f32 = 0.08;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "replay", derive(serde::Serialize, serde::Deserialize))]
 pub struct Heap {
     pub id: u64,
     pub name: Option<String>,
@@ -81,6 +82,7 @@ impl Heap {
 }
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "replay", derive(serde::Serialize, serde::Deserialize))]
 pub struct Board {
     pub heaps: Vec<Heap>,
     pub next_id: u64,

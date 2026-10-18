@@ -66,10 +66,10 @@ fn draw_marks(st: &S, p: &Table, marks: &[Mark], seed: u64) -> Result<f32> {
             drawn += d;
         }
         c.tally_mut().draw(marks.len() as u64, drawn as f64);
-        Ok(drawn)
+        Ok((drawn, worn))
     })?;
-    p.set("worn", worn)?;
-    Ok(drawn)
+    p.set("worn", drawn.1)?;
+    Ok(drawn.0)
 }
 
 fn tremor_units(st: &S, o: Option<&Table>) -> Result<f32> {
@@ -302,9 +302,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     {
         let st1 = st.clone();
         g.set("drawing_guide", lua.create_function(move |_, ()| {
-            let s = st1.borrow();
-            let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-            Ok(wrap(c.drawing_guide()))
+            Ok(wrap(crate::time::read("drawing_guide", || {
+                let s = st1.borrow();
+                let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+                Ok(c.drawing_guide())
+            })?))
         })?)?;
     }
     Ok(())

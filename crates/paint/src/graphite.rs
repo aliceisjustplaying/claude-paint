@@ -702,10 +702,10 @@ impl Canvas {
             // the eraser touches the tops; the hollows keep more
             let reach = 1.0 - ((top - height[i]) / 10.0).clamp(0.0, 1.0);
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
-            let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
-            // what it lifts leaves the tooth with it: the loose volume falls
-            // with the coverage taken (only a stick's pastel has any; c.a > 0)
-            c.loose *= a1 / c.a;
+            let floor = c.floor.min(c.a);
+            let a1 = (c.a * (1.0 - take)).max(floor);
+            let removable = c.a - floor;
+            c.loose *= if removable > 0.0 { (a1 - floor) / removable } else { 1.0 - take };
             let under = uncover(self.px[i], c.a, c.r);
             c.a = a1;
             self.px[i] = cover(under, c.a, c.r);

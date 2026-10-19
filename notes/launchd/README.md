@@ -42,19 +42,20 @@ configure.
 
 ### Linux studio support
 
-CPU oil studios support Linux as well as macOS: `scripts/export_r16_studio` builds the painter-only
-easel, `scripts/prepare_capy_studio` prepares its brief and MCP registration, and
-`scripts/prepare_agy_studio` or `scripts/prepare_friedrich_studio` prepares the corresponding launcher.
-Rust, a C compiler, Perl, Python and `uv` are required; the pi house runner also uses `ps` and `lsof`.
-Painter launches still require the chosen CLI, its extensions and its account credentials.
+CPU oil studios run on Linux as well as macOS. `scripts/export_r16_studio` builds the painter-only
+easel. `scripts/prepare_capy_studio` writes its brief and prints its MCP registration, and
+`scripts/prepare_agy_studio` and `scripts/prepare_friedrich_studio` write the launcher for their
+painter. Building needs Rust, a C compiler, Perl, Python and `uv`. The house runner
+(`atelier/house/r21_chains.py`) also calls `ps` and `lsof`. Launching a real painter still needs that
+painter's CLI, its extensions and its account credentials.
 
-`studio/studio.py`, the stdio/HTTP MCP adapters and `studio/export_static.py` run on Linux.
-The static exporter reads Linux painter working directories from `/proc` instead of the macOS
-`lsof` fallback. `scripts/prepare_remote_easel_launchd` keeps its existing name but stages systemd
-user `.service` files on Linux and `.plist` files on macOS. Staging does not start either service
-or open a tunnel. The [remote adapter notes](../../harness/easel_mcp/REMOTE.md) describe that setup.
+The viewer (`studio/studio.py`), the stdio and HTTP MCP adapters and `studio/export_static.py` run on
+Linux. There the static exporter reads each painter's working directory from `/proc/<pid>/cwd`; on
+macOS it still asks `lsof`. `scripts/prepare_remote_easel_launchd` keeps its name but stages systemd
+user `.service` files on Linux and `.plist` files on macOS. Staging never starts a service or opens a
+tunnel. The [remote adapter notes](../../harness/easel_mcp/REMOTE.md) cover installing the staged units.
 
-`scripts/test` runs the retained gate on Linux, including both mocked macOS service installation
-and Linux unit tests. `scripts/prove_remote_easel` exercises a real exported easel and a loopback
-viewer without a model painter or a public tunnel. Native launchd execution requires a Mac;
-watercolor's Mac GPU backend is not supported on Linux.
+`scripts/test` runs the retained checks on Linux. They include tests that mock both the macOS
+LaunchAgent install and the Linux systemd install. `scripts/prove_remote_easel` paints on a real
+exported easel and reads the result back through a loopback viewer, with no model painter and no
+tunnel. Running launchd itself needs a Mac, and watercolor's Mac GPU backend has no Linux support.

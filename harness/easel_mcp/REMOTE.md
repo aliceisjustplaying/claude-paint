@@ -85,7 +85,7 @@ override `--sessions-root` to keep the proof out of the live picker and sync.
 
 The existing r25tunnel is a quick tunnel to the studio viewer. This service
 uses a separate quick tunnel and leaves that launch agent alone. Prepare,
-but do not load, two new plists:
+but do not load, two new service files:
 
 ```sh
 scripts/prepare_remote_easel_launchd \
@@ -94,10 +94,24 @@ scripts/prepare_remote_easel_launchd \
   --out ~/.capy/work/easel-mcp-remote-launch --port 8790
 ```
 
-The helper writes `art.stillwet.easel-mcp.http.plist` and
+On macOS the helper writes `art.stillwet.easel-mcp.http.plist` and
 `art.stillwet.easel-mcp.tunnel.plist`, with KeepAlive and a 15-second restart
-throttle. It does not run launchctl or cloudflared and refuses to stage directly
-in `Library/LaunchAgents`. Get approval before loading the tunnel plist.
+throttle. On Linux it writes `.service` files with the same names for systemd's
+user manager, with `Restart=always` and `RestartSec=15`. Both services log to
+`logs/` in the staging folder, so that folder has to stay in place. The helper
+never runs launchctl, systemctl or cloudflared, and it refuses to stage inside
+`Library/LaunchAgents` or the systemd user directory
+(`${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`).
+
+On Linux, `link` makes the staged units known to systemd without starting
+either one. The HTTP service is then started by itself, leaving the tunnel off:
+
+```sh
+systemctl --user link /absolute/staged/*.service
+systemctl --user start art.stillwet.easel-mcp.http.service
+```
+
+Loading the tunnel service still needs approval on both platforms.
 
 The proposed tunnel command is:
 

@@ -480,7 +480,7 @@ def prepare(args):
             for name in ('archive_sources.py', 'archive_upload.py'):
                 with Path(__file__).with_name(name).open('rb') as stream:
                     candidate.add(stream, 'tools/' + name, 'preparation-tool/' + name)
-            guide = Path(__file__).resolve().parents[1] / 'archive/INTERNET_ARCHIVE.md'
+            guide = Path(__file__).resolve().parents[1] / 'notes/INTERNET_ARCHIVE.md'
             if guide.is_file():
                 with guide.open('rb') as stream:
                     candidate.add(stream, 'tools/INTERNET_ARCHIVE.md', 'preparation-guide')

@@ -55,6 +55,17 @@ class ReconstructionCLI(unittest.TestCase):
         self.cli('prepare', self.plan, self.candidate, '--scope-sha256', sha(self.plan))
         return json.loads((self.candidate / 'manifest.json').read_text())
 
+    def test_painting_repositories_and_source_refs_are_discovered_outside_the_engine(self):
+        refs = {'historical-engine': '1234567890abcdef'}
+        self.write('src/a/stillwet-paintings/other/claude-paint/source-refs.json', json.dumps(refs))
+        self.write('src/a/stillwet-paintings-public/README.md', 'Public painting records')
+        self.cli('plan', self.plan, '--home', self.home, '--project', self.project)
+        data = json.loads(self.plan.read_text())
+        self.assertEqual(data['source_refs']['historical-engine'], refs['historical-engine'])
+        roots = {entry['path'] for entry in data['roots']}
+        self.assertIn(str(self.home / 'src/a/stillwet-paintings'), roots)
+        self.assertIn(str(self.home / 'src/a/stillwet-paintings-public'), roots)
+
     def test_current_full_sessions_preservation_and_portable_restore(self):
         """Uncommitted files, every sitting/entry and vanished data survive in a usable layout."""
         current = self.write('src/a/claude-paint/uncommitted.txt', str(self.home) + '/src/a/paint-studio-new\n')

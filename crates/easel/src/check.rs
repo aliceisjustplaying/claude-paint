@@ -161,7 +161,6 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
     })
 }
 
-#[cfg(feature = "replay")]
 fn matches(seen: &[u32], surface: &[u32], replay_seen: &[paint::Rgb], replay_surface: &[f32]) -> bool {
     if seen.len() != replay_seen.len() * 3 || surface.len() != replay_surface.len() || replay_seen.len() != replay_surface.len() {
         return false;
@@ -176,7 +175,7 @@ fn matches(seen: &[u32], surface: &[u32], replay_seen: &[paint::Rgb], replay_sur
     })
 }
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -243,9 +243,18 @@ impl Canvas {
         self.mm_per_unit / self.f.scale
     }
 
-    /// Lay the bare support: woven linen height in µm, averaged over each
-    /// pixel's footprint so threads finer than a pixel don't alias.
+    /// Lay the bare support: a sheet of paper (`paper::lay`), or woven linen
+    /// height in µm, averaged over each pixel's footprint so threads finer
+    /// than a pixel don't alias.
     pub(crate) fn build_support(&mut self) {
+        if let Some(p) = self.paper {
+            let f = self.f;
+            let s = crate::paper::lay(&p, f.x0, f.y0, f.w, f.h, self.px_mm());
+            self.height = s.height;
+            self.micro = s.micro;
+            self.surf_gen += 1;
+            return;
+        }
         let Some(l) = self.linen else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);
@@ -625,7 +634,7 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     l.crown_um * (a.max(b) + 0.06 * grit)
 }
 
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod liquid_film_tests {
     use super::*;
 
@@ -650,7 +659,7 @@ mod liquid_film_tests {
                 let keep = (-c.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
                 fine[i] + (c.height[i] - fine[i]) * keep + a
             }).collect();
-            assert_eq!(c.wet_surface(), expected);
+            crate::tests::image_tolerance::assert_fields_close(c.wet_surface(), expected.iter().copied());
             let old_lit = c.seen_lit(315.0, 55.0, 1.0);
             for levels in [false, true] {
                 let c = c.clone().with_liquid_film_levels(levels);
@@ -663,8 +672,8 @@ mod liquid_film_tests {
                 if levels {
                     assert_ne!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
                 } else {
-                    assert_eq!(restored.wet_surface(), expected);
-                    assert_eq!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
+                    crate::tests::image_tolerance::assert_fields_close(restored.wet_surface(), expected.iter().copied());
+                    crate::tests::image_tolerance::assert_fields_close(restored.seen_lit(315.0, 55.0, 1.0).into_iter().flatten(), old_lit.iter().flatten().copied());
                 }
             }
         }

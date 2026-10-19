@@ -10,7 +10,7 @@ Writes <out>/index.html (the viewer, reading files instead of the live API), <ou
 layout, loaded with ?stream=1), <out>/data/sessions.json and,
 per-painter share/<painter>.html (the same viewer with crawler-visible metadata, served by Caddy for ?p= links),
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
-data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
+data/<painter>/file/<the painting's source> (from stillwet-paintings/other/claude-paint/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
 
 Each look also gets two small JPEG copies for the web, made once (again only when the look itself changes):
@@ -28,6 +28,7 @@ viewer at /atelier/easel/: its links point there, and every script is a same-ori
 atelier's pages allow no inline script.
 """
 import argparse, glob, hashlib, html, io, json, os, re, shutil, subprocess, sys, time
+import platform
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import studio as S
@@ -89,9 +90,17 @@ def working_studios():
         agy = {os.path.basename(m.group(1)) for row in map(str.strip, args.stdout.splitlines())
                if re.search(r"(?:^| )--agy(?: |$)", row)
                and (m := re.search(r"/bin/mcp/server\.py .*?--studio (.+?)(?: --|$)", row))}
-        lsof = shutil.which("lsof") or "/usr/sbin/lsof"
         if not pids:
             return agy
+        if platform.system() == "Linux":
+            working = set(agy)
+            for pid in pids:
+                try:
+                    working.add(os.path.basename(os.readlink(f"/proc/{pid}/cwd")))
+                except OSError:
+                    pass
+            return working
+        lsof = shutil.which("lsof") or "/usr/sbin/lsof"
         r = subprocess.run([lsof, "-a", "-p", ",".join(pids), "-d", "cwd", "-Fn"],
                            capture_output=True, text=True, timeout=10)
         return agy | {os.path.basename(row[1:]) for row in r.stdout.splitlines() if row.startswith("n")}

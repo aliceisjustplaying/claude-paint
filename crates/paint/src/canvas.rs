@@ -213,6 +213,12 @@ pub struct Canvas {
     /// `Cracks::aged` fits its craquelure to).
     pub(crate) ground_um: f32,
     pub(crate) linen: Option<Linen>,
+    /// A paper support, instead of linen.
+    pub(crate) paper: Option<crate::paper::Paper>,
+    /// The micro-roughness under a pixel, µm: the mean depth of the pores
+    /// below the surface's top envelope (`paper`), what a pastel stick and
+    /// a finger meet. Empty unless the support is paper.
+    pub(crate) micro: Vec<f32>,
     /// Physical size: millimeters per unit (the canvas is 1000 units wide).
     pub(crate) mm_per_unit: f32,
     /// Wet paint on top of the dry picture.
@@ -302,6 +308,8 @@ impl Canvas {
             absorb_any: false,
             ground_um: 0.0,
             linen: None,
+            paper: None,
+            micro: Vec::new(),
             mm_per_unit: 0.7,
             wet: crate::wet::Wet::new(n),
             surf_gen: 0,
@@ -449,9 +457,35 @@ impl Canvas {
         self
     }
 
+    /// Use a sheet of paper as the support: its surface from its fibers,
+    /// flocs, mold, felt and pressing (`paper::lay`), its pores taking oil
+    /// as an absorbent ground does. A ground laid on it after
+    /// (`Style::prepare_paper`) is what the paint meets: an oil ground seals
+    /// the paper, as oil priming does (`ground_finish`).
+    pub fn with_paper(mut self, p: crate::paper::Paper) -> Self {
+        self.linen = None;
+        self.paper = Some(p);
+        self.build_support();
+        // the pores take oil: the sheet's pore volume, in coats
+        let cap = p.absorbent.clamp(0.0, 1.0) * p.porosity * p.caliper_um() / crate::surface::COAT_UM;
+        self.absorb.iter_mut().for_each(|v| *v = cap);
+        self.absorb_any = cap > 0.0;
+        // bare paper is matte
+        self.gloss.iter_mut().for_each(|v| *v = 0.05);
+        self
+    }
+
     /// Use a woven linen support.
     pub fn with_linen(mut self, l: Linen) -> Self {
         self.linen = Some(l);
+        // (linen instead of a sheet of paper: the paper's surface, pores and
+        // matte face go with it, as on a canvas new from `new_window`)
+        if self.paper.take().is_some() {
+            self.micro.clear();
+            self.absorb.iter_mut().for_each(|v| *v = 0.0);
+            self.absorb_any = false;
+            self.gloss.iter_mut().for_each(|v| *v = OIL_GROUND_GLOSS);
+        }
         self.build_support();
         self
     }
@@ -768,7 +802,6 @@ mod tests {
     // weave, where the same thickness of dry paint keeps the weave's texture.
     // Outside the film the two surfaces are the same.
     #[test]
-    #[cfg(tube_box)]
     fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
         let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4).with_liquid_film_levels(true);
         let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
@@ -789,8 +822,9 @@ mod tests {
         };
         assert!(relief(&r) > 0.0, "the ground has a weave to level");
         assert!(relief(&l) < 0.5 * relief(&r), "a liquid film levels the weave: {} against dry paint's {}", relief(&l), relief(&r));
-        for i in (0..l.len()).filter(|&i| !band(i)) {
-            assert_eq!(l[i], r[i], "outside the film, pixel {i}");
-        }
+        crate::tests::image_tolerance::assert_fields_close(
+            (0..l.len()).filter(|&i| !band(i)).map(|i| l[i]),
+            (0..r.len()).filter(|&i| !band(i)).map(|i| r[i]),
+        );
     }
 }

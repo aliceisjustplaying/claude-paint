@@ -109,6 +109,20 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_installed_easel_and_its_aliases_are_not_readable(self):
+        loader = SourceFileLoader("read_test_server", str(SERVER))
+        module = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        executable = self.studio / "bin/easel"
+        (self.studio / "notes/link").symlink_to(executable)
+        (self.studio / "notes/hard-link").hardlink_to(executable)
+        shutil.copyfile(executable, self.studio / "notes/copy")
+        (self.studio / "notes/binary").write_bytes(bytes([0, 255, 17]))
+        for path in (str(executable), "bin/easel", "@bin/easel", "bin/../bin/easel", "notes/link", "notes/hard-link", executable.as_uri()):
+            self.assertIsNone(module.studio_path(self.studio, path), path)
+        for path in ("notes/copy", "notes/binary", "bin/box"):
+            self.assertEqual(module.studio_path(self.studio, path), self.studio / path)
+
     async def test_painting_header_sets_chunk_and_rebuild_waits(self):
         loader = SourceFileLoader("width_test_server", str(SERVER))
         module = module_from_spec(spec_from_loader(loader.name, loader))

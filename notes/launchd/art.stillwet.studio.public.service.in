@@ -1,0 +1,14 @@
+[Unit]
+Description=Studio public viewer
+
+[Service]
+ExecStart="@UVBIN@/uv" run studio/studio.py --public --host 127.0.0.1 --port 8766
+WorkingDirectory=%h/src/a/claude-paint
+Environment="PATH=@UVBIN@:/usr/local/bin:/usr/bin:/bin" "HOME=%h"
+Restart=always
+RestartSec=15s
+StandardOutput=append:%h/tmp/studio-viewer-logs/art.stillwet.studio.public.log
+StandardError=append:%h/tmp/studio-viewer-logs/art.stillwet.studio.public.log
+
+[Install]
+WantedBy=default.target

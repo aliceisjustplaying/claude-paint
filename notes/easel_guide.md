@@ -39,7 +39,7 @@ The first chunk is `canvas{}` (see [The canvas](#the-canvas)). `read` reads the 
 your notes. `read` on a folder lists what is in it.
 
 Beside the painting is a scratch canvas to try things on (see [The scratch canvas](#the-scratch-canvas)): `paint`,
-`look`, `status` and `log` work on it with `scratch: true`.
+`look`, `probe`, `status` and `log` work on it with `scratch: true`.
 
 In the examples below, `<tube>` stands for a name from the tube box and
 `<parts>` for a number of parts you choose. Other numbers in the examples
@@ -57,6 +57,7 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
 - `aspect`: width / height.
 - `linen`: plain-weave linen, threads per cm, one number or `{warp, weft}`
   (4 to 60).
+- `paper`, instead of `linen`: a sheet of paper (below).
 - `ground`: the preparation layers, bottom first. Each is a paste mixed
   from tubes in parts (as a pile is, below), a thickness in µm (5 to 400)
   and how it is put on: `"knife"` (levels the weave; `texture` 0..1 is the
@@ -83,6 +84,27 @@ canvas{size=<mm>, aspect=<width / height>, linen={<warp>, <weft>}, seed=<seed>,
   semi-matte. (A painting whose log's head has no `--@ drain` line keeps
   the older ground: it draws oil from the paint just laid, leaving it
   stiffer.)
+
+**Paper.** `canvas{size=, aspect=, paper={...}}` instead of `linen=`: a
+sheet laid from its fibers (a random fiber network, with flocs), pressed
+on a felt (its grain) and calendered. Every key has a default (a 160 g/m²
+cotton drawing paper with a felt grain):
+
+| key | |
+|---|---|
+| `tone` | the sheet's color: parts of tubes, as a ground's paste (`{{"cobalt blue", 1}, {"lead white", 3}}`), seen dry |
+| `grammage` | g/m² (90–250 for drawing papers) |
+| `fiber`, `fiber_width`, `thickness`, `coarseness` | fiber length (mm), width (µm), collapsed thickness (µm), mass per length (mg/m) |
+| `porosity`, `floc`, `floc_size`, `press`, `calender` | the sheet's pore share; the share of fibers in flocs and their size (mm); how much of the thickness variation the press turns into density (0.5–0.8); calendering 0..1 |
+| `felt` | `{cell=mm, depth=µm}`, or `false` for none |
+| `laid` | `{per_cm=, chain=mm, deficit=}`: a laid mold's wires |
+| `absorbent`, `stiffness` | how much of the pores take oil (0..1); the sheet's give under a stick (MPa) |
+
+A ground is optional on paper. Thin oil paint on it goes lean and matte, as
+on an absorbent ground. The numbers come from paper physics and, where no
+measurement of artists' papers exists, are estimates. Paper is there in a painting begun since
+it came (its log's head says `--@ paper`); an older painting replays as it
+was painted, and `paper=` in it is refused.
 
 **Gloss.** Every dry surface is more or less glossy: oily paint (medium)
 dries glossy, lean paint (blotted, or drawn out by an absorbent ground)
@@ -775,28 +797,13 @@ with `scratch: true`; without it they work on the painting.
 - It is a separate canvas: its own palette, brushes, knives, rags and variables (a pile
   knifed for the painting has to be knifed again here), and its own log,
   `paintings/lua/scratch.lua`. Nothing done on it reaches the painting.
-- It keeps its own clock. Time spent or waited there (`wait`, `dry()`, `glaze()`) doesn't
+- It keeps its own clock. Time spent or waited there (`wait`) doesn't
   pass for the painting, and the painting's time doesn't pass for it.
 - To use what worked, paint it on the painting: the same pile, the same handling.
 - `new_scratch: true` (with `scratch: true`) puts the scratch canvas aside and starts a
   fresh one before the chunk runs. The old log stays, as `paintings/lua/scratch-1.lua`, and so on.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
-
-## Color, planes and open coverage
-
-These tools build a picture from color and separately drawn planes,
-alongside the lit-volume and perspective scaffolds above. The subject,
-canvas and arrangement are yours:
-
-| Idea | Tools and parameters |
-|---|---|
-| Color-built space | Related warm/cool `pile{}` mixtures; separate `b:stroke` marks, or `work` with weighted `piles`. Relative warmth can advance and coolness recede; check the effect with a laid trial. |
-| Compressed depth and tilted planes | Separately drawn `poly` masks and stroke paths; adjust spacing, tilt, overlap and relative color intensity. A `world{}` projection is optional. |
-| Volumes and facets | Plane divisions drawn with `poly` or brush paths, related through color; `form{}` is optional, as a volume guide. |
-| Constructive direction | Blunt `brush{kind="flat", point=0, width=...}` with `b:stroke`; or `work` with `tool`, `length`, `angle`, `dips`. The `hatch` hand's default brush is a round. |
-| Reserves | Prepared `canvas{ground=...}`; `work`'s `coverage`, `load`, `hug=false`, `fill=false`. An untouched area keeps its preparation; a wet lift may leave a stain. |
-| Multiple viewpoints | Separately drawn plane masks and paths can each take their own orientation; `look` checks how they relate across the whole picture. |
 
 ## The journal
 

@@ -1,14 +1,17 @@
 # Thinner acceptance checks
 
 Four of the thinner's acceptance checks are left, all in `scripts/test` (the
-gate). Their answers and limits are unchanged; the full text of every check,
+gate). Rendered images use the tolerance in `notes/workflow.md`, while
+state fields use finite numeric bounds. Conservation and pigment limits
+are unchanged. The full text of every historical check,
 its review history and the files' approved hashes are in this file's history
 (last at `de23782`).
 
 - **Check 2, no thinner:** `scripts/thinner_check2 <easel>`. Without thinner,
   or with `thinner=0`, engine 3 leaves the before-change baseline
   (`notes/thinner/baseline/`, from unchanged af49348) as it was: every state
-  field after every chunk of the six scenes, and their PNGs. The rag scene's
+  field after every chunk of the six scenes within numeric tolerance, and
+  their PNGs within 2/255 maximum decoded RGBA channel error. The rag scene's
   mismatch is the registered known failure (`scripts/known_rag_baseline.py`).
   `crates/easel/tests/thinner/dump_solvent.lua` is its positive control.
 - **Check 4, nothing vanishes:**

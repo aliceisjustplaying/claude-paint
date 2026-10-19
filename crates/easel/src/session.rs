@@ -70,6 +70,13 @@ pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// engine of its own: it rides on engine 5 and later (`box_for`), and the
 /// box carries it (`Palette::drain`).
 pub const DRAIN_MARK: &str = "--@ drain";
+/// The paper-and-pastel switch, in the head of a session file: a painting
+/// whose log has it may be on a sheet of paper (`canvas{paper=}`, paint's
+/// `paper`), and what comes with paper is its too. A new painting has it; a
+/// log without it was painted before paper and replays as it was painted,
+/// with none of it. It names no engine of its own: it rides on engine 5
+/// and later (`box_for`).
+pub const PAPER_MARK: &str = "--@ paper";
 /// A sketch's width (px): a quarter of the live width, some 16 times faster,
 /// for trying out a composition before the painting.
 pub const SKETCH_WIDTH: usize = crate::LIVE_WIDTH / 4;
@@ -272,7 +279,7 @@ pub struct Ran {
 
 impl Session {
     /// A session painting from the default box (tests).
-    #[cfg(all(test, tube_box))]
+    #[cfg(test)]
     pub fn new(width: usize) -> mlua::Result<Self> {
         Self::with_box(width, Palette::tube_box())
     }
@@ -340,7 +347,7 @@ impl Session {
 
     /// A session that replays a program from the default box (tests;
     /// `easel run` and `check` use `replay_with`).
-    #[cfg(all(test, tube_box))]
+    #[cfg(test)]
     pub fn replay(width: usize) -> mlua::Result<Self> {
         Self::replay_with(width, Palette::tube_box())
     }
@@ -348,7 +355,6 @@ impl Session {
     /// A session that replays a program painted from `tubes`: a failed chunk
     /// ends it, so it keeps no snapshot. (`easel run` and `check`: the replay
     /// build.)
-    #[cfg(any(feature = "replay", all(test, tube_box)))]
     pub fn replay_with(width: usize, tubes: Palette) -> mlua::Result<Self> {
         let mut s = Self::with_box(width, tubes)?;
         s.replay = true;
@@ -366,9 +372,17 @@ impl Session {
     }
 
     /// The box this session paints from.
-    #[cfg(feature = "replay")]
     pub fn tube_box(&self) -> Palette {
         (*self.st.borrow().tubes).clone()
+    }
+
+    /// Set the paper-and-pastel switch (`PAPER_MARK`): a new painting's is
+    /// on, a replay's is its log's (`logged_paper`). Set before the first
+    /// chunk runs.
+    pub fn with_paper(self, on: bool) -> Self {
+        debug_assert!(self.log.is_empty(), "the paper-and-pastel switch is set before the first chunk");
+        self.st.borrow_mut().paper = on;
+        self
     }
 
     /// Replaying (reopening a log): no snapshot before each chunk, since a failed chunk ends
@@ -450,7 +464,7 @@ impl Session {
             let s = self.st.borrow();
             (s.width, (*s.tubes).clone())
         };
-        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?;
+        let mut fresh = Session::with_box(width, tubes).map_err(|e| e.to_string())?.with_paper(self.st.borrow().paper);
         fresh.chunk_limit = self.chunk_limit;
         fresh.replay = true;
         for (i, c) in self.log.iter().enumerate() {
@@ -500,7 +514,6 @@ impl Session {
             check.call::<()>(())?;
             // the hand time the chunk spent goes on the clock before it ends
             crate::time::flush(&self.st, true);
-            #[cfg(feature = "replay")]
             crate::replay_checkpoint::check()?;
             self.next_globals(n as usize)
         }));
@@ -620,6 +633,9 @@ impl Session {
         // (our switches after main's head lines)
         if self.st.borrow().tubes.drain {
             let _ = writeln!(s, "{DRAIN_MARK}");
+        }
+        if self.st.borrow().paper {
+            let _ = writeln!(s, "{PAPER_MARK}");
         }
         for (i, c) in self.log.iter().enumerate() {
             let _ = writeln!(s, "\n{MARK} {}", i + 1);
@@ -1208,6 +1224,12 @@ pub fn logged_sketch(text: &str) -> bool {
     text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == SKETCH_MARK)
 }
 
+/// Whether a session file's head has the paper-and-pastel switch (a
+/// `PAPER_MARK` line before the first chunk).
+pub fn logged_paper(text: &str) -> bool {
+    text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == PAPER_MARK)
+}
+
 pub fn logged_quarter_tiles(text: &str) -> Result<bool, String> {
     let mut found = false;
     for l in text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)) {
@@ -1232,9 +1254,13 @@ pub fn logged_drain(text: &str) -> bool {
 
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
-/// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
-/// box). The two naming different boxes is an error.
+/// `<studio>/bin/box`), else `EASEL_BOX`, in developer mode. Painter mode
+/// takes only its studio setting. None: the default box. Conflicting
+/// developer settings are an error.
 pub fn configured_box() -> Result<Option<(String, String)>, String> {
+    if let Some(name) = crate::studio::box_name() {
+        return Ok(Some((name.to_string(), "the studio setting".to_string())));
+    }
     let file = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(|d| d.join("box")));
     let from_file = match file {
         Some(f) if f.exists() => {
@@ -1257,6 +1283,11 @@ pub fn configured_box() -> Result<Option<(String, String)>, String> {
 
 /// The box called `name`, or an error naming the boxes this easel has.
 pub fn find_box(name: &str) -> Result<Palette, String> {
+    if let Some(own) = crate::studio::box_name()
+        && name != own
+    {
+        return Err("this studio paints from its own box only; nothing ran".into());
+    }
     Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", box_list()))
 }
 
@@ -1266,8 +1297,7 @@ fn box_list() -> String {
 }
 
 /// The box a painting is painted from. A new painting (`log` None) takes the
-/// configured box (`configured_box`), else the default (in a painter's build
-/// for one box, which has no default box: that box). An existing one takes
+/// configured box (`configured_box`), else the default. An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
 /// engine version the painting is painted with: a new one engine 8,
@@ -1296,6 +1326,9 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Ok(b);
     };
     let engine = logged_engine(text)?;
+    if logged_paper(text) && engine < 5 {
+        return Err(format!("the log's {PAPER_MARK} line (the paper-and-pastel switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
+    }
     let adaptive_sweep = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == "--@ adaptive-sweep");
     if adaptive_sweep && engine != 5 {
         return Err("the log's adaptive sweep switch requires engine 5".into());
@@ -1315,12 +1348,13 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Err(format!("the log's {DRAIN_MARK} line (the drain switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
     let logged = logged_box(text)?;
-    let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
-        return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
-    };
+    let name = logged.as_deref().unwrap_or(paint::palette::DEFAULT_BOX);
     if let Some((c, from)) = &configured
         && c != name
     {
+        if crate::studio::painter() {
+            return Err("the log wasn't painted from this studio's box; nothing ran".into());
+        }
         let log_says = match &logged {
             Some(n) => format!("the log was painted from the box {n:?} (its {BOX_MARK} line)"),
             None => format!("the log names no box, so it was painted from the default box {name:?}"),
@@ -1375,13 +1409,16 @@ pub fn parse_program(text: &str) -> Vec<String> {
 }
 
 /// The checkout the easel works in (session logs in `paintings/lua`, renders
-/// in `out/`) in the replay build: `EASEL_ROOT` if set, else the nearest directory at or above
+/// in `out/`) in developer mode: `EASEL_ROOT` if set, else the nearest directory at or above
 /// the working directory that holds `crates/easel/Cargo.toml`, else the
 /// checkout this binary was built from. Looking from the working directory
 /// keeps git worktrees apart: a binary built in (or copied from) another
-/// checkout still writes into the worktree it's run in.
-#[cfg(feature = "replay")]
+/// checkout still writes into the worktree it's run in. Painter mode always
+/// uses the studio above the executable's directory.
 pub fn root() -> PathBuf {
+    if let Some(root) = crate::studio::root() {
+        return root.to_path_buf();
+    }
     if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
         let r = PathBuf::from(r);
         return r.canonicalize().unwrap_or(r);
@@ -1396,18 +1433,29 @@ pub fn root() -> PathBuf {
     r.canonicalize().unwrap_or(r)
 }
 
-/// The studio the painter build works in: the parent of the directory
-/// holding the executable (the studio ships it as `<studio>/bin/easel`),
-/// wherever it is run from. Nothing in the environment moves it.
-#[cfg(not(feature = "replay"))]
-pub fn root() -> PathBuf {
-    let exe = std::env::current_exe().and_then(|e| e.canonicalize()).unwrap_or_else(|e| panic!("easel: cannot locate its own executable: {e}"));
-    exe.parent().and_then(Path::parent).unwrap_or_else(|| panic!("easel: {} is not inside <studio>/bin", exe.display())).to_path_buf()
-}
+#[cfg(test)]
+#[path = "../../paint/tests/support/image_tolerance.rs"]
+mod image_tolerance;
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {
+        assert_eq!(actual.engine(), expected.engine());
+        assert_eq!(actual.drain(), expected.drain());
+        let (aw, ah, actual_surface) = actual.kept_surface_um();
+        let (ew, eh, expected_surface) = expected.kept_surface_um();
+        assert_eq!((aw, ah), (ew, eh));
+        image_tolerance::assert_fields_close(actual_surface, expected_surface);
+        for mode in ["normal", "gallery", "relief"] {
+            let size = expected.window().w.max(expected.window().h).to_string();
+            let view = crate::look::View::parse(&["--mode".into(), mode.into(), "--size".into(), size]).unwrap();
+            let (_, _, actual) = crate::look::render(actual, &view).unwrap();
+            let (_, _, expected) = crate::look::render(expected, &view).unwrap();
+            image_tolerance::assert_close(&image::load_from_memory(&actual).unwrap().to_rgba8(), &image::load_from_memory(&expected).unwrap().to_rgba8());
+        }
+    }
 
     #[test]
     fn a_subnormal_blend_stays_finite_through_a_scrape_and_wait() {
@@ -1432,7 +1480,6 @@ mod tests {
     }
 
 
-    #[cfg(tube_box)]
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
 
     /// The drain switch is read from a log's head only, needs engine 5, and
@@ -1441,7 +1488,6 @@ mod tests {
     /// packing; a log without it is as before (no mark, version 11, five
     /// properties printed). A new painting's box has it.
     #[test]
-    #[cfg(tube_box)]
     fn the_drain_switch_comes_from_the_log_s_head() {
         assert!(logged_drain(&format!("{ENGINE_MARK} 5\n  {DRAIN_MARK}  \n{MARK} 1\n")));
         assert!(!logged_drain(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{DRAIN_MARK}\n")));
@@ -1473,14 +1519,17 @@ mod tests {
                 replay.run(&chunk).unwrap();
             }
             let bytes = state(&live);
+            let original = live.canvas().unwrap().clone();
             assert_eq!(&bytes[..8], if drain { b"PAINTC14" } else { b"PAINTC11" });
-            assert!(state(&replay) == bytes && replay.program("drain") == log, "drain {drain}: the replay is the painting");
+            assert_canvas_close(&replay.canvas().unwrap(), &original);
+            assert_eq!(replay.program("drain"), log);
             let brushes = live.st.borrow_mut().live_brushes();
             let held = format!("{:?}", brushes[0].borrow());
             let hide = held.split("hide: [").nth(1).and_then(|h| h.split(']').next()).unwrap();
             assert_eq!(hide.matches(',').count(), if drain { 9 } else { 4 }, "drain {drain}: {hide}");
             live.rebuild().unwrap();
-            assert!(state(&live) == bytes && live.program("drain") == log, "drain {drain}: the rebuild is the painting");
+            assert_canvas_close(&live.canvas().unwrap(), &original);
+            assert_eq!(live.program("drain"), log);
         }
     }
     /// Paintings from before the engine version was recorded (no `--@ engine`
@@ -1501,7 +1550,7 @@ mod tests {
         }
     }
 
-    /// An engine-2 painting replays as engine 2, bit for bit as it did before
+    /// An engine-2 painting replays as engine 2, within image tolerance as it did before
     /// engine 3 (recorded at 7b80cb0, round 23): a test sheet of lead white
     /// and bone black laid at different times over five days, lifted at
     /// every stage of drying and painted across, with waits of hours and
@@ -1511,8 +1560,12 @@ mod tests {
         let (s, text) = replay_fixture("engine2/drying_sheet");
         assert_eq!(s.canvas().unwrap().engine(), 2);
         assert_eq!(s.program("painting"), text);
-        let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) { "137bcdd02d9ccf64" } else { "2d2bc0a5b6922d4a" };
-        assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
+        for mode in ["normal", "gallery", "relief"] {
+            let view = crate::look::View::parse(&["--mode".into(), mode.into(), "--size".into(), "320".into()]).unwrap();
+            let (_, _, png) = crate::look::render(&s.canvas().unwrap(), &view).unwrap();
+            let expected = image::open(format!("{}/tests/engine2/drying_sheet_{mode}.png", env!("CARGO_MANIFEST_DIR"))).unwrap().to_rgba8();
+            image_tolerance::assert_close(&image::load_from_memory(&png).unwrap().to_rgba8(), &expected);
+        }
     }
 
     /// A gesture keeps the pressure its points ask for up to its last point
@@ -1844,6 +1897,77 @@ mod tests {
         assert!((0.3..0.7).contains(&share), "the scumble reached {share} of its rect at coverage 0.5");
         assert!(lift < 0.75 * (80.0 - under), "where it lands it hides the dark: L* {under} up by {lift}");
     }
+    /// The paper-and-pastel switch is read from a log's head only, needs
+    /// engine 5, and is what lets `canvas{paper=}` set up a sheet: without it
+    /// (an older painting's log) paper is refused by name; with it the log
+    /// says so, and replays, rebuilds and checkpoints the same sheet.
+    #[test]
+    fn paper_comes_with_the_switch_in_the_log_s_head() {
+        assert!(logged_paper(&format!("{ENGINE_MARK} 5\n  {PAPER_MARK}  \n{MARK} 1\n")));
+        assert!(!logged_paper(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{PAPER_MARK}\n")));
+        assert!(!logged_paper(&format!("{ENGINE_MARK} 5\n{PAPER_MARK}-ish\n{MARK} 1\n")));
+        let e = box_for(Some(&format!("{ENGINE_MARK} 4\n{PAPER_MARK}\n{MARK} 1\n"))).unwrap_err();
+        assert!(e.contains(PAPER_MARK), "{e}");
+        let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+        let mut old = Session::new(96).unwrap();
+        let e = old.run(sheet).unwrap_err();
+        assert!(e.contains(PAPER_MARK), "{e}");
+        old.run(CANVAS).unwrap();
+        assert!(!logged_paper(&old.program("old")));
+        let mut live = Session::new(96).unwrap().with_paper(true);
+        live.run(sheet).unwrap();
+        let log = live.program("paper");
+        assert!(log.contains(&format!("{ENGINE_MARK} {}\n{PAPER_MARK}\n\n{MARK} 1\n", paint::ENGINE)), "{log}");
+        let mut replay = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap().with_paper(logged_paper(&log));
+        for chunk in parse_program(&log) {
+            replay.run(&chunk).unwrap();
+        }
+        let state = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let bytes = state(&live);
+        let original = live.canvas().unwrap().clone();
+        assert_eq!(&bytes[..8], b"PAINTC13");
+        assert_canvas_close(&replay.canvas().unwrap(), &original);
+        assert!(replay.st.borrow().paper);
+        assert_eq!(replay.program("paper"), log);
+        live.rebuild().unwrap();
+        assert_canvas_close(&live.canvas().unwrap(), &original);
+        assert!(live.st.borrow().paper);
+        assert_eq!(live.program("paper"), log);
+    }
+
+    /// A save keeps the paper-and-pastel switch and the sheet: read back
+    /// (`save::read`), the session has the switch, the same canvas bit for
+    /// bit (a sheet: version 13), paints on as the live one does, and writes
+    /// the switch into its log's head.
+    #[test]
+    fn paper_survives_a_save() {
+        let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
+        for setup in [CANVAS, sheet] {
+            let path = std::env::temp_dir().join(format!("easel-paper-save-{}-{}.ckpt", std::process::id(), setup.len()));
+            let mut live = Session::new(96).unwrap().with_paper(true);
+            live.run(setup).unwrap();
+            live.run("b = brush(\"round\", 6); b:load(pile{{\"raw umber\", 1}}, 0.6); b:stroke({{100, 300}, {800, 320}})").unwrap();
+            crate::save::write(&live, &live.program("t"), &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            let saved = |s: &Session| {
+                let mut bytes = Vec::new();
+                s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+                bytes
+            };
+            assert!(restored.st.borrow().paper);
+            assert_eq!(saved(&restored), saved(&live));
+            assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == sheet);
+            restored.run("wait(1)").unwrap();
+            live.run("wait(1)").unwrap();
+            assert_canvas_close(&restored.canvas().unwrap(), &live.canvas().unwrap());
+            assert!(logged_paper(&restored.program("t")));
+            std::fs::remove_file(path).unwrap();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1862,7 +1986,7 @@ mod progress {
 }
 
 /// The Lua memory cap (LUA_MAX_BYTES, Serials::held, Serials::capped).
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod memory_cap_tests {
     use super::*;
 

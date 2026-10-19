@@ -214,7 +214,11 @@ export function studioPath(studio: string, path: string): string | undefined {
 	const real = realOf(resolve(root, p));
 	const rel = relative(root, real);
 	// outside: a first step that is exactly ".." (not a name like "..draft.md"), or another drive
-	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) ? real : undefined;
+	if (rel !== "" && (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel))) return undefined;
+	const executable = statSync(join(root, "bin", "easel"), { throwIfNoEntry: false });
+	const requested = statSync(real, { throwIfNoEntry: false });
+	if (executable && requested && executable.dev === requested.dev && executable.ino === requested.ino) return undefined;
+	return real;
 }
 
 export function directoryListing(path: string): string | undefined {

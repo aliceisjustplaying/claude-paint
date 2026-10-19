@@ -71,11 +71,11 @@ the rocks of *Millstone in the Park of the Château Noir* [BUT].
 
 Art Institute examination of *The Basket of Apples* finds solid opaque
 green, orange, yellow and red marks building fruit. Its apparently white
-cloth is pale pink, yellow, blue, green and grey, with mixtures including
+cloth is pale pink, yellow, blue, green and gray, with mixtures including
 lead white, emerald green, viridian, Prussian blue and ultramarine [AIC22].
 
 **Passage is selective continuity across a boundary.** The Art Institute
-catalogue describes background colour slipping over the plate's edge and
+catalog describes background color slipping over the plate's edge and
 white passing over a pink stripe in *The Basket of Apples*. Objects and
 spaces can share a plane without all contours dissolving. The technical
 evidence for broken blue mountain contours gives a complementary case:

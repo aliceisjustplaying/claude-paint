@@ -6,13 +6,11 @@
 //!
 //! Colors are linear-light RGB reflectances in 0..1.
 
-#[cfg(box_conflict)]
-compile_error!("paint: more than one box-* feature without all-boxes: a painter's build has one box (box-<name>), the replay build all of them (all-boxes)");
-
 pub mod canvas;
 pub mod checkpoint;
 pub mod color;
 pub mod crack;
+pub mod dry;
 pub mod drying;
 pub mod mask;
 pub mod noise;
@@ -24,6 +22,7 @@ pub mod graphite;
 pub mod rag;
 pub mod scene;
 pub mod palette;
+pub mod paper;
 pub mod pigment;
 pub mod prepared_optics;
 pub mod rng;

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { atEasel, directoryListing, easel, logFind, lookArgs, probeArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
+
+const shellPath = "'" + (process.env.PATH ?? "/usr/bin:/bin").replaceAll("'", "'\\''") + "'";
 
 test("painting headers set the waits before the new-painting width", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
@@ -95,6 +97,28 @@ test("read opens only studio files, however the path is spelled", () => {
 		for (const [path, want] of cases) assert.equal(studioPath(studio, path), want, path);
 	} finally {
 		process.env.HOME = home;
+	}
+});
+
+test("the installed easel and its aliases cannot be read, but other binary files can", () => {
+	const studio = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	try {
+		mkdirSync(join(studio, "bin"));
+		mkdirSync(join(studio, "notes"));
+		const executable = join(studio, "bin/easel");
+		writeFileSync(executable, "all boxes");
+		symlinkSync(executable, join(studio, "notes/link"));
+		linkSync(executable, join(studio, "notes/hard-link"));
+		copyFileSync(executable, join(studio, "notes/copy"));
+		writeFileSync(join(studio, "notes/binary"), Buffer.from([0, 255, 17]));
+		for (const path of [executable, "bin/easel", "@bin/easel", "bin/../bin/easel", "notes/link", "notes/hard-link", `file://${executable}`]) {
+			assert.equal(studioPath(studio, path), undefined, path);
+		}
+		assert.equal(studioPath(studio, "notes/copy"), join(studio, "notes/copy"));
+		assert.equal(studioPath(studio, "notes/binary"), join(studio, "notes/binary"));
+		assert.equal(studioPath(studio, "bin/box"), join(studio, "bin/box"));
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
 	}
 });
 
@@ -236,7 +260,7 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 test("a client that hangs is stopped and reported, not waited on forever", async () => {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
-	writeFileSync(join(studio, "bin", "easel"), "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\nPATH=${shellPath}\nsleep 30\n`, { mode: 0o755 });
 	const t0 = Date.now();
 	const r = await easel(studio, ["do", "-"], "print(1)", undefined, 300);
 	assert.equal(r.timedOut, true);
@@ -247,7 +271,7 @@ test("a client that hangs is stopped and reported, not waited on forever", async
 function stubStudio(body: string): string {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
-	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\necho "$1" >> calls\n${body}\n`, { mode: 0o755 });
+	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\nPATH=${shellPath}\necho "$1" >> calls\n${body}\n`, { mode: 0o755 });
 	return studio;
 }
 const calls = (studio: string) => readFileSync(join(studio, "calls"), "utf8").trim().split("\n");

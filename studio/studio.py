@@ -298,13 +298,14 @@ def list_sessions():
                                     "files": [i["path"]], "mtime": i["mtime"], "size": i["size"]})
             continue
         if PAINTER.match(name):
+            numbers = sitting_numbers(fs)
             models = []
             for i in info:
                 if i["model"] and i["model"] not in models:
                     models.append(i["model"])
             rnd, lane, n, size, outcome, _ = lanes().get(name, ("", "", 0, 0, None, None))
             out.append({"p": name, "folder": name, "painter": True, "model": " → ".join(models),
-                        "sittings": sum(_glance_file(f)["worked"] for f in fs),
+                        "sittings": max(numbers, default=0), "sitting_numbers": numbers,
                         "thinking": session_thinking(fs[-1]), **about_brief(name),
                         "round": rnd, "lane": lane, "n": n, "chain": size if size > 1 else 0,
                         "outcome": outcome,
@@ -763,7 +764,7 @@ def _glance_file(path):
         g = _glances.get(path)
         size = os.path.getsize(path)
         if not g or size < g["offset"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "cwd": "", "worked": False}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "cwd": "", "worked": False, "concepts": False}
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -779,6 +780,8 @@ def _glance_file(path):
                     g["cwd"] = d.get("cwd", "")
                 m = (d.get("message") or {}) if d.get("type") == "message" else {}
                 content = m.get("content")
+                if m.get("role") == "user" and "Use write_concepts" in _text(content or []):
+                    g["concepts"] = True
                 if not isinstance(content, list):
                     continue
                 if m.get("role") == "assistant":
@@ -787,6 +790,8 @@ def _glance_file(path):
                             g["say"] = x["text"]
                             g["worked"] = True
                         elif x.get("type") == "toolCall":  # a look's request; REFERENCE for a read from reference/
+                            if x.get("name") == "write_concepts":
+                                g["concepts"] = True
                             if x.get("name") and x["name"] not in ("look", "read", "status", "log"):
                                 g["worked"] = True
                             a = x.get("arguments") or {}
@@ -818,7 +823,19 @@ def _glance_file(path):
                 g["pending"].remove(pending)
             elif status == b"failed\n":
                 g["pending"].remove(pending)
+        if g["concepts"]:
+            g["worked"] = False
         return g
+
+
+def sitting_numbers(files):
+    """Each session's sitting number, or zero for concepts and startup-only sessions."""
+    numbers, n = [], 0
+    for f in files:
+        worked = _glance_file(f)["worked"]
+        n += worked
+        numbers.append(n if worked else 0)
+    return numbers
 
 
 def glance(files):
@@ -881,7 +898,7 @@ def _hhmm(ts):
 
 def stream(key, files):
     """The events of several session files (a painter's sittings) as one stream, in start
-    order, with a {"kind": "sitting"} event before each sitting after the first. Image
+    order, with a {"kind": "sitting"} event before each counted sitting. Image
     indices are renumbered to be unique across files. Built incrementally: each file is
     parsed from where it stopped, and only the new events are appended. If an earlier
     part changes (it shouldn't: a sitting ends before the next begins) the stream is
@@ -891,6 +908,7 @@ def stream(key, files):
     with _lock("s:" + key):
         st = _streams.get(key)
         parsed = [parse(f) for f in files]
+        numbers = sitting_numbers(files)
         parts = [(f, len(ev), len(im)) for f, (ev, im) in zip(files, parsed)]
         generations = [_cache[f].get("generation", 0) for f in files]
         if st:
@@ -898,7 +916,8 @@ def stream(key, files):
             same = (len(old) <= len(parts) and all(o[0] == n[0] for o, n in zip(old, parts))
                     and all(o == n for o, n in zip(old[:-1], parts))
                     and (not old or parts[len(old) - 1][1] >= old[-1][1] and parts[len(old) - 1][2] >= old[-1][2]))
-            if not same or st.get("generations", []) != generations[:len(old)]:
+            if (not same or st.get("generations", []) != generations[:len(old)]
+                    or st.get("sitting_numbers", []) != numbers[:len(old)]):
                 st = {"epoch": st["epoch"] + 1, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
         else:
             st = {"epoch": STREAM_EPOCH, "parts": [], "events": [], "base": [], "chg": [], "updates": []}
@@ -907,9 +926,9 @@ def stream(key, files):
         for k, (f, n, ni) in enumerate(parts):
             ev = parsed[k][0]
             seen = old[k][1] if k < len(old) else 0
-            if seen == 0 and n and k > 0:
-                st["events"].append({"ts": ev[0]["ts"], "kind": "sitting", "n": k + 1,
-                                     "text": f"sitting {k + 1} · {_hhmm(ev[0]['ts'])}"})
+            if seen == 0 and n and numbers[k]:
+                st["events"].append({"ts": ev[0]["ts"], "kind": "sitting", "n": numbers[k],
+                                     "text": f"sitting {numbers[k]} · {_hhmm(ev[0]['ts'])}"})
             if k == len(st["base"]):
                 st["base"].append(len(st["events"]))  # where this file's events begin in the stream
             if k == len(st["chg"]):
@@ -926,6 +945,8 @@ def stream(key, files):
             ioff += ni
         st["parts"] = parts
         st["generations"] = generations
+        st["sitting_numbers"] = numbers
+        st["sittings"] = max(numbers, default=0)
         return st
 
 
@@ -1080,7 +1101,7 @@ class H(http.server.BaseHTTPRequestHandler):
             u = int(q.get("u", ["0"])[0]) if q.get("epoch", [""])[0] == str(st["epoch"]) else 0
             ups = [[i, ev[i]] for i in st["updates"][u:] if i < since]
             return self._send(200, json.dumps({"events": ev[since:], "total": len(ev), "epoch": st["epoch"],
-                                               "sittings": sum(_glance_file(f)["worked"] for f in files), "updates": ups,
+                                               "sittings": st["sittings"], "updates": ups,
                                                "nupdates": len(st["updates"])}).encode(), "application/json")
         if u.path == "/api/file":  # the painting's current source, from the painter's folder
             cwd, rels = painting_sources(st["events"])

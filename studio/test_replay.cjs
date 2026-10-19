@@ -18,9 +18,9 @@ const initial = [ev('start', { cwd:'/painter' }), ev('think', { text:'# First\n\
   ev('look', { text:'mode normal' }, 13), ev('paint', { code:'local pending=4' }, 14),
   ev('sitting', { n:2 }, 20), ev('say', { text:'## Done\n\n3. ordered\n4. list\n\n---\n\n_literal_ <tag>' }, 21)];
 
-async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false } = {}) {
+async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false, sittings = 2, codeReady = true } = {}) {
   const page = await browser.newPage();
-  const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0 };
+  const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0, sittings };
   page.on('pageerror', e => report.pageErrors.push(String(e)));
   await page.route('**/*', async route => {
     const u = new URL(route.request().url());
@@ -28,12 +28,12 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
       const html = old ? baseline : fs.readFileSync(candidate, 'utf8');
       return route.fulfill({ contentType:'text/html', body:staticMode ? html.replace('<script src="code-display.js">', '<script>window.STUDIO_STATIC=true;</script><script src="code-display.js">') : html });
     }
-    if (u.pathname === '/api/sessions' || u.pathname === '/data/sessions.json') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, sittings:2, mtime:0, title:'Fixture' }] });
+    if (u.pathname === '/api/sessions' || u.pathname === '/data/sessions.json') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, sittings, mtime:0, title:'Fixture' }] });
     if (u.pathname === '/paintings.json') return route.fulfill({ json:[] });
     if (u.pathname === '/api/events' || u.pathname.endsWith('/events.json')) {
       const since = staticMode || u.searchParams.has('epoch') && u.searchParams.get('epoch') !== state.epoch ? 0 : +(u.searchParams.get('since') || 0);
       const updates = state.updates.splice(0);
-      return route.fulfill({ json:{ epoch:state.epoch, sittings:2, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
+      return route.fulfill({ json:{ epoch:state.epoch, sittings:state.sittings, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
     }
     if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { state.files++; return route.fulfill({ contentType:'text/plain', body:state.file }); }
     if (u.pathname === '/img' || u.pathname.includes('/img/')) return route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800"><rect width="1000" height="800" fill="green"/></svg>' });
@@ -45,7 +45,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
     return route.fulfill({ status:404, body:'' });
   });
   await page.goto(origin + '/?p=fixture' + (streamMode ? '&stream=1' : ''));
-  await page.waitForFunction(() => events.length > 0 && !document.querySelector('#togglecode').disabled);
+  await page.waitForFunction(codeReady => events.length > 0 && (!codeReady || !document.querySelector('#togglecode').disabled), codeReady);
   if (liveFile) await page.waitForFunction(() => document.querySelector('#code .src')?.textContent.includes('live'));
   return { page, state };
 }
@@ -85,6 +85,59 @@ async function pollUpdate(v, i, replacement) {
 (async () => {
   const browser = await chromium.launch({ channel:'chrome', headless:true });
   try {
+    const dieRoll = [ev('start', { cwd:'/painter' }), ev('tool', { name:'write_concepts', out:'Saved notes/concepts.md.' }, 1),
+      ev('say', { text:'Saved the eight pictures and their estimates.' }, 2),
+      ev('sitting', { n:1 }, 10), ev('start', { cwd:'/painter' }, 10), ev('paint', { code:'canvas{}', out:'ok' }, 12),
+      ev('start', { cwd:'/painter' }, 20), ev('look', { text:'' }, 21),
+      ev('sitting', { n:2 }, 60), ev('start', { cwd:'/painter' }, 60), ev('say', { text:'end' }, 62)];
+    for (const staticMode of [false, true]) {
+      const v = await viewer(browser, dieRoll, { staticMode });
+      assert.deepEqual(await v.page.locator('#strip .sep').allTextContents(), ['sitting 1', 'sitting 2']);
+      assert.equal(await v.page.locator('#clock').textContent(), '0:04:00');
+      assert.match(await v.page.locator('#clocklbl').textContent(), /2 sittings/);
+      for (const [i, clock, label] of [[2, '0:00:00', 'at'], [5, '0:02:00', 'at · sitting 1 of 2'], [7, '0:02:00', 'at · sitting 1 of 2']]) {
+        await seek(v.page, i);
+        assert.equal(await v.page.locator('#clock').textContent(), clock);
+        assert.equal(await v.page.locator('#clocklbl').textContent(), label);
+      }
+      assert.match(await v.page.locator('#jbody').textContent(), /Saved the eight pictures/);
+      await v.page.close();
+    }
+    const first = await viewer(browser, [ev('sitting', { n:1 }), ev('start', { cwd:'/painter' }), ev('paint', { code:'canvas{}', out:'ok' }, 2)], { sittings:1 });
+    assert.equal(await first.page.locator('#strip .sep').textContent(), 'sitting 1');
+    assert.equal(await first.page.locator('#clock').textContent(), '0:02:00');
+    assert.equal(await first.page.locator('#clocklbl').textContent(), 'painted for');
+    await first.page.close();
+    const waiting = await viewer(browser, dieRoll.slice(0, 3).concat(dieRoll[4]), { staticMode:true, sittings:0, codeReady:false, liveFile:false });
+    waiting.state.events = dieRoll.slice(0, 6); waiting.state.sittings = 1;
+    await waiting.page.evaluate(async () => { lastStatic = 0; await poll(); });
+    assert.equal(await waiting.page.locator('#strip .sep').textContent(), 'sitting 1');
+    assert.equal(await waiting.page.locator('#clock').textContent(), '0:02:00');
+    assert.equal(await waiting.page.locator('#clocklbl').textContent(), 'painted for');
+    assert.equal(await waiting.page.evaluate(() => events.length), 6);
+    await waiting.page.close();
+    for (const staticMode of [false, true]) {
+      const firstSitting = [ev('sitting', { n:1 }), ev('start', { cwd:'/painter' }), ev('paint', { code:'local first=1', out:'ok' }, 1),
+        ev('look', { text:'' }, 2), ev('image', { img:0, look:'' }, 2), ev('start', { cwd:'/painter' }, 10)];
+      const rewound = await viewer(browser, firstSitting, { staticMode, sittings:1 });
+      await seek(rewound.page, 4);
+      await rewound.page.waitForFunction(() => document.querySelector('#img').naturalWidth > 0);
+      const canvas = (await rewound.page.locator('#img').getAttribute('src')).replace(/epoch=[^&]+/, 'epoch=');
+      rewound.state.events.splice(5, 0, ev('sitting', { n:2 }, 10));
+      rewound.state.events.push(ev('paint', { code:'local second=2', out:'ok' }, 12));
+      rewound.state.sittings = 2;
+      if (!staticMode) rewound.state.epoch = 'two';
+      await rewound.page.evaluate(async () => { lastStatic = 0; await poll(); });
+      await rewound.page.waitForFunction(() => !document.querySelector('#togglecode').disabled && codeBatch === null && document.querySelector('#img').naturalWidth > 0);
+      assert.equal((await rewound.page.locator('#img').getAttribute('src')).replace(/epoch=[^&]+/, 'epoch='), canvas);
+      assert.equal(await rewound.page.locator('#nopic').isVisible(), false);
+      assert.equal(await rewound.page.evaluate(() => pos), 4);
+      assert.equal(await rewound.page.evaluate(() => live), false);
+      assert.match((await snapshot(rewound.page)).code.join('\n'), /local first\s*=\s*1/);
+      assert.equal(await rewound.page.locator('#clocklbl').textContent(), 'at · sitting 1 of 2');
+      await rewound.page.close();
+    }
+    report.checks.push('sitting labels and clocks exclude die rolls, startup-only sessions and gaps in API/static replay');
     const canvas = [ev('start'), ev('look', {text:'scratch True'}, 1), ev('image', {img:0, look:'scratch True'}, 2),
       ev('paint', {scratch:true, code:'work{}', out:'ok'}, 3), ev('look', {text:'scratch True, crop 100,100,300,300'}, 4),
       ev('image', {img:1, look:'scratch True, crop 100,100,300,300'}, 5), ev('look', {text:''}, 6), ev('image', {img:2, look:''}, 7),

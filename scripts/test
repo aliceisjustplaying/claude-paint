@@ -96,6 +96,7 @@ rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
 rust painter-signals easel 'test painter_signals test'
+rust studio-profiles easel 'test studio_profiles test'
 rust r19 easel 'test boxes test' a_round_19_log_replays_as_before
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
@@ -143,6 +144,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
+check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
 check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"

@@ -28,6 +28,41 @@ this note covers the design, how it felt to paint with it and what to do next.
 
 ## Design decisions
 
+### Studio selection
+
+`cargo build --release -p easel` builds one default-feature executable with
+all tube boxes, replay and finishing support. The same binary is installed
+in each oil studio. Runtime selection comes only from `studio` beside the
+executable (`<studio>/bin/studio`), never from the working directory or an
+environment override. Its complete contents are one of:
+
+- `painter <box>` for a named tube box, such as `painter friedrich`.
+- `painter none` for the default tube box.
+- `developer` for normal developer/runner behavior. A missing file has the
+  same behavior.
+
+Painter mode keeps one painting in the directory above `bin`, restricts
+the command and Lua surfaces and ignores developer root, session and box
+overrides. Replay and finishing remain available in developer mode.
+In painter mode `bin/box` is profile metadata consumed by scripts, not
+runtime authority. Developer mode retains its existing `bin/box` and
+`EASEL_BOX` configuration.
+Watercolor uses its separate engine and keeps its existing mode.
+
+Painter tools cannot read the installed `bin/easel` or its aliases, because
+the shared executable contains every studio's box names. This is the only
+additional file-read restriction; other binary files are not inspected or
+blocked. The painter has no shell or general file-write tool, Lua has no
+file or OS access and painting commands cannot change `bin/studio`.
+
+`scripts/export_r16_studio` exports committed `HEAD` by default; `R16_BRANCH`
+selects another runtime-capable revision. Its existing code-tree cache and
+extraction lock remain, with one `built/universal/easel` and build lock per
+code hash instead of a build per box. `scripts/replay_easel` uses the same
+default features for runner builds outside an exported studio.
+
+### Session behavior
+
 **A chunk is the unit of everything.** It is the unit of the log, of undo,
 of randomness and of rollback. Before each chunk the session snapshots the
 canvas (a clone, ≈ 50 MB at 1000px), a shallow copy of the Lua globals, the

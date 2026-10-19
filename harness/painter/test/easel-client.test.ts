@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
@@ -95,6 +95,28 @@ test("read opens only studio files, however the path is spelled", () => {
 		for (const [path, want] of cases) assert.equal(studioPath(studio, path), want, path);
 	} finally {
 		process.env.HOME = home;
+	}
+});
+
+test("the installed easel and its aliases cannot be read, but other binary files can", () => {
+	const studio = realpathSync(mkdtempSync(join(tmpdir(), "studio-")));
+	try {
+		mkdirSync(join(studio, "bin"));
+		mkdirSync(join(studio, "notes"));
+		const executable = join(studio, "bin/easel");
+		writeFileSync(executable, "all boxes");
+		symlinkSync(executable, join(studio, "notes/link"));
+		linkSync(executable, join(studio, "notes/hard-link"));
+		copyFileSync(executable, join(studio, "notes/copy"));
+		writeFileSync(join(studio, "notes/binary"), Buffer.from([0, 255, 17]));
+		for (const path of [executable, "bin/easel", "@bin/easel", "bin/../bin/easel", "notes/link", "notes/hard-link", `file://${executable}`]) {
+			assert.equal(studioPath(studio, path), undefined, path);
+		}
+		assert.equal(studioPath(studio, "notes/copy"), join(studio, "notes/copy"));
+		assert.equal(studioPath(studio, "notes/binary"), join(studio, "notes/binary"));
+		assert.equal(studioPath(studio, "bin/box"), join(studio, "bin/box"));
+	} finally {
+		rmSync(studio, { recursive: true, force: true });
 	}
 });
 

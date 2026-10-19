@@ -1,6 +1,5 @@
 //! Transport/lifecycle contracts without allocating a live canvas.
 // The replay build: EASEL_ROOT, named sessions and `easel run`.
-#![cfg(feature = "replay")]
 use std::{
     path::PathBuf,
     process::{Command, Output},

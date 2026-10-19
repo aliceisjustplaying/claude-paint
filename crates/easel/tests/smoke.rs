@@ -3,7 +3,6 @@
 //! that the log replays within tolerance, save and replay it, keep a journal. What
 //! the easel doesn't have errors clearly and changes nothing.
 // The replay build: EASEL_ROOT, named sessions and `easel run`.
-#![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -149,14 +148,6 @@ fn a_short_session_at_the_easel() {
     ] {
         let e = fails(&["-s", "smoke", "do", chunk]);
         assert!(e.contains(want) && e.contains("the chunk failed and changed nothing"), "{chunk}: {e}");
-    }
-    // finishing is applied after the session (scripts/finish_painting): the
-    // painter build (`--no-default-features`; test it with `--features replay`)
-    // has no finishing verbs
-    #[cfg(not(feature = "finish"))]
-    for verb in ["varnish", "cracks", "relief"] {
-        let e = fails(&["-s", "smoke", "do", &format!("{verb}()")]);
-        assert!(e.contains(&format!("global '{verb}'")) && e.contains("the chunk failed and changed nothing"), "{verb}: {e}");
     }
     for mode in ["wet", "drying", "stages"] {
         let e = fails(&["-s", "smoke", "look", "--mode", mode]);

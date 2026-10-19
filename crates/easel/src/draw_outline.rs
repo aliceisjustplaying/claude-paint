@@ -24,7 +24,6 @@ pub struct OutlineU {
 
 /// The first line of an outline value (points, closed?), for the legacy
 /// tools that build on a drawn outline (legacy.rs).
-#[cfg(feature = "replay")]
 pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
     let o = v.borrow::<OutlineU>().ok()?;
     let l = o.o.lines.first()?;
@@ -33,7 +32,6 @@ pub(crate) fn outline_path(v: &AnyUserData) -> Option<(Vec<(f32, f32)>, bool)> {
 
 /// The corners of an outline value's first line (points), for the legacy
 /// rocks (legacy.rs).
-#[cfg(feature = "replay")]
 pub(crate) fn outline_corners(v: &AnyUserData) -> Option<Vec<(f32, f32)>> {
     let o = v.borrow::<OutlineU>().ok()?;
     let l = o.o.lines.first()?;
@@ -369,7 +367,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod tests {
     use crate::session::{Session, box_for};
 

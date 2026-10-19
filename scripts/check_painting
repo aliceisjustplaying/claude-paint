@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Check a painter's log after the painter's last sitting, with the replay
-# build: what `easel check` did in the painter's hands before round 19. The
-# painter build has no `check`; the runner runs this in the background and
+# Check a painter's log after the painter's last sitting, in developer
+# mode: what `easel check` did in the painter's hands before round 19. The
+# painter mode has no `check`; the runner runs this in the background and
 # logs the result.
 #
 #   scripts/check_painting <studio> <workdir>
 #
 # <workdir> is a new (or empty) folder. The studio is only read: its log
 # (paintings/lua/painting.lua) is copied into <workdir> as the log and the
-# committed record, and a session of the replay build (EASEL_ROOT=<workdir>)
+# committed record, and a developer session (EASEL_ROOT=<workdir>)
 #   1. opens it, which replays the log (a chunk that fails to replay fails
 #      here),
 #   2. saves the replayed canvas (<workdir>/replayed.png) and compares it

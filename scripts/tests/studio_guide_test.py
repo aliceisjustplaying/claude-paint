@@ -23,10 +23,6 @@ class StudioGuideTests(unittest.TestCase):
         fixture.write(fixture.root / "revisions/HEAD/notes/reference-library/manifest.json", "[]\n")
         fixture.executable(fixture.repo / "scripts/build_reference_library",
                            'from pathlib import Path\nimport sys\nPath(sys.argv[-1]).write_text("[]\\n")\n')
-        built = next((fixture.root / "builds").glob("code-*/built/tonn/easel"))
-        fixture.executable(built.parent.parent / "default/easel",
-                           f"TABLE = {materials.TABLE!r}\n" + materials.EASEL.replace(
-                               'box = (studio / "bin/box").read_text().strip()', 'box = ""'))
         return fixture
 
     def test_committed_oil_guide_names_the_nine_plain_studio_tools(self):
@@ -39,6 +35,7 @@ class StudioGuideTests(unittest.TestCase):
         fixture = self.fixture()
         studio, result = fixture.export(profile="blank")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((studio / "bin/studio").read_text(), "painter none\n")
         self.assertEqual((studio / "notes/easel_guide.md").read_bytes(),
                          (fixture.root / "revisions/HEAD/notes/easel_guide.md").read_bytes())
 
@@ -59,6 +56,7 @@ class StudioGuideTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 committed = (fixture.root / "revisions/HEAD/notes/easel_guide.md").read_bytes()
                 (studio / "bin/box").write_text("friedrich\n")
+                (studio / "bin/studio").write_text("painter friedrich\n")
                 house = REPO / "notes/round29/runner"
                 prep["prepare"](studio, house, fixture.root / "runner", house / "studio_notes.md", critic=critic)
                 expected = committed

@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
 # Exports of different profiles at once, from an empty build directory
-# (nothing extracted, no easel cached): each studio gets its own box's easel.
-# The sargent, inness and blank exports start together, so they extract the
-# archive and build at the same time; then each studio's easel must know
-# exactly its own box (the list its refusal of an unknown box gives).
-# The sargent export is held
-# between its build and its copy (STUDIO_BUILD_HOOK) until the inness and
-# blank builds have finished, so an export that copied from a build output
-# the others share would copy another box's easel every time.
+# (nothing extracted, no easel cached): one build serves all studios,
+# while each copy exposes only its configured runtime box.
 #
 #   R16_BRANCH=<branch> scripts/tests/export_concurrent.sh
 #
 # Requires a caller-provided persistent scratch directory (TMPDIR). Builds
-# three painter easels from nothing (several minutes).
+# one shared easel from nothing (several minutes).
 set -euo pipefail
 : "${TMPDIR:?set TMPDIR to persistent scratch storage}"
 : "${R16_BRANCH:?set R16_BRANCH to the branch to export}"
@@ -20,19 +14,12 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d "$TMPDIR/export-concurrent.XXXXXX")
 unset EASEL_BOX
 export STUDIO_BUILDS=$work/builds
-# the barrier: each build says it's done; sargent's waits for the other two
 hook=$work/hook
 cat > "$hook" <<HOOK
 #!/usr/bin/env bash
 set -eu
-touch "$work/built-\$1"
-[ "\$1" = sargent ] || exit 0
-for i in \$(seq 1 1800); do
-  [ -e "$work/built-inness" ] && [ -e "$work/built-default" ] && exit 0
-  sleep 1
-done
-echo "the inness and blank builds didn't finish in 30 minutes" >&2
-exit 1
+echo "\$1" >> "$work/builds-called"
+sleep 1
 HOOK
 chmod +x "$hook"
 export STUDIO_BUILD_HOOK=$hook
@@ -47,18 +34,27 @@ for i in "${!profiles[@]}"; do
   wait "${pids[$i]}" || { echo "${profiles[$i]}: the export failed:" >&2; cat "$work/${profiles[$i]}.log" >&2; failed=1; }
 done
 [ $failed = 0 ] || exit 1
-for v in sargent inness default; do [ -e "$work/built-$v" ] || { echo "the $v build never reached the hook" >&2; exit 1; }; done
+[ "$(cat "$work/builds-called")" = universal ] || { echo "expected exactly one universal build" >&2; exit 1; }
 for p in "${profiles[@]}"; do
-  case $p in blank) want='"tube box"' ;; *) want="\"$p\"" ;; esac
+  case $p in blank) box=none ;; *) box=$p ;; esac
   e=$work/$p/bin/easel
-  # the boxes this easel knows: its refusal of a box no easel has lists them
+  cmp -s "$e" "$work/sargent/bin/easel" || { echo "$p: binary differs from sargent's" >&2; exit 1; }
+  [ "$(cat "$work/$p/bin/studio")" = "painter $box" ] || { echo "$p: wrong runtime selection" >&2; exit 1; }
+  table=$(cd / && "$e" tubes --markdown)
   probe=$work/$p-probe
   mkdir -p "$probe/bin"
   cp "$e" "$probe/bin/easel"
-  echo "no-such-box" > "$probe/bin/box"
-  err=$(cd / && "$probe/bin/easel" open 2>&1 || true)
-  known=$(sed -n 's/.*no box "no-such-box" (its boxes: \(.*\)).*/\1/p' <<<"$err")
-  [ "$known" = "$want" ] || { echo "$p: its easel knows the boxes [$known], not [$want] ($err)" >&2; exit 1; }
-  echo "$p: ok (boxes: $known)"
+  cp "$work/$p/bin/studio" "$probe/bin/studio"
+  echo no-such-box > "$probe/bin/box"
+  isolated=$(cd / && EASEL_BOX=no-such-box "$probe/bin/easel" tubes --markdown)
+  [ "$isolated" = "$table" ] || { echo "$p: metadata or environment changed its runtime box" >&2; exit 1; }
+  cp "$work/inness/bin/studio" "$probe/bin/studio"
+  selected=$(cd / && "$probe/bin/easel" tubes --markdown)
+  inness=$(cd / && "$work/inness/bin/easel" tubes --markdown)
+  [ "$selected" = "$inness" ] || { echo "$p: adjacent selection didn't select inness" >&2; exit 1; }
+  echo "$p: ok (shared binary, isolated $box selection)"
 done
-echo "export_concurrent: three exports at once from an empty build directory each got their own box's easel ($work)"
+sargent=$(cd / && "$work/sargent/bin/easel" tubes --markdown)
+blank=$(cd / && "$work/blank/bin/easel" tubes --markdown)
+[[ "$sargent" != "$inness" && "$blank" != "$inness" && "$sargent" != "$blank" ]] || { echo "runtime box tables aren't distinct" >&2; exit 1; }
+echo "export_concurrent: three exports shared one build with isolated runtime selections ($work)"

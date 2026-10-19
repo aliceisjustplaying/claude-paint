@@ -4,7 +4,7 @@
 # finish`, seconds), or, with no save, by replaying its log. The Friedrich
 # studio gets varnish and cracks; every other studio keeps its final state.
 # The log's box records the artist profile selected by export_r16_studio.
-# Painters don't finish their own pictures (the painter build has no
+# Painters don't finish their own pictures (painter mode has no
 # varnish{}, cracks{} or relief()),
 # so that varnishing can't become their way of ending.
 #

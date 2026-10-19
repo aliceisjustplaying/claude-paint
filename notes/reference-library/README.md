@@ -1,6 +1,6 @@
 # Painter reference library
 
-`manifest.json` selects 21 reviewed texts or bounded excerpts from existing notes.
+`manifest.json` selects 20 reviewed texts or bounded excerpts from existing notes.
 `scripts/build_reference_library` reads the selected committed revision, checks
 each source hash and applies the existing source-stripping transform. A changed
 source fails closed until its selection is reviewed again. The exporter ships
@@ -27,9 +27,12 @@ library tests check all replies stay under Antigravity's 8,000-byte threshold.
   canvas, pigment behavior and optical mixing. Source caveats and estimates
   remain in the served text.
 - **Easel techniques:** ground, spatter, uneven loading, impasto, knife,
-  blending, glazing, scumbling, rag and drying. Selected watercolor handling
-  includes its documented engine limits; real-material physics is not a promise
-  that the simulator implements every effect.
+  blending, glazing, scumbling, rag and drying. Real-material physics is not a
+  promise that the simulator implements every effect.
+
+The subject entries are marked `"subject": true` in the manifest. The every and
+blank studios, whose painter chooses its own subject, are exported without them
+(`scripts/build_reference_library --without-subjects`).
 
 ## Exclusions and gaps
 

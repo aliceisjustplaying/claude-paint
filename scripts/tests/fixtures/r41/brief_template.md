@@ -4,7 +4,7 @@
 
 ## Your studio
 - The folder {STUDIO}: this brief, your notes and the easel.
-- The easel's tools are `paint`, `look`, `note`, `status` and `log`;
+- The easel's tools are `paint`, `look`, `probe`, `note`, `status` and `log`;
   notes/easel_guide.md explains them.
 - There is no undo. To change a passage, paint over it, or lift wet
   paint with a rag or a brush.
@@ -19,7 +19,7 @@
   masks, amounts or proportions.
 - Shapes are drawn, not copied: don't make a mask or stroke by mirroring
   or rotating another mask's or stroke's coordinates. A shape that mirrors
-  another is drawn as its own shape, not as `m:at(x, 2*H - y)` or
+  another is drawn as its own shape, not as `m:at(x, H - y)` or
   `m:at(W - x, y)`. Moving a shape and reusing your own helpers are fine.
 
 ## What to read

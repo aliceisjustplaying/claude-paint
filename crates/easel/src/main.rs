@@ -860,12 +860,9 @@ fn serve(args: &[String]) -> Result<(), String> {
         if let Some(sc) = srv.scratch.as_mut()
             && sc.s.stale
         {
-            match Server::resume_as(sc.name.clone(), Some(&srv.s), sc.display.clone(), &|_, _| {}) {
-                Ok(fresh) => **sc = fresh,
-                Err(e) => {
-                    eprintln!("warning: the scratch canvas couldn't be rebuilt ({e}); it is put away");
-                    srv.scratch = None;
-                }
+            if let Err(e) = sc.rebuild(&|_, _| {}) {
+                eprintln!("warning: the scratch canvas couldn't be rebuilt ({e}); it is put away");
+                srv.scratch = None;
             }
         }
         // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
@@ -902,13 +899,7 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
     let (done, total) = (AtomicUsize::new(0), AtomicUsize::new(srv.s.log.len()));
     let (name, written) = (srv.name.clone(), srv.written.clone().ok_or("session integrity: uninitialized log")?);
     let status = || validate_log(&name, &written).and_then(|()| replay_status(&done, &total));
-    serving_status(listener, status, Some(REBUILDING), || {
-        let mut fresh = Server::resume_as(srv.name.clone(), None, srv.display.clone(), &|k, _| done.store(k, Ordering::Release))?;
-        fresh.frames = srv.frames;
-        fresh.scratch = srv.scratch.take();
-        *srv = fresh;
-        Ok(())
-    })?.0
+    serving_status(listener, status, Some(REBUILDING), || srv.rebuild(&|k, _| done.store(k, Ordering::Release)))?.0
 }
 
 /// Requests read while `work` ran (`serving_status`), each with its connection, in the order they came.
@@ -1228,38 +1219,7 @@ impl Server {
         };
         if let Some(text) = text {
             srv.written = Some(text.clone());
-            let chunks = parse_program(&text);
-            progress(0, chunks.len());
-            // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
-            srv.s.set_replaying(true);
-            let checkpoint = session_dir(&srv.name).join("replay.ckpt");
-            let resumed = srv.replay.resume(&checkpoint, &text, width, &mut srv.s, &chunks, &srv.name, progress)
-                .and_then(|done| { srv.start_hand_frames(Some(done))?; Ok(done) });
-            let done = match resumed {
-                Ok(done) => done,
-                Err(e) => {
-                    eprintln!("warning: replay checkpoint: {e}; replaying the full log");
-                    srv.s = Session::with_box(width, srv.s.tube_box()).map_err(|e| e.to_string())?.with_paper(session::logged_paper(&text));
-                    srv.s.set_replaying(true);
-                    srv.replay = replay_checkpoint::Live::new();
-                    srv.start_hand_frames(None)?;
-                    0
-                }
-            };
-            for (i, chunk) in chunks.iter().enumerate().skip(done) {
-                let t0 = Instant::now();
-                eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
-                srv.run_chunk(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
-                srv.record_replay()?;
-                eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
-                progress(i + 1, chunks.len());
-            }
-            srv.s.set_replaying(false);
-            srv.replayed = chunks.len() - done;
-            if srv.s.program(&srv.name) != text {
-                return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
-            }
-            println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
+            srv.replay_log(&text, progress)?;
             #[cfg(feature = "state-store")]
             if let Some(store) = &mut srv.committed { store.publish(&srv.s, &text).map_err(|e| format!("state integrity: {e}"))?; }
         } else {
@@ -1267,6 +1227,56 @@ impl Server {
             srv.save_log()?;
         }
         Ok(srv)
+    }
+
+    fn rebuild(&mut self, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+        self.validate()?;
+        let text = self.written.clone().ok_or("session integrity: uninitialized log")?;
+        let (width, paper) = { let st = self.s.st.borrow(); (st.width, st.paper) };
+        let mut fresh = Session::with_box(width, self.s.tube_box()).map_err(|e| e.to_string())?.with_paper(paper);
+        fresh.chunk_limit = self.s.chunk_limit;
+        self.s = fresh;
+        self.replay = replay_checkpoint::Live::new();
+        self.replay_log(&text, progress)
+    }
+
+    fn replay_log(&mut self, text: &str, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+        let chunks = parse_program(text);
+        let width = self.s.st.borrow().width;
+        progress(0, chunks.len());
+        self.s.set_replaying(true);
+        let checkpoint = session_dir(&self.name).join("replay.ckpt");
+        let resumed = self.replay.resume(&checkpoint, text, width, &mut self.s, &chunks, &self.name, progress)
+            .and_then(|done| { self.start_hand_frames(Some(done))?; Ok(done) });
+        let done = match resumed {
+            Ok(done) => done,
+            Err(e) => {
+                eprintln!("warning: replay checkpoint: {e}; replaying the full log");
+                let limit = self.s.chunk_limit;
+                self.s = Session::with_box(width, self.s.tube_box()).map_err(|e| e.to_string())?.with_paper(session::logged_paper(text));
+                self.s.chunk_limit = limit;
+                self.s.set_replaying(true);
+                self.replay = replay_checkpoint::Live::new();
+                self.start_hand_frames(None)?;
+                progress(0, chunks.len());
+                0
+            }
+        };
+        for (i, chunk) in chunks.iter().enumerate().skip(done) {
+            let t0 = Instant::now();
+            eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
+            self.run_chunk(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
+            if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
+            eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
+            progress(i + 1, chunks.len());
+        }
+        self.s.set_replaying(false);
+        self.replayed = chunks.len();
+        if self.s.program(&self.name) != text {
+            return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
+        }
+        println!("resumed {} chunks from {}", self.s.log.len(), log_path(&self.name).display());
+        Ok(())
     }
 
     /// Append only the new suffix. Commit the redundant witness afterward.

@@ -2163,8 +2163,8 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(d) = flag(args, "--dump-state") {
             state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
         }
-        if frames && let Some(c) = s.canvas() {
-            frames::chunk_end(&c, i + 1);
+        if frames {
+            frames::chunk_end(s.canvas().as_deref(), i + 1)?;
         }
         if batch.completed(&s, i + 1)? { break; }
     }

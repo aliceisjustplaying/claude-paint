@@ -24,6 +24,17 @@ scripts/test                          # the gate (notes/speed/SKIPPED.md: what i
 - `crates/easel`: the live Lua session over it.
 - `THIRD_PARTY_NOTICES.md`: licenses of the code this builds on.
 
+## Painting records
+
+This repository holds the engine, easel, harness, scripts, tests and notes.
+The painting records live in their own repositories:
+
+- [stillwet-paintings](https://github.com/aliceisjustplaying/stillwet-paintings)
+  (private): briefs, journals, Lua, studio viewer logs, runner records,
+  final images and timelapses.
+- [stillwet-paintings-public](https://github.com/aliceisjustplaying/stillwet-paintings-public):
+  the public collection.
+
 ## Painting with Capy
 
 Install Rust, a C compiler, Python 3.10+, uv and Perl on the painter's
@@ -54,10 +65,10 @@ write the existing studio viewer's event format and support durable call retries
 
 ## For developers
 
-- Finished paintings, videos, prompts and painter notes are indexed in
-  [the painting collection](archive/collection/README.md). Raw sessions and
-  unredacted originals are preserved locally under the Git-ignored `.preservation/`
-  directory. Working renders under `out/` remain ignored; replay logs are retained.
+- Painting records are in
+  [stillwet-paintings](https://github.com/aliceisjustplaying/stillwet-paintings).
+  Raw sessions and unredacted originals are preserved locally under the
+  Git-ignored `.preservation/` directory. Working renders under `out/` stay ignored.
 - Rounds are tags and folders, not branches. A tag holds the code a round's
   painters ran (`round-19`, `round-20`; older rounds' branches are kept as
   `archive/<branch>` tags); `notes/rN/BUILD.md` and `notes/roundN/` (runner,
@@ -75,9 +86,10 @@ write the existing studio viewer's event format and support durable call retries
 - The studio viewer (`studio/studio.py`) shows painters at work, live or
   replayed, from their pi session logs. Two run under launchd, a tailnet one
   and a public one behind the Tailscale Funnel (`notes/launchd/README.md`);
-  restart them after a change to `studio/`. The painting sources of painters
-  whose folder is gone (rounds 7-15, whose folders were worktrees or copies)
-  are kept in `archive/sources/<folder>/`.
+  restart them after a change to `studio/`. Historical sources are read from
+  `~/src/a/stillwet-paintings/other/claude-paint/sources/<folder>/`.
+  `STILLWET_PAINTINGS` overrides the paintings repository's location for both
+  the viewer and static exporter. The technique sampler is in `examples/sampler/`.
 - The gallery, https://stillwet.art, is built and deployed from
   `~/src/a/stillwet` (see its `DEPLOY.md`). Its studio pages are
   `studio/export_static.py`'s output from this checkout (`~/src/a/claude-paint`),

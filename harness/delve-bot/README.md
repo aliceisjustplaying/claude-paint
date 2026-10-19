@@ -200,4 +200,4 @@ OAuth, PDS compatibility and stream.place indexing haven't been tried against th
 ## Provenance
 
 - **Trinity** at `e1b1ba5`: `src/jetstream-parser.ts` is Trinity's file unchanged. `src/delve.ts` and the guard design are adapted from Trinity.
-- **claude-paint**: `assets/brief_template.md` is `notes/round29/runner/brief_template.md` copied byte for byte. `PAINTER_MSG` and `CONTINUE_MESSAGE` in `src/painter.ts` match the house runner's `r21_chains.py`. `tests/fixtures/painting.jpg` is `archive/collection/gallery/r01-coast/` as a JPEG.
+- **claude-paint**: `assets/brief_template.md` is `notes/round29/runner/brief_template.md` copied byte for byte. `PAINTER_MSG` and `CONTINUE_MESSAGE` in `src/painter.ts` match the house runner's `r21_chains.py`. `tests/fixtures/painting.jpg` is the r01 coast painting from [stillwet-paintings](https://github.com/aliceisjustplaying/stillwet-paintings) as a JPEG.

@@ -193,7 +193,6 @@ pub(crate) fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, 
 }
 
 /// `f` sampled on the field grid over `b`, as `sample` samples a Lua function.
-#[cfg(feature = "replay")]
 pub(crate) fn grid<const N: usize>(st: &S, b: (f32, f32, f32, f32), mut f: impl FnMut(f32, f32) -> Result<[f32; N]>) -> Result<Grid<N>> {
     let t0 = std::time::Instant::now();
     let step = FIELD_STEP;
@@ -251,7 +250,6 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
         return Ok(fu.angle(0.0));
     }
     // an old log's rock field (r:field("plane"), legacy.rs): read natively too
-    #[cfg(feature = "replay")]
     if let Some(f) = crate::legacy::angle_field(v) {
         return Ok(f);
     }
@@ -469,10 +467,7 @@ impl UserData for Brush {
             // (before anything is drawn from the session's randomness: a refused load leaves it as it was)
             let amount = load_amount(amount, 0.8, "b:load")?;
             // (on a legacy canvas a table is its load's options: brushload's)
-            #[cfg(feature = "replay")]
             let legacy = crate::legacy::on(&b.st);
-            #[cfg(not(feature = "replay"))]
-            let legacy = false;
             if let Value::Table(t) = &extra
                 && !legacy
             {
@@ -1038,7 +1033,6 @@ fn check_set_out(st: &S, parts: &[(usize, f32)], what: &str) -> Result<()> {
 /// knifed by hand is uneven), and the pile's color (for the palette ledger).
 fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32) -> Result<(paint::Paint, Rgb)> {
     // a legacy canvas's brushes load colors (legacy.rs)
-    #[cfg(feature = "replay")]
     if let Some(r) = crate::legacy::brushload(st, p, extra)? {
         return Ok(r);
     }
@@ -1317,10 +1311,7 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
 }
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
-    #[cfg(feature = "replay")]
     check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
-    #[cfg(not(feature = "replay"))]
-    check_keys(&o, WORK_KEYS, "work")?;
     let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
@@ -1353,7 +1344,6 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         Value::Nil if graded.is_some() => Some(graded.as_ref().unwrap()[0].0.clone()),
         Value::Nil if blending => None,
         // a legacy canvas's passes paint colors (legacy.rs)
-        #[cfg(feature = "replay")]
         Value::Nil if crate::legacy::on(st) => None,
         v => Some(pile_now(st, &v, "work", 0.5)?),
     };
@@ -1419,7 +1409,6 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
         h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
     }
-    #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {
         crate::legacy::work(st, &o, &mut h, &hand, blending, b)?;
     }
@@ -1614,10 +1603,7 @@ const STIPPLE_KEYS: &[&str] = &[
 ];
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
-    #[cfg(feature = "replay")]
     check_keys(&o, &crate::legacy::stipple_keys(st, STIPPLE_KEYS), "stipple")?;
-    #[cfg(not(feature = "replay"))]
-    check_keys(&o, STIPPLE_KEYS, "stipple")?;
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
@@ -1627,17 +1613,13 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     let b = support(Some(&mask), f, tool.width * 2.0 + 4.0);
     let tubes = st.borrow().tubes.clone();
     // a legacy canvas stipples colors (legacy.rs)
-    #[cfg(feature = "replay")]
     let legacy = o.get::<Value>("pile")?.is_nil() && crate::legacy::on(st);
-    #[cfg(not(feature = "replay"))]
-    let legacy = false;
     let mut sp = if legacy {
         Stipple::new(tool)
     } else {
         let pile = pile_now(st, &o.get::<Value>("pile")?, "stipple", 0.5)?;
         Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium).thinner(pile.thinner())
     };
-    #[cfg(feature = "replay")]
     if legacy {
         crate::legacy::stipple(st, &o, &mut sp, b)?;
     }
@@ -1792,8 +1774,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.ok_or_else(|| mlua::Error::runtime(CANVAS_HELP))?;
                 // an old log's canvas: a named style and palette (legacy.rs)
-                #[cfg(feature = "replay")]
-                if crate::legacy::asks(&o)? {
+                if !crate::studio::painter() && crate::legacy::asks(&o)? {
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
@@ -2261,8 +2242,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    #[cfg(feature = "finish")]
-    crate::finish::install(lua, st.clone())?;
+    if !crate::studio::painter() {
+        crate::finish::install(lua, st.clone())?;
+    }
 
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
@@ -2396,7 +2378,7 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
 }
 
 // Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod tests {
     use crate::session::Session;
 
@@ -2441,7 +2423,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod blend_at_masks_tests {
     use crate::session::{Session, box_for};
 

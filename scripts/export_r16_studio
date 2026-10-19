@@ -11,7 +11,7 @@
 #          sargent      the guide (its tube table the profile's box's), the
 #          inness       physics note, the artist's materials note
 #          alma-tadema  (notes/research/<artist>_materials.md) and bin/box, which
-#          tonn         sets the box the painting is painted from; nothing a
+#          tonn         records the profile for export scripts; nothing a
 #          hopper       painter can read names another painter (the
 #          giverny      impressionist studio's note names the painters
 #          impressionist in whose paintings its box was found)
@@ -21,11 +21,9 @@
 # dest:    a folder that doesn't exist yet (or is empty)
 #
 # dest gets:
-#   bin/easel                  the painter's easel (built without the `replay`
-#                              feature: no `run`, no `check`, one session, no EASEL_ROOT;
-#                              with the profile's box and no other box)
-#   bin/box                    the box's name (profiles with a box of their own; the
-#                              others paint from the default tube box)
+#   bin/easel                  the shared default-feature easel binary
+#   bin/studio                 runtime selection (notes/easel.md, Studio selection)
+#   bin/box                    profile metadata for export scripts (box profiles only)
 #   bin/THIRD_PARTY_NOTICES.md the license notices the binary requires, shipped
 #                              next to it (not at the studio root, where painters browse)
 #   notes/easel_guide.md, notes/techniques.md (rounds that have it), notes/research/..., notes/journal.md (empty)
@@ -36,19 +34,16 @@
 # guide's own, byte for byte (checked below).
 #
 # The binary is built from a `git archive` of the branch or tag (R16_BRANCH,
-# default round-16, round 16's code) in <repo>/target/studio-build/<commit>, so it is built
+# default HEAD) in <repo>/target/studio-build/code-<hash>, so it is built
 # from committed code only. Exports may run at once: the archive is
-# extracted under a lock, and each box builds in its own target directory
-# (<commit>/target/<box>) under its own lock, so one studio can't get
-# another's easel. STUDIO_BUILDS moves <repo>/target/studio-build elsewhere
+# extracted under a lock, and one universal binary builds under a second
+# lock in <code-hash>/target/universal. STUDIO_BUILDS moves <repo>/target/studio-build elsewhere
 # (scripts/tests/export_concurrent.sh builds from nothing there).
-# STUDIO_BUILD_HOOK, for that test: a program run with the box's variant
-# name (a box, or "default") after its build and before the easel is copied
-# from it, so a test can hold one export there while another builds.
+# STUDIO_BUILD_HOOK, for that test: a program run with "universal" once
+# after the build and before the binary is published to the cache.
 #
-# Delivery renders use the replay build (`cargo build --release -p easel`,
-# default features) outside the studio; it replays every box, reading the
-# box from the log.
+# Delivery renders use the same default-feature build outside the studio;
+# it replays every box, reading the box from the log.
 set -euo pipefail
 
 usage() { echo "usage: $0 friedrich|blank|sargent|inness|alma-tadema|tonn|hopper|giverny|impressionist|seurat|cezanne|every|watercolor <dest>" >&2; exit 2; }
@@ -73,17 +68,15 @@ case "$profile" in
   impressionist) box=impressionist; materials=impressionist_materials.md; own=(Monet Renoir Pissarro Sisley Morisot Degas Cézanne Seurat) ;;
   *) usage ;;
 esac
-# the studio's easel reads its box from bin/box, else EASEL_BOX, and a new
-# painting's width from bin/width, else EASEL_WIDTH: not from the environment of
-# this export. STUDIO_WIDTH=4800 writes bin/width (unset: 2400, no file).
+# Studio selection is documented in notes/easel.md. STUDIO_WIDTH=4800
+# writes bin/width (unset: 2400, no file).
 unset EASEL_BOX EASEL_WIDTH
 width=${STUDIO_WIDTH:-}
 case "$width" in ''|2400|4800) ;; *) echo "STUDIO_WIDTH=$width: want 2400 or 4800" >&2; exit 2 ;; esac
 [ "$profile" != watercolor ] || [ "${width:-2400}" = 2400 ] || { echo "STUDIO_WIDTH=$width: the watercolor studio has no width option" >&2; exit 2; }
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
-branch=${R16_BRANCH:-round-16}
-[ "$profile" != watercolor ] || branch=${R16_BRANCH:-HEAD}
+branch=${R16_BRANCH:-HEAD}
 git -C "$repo" rev-parse --verify -q "$branch^{commit}" >/dev/null || { echo "no branch or tag $branch in $repo" >&2; exit 1; }
 # the commit, also for a tag (whose own hash would name another build of the same code)
 sha=$(git -C "$repo" rev-parse --short "$branch^{commit}")
@@ -104,8 +97,7 @@ lock() {
 }
 unlock() { exec 9>&-; }
 
-# build the painter's easel from the committed source, with the profile's
-# box (a box-* feature) and no other; each variant is kept in built/<box>
+# Build from committed source; watercolor keeps its separate engine.
 builds=${STUDIO_BUILDS:-$repo/target/studio-build}
 if [ "$profile" = watercolor ]; then
   code=$(git -C "$repo" rev-parse "$branch:experiments/watercolor")
@@ -147,8 +139,7 @@ code=$(for p in crates .cargo Cargo.toml Cargo.lock; do
          git -C "$repo" rev-parse -q --verify "$branch^{commit}:$p" || echo "no $p"
        done | shasum | cut -c1-12)
 src="$builds/code-$code"
-variant=${box:-default}
-built="$src/built/$variant/easel"
+built="$src/built/universal/easel"
 if [ ! -x "$built" ]; then
   mkdir -p "$builds"
   lock "$builds/code-$code.lock"
@@ -160,12 +151,10 @@ if [ ! -x "$built" ]; then
   fi
   unlock
   mkdir -p "$src/built"
-  lock "$src/built/$variant.lock"
+  lock "$src/built/universal.lock"
   if [ ! -x "$built" ]; then
-    features=(--no-default-features)
-    [ -z "$box" ] || features+=(--features "box-$box")
-    target="$src/target/$variant"
-    build() { (cd "$src" && CARGO_TARGET_DIR="$target" cargo build --release -p easel "${features[@]}"); }
+    target="$src/target/universal"
+    build() { (cd "$src" && CARGO_TARGET_DIR="$target" cargo build --release -p easel); }
     if ! out=$(build 2>&1); then
       if [ "$(uname -s)" = Darwin ] && grep -qi 'license' <<<"$out"; then
         DEVELOPER_DIR=/Library/Developer/CommandLineTools build
@@ -175,7 +164,7 @@ if [ ! -x "$built" ]; then
       fi
     fi
     [ -x "$target/release/easel" ] || { echo "no easel built in $target" >&2; exit 1; }
-    [ -z "${STUDIO_BUILD_HOOK:-}" ] || "$STUDIO_BUILD_HOOK" "$variant" || { echo "STUDIO_BUILD_HOOK failed" >&2; exit 1; }
+    [ -z "${STUDIO_BUILD_HOOK:-}" ] || "$STUDIO_BUILD_HOOK" universal || { echo "STUDIO_BUILD_HOOK failed" >&2; exit 1; }
     mkdir -p "$(dirname "$built")"
     cp "$target/release/easel" "$built.part"
     mv "$built.part" "$built"
@@ -186,6 +175,7 @@ fi
 # what a painter gets
 mkdir -p "$dest/bin" "$dest/paintings/lua"
 cp "$built" "$dest/bin/easel"
+printf 'painter %s\n' "${box:-none}" > "$dest/bin/studio"
 [ -z "$box" ] || echo "$box" > "$dest/bin/box"
 [ -z "$width" ] || echo "$width" > "$dest/bin/width"
 notes=(notes/easel_guide.md notes/research/oil_paint_physics.md)
@@ -214,7 +204,7 @@ if git -C "$repo" cat-file -e "$branch:notes/reference-library/manifest.json" 2>
   "$repo/scripts/build_reference_library" --ref "$branch" "$dest/notes/reference-library.json"
 fi
 
-# the guide's tube table: the box of this studio's easel (it reads bin/box)
+# The guide's tube table comes from the configured runtime.
 guide=$dest/notes/easel_guide.md
 table_head='| tube | pigment | hiding | stiffness | tinting strength | drying |'
 [ "$(grep -cxF "$table_head" "$guide")" = 1 ] || { echo "the guide has no tube table (or more than one)" >&2; exit 1; }
@@ -234,7 +224,7 @@ if [ -z "$box" ] && ! git -C "$repo" show "$branch:notes/easel_guide.md" | cmp -
 fi
 
 # nothing but those
-extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/box ! -path ./bin/width ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
+extra=$(cd "$dest" && find . -type f ! -path ./bin/easel ! -path ./bin/studio ! -path ./bin/box ! -path ./bin/width ! -path ./bin/THIRD_PARTY_NOTICES.md ! -path './notes/*' | sort)
 [ -z "$extra" ] || { echo "unexpected files in $dest:" >&2; echo "$extra" >&2; exit 1; }
 
 # names of painters: none anywhere a painter can read in the blank studio

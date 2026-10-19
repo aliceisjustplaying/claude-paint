@@ -801,7 +801,6 @@ mod tests {
     // weave, where the same thickness of dry paint keeps the weave's texture.
     // Outside the film the two surfaces are the same.
     #[test]
-    #[cfg(tube_box)]
     fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
         let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4).with_liquid_film_levels(true);
         let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);

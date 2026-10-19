@@ -11,13 +11,9 @@ pub(crate) mod image_tolerance;
 use crate::bristle::{Gesture, Held, Orient, Tool};
 use crate::canvas::Canvas;
 use crate::color::hex;
-#[cfg(tube_box)]
 use crate::handling::Handling;
-#[cfg(tube_box)]
 use crate::mask::Mask;
-#[cfg(tube_box)]
 use crate::pigment::Pigment;
-#[cfg(tube_box)]
 use crate::style::Style;
 use crate::wet::Paint;
 
@@ -87,7 +83,6 @@ fn dry_is_idempotent_and_clears_wet() {
 /// A fixture through most of the engine: in the upper half a broad pass
 /// from a hand-knifed pile and the style's blend; after drying, in the lower half a
 /// hog-flat pass, three held-brush drags, a glaze; then relief.
-#[cfg(tube_box)]
 fn fixture() -> Canvas {
     // (the golden was recorded with engine 2: the scene stays that engine's)
     let mut st = Style::oil();
@@ -114,7 +109,6 @@ fn fixture() -> Canvas {
     c
 }
 
-#[cfg(tube_box)]
 fn rendered(mut c: Canvas, tag: &str) -> image::RgbaImage {
     let path = std::env::temp_dir().join(format!("paint-fixture-{}-{tag}.png", std::process::id()));
     c.save(&path).unwrap();
@@ -123,13 +117,11 @@ fn rendered(mut c: Canvas, tag: &str) -> image::RgbaImage {
     image
 }
 
-#[cfg(tube_box)]
 fn in_pool<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
     rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(f)
 }
 
 #[test]
-#[cfg(tube_box)]
 fn fixture_is_deterministic_across_thread_counts() {
     let a = in_pool(1, || rendered(fixture(), "one-thread"));
     let b = in_pool(4, || rendered(fixture(), "four-threads"));
@@ -137,7 +129,6 @@ fn fixture_is_deterministic_across_thread_counts() {
 }
 
 #[test]
-#[cfg(tube_box)]
 fn fixture_matches_golden() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.png");
     let platform_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden_scene.platform");
@@ -265,7 +256,6 @@ fn drained_deposition_keeps_its_pigment_when_wet_and_baked() {
 /// oil and dries about as glossy as on an oil ground. The paint keeps its
 /// stiffness (engine 4's draw, without the switch, stiffens it).
 #[test]
-#[cfg(tube_box)]
 fn an_absorbent_ground_drains_paint_as_its_pigment_packs() {
     use crate::palette::Palette;
     let pal = Palette::tube_box();

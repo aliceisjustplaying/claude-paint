@@ -2,7 +2,6 @@
 //! pile and names the piles on it, a running chunk's progress answers `status`, and so does a
 //! reopen's replay of the log.
 // The replay build: EASEL_ROOT, named sessions and `easel run`.
-#![cfg(feature = "replay")]
 use std::{
     path::PathBuf,
     process::{Command, Output},

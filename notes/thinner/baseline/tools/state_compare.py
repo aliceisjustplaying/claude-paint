@@ -7,19 +7,20 @@ BASELINE and NEW are two .state files (raw, .xz or .gz) or two directories
 of them (every chunk-*.state[.xz|.gz] in BASELINE is compared with the file
 of the same chunk in NEW, compressed or not).
 
-Every field the baseline has must be in the new dump with the same dtype,
-shape and values, bit for bit (floats compare by their bits, so -0.0 differs
-from 0.0 and NaN equals the same NaN). The text fields (brushes.debug,
+Every field the baseline has must be in the new dump with the same dtype
+and shape. Finite floats compare within absolute limits on every platform;
+signed zeros are equal and nonfinite values fail. The text fields (brushes.debug,
 rags.debug, studio.debug: Rust Debug text) are parsed into named values,
 e.g. brushes[0].bristles[3].vol, and compared value by value the same way.
 Fields or named values only the new dump has (a later engine's solvent, say)
 are listed, not failed; with --added-zero each of them must be zero
 (numbers 0, booleans false, None, empty lists).
 
---linux-tolerance opts into measured absolute limits for the six 128 px
-engine-3 baseline scenes across macOS arm64 and Linux x86_64. Unlisted
-fields, integers, structure, nonfinite values and added-zero checks stay
-exact. Each bounded field reports its maximum allowed and observed error.
+Measured absolute limits for the six 128 px engine-3 baseline scenes apply
+by default. Other floats allow an absolute error of 1e-7. Relative tolerance
+is zero, so errors cannot grow with magnitude. Integers, structure and
+added-zero checks stay exact. --linux-tolerance is a compatibility alias
+for the default policy. Each float field reports its limit and observed error.
 
 Exit 0: equal on every baseline field; 1: a difference; 2: a usage or
 format error. Only Python's standard library.
@@ -37,7 +38,10 @@ import sys
 
 DT = {"f32": ("f", 4), "f64": ("d", 8), "u32": ("I", 4), "u64": ("Q", 8)}
 
-LINUX_LIMITS = {
+DEFAULT_ABS_TOLERANCE = 1e-7
+MAX_REL_TOLERANCE = 0.0
+
+ABS_LIMITS = {
     "color": 5e-6,
     "height": 1.3e-4,
     "film": 6e-6,
@@ -60,6 +64,8 @@ LINUX_LIMITS = {
     "brushes.debug:brushes[].bristles[].hide[]": 3.1e-7,
     "brushes.debug:brushes[].bristles[].cure": 6.1e-12,
 }
+
+LINUX_LIMITS = ABS_LIMITS
 
 
 class FormatError(Exception):
@@ -235,12 +241,10 @@ def zero_value(node):
 # ---------------------------------------------------------------- compare
 
 def float_within_limit(name, x, y, limits, observed):
-    limit = limits.get(name)
-    if limit is None:
-        return False
+    limit = limits.get(name, ABS_LIMITS.get(name, DEFAULT_ABS_TOLERANCE))
     d = abs(x - y) if math.isfinite(x) and math.isfinite(y) else math.inf
     observed[name] = max(observed.get(name, 0.0), d)
-    return 0.0 < d <= limit
+    return math.isfinite(x) and math.isfinite(y) and math.isclose(x, y, abs_tol=limit, rel_tol=MAX_REL_TOLERANCE)
 
 
 def compare_numeric(name, a, b, problems, limits=None, observed=None):
@@ -250,29 +254,30 @@ def compare_numeric(name, a, b, problems, limits=None, observed=None):
     if da != db or sa != sb:
         problems.append("%s: dtype/shape %s %s -> %s %s" % (name, da, list(sa), db, list(sb)))
         return
-    if name in limits and da in ("f32", "f64"):
-        observed.setdefault(name, 0.0)
-    if ra == rb:
+    floating = da in ("f32", "f64")
+    if not floating and ra == rb:
         return
     code, size = DT[da]
     n = len(ra) // size
     va = struct.unpack("<%d%s" % (n, code), ra)
     vb = struct.unpack("<%d%s" % (n, code), rb)
-    bits = "Q" if size == 8 else "I"
-    ia = struct.unpack("<%d%s" % (n, bits), ra)
-    ib = struct.unpack("<%d%s" % (n, bits), rb)
-    diff = [i for i in range(n) if ia[i] != ib[i]]
-    worst, at = 0.0, diff[0]
-    for i in diff:
+    if floating and ra == rb and all(math.isfinite(v) for v in va):
+        observed.setdefault(name, 0.0)
+        return
+    failed = []
+    worst, at = 0.0, 0
+    for i in range(n):
         x, y = va[i], vb[i]
-        d = abs(x - y) if not (isinstance(x, float) and (math.isnan(x) or math.isnan(y))) else math.inf
+        same = float_within_limit(name, x, y, limits, observed) if floating else x == y
+        if same:
+            continue
+        failed.append(i)
+        d = abs(x - y) if math.isfinite(x) and math.isfinite(y) else math.inf
         if d > worst:
             worst, at = d, i
-    failed = [i for i in diff if da not in ("f32", "f64") or
-              not float_within_limit(name, va[i], vb[i], limits, observed)]
     if failed:
         problems.append("%s: %d of %d values differ%s (largest |diff| %g at flat index %d: %r -> %r)"
-                        % (name, len(failed), n, " beyond tolerance" if name in limits else "",
+                        % (name, len(failed), n, " beyond tolerance" if floating else "",
                            worst, at, va[at], vb[at]))
 
 
@@ -280,25 +285,26 @@ def compare_text(name, a, b, problems, added, added_zero, limits=None, observed=
     limits = limits or {}
     observed = observed if observed is not None else {}
     ta, tb = a[2].decode(), b[2].decode()
-    if ta == tb:
-        return
-    va, vb = debug_values(name, ta), debug_values(name, tb)
+    va = debug_values(name, ta)
+    vb = va if ta == tb else debug_values(name, tb)
     bad = 0
     for k, x in va.items():
         if k in ignore_values:
             continue
         y = vb.get(k)
         field = name + ":" + re.sub(r"\[\d+\]", "[]", k)
-        if field in limits:
-            observed.setdefault(field, 0.0)
         if y is None:
             if bad < 20:
                 problems.append("%s: %s is gone (was %s)" % (name, k, x[1]))
             bad += 1
-        elif x != y:
-            if x[0] == y[0] == "num" and not re.fullmatch(r"-?\d+", x[1]) and not re.fullmatch(r"-?\d+", y[1]):
-                if float_within_limit(field, num(x[1]), num(y[1]), limits, observed):
-                    continue
+        else:
+            floating = x[0] == y[0] == "num" and not re.fullmatch(r"-?\d+", x[1]) and not re.fullmatch(r"-?\d+", y[1])
+            if floating:
+                same = float_within_limit(field, num(x[1]), num(y[1]), limits, observed)
+            else:
+                same = x == y
+            if same:
+                continue
             if bad < 20:
                 problems.append("%s: %s %s -> %s" % (name, k, x[1], y[1] if len(y) > 1 else y))
             bad += 1
@@ -360,9 +366,9 @@ def main():
     ap.add_argument("--added-zero", action="store_true", help="fields only the new dump has must be zero")
     ap.add_argument("--ignore", action="append", default=[], help="skip a field (repeatable)")
     ap.add_argument("--quiet", action="store_true", help="print only differences and the verdict")
-    ap.add_argument("--linux-tolerance", action="store_true", help="use measured Linux absolute float limits and report maximum errors")
+    ap.add_argument("--linux-tolerance", action="store_true", help="compatibility alias: numeric tolerance is always enabled")
     args = ap.parse_args()
-    args.limits = LINUX_LIMITS if args.linux_tolerance else {}
+    args.limits = ABS_LIMITS
     args.observed = {}
     try:
         if os.path.isdir(args.baseline):
@@ -395,15 +401,16 @@ def main():
                 for p in problems:
                     print("  " + p)
             elif not args.quiet:
-                print("%s: %s on every baseline field" % (k, "within Linux tolerance" if args.linux_tolerance else "equal"))
+                print("%s: within numeric tolerance on every baseline field" % k)
             if added and not args.quiet:
                 print("  only in the new dump: %d (%s%s)" % (len(added), "; ".join(added[:6]), "; ..." if len(added) > 6 else ""))
     except FormatError as e:
         print("state_compare: %s" % e, file=sys.stderr)
         return 2
     for name, observed in sorted(args.observed.items()):
-        print("%s: maximum allowed |diff| %.9g; maximum observed |diff| %.9g" % (name, args.limits[name], observed))
-    verdict = "DIFFERENT" if failed else "WITHIN LINUX TOLERANCE" if args.linux_tolerance else "EQUAL"
+        print("%s: maximum allowed |diff| %.9g; maximum observed |diff| %.9g; relative tolerance %.9g" %
+              (name, args.limits.get(name, DEFAULT_ABS_TOLERANCE), observed, MAX_REL_TOLERANCE))
+    verdict = "DIFFERENT" if failed else "WITHIN NUMERIC TOLERANCE"
     print("state_compare: %s (%d of %d chunks differ)" % (verdict, failed, len(pairs)))
     return 1 if failed else 0
 

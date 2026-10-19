@@ -113,7 +113,7 @@ def main():
         problems = diagnose(args.directory, sc.LINUX_LIMITS if host[0] == "linux" else {})
         if args.image_report:
             report = args.image_report.read_text().strip()
-            match = re.fullmatch(r"image comparison: FAIL: (?:(?:cross-platform \([^()\n]+\)|byte-exact(?: comparison \([^()\n]+\))?); )?(\d+)/8192 pixels changed; max RGB delta (\d+)/255(?:; allowed \d+ pixels, max \d+/255)?", report)
+            match = re.fullmatch(r"image comparison: FAIL: (?:(?:(?:tolerance|cross-platform) \([^()\n]+\)|byte-exact(?: comparison \([^()\n]+\))?); )?(\d+)/8192 pixels changed; max RGB delta (\d+)/255(?:; max alpha delta 0/255)?(?:; allowed \d+ pixels, max \d+/255)?", report)
             if not match or int(match[1]) != 707 or int(match[2]) != 109:
                 problems.append("rag PNG does not match the known image diagnostic: " + report)
     except (OSError, ValueError, KeyError, TypeError, struct.error, sc.FormatError) as error:

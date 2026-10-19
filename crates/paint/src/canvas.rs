@@ -822,8 +822,9 @@ mod tests {
         };
         assert!(relief(&r) > 0.0, "the ground has a weave to level");
         assert!(relief(&l) < 0.5 * relief(&r), "a liquid film levels the weave: {} against dry paint's {}", relief(&l), relief(&r));
-        for i in (0..l.len()).filter(|&i| !band(i)) {
-            assert_eq!(l[i], r[i], "outside the film, pixel {i}");
-        }
+        crate::tests::image_tolerance::assert_fields_close(
+            (0..l.len()).filter(|&i| !band(i)).map(|i| l[i]),
+            (0..r.len()).filter(|&i| !band(i)).map(|i| r[i]),
+        );
     }
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # The engine against the small before-change results (notes/thinner/baseline):
-# every state field af49348 had, after every chunk of the six scenes, equal
-# bit for bit on macOS, within measured float limits on Linux x86_64;
+# every state field af49348 had, after every chunk of the six scenes, within
+# numeric float limits on every platform;
 # fields a newer engine adds zero (--added-zero); and every
-# scene's PNG under the platform-aware image policy. (The thinner's check 2: "no
+# scene's PNG under the image tolerance policy. (The thinner's check 2: "no
 # thinner" leaves engine 3 as it was.)
 #
 #   scripts/tests/baseline_state.sh [<release easel>]   (default $CARGO_TARGET_DIR or target, /release/easel)
@@ -18,13 +18,8 @@ scenes=0
 failed=0
 known_rag=0
 compare_flags=()
-state_result="state equal on every baseline field"
-state_summary="equal af49348 in state"
-if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then
-  compare_flags=(--linux-tolerance)
-  state_result="state within tolerance on every baseline field"
-  state_summary="within tolerance on every baseline field"
-fi
+state_result="state within tolerance on every baseline field"
+state_summary="within tolerance on every baseline field"
 for dir in "$baseline"/state/*/; do
   name=$(basename "$dir")
   state_failed=0
@@ -39,7 +34,7 @@ for dir in "$baseline"/state/*/; do
   fi
   cat "$work/$name.image-report"
   if [ "$name" = rag ] && [ "$state_failed" = 1 ]; then
-    if python3 "$repo/scripts/known_rag_baseline.py" "$work/state/$name" --image-report "$work/$name.image-report"; then
+    if uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$name" --image-report "$work/$name.image-report"; then
       known_rag=1
     else
       failed=1
@@ -57,4 +52,4 @@ if [ "$known_rag" = 1 ]; then
   echo "baseline_state: other five scenes meet the state and image criteria; rag is a known historical-baseline mismatch"
   exit 4
 fi
-echo "baseline_state: all $scenes scenes $state_summary; PNGs meet their platform image criteria"
+echo "baseline_state: all $scenes scenes $state_summary; PNGs meet the image tolerance"

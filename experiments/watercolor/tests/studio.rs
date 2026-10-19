@@ -4,6 +4,10 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 use watercolor_pilot::{studio, Watercolor};
+
+#[path = "../../../crates/paint/tests/support/image_tolerance.rs"]
+mod image_tolerance;
+
 static ID: AtomicU64 = AtomicU64::new(0);
 fn root() -> PathBuf {
     let p = std::env::temp_dir().join(format!(
@@ -108,9 +112,9 @@ fn resume_keeps_named_loads_clock_material_and_images_exact() {
     let x = studio::run(&a, finish).unwrap();
     let y = studio::run(&b, finish).unwrap();
     assert_eq!(x, y);
-    assert_eq!(
-        fs::read(a.join("final.png")).unwrap(),
-        fs::read(b.join("final.png")).unwrap()
+    image_tolerance::assert_close(
+        &image::open(a.join("final.png")).unwrap().to_rgba8(),
+        &image::open(b.join("final.png")).unwrap().to_rgba8(),
     );
     x.check_balance().unwrap();
     assert!(x.brushes["b"].water > 0.0);

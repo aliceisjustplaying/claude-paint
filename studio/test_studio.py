@@ -608,6 +608,24 @@ def test_native_sitting_exports_an_untitled_painter_as_live_without_overriding_r
     assert session["active"] is False
 
 
+def test_a_painter_working_elsewhere_exports_as_live(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "working_studios", set)
+    log.write_text(start(str(studio)) + look("l1", png_of("blue")))
+    out = root / "export"
+    for args, active in (([], False), (["--elsewhere", PAINTER], True)):
+        monkeypatch.setattr(sys, "argv", ["export_static.py", str(out), *args])
+        E.WRITTEN.clear()
+        E.main()
+        session, = json.loads((out / "data/sessions.json").read_text())
+        assert session["active"] is active
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

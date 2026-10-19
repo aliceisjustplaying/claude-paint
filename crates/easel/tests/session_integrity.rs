@@ -60,7 +60,7 @@ fn replay_failure_is_fatal() {
     std::fs::write(dir.join("committed.lua"), text).unwrap();
     let o = cmd(&["open", name]);
     assert!(!o.status.success(), "partial replay was accepted");
-    assert!(String::from_utf8_lossy(&o.stderr).contains("replay failed at chunk 2"));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("replay failed at chunk 2"), "open: {o:?}");
     assert_eq!(std::fs::read_to_string(logs.join("bad-replay.lua")).unwrap(), text);
     assert!(!cmd(&["-s", name, "status"]).status.success());
 }

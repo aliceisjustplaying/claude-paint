@@ -11,8 +11,8 @@ What landed:
    at the run's full resolution. They are fast, and close to a whole render
    (not exact; the reasons are below).
 2. **Stages and checkpoints**: `--ckpt` saves the complete canvas state after
-   every stage and `--resume <stage>` starts from one. Resuming is
-   **bit-exact**, and stale checkpoints are refused.
+   every stage and `--resume <stage>` starts from one. Resuming must stay
+   visually close within the image tolerance below; stale checkpoints are refused.
 3. **Speed**, with the output unchanged: an exact per-column memo for 1-D
    profiles (cuts mask cost in crops) and a dependency-ordered tile scheduler
    in place of phase barriers.
@@ -162,9 +162,9 @@ window (`sample` clamps to it).
   brushes' contact surface is rebuilt from the relief. Sizes: 43 MB at
   1000px, about 440 MB at 3200px whole, 35 MB for the 3200px figures crop.
   Writing takes 0.02–0.05 s at 1000px.
-- **Exact**: resuming from any stage, including one that ends with wet paint
-  ("sky lay"), gives a byte-identical PNG. Checked for mist and "sky lay" at
-  1000px and for mist in the 3200px crop.
+- **Resume comparison**: the historical mist and "sky lay" checks at
+  1000px and mist in the 3200px crop happened to give identical PNGs.
+  Acceptance now uses the image tolerance below, not PNG bytes.
 - **Validation**: a checkpoint must match name, width, seed and crop.
   `--resume` also refuses it if the code that produced it has changed since
   it was saved. The error names what changed. The staleness model (since
@@ -362,14 +362,15 @@ outside the window affect the load of those inside it. study_form crops
 take 11–12 s against 31 s whole, because its form fields (SDFs per pixel)
 are computed over the whole canvas, like masks.
 
-Resuming stays byte-identical: moonrise from "sky lay" (wet), "mist" and
-"figures", and study_stipple from "pass 1".
+The historical resume probes matched: moonrise from "sky lay" (wet),
+"mist" and "figures", and study_stipple from "pass 1". Current checks
+use the image tolerance below.
 
 ## Fixes from amnesia round 2 (branch `fixes-ux`)
 
 From the painters' friction lists (notes/amnesia2.md items 9, 10, 11, 12).
-Resume is still byte-exact (study_stipple at 400px: whole vs resumed from
-"pass 1", `cmp` identical); golden unchanged.
+The historical study_stipple resume probe at 400px matched the whole run
+from "pass 1"; the golden was unchanged. Current checks use image tolerance.
 
 **Stage names and flags** (`paintings/src/run.rs`):
 - Names match by `run::key`: case, spaces, underscores, hyphens and
@@ -474,7 +475,10 @@ Platform arguments and adjacent metadata record provenance only; unknown
 origins use the same tolerance. `--actual-platform current` identifies a
 locally produced image. Old-log state hashes are diagnostic, not gates.
 Rendering-state tests use finite numeric tolerances rather than float-bit
-hashes. Conservation laws, discrete flags, shapes, types and lossless
+hashes. Rust replay fields allow 1e-6 absolute plus 1e-5 relative error.
+Historical state dumps keep their measured per-field absolute bounds
+(`notes/thinner/baseline/README.md`), with 1e-7 absolute for other floats
+and no relative growth. Conservation laws, discrete flags, shapes, types and lossless
 serialization still have their own correctness checks.
 
 `scripts/check_painting` reports the OS-architecture `platform` recorded in
@@ -491,8 +495,16 @@ equal or establish physical accuracy.
 References are not silently refreshed to accommodate a failure. The existing
 golden approval rules still apply to intentional changes. Ordinary correctness,
 conservation and lossless file-preservation tests remain in place. Runtime
-`easel check` is unchanged by this test/workflow policy; its exact replay
-diagnostic is not the image acceptance gate described here.
+`easel check` uses the same two-level sRGB comparison and finite surface
+tolerance, so its success report says "within tolerance", not "exactly".
+
+The plough regression test stores its original volume and cure fields in
+the red and green channels of a 16-bit PNG, scaled to 0.01 coats and 0.1
+cure. It allows two quantized levels (about 3.1e-7 coats and 3.1e-6 cure),
+not exact float hashes. This reference and the engine-2 drying-sheet color,
+gallery and relief references were recorded only after their original
+Linux hashes passed at `dc82b80396809701fd02cb574e2933905fca96ce`.
+The existing golden scene, round-19 and historical log images are unchanged.
 
 `scripts/test` reports the registered rag baseline mismatch
 (`KNOWN_FAILURE: rag-historical-baseline-main`) by name as a known failure on

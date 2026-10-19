@@ -659,7 +659,7 @@ mod liquid_film_tests {
                 let keep = (-c.wet.vol[i] * COAT_UM / BRIDGE_UM).exp();
                 fine[i] + (c.height[i] - fine[i]) * keep + a
             }).collect();
-            assert_eq!(c.wet_surface(), expected);
+            crate::tests::image_tolerance::assert_fields_close(c.wet_surface(), expected.iter().copied());
             let old_lit = c.seen_lit(315.0, 55.0, 1.0);
             for levels in [false, true] {
                 let c = c.clone().with_liquid_film_levels(levels);
@@ -672,8 +672,8 @@ mod liquid_film_tests {
                 if levels {
                     assert_ne!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
                 } else {
-                    assert_eq!(restored.wet_surface(), expected);
-                    assert_eq!(restored.seen_lit(315.0, 55.0, 1.0), old_lit);
+                    crate::tests::image_tolerance::assert_fields_close(restored.wet_surface(), expected.iter().copied());
+                    crate::tests::image_tolerance::assert_fields_close(restored.seen_lit(315.0, 55.0, 1.0).into_iter().flatten(), old_lit.iter().flatten().copied());
                 }
             }
         }

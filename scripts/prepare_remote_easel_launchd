@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 import argparse
+import os
 from pathlib import Path
+import platform
 import plistlib
 import shutil
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare inactive launchd plists; does not start HTTP or a tunnel.")
+    parser = argparse.ArgumentParser(description="Prepare inactive launchd or systemd user services; does not start HTTP or a tunnel.")
     parser.add_argument("--studio", type=Path, required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
@@ -17,9 +19,14 @@ def main():
     if not args.uv or not args.cloudflared:
         parser.error("install uv and cloudflared or supply their absolute paths")
     out = args.out.expanduser().resolve()
-    active = Path.home() / "Library/LaunchAgents"
+    system = platform.system()
+    if system not in ("Darwin", "Linux"):
+        parser.error("service preparation supports macOS and Linux")
+    if system == "Linux" and any(c in str(out) for c in "\n\r"):
+        parser.error("the service staging path must not contain line breaks")
+    active = Path.home() / "Library/LaunchAgents" if system == "Darwin" else Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd/user"
     if out.is_relative_to(active.resolve()):
-        parser.error("stage these files outside Library/LaunchAgents until the tunnel is approved")
+        parser.error("stage these files outside Library/LaunchAgents until the tunnel is approved" if system == "Darwin" else f"stage these files outside {active} until the tunnel is approved")
     if not 1024 <= args.port <= 65535:
         parser.error("port must be between 1024 and 65535")
     out.mkdir(parents=True, exist_ok=True)
@@ -39,10 +46,24 @@ def main():
         "StandardOutPath": str(logs / "tunnel-output.log"), "StandardErrorPath": str(logs / "tunnel-output.log"),
     }
     for definition in (http, tunnel):
-        path = out / (definition["Label"] + ".plist")
-        with path.open("xb") as file:
-            plistlib.dump(definition, file)
+        if system == "Darwin":
+            path = out / (definition["Label"] + ".plist")
+            with path.open("xb") as file:
+                plistlib.dump(definition, file)
+        else:
+            path = out / (definition["Label"] + ".service")
+            command = " ".join(unit_quote(arg).replace("$", "$$") for arg in definition["ProgramArguments"])
+            text = f"[Unit]\nDescription={definition['Label']}\n\n[Service]\nType=simple\nExecStart={command}\nRestart=always\nRestartSec=15\n"
+            if "WorkingDirectory" in definition:
+                text += "WorkingDirectory=" + definition["WorkingDirectory"].replace("%", "%%") + "\n"
+            text += "StandardOutput=append:" + definition["StandardOutPath"].replace("%", "%%") + "\nStandardError=append:" + definition["StandardErrorPath"].replace("%", "%%") + "\n\n[Install]\nWantedBy=default.target\n"
+            with path.open("x") as file:
+                file.write(text)
         print(path)
+
+
+def unit_quote(value):
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + '"'
 
 
 if __name__ == "__main__":

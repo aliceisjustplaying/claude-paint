@@ -10,6 +10,7 @@ import http.server
 import importlib.util
 from importlib.machinery import SourceFileLoader
 import json
+import os
 from pathlib import Path
 import secrets
 import socket
@@ -333,7 +334,7 @@ class HelperTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="mcp-plist-") as temp:
             out = Path(temp).resolve() / "stage"
             argv = ["prepare_remote_easel_launchd", "--studio", str(Path(temp) / "paint-studio-aabbcc"), "--token-file", str(Path(temp) / "token"), "--out", str(out), "--uv", "/path/to/uv", "--cloudflared", "/path/to/cloudflared"]
-            with patch.object(sys, "argv", argv), patch.object(sys, "stdout", StringIO()):
+            with patch.object(sys, "argv", argv), patch.object(sys, "stdout", StringIO()), patch.object(helper.platform, "system", return_value="Darwin"):
                 helper.main()
             plists = [plistlib.loads(path.read_bytes()) for path in out.glob("*.plist")]
             self.assertEqual(len(plists), 2)
@@ -342,6 +343,45 @@ class HelperTests(unittest.TestCase):
             self.assertIn("--http-host-header", args)
             self.assertIn("localhost:8790", args)
             self.assertFalse(any("EnvironmentVariables" in plist for plist in plists))
+
+
+    def test_linux_services_are_inactive_and_escape_exec_arguments(self):
+        helper = self.load("prepare_remote_easel_launchd")
+        with tempfile.TemporaryDirectory(prefix="mcp-systemd-") as temp:
+            root = Path(temp).resolve()
+            out = root / "stage 100%"
+            studio = root / 'paint-studio-aabbcc $HOME %h "quoted"'
+            token = root / "token"
+            token.write_text("secret-value-not-for-unit-files")
+            argv = ["prepare_remote_easel_launchd", "--studio", str(studio), "--token-file", str(token), "--out", str(out), "--uv", "/path to/uv", "--cloudflared", "/path/to/cloudflared"]
+            with patch.object(sys, "argv", argv), patch.object(sys, "stdout", StringIO()), patch.object(helper.platform, "system", return_value="Linux"):
+                helper.main()
+            services = sorted(out.glob("*.service"))
+            self.assertEqual(len(services), 2)
+            self.assertEqual(list(out.glob("*.plist")), [])
+            http, tunnel = [path.read_text() for path in services]
+            self.assertIn('ExecStart="/path to/uv" "run" "--no-project" "--script"', http)
+            self.assertIn('$$HOME %%h \\"quoted\\"', http)
+            self.assertIn(f'"--token-file" "{token}"', http)
+            self.assertIn("--http-host-header\" \"localhost:8790", tunnel)
+            self.assertIn("logs/tunnel.log", tunnel)
+            self.assertIn("Restart=always\nRestartSec=15", http)
+            self.assertIn(f"StandardOutput=append:{out}/logs/http.log".replace("%", "%%"), http)
+            self.assertNotIn("secret-value-not-for-unit-files", http + tunnel)
+            self.assertNotIn("Environment=", http + tunnel)
+            with patch.object(sys, "argv", argv), patch.object(helper.platform, "system", return_value="Linux"), self.assertRaises(FileExistsError):
+                helper.main()
+
+    def test_service_preparation_refuses_active_user_unit_directories(self):
+        helper = self.load("prepare_remote_easel_launchd")
+        with tempfile.TemporaryDirectory(prefix="mcp-active-") as temp:
+            root = Path(temp).resolve()
+            for system, active in (("Darwin", root / "Library/LaunchAgents"), ("Linux", root / "config/systemd/user")):
+                with self.subTest(system=system):
+                    argv = ["prepare_remote_easel_launchd", "--studio", str(root / "studio"), "--token-file", str(root / "token"), "--out", str(active / "nested"), "--uv", "/path/to/uv", "--cloudflared", "/path/to/cloudflared"]
+                    with patch.object(helper.platform, "system", return_value=system), patch.object(helper.Path, "home", return_value=root), patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "config")}), patch.object(sys, "argv", argv), patch.object(sys, "stderr", StringIO()), self.assertRaises(SystemExit):
+                        helper.main()
+                    self.assertFalse(active.exists())
 
 
 if __name__ == "__main__":

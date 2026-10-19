@@ -95,9 +95,15 @@ scripts/prepare_remote_easel_launchd \
 ```
 
 The helper writes `art.stillwet.easel-mcp.http.plist` and
-`art.stillwet.easel-mcp.tunnel.plist`, with KeepAlive and a 15-second restart
-throttle. It does not run launchctl or cloudflared and refuses to stage directly
-in `Library/LaunchAgents`. Get approval before loading the tunnel plist.
+`art.stillwet.easel-mcp.tunnel.plist` on macOS, with KeepAlive and a 15-second restart
+throttle. On Linux the same helper writes `.service` files for systemd's user manager,
+with `Restart=always` and `RestartSec=15`. Output stays in the staging folder's `logs/`.
+It does not run launchctl, systemctl or cloudflared and refuses to stage directly
+in `Library/LaunchAgents` or the Linux user's systemd configuration directory.
+The Linux units can be installed with `systemctl --user link /absolute/staged/*.service`
+and started individually with `systemctl --user start art.stillwet.easel-mcp.http.service`.
+The staging folder must remain in place for logging. Loading the tunnel service still
+requires approval on either platform.
 
 The proposed tunnel command is:
 

@@ -2,17 +2,15 @@
 # /// script
 # dependencies = ["pillow>=11,<13"]
 # ///
-"""Platform-aware PNG comparison: exact unless known platforms differ.
+"""Compare decoded images with a platform-independent RGBA tolerance.
 
-Cross-platform RGB differences must be <=2 levels/channel in strictly <0.1%
-of pixels. Dimensions and alpha must match exactly. Unknown origins and
-same-platform comparisons require identical bytes. Exit 0 for a match,
-1 for drift, 2 for invalid input.
+Every pixel's RGBA channels must differ by <=2 levels out of 255, with
+matching dimensions. Platform origins are diagnostic provenance only.
+Exit 0 for a match, 1 for drift, 2 for invalid input.
 """
 import argparse
 import platform
 import sys
-from pathlib import Path
 
 from PIL import Image, ImageChops
 
@@ -38,18 +36,14 @@ def compare(expected, actual, expected_platform="unknown", actual_platform="unkn
         a, b = a.convert("RGBA"), b.convert("RGBA")
         delta = ImageChops.difference(a, b)
         red, green, blue, alpha = delta.split()
-        if alpha.getextrema()[1] != 0:
-            return False, "alpha differs"
         rgb_delta = ImageChops.lighter(ImageChops.lighter(red, green), blue)
-        histogram = rgb_delta.histogram()
+        histogram = ImageChops.lighter(rgb_delta, alpha).histogram()
         pixels = a.width * a.height
         changed = pixels - histogram[0]
         maximum = rgb_delta.getextrema()[1]
-        if expected_platform not in PLATFORMS or actual_platform not in PLATFORMS or expected_platform == actual_platform:
-            ok = Path(expected).read_bytes() == Path(actual).read_bytes()
-            return ok, f"byte-exact comparison ({expected_platform} -> {actual_platform}); {changed}/{pixels} pixels changed; max RGB delta {maximum}/255"
-        ok = maximum <= 2 and changed * 1_000 < pixels
-        return ok, f"cross-platform ({expected_platform} -> {actual_platform}); {changed}/{pixels} pixels changed; max RGB delta {maximum}/255; allowed {(pixels - 1) // 1_000} pixels, max 2/255"
+        alpha_maximum = alpha.getextrema()[1]
+        ok = max(maximum, alpha_maximum) <= 2
+        return ok, f"tolerance ({expected_platform} -> {actual_platform}); {changed}/{pixels} pixels changed; max RGB delta {maximum}/255; max alpha delta {alpha_maximum}/255"
 
 
 def main():

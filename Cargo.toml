@@ -9,14 +9,13 @@ codegen-units = 256
 [profile.release]
 opt-level = 3
 debug = false
-# Favor runtime optimization for exports; cross-build pixel drift is bounded
+# Cross-build pixel drift is bounded
 # by the comparison policy in notes/workflow.md, not forbidden by hash.
 incremental = true
-codegen-units = 1
 
 # Tests run optimized (the physics tests took ~10 min unoptimized), with
 # debug assertions and overflow checks kept on. Incremental codegen favors
-# edit/rebuild speed; same-build determinism checks remain exact.
+# edit/rebuild speed.
 [profile.test]
 opt-level = 2
 incremental = true

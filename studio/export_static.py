@@ -359,9 +359,9 @@ def text(path, data):
     write(path, body)
 
 
-def export(out, skip=(), only=None, live=False, atelier=None):
+def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
     """atelier: None for every painter, "only" for the atelier's alone (the viewer at /atelier/easel/), "skip" for
-    every painter but the atelier's."""
+    every painter but the atelier's. elsewhere: painters working on another machine, live while their session is recent."""
     S.PUBLIC = True
     WRITTEN.clear()
     out = os.path.abspath(out)
@@ -374,8 +374,8 @@ def export(out, skip=(), only=None, live=False, atelier=None):
     if only is not None and len(ss) != 1:
         raise ValueError("the selected painter has no viewer session yet")
     runner_states(ss, working_studios(), time.time())
-    if live:
-        for s in ss:
+    for s in ss:
+        if live or s["p"] in elsewhere:
             s["active"] = not s.get("outcome") and 0 <= time.time() - s["mtime"] < 1800
     n_img = n_web = 0
     pool = ThreadPoolExecutor(os.cpu_count() or 4) if Image else None
@@ -506,8 +506,10 @@ def main():
                        help="only the atelier's paintings, as the viewer at /atelier/easel/")
     which.add_argument("--skip-atelier", action="store_const", const="skip", dest="atelier",
                        help="every painter but the atelier's")
+    ap.add_argument("--elsewhere", nargs="*", default=[],
+                    help="painters working on another machine (their sessions copied here): live while recently active")
     a = ap.parse_args()
-    export(a.out, skip=a.skip, atelier=a.atelier)
+    export(a.out, skip=a.skip, atelier=a.atelier, elsewhere=a.elsewhere)
 
 
 if __name__ == "__main__":

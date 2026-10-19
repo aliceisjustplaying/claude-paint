@@ -579,6 +579,11 @@ fn open(args: &[String]) -> Result<(), String> {
     loop {
         if let Some(lock) = try_lock(&name)? {
             if started {
+                if let Ok(log) = std::fs::read_to_string(dir.join("server.log"))
+                    && log.contains("easel: fatal")
+                {
+                    return Err(log);
+                }
                 return Err(format!("the session's server stopped without saying why; see {}", dir.join("server.log").display()));
             }
             // no server holds the session: a socket left there is a dead one's

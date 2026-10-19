@@ -192,7 +192,7 @@ struct Saved {
     digests: Option<Vec<String>>,
 }
 
-fn atomic(path: &Path, f: impl FnOnce(&mut std::fs::File) -> Result<(), String>) -> Result<(), String> {
+pub(crate) fn atomic(path: &Path, f: impl FnOnce(&mut std::fs::File) -> Result<(), String>) -> Result<(), String> {
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let mut opened = None;

@@ -192,8 +192,7 @@ pub fn chunk_end(c: Option<&Canvas>, n: usize) -> Result<(), String> {
 
 /// Replace `path` with `text` so an interruption leaves the old file or the new one.
 fn replace(path: &std::path::Path, text: &str) -> Result<(), String> {
-    let part = path.with_extension("part");
-    std::fs::write(&part, text).and_then(|_| std::fs::File::open(&part)?.sync_all()).and_then(|_| std::fs::rename(&part, path)).map_err(|e| format!("{}: {e}", path.display()))
+    crate::replay_checkpoint::atomic(path, |f| f.write_all(text.as_bytes()).map_err(|e| e.to_string()))
 }
 
 pub fn finish(c: &Canvas) {

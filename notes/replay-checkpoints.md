@@ -73,9 +73,10 @@ continuation state. Plain, uninterrupted `run` still supports them as before.
 
 ## Progress
 
-Batch replay atomically updates `painting.replay-progress.json` beside
-`painting.lua` before and after each chunk. Plain `run` writes it beside its
-output image instead, so replaying a read-only source remains supported.
+Batch replay atomically updates `<checkpoint>.replay-progress.json` beside its
+checkpoint (`replay.ckpt` gives `replay.replay-progress.json`) before and after
+each chunk. Plain `run` writes it beside its output image instead. Neither
+writes beside the source, so replaying a read-only source remains supported.
 It contains `version`, `status`, `chunks_done`,
 `chunks_total`, `current_chunk`, `elapsed_secs`, `chunks_per_second` and
 `eta_secs`. Unknown rates and ETAs are null. Paused and complete runs have no

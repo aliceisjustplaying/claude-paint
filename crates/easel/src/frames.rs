@@ -120,7 +120,7 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
     if kept.len() != s.written + 1 {
         return Err(format!("{}: fewer frames than the state after chunk {done} records", tsv.display()));
     }
-    std::fs::write(&tsv, kept.join("\n") + "\n").map_err(|e| format!("{}: {e}", tsv.display()))?;
+    replace(&tsv, &(kept.join("\n") + "\n"))?;
     for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
         let p = entry.map_err(|e| e.to_string())?.path();
         let n = p.file_stem().and_then(|n| n.to_str()).and_then(|n| n.parse::<usize>().ok());
@@ -129,7 +129,7 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
         }
     }
     let lines: Vec<String> = std::fs::read_to_string(&states).map_err(|e| e.to_string())?.lines().take_while(|l| serde_json::from_str::<Saved>(l).is_ok_and(|x| x.chunk <= done)).map(|l| l.to_string() + "\n").collect();
-    std::fs::write(&states, lines.concat()).map_err(|e| format!("{}: {e}", states.display()))?;
+    replace(&states, &lines.concat())?;
     let index = std::fs::OpenOptions::new().append(true).open(&tsv).map_err(|e| e.to_string())?;
     Ok(Recorder { every, dir, width, light, base: s.base, next: s.next, hand: s.hand, written: s.written, ticks: s.ticks, chunk: s.chunk, index: Some(index), err: None })
 }
@@ -172,17 +172,28 @@ fn observe(c: &Canvas, secs: f64) {
     });
 }
 
-/// The end of chunk `n` (and with `last`, the finished canvas too).
-pub fn chunk_end(c: &Canvas, n: usize) {
+/// The end of chunk `n`: its frame (once there is a canvas) and the
+/// recorder's state. An error in any frame so far fails the chunk, so a
+/// replay checkpoint never gets ahead of the frames.
+pub fn chunk_end(c: Option<&Canvas>, n: usize) -> Result<(), String> {
     REC.with(|r| {
-        if let Some(rec) = r.borrow_mut().as_mut() {
-            rec.chunk = n;
+        let mut g = r.borrow_mut();
+        let Some(rec) = g.as_mut() else { return Ok(()) };
+        rec.chunk = n;
+        if let Some(c) = c {
             rec.write(c, 0, Kind::Chunk);
-            if rec.err.is_none() && let Err(e) = rec.save_state() {
-                rec.err = Some(e);
-            }
         }
-    });
+        if let Some(e) = rec.err.clone() {
+            return Err(format!("frames: {e}"));
+        }
+        rec.save_state().map_err(|e| format!("frames: {e}"))
+    })
+}
+
+/// Replace `path` with `text` so an interruption leaves the old file or the new one.
+fn replace(path: &std::path::Path, text: &str) -> Result<(), String> {
+    let part = path.with_extension("part");
+    std::fs::write(&part, text).and_then(|_| std::fs::File::open(&part)?.sync_all()).and_then(|_| std::fs::rename(&part, path)).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 pub fn finish(c: &Canvas) {

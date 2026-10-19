@@ -242,7 +242,7 @@ impl Batch {
         let minutes = crate::flag(args, "--for-minutes").map(|v| v.parse::<f64>().map_err(|_| "--for-minutes needs a positive duration".to_string())).transpose()?;
         if minutes.is_some_and(|m| !m.is_finite() || m <= 0.0) { return Err("--for-minutes needs a positive finite duration".into()); }
         if checkpoint.is_none() && (until < chunks.len() || minutes.is_some()) { return Err("batch limits require --replay-checkpoint".into()); }
-        let progress = if checkpoint.is_some() { file } else { out }.with_extension("replay-progress.json");
+        let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
         let mut outputs = vec![out.to_path_buf()];
         if args.iter().any(|a| a == "--look") { outputs.push(out.with_extension("look.png")); }
         for option in ["--checkpoint-out", "--state-digest", "--dump-surface"] {
@@ -503,7 +503,7 @@ print(counter,rand(),drying(300,300))
         let chunks = crate::session::parse_program(SOURCE);
         let mut s = session();
         let mut batch = Batch::open(&args(&dir.0, 2), &source, SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
-        let progress = source.with_extension("replay-progress.json");
+        let progress = dir.0.join("replay.replay-progress.json");
         let read = || serde_json::from_slice::<serde_json::Value>(&std::fs::read(&progress).unwrap()).unwrap();
         assert_eq!(read()["chunks_done"], 0);
         for (i, chunk) in chunks.iter().take(2).enumerate() {

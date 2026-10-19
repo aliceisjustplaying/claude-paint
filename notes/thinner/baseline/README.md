@@ -129,26 +129,25 @@ byte. `MANIFEST.md` lists the commands and binary hashes.
   paint by.
 - The `secs=` field of a digest line is wall time. Drop it before comparing
   (`sed 's/ secs=[^ ]*//'`).
-- Release profile only (`codegen-units = 1`, not incremental). The iter
-  profile can move the last digits.
+- These reference measurements used the release profile. All build profiles
+  now use the same bounded image acceptance policy in notes/workflow.md.
 
-## Linux state comparison
+## Numeric state comparison
 
-`scripts/tests/baseline_state.sh` keeps the exact comparison on macOS and
-other unmeasured hosts. Linux x86_64 opts into `state_compare.py
---linux-tolerance`. The two hash-only Rust tests (the threshold plough and
-the engine-2 drying sheet) also select exact Linux x86_64 fixtures; all
-other targets retain their original exact fixtures. Only macOS arm64 and
-Ubuntu x86_64 with Rust 1.97.1 have been measured.
+`scripts/tests/baseline_state.sh` uses finite numeric tolerances on every
+platform. `--linux-tolerance` remains a compatibility alias, not an opt-in.
+Rendered PNGs use maximum decoded RGBA channel error at most 2/255,
+regardless of build or platform. Only macOS arm64 and Ubuntu x86_64 with
+Rust 1.97.1 supplied the historical measurements below.
 
 The numeric limits below were measured against all 27 stored chunks using
 the release easel at `908d0db`, the committed lockfile and Rust 1.97.1 on
 Ubuntu 24.04 x86_64. They are absolute limits, with no relative allowance
-that grows with a field's magnitude. Unlisted floats, every integer,
-dtype, shape, missing value, enum, signed zero and nonfinite bit change
-remain exact. Added state still must satisfy `--added-zero` without any
-tolerance. Debug float limits apply only to the named bristle properties,
-not to integer tokens or other Debug state. The comparer prints the
+that grows with a field's magnitude. Other finite floats use the small
+default absolute tolerance documented by `state_compare.py`; signed zeros
+are equivalent and nonfinite values are rejected. Every integer, dtype,
+shape, missing value and enum remains exact. Added state still must satisfy
+`--added-zero` without any tolerance. The comparer prints the
 maximum allowed and observed absolute error for each bounded field,
 including on failure.
 
@@ -229,13 +228,13 @@ Exit 0 means the known diagnostic matches; 1 means a different/unrelated
 failure and 2 means malformed input. The helper emits no known marker.
 It checks eight scalars across the dry wipe (chunk 4), damp wipe (chunk
 6) and refold/brush operation (chunk 8), with narrow rounding bands. All
-pre-wipe chunks and unaffected state fields still use the ordinary exact
-or Linux-bounded comparison. Only the identified wet-array, carried-rag
+pre-wipe chunks and unaffected state fields still use the ordinary bounded
+numeric comparison. Only the identified wet-array, carried-rag
 paint and final-brush mismatch categories may differ; dtype/shape,
 integers, nonfinite changes and nonzero added solvent are rejected.
 The image report must be the measured Linux and macOS result (707/8192
-changed pixels, max 109/255), including the cross-platform or byte-exact
-provenance prefix when present. State-only callers may omit
+changed pixels, max 109/255), including the tolerance provenance prefix.
+State-only callers may omit
 `--image-report`; historical image checks must supply it.
 
 Targeted checks:

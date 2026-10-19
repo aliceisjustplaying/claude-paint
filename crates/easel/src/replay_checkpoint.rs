@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const MAGIC: &[u8; 8] = b"EASLRP01";
 
@@ -109,6 +109,28 @@ pub fn check() -> mlua::Result<()> {
     })
 }
 
+pub struct Mark {
+    events: usize,
+    at: usize,
+    failure: Option<String>,
+}
+
+pub fn mark() -> Mark {
+    TRACE.with(|t| {
+        let t = t.borrow();
+        Mark { events: t.events.len(), at: t.at, failure: t.failure.clone() }
+    })
+}
+
+pub fn rollback(mark: Mark) {
+    TRACE.with(|t| {
+        let mut t = t.borrow_mut();
+        t.events.truncate(mark.events);
+        t.at = mark.at;
+        t.failure = mark.failure;
+    });
+}
+
 pub fn effect<R: Serialize + DeserializeOwned>(st: &S, tag: &str, f: impl FnOnce() -> mlua::Result<R>) -> mlua::Result<R> {
     invoke(Some(st), tag, f)
 }
@@ -164,7 +186,7 @@ fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl Fn
     value
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 struct Identity {
     build: [u8; 32],
     source: [u8; 32],
@@ -217,6 +239,145 @@ pub(crate) fn atomic(path: &Path, f: impl FnOnce(&mut std::fs::File) -> Result<(
     result.map_err(|e| format!("{}: {e}", path.display()))
 }
 
+fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, digests: &Option<Vec<String>>, elapsed: f64) -> Result<(), String> {
+    let started = Instant::now();
+    check().map_err(|e| e.to_string())?;
+    let state = State::capture(&s.st);
+    let mut bytes = 0;
+    atomic(path, |f| {
+        f.write_all(MAGIC).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
+        {
+            let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
+            TRACE.with(|t| {
+                #[derive(Serialize)]
+                struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Vec<Vec<u8>>, state: &'a State, digests: &'a Option<Vec<String>> }
+                bincode::serialize_into(&mut writer, &SavedRef { identity, done, events: &t.borrow().events, state: &state, digests }).map_err(|e| e.to_string())
+            })?;
+            bincode::serialize_into(&mut writer, &s.canvas().is_some()).map_err(|e| e.to_string())?;
+            if let Some(c) = s.canvas() { c.write_state(&mut writer, "").map_err(|e| e.to_string())?; }
+            writer.finish().map_err(|e| e.to_string())?;
+        }
+        bytes = f.stream_position().map_err(|e| e.to_string())?;
+        f.seek(SeekFrom::Start(40)).and_then(|_| f.write_all(&elapsed.to_le_bytes())).map_err(|e| e.to_string())?;
+        f.seek(SeekFrom::Start(40)).map_err(|e| e.to_string())?;
+        let digest = hash_reader(&mut *f)?;
+        f.seek(SeekFrom::Start(8)).and_then(|_| f.write_all(&digest)).map_err(|e| e.to_string())
+    })?;
+    eprintln!("replay checkpoint {}: {done} chunks, {bytes} bytes, {:.3}s write", path.display(), started.elapsed().as_secs_f64());
+    Ok(())
+}
+
+fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Option<paint::Canvas>, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+    TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, playback: true, events: std::mem::take(&mut saved.events), ..Trace::default() });
+    for (i, chunk) in chunks.iter().take(saved.done).enumerate() {
+        s.run(chunk).map_err(|e| format!("replay checkpoint: prefix chunk {} failed: {e}", i + 1))?;
+        progress(i + 1, chunks.len());
+    }
+    check().map_err(|e| e.to_string())?;
+    let complete = TRACE.with(|t| { let t = t.borrow(); t.at == t.events.len() });
+    if !complete || encode(&State::capture(&s.st))? != encode(&saved.state)? {
+        return Err("replay checkpoint: incomplete or divergent reconstructed state".into());
+    }
+    if s.canvas().is_some() != canvas.is_some() {
+        return Err("replay checkpoint: reconstructed canvas differs".into());
+    }
+    s.st.borrow_mut().canvas = canvas;
+    TRACE.with(|t| t.borrow_mut().playback = false);
+    Ok(())
+}
+
+fn source_prefix(source: &str, done: usize) -> Result<String, String> {
+    let chunks = crate::session::parse_program(source);
+    if done == 0 || done > chunks.len() {
+        return Err("replay checkpoint: invalid chunk cursor".into());
+    }
+    let head: String = source.split_inclusive('\n').take_while(|l| !l.trim_start().starts_with(crate::session::MARK)).collect();
+    let mut prefix = head.trim_end().to_string();
+    prefix.push('\n');
+    for (i, chunk) in chunks.iter().take(done).enumerate() {
+        prefix.push_str(&format!("\n{} {}\n", crate::session::MARK, i + 1));
+        prefix.push_str(chunk);
+        prefix.push('\n');
+    }
+    Ok(prefix)
+}
+
+pub struct Live {
+    trace: Trace,
+    identity: Result<Identity, String>,
+    done: usize,
+    written: Instant,
+}
+
+impl Live {
+    pub fn new() -> Self {
+        static IDENTITY: std::sync::OnceLock<Result<Identity, String>> = std::sync::OnceLock::new();
+        Self { trace: Trace { enabled: true, ..Trace::default() }, identity: IDENTITY.get_or_init(|| Identity::new("", 0)).clone(), done: 0, written: Instant::now() }
+    }
+
+    fn identity(&self, source: &str, width: usize) -> Result<Identity, String> {
+        let mut identity = self.identity.clone()?;
+        identity.source = Sha256::digest(source.as_bytes()).into();
+        identity.width = width;
+        Ok(identity)
+    }
+
+    pub fn with<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        struct Active<'a>(&'a mut Trace);
+        impl Drop for Active<'_> {
+            fn drop(&mut self) { TRACE.with(|t| std::mem::swap(&mut *t.borrow_mut(), self.0)); }
+        }
+        TRACE.with(|t| std::mem::swap(&mut *t.borrow_mut(), &mut self.trace));
+        let active = Active(&mut self.trace);
+        let result = f();
+        drop(active);
+        result
+    }
+
+    pub fn resume(&mut self, path: &Path, source: &str, width: usize, s: &mut Session, chunks: &[String], name: &str, progress: &dyn Fn(usize, usize)) -> Result<usize, String> {
+        let started = Instant::now();
+        let modified = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("replay checkpoint {}: no checkpoint found; refusing resume", path.display())
+            } else {
+                format!("replay checkpoint {}: {e}; refusing resume", path.display())
+            }
+        })?;
+        let (mut saved, canvas, elapsed) = load(path)?;
+        if saved.done == 0 || saved.done > chunks.len() || !elapsed.is_finite() || elapsed < 0.0 {
+            return Err("replay checkpoint: invalid chunk cursor or elapsed time".into());
+        }
+        let identity = self.identity(&source_prefix(source, saved.done)?, width)?;
+        if saved.identity != identity {
+            return Err("replay checkpoint: source prefix, executable, width or engine environment differs; refusing resume".into());
+        }
+        self.with(|| -> Result<(), String> {
+            reconstruct(s, chunks, &mut saved, canvas, progress)?;
+            let prefix: [u8; 32] = Sha256::digest(s.program(name).as_bytes()).into();
+            if prefix != saved.identity.source {
+                return Err("replay checkpoint: reconstructed source prefix differs; refusing resume".into());
+            }
+            Ok(())
+        })?;
+        self.done = saved.done;
+        self.written = Instant::now() - modified.elapsed().unwrap_or_default().min(Duration::from_secs(900));
+        eprintln!("reconstructed {} chunks from {} in {:.3}s", saved.done, path.display(), started.elapsed().as_secs_f64());
+        Ok(saved.done)
+    }
+
+    pub fn completed(&mut self, path: &Path, s: &Session, source: &str, width: usize) -> Result<(), String> {
+        let done = s.log.len();
+        if done == 0 || (done.saturating_sub(self.done) < 10 && self.written.elapsed() < Duration::from_secs(900)) {
+            return Ok(());
+        }
+        let identity = self.identity(source, width)?;
+        self.with(|| write_checkpoint(path, s, &identity, done, &None, 0.0))?;
+        self.done = done;
+        self.written = Instant::now();
+        Ok(())
+    }
+}
+
 pub struct Batch {
     checkpoint: Option<PathBuf>,
     progress: PathBuf,
@@ -260,7 +421,7 @@ impl Batch {
         let identity = Identity::new(source, width)?;
         let mut batch = Self { checkpoint, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
         if let Some(path) = batch.checkpoint.as_ref().filter(|p| p.exists()) {
-            let (saved, canvas, elapsed_secs) = load(path)?;
+            let (mut saved, canvas, elapsed_secs) = load(path)?;
             if saved.identity != batch.identity { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
             if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
                 return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
@@ -268,15 +429,7 @@ impl Batch {
             if saved.done == 0 || saved.done > chunks.len() || saved.done > until || !elapsed_secs.is_finite() || elapsed_secs < 0.0 {
                 return Err("replay checkpoint: invalid chunk cursor or elapsed time".into());
             }
-            TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, playback: true, events: saved.events, ..Trace::default() });
-            for (i, chunk) in chunks.iter().take(saved.done).enumerate() {
-                s.run(chunk).map_err(|e| format!("replay checkpoint: prefix chunk {} failed: {e}", i + 1))?;
-            }
-            check().map_err(|e| e.to_string())?;
-            let complete = TRACE.with(|t| { let t = t.borrow(); t.at == t.events.len() });
-            if !complete || encode(&State::capture(&s.st))? != encode(&saved.state)? { return Err("replay checkpoint: incomplete or divergent reconstructed state".into()); }
-            s.st.borrow_mut().canvas = canvas;
-            TRACE.with(|t| t.borrow_mut().playback = false);
+            reconstruct(s, chunks, &mut saved, canvas, &|_, _| {})?;
             batch.done = saved.done;
             batch.elapsed_before = elapsed_secs;
             batch.digests = saved.digests;
@@ -295,26 +448,7 @@ impl Batch {
     pub fn completed(&mut self, s: &Session, done: usize) -> Result<bool, String> {
         self.done = done;
         if let Some(path) = &self.checkpoint {
-            check().map_err(|e| e.to_string())?;
-            let state = State::capture(&s.st);
-            atomic(path, |f| {
-                f.write_all(MAGIC).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
-                {
-                    let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
-                    TRACE.with(|t| {
-                        #[derive(Serialize)]
-                        struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Vec<Vec<u8>>, state: &'a State, digests: &'a Option<Vec<String>> }
-                        bincode::serialize_into(&mut writer, &SavedRef { identity: &self.identity, done, events: &t.borrow().events, state: &state, digests: &self.digests }).map_err(|e| e.to_string())
-                    })?;
-                    bincode::serialize_into(&mut writer, &s.canvas().is_some()).map_err(|e| e.to_string())?;
-                    if let Some(c) = s.canvas() { c.write_state(&mut writer, "").map_err(|e| e.to_string())?; }
-                    writer.finish().map_err(|e| e.to_string())?;
-                }
-                f.seek(SeekFrom::Start(40)).and_then(|_| f.write_all(&self.elapsed().to_le_bytes())).map_err(|e| e.to_string())?;
-                f.seek(SeekFrom::Start(40)).map_err(|e| e.to_string())?;
-                let digest = hash_reader(&mut *f)?;
-                f.seek(SeekFrom::Start(8)).and_then(|_| f.write_all(&digest)).map_err(|e| e.to_string())
-            })?;
+            write_checkpoint(path, s, &self.identity, done, &self.digests, self.elapsed())?;
         }
         let stop = done >= self.until || self.minutes.is_some_and(|m| self.started.elapsed().as_secs_f64() >= m * 60.0);
         self.publish(if done == self.total { "complete" } else if stop { "paused" } else { "running" }, if done < self.total && !stop { Some(done + 1) } else { None })?;
@@ -529,6 +663,145 @@ print(counter,rand(),drying(300,300))
         let result = s.run("pcall(function() wait(2) end)");
         TRACE.with(|t| *t.borrow_mut() = Trace::default());
         assert!(result.err().unwrap().contains("exhausted effect trace"));
+    }
+
+    #[test]
+    fn live_checkpoint_cadence_and_failed_writes_preserve_last_success() {
+        let dir = Temp::new();
+        let path = dir.0.join("live.ckpt");
+        let mut s = session();
+        let mut live = Live::new();
+        for done in 1..=10 {
+            live.with(|| s.run("counter = (counter or 0) + 1")).unwrap();
+            live.completed(&path, &s, &s.program("live"), 64).unwrap();
+            assert_eq!(path.exists(), done == 10);
+        }
+        assert_eq!(load(&path).unwrap().0.done, 10);
+        live.with(|| s.run("counter = (counter or 0) + 1")).unwrap();
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        assert_eq!(load(&path).unwrap().0.done, 10);
+        live.written -= Duration::from_secs(900);
+        let written = live.written;
+        assert!(live.completed(&dir.0, &s, &s.program("live"), 64).is_err());
+        assert_eq!(live.done, 10);
+        assert_eq!(live.written, written);
+        assert_eq!(load(&path).unwrap().0.done, 10);
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        assert_eq!(live.done, 11);
+        assert!(live.written > written);
+        assert_eq!(load(&path).unwrap().0.done, 11);
+    }
+
+    #[test]
+    fn live_resume_accepts_appended_chunks_and_keeps_recording() {
+        let dir = Temp::new();
+        let path = dir.0.join("live.ckpt");
+        let chunks = crate::session::parse_program(SOURCE);
+        let mut s = session();
+        let mut live = Live::new();
+        for chunk in chunks.iter().take(3) { live.with(|| s.run(chunk)).unwrap(); }
+        live.written -= Duration::from_secs(900);
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        let expected_canvas = canvas(&s);
+        std::fs::File::open(&path).unwrap().set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::now() - Duration::from_secs(900))).unwrap();
+        for chunk in chunks.iter().skip(3) { live.with(|| s.run(chunk)).unwrap(); }
+        let source = s.program("live");
+        let chunks = crate::session::parse_program(&source);
+        let mut restored = session();
+        let mut resumed = Live::new();
+        let progress = RefCell::new(Vec::new());
+        assert_eq!(resumed.resume(&path, &source, 64, &mut restored, &chunks, "live", &|n, total| progress.borrow_mut().push((n, total))).unwrap(), 3);
+        assert_eq!(*progress.borrow(), vec![(1, chunks.len()), (2, chunks.len()), (3, chunks.len())]);
+        assert_eq!(canvas(&restored), expected_canvas);
+        for (i, chunk) in chunks.iter().enumerate().skip(3) {
+            resumed.with(|| restored.run(chunk)).unwrap();
+            resumed.completed(&path, &restored, &restored.program("live"), 64).unwrap();
+            if i == 3 { assert_eq!(load(&path).unwrap().0.done, 4); }
+        }
+        assert_eq!(canvas(&restored), canvas(&s));
+        assert_eq!(encode(&State::capture(&restored.st)).unwrap(), encode(&State::capture(&s.st)).unwrap());
+        assert_eq!(resumed.trace.events, live.trace.events);
+        assert!(!resumed.trace.playback);
+        resumed.written -= Duration::from_secs(900);
+        resumed.completed(&path, &restored, &source, 64).unwrap();
+        assert_eq!(load(&path).unwrap().0.done, chunks.len());
+    }
+
+    #[test]
+    fn live_resume_rejects_missing_and_changed_prefix_before_reconstruction() {
+        let dir = Temp::new();
+        let path = dir.0.join("live.ckpt");
+        let mut s = session();
+        let mut live = Live::new();
+        live.with(|| s.run("counter = 1")).unwrap();
+        live.written -= Duration::from_secs(900);
+        let source = s.program("live");
+        live.completed(&path, &s, &source, 64).unwrap();
+        let changed = source.replace("counter = 1", "counter = 2");
+        let mut restored = session();
+        let mut resumed = Live::new();
+        let error = resumed.resume(&path, &changed, 64, &mut restored, &crate::session::parse_program(&changed), "live", &|_, _| panic!("must validate first")).unwrap_err();
+        assert!(error.contains("source prefix, executable, width or engine environment differs"));
+        assert!(restored.log.is_empty());
+        let chunks = crate::session::parse_program(&source);
+        assert!(resumed.resume(&path, &source, 65, &mut restored, &chunks, "live", &|_, _| panic!("must validate first")).unwrap_err().contains("differs"));
+        let error = resumed.resume(&dir.0.join("missing"), &source, 64, &mut restored, &chunks, "live", &|_, _| {}).unwrap_err();
+        assert!(error.contains("no checkpoint found") && error.contains("refusing resume"));
+    }
+
+    #[test]
+    fn live_checkpoint_uses_its_startup_identity() {
+        let dir = Temp::new();
+        let path = dir.0.join("live.ckpt");
+        let mut s = session();
+        let mut live = Live::new();
+        live.identity.as_mut().unwrap().build = [7; 32];
+        live.identity.as_mut().unwrap().environment.push((b"PAINT_TEST_STARTUP".to_vec(), b"kept".to_vec()));
+        live.with(|| s.run("counter = 1")).unwrap();
+        live.written -= Duration::from_secs(900);
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        let saved = load(&path).unwrap().0;
+        assert_eq!(saved.identity.build, [7; 32]);
+        assert_eq!(saved.identity.environment, live.identity.as_ref().unwrap().environment);
+    }
+
+    #[test]
+    fn live_scope_restores_both_traces_on_unwind() {
+        let mut outer = Live::new();
+        let mut inner = Live::new();
+        outer.with(|| {
+            read("outer", || Ok(1u32)).unwrap();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| inner.with(|| {
+                read("inner", || Ok(2u32)).unwrap();
+                panic!("unwind the trace scope");
+            })));
+            assert!(result.is_err());
+            TRACE.with(|t| assert_eq!(t.borrow().events.len(), 1));
+            read("outer again", || Ok(3u32)).unwrap();
+        });
+        assert_eq!(outer.trace.events.len(), 2);
+        assert_eq!(inner.trace.events.len(), 1);
+        TRACE.with(|t| assert!(!t.borrow().enabled));
+    }
+
+    #[test]
+    fn trace_rollback_discards_failed_events_and_restores_failure() {
+        let mut live = Live::new();
+        live.with(|| {
+            read("kept", || Ok(1u32)).unwrap();
+            let before = mark();
+            read("discarded", || Ok(2u32)).unwrap();
+            let _ = failed("discarded failure".into());
+            assert!(check().is_err());
+            rollback(before);
+            check().unwrap();
+            TRACE.with(|t| assert_eq!(t.borrow().events.len(), 1));
+            let _ = failed("existing failure".into());
+            let before = mark();
+            TRACE.with(|t| t.borrow_mut().failure = Some("replaced".into()));
+            rollback(before);
+            assert!(check().unwrap_err().to_string().contains("existing failure"));
+        });
     }
 
     #[test]

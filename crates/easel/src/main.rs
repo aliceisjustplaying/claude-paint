@@ -613,7 +613,9 @@ fn open(args: &[String]) -> Result<(), String> {
         }
         if let Some(end) = log[shown..].rfind('\n').map(|i| shown + i + 1) {
             for line in log[shown..end].lines() {
-                if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("warning") {
+                if line.starts_with("warning: replay checkpoint") {
+                    eprintln!("{line}");
+                } else if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("reconstructed ") || line.starts_with("warning") {
                     println!("{line}");
                 }
             }
@@ -696,6 +698,8 @@ struct Server {
     build: u64,
     s: Session,
     frames: bool,
+    replay: replay_checkpoint::Live,
+    hand_frames: Option<frames::Recorder>,
     /// The log text as the easel last wrote (or read) it: if the file on
     /// disk differs, it was changed outside the session.
     written: Option<String>,
@@ -856,7 +860,7 @@ fn serve(args: &[String]) -> Result<(), String> {
         if let Some(sc) = srv.scratch.as_mut()
             && sc.s.stale
         {
-            if let Err(e) = sc.s.rebuild() {
+            if let Err(e) = sc.rebuild(&|_, _| {}) {
                 eprintln!("warning: the scratch canvas couldn't be rebuilt ({e}); it is put away");
                 srv.scratch = None;
             }
@@ -871,7 +875,6 @@ fn serve(args: &[String]) -> Result<(), String> {
                 let _ = std::fs::remove_file(&sock);
                 return Err(format!("easel: fatal: {e}"));
             }
-            srv.replayed = srv.s.log.len();
             eprintln!("rebuilt {:.2}s", t0.elapsed().as_secs_f64());
         }
     }
@@ -896,7 +899,7 @@ fn rebuild_serving_status(listener: &UnixListener, srv: &mut Server) -> Result<(
     let (done, total) = (AtomicUsize::new(0), AtomicUsize::new(srv.s.log.len()));
     let (name, written) = (srv.name.clone(), srv.written.clone().ok_or("session integrity: uninitialized log")?);
     let status = || validate_log(&name, &written).and_then(|()| replay_status(&done, &total));
-    serving_status(listener, status, Some(REBUILDING), || srv.s.rebuild_with_progress(|k, _| done.store(k, Ordering::Release)))?.0
+    serving_status(listener, status, Some(REBUILDING), || srv.rebuild(&|k, _| done.store(k, Ordering::Release)))?.0
 }
 
 /// Requests read while `work` ran (`serving_status`), each with its connection, in the order they came.
@@ -1204,7 +1207,7 @@ impl Server {
         let width = committed.as_ref().and_then(|s| s.current.as_ref()).map(|(_, m)| m.painting_width).unwrap_or(width);
         let executable = std::env::current_exe().and_then(std::fs::read).map_err(|e| format!("read build identity: {e}"))?;
         let frames = like.is_none() && name != "scratch" && !name.ends_with("-scratch") && !name.starts_with("sketch");
-        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames, written: None, replayed: 0, scratch: None, display,
+        let mut srv = Self { name, build: save::fnv1a(&executable), s: Session::with_box(width, tubes).map_err(|e| e.to_string())?, frames, replay: replay_checkpoint::Live::new(), hand_frames: None, written: None, replayed: 0, scratch: None, display,
             #[cfg(feature = "state-store")] committed,
             #[cfg(feature = "state-store")] state_failed: false,
         };
@@ -1216,29 +1219,64 @@ impl Server {
         };
         if let Some(text) = text {
             srv.written = Some(text.clone());
-            let chunks = parse_program(&text);
-            progress(0, chunks.len());
-            // a failed chunk refuses the whole reopen: no snapshots, no time limit (session.rs)
-            srv.s.set_replaying(true);
-            for (i, chunk) in chunks.iter().enumerate() {
-                let t0 = Instant::now();
-                eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
-                srv.s.run(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
-                eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
-                progress(i + 1, chunks.len());
-            }
-            srv.s.set_replaying(false);
-            srv.replayed = chunks.len();
-            if srv.s.program(&srv.name) != text {
-                return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
-            }
-            println!("resumed {} chunks from {}", srv.s.log.len(), lp.display());
+            srv.replay_log(&text, progress)?;
             #[cfg(feature = "state-store")]
             if let Some(store) = &mut srv.committed { store.publish(&srv.s, &text).map_err(|e| format!("state integrity: {e}"))?; }
         } else {
+            srv.start_hand_frames(None)?;
             srv.save_log()?;
         }
         Ok(srv)
+    }
+
+    fn rebuild(&mut self, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+        self.validate()?;
+        let text = self.written.clone().ok_or("session integrity: uninitialized log")?;
+        let (width, paper) = { let st = self.s.st.borrow(); (st.width, st.paper) };
+        let mut fresh = Session::with_box(width, self.s.tube_box()).map_err(|e| e.to_string())?.with_paper(paper);
+        fresh.chunk_limit = self.s.chunk_limit;
+        self.s = fresh;
+        self.replay = replay_checkpoint::Live::new();
+        self.replay_log(&text, progress)
+    }
+
+    fn replay_log(&mut self, text: &str, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+        let chunks = parse_program(text);
+        let width = self.s.st.borrow().width;
+        progress(0, chunks.len());
+        self.s.set_replaying(true);
+        let checkpoint = session_dir(&self.name).join("replay.ckpt");
+        let resumed = self.replay.resume(&checkpoint, text, width, &mut self.s, &chunks, &self.name, progress)
+            .and_then(|done| { self.start_hand_frames(Some(done))?; Ok(done) });
+        let done = match resumed {
+            Ok(done) => done,
+            Err(e) => {
+                eprintln!("warning: replay checkpoint: {e}; replaying the full log");
+                let limit = self.s.chunk_limit;
+                self.s = Session::with_box(width, self.s.tube_box()).map_err(|e| e.to_string())?.with_paper(session::logged_paper(text));
+                self.s.chunk_limit = limit;
+                self.s.set_replaying(true);
+                self.replay = replay_checkpoint::Live::new();
+                self.start_hand_frames(None)?;
+                progress(0, chunks.len());
+                0
+            }
+        };
+        for (i, chunk) in chunks.iter().enumerate().skip(done) {
+            let t0 = Instant::now();
+            eprintln!("resuming chunk {}/{}", i + 1, chunks.len());
+            self.run_chunk(chunk).map_err(|e| format!("session integrity: replay failed at chunk {}: {e}; refusing partial session", i + 1))?;
+            if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
+            eprintln!("resumed chunk {}/{} {:.2}s", i + 1, chunks.len(), t0.elapsed().as_secs_f64());
+            progress(i + 1, chunks.len());
+        }
+        self.s.set_replaying(false);
+        self.replayed = chunks.len();
+        if self.s.program(&self.name) != text {
+            return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
+        }
+        println!("resumed {} chunks from {}", self.s.log.len(), log_path(&self.name).display());
+        Ok(())
     }
 
     /// Append only the new suffix. Commit the redundant witness afterward.
@@ -1261,7 +1299,10 @@ impl Server {
                     eprintln!("state store: chunk is committed but journal export needs recovery: {e}");
                 }
             }
-            if changed { self.record_frame(); }
+            if changed {
+                self.record_frame();
+                if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
+            }
             return Ok(String::new());
         }
         let previous = self.written.as_deref().unwrap_or("");
@@ -1283,8 +1324,33 @@ impl Server {
         f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
         std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
         self.written = Some(text);
-        if changed { self.record_frame(); }
+        if changed {
+            self.record_frame();
+            if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
+        }
         Ok(String::new())
+    }
+
+    fn start_hand_frames(&mut self, done: Option<usize>) -> Result<(), String> {
+        frames::start(60.0, session_dir(&self.name).join("hand-frames"), 1000, Some(GALLERY_LIGHT), done)?;
+        self.hand_frames = frames::stop();
+        Ok(())
+    }
+
+    fn run_chunk(&mut self, src: &str) -> Result<session::Ran, String> {
+        let result = frames::with(&mut self.hand_frames, || self.replay.with(|| self.s.run(src)));
+        if result.is_err() {
+            self.start_hand_frames((!self.s.log.is_empty()).then_some(self.s.log.len()))?;
+        }
+        result
+    }
+
+    fn record_replay(&mut self) -> Result<(), String> {
+        let n = self.s.log.len();
+        if n == 0 { return Ok(()); }
+        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), n))?;
+        let width = self.s.st.borrow().width;
+        self.replay.completed(&session_dir(&self.name).join("replay.ckpt"), &self.s, &self.s.program(&self.name), width)
     }
 
     fn record_frame(&self) {
@@ -1730,7 +1796,7 @@ impl Server {
     /// Run a chunk of the easel's own (not the painter's) and log it.
     fn run_own(&mut self, src: &str) -> Result<(), String> {
         self.ready()?;
-        self.s.run(src)?;
+        self.run_chunk(src)?;
         self.save_log()?;
         Ok(())
     }
@@ -1783,7 +1849,7 @@ impl Server {
             "note" => append_note(self.s.st.borrow().clock, payload),
             "status" => Ok(format!("{}\n", self.s.status())),
             "globals" => Ok(self.s.globals()),
-            "do" => match self.s.run(payload) {
+            "do" => match self.run_chunk(payload) {
                 Ok(ran) => {
                     let note = self.save_log()?;
                     let n = self.s.log.len();
@@ -1850,6 +1916,12 @@ impl Server {
             }
             "close" => {
                 let note = self.save_log()?;
+                frames::with(&mut self.hand_frames, || {
+                    if let Some(c) = self.s.canvas() { frames::finish(&c); }
+                });
+                if let Some(e) = self.hand_frames.as_ref().and_then(|r| r.err.as_ref()) {
+                    eprintln!("warning: final hand-time frame not saved: {e}");
+                }
                 let live = self.save_live().unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));
                 if let Some(pool) = &self.display { pool.flush()?; }
                 Ok(format!("{note}{live}closed; the session is in {}\n", log_path(&self.name).display()))

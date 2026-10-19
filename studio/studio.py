@@ -410,6 +410,8 @@ def _parse(path):
                         ev.update(kind="jnote", text=a.get("text", ""))
                     elif name == "notebook":
                         ev.update(kind="notebook", text=a.get("text", ""))
+                    elif name == "ask_critic":
+                        ev.update(kind="critic", text=a.get("note", ""))
                     else:
                         ev.update(text=json.dumps(a)[:300])
                     c["calls"][x.get("id")] = len(c["events"])
@@ -423,7 +425,7 @@ def _parse(path):
                         r"^a (?:fresh scratch canvas|scratch canvas beside the painting)|\(the scratch canvas couldn't be reopened, so it is put aside\)", txt, re.M):
                     ev["scratch_reset"] = True
                 if txt:
-                    ev["out"] = txt[-1500:]
+                    ev["out"] = txt if ev["kind"] == "critic" else txt[-1500:]
                 if m.get("isError"):
                     ev["err"] = True
                 c["changed"].append(parent)

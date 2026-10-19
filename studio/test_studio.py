@@ -1071,6 +1071,19 @@ def test_notebook_calls_are_events_like_journal_notes(home, server):
         assert "if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];" in fh.read()
 
 
+def test_ask_critic_shows_the_note_and_the_whole_reply(home, server):
+    _, studio, log = home
+    reply = "The horizon sits too high. " * 100
+    log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "id": "k1", "name": "ask_critic", "arguments": {"note": "Is the mist too heavy?"}}]}})
+        + line({"type": "message", "message": {"role": "toolResult", "toolCallId": "k1", "isError": False,
+                                                "content": [{"type": "text", "text": reply}]}}))
+    status, body = server(f"/api/events?p={PAINTER}&since=0")
+    assert status == 200
+    asked = [e for e in json.loads(body)["events"] if e["kind"] == "critic"]
+    assert [(e["text"], e["out"]) for e in asked] == [("Is the mist too heavy?", reply)]
+
+
 def atelier_work(root, sid, n, folder, manifest=None, card=None):
     """A work in the atelier fixture: its run record, manifest and, once it hangs, its card."""
     work = root / "works" / f"{sid}-{n:03d}"

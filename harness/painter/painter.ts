@@ -45,6 +45,7 @@ import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
 import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 import { text } from "./easel-client.ts";
 import { CRITIQUE, criticFromEnv, leaveNote, passagesToTakeUp, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
+import { registerInbox } from "./inbox.ts";
 
 /** The system prompt is only what --system-prompt gives (the critic's session uses this too). */
 export function onlyOurSystemPrompt(pi: ExtensionAPI) {
@@ -101,6 +102,7 @@ export default function painter(pi: ExtensionAPI) {
 			: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
 		return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
 	});
+	registerInbox(pi);
 	const pace = tpm ? new TokenPace(tpm) : undefined;
 	let lastRequest = 0;
 	// the latest usage-limit error of this run, and since when the limit has held

@@ -15,7 +15,63 @@ from the machine's global pi setup (packages, `~/.pi/agent/extensions`,
 | `notebook.ts` | the atelier's `notebook` tool (`atelier/`, listed in its `--tools` only): appends to or revises `notebook.md`, every call kept in `out/easel/notebook-revisions.jsonl`; `test/notebook.test.ts` tests it |
 | `system_prompt.md` | the painter's system prompt (approved by Alice, 2026-09-27) |
 
-## Launch
+## Direct messages
+
+New `atelier/run.py` runs enable an inbox by default. `--no-inbox` disables
+delivery for that run (`configure(..., inbox=False)` does the same in a runner
+configuration). Existing or already-running painters aren't changed.
+
+```sh
+scripts/tell-painter /path/to/run/OPUS "Your message"
+scripts/tell-painter /path/to/paint-studio-ab12 "Your message"
+```
+
+The studio form uses `.painter-run`, written by the runner when it starts a
+sitting. The command appends timestamped plain text from the studio operator to
+`painter-inbox.json` in that run directory. It never writes painting logs,
+journals or critic notes. Anyone with write access to that directory can
+write messages; this is a local channel, not an authenticated remote service.
+
+After each top-level tool call, the harness appends waiting messages to that
+tool's result. If the painter thinks for a long time without calling a tool,
+messages wait for the next tool call. Messages left when a sitting ends go
+at the top of the next sitting's opening message, before its recovery text.
+Each message has this framing, with its text unchanged:
+
+```text
+A message from the person who runs this studio:
+
+<message text>
+
+End of message.
+```
+
+`painter-inbox.json` is both the inbox and its delivery log. Every entry has
+an `id`, `timestamp` and `text`. A committed `delivery` records `time`,
+`sitting`, `session`, `tool_call` and `tool`; the last two are null for an
+opening message. The session transcript contains the text too. Tool-result
+details list the message IDs as `painterInbox`.
+
+Writers share a file lock and atomically replace the inbox/log. An
+`attaching` delivery reserves the message while pi writes its transcript.
+The next request or the end of the agent turn confirms the persisted
+receipt and marks it `delivered`. A restart or a later send reconciles an
+interrupted attachment: a persisted receipt is committed once; an attachment
+whose process died before writing its receipt becomes pending again.
+This records delivery into the conversation, not whether the model read or
+acted on it. No inbox means no added prompt text or changed tool results.
+
+For another launcher, set `PAINTER_INBOX_DIR` to the run directory and
+`PAINTER_INBOX_SITTING` to the sitting number. Both are removed from the
+painter's environment after the harness reads them. Persistent pi sessions
+are required for delivery receipts.
+
+Tests: `scripts/test` runs the Python inbox tests and
+`test/inbox-hooks.test.ts`. The real-pi integration check is
+`node --test harness/painter/test/inbox.test.ts` (with `pi` on PATH and
+`TMPDIR` pointing to scratch), like the other pi integration checks here.
+
+## Launch commands
 
 Run from the studio folder (pi's cwd is the studio). `H` is this folder,
 `BLACK` is Alice's installed pi-black extension, `TEMP_GUARD` her persistent-temp

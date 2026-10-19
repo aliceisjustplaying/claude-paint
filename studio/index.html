@@ -312,7 +312,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Q: what we watch, as a query: 'p=<painter folder>' (all its sittings, stitched) or 's=<session file>' (one session)
-let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing = null, cwd = '', sitStarts = [0], nSittings = 1;
+let Q = null, epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing = null, cwd = '', sitStarts = [], nSittings = 0;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));  // text and quoted attributes
 const fname = p => (p || '').split('/').slice(-1)[0];
 const fmt = s => { s = Math.max(0, s|0); return `${(s/3600)|0}:${String(((s%3600)/60)|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
@@ -401,7 +401,8 @@ const sessLabel = s => `${s.folder.replace(/^claude-paint-/, '')}${s.model ? ' �
 // an old ?s= link to one sitting of a painter: what to call it
 function oneSitting() {
   const path = Q && Q.startsWith('s=') ? decodeURIComponent(Q.slice(2)) : '', owner = allSessions.find(s => s.files && s.files.includes(path));
-  return owner ? `${owner.folder} · sitting ${owner.files.indexOf(path) + 1} of ${owner.sittings} only` : path.split('/').slice(-2).join('/');
+  const n = owner && (owner.sitting_numbers ? owner.sitting_numbers[owner.files.indexOf(path)] : owner.files.indexOf(path) + 1);
+  return n ? `${owner.folder} · sitting ${n} of ${owner.sittings} only` : path.split('/').slice(-2).join('/');
 }
 function renderHeader() {
   const cur = allSessions.find(s => qOf(s) === Q), w = $('who');
@@ -532,7 +533,7 @@ async function loadSessions() {
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
-function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = [0]; nSittings = 1; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
+function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
 function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; clearPic($('img')); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
 function noPicture() { noPainting(); second(-1); palette(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
@@ -570,7 +571,9 @@ async function poll() {
     return; }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
-  if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
+  const shifted = STATIC && events.some((e, i) => !r.events[i] || e.kind !== r.events[i].kind || e.ts !== r.events[i].ts || e.kind === 'sitting' && e.n !== r.events[i].n);
+  const rebuilt = epoch !== null && r.epoch !== epoch || shifted;
+  if (rebuilt) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];
@@ -587,7 +590,7 @@ async function poll() {
     r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j, f); else if (e.kind === 'look') hasLooks = true; else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j, f); } });
     $('strip').appendChild(f); if (live) stripEnd();  // (fixed thumbnail sizes in the CSS: the strip's width is known before they load)
     ticks();
-    if (live) show(events.length - 1);
+    if (live || rebuilt) show(live ? events.length - 1 : Math.min(pos, events.length - 1));
     if (!base && sessionsLoaded && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
   }
   if (live) refreshLiveCode();
@@ -600,7 +603,7 @@ function sitDivider(e, i, to) {
 }
 function ticks() {
   const n = Math.max(1, events.length - 1);
-  $('ticks').innerHTML = sitStarts.slice(1).map(k => `<span style="left:calc(8px + (100% - 16px) * ${k / n})" title="${esc(sitLabel(events[k]))}">${events[k].n}</span>`).join('');
+  $('ticks').innerHTML = sitStarts.filter(k => events[k].n > 1).map(k => `<span style="left:calc(8px + (100% - 16px) * ${k / n})" title="${esc(sitLabel(events[k]))}">${events[k].n}</span>`).join('');
 }
 // time spent painting up to event i (at time t): the sittings' durations summed, the gaps between them not counted
 // the painting's own clock at event i: the easel's time of day ("day 3, 14:20"; it began at 09:00 on day 1), from the last
@@ -619,9 +622,14 @@ function stretch(min) {
   const y = Math.floor(d / 365.25); return `${q(y, 'year')} ${q(Math.floor((d - y * 365.25) / 30.44), 'month')}`;
 }
 function paintedFor(i, t) {
-  let total = 0, s0 = 0;
-  for (const b of sitStarts.slice(1)) { if (b > i) break; total += Date.parse(events[b - 1].ts) - Date.parse(events[s0].ts); s0 = b; }
-  return (total + t - Date.parse(events[s0].ts)) / 1000;
+  let total = 0, s0 = null;
+  for (let k = 0; k <= i; k++) {
+    const e = events[k];
+    if (e.kind !== 'start' && e.kind !== 'sitting') continue;
+    if (s0 !== null) total += Date.parse(events[k - 1].ts) - s0;
+    s0 = e.kind === 'sitting' || k > 0 && events[k - 1].kind === 'sitting' ? Date.parse(e.ts) : null;
+  }
+  return (total + (s0 === null ? 0 : t - s0)) / 1000;
 }
 const sittingAt = i => sitStarts.filter(b => b <= i).length;
 function thumb(e, i, to) {
@@ -728,9 +736,9 @@ function status() {
   // LIVE only while the painter works; after that the same control just goes to the end
   const g = $('golive'); g.classList.toggle('on', atLive && active); g.classList.toggle('end', !active);
   g.textContent = active ? '● LIVE' : 'End ⇥'; g.title = active ? 'jump to live  l' : 'go to the end  l';
-  const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = atLive ? nSittings : sitStarts.length;
+  const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = atLive ? nSittings : sitStarts.length, sitting = sittingAt(pos);
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
-  $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 ? (atLive ? ` · ${n} sittings` : ` · sitting ${sittingAt(pos)} of ${n}`) : '');
+  $('clocklbl').textContent = (atLive ? (active ? 'painting for' : 'painted for') : 'at') + (n > 1 && (atLive || sitting) ? (atLive ? ` · ${n} sittings` : ` · sitting ${sitting} of ${n}`) : '');
   const ec = easelClockAt(pos), pc = $('pclock'); pc.hidden = false;
   if (ec) { pc.querySelector('b').textContent = stretch(ec.min);  // (one figure: time passed, as the real clock beside it; the easel's own reading goes in the tooltip)
     pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is the latest recorded time (${ec.text}; it counts from 09:00 on day 1).`; }
@@ -922,7 +930,7 @@ function journal(i, scroll) {
       if (e.kind === 'think' || e.kind === 'say') html = md(e.text.trim());
       else if (e.kind === 'critic') html = '<div class="cq">🗣 asks the critic</div>' + (e.text.trim() ? md(e.text.trim()) : '') +
         '<div class="cq">' + (e.out === undefined ? '🧐 the critic is looking…' : e.err ? '🧐 the critic couldn’t come' : '🧐 the critic writes back') + '</div>' + (e.out ? md(e.out.trim()) : '');
-      else if (e.kind === 'sitting') { const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
+      else if (e.kind === 'sitting') { const gap = k > 0 ? (t - Date.parse(events[k - 1].ts)) / 1000 : 0;
         html = '🪑 ' + esc(sitLabel(e)) + (gap > 120 ? ' <span>· after ' + ago(gap).replace(' ago', '') + ' away</span>' : ''); }
       else { const c = kindOf(e);
         if (c && !(e.kind === 'image' && (e.ref || e.look !== undefined || k > 0 && (events[k-1].kind === 'read' || events[k-1].kind === 'look')))) {

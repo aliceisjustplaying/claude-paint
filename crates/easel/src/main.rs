@@ -9,12 +9,10 @@
 //!   easel run paintings/lua/<name>.lua [--out path] [--light az,el | --gallery] [--look] [--state-digest digests.txt]
 //!                                    (replay build) replay at the width it was painted at
 //!
-//! Two builds (see `USAGE`). The replay build (feature `replay`, on by
-//! default: developers, tests and the outside runner) has named sessions
-//! (`-s`, `EASEL_SESSION`), `EASEL_ROOT`, `run`, `check` and `hash-probe`. The
-//! painter build (`--no-default-features`) has none of them: its studio is
-//! the directory above the executable's (`<studio>/bin/easel`) and holds one
-//! painting, `PAINTING`. See notes/easel_guide.md.
+//! One binary, two runtime modes (notes/easel.md#studio-selection). The
+//! developer mode has named sessions, `EASEL_ROOT`, replay and finishing.
+//! Painter mode has none of them: its studio is the directory above the
+//! executable's (`<studio>/bin/easel`) and holds one painting, `PAINTING`.
 
 mod api;
 mod ground_cache;
@@ -24,12 +22,9 @@ mod depth;
 mod display;
 mod draw_edges;
 mod draw_outline;
-#[cfg(feature = "finish")]
 mod finish;
 mod form;
-#[cfg(feature = "replay")]
 mod frames;
-#[cfg(feature = "replay")]
 mod legacy;
 mod look;
 mod output;
@@ -37,12 +32,12 @@ mod live_frames;
 mod save;
 #[cfg(feature = "state-store")]
 mod painting_store;
-#[cfg(all(feature = "replay", feature = "render-snapshot"))]
+#[cfg(feature = "render-snapshot")]
 mod optical;
 mod palette_look;
 mod session;
-#[cfg(feature = "replay")]
 mod state_dump;
+mod studio;
 mod time;
 mod world;
 
@@ -98,12 +93,10 @@ fn new_width(file: Option<(&str, &str)>, env: Option<&str>) -> Result<usize, Str
     }
 }
 
-/// The painter build's one session.
-#[cfg(not(feature = "replay"))]
+/// Painter mode's one session.
 const PAINTING: &str = "painting";
 
-#[cfg(not(feature = "replay"))]
-const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
+const PAINTER_USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open          start or reattach; replays paintings/lua/painting.lua if it exists
   easel do '<lua>'  |  easel do -f chunk.lua  |  easel do - (stdin)     [--look] also looks afterwards
@@ -123,8 +116,7 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   easel note '<text>' | easel note - (stdin)    append a dated entry to notes/journal.md
   easel tubes [--markdown]   the tubes in the box (--markdown: as a table)";
 
-#[cfg(feature = "replay")]
-const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
+const DEVELOPER_USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
 
   easel open <name>    start or reattach; replays paintings/lua/<name>.lua if it exists
                       (a new session named sketch... is a sketch, 600px)
@@ -166,6 +158,10 @@ const USAGE: &str = "easel: a live painting session (see notes/easel_guide.md)
   -s <name> (or EASEL_SESSION) picks the session; default: the last opened.";
 
 fn main() -> ExitCode {
+    if let Err(e) = studio::load() {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let name = match take_session(&mut args) {
         Ok(n) => n,
@@ -182,24 +178,20 @@ fn main() -> ExitCode {
     let r = match cmd.as_str() {
         "open" => open(&rest),
         "serve" => serve(&rest),
-        #[cfg(feature = "replay")]
-        "run" => run(&rest),
-        #[cfg(feature = "replay")]
-        "render-checkpoint" => render_checkpoint(&rest),
-        #[cfg(all(feature = "replay", feature = "state-store"))]
-        "render-state" => render_state(&rest),
-        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
-        "snapshot-state" => optical::export(&rest),
-        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
-        "render-snapshot" => optical::render(&rest),
-        #[cfg(all(feature = "replay", feature = "render-snapshot"))]
-        "snapshot-companions" => optical::companions(&rest),
-        #[cfg(all(feature = "replay", feature = "finish"))]
-        "finish" => finish_cmd(&rest),
+        "run" if !studio::painter() => run(&rest),
+        "render-checkpoint" if !studio::painter() => render_checkpoint(&rest),
+        #[cfg(feature = "state-store")]
+        "render-state" if !studio::painter() => render_state(&rest),
+        #[cfg(feature = "render-snapshot")]
+        "snapshot-state" if !studio::painter() => optical::export(&rest),
+        #[cfg(feature = "render-snapshot")]
+        "render-snapshot" if !studio::painter() => optical::render(&rest),
+        #[cfg(feature = "render-snapshot")]
+        "snapshot-companions" if !studio::painter() => optical::companions(&rest),
+        "finish" if !studio::painter() => finish_cmd(&rest),
         "note" => note(&rest, name),
         "tubes" => tubes(&rest),
-        #[cfg(feature = "replay")]
-        "hash-probe" => {
+        "hash-probe" if !studio::painter() => {
             println!("{}", session::hash_probe());
             Ok(())
         }
@@ -210,9 +202,8 @@ fn main() -> ExitCode {
         "do" | "look" | "probe" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
         // replaying the log to compare it with the live canvas is the runner's, after the
         // painter's session (scripts/check_painting); the painter build has no `check`
-        #[cfg(feature = "replay")]
-        "check" => client(&cmd, &rest, name),
-        o => Err(format!("easel: no command {o:?}\n\n{USAGE}")),
+        "check" if !studio::painter() => client(&cmd, &rest, name),
+        o => Err(format!("easel: no command {o:?}\n\n{}", usage())),
     };
     match r {
         Ok(()) => ExitCode::SUCCESS,
@@ -224,17 +215,29 @@ fn main() -> ExitCode {
 }
 
 fn print_usage() {
-    println!("{USAGE}");
-    #[cfg(all(feature = "replay", feature = "state-store"))]
+    println!("{}", usage());
+    if studio::painter() {
+        return;
+    }
+    #[cfg(feature = "state-store")]
     println!("\n  run … --state-store DIR [--state-budget-mib N]   publish each successful chunk\n  render-state DIR out.png [--mode color|gallery|relief] [--look]   open the committed revision\n  EASEL_STATE_SESSION=<name> opts that live painting into per-chunk state publication");
-    #[cfg(all(feature = "replay", feature = "render-snapshot"))]
+    #[cfg(feature = "render-snapshot")]
     println!("\n  snapshot-state DIR out.view   export compact optics of the committed revision\n  render-snapshot out.view out.png [--mode color|gallery|relief] [--light az,el,strength] [--crop x0,y0,x1,y1]\n  snapshot-companions out.view CACHE [--gallery-light az,el,strength] [--relief-light az,el,strength] [--crop x0,y0,x1,y1] [--cache-budget-mib N]");
+}
+
+fn usage() -> &'static str {
+    if studio::painter() { PAINTER_USAGE } else { DEVELOPER_USAGE }
 }
 
 /// The session a command is for: `-s <name>` (taken out of `args`), else
 /// `EASEL_SESSION`, else (None) the last one opened.
-#[cfg(feature = "replay")]
 fn take_session(args: &mut Vec<String>) -> Result<Option<String>, String> {
+    if studio::painter() {
+        if let Some(a) = args.iter().find(|a| *a == "-s" || *a == "--session" || a.starts_with("--session=")) {
+            return Err(format!("easel: no option {a:?}: this studio has one painting, there are no sessions to pick\n\n{}", usage()));
+        }
+        return Ok(Some(PAINTING.to_string()));
+    }
     let mut name: Option<String> = std::env::var("EASEL_SESSION").ok();
     if let Some(i) = args.iter().position(|a| a == "-s" || a == "--session")
         && i + 1 < args.len()
@@ -243,16 +246,6 @@ fn take_session(args: &mut Vec<String>) -> Result<Option<String>, String> {
         args.remove(i);
     }
     Ok(name)
-}
-
-/// The painter build has one session: `-s` is refused, `EASEL_SESSION`
-/// ignored.
-#[cfg(not(feature = "replay"))]
-fn take_session(args: &mut Vec<String>) -> Result<Option<String>, String> {
-    if let Some(a) = args.iter().find(|a| *a == "-s" || *a == "--session") {
-        return Err(format!("easel: no option {a:?}: this studio has one painting, there are no sessions to pick\n\n{USAGE}"));
-    }
-    Ok(Some(PAINTING.to_string()))
 }
 
 fn session_dir(name: &str) -> PathBuf {
@@ -304,7 +297,6 @@ fn journal_path() -> PathBuf {
     root().join("notes/journal.md")
 }
 
-#[cfg(feature = "replay")]
 fn flag(args: &[String], f: &str) -> Option<String> {
     args.iter().position(|a| a == f).and_then(|i| args.get(i + 1).cloned())
 }
@@ -450,10 +442,7 @@ fn read_request(s: &mut impl Read) -> Result<Vec<u8>, String> {
 // ---------------------------------------------------------------- client
 
 fn request(name: &str, cmd: &str, args: &[String], payload: &[u8]) -> Result<(bool, String), String> {
-    #[cfg(feature = "replay")]
-    let not_running = || format!("no easel session {name:?} running: easel open {name}");
-    #[cfg(not(feature = "replay"))]
-    let not_running = || "no painting open: easel open".to_string();
+    let not_running = || if studio::painter() { "no painting open: easel open".to_string() } else { format!("no easel session {name:?} running: easel open {name}") };
     let mut s = UnixStream::connect(sock_path(name)).map_err(|_| not_running())?;
     let mut head = cmd.to_string();
     for a in args {
@@ -515,9 +504,14 @@ fn client(cmd: &str, args: &[String], name: Option<String>) -> Result<(), String
     }
 }
 
-/// The session `open` is for: the name given (replay build).
-#[cfg(feature = "replay")]
+/// The session `open` is for: the studio's painting or a developer's name.
 fn open_name(args: &[String]) -> Result<String, String> {
+    if studio::painter() {
+        if let Some(a) = args.first() {
+            return Err(format!("open: this studio has one painting; easel open takes no name or option (got {a:?})"));
+        }
+        return Ok(PAINTING.to_string());
+    }
     let name = args.first().filter(|a| !a.starts_with('-')).ok_or("open <name>")?.clone();
     valid_name(&name)?;
     if args.len() != 1 {
@@ -526,21 +520,12 @@ fn open_name(args: &[String]) -> Result<String, String> {
     Ok(name)
 }
 
-/// The painter build opens its one painting: `open` takes nothing.
-#[cfg(not(feature = "replay"))]
-fn open_name(args: &[String]) -> Result<String, String> {
-    if let Some(a) = args.first() {
-        return Err(format!("open: this studio has one painting; easel open takes no name or option (got {a:?})"));
-    }
-    Ok(PAINTING.to_string())
-}
-
 /// Remember the session opened last (replay build: commands without `-s`
 /// go to it).
 fn set_current(name: &str) -> Result<(), String> {
-    #[cfg(feature = "replay")]
-    std::fs::write(root().join("out/easel/current"), name).map_err(|e| e.to_string())?;
-    let _ = name;
+    if !studio::painter() {
+        std::fs::write(root().join("out/easel/current"), name).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -594,6 +579,11 @@ fn open(args: &[String]) -> Result<(), String> {
     loop {
         if let Some(lock) = try_lock(&name)? {
             if started {
+                if let Ok(log) = std::fs::read_to_string(dir.join("server.log"))
+                    && log.contains("easel: fatal")
+                {
+                    return Err(log);
+                }
                 return Err(format!("the session's server stopped without saying why; see {}", dir.join("server.log").display()));
             }
             // no server holds the session: a socket left there is a dead one's
@@ -732,8 +722,7 @@ fn scratch_name(name: &str) -> String {
 fn serve(args: &[String]) -> Result<(), String> {
     let name = args.first().ok_or("serve <name>")?.clone();
     valid_name(&name)?;
-    #[cfg(not(feature = "replay"))]
-    if name != PAINTING {
+    if studio::painter() && name != PAINTING {
         return Err(format!("easel: fatal: this studio has one painting, {PAINTING:?}"));
     }
     if args.len() != 1 {
@@ -770,7 +759,6 @@ fn serve(args: &[String]) -> Result<(), String> {
     };
     let _ = std::io::stdout().flush();
     // the check running on its own thread, if any (check.rs; replay build only)
-    #[cfg(feature = "replay")]
     let mut checking: Option<check::Job> = None;
     // requests that came while the log replayed or a chunk ran, read and waiting their turn
     let mut pending = std::collections::VecDeque::from(waiting);
@@ -807,8 +795,7 @@ fn serve(args: &[String]) -> Result<(), String> {
             eprintln!("{cmd} skipped: the client went away before it ran");
             continue;
         }
-        #[cfg(feature = "replay")]
-        if cmd == "check" {
+        if cmd == "check" && !studio::painter() {
             if let Some(j) = checking.take() {
                 j.stop();
             }
@@ -855,7 +842,6 @@ fn serve(args: &[String]) -> Result<(), String> {
             return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
         }
         if cmd == "close" && r.is_ok() {
-            #[cfg(feature = "replay")]
             if let Some(j) = checking.take() {
                 j.stop();
             }
@@ -1694,7 +1680,6 @@ impl Server {
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
-    #[cfg(feature = "replay")]
     fn check_input(&self) -> Result<check::Input, String> {
         self.ready()?;
         Ok(check::Input {
@@ -1873,11 +1858,9 @@ impl Server {
     }
 }
 
-#[cfg(feature = "replay")]
 fn bits(v: &[paint::Rgb]) -> Vec<u32> {
     v.iter().flat_map(|p| p.map(f32::to_bits)).collect()
 }
-#[cfg(feature = "replay")]
 fn bits_f(v: &[f32]) -> Vec<u32> {
     v.iter().map(|x| x.to_bits()).collect()
 }
@@ -1985,10 +1968,8 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
     image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-#[cfg(feature = "replay")]
 const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
-#[cfg(any(feature = "replay", feature = "state-store"))]
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
     let mut pending: std::collections::VecDeque<_> = absolute.components().map(|c| c.as_os_str().to_os_string()).collect();
@@ -2020,7 +2001,6 @@ fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     Ok(resolved)
 }
 
-#[cfg(any(feature = "replay", feature = "state-store"))]
 fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     use std::os::unix::fs::MetadataExt;
     let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
@@ -2030,7 +2010,6 @@ fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     })
 }
 
-#[cfg(feature = "replay")]
 fn run(args: &[String]) -> Result<(), String> {
     let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
     let mut i = 1;
@@ -2223,10 +2202,8 @@ fn run(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(feature = "replay")]
 const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]";
 
-#[cfg(feature = "replay")]
 fn render_checkpoint(args: &[String]) -> Result<(), String> {
     let (mut files, mut mode, mut log, mut bounded) = (Vec::new(), "gallery".to_string(), None::<String>, false);
     let mut i = 0;
@@ -2277,7 +2254,7 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(feature = "replay", feature = "state-store"))]
+#[cfg(feature = "state-store")]
 fn render_state(args: &[String]) -> Result<(), String> {
     let Some(dir) = args.first().filter(|s| !s.starts_with('-')) else { return Err("render-state <store directory> <out.png> [--mode color|gallery|relief] [--look]".into()) };
     let Some(out) = args.get(1).filter(|s| !s.starts_with('-')) else { return Err("render-state needs an output PNG".into()) };
@@ -2301,7 +2278,6 @@ fn render_state(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(feature = "replay", feature = "finish"))]
 const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [--coats C] [--no-varnish] [--no-cracks] [--relief]
        finish --print-chunk [--coats C] [--no-varnish] [--no-cracks] [--relief]";
 
@@ -2309,7 +2285,6 @@ const FINISH_USAGE: &str = "finish <save file> <out.png> [--log painting.lua] [-
 /// save.rs) into a fresh session, run the finishing chunk scripts/finish_painting builds
 /// (finish.rs `chunk`) and write the PNG, without replaying the log. With `--log`, the save
 /// must be of that log (its hash and chunk count). `--print-chunk` prints the chunk only.
-#[cfg(all(feature = "replay", feature = "finish"))]
 fn finish_cmd(args: &[String]) -> Result<(), String> {
     let (mut coats, mut varnish, mut cracks, mut relief) = ("0.4".to_string(), true, true, false);
     let (mut print_chunk, mut log, mut files) = (false, None::<String>, Vec::new());
@@ -2370,7 +2345,6 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(feature = "replay")]
 use save::fnv1a;
 
 /// `run --state-digest`'s line for the state after chunk `n` (which took
@@ -2401,7 +2375,6 @@ use save::fnv1a;
 /// surface, film floors of past strokes) that checkpoints leave out too.
 /// The format is fixed (recorded goldens depend on it): a field added to
 /// `Held`, `Hand` or the checkpoint changes the digests.
-#[cfg(feature = "replay")]
 fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let mut st = s.st.borrow_mut();
     let canvas = match st.canvas.as_ref() {

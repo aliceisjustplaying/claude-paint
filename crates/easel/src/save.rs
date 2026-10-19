@@ -129,25 +129,21 @@ pub fn write(s: &Session, program: &str, path: &std::path::Path) -> Result<bool,
 }
 
 /// A save read back: the session holding its state, and what ties it to its log.
-#[cfg(feature = "replay")]
 pub struct Restored {
     pub session: Session,
     pub chunks: usize,
     pub log_fnv: u64,
 }
 
-#[cfg(feature = "replay")]
 fn field<'a>(h: &'a std::collections::BTreeMap<&str, &str>, k: &str) -> Result<&'a str, String> {
     h.get(k).copied().ok_or_else(|| format!("the save has no {k}= in its header"))
 }
 
-#[cfg(feature = "replay")]
 fn parse<T: std::str::FromStr>(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<T, String> {
     let v = field(h, k)?;
     v.parse().map_err(|_| format!("the save's {k}={v:?} doesn't parse"))
 }
 
-#[cfg(feature = "replay")]
 fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, String> {
     let v = field(h, k)?;
     u64::from_str_radix(v, 16).map_err(|_| format!("the save's {k}={v:?} isn't hex"))
@@ -156,7 +152,6 @@ fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, Str
 /// Read a save into a fresh replay session: the canvas, and the studio fields as the live
 /// session left them. Its next chunk runs as chunk `chunks + 1`, as it would at the end of
 /// the log.
-#[cfg(feature = "replay")]
 pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
     use std::rc::Rc;

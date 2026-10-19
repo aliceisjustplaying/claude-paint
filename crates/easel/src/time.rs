@@ -71,7 +71,6 @@ pub fn verb<R>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R
         Verb::Pass | Verb::Wait => flush(st, true),
         Verb::Query => {}
     }
-    #[cfg(feature = "replay")]
     if let Some(c) = st.borrow().canvas.as_ref() {
         crate::frames::after_verb(c);
     }
@@ -102,7 +101,6 @@ pub(crate) fn flush(st: &S, force: bool) {
 /// the mark grain, verb flushes and chunk-end flush are unchanged.
 pub fn start(c: &mut paint::Canvas) {
     c.set_hand_time(Some(SLICE_MIN));
-    #[cfg(feature = "replay")]
     crate::frames::begin(c);
 }
 

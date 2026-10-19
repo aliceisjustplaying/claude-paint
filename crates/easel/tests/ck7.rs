@@ -1,4 +1,3 @@
-#![cfg(feature = "replay")]
 
 use std::path::Path;
 use std::process::Command;

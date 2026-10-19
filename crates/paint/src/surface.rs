@@ -634,7 +634,7 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     l.crown_um * (a.max(b) + 0.06 * grit)
 }
 
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod liquid_film_tests {
     use super::*;
 

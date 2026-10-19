@@ -106,7 +106,6 @@ impl Style {
     ///   weave, then a brushed top layer (60 µm) whose striations stay;
     ///   total 240 µm.
     /// - `Palette::cobalt_box`.
-    #[cfg(tube_box)]
     pub fn oil() -> Self {
         Style::oil_with(Palette::cobalt_box())
     }
@@ -144,7 +143,6 @@ impl Style {
     /// `Palette::smalt_box` and a three-layer ground: bright red, then two
     /// light brown layers, the first two knifed, the third rolled on (a fine
     /// texture).
-    #[cfg(tube_box)]
     pub fn oil_red_ground() -> Self {
         Style {
             width_mm: 1714.0,

@@ -1,8 +1,17 @@
 # Exact batch replay
 
-The replay build's `run` command can keep a resumable checkpoint after every
-successful chunk. Live sessions and their finish-only `live.ckpt` files are
-unchanged.
+`easel run` can keep a resumable checkpoint after every successful chunk, and
+`scripts/finish_painting` and `scripts/replay_clip` always do: a replay that is
+killed or interrupted picks up from its last finished chunk when the same
+command runs again (`<out>.replay.ckpt`, `<frames dir>.replay.ckpt`), and the
+checkpoint is deleted once the replay finishes. Live sessions and their
+finish-only `live.ckpt` files are unchanged.
+
+Hand-time frames (`--frames-dir`) resume too. After each chunk the recorder
+appends its state to `frames.states` in the frames folder; a resumed replay
+takes the state after the checkpoint's last chunk, cuts `frames.tsv` and the
+frames back to it and carries on, so the frames come out as an uninterrupted
+replay writes them. `--frames-every`, `--frame-width` and the light must match.
 
 ```
 easel run painting.lua --replay-checkpoint replay.ckpt --until-chunk 137 --out final.png

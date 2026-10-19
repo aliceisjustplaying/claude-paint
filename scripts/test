@@ -95,6 +95,7 @@ rust smoke easel 'test smoke test'
 rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
+rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \

@@ -2023,8 +2023,8 @@ fn run(args: &[String]) -> Result<(), String> {
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }
-    if flag(args, "--replay-checkpoint").is_some() && args.iter().any(|a| matches!(a.as_str(), "--frames-dir" | "--state-store" | "--dump-state")) {
-        return Err("--replay-checkpoint cannot resume frames, a state store or per-chunk state dumps".into());
+    if flag(args, "--replay-checkpoint").is_some() && args.iter().any(|a| matches!(a.as_str(), "--state-store" | "--dump-state")) {
+        return Err("--replay-checkpoint cannot resume a state store or per-chunk state dumps".into());
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
@@ -2123,17 +2123,20 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
-        (None, None) => false,
+        (None, None) => None,
         (Some(e), Some(d)) => {
             let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
             let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
-            frames::start(every, PathBuf::from(d), fw, light)?;
-            true
+            Some((every, PathBuf::from(d), fw))
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
     let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?.with_paper(session::logged_paper(&text));
     let mut batch = replay_checkpoint::Batch::open(args, Path::new(file), &text, width, &mut s, &chunks, &out)?;
+    if let Some((every, dir, fw)) = frames.clone() {
+        frames::start(every, dir, fw, light, (batch.done > 0).then_some(batch.done))?;
+    }
+    let frames = frames.is_some();
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
     if let (Some(file), Some(rows)) = (&mut digests, &batch.digests) {

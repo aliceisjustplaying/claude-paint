@@ -18,9 +18,9 @@ const initial = [ev('start', { cwd:'/painter' }), ev('think', { text:'# First\n\
   ev('look', { text:'mode normal' }, 13), ev('paint', { code:'local pending=4' }, 14),
   ev('sitting', { n:2 }, 20), ev('say', { text:'## Done\n\n3. ordered\n4. list\n\n---\n\n_literal_ <tag>' }, 21)];
 
-async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false, sittings = 2 } = {}) {
+async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false, sittings = 2, codeReady = true } = {}) {
   const page = await browser.newPage();
-  const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0 };
+  const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0, sittings };
   page.on('pageerror', e => report.pageErrors.push(String(e)));
   await page.route('**/*', async route => {
     const u = new URL(route.request().url());
@@ -33,7 +33,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
     if (u.pathname === '/api/events' || u.pathname.endsWith('/events.json')) {
       const since = staticMode || u.searchParams.has('epoch') && u.searchParams.get('epoch') !== state.epoch ? 0 : +(u.searchParams.get('since') || 0);
       const updates = state.updates.splice(0);
-      return route.fulfill({ json:{ epoch:state.epoch, sittings, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
+      return route.fulfill({ json:{ epoch:state.epoch, sittings:state.sittings, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
     }
     if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { state.files++; return route.fulfill({ contentType:'text/plain', body:state.file }); }
     if (u.pathname === '/img' || u.pathname.includes('/img/')) return route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800"><rect width="1000" height="800" fill="green"/></svg>' });
@@ -45,7 +45,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
     return route.fulfill({ status:404, body:'' });
   });
   await page.goto(origin + '/?p=fixture' + (streamMode ? '&stream=1' : ''));
-  await page.waitForFunction(() => events.length > 0 && !document.querySelector('#togglecode').disabled);
+  await page.waitForFunction(codeReady => events.length > 0 && (!codeReady || !document.querySelector('#togglecode').disabled), codeReady);
   if (liveFile) await page.waitForFunction(() => document.querySelector('#code .src')?.textContent.includes('live'));
   return { page, state };
 }
@@ -108,6 +108,14 @@ async function pollUpdate(v, i, replacement) {
     assert.equal(await first.page.locator('#clock').textContent(), '0:02:00');
     assert.equal(await first.page.locator('#clocklbl').textContent(), 'painted for');
     await first.page.close();
+    const waiting = await viewer(browser, dieRoll.slice(0, 3).concat(dieRoll[4]), { staticMode:true, sittings:0, codeReady:false, liveFile:false });
+    waiting.state.events = dieRoll.slice(0, 6); waiting.state.sittings = 1;
+    await waiting.page.evaluate(async () => { lastStatic = 0; await poll(); });
+    assert.equal(await waiting.page.locator('#strip .sep').textContent(), 'sitting 1');
+    assert.equal(await waiting.page.locator('#clock').textContent(), '0:02:00');
+    assert.equal(await waiting.page.locator('#clocklbl').textContent(), 'painted for');
+    assert.equal(await waiting.page.evaluate(() => events.length), 6);
+    await waiting.page.close();
     report.checks.push('sitting labels and clocks exclude die rolls, startup-only sessions and gaps in API/static replay');
     const canvas = [ev('start'), ev('look', {text:'scratch True'}, 1), ev('image', {img:0, look:'scratch True'}, 2),
       ev('paint', {scratch:true, code:'work{}', out:'ok'}, 3), ev('look', {text:'scratch True, crop 100,100,300,300'}, 4),

@@ -571,7 +571,8 @@ async function poll() {
     return; }
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
-  if (epoch !== null && r.epoch !== epoch) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
+  const shifted = STATIC && events.some((e, i) => !r.events[i] || e.kind !== r.events[i].kind || e.ts !== r.events[i].ts || e.kind === 'sitting' && e.n !== r.events[i].n);
+  if (epoch !== null && r.epoch !== epoch || shifted) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];

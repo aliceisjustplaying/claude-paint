@@ -518,6 +518,7 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
         out = tables.get(tuple(cmd)) or ("p501\nfcwd\nn/Users/x/src/a/" + PAINTER + "\n" if cmd[1:3] == ["-a", "-p"] else "")
         return subprocess.CompletedProcess(cmd, 0, out, "")
     monkeypatch.setattr(E.subprocess, "run", run)
+    monkeypatch.setattr(E.platform, "system", lambda: "Darwin")
     assert E.working_studios() == {PAINTER, agy, done}
 
     run_dir = tmp_path / "src/a/stillwet-runs/cowboy-zombie-agy/run"
@@ -528,6 +529,27 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
     sessions = [{"p": agy, "mtime": 1000.0}, {"p": done, "mtime": 1000.0}]
     E.runner_states(sessions, E.working_studios(), 1060.0)
     assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
+
+
+def test_linux_working_studios_reads_proc_without_lsof(monkeypatch):
+    import export_static as E
+    agy = "paint-studio-063cbb"
+
+    def run(cmd, **kw):
+        if cmd == ["ps", "-Ao", "pid=,comm="]:
+            return subprocess.CompletedProcess(cmd, 0, "501 pi\n502 pi\n503 pi\n", "")
+        assert cmd == ["ps", "-wwAo", "args="]
+        return subprocess.CompletedProcess(cmd, 0, f"uv /home/user/{agy}/bin/mcp/server.py --studio /home/user/{agy} --agy", "")
+
+    def readlink(path):
+        if path == "/proc/501/cwd":
+            return "/home/user/Art Work/" + PAINTER
+        raise PermissionError(path)
+
+    monkeypatch.setattr(E.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(E.subprocess, "run", run)
+    monkeypatch.setattr(E.os, "readlink", readlink)
+    assert E.working_studios() == {PAINTER, agy}
 
 
 @pytest.mark.parametrize("state,working,age,outcome,active", [

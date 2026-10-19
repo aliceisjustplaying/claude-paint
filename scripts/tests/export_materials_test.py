@@ -116,6 +116,40 @@ class ExportMaterialsTests(unittest.TestCase):
         self.assertEqual((dest / "bin/box").read_text(), "tonn\n")
         self.assertTrue((dest / "notes/research/oil_paint_physics.md").is_file())
 
+    def test_license_retry_is_only_used_on_macos(self):
+        code = hashlib.sha1(b"fixture-tree\n" * 4).hexdigest()[:12]
+        src = Path(self.env["STUDIO_BUILDS"]) / f"code-{code}"
+        self.write(src / ".extracted", "")
+        cached = src / "built/tonn/easel"
+        source = cached.read_text()
+        for system in ("Linux", "Darwin"):
+            with self.subTest(system=system):
+                cached.unlink(missing_ok=True)
+                calls = self.root / f"{system}.jsonl"
+                self.executable(self.root / "bin/uname", f'print({system!r})\n')
+                self.executable(self.root / "bin/cargo",
+                                "import json, os, sys\nfrom pathlib import Path\n"
+                                f"calls = Path({str(calls)!r})\n"
+                                "retry = calls.exists()\n"
+                                "with calls.open('a') as file:\n"
+                                "    file.write(json.dumps(os.environ.get('DEVELOPER_DIR')) + '\\n')\n"
+                                "if not retry:\n"
+                                "    sys.exit('fixture license error')\n"
+                                "target = Path(os.environ['CARGO_TARGET_DIR']) / 'release/easel'\n"
+                                "target.parent.mkdir(parents=True, exist_ok=True)\n"
+                                f"target.write_text({source!r})\n"
+                                "target.chmod(0o755)\n")
+                self.env.pop("DEVELOPER_DIR", None)
+                _, result = self.export()
+                observed = [json.loads(line) for line in calls.read_text().splitlines()]
+                if system == "Darwin":
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(observed, [None, "/Library/Developer/CommandLineTools"])
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("fixture license error", result.stderr)
+                    self.assertEqual(observed, [None])
+
     def test_historical_tonn_export_includes_stripped_materials(self):
         dest, result = self.export(ref="historical")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

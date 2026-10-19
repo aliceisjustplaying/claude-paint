@@ -10,7 +10,7 @@ Writes <out>/index.html (the viewer, reading files instead of the live API), <ou
 layout, loaded with ?stream=1), <out>/data/sessions.json and,
 per-painter share/<painter>.html (the same viewer with crawler-visible metadata, served by Caddy for ?p= links),
 per painter, data/<painter>/events.json (with the image extensions), data/<painter>/img/<i>.<ext> and
-data/<painter>/file/<the painting's source> (from archive/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
+data/<painter>/file/<the painting's source> (from stillwet-paintings/other/claude-paint/sources/ once the painter's folder is gone). Every text response is scrubbed like the public server's
 (home folder -> ~, account name -> user); the export stops if a scrubbed file still names either.
 
 Each look also gets two small JPEG copies for the web, made once (again only when the look itself changes):

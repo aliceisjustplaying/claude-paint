@@ -18,7 +18,7 @@ const initial = [ev('start', { cwd:'/painter' }), ev('think', { text:'# First\n\
   ev('look', { text:'mode normal' }, 13), ev('paint', { code:'local pending=4' }, 14),
   ev('sitting', { n:2 }, 20), ev('say', { text:'## Done\n\n3. ordered\n4. list\n\n---\n\n_literal_ <tag>' }, 21)];
 
-async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false } = {}) {
+async function viewer(browser, fixture, { old = false, staticMode = false, liveFile = true, streamMode = false, sittings = 2 } = {}) {
   const page = await browser.newPage();
   const state = { events:structuredClone(fixture), updates:[], epoch:'one', nupdates:0, file:'local live=99\n', files:0 };
   page.on('pageerror', e => report.pageErrors.push(String(e)));
@@ -28,12 +28,12 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
       const html = old ? baseline : fs.readFileSync(candidate, 'utf8');
       return route.fulfill({ contentType:'text/html', body:staticMode ? html.replace('<script src="code-display.js">', '<script>window.STUDIO_STATIC=true;</script><script src="code-display.js">') : html });
     }
-    if (u.pathname === '/api/sessions' || u.pathname === '/data/sessions.json') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, sittings:2, mtime:0, title:'Fixture' }] });
+    if (u.pathname === '/api/sessions' || u.pathname === '/data/sessions.json') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, sittings, mtime:0, title:'Fixture' }] });
     if (u.pathname === '/paintings.json') return route.fulfill({ json:[] });
     if (u.pathname === '/api/events' || u.pathname.endsWith('/events.json')) {
       const since = staticMode || u.searchParams.has('epoch') && u.searchParams.get('epoch') !== state.epoch ? 0 : +(u.searchParams.get('since') || 0);
       const updates = state.updates.splice(0);
-      return route.fulfill({ json:{ epoch:state.epoch, sittings:2, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
+      return route.fulfill({ json:{ epoch:state.epoch, sittings, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
     }
     if (u.pathname === '/api/file' || u.pathname.includes('/file/')) { state.files++; return route.fulfill({ contentType:'text/plain', body:state.file }); }
     if (u.pathname === '/img' || u.pathname.includes('/img/')) return route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800"><rect width="1000" height="800" fill="green"/></svg>' });
@@ -85,6 +85,30 @@ async function pollUpdate(v, i, replacement) {
 (async () => {
   const browser = await chromium.launch({ channel:'chrome', headless:true });
   try {
+    const dieRoll = [ev('start', { cwd:'/painter' }), ev('tool', { name:'write_concepts', out:'Saved notes/concepts.md.' }, 1),
+      ev('say', { text:'Saved the eight pictures and their estimates.' }, 2),
+      ev('sitting', { n:1 }, 10), ev('start', { cwd:'/painter' }, 10), ev('paint', { code:'canvas{}', out:'ok' }, 12),
+      ev('start', { cwd:'/painter' }, 20), ev('look', { text:'' }, 21),
+      ev('sitting', { n:2 }, 60), ev('start', { cwd:'/painter' }, 60), ev('say', { text:'end' }, 62)];
+    for (const staticMode of [false, true]) {
+      const v = await viewer(browser, dieRoll, { staticMode });
+      assert.deepEqual(await v.page.locator('#strip .sep').allTextContents(), ['sitting 1', 'sitting 2']);
+      assert.equal(await v.page.locator('#clock').textContent(), '0:04:00');
+      assert.match(await v.page.locator('#clocklbl').textContent(), /2 sittings/);
+      for (const [i, clock, label] of [[2, '0:00:00', 'at'], [5, '0:02:00', 'at · sitting 1 of 2'], [7, '0:02:00', 'at · sitting 1 of 2']]) {
+        await seek(v.page, i);
+        assert.equal(await v.page.locator('#clock').textContent(), clock);
+        assert.equal(await v.page.locator('#clocklbl').textContent(), label);
+      }
+      assert.match(await v.page.locator('#jbody').textContent(), /Saved the eight pictures/);
+      await v.page.close();
+    }
+    const first = await viewer(browser, [ev('sitting', { n:1 }), ev('start', { cwd:'/painter' }), ev('paint', { code:'canvas{}', out:'ok' }, 2)], { sittings:1 });
+    assert.equal(await first.page.locator('#strip .sep').textContent(), 'sitting 1');
+    assert.equal(await first.page.locator('#clock').textContent(), '0:02:00');
+    assert.equal(await first.page.locator('#clocklbl').textContent(), 'painted for');
+    await first.page.close();
+    report.checks.push('sitting labels and clocks exclude die rolls, startup-only sessions and gaps in API/static replay');
     const canvas = [ev('start'), ev('look', {text:'scratch True'}, 1), ev('image', {img:0, look:'scratch True'}, 2),
       ev('paint', {scratch:true, code:'work{}', out:'ok'}, 3), ev('look', {text:'scratch True, crop 100,100,300,300'}, 4),
       ev('image', {img:1, look:'scratch True, crop 100,100,300,300'}, 5), ev('look', {text:''}, 6), ev('image', {img:2, look:''}, 7),

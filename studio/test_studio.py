@@ -991,6 +991,57 @@ def test_sittings_exclude_startup_only_crashes_but_keep_painting_and_final_revie
     assert p["sittings"] == 3
 
 
+@pytest.mark.parametrize("retry", [False, True])
+def test_die_roll_stays_in_journal_without_counting_as_a_sitting(home, server, retry):
+    tmp_path, studio, log = home
+    prompt = ("Your brief is in BRIEF.md. notes/concepts.md is missing or didn't parse. " if retry else
+              "Your brief is in BRIEF.md. This sitting is only for writing notes/concepts.md. ")
+    prompt += "Use write_concepts to save the whole file at once. Each save replaces it."
+    content = prompt if retry else [{"type": "text", "text": prompt}]
+    log.write_text(start(str(studio)) + line({"type": "message", "message": {"role": "user", "content": content}}) +
+                   line({"type": "message", "message": {"role": "assistant", "content": [
+                       {"type": "toolCall", "id": "brief", "name": "read", "arguments": {"path": "BRIEF.md"}}]}}) +
+                   result("brief", "Choose eight pictures.") + say("I'll estimate eight pictures."))
+    before = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    assert before["sittings"] == 0
+    assert not any(e["kind"] == "sitting" for e in before["events"])
+    with log.open("a") as fh:
+        fh.write(line({"type": "message", "message": {"role": "assistant", "content": [
+            {"type": "toolCall", "id": "concepts", "name": "write_concepts", "arguments": {
+                "text": "\n\n".join(f"{n}. Picture {n}.\nEstimate: {n * 10}/100" for n in range(1, 9))}}]}}) +
+                 result("concepts", "Saved notes/concepts.md.") + say("Saved the eight pictures and their estimates."))
+    sitting = log.with_name("2026-09-29T10-10-00-000Z_sitting.jsonl")
+    sitting.write_text(start(str(studio)).replace("10:00:00", "10:10:00"))
+    waiting = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    assert waiting["sittings"] == 0
+    with sitting.open("a") as fh:
+        fh.write((call("c1", "canvas{}") + result("c1", "ok") + look("l1", png_of("blue"))).replace("10:00:00", "10:12:00"))
+    first = json.loads(server(f"/api/events?p={PAINTER}&since={waiting['total']}&epoch={waiting['epoch']}")[1])
+    assert first["epoch"] > waiting["epoch"]
+    assert first["sittings"] == 1
+    assert [(e["n"], e["ts"]) for e in first["events"] if e["kind"] == "sitting"] == [(1, "2026-09-29T10:10:00.000Z")]
+    assert any(e.get("name") == "write_concepts" for e in first["events"])
+    assert any(e.get("text") == "Saved the eight pictures and their estimates." for e in first["events"])
+    assert [e["img"] for e in first["events"] if e["kind"] == "image"] == [0]
+    p = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert (p["sittings"], p["sitting_numbers"]) == (1, [0, 1])
+    out = tmp_path / "out"
+    assert export(tmp_path, out).returncode == 0
+    exported = json.loads((out / "data" / PAINTER / "events.json").read_text())
+    assert exported["sittings"] == 1
+    assert [e["n"] for e in exported["events"] if e["kind"] == "sitting"] == [1]
+    with sitting.open("a") as fh:
+        fh.write(say("The sky is laid in.").replace("10:00:00", "10:13:00"))
+    more = json.loads(server(f"/api/events?p={PAINTER}&since={first['total']}&epoch={first['epoch']}")[1])
+    assert more["epoch"] == first["epoch"]
+    assert [e["kind"] for e in more["events"]] == ["say"]
+    second = log.with_name("2026-09-29T11-00-00-000Z_review.jsonl")
+    second.write_text((start(str(studio)) + say("I've reviewed it and stopped.")).replace("10:00:00", "11:00:00"))
+    final = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    assert final["sittings"] == 2
+    assert [e["n"] for e in final["events"] if e["kind"] == "sitting"] == [1, 2]
+
+
 def test_muse_wonder_full_display_name_matches_viewer_and_export():
     import export_static as E
     assert E.MODEL_NAMES["muse-wonder-full-1.0"] == "Muse Wonder Full"

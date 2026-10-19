@@ -26,7 +26,8 @@
       "pine",
       "spruce",
       "willow"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "rocks",
@@ -46,7 +47,8 @@
       "knife",
       "glaze",
       "texture"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "water",
@@ -69,7 +71,8 @@
       "scumbling",
       "glazing",
       "knife"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "snow",
@@ -87,7 +90,8 @@
       "winter",
       "knife",
       "scumble"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "artificial-light",
@@ -116,13 +120,14 @@
       "falloff",
       "cast",
       "shadow"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "fruit-cloth",
     "title": "Fruit and cloth: an examination-backed example",
     "source": "notes/research/cezanne_materials_full.md",
-    "sha256": "319a32157a2bd5f876d0ec464ea170dcc2adc3557d67d9345044ea8a6eb7f663",
+    "sha256": "1586af19f8249ac6d51d1064e382238f1aa3f3b588044effad2762c5d843bc70",
     "lines": [
       [
         72,
@@ -141,7 +146,8 @@
       "marks",
       "edges",
       "passage"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "frost",
@@ -163,7 +169,8 @@
       "wind",
       "temperature",
       "branches"
-    ]
+    ],
+    "subject": true
   },
   {
     "id": "oil-physics",
@@ -249,7 +256,7 @@
     "id": "pigments",
     "title": "Pigment behavior and documented estimates",
     "source": "notes/research/every_materials.md",
-    "sha256": "feef526070607b936c4fb112111be51dccc266884b4f3d85b93a199a9f322ef5",
+    "sha256": "5150b40cfda75891a68e7e9afa241edf9b23ac13c749be63cbc5419e7e20901c",
     "lines": [
       [
         30,
@@ -300,7 +307,7 @@
     "id": "oil-ground",
     "title": "Oil ground handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         60,
@@ -319,7 +326,7 @@
     "id": "oil-spatter",
     "title": "Oil spatter at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         115,
@@ -336,7 +343,7 @@
     "id": "oil-loading",
     "title": "Uneven paint loading at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         164,
@@ -355,7 +362,7 @@
     "id": "oil-impasto",
     "title": "Impasto handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         188,
@@ -373,7 +380,7 @@
     "id": "oil-knife",
     "title": "Knife handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         201,
@@ -391,7 +398,7 @@
     "id": "oil-blending",
     "title": "Blending at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         212,
@@ -410,7 +417,7 @@
     "id": "oil-glazes",
     "title": "Glazing and scumbling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         226,
@@ -431,7 +438,7 @@
     "id": "oil-rag-time",
     "title": "Rag handling and drying time at the easel",
     "source": "notes/techniques.md",
-    "sha256": "09ae026c5736c023d915e38fe12fd074bce45edef0f819ba2ec13170001e98e7",
+    "sha256": "aca61a0b6b1f82c2377fc1e5e9ba9c18c44a218e3eec567bceb023dcb168d902",
     "lines": [
       [
         265,
@@ -449,45 +456,6 @@
       "wet",
       "repair",
       "time"
-    ]
-  },
-  {
-    "id": "watercolor-handling",
-    "title": "Watercolor handling and engine limits",
-    "source": "notes/watercolor_techniques.md",
-    "sha256": "0becfb139b18fdc1eec4d9f05f73ce05a68ebc566fbec8056e8ac381ec4eacdf",
-    "lines": [
-      [
-        23,
-        32
-      ],
-      [
-        78,
-        94
-      ],
-      [
-        119,
-        192
-      ],
-      [
-        204,
-        225
-      ]
-    ],
-    "keywords": [
-      "watercolor",
-      "paper",
-      "loading",
-      "washes",
-      "edges",
-      "backruns",
-      "granulation",
-      "lifting",
-      "glazing",
-      "dry",
-      "brush",
-      "engine",
-      "limits"
     ]
   }
 ]

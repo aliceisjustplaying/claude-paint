@@ -35,11 +35,15 @@ def main():
     parser = argparse.ArgumentParser(description="Export the reviewed reference passages from a committed revision.")
     parser.add_argument("dest", type=Path)
     parser.add_argument("--ref", default="HEAD")
+    parser.add_argument("--without-subjects", action="store_true",
+                        help="leave out the entries on particular subjects, for a studio whose painter chooses its own")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     def read(path):
         return subprocess.check_output(["git", "-C", str(repo), "show", f"{args.ref}:{path}"]).decode()
     manifest = json.loads(read("notes/reference-library/manifest.json"))
+    if args.without_subjects:
+        manifest = [item for item in manifest if not item.get("subject")]
     strip = runpy.run_path(str(repo / "scripts/strip_sources"))["strip"]
     entries = build(manifest, read, strip)
     args.dest.parent.mkdir(parents=True, exist_ok=True)

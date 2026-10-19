@@ -46,8 +46,8 @@ does; this says how to use them. What you paint is yours to choose.
    with new paint.
 4. **Choose a repair.** If further handling keeps mixing an unsuccessful
    wet deposit, scrape or lift it before restating it. The knife scrapes
-   wet paint down to set paint; the rag lifts and smears it and leaves a
-   trace. Inspect what remains before repainting. See
+   wet paint down to set paint; the rag lifts it and leaves a thin
+   tint. Inspect what remains before repainting. See
    [The knife](#the-knife) and [The rag](#the-rag) for handling and limits.
 5. **Test a doubtful change.** Use the scratch procedure in
    [Plan before you paint](#plan-before-you-paint), matching the underpaint
@@ -62,7 +62,7 @@ does; this says how to use them. What you paint is yours to choose.
   thin paint: matte, lean, quick to set, colors that sit on the surface;
   thick paint is barely touched. Choose before you start: it is the
   canvas's character.
-- A **toned ground** (a little ochre, umber or black in the white) sets the
+- A **toned ground** (a little ochre, red earth or black in the white) sets the
   middle value from the first stroke; a white ground keeps everything high
   in key and lets thin paint glow.
 
@@ -136,7 +136,7 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## The palette
 
-- **Look at the board before the canvas.** `look --palette` shows each heap
+- **Look at the board before the canvas.** `look` with `palette: true` shows each heap
   thick and thinned over black: a chalky mix, a violet "gray", a glaze that
   stains or one that hides show there, before they cost a passage.
 - **Steer a mix by eye**: `p:add{}` a touch at a time, looking between
@@ -269,21 +269,21 @@ does; this says how to use them. What you paint is yours to choose.
   layer under it is still tacky, it grabs the brush when you repaint.
   Check it at a nearby gap in the paint, where `drying(x, y)` reads the
   set layer.
-- **Dip it for a lift.** A dry rag mostly moves paint and leaves its color
-  in the weave: useful for wiping lights out of a wet glaze or lay-in. To
+- **Dip it for a lift.** A dry rag lifts less and leaves a pale tint of
+  the color in the weave: useful for wiping lights out of a wet glaze or lay-in. To
   take a passage off, dip well (`r:dip(0.9)`), press firmly, give it two or
   three passes, then go over it again across the first direction with a
   fresh, dipped rag.
 - **The spirits go in minutes.** Dampness halves every three minutes of
   painting time, and a long mask wipe takes minutes. Dip just before each
   wipe; `print(r.damp)` says how much is left.
-- **A loaded face puts paint back.** `print(r.load)`: near 1, the face
-  lifts little and smears. Refold (`refold=` in a mask wipe) or take a
-  fresh rag.
-- **The rag runs past the mask.** Its rim reaches past the mask's edge and
-  lays lifted paint on what is next to it, dry shapes included. Keep the
-  mask clear of edges you need crisp. Along an edge, wipe a path parallel
-  to it with a rag narrower than the strip.
+- **A face fills up.** `print(r.load)`: near 1, the face lifts almost
+  nothing, and the reply says so when a wipe ran on a full face. Refold
+  (`refold=` in a mask wipe); when `r.soaked` nears 1 the whole cloth is
+  full, so take a fresh rag.
+- **A mask wipe stays inside its mask.** Paint outside the mask is left as
+  it was. A path wipe has no mask: the whole pad lifts, so along an edge
+  you need crisp, use a rag narrower than the strip.
 - **Shape the mask like the passage.** Mask wipes start and stop a little
   inside the mask, so a rectangle leaves a frame of the wiped color. If a
   frame shows, wipe along its sides with a path.
@@ -297,7 +297,7 @@ does; this says how to use them. What you paint is yours to choose.
 ## Time
 
 - Time passes only as you paint or `wait`. Paint dries on its own clock:
-  lead white and umber fast, lakes and vermilion slow, thin paint faster than
+  lead white and cobalt fast, lakes and vermilion slow, thin paint faster than
   thick. Added medium and the slower oils (walnut, poppy) slow it; an
   absorbent ground sets thin paint laid straight on it quickly.
 - **Check `drying(x, y)` at several points** along the next pass, its edges
@@ -307,5 +307,4 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Finishing
 
-- An unvarnished picture keeps its matte and glossy passages as painted.
-  A varnish (where the easel has one) makes it all glossy: darks deepen.
+- This easel has no varnish: the picture keeps its matte and glossy passages as painted.

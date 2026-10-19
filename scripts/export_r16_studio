@@ -27,6 +27,9 @@
 #   bin/THIRD_PARTY_NOTICES.md the license notices the binary requires, shipped
 #                              next to it (not at the studio root, where painters browse)
 #   notes/easel_guide.md, notes/techniques.md (rounds that have it), notes/research/..., notes/journal.md (empty)
+#   notes/reference-library.json  the reference library; the every and blank studios,
+#                              whose painter chooses its own subject, get it without
+#                              the entries on particular subjects ("subject" in its manifest)
 #   paintings/lua/             (empty; the session log goes here)
 #
 # The guide's tube table is the one the studio's easel prints for its box
@@ -201,7 +204,9 @@ for n in "$dest"/notes/research/*.md; do
 done
 
 if git -C "$repo" cat-file -e "$branch:notes/reference-library/manifest.json" 2>/dev/null; then
-  "$repo/scripts/build_reference_library" --ref "$branch" "$dest/notes/reference-library.json"
+  library=()
+  case "$profile" in every|blank) library=(--without-subjects) ;; esac
+  "$repo/scripts/build_reference_library" --ref "$branch" ${library[@]+"${library[@]}"} "$dest/notes/reference-library.json"
 fi
 
 # The guide's tube table comes from the configured runtime.

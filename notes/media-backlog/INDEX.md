@@ -4,7 +4,7 @@ All five inventory candidates now have final PNGs and social MP4s. A runner-comp
 
 | Painting | Finished PNG | Normal view | MP4 | Verification |
 |---|---|---|---|---|
-| r27 Hopper | [2400×1500](../round27/social/r27-hopr-finished.png) | [PNG](../round27/social/r27-hopr-normal.png) | [1920×1200](../round27/social/r27-hopr.mp4) | [Receipt](../round27/social/delivery-check.json) |
+| r27 Hopper | [2400×1500](../round27/social/r27-hopr-finished.png) | [PNG](../round27/social/r27-hopr-normal.png) | [1920×1200](../round27/social/r27-hopr.mp4) | [Receipt](https://github.com/aliceisjustplaying/stillwet-paintings/blob/main/2026-10-05%20r27%20Barber%20Shop%2C%20Late%20Afternoon%20%28Claude%20Opus%205.5%29/other/delivery-check.json) |
 | r26 Monet | [2400×2400](assets/r26-mont/r26-mont-finished.png) | [PNG](assets/r26-mont/r26-mont-normal.png) | [1920×1920](assets/r26-mont/r26-mont.mp4) | [Receipt](assets/r26-mont/delivery-check.json) |
 | r25 Friedrich | [2400×1714](assets/r25-frdc/r25-frdc-finished.png) | [PNG](assets/r25-frdc/r25-frdc-normal.png) | [1920×1372](assets/r25-frdc/r25-frdc.mp4) | [Receipt](assets/r25-frdc/delivery-check.json) |
 | r24 Inness | [2400×1600](assets/r24-inns/r24-inns-finished.png) | [PNG](assets/r24-inns/r24-inns-normal.png) | [1920×1280](assets/r24-inns/r24-inns.mp4) | [Receipt](assets/r24-inns/delivery-check.json) |

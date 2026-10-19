@@ -124,7 +124,7 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "studio_notes.md"):
             shutil.copy(REPO / "notes/round29/runner" / name, house / name)
         for name in ("brief_template.md", "r21_chains.py"):
-            shutil.copy(REPO / "archive/collection/runners/gallery-fcf9c110/r41" / name, house / name)
+            shutil.copy(REPO / "scripts/tests/fixtures/r41" / name, house / name)
         runner = self.root / "runner"
         prep["prepare"](self.studio, house, runner, house / "studio_notes.md", self.root / "prepared-run", critic=True)
         config = json.loads(subprocess.check_output([sys.executable, str(runner / "run.py"), "--check"]))

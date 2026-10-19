@@ -106,7 +106,6 @@ impl Style {
     ///   weave, then a brushed top layer (60 µm) whose striations stay;
     ///   total 240 µm.
     /// - `Palette::cobalt_box`.
-    #[cfg(tube_box)]
     pub fn oil() -> Self {
         Style::oil_with(Palette::cobalt_box())
     }
@@ -144,7 +143,6 @@ impl Style {
     /// `Palette::smalt_box` and a three-layer ground: bright red, then two
     /// light brown layers, the first two knifed, the third rolled on (a fine
     /// texture).
-    #[cfg(tube_box)]
     pub fn oil_red_ground() -> Self {
         Style {
             width_mm: 1714.0,
@@ -181,7 +179,7 @@ impl Style {
 
     fn prepare_cached_on(&self, c: Canvas, seed: u64, cache: Option<(&std::path::Path, &str)>) -> Canvas {
         use sha2::{Digest, Sha256};
-        let mut c = c
+        let c = c
             .with_engine(self.palette.engine)
             .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
@@ -228,27 +226,7 @@ impl Style {
                 }
             }
         }
-        // the canvas is prepared alike in every engine: engine 4's stiffer
-        // films and clumping hair are the painting's, not the primer's
-        let engine = c.engine;
-        c.engine = engine.min(3);
-        for (k, g) in self.ground.iter().enumerate() {
-            if g.um <= 0.0 {
-                continue;
-            }
-            let s = seed * 31 + k as u64;
-            match g.apply {
-                Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
-                Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),
-                Apply::Brush => {
-                    brush_ground(&mut c, g, s);
-                    // (`prime` counts its own layers)
-                    c.ground_um += g.um;
-                }
-            }
-            c.ground_finish(g.absorbent);
-        }
-        c.engine = engine;
+        let mut c = self.ground_on(c, seed);
         if let Some((path, key)) = cache {
             // the cache keeps the paint's packing (`wet::Prop`'s last five),
             // which only a draining canvas's checkpoint holds (version 14), so
@@ -274,6 +252,40 @@ impl Style {
             }
         }
         c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
+    }
+
+    /// A sheet of paper of this style's width, with its ground layers (if
+    /// any) laid on it. Never from the ground cache (`prepare_cached`),
+    /// whose key describes a linen support: a sheet is laid afresh.
+    pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
+    }
+
+    /// This style's ground layers laid on `c`, bottom first.
+    fn ground_on(&self, mut c: Canvas, seed: u64) -> Canvas {
+        // the canvas is prepared alike in every engine: engine 4's stiffer
+        // films and clumping hair are the painting's, not the primer's
+        let engine = c.engine;
+        c.engine = engine.min(3);
+        for (k, g) in self.ground.iter().enumerate() {
+            if g.um <= 0.0 {
+                continue;
+            }
+            let s = seed * 31 + k as u64;
+            match g.apply {
+                Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
+                Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),
+                Apply::Brush => {
+                    brush_ground(&mut c, g, s);
+                    // (`prime` counts its own layers)
+                    c.ground_um += g.um;
+                }
+            }
+            c.ground_finish(g.absorbent);
+        }
+        c.engine = engine;
+        c
     }
 }
 

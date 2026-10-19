@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The replay build of the easel (`cargo build --release -p easel`, default
-# features): builds it unless --no-build, then prints the executable's path
+# The shared easel (`cargo build --release -p easel`), used in developer
+# mode outside studios: builds it unless --no-build, then prints its path
 # in the target directory cargo builds into (CARGO_TARGET_DIR, a config's
 # build.target-dir or <repo>/target, as `cargo metadata` resolves it).
 #

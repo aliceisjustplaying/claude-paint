@@ -1,7 +1,7 @@
 //! Finishing: varnish, cracks and relief over the whole dry picture.
 //!
-//! Only in builds with the `finish` feature (developers and the outside
-//! runner). The painter build has none of these verbs: finishing is applied
+//! Available only in developer mode and the outside runner. Painter mode
+//! has none of these verbs: finishing is applied
 //! after the session, by `scripts/finish_painting`, so that it can't become
 //! the painter's way of ending.
 

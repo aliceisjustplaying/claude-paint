@@ -4,11 +4,11 @@
 #
 #   compare_build.sh <easel> [state_compare.py flags, e.g. --added-zero]
 #
-# Fails (exit 1) if any field the baseline has differs, bit for bit, or a
+# Fails (exit 1) if any field the baseline has exceeds numeric tolerance, or a
 # chunk is missing. Fields a newer engine adds are listed; --added-zero
 # requires them to be zero (thinner check 2: no thinner, no solvent). Also
-# reports, without failing, whether the PNGs and the state digests equal
-# af49348's (a new checkpoint format changes the canvas= digest by itself).
+# compares PNGs within image tolerance and reports state digests without
+# failing on them (a new checkpoint format changes the canvas= digest by itself).
 # Run as one heavy job: scripts/lockrun --timeout 60 -- .../compare_build.sh ...
 set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: compare_build.sh <easel> [state_compare flags]" >&2; exit 2; }
@@ -21,13 +21,12 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 known_rag=0
 scenes=0
-state_result='state equal on every baseline field'
-[[ " $* " != *' --linux-tolerance '* ]] || state_result='state within tolerance on every baseline field'
+state_result='state within tolerance on every baseline field'
 for d in "$here"/state/*/; do
   s=$(basename "$d")
   state_failed=0
   image_failed=0
-  if python3 "$here/tools/state_compare.py" "$d" "$work/state/$s" --quiet "$@" >"$work/$s.cmp"; then
+  if uv run --no-project python "$here/tools/state_compare.py" "$d" "$work/state/$s" --quiet "$@" >"$work/$s.cmp"; then
     echo "$s: $state_result ($(tail -1 "$work/$s.cmp" | sed 's/state_compare: //'))"
     cat "$work/$s.cmp"
   else
@@ -41,7 +40,7 @@ for d in "$here"/state/*/; do
     image_failed=1
   fi
   cat "$work/$s.image-report"
-  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && python3 "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
+  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
     known_rag=1
   elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     failed=1

@@ -5,51 +5,23 @@ edition = "2024"
 publish = false
 
 [features]
-default = ["replay", "finish"]
-# The developer/runner build: EASEL_ROOT, named sessions (-s, EASEL_SESSION),
-# `easel run` (with --dump-surface) and `hash-probe`. Without it (the
-# painter build, `--no-default-features`) the studio is the directory above
-# the one holding the executable (<studio>/bin/easel) and it holds one
-# painting, "painting".
-replay = ["paint/hand-hook", "paint/replay-effects", "all-boxes", "dep:zstd", "dep:serde", "dep:bincode", "dep:sha2", "dep:serde_json"]
-# varnish{}, cracks{} and relief(): whole-picture finishing, applied after
-# the painter's session by scripts/finish_painting. Not in the painter build,
-# so finishing can't become the painter's way of ending.
-finish = []
-state-store = ["dep:sha2", "dep:serde", "dep:serde_json", "dep:zstd"]
+state-store = []
 render-snapshot = ["state-store", "paint/render-snapshot"]
-# The boxes besides the default tube box (paint's `box-*` features): the
-# replay build has them all, so it replays any log; a painter's build is
-# built with its studio's only (scripts/export_r16_studio), so nothing in it
-# names another studio's box. Its `paint/all-boxes` puts the default tube box
-# in too (paint's build.rs); two box-* features without it are a compile error.
-all-boxes = ["box-friedrich", "box-sargent", "box-inness", "box-alma-tadema", "box-tonn", "box-hopper", "box-giverny", "box-impressionist", "box-seurat", "box-cezanne", "box-every", "paint/all-boxes"]
-box-friedrich = ["paint/box-friedrich"]
-box-sargent = ["paint/box-sargent"]
-box-inness = ["paint/box-inness"]
-box-alma-tadema = ["paint/box-alma-tadema"]
-box-tonn = ["paint/box-tonn"]
-box-giverny = ["paint/box-giverny"]
-box-impressionist = ["paint/box-impressionist"]
-box-seurat = ["paint/box-seurat"]
-box-cezanne = ["paint/box-cezanne"]
-box-hopper = ["paint/box-hopper"]
-box-every = ["paint/box-every"]
 
 [[bin]]
 name = "easel"
 path = "src/main.rs"
 
 [dependencies]
-paint = { path = "../paint", default-features = false }
+paint = { path = "../paint", features = ["hand-hook", "replay-effects"] }
 # Upgrading mlua/lua-src/Lua: session.rs `TableHead` reads Lua 5.5.1's
 # private table layout; recheck it first (notes/easel.md "Lua internals
 # read directly").
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 rayon = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
-zstd = { version = "0.13", optional = true }
-sha2 = { version = "0.10", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-bincode = { version = "1.3", optional = true }
+zstd = "0.13"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1.3"

@@ -42,8 +42,10 @@ command = sys.argv[1]
 if command == "tubes":
     print(TABLE, end="")
 elif command == "save":
-    box = (studio / "bin/box").read_text().strip()
-    (studio / "paintings/lua/painting.lua").write_text(f"--@ box {box}\\n--@ chunk\\n")
+    mode, box = (studio / "bin/studio").read_text().split()
+    assert mode == "painter"
+    header = "" if box == "none" else f"--@ box {box}\\n"
+    (studio / "paintings/lua/painting.lua").write_text(header + "--@ chunk\\n")
     image = studio / "out/easel/painting/painting.png"
     image.parent.mkdir(parents=True)
     image.write_bytes(b"fixture image")
@@ -63,7 +65,8 @@ class ExportMaterialsTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.repo = self.root / "repo"
         for name in ("export_r16_studio", "prepare_capy_studio", "strip_sources",
-                     "check_studio_names", "check_box_tubes", "tests/export_profiles.sh"):
+                     "check_studio_names", "check_box_tubes", "tests/export_profiles.sh",
+                     "tests/export_concurrent.sh"):
             path = self.repo / "scripts" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO / "scripts" / name, path)
@@ -84,9 +87,8 @@ class ExportMaterialsTests(unittest.TestCase):
         self.executable(self.root / "bin/cargo", 'raise SystemExit("builds forbidden in this test")\n')
         code = hashlib.sha1(b"fixture-tree\n" * 4).hexdigest()[:12]
         builds = self.root / "builds"
-        for profile in ("tonn", "hopper"):
-            self.executable(builds / f"code-{code}/built/{profile}/easel",
-                            f"TABLE = {TABLE!r}\n" + EASEL)
+        self.executable(builds / f"code-{code}/built/universal/easel",
+                        f"TABLE = {TABLE!r}\n" + EASEL)
         self.env = dict(os.environ, PATH=f"{self.root / 'bin'}:{os.environ['PATH']}",
                         EXPORT_FIXTURES=str(fixtures), STUDIO_BUILDS=str(builds),
                         TMPDIR=str(self.root), UV_PYTHON=sys.executable)
@@ -114,13 +116,94 @@ class ExportMaterialsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse((dest / "notes/research/tonn_materials.md").exists())
         self.assertEqual((dest / "bin/box").read_text(), "tonn\n")
+        self.assertEqual((dest / "bin/studio").read_text(), "painter tonn\n")
         self.assertTrue((dest / "notes/research/oil_paint_physics.md").is_file())
+
+    def test_license_retry_is_only_used_on_macos(self):
+        code = hashlib.sha1(b"fixture-tree\n" * 4).hexdigest()[:12]
+        src = Path(self.env["STUDIO_BUILDS"]) / f"code-{code}"
+        self.write(src / ".extracted", "")
+        cached = src / "built/universal/easel"
+        source = cached.read_text()
+        for system in ("Linux", "Darwin"):
+            with self.subTest(system=system):
+                cached.unlink(missing_ok=True)
+                calls = self.root / f"{system}.jsonl"
+                self.executable(self.root / "bin/uname", f'print({system!r})\n')
+                self.executable(self.root / "bin/cargo",
+                                "import json, os, sys\nfrom pathlib import Path\n"
+                                f"calls = Path({str(calls)!r})\n"
+                                "retry = calls.exists()\n"
+                                "with calls.open('a') as file:\n"
+                                "    file.write(json.dumps(os.environ.get('DEVELOPER_DIR')) + '\\n')\n"
+                                "if not retry:\n"
+                                "    sys.exit('fixture license error')\n"
+                                "target = Path(os.environ['CARGO_TARGET_DIR']) / 'release/easel'\n"
+                                "target.parent.mkdir(parents=True, exist_ok=True)\n"
+                                f"target.write_text({source!r})\n"
+                                "target.chmod(0o755)\n")
+                self.env.pop("DEVELOPER_DIR", None)
+                _, result = self.export()
+                observed = [json.loads(line) for line in calls.read_text().splitlines()]
+                if system == "Darwin":
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(observed, [None, "/Library/Developer/CommandLineTools"])
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("fixture license error", result.stderr)
+                    self.assertEqual(observed, [None])
 
     def test_historical_tonn_export_includes_stripped_materials(self):
         dest, result = self.export(ref="historical")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((dest / "notes/research/tonn_materials.md").read_text(),
                          "Historical fixture materials.\n")
+
+    def test_default_ref_exports_head(self):
+        env = self.env.copy()
+        env.pop("R16_BRANCH", None)
+        result = subprocess.run(
+            [str(self.repo / "scripts/export_r16_studio"), "tonn", str(self.root / "studio")],
+            env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("from HEAD", result.stdout)
+
+    def test_concurrent_exports_build_once_with_default_features(self):
+        built = next((self.root / "builds").glob("code-*/built/universal/easel"))
+        source = self.root / "source-easel"
+        shutil.move(built, source)
+        source.write_text(source.read_text().replace(
+            'print(TABLE, end="")',
+            'box = (studio / "bin/studio").read_text().split()[1]\n'
+            '    pigment = {"sargent": "01", "inness": "02"}.get(box, "00")\n'
+            '    print(TABLE.replace("pigment-00", "pigment-" + pigment), end="")',
+        ))
+        revision = self.root / "revisions/HEAD"
+        (revision / ".cargo").mkdir()
+        for name in ("Cargo.toml", "Cargo.lock"):
+            self.write(revision / name, "fixture\n")
+        for profile in ("sargent", "inness"):
+            self.write(revision / f"notes/research/{profile}_materials.md", "Fixture materials.\n")
+        self.executable(self.root / "bin/cargo", '''import os
+from pathlib import Path
+import shutil
+import sys
+
+assert sys.argv[1:] == ["build", "--release", "-p", "easel"], sys.argv
+root = Path(os.environ["EXPORT_FIXTURES"]).parent
+with (root / "cargo-calls").open("a") as calls:
+    calls.write("build\\n")
+target = Path(os.environ["CARGO_TARGET_DIR"]) / "release/easel"
+target.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(root / "source-easel", target)
+''')
+        result = subprocess.run(
+            [str(self.repo / "scripts/tests/export_concurrent.sh")],
+            env=dict(self.env, R16_BRANCH="HEAD"), capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.root / "cargo-calls").read_text(), "build\n")
 
     def test_profile_checks_accept_current_and_historical_tonn(self):
         for ref in ("HEAD", "historical"):

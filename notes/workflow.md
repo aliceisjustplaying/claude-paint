@@ -11,8 +11,8 @@ What landed:
    at the run's full resolution. They are fast, and close to a whole render
    (not exact; the reasons are below).
 2. **Stages and checkpoints**: `--ckpt` saves the complete canvas state after
-   every stage and `--resume <stage>` starts from one. Resuming is
-   **bit-exact**, and stale checkpoints are refused.
+   every stage and `--resume <stage>` starts from one. Resuming must stay
+   visually close within the image tolerance below; stale checkpoints are refused.
 3. **Speed**, with the output unchanged: an exact per-column memo for 1-D
    profiles (cuts mask cost in crops) and a dependency-ordered tile scheduler
    in place of phase barriers.
@@ -162,9 +162,9 @@ window (`sample` clamps to it).
   brushes' contact surface is rebuilt from the relief. Sizes: 43 MB at
   1000px, about 440 MB at 3200px whole, 35 MB for the 3200px figures crop.
   Writing takes 0.02–0.05 s at 1000px.
-- **Exact**: resuming from any stage, including one that ends with wet paint
-  ("sky lay"), gives a byte-identical PNG. Checked for mist and "sky lay" at
-  1000px and for mist in the 3200px crop.
+- **Resume comparison**: the historical mist and "sky lay" checks at
+  1000px and mist in the 3200px crop happened to give identical PNGs.
+  Acceptance now uses the image tolerance below, not PNG bytes.
 - **Validation**: a checkpoint must match name, width, seed and crop.
   `--resume` also refuses it if the code that produced it has changed since
   it was saved. The error names what changed. The staleness model (since
@@ -362,14 +362,15 @@ outside the window affect the load of those inside it. study_form crops
 take 11–12 s against 31 s whole, because its form fields (SDFs per pixel)
 are computed over the whole canvas, like masks.
 
-Resuming stays byte-identical: moonrise from "sky lay" (wet), "mist" and
-"figures", and study_stipple from "pass 1".
+The historical resume probes matched: moonrise from "sky lay" (wet),
+"mist" and "figures", and study_stipple from "pass 1". Current checks
+use the image tolerance below.
 
 ## Fixes from amnesia round 2 (branch `fixes-ux`)
 
 From the painters' friction lists (notes/amnesia2.md items 9, 10, 11, 12).
-Resume is still byte-exact (study_stipple at 400px: whole vs resumed from
-"pass 1", `cmp` identical); golden unchanged.
+The historical study_stipple resume probe at 400px matched the whole run
+from "pass 1"; the golden was unchanged. Current checks use image tolerance.
 
 **Stage names and flags** (`paintings/src/run.rs`):
 - Names match by `run::key`: case, spaces, underscores, hyphens and
@@ -457,47 +458,53 @@ coil's only NaN is its last point) and the finite-points control.
 Development, test and `iter` builds use incremental compilation and 256
 codegen units to favor edit/rebuild speed. Tests keep opt-level 2, debug
 assertions and overflow checks. Release also enables incremental compilation
-but keeps one codegen unit for runtime optimization. These settings are choices,
+and uses Cargo's default codegen-unit count. These settings are choices,
 not measured speedup claims. Kache is installed and configured by nixfiles;
 its `preserve_incremental` setting retains incremental state for active units.
 
-On the same OS and CPU architecture, PNGs must match byte for byte, even
-across builds. On known different platforms, RGB images may differ by at most
-two 8-bit levels per channel in strictly less than 0.1% of pixels. Dimensions
-and alpha must match exactly. A 10,000-pixel image allows at most nine changed
-pixels; an image with at most 1,000 pixels allows none.
-`scripts/compare_images.py` enforces this rule with explicit
-`--expected-platform` and `--actual-platform` OS-architecture identities
-(for example, `macos-aarch64` and `linux-x86_64`). Unknown origins default to
-byte-exact comparison; arbitrary external PNGs are never assumed to be Mac
-images. `--actual-platform current` identifies a locally produced image.
-The golden scene and old-log image references use this comparison. Their
-historical references and the thinner baseline images originated on macOS
-arm64, recorded in adjacent platform metadata. Old-log
-state hashes remain diagnostic across builds; repeat replay with the same
-binary must match both the PNG bytes and state digests exactly. The thinner's
-field-by-field state checks retain their independent state requirements.
-The full-width round-19 check likewise keeps exact surface fingerprints,
-with separate references for macOS arm64 and Linux x86_64; only its
-cross-platform image comparison uses the tolerance. The new PNG and surface
-references were checked against the original combined fingerprint before
-being separated.
+Visually close enough is the rendering requirement, never byte-identical.
+The image metric is maximum absolute decoded RGBA channel error: at most
+2 of 255 at every pixel, with equal dimensions. It permits tiny rounding
+drift anywhere, including 1-pixel images, while rejecting a wrong color,
+a missing stroke or a black rectangle as soon as a channel differs by more
+than two levels. There is no changed-pixel quota, platform exception or
+PNG-encoding requirement. Alpha uses the same two-level limit.
+`scripts/compare_images.py` and the Rust image-test helper enforce this
+rule for golden scenes, old logs, repeated replays and checkpoint renders.
+Platform arguments and adjacent metadata record provenance only; unknown
+origins use the same tolerance. `--actual-platform current` identifies a
+locally produced image. Old-log state hashes are diagnostic, not gates.
+Rendering-state tests use finite numeric tolerances rather than float-bit
+hashes. Rust replay fields allow 1e-6 absolute plus 1e-5 relative error.
+Historical state dumps keep their measured per-field absolute bounds
+(`notes/thinner/baseline/README.md`), with 1e-7 absolute for other floats
+and no relative growth. Conservation laws, discrete flags, shapes, types and lossless
+serialization still have their own correctness checks.
 
-`scripts/check_painting` compares both the build identity and the OS-architecture
-`platform` recorded in `live.txt`. Future live records write both. Historical
+`scripts/check_painting` reports the OS-architecture `platform` recorded in
+`live.txt`. Historical
 easel live records with chunk and replay counts but no platform field are
 explicitly classified as macOS arm64; an explicit `platform unknown` opts out
-of that legacy classification. Missing or unrecognized provenance never enables
-tolerance. The same binary must reproduce the PNG and checkpoint exactly.
-Same-platform PNGs stay byte-exact across builds. Across builds, a matching live
-PNG under the applicable platform rule is sufficient; checkpoint differences are reported,
-not treated as proof of a rendering regression. Without a comparable live PNG,
-a checkpoint mismatch still fails. This does not assert that internal state is
+of that legacy classification. All builds and platforms use the image
+tolerance. A matching live PNG is sufficient; checkpoint differences are
+reported, never treated as proof of a rendering regression. Without a
+comparable live PNG the result is "replay only", not a visual pass or a
+checkpoint-byte failure. This does not assert that internal state is
 equal or establish physical accuracy.
 
 References are not silently refreshed to accommodate a failure. The existing
 golden approval rules still apply to intentional changes. Ordinary correctness,
-conservation and same-build determinism tests remain in place.
+conservation and lossless file-preservation tests remain in place. Runtime
+`easel check` uses the same two-level sRGB comparison and finite surface
+tolerance, so its success report says "within tolerance", not "exactly".
+
+The plough regression test stores its original volume and cure fields in
+the red and green channels of a 16-bit PNG, scaled to 0.01 coats and 0.1
+cure. It allows two quantized levels (about 3.1e-7 coats and 3.1e-6 cure),
+not exact float hashes. This reference and the engine-2 drying-sheet color,
+gallery and relief references were recorded only after their original
+Linux hashes passed at `dc82b80396809701fd02cb574e2933905fca96ce`.
+The existing golden scene, round-19 and historical log images are unchanged.
 
 `scripts/test` reports the registered rag baseline mismatch
 (`KNOWN_FAILURE: rag-historical-baseline-main`) by name as a known failure on

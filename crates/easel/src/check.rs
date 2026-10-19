@@ -22,23 +22,16 @@
 //! The check's own thread also gets its own mask garbage collection (api.rs keeps it per
 //! thread): on the server thread, the check's throwaway state took it over from the live one.
 
-#[cfg(feature = "replay")]
 use crate::session::Session;
-#[cfg(feature = "replay")]
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixStream;
-#[cfg(feature = "replay")]
 use std::sync::Arc;
-#[cfg(feature = "replay")]
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "replay")]
 use std::time::Instant;
 
-#[cfg(feature = "replay")]
 /// Lua instructions between two looks at whether the check should stop.
 const HOOK_EVERY: u32 = 1_000_000;
-#[cfg(feature = "replay")]
 const STOPPED: &str = "check stopped";
 
 #[repr(C)]
@@ -75,24 +68,23 @@ pub fn client_gone(conn: &UnixStream) -> bool {
     if cfg!(target_os = "linux") { p.revents & POLLHUP != 0 } else { p.revents & POLLHUP != 0 && p.revents & POLLOUT == 0 }
 }
 
-#[cfg(feature = "replay")]
 /// What a check compares: the log's chunks and the live canvas (None: no canvas yet) as
 /// bits of what's seen and of the surface.
 pub struct Input {
     pub width: usize,
+    /// The paper-and-pastel switch (session.rs `PAPER_MARK`).
+    pub paper: bool,
     /// The box the session paints from.
     pub tubes: paint::Palette,
     pub chunks: Vec<String>,
     pub live: Option<(Vec<u32>, Vec<u32>)>,
 }
 
-#[cfg(feature = "replay")]
 /// A check running on its own thread.
 pub struct Job {
     stop: Arc<AtomicBool>,
 }
 
-#[cfg(feature = "replay")]
 impl Job {
     /// Ask the check to stop (it answers its client "check stopped").
     pub fn stop(&self) {
@@ -100,7 +92,6 @@ impl Job {
     }
 }
 
-#[cfg(feature = "replay")]
 /// Start checking `input` on a new thread; it answers `conn` itself.
 pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
     let stop = Arc::new(AtomicBool::new(false));
@@ -115,9 +106,9 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
             let r = replay(&conn, &input, &stop);
             let gone = client_gone(&conn);
             let (reply, how) = match &r {
-                Ok(true) => (format!("ok\nreplay matches the live canvas exactly ({n} chunks, {:.1}s)\n", t0.elapsed().as_secs_f64()), "ok"),
+                Ok(true) => (format!("ok\nreplay matches the live canvas within tolerance ({n} chunks, {:.1}s)\n", t0.elapsed().as_secs_f64()), "ok"),
                 Ok(false) => (
-                    "err\nreplay DIFFERS from the live canvas: a chunk depended on state from a failed chunk (e.g. a table it changed); the log is the painting: close and reopen to continue from it\n".to_string(),
+                    "err\nreplay DIFFERS from the live canvas beyond tolerance; the log is the painting, so close and reopen to continue from it\n".to_string(),
                     "err",
                 ),
                 Err(e) => (
@@ -141,12 +132,11 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
     Ok(job)
 }
 
-#[cfg(feature = "replay")]
 /// Replay the chunks in a fresh session and compare with the live canvas: Ok(same), or Err
 /// if a chunk failed or the check was stopped.
 fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bool, String> {
     let give_up = |stop: &AtomicBool, conn: &UnixStream| stop.load(Ordering::Relaxed) || client_gone(conn);
-    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?;
+    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?.with_paper(input.paper);
     {
         let (stop, conn) = (stop.clone(), conn.try_clone().map_err(|e| e.to_string())?);
         fresh
@@ -165,8 +155,90 @@ fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bo
         })?;
     }
     Ok(match (&input.live, fresh.canvas()) {
-        (Some((seen, surface)), Some(b)) => *seen == crate::bits(&b.seen()) && *surface == crate::bits_f(b.surface_um()),
+        (Some((seen, surface)), Some(b)) => matches(seen, surface, &b.seen(), b.surface_um()),
         (None, None) => true,
         _ => false,
     })
+}
+
+fn matches(seen: &[u32], surface: &[u32], replay_seen: &[paint::Rgb], replay_surface: &[f32]) -> bool {
+    if seen.len() != replay_seen.len() * 3 || surface.len() != replay_surface.len() || replay_seen.len() != replay_surface.len() {
+        return false;
+    }
+    let channel = |v: f32| (paint::color::linear_to_srgb(v) * 255.0).round() as u8;
+    seen.iter().zip(replay_seen.iter().flatten()).all(|(&a, &b)| {
+        let a = f32::from_bits(a);
+        a.is_finite() && b.is_finite() && channel(a).abs_diff(channel(b)) <= 2
+    }) && surface.iter().zip(replay_surface).all(|(&a, &b)| {
+        let a = f32::from_bits(a);
+        a.is_finite() && b.is_finite() && (a - b).abs() <= 1e-6 + 1e-5 * a.abs()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn linear(level: u8) -> f32 {
+        paint::color::srgb_to_linear(f32::from(level) / 255.0)
+    }
+
+    #[test]
+    fn visible_color_accepts_two_srgb_levels_at_every_pixel() {
+        let live = crate::bits(&[[linear(100); 3]; 4]);
+        let surface = crate::bits_f(&[50.0; 4]);
+        for level in [98, 99, 100, 101, 102] {
+            assert!(matches(&live, &surface, &[[linear(level); 3]; 4], &[50.0; 4]));
+        }
+        assert!(matches(&crate::bits(&[[0.0; 3]]), &crate::bits_f(&[0.0]), &[[0.0001; 3]], &[0.0]));
+    }
+
+    #[test]
+    fn visible_color_rejects_three_srgb_levels_in_any_channel() {
+        let live = crate::bits(&[[linear(100); 3]]);
+        for channel in 0..3 {
+            for level in [97, 103] {
+                let mut replay = [[linear(100); 3]];
+                replay[0][channel] = linear(level);
+                assert!(!matches(&live, &crate::bits_f(&[0.0]), &replay, &[0.0]));
+            }
+        }
+    }
+
+    #[test]
+    fn surface_uses_absolute_and_relative_tolerance() {
+        let color = [[linear(100); 3]];
+        let seen = crate::bits(&color);
+        for (live, replay, expected) in [(0.0, 1e-6, true), (0.0, 1.1e-6, false), (100.0, 100.0009, true), (100.0, 100.002, false), (-100.0, -100.0009, true)] {
+            assert_eq!(matches(&seen, &crate::bits_f(&[live]), &color, &[replay]), expected, "{live} -> {replay}");
+        }
+    }
+
+    #[test]
+    fn nonfinite_color_and_surface_never_match() {
+        let color = [[linear(100); 3]];
+        let seen = crate::bits(&color);
+        let surface = crate::bits_f(&[0.0]);
+        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(!matches(&crate::bits(&[[value; 3]]), &surface, &[[value; 3]], &[0.0]));
+            assert!(!matches(&seen, &surface, &[[value; 3]], &[0.0]));
+            assert!(!matches(&crate::bits(&[[value; 3]]), &surface, &color, &[0.0]));
+            assert!(!matches(&seen, &crate::bits_f(&[value]), &color, &[value]));
+            assert!(!matches(&seen, &surface, &color, &[value]));
+            assert!(!matches(&seen, &crate::bits_f(&[value]), &color, &[0.0]));
+        }
+    }
+
+    #[test]
+    fn color_and_surface_counts_must_match() {
+        let color = [[linear(100); 3]];
+        let seen = crate::bits(&color);
+        let surface = crate::bits_f(&[0.0]);
+        assert!(!matches(&seen[..2], &surface, &color, &[0.0]));
+        assert!(!matches(&seen, &surface, &color.repeat(2), &[0.0]));
+        assert!(!matches(&seen, &surface, &color, &[0.0, 0.0]));
+        assert!(!matches(&seen, &[], &color, &[0.0]));
+        assert!(!matches(&seen, &surface, &color, &[]));
+        assert!(!matches(&[], &surface, &[], &[0.0]));
+    }
 }

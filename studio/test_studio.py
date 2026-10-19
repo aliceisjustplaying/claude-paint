@@ -141,15 +141,20 @@ def test_saved_clock_survives_compaction_and_recovery_text_truncation(home, serv
     assert [e["clock"] for e in events if "clock" in e] == ["day 2, 12:34"]
 
 
-def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server):
-    # a round's worktree, removed: its painting's source is kept in archive/sources/<folder name>
+def test_a_painter_whose_folder_is_gone_is_served_from_the_archive(home, server, monkeypatch):
     tmp_path, _, log = home
     gone = tmp_path / "src" / "a" / "claude-paint-r7-arm2"
     rel = "paintings/src/bin/pond_poplars.rs"
+    archive = tmp_path / "stillwet-paintings"
+    sources = archive / "other/claude-paint/sources"
+    kept = b"fn main() {}\n"
+    source = sources / gone.name / rel
+    source.parent.mkdir(parents=True)
+    source.write_bytes(kept)
+    monkeypatch.setattr(S, "ARCHIVE", str(sources))
+    monkeypatch.setenv("STILLWET_PAINTINGS", str(archive))
     log.write_text(start(str(gone)) + line({"type": "message", "message": {"role": "assistant", "content": [
         {"type": "toolCall", "id": "c1", "name": "bash", "arguments": {"command": "cargo paint pond_poplars"}}]}}))
-    with open(os.path.join(os.path.dirname(HERE), "archive", "sources", "claude-paint-r7-arm2", rel), "rb") as fh:
-        kept = fh.read()
     assert server(f"/api/file?p={PAINTER}&f={rel}") == (200, kept)
     out = tmp_path / "out"
     r = export(tmp_path, out)
@@ -513,6 +518,7 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
         out = tables.get(tuple(cmd)) or ("p501\nfcwd\nn/Users/x/src/a/" + PAINTER + "\n" if cmd[1:3] == ["-a", "-p"] else "")
         return subprocess.CompletedProcess(cmd, 0, out, "")
     monkeypatch.setattr(E.subprocess, "run", run)
+    monkeypatch.setattr(E.platform, "system", lambda: "Darwin")
     assert E.working_studios() == {PAINTER, agy, done}
 
     run_dir = tmp_path / "src/a/stillwet-runs/cowboy-zombie-agy/run"
@@ -523,6 +529,27 @@ def test_agy_tool_server_marks_its_studio_working_and_live_only_with_a_running_s
     sessions = [{"p": agy, "mtime": 1000.0}, {"p": done, "mtime": 1000.0}]
     E.runner_states(sessions, E.working_studios(), 1060.0)
     assert [s["active"] for s in sessions] == [True, False]  # a finished agy left open has no running sitting
+
+
+def test_linux_working_studios_reads_proc_without_lsof(monkeypatch):
+    import export_static as E
+    agy = "paint-studio-063cbb"
+
+    def run(cmd, **kw):
+        if cmd == ["ps", "-Ao", "pid=,comm="]:
+            return subprocess.CompletedProcess(cmd, 0, "501 pi\n502 pi\n503 pi\n", "")
+        assert cmd == ["ps", "-wwAo", "args="]
+        return subprocess.CompletedProcess(cmd, 0, f"uv /home/user/{agy}/bin/mcp/server.py --studio /home/user/{agy} --agy", "")
+
+    def readlink(path):
+        if path == "/proc/501/cwd":
+            return "/home/user/Art Work/" + PAINTER
+        raise PermissionError(path)
+
+    monkeypatch.setattr(E.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(E.subprocess, "run", run)
+    monkeypatch.setattr(E.os, "readlink", readlink)
+    assert E.working_studios() == {PAINTER, agy}
 
 
 @pytest.mark.parametrize("state,working,age,outcome,active", [

@@ -283,6 +283,24 @@ def test_run_configures_the_house_loop_with_the_atelier_texts(world, monkeypatch
     assert house.RUN == work / "run"
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_run_passes_the_run_directory_and_sitting_only_when_inbox_enabled(world, monkeypatch, enabled):
+    work = world.start(OPUS, prepare=True)
+    house = A.house()
+    calls = []
+    house.run = lambda *args, **kwargs: calls.append((args, kwargs)) or 0
+    monkeypatch.setattr(A, "house", lambda: house)
+    monkeypatch.setenv("PAINTER_INBOX_DIR", "inherited")
+    configured = R.configure(OPUS, work, inbox=enabled)
+    assert "PAINTER_INBOX_DIR" not in R.os.environ
+    folder = Path(json.loads((work / "manifest.json").read_text())["folder"])
+    rd = work / "run" / "OPUS"
+    configured.run(["pi", "--print"], folder, rd / "p1_s2_part3_final.txt", rd / "err.txt", env={"KEEP": "yes"})
+    env = calls[0][1]["env"]
+    assert env == ({"KEEP": "yes", "PAINTER_INBOX_DIR": str(rd.resolve()), "PAINTER_INBOX_SITTING": "2"} if enabled else {"KEEP": "yes"})
+    assert (folder / ".painter-run").exists() == enabled
+
+
 def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
     world.start(OPUS, prepare=True)
     seen = []
@@ -292,7 +310,7 @@ def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
         painted(world, OPUS)
         return [{}]
 
-    monkeypatch.setattr(R, "configure", lambda sid, work: type("H", (), {"paint": loop, "log": lambda self, m: None})())
+    monkeypatch.setattr(R, "configure", lambda sid, work, **options: type("H", (), {"paint": loop, "log": lambda self, m: None})())
     assert R.paint(world, OPUS, 1) == 0
     assert seen[0][0] == "OPUS" and seen[0][3] == world.root / "works/claude-opus-5-5-001/run/OPUS"
     assert (world.home(OPUS) / "cards/001.json").exists()

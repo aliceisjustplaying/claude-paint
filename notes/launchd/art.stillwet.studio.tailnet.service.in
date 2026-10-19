@@ -1,0 +1,14 @@
+[Unit]
+Description=Studio tailnet viewer
+
+[Service]
+ExecStart="@UVBIN@/uv" run studio/studio.py --host @TAILNET_IP@ --port 8765
+WorkingDirectory=%h/src/a/claude-paint
+Environment="PATH=@UVBIN@:/usr/local/bin:/usr/bin:/bin" "HOME=%h"
+Restart=always
+RestartSec=15s
+StandardOutput=append:%h/tmp/studio-viewer-logs/art.stillwet.studio.tailnet.log
+StandardError=append:%h/tmp/studio-viewer-logs/art.stillwet.studio.tailnet.log
+
+[Install]
+WantedBy=default.target

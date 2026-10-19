@@ -103,6 +103,7 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files \
   replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored
 rust painter-signals easel 'test painter_signals test'
+rust studio-profiles easel 'test studio_profiles test'
 rust r19 easel 'test boxes test' a_round_19_log_replays_as_before
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
@@ -111,6 +112,13 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
+  bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure \
+  thinner::tests::the_sparse_flow_set_moves_only_the_liquid_above_packed_paint \
+  thinner::tests::paint_the_flow_brings_onto_absorbent_ground_drains_there \
+  canvas::tests::a_liquid_film_levels_the_weave_under_it_from_engine_4 \
+  surface::liquid_film_tests::absent_switch_keeps_the_old_surface_and_lighting_through_checkpoints \
+  tests::image_tolerance::tests::two_levels_pass_in_every_channel_and_three_fail \
+  tests::image_tolerance::tests::numeric_fields_accept_rounding_and_reject_regressions_and_nonfinite_values \
   drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features \
   drying::tests::a_scraped_nan_film_can_wait_without_a_thickness_buffer \
   bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint \
@@ -119,6 +127,11 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint \
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
+  check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
+  check::tests::surface_uses_absolute_and_relative_tolerance \
+  check::tests::nonfinite_color_and_surface_never_match \
+  check::tests::color_and_surface_counts_must_match \
   live_frames::tests::atomic_frame_publication_keeps_the_previous_file_on_failure \
   live_frames::tests::portrait_frames_fit_the_long_side_and_existing_frames_are_untouched \
   session::tests::a_subnormal_blend_stays_finite_through_a_scrape_and_wait \
@@ -138,16 +151,20 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
+check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
 check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"
+check die-roll 'uv run --no-project python -m unittest discover -s harness/painter/test -p test_die_roll.py -v' "$unittest"
 check atelier "cd atelier && $pytest -rs ." "$passed"
+check painter-inbox 'uv run --no-project python harness/painter/test/inbox_test.py -v' "$unittest"
+check painter-inbox-hooks 'node --test --test-reporter=tap harness/painter/test/inbox-hooks.test.ts' '^# pass [1-9]'
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
 check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
-check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py" "$passed"
+check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/check_painting_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'
 rust save-confined easel 'test save_confined test'
 rust ck7 easel 'test ck7 test'

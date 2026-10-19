@@ -2,6 +2,11 @@
 
 Read-only study of `~/src/a/claude-paint` at `c4a558c`. Receipts are `file:line` (paths under `crates/` unless noted), commands run or quoted docs. Scratch evidence (scripts, digests) is in `~/tmp/sw-scope/`. The raw `sample` dumps the profile receipts name (`s_*_*.txt`, `sample_frdc2_run.txt`, `s_b08dc3.txt`, ~150 MB) were deleted after summarizing; `sample <pid> 10 -file <f>` and the scripts there reproduce them.
 
+Studio-build update: oil studios now share one default-feature executable,
+with runtime selection documented in [easel.md](easel.md#studio-selection).
+The per-box compilation and painter-build finishing exclusions below
+describe the studied revision, not the current export process.
+
 **Caveat on every timing.** All timings were taken on a loaded machine: `uptime` said `load average: 35.02` on 12 cores (`sysctl hw.ncpu` → 12). Three check/finish replays and two live painters were running.
 
 ---

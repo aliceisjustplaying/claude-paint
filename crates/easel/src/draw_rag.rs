@@ -238,7 +238,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 }
 
 // every test here paints from the default box
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod tests {
     use crate::session::Session;
 

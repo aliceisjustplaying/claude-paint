@@ -99,7 +99,7 @@ def discover(home, project):
             missing.append({'path': str(path), 'reason': 'Outside project allowlist: ' + reason})
 
     add(project, 'Current project, including uncommitted and ignored meaningful files')
-    for name in ('stillwet', 'stillwet-data'):
+    for name in ('stillwet', 'stillwet-data', 'stillwet-paintings', 'stillwet-paintings-public'):
         add(project.parent / name, 'Website source, data and local static assets')
     for pattern in ('paint-studio-*', 'paint-r*', 'claude-paint-*'):
         for path in sorted(project.parent.glob(pattern)):
@@ -192,7 +192,7 @@ def discover(home, project):
             continue
         compact.append({'path': root, 'reasons': sorted(reasons), 'engine': engine})
     refs = {}
-    refs_file = project / 'archive/collection/source-refs.json'
+    refs_file = project.parent / 'stillwet-paintings/other/claude-paint/source-refs.json'
     if refs_file.is_file():
         refs.update(json.loads(refs_file.read_text()))
     refs.update({'r22.1-original-unavailable': '0e00118',

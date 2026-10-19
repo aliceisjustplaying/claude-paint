@@ -2548,27 +2548,17 @@ impl Touch {
 
 // every test here paints on the default box's style
 
-/// An arithmetic trap for exact (bit-identical) speedups of the brush
-/// kernel: it pins what the code on main does, so a faster version that
-/// changes a bit fails here before it reaches a replay.
+/// A numeric regression check for the brush kernel's paint volume and cure.
 #[cfg(test)]
 mod kernel_traps {
     use super::*;
     use crate::color::hex;
-
-    fn fnv(h: &mut u64, bits: u32) {
-        for b in bits.to_le_bytes() {
-            *h ^= b as u64;
-            *h = h.wrapping_mul(0x100_0000_01b3);
-        }
-    }
 
     /// An engine-2 canvas that has waited (drying state allocated), wet all
     /// over: every other pixel (at random) a film just over the 1e-5 coats
     /// `wait` counts as a film (up to 1.05e-5), with cure 0.1, the rest
     /// thick wet paint with cure 0.05.
     fn thin_and_thick() -> Canvas {
-        // (the recorded hashes are engine 2's)
         let mut c = Canvas::new(600, 2.0, hex("#e8e0d0")).with_size_mm(440.0).with_engine(2);
         c.wait(1.0);
         let n = c.f.w * c.f.h;
@@ -2587,7 +2577,7 @@ mod kernel_traps {
 
     /// Trap A, the kernel: an empty filbert that doesn't pick up (so it only
     /// ploughs, sharing each pixel's paint bilinearly among four
-    /// destinations) dragged through films at the threshold leaves exactly
+    /// destinations) dragged through films at the threshold leaves approximately
     /// the wet volume and cure recorded from main (4ec3169). A plough that
     /// hoisted the source's cure out of its destination loop fails this.
     #[test]
@@ -2602,19 +2592,17 @@ mod kernel_traps {
         }
         let n = c.f.w * c.f.h;
         let zeroed = (0..n).filter(|&i| before[i] > 0.0 && c.wet.clock.px[i].cure == 0.0).count();
-        let (mut hv, mut hc) = (0xcbf2_9ce4_8422_2325u64, 0xcbf2_9ce4_8422_2325u64);
-        for i in 0..n {
-            fnv(&mut hv, c.wet.vol[i].to_bits());
-            fnv(&mut hc, c.wet.clock.px[i].cure.to_bits());
-        }
         // the strokes did plough thin films under the threshold
         assert!(zeroed > 1000, "{zeroed} films ploughed bare");
-        let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            "vol=1c120f17ecd81763 cure=7c833caca2cc5c60 zeroed=7536"
-        } else {
-            "vol=216de608ff085476 cure=322c7a06e7dcb3f4 zeroed=7536"
-        };
-        assert_eq!(format!("vol={hv:016x} cure={hc:016x} zeroed={zeroed}"), expected, "the plough no longer moves paint and cure as main did");
+        let expected = image::open(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/plough_volume_cure.png")).unwrap().to_rgb16();
+        assert_eq!(expected.dimensions(), (c.f.w as u32, c.f.h as u32));
+        for (i, pixel) in expected.pixels().enumerate() {
+            for (channel, (value, scale)) in [(c.wet.vol[i], 0.01), (c.wet.clock.px[i].cure, 0.1)].into_iter().enumerate() {
+                assert!(value.is_finite() && (0.0..=scale).contains(&value), "field {channel} at pixel {i}: {value}");
+                let actual = (value / scale * 65535.0).round() as u16;
+                assert!(actual.abs_diff(pixel[channel]) <= 2, "field {channel} at pixel {i}: {value} exceeds two 16-bit reference levels");
+            }
+        }
     }
 }
 

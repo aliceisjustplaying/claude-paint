@@ -35,6 +35,8 @@ pub const FIELD_STEP: f32 = 2.0;
 
 pub struct Studio {
     pub width: usize,
+    /// The paper-and-pastel switch (session.rs `PAPER_MARK`): `canvas{paper=}`.
+    pub paper: bool,
     pub canvas: Option<Canvas>,
     pub recording_ground: u64,
     pub style: Option<Rc<Style>>,
@@ -76,7 +78,7 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
+        Studio { width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -191,7 +193,6 @@ pub(crate) fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, 
 }
 
 /// `f` sampled on the field grid over `b`, as `sample` samples a Lua function.
-#[cfg(feature = "replay")]
 pub(crate) fn grid<const N: usize>(st: &S, b: (f32, f32, f32, f32), mut f: impl FnMut(f32, f32) -> Result<[f32; N]>) -> Result<Grid<N>> {
     let t0 = std::time::Instant::now();
     let step = FIELD_STEP;
@@ -249,7 +250,6 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
         return Ok(fu.angle(0.0));
     }
     // an old log's rock field (r:field("plane"), legacy.rs): read natively too
-    #[cfg(feature = "replay")]
     if let Some(f) = crate::legacy::angle_field(v) {
         return Ok(f);
     }
@@ -467,10 +467,7 @@ impl UserData for Brush {
             // (before anything is drawn from the session's randomness: a refused load leaves it as it was)
             let amount = load_amount(amount, 0.8, "b:load")?;
             // (on a legacy canvas a table is its load's options: brushload's)
-            #[cfg(feature = "replay")]
             let legacy = crate::legacy::on(&b.st);
-            #[cfg(not(feature = "replay"))]
-            let legacy = false;
             if let Value::Table(t) = &extra
                 && !legacy
             {
@@ -1036,7 +1033,6 @@ fn check_set_out(st: &S, parts: &[(usize, f32)], what: &str) -> Result<()> {
 /// knifed by hand is uneven), and the pile's color (for the palette ledger).
 fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32) -> Result<(paint::Paint, Rgb)> {
     // a legacy canvas's brushes load colors (legacy.rs)
-    #[cfg(feature = "replay")]
     if let Some(r) = crate::legacy::brushload(st, p, extra)? {
         return Ok(r);
     }
@@ -1315,10 +1311,7 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
 }
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
-    #[cfg(feature = "replay")]
     check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
-    #[cfg(not(feature = "replay"))]
-    check_keys(&o, WORK_KEYS, "work")?;
     let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
@@ -1351,7 +1344,6 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         Value::Nil if graded.is_some() => Some(graded.as_ref().unwrap()[0].0.clone()),
         Value::Nil if blending => None,
         // a legacy canvas's passes paint colors (legacy.rs)
-        #[cfg(feature = "replay")]
         Value::Nil if crate::legacy::on(st) => None,
         v => Some(pile_now(st, &v, "work", 0.5)?),
     };
@@ -1417,7 +1409,6 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
         h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
     }
-    #[cfg(feature = "replay")]
     if pile.is_none() && crate::legacy::on(st) {
         crate::legacy::work(st, &o, &mut h, &hand, blending, b)?;
     }
@@ -1612,10 +1603,7 @@ const STIPPLE_KEYS: &[&str] = &[
 ];
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
-    #[cfg(feature = "replay")]
     check_keys(&o, &crate::legacy::stipple_keys(st, STIPPLE_KEYS), "stipple")?;
-    #[cfg(not(feature = "replay"))]
-    check_keys(&o, STIPPLE_KEYS, "stipple")?;
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
@@ -1625,17 +1613,13 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     let b = support(Some(&mask), f, tool.width * 2.0 + 4.0);
     let tubes = st.borrow().tubes.clone();
     // a legacy canvas stipples colors (legacy.rs)
-    #[cfg(feature = "replay")]
     let legacy = o.get::<Value>("pile")?.is_nil() && crate::legacy::on(st);
-    #[cfg(not(feature = "replay"))]
-    let legacy = false;
     let mut sp = if legacy {
         Stipple::new(tool)
     } else {
         let pile = pile_now(st, &o.get::<Value>("pile")?, "stipple", 0.5)?;
         Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium).thinner(pile.thinner())
     };
-    #[cfg(feature = "replay")]
     if legacy {
         crate::legacy::stipple(st, &o, &mut sp, b)?;
     }
@@ -1782,7 +1766,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    // canvas{size=, aspect=, linen=, ground={...} or raw=, seed=}
+    // canvas{size=, aspect=, linen= or paper={...}, ground={...} or raw=, seed=}
     {
         let st = st.clone();
         g.set(
@@ -1790,12 +1774,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.ok_or_else(|| mlua::Error::runtime(CANVAS_HELP))?;
                 // an old log's canvas: a named style and palette (legacy.rs)
-                #[cfg(feature = "replay")]
-                if crate::legacy::asks(&o)? {
+                if !crate::studio::painter() && crate::legacy::asks(&o)? {
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
-                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "ground", "seed"] }, "canvas")?;
+                check_keys(&o, if raw_ok { &["size", "aspect", "linen", "paper", "ground", "seed", "raw"] } else { &["size", "aspect", "linen", "paper", "ground", "seed"] }, "canvas")?;
                 if st.borrow().canvas.is_some() {
                     return err("the canvas is already set up (canvas{} is the first chunk)");
                 }
@@ -1807,26 +1790,62 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(0.2..=5.0).contains(&aspect) {
                     return err("canvas: aspect is width / height, between 0.2 and 5");
                 }
-                let (warp, weft) = pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}})\n{CANVAS_HELP}")))?;
-                if !((4.0..=60.0).contains(&warp) && (4.0..=60.0).contains(&weft)) {
-                    return err("canvas: linen threads per cm, 4 to 60");
-                }
                 let tubes = st.borrow().tubes.clone();
-                // a raw canvas: no ground, the bare cloth
-                let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
-                let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
                 let seed = o.get::<Option<u64>>("seed")?.unwrap_or(1);
-                let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
-                if let Some(f) = &fabric {
-                    sty.raw = f.color;
-                }
+                // paper=: a sheet of paper instead of linen
+                let paper_ok = st.borrow().paper;
+                let paper = match o.get::<Value>("paper")? {
+                    Value::Nil => None,
+                    Value::Table(t) => {
+                        if !paper_ok {
+                            return err(format!("canvas: paper= needs the paper-and-pastel switch, which this painting doesn't have: its log's head has no {:?} line (it was begun before paper)", crate::session::PAPER_MARK));
+                        }
+                        if o.contains_key("linen")? {
+                            return err("canvas: a sheet of paper or linen, not both");
+                        }
+                        if raw_ok && o.contains_key("raw")? {
+                            return err("canvas: a sheet of paper or a raw canvas, not both");
+                        }
+                        Some(paper_of(&tubes, &t, seed)?)
+                    }
+                    v => return err(format!("canvas: paper= is a table of the sheet's make ({{grammage=, tone=, felt=, ...}}), got {}", v.type_name())),
+                };
                 let width = st.borrow().width;
-                // (the drain switch rides on the box, `session::DRAIN_MARK`;
-                // the ground is prepared alike either way)
-                let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed).with_drain(tubes.drain);
-                if let Some(f) = &fabric {
-                    c.raw_canvas(f.clone(), seed);
-                }
+                let (mut c, sty, support) = match paper {
+                    Some((p, tone)) => {
+                        // (a sheet of paper needs no ground: it is drawn and painted on as it is)
+                        let ground = match o.get::<Value>("ground")? {
+                            Value::Nil => Vec::new(),
+                            g => ground_of(&tubes, &g)?,
+                        };
+                        let sty = Style { name: "oil", width_mm: mm, raw: tone, ground, ..Style::oil_with((*tubes).clone()) };
+                        (sty.prepare_paper(width, aspect, seed, p), sty, format!("paper={} g/m²", fmt_num(p.grammage)))
+                    }
+                    None => {
+                        let or_paper = if paper_ok { ", or paper= (a sheet of paper)" } else { "" };
+                        let (warp, weft) = pair(&o, "linen")?.ok_or_else(|| mlua::Error::runtime(format!("canvas: linen= (threads per cm: one number, or {{warp, weft}}){or_paper}\n{CANVAS_HELP}")))?;
+                        if !((4.0..=60.0).contains(&warp) && (4.0..=60.0).contains(&weft)) {
+                            return err("canvas: linen threads per cm, 4 to 60");
+                        }
+                        // a raw canvas: no ground, the bare cloth
+                        let fabric = if raw_ok { draw_soak::fabric_of(&o)? } else { None };
+                        let ground = if fabric.is_some() { Vec::new() } else { ground_of(&tubes, &o.get::<Value>("ground")?)? };
+                        let mut sty = Style { name: "oil", width_mm: mm, linen: Linen { warp_per_cm: warp, weft_per_cm: weft, ..Linen::fine(1) }, ground, ..Style::oil_with((*tubes).clone()) };
+                        if let Some(f) = &fabric {
+                            sty.raw = f.color;
+                        }
+                        let mut c = crate::ground_cache::prepare(&sty, width, aspect, seed);
+                        let support = match &fabric {
+                            None => format!("linen={{{warp}, {weft}}}"),
+                            Some(f) => format!("linen={{{warp}, {weft}}}, raw={:?}", f.name),
+                        };
+                        if let Some(f) = fabric {
+                            c.raw_canvas(f, seed);
+                        }
+                        (c, sty, support)
+                    }
+                };
+                c = c.with_drain(tubes.drain);
                 let h = c.height();
                 {
                     let mut s = st.borrow_mut();
@@ -1841,10 +1860,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                     s.canvas = Some(c);
                     s.style = Some(Rc::new(sty));
                     s.canvas_src = Some(format!("canvas{}", lua_src(&Value::Table(o.clone()))?));
-                    s.setup = Some(match fabric {
-                        None => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, seed={seed}", fmt_num(mm)),
-                        Some(f) => format!("size={}, aspect={aspect}, linen={{{warp}, {weft}}}, raw={:?}, seed={seed}", fmt_num(mm), f.name),
-                    });
+                    s.setup = Some(format!("size={}, aspect={aspect}, {support}, seed={seed}", fmt_num(mm)));
                 }
                 let gl = lua.globals();
                 // whole numbers as Lua integers (so `print(H)` says 714, not 714.0)
@@ -2226,8 +2242,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    #[cfg(feature = "finish")]
-    crate::finish::install(lua, st.clone())?;
+    if !crate::studio::painter() {
+        crate::finish::install(lua, st.clone())?;
+    }
 
     crate::form::install(lua, st.clone())?;
     crate::world::install(lua, st.clone())?;
@@ -2246,7 +2263,74 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
 
 
 
-const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
+const CANVAS_HELP: &str = "canvas{size=<mm>, aspect=<width / height>, linen=<threads per cm>, ground={{pile={{\"<tube>\", <parts>}, ...}, um=<µm>, apply=\"<knife|roller|brush>\"}, ...}, seed=<n>}\n  size: width in mm; aspect: width / height; linen: threads per cm (or {warp, weft});\n  ground: layers bottom first, each a pile of tubes, a thickness in µm and how it is put on (\"knife\", \"roller\" or \"brush\"; a knife takes texture=0..1)\n  or paper={grammage=, tone={{\"<tube>\", <parts>}, ...}, felt={cell=, depth=}|false, laid={per_cm=, chain=, deficit=}, ...} instead of linen: a sheet of paper (a ground is then optional)\n  or raw=\"cotton duck\" (or \"linen\") and no ground: the bare cloth (engine 3)";
+
+/// A sheet of paper from `canvas{paper={...}}`, and its tone: the pulp's
+/// color, tubes' pigments as they look dry (a dyed or toned sheet), or the
+/// color of cotton rag if none is given. Every key has a default
+/// (`Paper::drawing`).
+fn paper_of(tubes: &Palette, t: &Table, seed: u64) -> Result<(paint::paper::Paper, paint::Rgb)> {
+    use paint::paper::{Felt, Laid, Paper};
+    check_keys(t, &["grammage", "fiber", "fiber_width", "thickness", "coarseness", "porosity", "floc", "floc_size", "press", "calender", "felt", "laid", "absorbent", "stiffness", "tone"], "paper")?;
+    let d = Paper::drawing(seed);
+    let get = |k: &str, def: f32, lo: f32, hi: f32| -> Result<f32> {
+        let v = num(t, k)?.unwrap_or(def);
+        if !(lo..=hi).contains(&v) {
+            return err(format!("paper: {k} between {lo} and {hi}"));
+        }
+        Ok(v)
+    };
+    let felt = match t.get::<Value>("felt")? {
+        Value::Nil => d.felt,
+        Value::Boolean(false) => None,
+        Value::Table(f) => {
+            check_keys(&f, &["cell", "depth"], "paper felt")?;
+            let (cell, depth) = (num(&f, "cell")?.unwrap_or(0.8), num(&f, "depth")?.unwrap_or(20.0));
+            // (clamp keeps a NaN: refuse it first)
+            if !(cell.is_finite() && depth.is_finite()) {
+                return err("paper: felt= cell and depth are numbers (mm, µm)");
+            }
+            Some(Felt { cell_mm: cell.clamp(0.1, 5.0), depth_um: depth.clamp(0.0, 200.0) })
+        }
+        _ => return err("paper: felt= {cell=mm, depth=µm}, or false for none"),
+    };
+    let laid = match t.get::<Value>("laid")? {
+        Value::Nil | Value::Boolean(false) => None,
+        Value::Table(l) => {
+            check_keys(&l, &["per_cm", "chain", "deficit"], "paper laid")?;
+            let (per_cm, chain, deficit) = (num(&l, "per_cm")?.unwrap_or(10.0), num(&l, "chain")?.unwrap_or(25.0), num(&l, "deficit")?.unwrap_or(0.15));
+            if !(per_cm.is_finite() && chain.is_finite() && deficit.is_finite()) {
+                return err("paper: laid= per_cm, chain and deficit are numbers");
+            }
+            Some(Laid { per_cm: per_cm.clamp(2.0, 20.0), chain_mm: chain.clamp(5.0, 60.0), deficit: deficit.clamp(0.0, 0.5) })
+        }
+        _ => return err("paper: laid= {per_cm=, chain=mm, deficit=}"),
+    };
+    let p = Paper {
+        grammage: get("grammage", d.grammage, 40.0, 600.0)?,
+        fiber_mm: get("fiber", d.fiber_mm, 0.3, 10.0)?,
+        fiber_um: get("fiber_width", d.fiber_um, 8.0, 60.0)?,
+        thick_um: get("thickness", d.thick_um, 2.0, 30.0)?,
+        coarseness: get("coarseness", d.coarseness, 0.04, 0.5)?,
+        porosity: get("porosity", d.porosity, 0.2, 0.8)?,
+        floc: get("floc", d.floc, 0.0, 1.0)?,
+        floc_mm: get("floc_size", d.floc_mm, 0.2, 10.0)?,
+        press: get("press", d.press, 0.3, 1.0)?,
+        calender: get("calender", d.calender, 0.0, 1.0)?,
+        absorbent: get("absorbent", d.absorbent, 0.0, 1.0)?,
+        z_mpa: get("stiffness", d.z_mpa, 2.0, 500.0)?,
+        felt,
+        laid,
+        seed,
+    };
+    // the tone: parts of tubes, as a ground's paste is given ({{"tube", parts}, ...})
+    let tone = match t.get::<Value>("tone")? {
+        Value::Nil => paint::hex("#e8e0cf"),
+        Value::Table(p) => tubes.dry_color(&parts_of(tubes, &p, "paper tone")?.0),
+        v => return err(format!("paper: tone= is parts of tubes ({{{{\"tube\", parts}}, ...}}), got {}", v.type_name())),
+    };
+    Ok((p, tone))
+}
 
 /// Ground layers from `{{pile={{tube, parts}, ...}, um=, apply=, texture=}, ...}`,
 /// bottom first: each the paste its tubes make (masstone, hiding, stiffness).
@@ -2294,7 +2378,7 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
 }
 
 // Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod tests {
     use crate::session::Session;
 
@@ -2339,7 +2423,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod blend_at_masks_tests {
     use crate::session::{Session, box_for};
 

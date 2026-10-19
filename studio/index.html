@@ -572,7 +572,8 @@ async function poll() {
   finally { if (g === gen) busy = false; }
   if (g !== gen) return;  // switched painters meanwhile
   const shifted = STATIC && events.some((e, i) => !r.events[i] || e.kind !== r.events[i].kind || e.ts !== r.events[i].ts || e.kind === 'sitting' && e.n !== r.events[i].n);
-  if (epoch !== null && r.epoch !== epoch || shifted) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
+  const rebuilt = epoch !== null && r.epoch !== epoch || shifted;
+  if (rebuilt) { const wasLive = live; reset(); live = wasLive; }  // the stream was rebuilt: start over
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];
@@ -589,7 +590,7 @@ async function poll() {
     r.events.forEach((e, j) => { if (e.kind === 'image') thumb(e, base + j, f); else if (e.kind === 'look') hasLooks = true; else if (e.kind === 'sitting') { sitStarts.push(base + j); sitDivider(e, base + j, f); } });
     $('strip').appendChild(f); if (live) stripEnd();  // (fixed thumbnail sizes in the CSS: the strip's width is known before they load)
     ticks();
-    if (live) show(events.length - 1);
+    if (live || rebuilt) show(live ? events.length - 1 : Math.min(pos, events.length - 1));
     if (!base && sessionsLoaded && !allSessions.some(s => qOf(s) === Q)) loadSessions();  // a painter that has just begun: its name for the header
   }
   if (live) refreshLiveCode();

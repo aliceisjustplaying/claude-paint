@@ -116,6 +116,27 @@ async function pollUpdate(v, i, replacement) {
     assert.equal(await waiting.page.locator('#clocklbl').textContent(), 'painted for');
     assert.equal(await waiting.page.evaluate(() => events.length), 6);
     await waiting.page.close();
+    for (const staticMode of [false, true]) {
+      const firstSitting = [ev('sitting', { n:1 }), ev('start', { cwd:'/painter' }), ev('paint', { code:'local first=1', out:'ok' }, 1),
+        ev('look', { text:'' }, 2), ev('image', { img:0, look:'' }, 2), ev('start', { cwd:'/painter' }, 10)];
+      const rewound = await viewer(browser, firstSitting, { staticMode, sittings:1 });
+      await seek(rewound.page, 4);
+      await rewound.page.waitForFunction(() => document.querySelector('#img').naturalWidth > 0);
+      const canvas = (await rewound.page.locator('#img').getAttribute('src')).replace(/epoch=[^&]+/, 'epoch=');
+      rewound.state.events.splice(5, 0, ev('sitting', { n:2 }, 10));
+      rewound.state.events.push(ev('paint', { code:'local second=2', out:'ok' }, 12));
+      rewound.state.sittings = 2;
+      if (!staticMode) rewound.state.epoch = 'two';
+      await rewound.page.evaluate(async () => { lastStatic = 0; await poll(); });
+      await rewound.page.waitForFunction(() => !document.querySelector('#togglecode').disabled && codeBatch === null && document.querySelector('#img').naturalWidth > 0);
+      assert.equal((await rewound.page.locator('#img').getAttribute('src')).replace(/epoch=[^&]+/, 'epoch='), canvas);
+      assert.equal(await rewound.page.locator('#nopic').isVisible(), false);
+      assert.equal(await rewound.page.evaluate(() => pos), 4);
+      assert.equal(await rewound.page.evaluate(() => live), false);
+      assert.match((await snapshot(rewound.page)).code.join('\n'), /local first\s*=\s*1/);
+      assert.equal(await rewound.page.locator('#clocklbl').textContent(), 'at · sitting 1 of 2');
+      await rewound.page.close();
+    }
     report.checks.push('sitting labels and clocks exclude die rolls, startup-only sessions and gaps in API/static replay');
     const canvas = [ev('start'), ev('look', {text:'scratch True'}, 1), ev('image', {img:0, look:'scratch True'}, 2),
       ev('paint', {scratch:true, code:'work{}', out:'ok'}, 3), ev('look', {text:'scratch True, crop 100,100,300,300'}, 4),

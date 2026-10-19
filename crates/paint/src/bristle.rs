@@ -90,6 +90,7 @@ fn transpose(src: &[f32], w: usize, h: usize) -> Vec<f32> {
 pub(crate) const WET_REACH: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub enum Kind {
     Round,
     Flat,
@@ -100,6 +101,7 @@ pub enum Kind {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tool {
     pub kind: Kind,
     /// Footprint width at full pressure (units).
@@ -333,6 +335,7 @@ impl Tool {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Bristle {
     /// Root offset in the brush frame (x along the wide axis), roughly −1..1.
     pub(crate) rx: f32,
@@ -358,6 +361,7 @@ pub(crate) struct Bristle {
 /// A brush in the hand, with paint in its bristles. (`Debug` is part of
 /// `easel run --state-digest`: see its impl.)
 #[derive(Clone)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Held {
     pub tool: Tool,
     pub(crate) bristles: Vec<Bristle>,
@@ -2742,6 +2746,7 @@ const SKIM_COATS: f32 = 0.25;
 /// paint in flat slabs, leaving the paint it cuts off at the blade's ends in
 /// ridges and a bead where it lifts, and scrapes wet paint off.
 #[derive(Clone)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Knife {
     pub width: f32,
     vol: f32,

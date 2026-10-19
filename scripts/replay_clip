@@ -96,15 +96,17 @@ dir=${dir:-$out.frames}
 if [ "$reuse" = 0 ]; then
   [ -n "$easel" ] || easel=$("$(dirname "$0")/replay_easel" --no-build)
   [ -x "$easel" ] || { echo "replay_clip: no easel at $easel (cargo build --release -p easel)" >&2; exit 1; }
-  # only a frames folder of ours (or nothing, or an empty folder) is replaced
+  # only a frames folder of ours (or nothing, or an empty folder) is replaced;
+  # one with a replay checkpoint beside it is an interrupted replay, resumed
   if [ -e "$dir" ] && [ ! -f "$dir/frames.tsv" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
     echo "replay_clip: $dir exists and isn't a frames folder (no frames.tsv); not replacing it" >&2
     exit 1
   fi
-  rm -rf "$dir"
+  [ -f "$dir.replay.ckpt" ] || { rm -rf "$dir"; : > "$dir.log"; }
   t0=$(date +%s)
-  "$easel" run "$log" "${lightargs[@]}" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" >/dev/null 2>"$dir.log" \
+  "$easel" run "$log" "${lightargs[@]}" --out "$dir/final-full.png" --frames-every "$every" --frames-dir "$dir" --frame-width "$width" --replay-checkpoint "$dir.replay.ckpt" >/dev/null 2>>"$dir.log" \
     || { tail -20 "$dir.log" >&2; exit 1; }
+  rm -f "$dir.replay.ckpt"
   grep -E '^(frames|wrote)' "$dir.log" >&2
   echo "replay took $(( $(date +%s) - t0 )) s" >&2
 fi

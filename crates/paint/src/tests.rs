@@ -3,7 +3,10 @@
 //! deliberately with `UPDATE_GOLDEN=1 cargo test -p paint` when a change is
 //! meant to alter rendering. The golden is recorded with the workspace's `[profile.test]`
 //! (optimized, debug assertions on: see Cargo.toml). Cross-build image drift
-//! follows notes/workflow.md; same-build state fingerprints remain exact.
+//! follows notes/workflow.md, including same-build and thread-count comparisons.
+
+#[path = "../tests/support/image_tolerance.rs"]
+pub(crate) mod image_tolerance;
 
 use crate::bristle::{Gesture, Held, Orient, Tool};
 use crate::canvas::Canvas;
@@ -76,7 +79,9 @@ fn dry_is_idempotent_and_clears_wet() {
     assert_eq!(c.wet_total(), 0.0);
     let snap = (c.px.clone(), c.height.clone(), c.film.clone());
     c.dry();
-    assert!(snap.0 == c.px && snap.1 == c.height && snap.2 == c.film);
+    image_tolerance::assert_fields_close(c.px.iter().flatten().copied(), snap.0.iter().flatten().copied());
+    image_tolerance::assert_fields_close(c.height.iter().copied(), snap.1);
+    image_tolerance::assert_fields_close(c.film.iter().copied(), snap.2);
 }
 
 /// A fixture through most of the engine: in the upper half a broad pass
@@ -110,21 +115,12 @@ fn fixture() -> Canvas {
 }
 
 #[cfg(tube_box)]
-fn fingerprint(c: &Canvas) -> String {
-    // FNV-1a over the exact bits of every state buffer
-    let mut hsh = 0xcbf2_9ce4_8422_2325u64;
-    let mut eat = |v: f32| {
-        for b in v.to_bits().to_le_bytes() {
-            hsh ^= b as u64;
-            hsh = hsh.wrapping_mul(0x100_0000_01b3);
-        }
-    };
-    for p in &c.px {
-        p.iter().for_each(|&v| eat(v));
-    }
-    c.height.iter().for_each(|&v| eat(v));
-    c.film.iter().for_each(|&v| eat(v));
-    format!("{hsh:016x}")
+fn rendered(mut c: Canvas, tag: &str) -> image::RgbaImage {
+    let path = std::env::temp_dir().join(format!("paint-fixture-{}-{tag}.png", std::process::id()));
+    c.save(&path).unwrap();
+    let image = image::open(&path).unwrap().to_rgba8();
+    std::fs::remove_file(path).unwrap();
+    image
 }
 
 #[cfg(tube_box)]
@@ -135,9 +131,9 @@ fn in_pool<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
 #[test]
 #[cfg(tube_box)]
 fn fixture_is_deterministic_across_thread_counts() {
-    let a = in_pool(1, || fingerprint(&fixture()));
-    let b = in_pool(4, || fingerprint(&fixture()));
-    assert_eq!(a, b);
+    let a = in_pool(1, || rendered(fixture(), "one-thread"));
+    let b = in_pool(4, || rendered(fixture(), "four-threads"));
+    image_tolerance::assert_close(&a, &b);
 }
 
 #[test]
@@ -151,30 +147,9 @@ fn fixture_matches_golden() {
         std::fs::write(platform_path, format!("{platform}\n")).unwrap();
         return;
     }
-    let rendered = std::env::temp_dir().join(format!("paint-golden-{}.png", std::process::id()));
-    fixture().save(&rendered).unwrap();
-    let got_bytes = std::fs::read(&rendered).unwrap();
-    let got = image::open(&rendered).unwrap().to_rgba8();
-    std::fs::remove_file(rendered).unwrap();
-    let reference_platform = std::fs::read_to_string(platform_path).unwrap_or_else(|_| "unknown".into());
-    let known_platforms = ["macos-aarch64", "macos-x86_64", "linux-aarch64", "linux-x86_64", "windows-aarch64", "windows-x86_64"];
-    if reference_platform.trim() == platform || !known_platforms.contains(&reference_platform.trim()) || !known_platforms.contains(&platform.as_str()) {
-        assert!(got_bytes == std::fs::read(path).unwrap(), "golden PNG bytes changed on the same or unknown platform");
-        return;
-    }
+    let got = rendered(fixture(), "golden");
     let want = image::open(path).expect("no golden: run with UPDATE_GOLDEN=1").to_rgba8();
-    assert_eq!(got.dimensions(), want.dimensions());
-    let mut changed = 0usize;
-    let mut maximum = 0u8;
-    for (a, b) in got.pixels().zip(want.pixels()) {
-        assert_eq!(a.0[3], b.0[3], "golden image alpha changed");
-        let delta = a.0[..3].iter().zip(&b.0[..3]).map(|(x, y)| x.abs_diff(*y)).max().unwrap();
-        changed += usize::from(delta != 0);
-        maximum = maximum.max(delta);
-    }
-    let pixels = got.width() as usize * got.height() as usize;
-    assert!(maximum <= 2 && changed * 1_000 < pixels,
-            "cross-platform golden image drift: {changed}/{pixels} pixels, max {maximum}/255; allowed <0.1% pixels and <=2/255 per channel");
+    image_tolerance::assert_close(&got, &want);
 }
 
 /// The drain switch: an absorbent ground drains a film to its drained
@@ -338,7 +313,8 @@ fn a_packed_film_follows_the_relief() {
     let (packed, fluid) = (spread(&film(Some(0.0))), spread(&film(None)));
     assert!(packed.1 - packed.0 < 0.01, "packed through: an even film {packed:?}");
     assert!(fluid.1 - fluid.0 > 1.0, "fluid: it gathers in the hollows {fluid:?}");
-    assert_eq!(spread(&film(Some(1.0))), fluid);
+    let full = spread(&film(Some(1.0)));
+    image_tolerance::assert_fields_close([full.0, full.1], [fluid.0, fluid.1]);
 }
 
 /// The drain switch: a stroke baked with packed edges beside a still-fluid

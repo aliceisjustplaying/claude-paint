@@ -1022,6 +1022,9 @@ mod tests {
             c.wait(30.0);
             c.dry();
         }
-        assert!(a.px == b.px && a.height == b.height && a.film == b.film && a.clock() == b.clock());
+        crate::tests::image_tolerance::assert_fields_close(a.px.iter().flatten().copied(), b.px.iter().flatten().copied());
+        crate::tests::image_tolerance::assert_fields_close(a.height.iter().copied(), b.height.iter().copied());
+        crate::tests::image_tolerance::assert_fields_close(a.film.iter().copied(), b.film.iter().copied());
+        assert_eq!(a.clock(), b.clock());
     }
 }

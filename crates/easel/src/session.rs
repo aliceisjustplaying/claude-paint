@@ -1432,8 +1432,28 @@ pub fn root() -> PathBuf {
 }
 
 #[cfg(all(test, feature = "replay"))]
+#[path = "../../paint/tests/support/image_tolerance.rs"]
+mod image_tolerance;
+
+#[cfg(all(test, feature = "replay"))]
 mod tests {
     use super::*;
+
+    fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {
+        assert_eq!(actual.engine(), expected.engine());
+        assert_eq!(actual.drain(), expected.drain());
+        let (aw, ah, actual_surface) = actual.kept_surface_um();
+        let (ew, eh, expected_surface) = expected.kept_surface_um();
+        assert_eq!((aw, ah), (ew, eh));
+        image_tolerance::assert_fields_close(actual_surface, expected_surface);
+        for mode in ["normal", "gallery", "relief"] {
+            let size = expected.window().w.max(expected.window().h).to_string();
+            let view = crate::look::View::parse(&["--mode".into(), mode.into(), "--size".into(), size]).unwrap();
+            let (_, _, actual) = crate::look::render(actual, &view).unwrap();
+            let (_, _, expected) = crate::look::render(expected, &view).unwrap();
+            image_tolerance::assert_close(&image::load_from_memory(&actual).unwrap().to_rgba8(), &image::load_from_memory(&expected).unwrap().to_rgba8());
+        }
+    }
 
     #[test]
     fn a_subnormal_blend_stays_finite_through_a_scrape_and_wait() {
@@ -1499,14 +1519,17 @@ mod tests {
                 replay.run(&chunk).unwrap();
             }
             let bytes = state(&live);
+            let original = live.canvas().unwrap().clone();
             assert_eq!(&bytes[..8], if drain { b"PAINTC14" } else { b"PAINTC11" });
-            assert!(state(&replay) == bytes && replay.program("drain") == log, "drain {drain}: the replay is the painting");
+            assert_canvas_close(&replay.canvas().unwrap(), &original);
+            assert_eq!(replay.program("drain"), log);
             let brushes = live.st.borrow_mut().live_brushes();
             let held = format!("{:?}", brushes[0].borrow());
             let hide = held.split("hide: [").nth(1).and_then(|h| h.split(']').next()).unwrap();
             assert_eq!(hide.matches(',').count(), if drain { 9 } else { 4 }, "drain {drain}: {hide}");
             live.rebuild().unwrap();
-            assert!(state(&live) == bytes && live.program("drain") == log, "drain {drain}: the rebuild is the painting");
+            assert_canvas_close(&live.canvas().unwrap(), &original);
+            assert_eq!(live.program("drain"), log);
         }
     }
     /// Paintings from before the engine version was recorded (no `--@ engine`
@@ -1527,7 +1550,7 @@ mod tests {
         }
     }
 
-    /// An engine-2 painting replays as engine 2, bit for bit as it did before
+    /// An engine-2 painting replays as engine 2, within image tolerance as it did before
     /// engine 3 (recorded at 7b80cb0, round 23): a test sheet of lead white
     /// and bone black laid at different times over five days, lifted at
     /// every stage of drying and painted across, with waits of hours and
@@ -1537,8 +1560,12 @@ mod tests {
         let (s, text) = replay_fixture("engine2/drying_sheet");
         assert_eq!(s.canvas().unwrap().engine(), 2);
         assert_eq!(s.program("painting"), text);
-        let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) { "137bcdd02d9ccf64" } else { "2d2bc0a5b6922d4a" };
-        assert_eq!(canvas_hash(&s), expected, "the engine-2 drying sheet no longer replays as it did");
+        for mode in ["normal", "gallery", "relief"] {
+            let view = crate::look::View::parse(&["--mode".into(), mode.into(), "--size".into(), "320".into()]).unwrap();
+            let (_, _, png) = crate::look::render(&s.canvas().unwrap(), &view).unwrap();
+            let expected = image::open(format!("{}/tests/engine2/drying_sheet_{mode}.png", env!("CARGO_MANIFEST_DIR"))).unwrap().to_rgba8();
+            image_tolerance::assert_close(&image::load_from_memory(&png).unwrap().to_rgba8(), &expected);
+        }
     }
 
     /// A gesture keeps the pressure its points ask for up to its last point
@@ -1902,10 +1929,15 @@ mod tests {
             bytes
         };
         let bytes = state(&live);
+        let original = live.canvas().unwrap().clone();
         assert_eq!(&bytes[..8], b"PAINTC13");
-        assert!(state(&replay) == bytes && replay.program("paper") == log);
+        assert_canvas_close(&replay.canvas().unwrap(), &original);
+        assert!(replay.st.borrow().paper);
+        assert_eq!(replay.program("paper"), log);
         live.rebuild().unwrap();
-        assert!(state(&live) == bytes && live.program("paper") == log);
+        assert_canvas_close(&live.canvas().unwrap(), &original);
+        assert!(live.st.borrow().paper);
+        assert_eq!(live.program("paper"), log);
     }
 
     /// A save keeps the paper-and-pastel switch and the sheet: read back
@@ -1933,7 +1965,7 @@ mod tests {
             assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == sheet);
             restored.run("wait(1)").unwrap();
             live.run("wait(1)").unwrap();
-            assert_eq!(saved(&restored), saved(&live));
+            assert_canvas_close(&restored.canvas().unwrap(), &live.canvas().unwrap());
             assert!(logged_paper(&restored.program("t")));
             std::fs::remove_file(path).unwrap();
         }

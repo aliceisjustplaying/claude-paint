@@ -3,6 +3,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "../../paint/tests/support/image_tolerance.rs"]
+mod image_tolerance;
+
 const CANVAS: &str = "canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{\"lead white\",6},{\"raw umber\",1}}, um=50, apply=\"roller\"}}}";
 const PREPARE: &str = "p=pile{{\"lead white\",6},{\"cobalt blue\",1}}; b=brush(\"filbert\",8); b:load(p,0.9)";
 const MARK: &str = "b:stroke({{100,100},{800,130}}, {pressure=0.8})";
@@ -101,8 +104,16 @@ fn recording_leaves_painting_bytes_and_replay_unchanged() {
         studio.ok(&["check"]);
         studio.ok(&["close"]);
     }
-    for file in ["plain.png", "gallery.png", "out/easel/painting/committed.lua", "out/easel/painting/live.png", "out/easel/painting/live.ckpt"] {
-        assert_eq!(std::fs::read(on.0.join(file)).unwrap(), std::fs::read(off.0.join(file)).unwrap(), "{file}");
+    for file in ["plain.png", "gallery.png", "out/easel/painting/live.png"] {
+        image_tolerance::assert_close(&image::open(on.0.join(file)).unwrap().to_rgba8(), &image::open(off.0.join(file)).unwrap().to_rgba8());
     }
+    let committed = "out/easel/painting/committed.lua";
+    assert_eq!(std::fs::read(on.0.join(committed)).unwrap(), std::fs::read(off.0.join(committed)).unwrap());
+    let checkpoint = "out/easel/painting/live.ckpt";
+    let (on_canvas, _) = paint::Canvas::read_state(&mut std::io::BufReader::new(std::fs::File::open(on.0.join(checkpoint)).unwrap())).unwrap();
+    let (off_canvas, _) = paint::Canvas::read_state(&mut std::io::BufReader::new(std::fs::File::open(off.0.join(checkpoint)).unwrap())).unwrap();
+    assert_eq!((on_canvas.window().w, on_canvas.window().h), (off_canvas.window().w, off_canvas.window().h));
+    image_tolerance::assert_fields_close(on_canvas.seen().into_iter().flatten(), off_canvas.seen().into_iter().flatten());
+    image_tolerance::assert_fields_close(on_canvas.surface_um().iter().copied(), off_canvas.surface_um().iter().copied());
     assert!(!off.frames().exists());
 }

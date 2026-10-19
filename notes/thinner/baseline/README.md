@@ -85,7 +85,7 @@ globals, the style, the world view and derived caches.
 **A later engine that adds state** (solvent per pixel, in the brushes or
 rags, more clock fields) adds fields under new names, or new keys in a
 struct's `Debug`. It keeps the existing names and meanings. A comparison
-checks every field and value the baseline has, bit for bit, and lists what
+checks every field and value the baseline has within numeric tolerance, and lists what
 only the new dump has. `--added-zero` requires the additions to be zero
 (numbers 0, `false`, `None`).
 

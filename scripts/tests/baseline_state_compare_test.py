@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linux state limits stay narrow; the default comparison stays exact."""
+"""State float limits stay narrow and apply on every platform by default."""
 
 import importlib.util
 import json
@@ -53,11 +53,14 @@ class StateToleranceTests(unittest.TestCase):
                 self.assertFalse(sc.float_within_limit(name, 0.0, math.nextafter(limit, math.inf), sc.LINUX_LIMITS, observed))
                 self.assertGreater(observed[name], limit)
 
-    def test_numeric_boundary_and_default_exact(self):
+    def test_numeric_boundary_applies_with_default_or_empty_limits(self):
         limit = sc.LINUX_LIMITS["color"]
         a, b = numeric("f64", 0.0), numeric("f64", limit)
         self.assertFalse(self.compare("color", a, b)[0])
-        self.assertTrue(self.compare("color", a, b, {})[0])
+        self.assertFalse(self.compare("color", a, b, {})[0])
+        problems = []
+        sc.compare_numeric("color", a, b, problems)
+        self.assertFalse(problems)
         self.assertTrue(self.compare("color", a, numeric("f64", math.nextafter(limit, math.inf)))[0])
 
     def test_material_rag_changes_are_rejected(self):
@@ -72,19 +75,26 @@ class StateToleranceTests(unittest.TestCase):
             with self.subTest(dtype=dtype):
                 self.assertTrue(self.compare("color", numeric(dtype, value), numeric(dtype, value + 1))[0])
 
-    def test_unlisted_float_remains_exact(self):
-        self.assertTrue(self.compare("studio.clock", numeric("f64", 0.0), numeric("f64", 1e-15))[0])
+    def test_unlisted_float_uses_default_absolute_limit(self):
+        limit = sc.DEFAULT_ABS_TOLERANCE
+        self.assertEqual(sc.MAX_REL_TOLERANCE, 0.0)
+        for dtype in ("f32", "f64"):
+            with self.subTest(dtype=dtype):
+                self.assertFalse(self.compare("studio.clock", numeric(dtype, 0.0), numeric(dtype, limit / 2))[0])
+                self.assertTrue(self.compare("studio.clock", numeric(dtype, 0.0), numeric(dtype, limit * 2))[0])
+        self.assertFalse(self.compare("studio.clock", numeric("f64", 0.0), numeric("f64", limit))[0])
+        self.assertTrue(self.compare("studio.clock", numeric("f64", 0.0), numeric("f64", math.nextafter(limit, math.inf)))[0])
+        self.assertTrue(self.compare("studio.clock", numeric("f64", 1e9), numeric("f64", 1e9 + 0.001))[0])
 
     def test_shape_and_dtype_remain_exact(self):
         self.assertTrue(self.compare("color", numeric("f32", 0.0), numeric("f64", 0.0))[0])
         self.assertTrue(self.compare("color", numeric("f32", 0.0), numeric("f32", 0.0, 0.0))[0])
 
-    def test_signed_zero_and_nonfinite_changes_fail(self):
-        for x, y in [(0.0, -0.0), (0.0, math.nan), (math.inf, -math.inf), (math.inf, 0.0)]:
+    def test_signed_zero_matches_and_all_nonfinite_values_fail(self):
+        self.assertFalse(self.compare("color", numeric("f64", 0.0), numeric("f64", -0.0))[0])
+        for x, y in [(0.0, math.nan), (math.inf, -math.inf), (math.inf, 0.0), (math.inf, math.inf), (math.nan, math.nan)]:
             with self.subTest(x=x, y=y):
                 self.assertTrue(self.compare("color", numeric("f64", x), numeric("f64", y))[0])
-        self.assertFalse(self.compare("color", numeric("f64", math.inf), numeric("f64", math.inf))[0])
-        self.assertFalse(self.compare("color", numeric("f64", math.nan), numeric("f64", math.nan))[0])
         a, b = ("f32", (1,), struct.pack("<I", 0x7fc00001)), ("f32", (1,), struct.pack("<I", 0x7fc00002))
         self.assertTrue(self.compare("color", a, b)[0])
 
@@ -97,14 +107,29 @@ class StateToleranceTests(unittest.TestCase):
         a = "Held { bristles: [Bristle { vol: 0.0 }], seed: 18446744073709551614 }"
         b = a.replace("vol: 0.0", "vol: 0.0011")
         self.assertFalse(self.compare_debug(a, b)[0])
-        self.assertTrue(self.compare_debug(a, b, {})[0])
+        self.assertFalse(self.compare_debug(a, b, {})[0])
         self.assertTrue(self.compare_debug(a, b.replace("0.0011", "0.0011000000000000003"))[0])
         self.assertTrue(self.compare_debug(a, a.replace("51614", "51615"))[0])
         self.assertTrue(self.compare_debug(a, a.replace("vol: 0.0", "vol: 1"))[0])
-        self.assertTrue(self.compare_debug(a, a.replace("vol: 0.0", "vol: -0.0"))[0])
+        self.assertFalse(self.compare_debug(a, a.replace("vol: 0.0", "vol: -0.0"))[0])
         self.assertTrue(self.compare_debug(a + "\nHeld { flag: false }", a + "\nHeld { flag: true }")[0])
         self.assertTrue(self.compare_debug(a, "Held { bristles: [] }")[0])
         self.assertTrue(self.compare_debug(a, a.replace("vol: 0.0", "vol: 0.0, solvent: 1e-15"))[0])
+
+    def test_debug_unlisted_floats_and_nonfinite_values(self):
+        a = "Held { pickup: 0.0 }"
+        self.assertFalse(self.compare_debug(a, "Held { pickup: 0.00000005 }")[0])
+        self.assertTrue(self.compare_debug(a, "Held { pickup: 0.0000002 }")[0])
+        for value in ("NaN", "inf", "-inf"):
+            with self.subTest(value=value):
+                invalid = "Held { pickup: %s }" % value
+                self.assertTrue(self.compare_debug(a, invalid)[0])
+                self.assertTrue(self.compare_debug(invalid, invalid)[0])
+
+    def test_debug_parser_remains_lossless(self):
+        for invalid in ("Held { pickup: 0.0 } trailing", "Held { pickup: ??? }", "Held { pickup: 0.0"):
+            with self.subTest(invalid=invalid), self.assertRaises(sc.FormatError):
+                self.compare_debug(invalid, invalid)
 
     def test_reports_all_errors_after_twenty_debug_failures(self):
         a = "Held { bristles: [" + ", ".join("Bristle { vol: 0.0 }" for _ in range(25)) + "] }"
@@ -119,18 +144,20 @@ class StateToleranceTests(unittest.TestCase):
             dump(a, {"color": numeric("f64", 0.0)})
             dump(b, {"color": numeric("f64", 5e-6)})
             args = [sys.executable, str(TOOL), str(a), str(b), "--quiet"]
-            exact = subprocess.run(args, capture_output=True, text=True)
-            self.assertEqual(exact.returncode, 1, exact.stdout)
+            default = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(default.returncode, 0, default.stdout)
             within = subprocess.run(args + ["--linux-tolerance"], capture_output=True, text=True)
             self.assertEqual(within.returncode, 0, within.stdout)
             self.assertIn("maximum allowed |diff| 5e-06; maximum observed |diff| 5e-06", within.stdout)
-            self.assertIn("WITHIN LINUX TOLERANCE", within.stdout)
+            self.assertEqual(default.stdout, within.stdout)
+            self.assertIn("relative tolerance 0", within.stdout)
+            self.assertIn("WITHIN NUMERIC TOLERANCE", within.stdout)
             dump(b, {"color": numeric("f64", 0.0), "wet.solvent": numeric("f64", 1e-15)})
             added = subprocess.run(args + ["--linux-tolerance", "--added-zero"], capture_output=True, text=True)
             self.assertEqual(added.returncode, 1, added.stdout)
             self.assertIn("added field has 1 nonzero values", added.stdout)
 
-    def test_baseline_script_only_opts_in_on_linux_x86_64(self):
+    def test_baseline_script_uses_the_same_default_on_every_platform(self):
         with tempfile.TemporaryDirectory() as tmp:
             bins = Path(tmp)
             for name, code in {"easel": "exit 0", "uv": "printf '%s\\n' \"$*\""}.items():
@@ -138,7 +165,7 @@ class StateToleranceTests(unittest.TestCase):
                 path.write_text("#!/bin/sh\n" + code + "\n")
                 path.chmod(0o755)
             env = dict(os.environ, PATH=str(bins) + os.pathsep + os.environ["PATH"])
-            for system, arch, tolerant in [("Linux", "x86_64", True), ("Darwin", "arm64", False), ("Linux", "aarch64", False)]:
+            for system, arch in [("Linux", "x86_64"), ("Darwin", "arm64"), ("Linux", "aarch64")]:
                 with self.subTest(system=system, arch=arch):
                     uname = bins / "uname"
                     uname.write_text("#!/bin/sh\nif [ \"$1\" = -s ]; then echo %s; else echo %s; fi\n" % (system, arch))
@@ -146,8 +173,8 @@ class StateToleranceTests(unittest.TestCase):
                     script = TOOL.parents[4] / "scripts/tests/baseline_state.sh"
                     result = subprocess.run(["bash", str(script), str(bins / "easel")], env=env, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assertEqual(result.stdout.count("--linux-tolerance"), 6 if tolerant else 0)
-                    self.assertIn("state within tolerance on every baseline field" if tolerant else "state equal on every baseline field", result.stdout)
+                    self.assertNotIn("--linux-tolerance", result.stdout)
+                    self.assertEqual(result.stdout.count("state within tolerance on every baseline field"), 6)
 
 
 if __name__ == "__main__":

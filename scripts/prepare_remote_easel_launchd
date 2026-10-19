@@ -52,7 +52,8 @@ def main():
                 plistlib.dump(definition, file)
         else:
             path = out / (definition["Label"] + ".service")
-            command = " ".join(unit_quote(arg).replace("$", "$$") for arg in definition["ProgramArguments"])
+            program, *arguments = definition["ProgramArguments"]
+            command = " ".join([unit_quote(program), *(unit_quote(arg).replace("$", "$$") for arg in arguments)])
             text = f"[Unit]\nDescription={definition['Label']}\n\n[Service]\nType=simple\nExecStart={command}\nRestart=always\nRestartSec=15\n"
             if "WorkingDirectory" in definition:
                 text += "WorkingDirectory=" + definition["WorkingDirectory"].replace("%", "%%") + "\n"

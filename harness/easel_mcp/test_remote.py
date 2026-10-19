@@ -353,14 +353,15 @@ class HelperTests(unittest.TestCase):
             studio = root / 'paint-studio-aabbcc $HOME %h "quoted"'
             token = root / "token"
             token.write_text("secret-value-not-for-unit-files")
-            argv = ["prepare_remote_easel_launchd", "--studio", str(studio), "--token-file", str(token), "--out", str(out), "--uv", "/path to/uv", "--cloudflared", "/path/to/cloudflared"]
+            argv = ["prepare_remote_easel_launchd", "--studio", str(studio), "--token-file", str(token), "--out", str(out), "--uv", "/path to/uv $literal%h", "--cloudflared", "/path/to/cloudflared $tunnel"]
             with patch.object(sys, "argv", argv), patch.object(sys, "stdout", StringIO()), patch.object(helper.platform, "system", return_value="Linux"):
                 helper.main()
             services = sorted(out.glob("*.service"))
             self.assertEqual(len(services), 2)
             self.assertEqual(list(out.glob("*.plist")), [])
             http, tunnel = [path.read_text() for path in services]
-            self.assertIn('ExecStart="/path to/uv" "run" "--no-project" "--script"', http)
+            self.assertIn('ExecStart="/path to/uv $literal%%h" "run" "--no-project" "--script"', http)
+            self.assertIn('ExecStart="/path/to/cloudflared $tunnel" "tunnel"', tunnel)
             self.assertIn('$$HOME %%h \\"quoted\\"', http)
             self.assertIn(f'"--token-file" "{token}"', http)
             self.assertIn("--http-host-header\" \"localhost:8790", tunnel)

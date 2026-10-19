@@ -17,7 +17,7 @@ The box holds every tube the easel knows, from old pigments (lead white,
 vermilion, smalt, the earths, verdigris) to the cadmiums, the cobalt colors,
 the chromate yellows, the iron-oxide Mars colors and a modern quinacridone
 [EASEL]. Some are fast driers (the lead colors, the umbers, the copper and
-cobalt colors) [DRY23; AP1 p.114; AP2 p.136; EASEL], some slow (ivory
+cobalt colors) [DRY23; AP1 p.114; AP2 p.136; EASEL], some slow (bone
 black, the cadmiums, bone brown, bitumen) [DRY23; AP1 p.72; SAL §243;
 CAMEO]. Several are transparent
 lakes or glazing colors; several are documented to fade, darken or change
@@ -252,7 +252,7 @@ fading in light.
   "come through as a part of the color" [SHEL p.32]. *Uncertain* (one
   account). Burnt red earth is found in the lower layers of grounds [KOR
   p.284]. Aged red iron oxide films shrank about 0% [12].
-- **Indian red** (nearly pure ferric oxide). A natural haematite,
+- **Indian red** (nearly pure ferric oxide). A natural hematite,
   purplish, and a separate pigment from Mars red [CH p.161]. Little else is
   documented.
 - **raw umber** (iron and manganese oxide earth). Umbers are rapid dryers

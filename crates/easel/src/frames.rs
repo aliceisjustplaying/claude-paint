@@ -87,6 +87,12 @@ pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, re
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let rec = match resume {
         None => {
+            for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
+                let p = entry.map_err(|e| e.to_string())?.path();
+                if p.extension().is_some_and(|e| e == "png") && p.file_stem().and_then(|n| n.to_str()).is_some_and(|n| n.parse::<usize>().is_ok()) {
+                    std::fs::remove_file(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+                }
+            }
             let mut index = std::fs::File::create(dir.join("frames.tsv")).map_err(|e| e.to_string())?;
             writeln!(index, "file\thand_secs\tticks\tchunks_done\tkind").map_err(|e| e.to_string())?;
             std::fs::File::create(dir.join("frames.states")).map_err(|e| e.to_string())?;
@@ -138,6 +144,22 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
 pub fn stop() -> Option<Recorder> {
     paint::tally::hand_hook::set(None);
     REC.with(|r| r.borrow_mut().take())
+}
+
+pub fn with<R>(recorder: &mut Option<Recorder>, f: impl FnOnce() -> R) -> R {
+    let previous = stop();
+    REC.with(|r| *r.borrow_mut() = recorder.take());
+    paint::tally::hand_hook::set(Some(Box::new(|c: &Canvas| observe(c, c.tally().clocked))));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    *recorder = stop();
+    REC.with(|r| *r.borrow_mut() = previous);
+    if REC.with(|r| r.borrow().is_some()) {
+        paint::tally::hand_hook::set(Some(Box::new(|c: &Canvas| observe(c, c.tally().clocked))));
+    }
+    match result {
+        Ok(value) => value,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }
 
 /// Hand time started on this canvas (`time::start`): count from here.

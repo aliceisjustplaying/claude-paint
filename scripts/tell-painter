@@ -1,0 +1,18 @@
+#!/usr/bin/env -S uv run --no-project python
+"""Append a message to a run's inbox, without changing its painting or notes."""
+import argparse
+from pathlib import Path
+import runpy
+
+
+ap = argparse.ArgumentParser(description=__doc__)
+ap.add_argument("run_or_studio", type=Path)
+ap.add_argument("text")
+args = ap.parse_args()
+run = args.run_or_studio.expanduser().resolve(strict=True)
+pointer = run / ".painter-run"
+if pointer.exists():
+    run = Path(pointer.read_text().strip()).resolve(strict=True)
+inbox = runpy.run_path(str(Path(__file__).resolve().parents[1] / "harness/painter/inbox.py"))
+message = inbox["send"](run, args.text)
+print(f"{message['id']} queued at {message['timestamp']} in {run / inbox['FILENAME']}")

@@ -95,6 +95,14 @@ rust smoke easel 'test smoke test'
 rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
+rust replay-frames-resume easel 'test replay_frames_resume test'
+rust replay-checkpoints easel 'bin easel test' \
+  replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
+  replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
+  replay_checkpoint::tests::progress_is_published_at_every_chunk_and_batch_boundary \
+  replay_checkpoint::tests::trace_failure_cannot_be_hidden_by_lua_pcall \
+  replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files \
+  replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 rust r19 easel 'test boxes test' a_round_19_log_replays_as_before

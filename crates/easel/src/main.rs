@@ -30,6 +30,7 @@ mod look;
 mod output;
 mod live_frames;
 mod save;
+mod replay_checkpoint;
 #[cfg(feature = "state-store")]
 mod painting_store;
 #[cfg(feature = "render-snapshot")]
@@ -1968,7 +1969,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
     image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--replay-checkpoint replay.ckpt [--until-chunk N] [--for-minutes M]] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
@@ -2017,10 +2018,13 @@ fn run(args: &[String]) -> Result<(), String> {
         match args[i].as_str() {
             #[cfg(feature = "state-store")]
             "--state-store" | "--state-budget-mib" if i + 1 < args.len() => i += 2,
-            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" if i + 1 < args.len() => i += 2,
+            "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--replay-checkpoint" | "--until-chunk" | "--for-minutes" if i + 1 < args.len() => i += 2,
             "--look" | "--gallery" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
+    }
+    if flag(args, "--replay-checkpoint").is_some() && args.iter().any(|a| matches!(a.as_str(), "--state-store" | "--dump-state")) {
+        return Err("--replay-checkpoint cannot resume a state store or per-chunk state dumps".into());
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or("easel".into());
@@ -2119,20 +2123,29 @@ fn run(args: &[String]) -> Result<(), String> {
     }
     let light = if args.iter().any(|a| a == "--gallery") { Some(GALLERY_LIGHT) } else { flag(args, "--light").map(|l| light_of(&l)).transpose()? };
     let frames = match (flag(args, "--frames-every"), flag(args, "--frames-dir")) {
-        (None, None) => false,
+        (None, None) => None,
         (Some(e), Some(d)) => {
             let every: f64 = e.parse().map_err(|_| format!("--frames-every {e}: want seconds of hand time"))?;
             let fw = flag(args, "--frame-width").map(|w| w.parse::<u32>().map_err(|_| format!("--frame-width {w}: want px"))).transpose()?.unwrap_or(1000);
-            frames::start(every, PathBuf::from(d), fw, light)?;
-            true
+            Some((every, PathBuf::from(d), fw))
         }
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
     let mut s = Session::replay_with(width, tubes).map_err(|e| e.to_string())?.with_paper(session::logged_paper(&text));
+    let mut batch = replay_checkpoint::Batch::open(args, Path::new(file), &text, width, &mut s, &chunks, &out)?;
+    if let Some((every, dir, fw)) = frames.clone() {
+        frames::start(every, dir, fw, light, (batch.done > 0).then_some(batch.done))?;
+    }
+    let frames = frames.is_some();
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
+    if let (Some(file), Some(rows)) = (&mut digests, &batch.digests) {
+        for row in rows { file.write_all(row.as_bytes()).map_err(|e| e.to_string())?; }
+    }
     let t0 = Instant::now();
-    for (i, c) in chunks.iter().enumerate() {
+    for (i, c) in chunks.iter().enumerate().skip(batch.done) {
+        if batch.stopped() { break; }
+        batch.begin_chunk(i + 1)?;
         let r = s.run(c).map_err(|e| format!("chunk {} failed:\n{e}", i + 1))?;
         #[cfg(feature = "state-store")]
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
@@ -2142,16 +2155,20 @@ fn run(args: &[String]) -> Result<(), String> {
             eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
         }
         if let Some(f) = digests.as_mut() {
-            f.write_all(state_digest_line(&s, i + 1, r.secs).as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
+            let line = state_digest_line(&s, i + 1, r.secs);
+            f.write_all(line.as_bytes()).map_err(|e| format!("--state-digest: {e}"))?;
+            batch.digests.as_mut().unwrap().push(line);
         }
         // --dump-state <dir>: every state value after the chunk (state_dump.rs; reads only)
         if let Some(d) = flag(args, "--dump-state") {
             state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
         }
-        if frames && let Some(c) = s.canvas() {
-            frames::chunk_end(&c, i + 1);
+        if frames {
+            frames::chunk_end(s.canvas().as_deref(), i + 1)?;
         }
+        if batch.completed(&s, i + 1)? { break; }
     }
+    if batch.done < chunks.len() { return Ok(()); }
     let paint_secs = t0.elapsed().as_secs_f64();
     if let Some(d) = flag(args, "--dump-state") {
         state_dump::write_save(&s, &text, Path::new(&d))?;

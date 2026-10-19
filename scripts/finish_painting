@@ -106,5 +106,6 @@ for candidate in "$save" "$save.zst" "$save.gz"; do
   echo "finish_painting: saved end state $candidate didn't match or couldn't finish; trying the next save" >&2
 done
 echo "finish_painting: no usable matching saved end state; replaying the full log $log" >&2
-"$easel" run "$finished" --out "$out"
+"$easel" run "$finished" --out "$out" --replay-checkpoint "$out.replay.ckpt"
+rm -f "$out.replay.ckpt"
 echo "finished: $out (log: $finished)"

@@ -8,11 +8,13 @@ edition = "2024"
 # clock (easel uses it for hand-time frames).
 hand-hook = []
 render-snapshot = []
+replay-effects = ["dep:serde"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 mixbox = "2"
 noise = "0.9"
 rayon = "1"
+serde = { version = "1", features = ["derive"], optional = true }
 sha2 = "0.10"
 tiny-skia = "0.12"

@@ -204,6 +204,7 @@ struct Pool {
 /// and when it was last brought up to date: minutes of painting time
 /// (`Canvas::now_min`) and hand seconds (`Tally::secs`).
 #[derive(Clone, Copy, Default, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mobile {
     pub mm3: f32,
     pub lat: crate::wet::Latent,
@@ -266,6 +267,7 @@ struct Seg {
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rag {
     pub width: f32,
     pub load: f32,

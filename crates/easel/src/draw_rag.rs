@@ -84,7 +84,7 @@ impl UserData for RagU {
         f.add_field_method_get("fold", |_, r| Ok(r.rag.borrow().fold));
         // as evaporated by now (rag.rs `evaporate`), without changing the rag
         f.add_field_method_get("damp", |_, r| {
-            let now = r.st.borrow().canvas.as_ref().map(|c| c.now_min());
+            let now = time::read("rag_now", || Ok(r.st.borrow().canvas.as_ref().map(|c| c.now_min())))?;
             let g = r.rag.borrow();
             Ok(now.map_or(g.damp, |n| g.damp_at(n)))
         });
@@ -227,8 +227,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         };
         let sd = seed(&st1, lua, o.as_ref())?;
         let rag = Rc::new(RefCell::new(Rag::new(width, sd)));
+        st1.borrow_mut().rags.push(Rc::downgrade(&rag));
         time::verb(&st1, Verb::Marks, |s| {
-            s.rags.push(Rc::downgrade(&rag));
             s.canvas.as_mut().ok_or_else(no_canvas)?.tally_mut().secs += pace::FRESH;
             Ok(())
         })?;

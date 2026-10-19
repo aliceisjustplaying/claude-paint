@@ -490,6 +490,7 @@ impl Session {
         if self.stale {
             self.rebuild()?;
         }
+        let trace = (!self.replay).then(crate::replay_checkpoint::mark);
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
@@ -564,6 +565,7 @@ impl Session {
         let _ = self.lua.gc_collect();
         self.deadline.set(None);
         if let Some(e) = fail {
+            if let Some(mark) = trace { crate::replay_checkpoint::rollback(mark); }
             let mut msg = out;
             msg.push_str(&e);
             return Err(msg);

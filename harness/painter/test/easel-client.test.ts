@@ -6,6 +6,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { atEasel, directoryListing, easel, logFind, lookArgs, probeArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
+const shellPath = "'" + (process.env.PATH ?? "/usr/bin:/bin").replaceAll("'", "'\\''") + "'";
+
 test("painting headers set the waits before the new-painting width", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
  touch polled
@@ -258,7 +260,7 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 test("a client that hangs is stopped and reported, not waited on forever", async () => {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
-	writeFileSync(join(studio, "bin", "easel"), "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\nPATH=${shellPath}\nsleep 30\n`, { mode: 0o755 });
 	const t0 = Date.now();
 	const r = await easel(studio, ["do", "-"], "print(1)", undefined, 300);
 	assert.equal(r.timedOut, true);
@@ -269,7 +271,7 @@ test("a client that hangs is stopped and reported, not waited on forever", async
 function stubStudio(body: string): string {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));
 	mkdirSync(join(studio, "bin"));
-	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\necho "$1" >> calls\n${body}\n`, { mode: 0o755 });
+	writeFileSync(join(studio, "bin", "easel"), `#!/bin/sh\nPATH=${shellPath}\necho "$1" >> calls\n${body}\n`, { mode: 0o755 });
 	return studio;
 }
 const calls = (studio: string) => readFileSync(join(studio, "calls"), "utf8").trim().split("\n");

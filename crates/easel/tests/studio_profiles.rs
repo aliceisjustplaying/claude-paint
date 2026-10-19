@@ -4,6 +4,8 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+mod support;
+
 struct Studio {
     root: PathBuf,
 }
@@ -13,6 +15,7 @@ impl Studio {
         let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("studio-profile-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("bin")).unwrap();
+        let root = root.canonicalize().unwrap();
         std::fs::hard_link(env!("CARGO_BIN_EXE_easel"), root.join("bin/easel")).unwrap();
         std::fs::write(root.join("bin/studio"), setting).unwrap();
         std::fs::write(root.join("bin/box"), "every\n").unwrap();
@@ -115,9 +118,9 @@ fn one_binary_serves_two_boxes_and_the_default_without_developer_commands() {
 
 #[test]
 fn painter_server_refuses_check_even_without_the_client() {
-    let studio = Studio::new("socket", "painter none\n");
+    let studio = Studio::new("socket-with-a-studio-path-long-enough-to-require-a-short-unix-socket", "painter none\n");
     studio.ok(&["open"]);
-    let socket = studio.root.join("out/easel/painting/sock");
+    let socket = support::sock_of(&studio.root.join("out/easel/painting"));
     let mut connection = UnixStream::connect(socket).unwrap();
     connection.write_all(b"6\ncheck\n").unwrap();
     let mut reply = String::new();

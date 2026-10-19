@@ -28,9 +28,9 @@
 # (out/easel/painting/committed.lua) equals its log.
 #
 # Prints a report and, last, one line starting "check:": "check: ok" when
-# the replay agrees with the live canvas or the live save and differs from
-# neither; "check: replay only" when the log replays but there is neither of
-# the whole log to compare with (none saved, saved at another chunk count, or
+# the replay matches the live canvas within tolerance; "check: replay only"
+# when the log replays but there is no complete independent live image
+# to compare with (none saved, saved at another chunk count, or
 # by a session that had replayed every chunk); "check: DIFFERS" otherwise. Exit 0 for the first two, 1 for DIFFERS or a log that doesn't
 # replay (2: usage). The comparison with the painter's save is reported, not
 # judged: a painter may have painted after its last save.

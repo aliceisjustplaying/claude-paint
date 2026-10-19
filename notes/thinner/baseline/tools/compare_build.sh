@@ -7,8 +7,8 @@
 # Fails (exit 1) if any field the baseline has exceeds numeric tolerance, or a
 # chunk is missing. Fields a newer engine adds are listed; --added-zero
 # requires them to be zero (thinner check 2: no thinner, no solvent). Also
-# reports, without failing, whether the PNGs and the state digests equal
-# af49348's (a new checkpoint format changes the canvas= digest by itself).
+# compares PNGs within image tolerance and reports state digests without
+# failing on them (a new checkpoint format changes the canvas= digest by itself).
 # Run as one heavy job: scripts/lockrun --timeout 60 -- .../compare_build.sh ...
 set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: compare_build.sh <easel> [state_compare flags]" >&2; exit 2; }

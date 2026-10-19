@@ -123,7 +123,7 @@ class ExportMaterialsTests(unittest.TestCase):
         code = hashlib.sha1(b"fixture-tree\n" * 4).hexdigest()[:12]
         src = Path(self.env["STUDIO_BUILDS"]) / f"code-{code}"
         self.write(src / ".extracted", "")
-        cached = src / "built/tonn/easel"
+        cached = src / "built/universal/easel"
         source = cached.read_text()
         for system in ("Linux", "Darwin"):
             with self.subTest(system=system):

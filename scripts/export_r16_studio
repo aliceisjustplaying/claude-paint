@@ -167,7 +167,7 @@ if [ ! -x "$built" ]; then
     target="$src/target/$variant"
     build() { (cd "$src" && CARGO_TARGET_DIR="$target" cargo build --release -p easel "${features[@]}"); }
     if ! out=$(build 2>&1); then
-      if grep -qi 'license' <<<"$out"; then
+      if [ "$(uname -s)" = Darwin ] && grep -qi 'license' <<<"$out"; then
         DEVELOPER_DIR=/Library/Developer/CommandLineTools build
       else
         echo "$out" >&2
@@ -276,7 +276,7 @@ E="$probe/bin/easel"
   "$E" close >/dev/null
   trap - EXIT
 )
-[ -s "$probe/paintings/lua/painting.lua" ] && [ -s "$probe/out/easel/painting/painting.png" ] || { echo "the exported easel didn't paint in $probe" >&2; exit 1; }
+[[ -s "$probe/paintings/lua/painting.lua" && -s "$probe/out/easel/painting/painting.png" ]] || { echo "the exported easel didn't paint in $probe" >&2; exit 1; }
 # its log names the studio's box (the default box: no line)
 logged=$(sed -n '/^--@ chunk/q; s/^--@ box //p' "$probe/paintings/lua/painting.lua")
 [ "$logged" = "$box" ] || { echo "the probe's log names box '$logged', not '$box'" >&2; exit 1; }

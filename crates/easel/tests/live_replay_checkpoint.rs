@@ -30,6 +30,7 @@ struct Studio {
     binary: PathBuf,
     child: Option<Child>,
     identity: &'static str,
+    state_store: bool,
 }
 
 impl Studio {
@@ -48,7 +49,7 @@ impl Studio {
         } else {
             PathBuf::from(env!("CARGO_BIN_EXE_easel"))
         };
-        Self { root, binary, child: None, identity: "original" }
+        Self { root, binary, child: None, identity: "original", state_store: false }
     }
 
     fn command(&self) -> Command {
@@ -61,7 +62,9 @@ impl Studio {
             .env_remove("EASEL_WIDTH")
             .env_remove("EASEL_BOX")
             .env_remove("EASEL_STATE_SESSION")
+            .env_remove("EASEL_STATE_DISK_MIB")
             .env_remove("EASEL_LOCK_ON_STDIN");
+        if self.state_store { command.env("EASEL_STATE_SESSION", "painting"); }
         command
     }
 
@@ -86,13 +89,15 @@ impl Studio {
         self.child = Some(self.command().args(["serve", "painting"])
             .stdin(Stdio::null()).stdout(log.try_clone().unwrap()).stderr(log)
             .spawn().unwrap());
+        let chunks = std::fs::read_to_string(self.log()).map(|source| source.lines().filter(|line| line.starts_with("--@ chunk ")).count()).unwrap_or(0);
+        self.wait_for_chunks(chunks);
+    }
+
+    fn wait_for_chunks(&mut self, chunks: usize) {
         let started = Instant::now();
         loop {
             let output = self.cmd(&["status"]);
-            if output.status.success() && String::from_utf8_lossy(&output.stdout).starts_with("0 chunks") {
-                break;
-            }
-            if output.status.success() && String::from_utf8_lossy(&output.stdout).starts_with("12 chunks") {
+            if output.status.success() && String::from_utf8_lossy(&output.stdout).starts_with(&format!("{chunks} chunks")) {
                 break;
             }
             let exited = self.child.as_mut().unwrap().try_wait().unwrap();
@@ -205,6 +210,8 @@ fn resume_matches_uninterrupted(tag: &str, painter: bool) {
     assert_files(&files(&resumed.dir().join("frames")), &jpegs);
     assert_eq!(std::fs::read(resumed.log()).unwrap(), source);
     resumed.close();
+    let provenance = String::from_utf8(resumed.bytes("live.txt")).unwrap();
+    assert!(provenance.lines().any(|line| line == "replayed 12"), "{provenance}");
     let completed = files(&resumed.dir().join("hand-frames"));
     let final_index = String::from_utf8(resumed.bytes("hand-frames/frames.tsv")).unwrap();
     assert_eq!(final_index.lines().filter(|line| line.ends_with("\tfinal")).count(), 1);
@@ -213,6 +220,8 @@ fn resume_matches_uninterrupted(tag: &str, painter: bool) {
     resumed.start();
     assert!(!String::from_utf8(resumed.bytes("hand-frames/frames.tsv")).unwrap().lines().any(|line| line.ends_with("\tfinal")));
     resumed.close();
+    let provenance = String::from_utf8(resumed.bytes("live.txt")).unwrap();
+    assert!(provenance.lines().any(|line| line == "replayed 12"), "{provenance}");
     assert_files(&files(&resumed.dir().join("hand-frames")), &completed);
 
     let mut whole = Studio::new(&format!("{tag}-uninterrupted"), painter);
@@ -259,4 +268,65 @@ fn invalid_checkpoint_falls_back_to_full_replay_and_matching_frames() {
         studio.close();
         studio.batch();
     }
+}
+
+#[test]
+fn an_unreplaceable_checkpoint_does_not_abort_full_replay_or_close() {
+    let mut studio = Studio::new("checkpoint-directory", false);
+    std::fs::create_dir_all(studio.dir().join("replay.ckpt")).unwrap();
+    std::fs::write(studio.dir().join("replay.ckpt/kept"), b"not a checkpoint").unwrap();
+    studio.start();
+    for n in 1..=12 { studio.ok(&["do", &format!("counter = {n}")]); }
+    let source = std::fs::read(studio.log()).unwrap();
+    studio.kill();
+    studio.start();
+    let log = String::from_utf8(studio.bytes("server.log")).unwrap();
+    let repaint: Vec<_> = log.lines().filter(|line| line.starts_with("resuming chunk ")).map(str::to_string).collect();
+    assert_eq!(repaint, (1..=12).map(|n| format!("resuming chunk {n}/12")).collect::<Vec<_>>(), "{log}");
+    assert!(log.contains("replay checkpoint"), "{log}");
+    studio.close();
+    assert_eq!(std::fs::read(studio.log()).unwrap(), source);
+    assert_eq!(studio.bytes("committed.lua"), source);
+    assert_eq!(studio.bytes("replay.ckpt/kept"), b"not a checkpoint");
+}
+
+fn stale_rebuild_after_executable_replacement(state_store: bool) {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut studio = Studio::new(if state_store { "rebuild-state-store" } else { "rebuild-developer" }, true);
+    std::fs::write(studio.root.join("bin/studio"), "developer\n").unwrap();
+    studio.state_store = state_store;
+    studio.start();
+    studio.ok(&["do", "t = {}; for i=1,30 do t['k' .. i] = i end; t[2] = 2"]);
+    let source = std::fs::read(studio.log()).unwrap();
+    let revision = state_store.then(|| studio.bytes("state/CURRENT"));
+    let old_inode = std::fs::metadata(&studio.binary).unwrap().ino();
+    let replacement = studio.binary.with_extension("replacement");
+    std::fs::copy(env!("CARGO_BIN_EXE_easel"), &replacement).unwrap();
+    std::fs::rename(replacement, &studio.binary).unwrap();
+    assert_ne!(std::fs::metadata(&studio.binary).unwrap().ino(), old_inode);
+    let failed = studio.cmd(&["do", "for i=1,1000 do t['x' .. i] = i end; for i=1,1000 do t['x' .. i] = nil end; error('force stale rebuild')"]);
+    assert!(!failed.status.success());
+    let error = String::from_utf8_lossy(&failed.stderr);
+    assert!(error.contains("force stale rebuild") && error.contains("rebuild"), "{error}");
+    studio.wait_for_chunks(1);
+    let log = String::from_utf8(studio.bytes("server.log")).unwrap();
+    assert!(log.contains("rebuilding from the log (1 chunks)") && log.lines().any(|line| line.starts_with("rebuilt ")), "{log}");
+    assert_eq!(std::fs::read(studio.log()).unwrap(), source);
+    assert_eq!(studio.bytes("committed.lua"), source);
+    if let Some(revision) = revision { assert_eq!(studio.bytes("state/CURRENT"), revision); }
+    studio.ok(&["do", "local n=0; for _ in pairs(t) do n=n+1 end; assert(n == 31); assert(t[2] == 2 and t.k30 == 30 and t.x1 == nil)"]);
+    assert!(studio.ok(&["status"]).starts_with("2 chunks"));
+    studio.close();
+}
+
+#[test]
+fn stale_rebuild_survives_executable_replacement() {
+    stale_rebuild_after_executable_replacement(false);
+}
+
+#[cfg(feature = "state-store")]
+#[test]
+fn stale_rebuild_reuses_the_already_locked_state_store_after_executable_replacement() {
+    stale_rebuild_after_executable_replacement(true);
 }

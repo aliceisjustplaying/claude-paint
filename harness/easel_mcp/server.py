@@ -84,6 +84,9 @@ def studio_path(studio, value):
     path = (studio / value).resolve()
     if not path.is_relative_to(studio):
         return None
+    executable = studio / "bin/easel"
+    if executable.is_file() and path.exists() and path.samefile(executable):
+        return None
     return path
 
 

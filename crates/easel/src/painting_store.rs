@@ -52,7 +52,6 @@ pub struct PaintingStore {
     poisoned: bool,
 }
 
-#[cfg(any(feature = "replay", test))]
 pub struct ReadRevision {
     dir: PathBuf,
     _gate: File,
@@ -532,7 +531,6 @@ impl PaintingStore {
     }
 }
 
-#[cfg(any(feature = "replay", test))]
 impl ReadRevision {
     pub fn protect_output(&self, path: &Path) -> io::Result<()> {
         protect_output(&self.dir, path)

@@ -279,7 +279,7 @@ pub struct Ran {
 
 impl Session {
     /// A session painting from the default box (tests).
-    #[cfg(all(test, tube_box))]
+    #[cfg(test)]
     pub fn new(width: usize) -> mlua::Result<Self> {
         Self::with_box(width, Palette::tube_box())
     }
@@ -347,7 +347,7 @@ impl Session {
 
     /// A session that replays a program from the default box (tests;
     /// `easel run` and `check` use `replay_with`).
-    #[cfg(all(test, tube_box))]
+    #[cfg(test)]
     pub fn replay(width: usize) -> mlua::Result<Self> {
         Self::replay_with(width, Palette::tube_box())
     }
@@ -355,7 +355,6 @@ impl Session {
     /// A session that replays a program painted from `tubes`: a failed chunk
     /// ends it, so it keeps no snapshot. (`easel run` and `check`: the replay
     /// build.)
-    #[cfg(any(feature = "replay", all(test, tube_box)))]
     pub fn replay_with(width: usize, tubes: Palette) -> mlua::Result<Self> {
         let mut s = Self::with_box(width, tubes)?;
         s.replay = true;
@@ -373,7 +372,6 @@ impl Session {
     }
 
     /// The box this session paints from.
-    #[cfg(feature = "replay")]
     pub fn tube_box(&self) -> Palette {
         (*self.st.borrow().tubes).clone()
     }
@@ -1255,9 +1253,13 @@ pub fn logged_drain(text: &str) -> bool {
 
 /// Where the box of a new painting is set: a file `box` next to the easel's
 /// executable (one line, the box's name; a studio ships it as
-/// `<studio>/bin/box`), else `EASEL_BOX`. None: neither is set (the default
-/// box). The two naming different boxes is an error.
+/// `<studio>/bin/box`), else `EASEL_BOX`, in developer mode. Painter mode
+/// takes only its studio setting. None: the default box. Conflicting
+/// developer settings are an error.
 pub fn configured_box() -> Result<Option<(String, String)>, String> {
+    if let Some(name) = crate::studio::box_name() {
+        return Ok(Some((name.to_string(), "the studio setting".to_string())));
+    }
     let file = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(|d| d.join("box")));
     let from_file = match file {
         Some(f) if f.exists() => {
@@ -1280,6 +1282,11 @@ pub fn configured_box() -> Result<Option<(String, String)>, String> {
 
 /// The box called `name`, or an error naming the boxes this easel has.
 pub fn find_box(name: &str) -> Result<Palette, String> {
+    if let Some(own) = crate::studio::box_name()
+        && name != own
+    {
+        return Err("this studio paints from its own box only; nothing ran".into());
+    }
     Palette::named_box(name).ok_or_else(|| format!("this easel has no box {name:?} (its boxes: {})", box_list()))
 }
 
@@ -1289,8 +1296,7 @@ fn box_list() -> String {
 }
 
 /// The box a painting is painted from. A new painting (`log` None) takes the
-/// configured box (`configured_box`), else the default (in a painter's build
-/// for one box, which has no default box: that box). An existing one takes
+/// configured box (`configured_box`), else the default. An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
 /// engine version the painting is painted with: a new one engine 8,
@@ -1341,12 +1347,13 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Err(format!("the log's {DRAIN_MARK} line (the drain switch) is engine 5's and later's; this log names engine {engine}; nothing ran"));
     }
     let logged = logged_box(text)?;
-    let Some(name) = logged.as_deref().or(paint::palette::default_box()) else {
-        return Err(format!("the log names no box, so it was painted from the default box, which this easel doesn't have (its boxes: {}); nothing ran", box_list()));
-    };
+    let name = logged.as_deref().unwrap_or(paint::palette::DEFAULT_BOX);
     if let Some((c, from)) = &configured
         && c != name
     {
+        if crate::studio::painter() {
+            return Err("the log wasn't painted from this studio's box; nothing ran".into());
+        }
         let log_says = match &logged {
             Some(n) => format!("the log was painted from the box {n:?} (its {BOX_MARK} line)"),
             None => format!("the log names no box, so it was painted from the default box {name:?}"),
@@ -1401,13 +1408,16 @@ pub fn parse_program(text: &str) -> Vec<String> {
 }
 
 /// The checkout the easel works in (session logs in `paintings/lua`, renders
-/// in `out/`) in the replay build: `EASEL_ROOT` if set, else the nearest directory at or above
+/// in `out/`) in developer mode: `EASEL_ROOT` if set, else the nearest directory at or above
 /// the working directory that holds `crates/easel/Cargo.toml`, else the
 /// checkout this binary was built from. Looking from the working directory
 /// keeps git worktrees apart: a binary built in (or copied from) another
-/// checkout still writes into the worktree it's run in.
-#[cfg(feature = "replay")]
+/// checkout still writes into the worktree it's run in. Painter mode always
+/// uses the studio above the executable's directory.
 pub fn root() -> PathBuf {
+    if let Some(root) = crate::studio::root() {
+        return root.to_path_buf();
+    }
     if let Some(r) = std::env::var_os("EASEL_ROOT").filter(|r| !r.is_empty()) {
         let r = PathBuf::from(r);
         return r.canonicalize().unwrap_or(r);
@@ -1422,20 +1432,11 @@ pub fn root() -> PathBuf {
     r.canonicalize().unwrap_or(r)
 }
 
-/// The studio the painter build works in: the parent of the directory
-/// holding the executable (the studio ships it as `<studio>/bin/easel`),
-/// wherever it is run from. Nothing in the environment moves it.
-#[cfg(not(feature = "replay"))]
-pub fn root() -> PathBuf {
-    let exe = std::env::current_exe().and_then(|e| e.canonicalize()).unwrap_or_else(|e| panic!("easel: cannot locate its own executable: {e}"));
-    exe.parent().and_then(Path::parent).unwrap_or_else(|| panic!("easel: {} is not inside <studio>/bin", exe.display())).to_path_buf()
-}
-
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 #[path = "../../paint/tests/support/image_tolerance.rs"]
 mod image_tolerance;
 
-#[cfg(all(test, feature = "replay"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1478,7 +1479,6 @@ mod tests {
     }
 
 
-    #[cfg(tube_box)]
     const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"red earth", 1}}, um=110, apply="knife"}, {pile={{"lead white", 5}, {"yellow ochre", 1}}, um=60, apply="brush"}}}"#;
 
     /// The drain switch is read from a log's head only, needs engine 5, and
@@ -1487,7 +1487,6 @@ mod tests {
     /// packing; a log without it is as before (no mark, version 11, five
     /// properties printed). A new painting's box has it.
     #[test]
-    #[cfg(tube_box)]
     fn the_drain_switch_comes_from_the_log_s_head() {
         assert!(logged_drain(&format!("{ENGINE_MARK} 5\n  {DRAIN_MARK}  \n{MARK} 1\n")));
         assert!(!logged_drain(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{DRAIN_MARK}\n")));
@@ -1902,7 +1901,6 @@ mod tests {
     /// (an older painting's log) paper is refused by name; with it the log
     /// says so, and replays, rebuilds and checkpoints the same sheet.
     #[test]
-    #[cfg(tube_box)]
     fn paper_comes_with_the_switch_in_the_log_s_head() {
         assert!(logged_paper(&format!("{ENGINE_MARK} 5\n  {PAPER_MARK}  \n{MARK} 1\n")));
         assert!(!logged_paper(&format!("{ENGINE_MARK} 5\n{MARK} 1\n{PAPER_MARK}\n")));
@@ -1945,7 +1943,6 @@ mod tests {
     /// bit (a sheet: version 13), paints on as the live one does, and writes
     /// the switch into its log's head.
     #[test]
-    #[cfg(all(tube_box, feature = "replay"))]
     fn paper_survives_a_save() {
         let sheet = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, felt=false}}"#;
         for setup in [CANVAS, sheet] {
@@ -1988,7 +1985,7 @@ mod progress {
 }
 
 /// The Lua memory cap (LUA_MAX_BYTES, Serials::held, Serials::capped).
-#[cfg(all(test, tube_box))]
+#[cfg(test)]
 mod memory_cap_tests {
     use super::*;
 

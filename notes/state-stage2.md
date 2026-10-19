@@ -4,7 +4,7 @@ This layer publishes a finishable material revision after each successful chunk,
 
 ## Opt in
 
-The `state-store` Cargo feature is off by default. Existing replay and painter builds do not enable it, and enabling the feature alone does not change session persistence.
+The `state-store` Cargo feature is off by default. The shared default-feature easel does not enable it, and enabling the feature alone does not change session persistence. Studio runtime selection is documented in [easel.md](easel.md#studio-selection).
 
 ```sh
 CARGO_TARGET_DIR=/private/target cargo build -p easel --features state-store
@@ -16,7 +16,7 @@ easel render-state /private/painting-state relief.png --mode relief
 
 `run --state-store` requires an empty store. It publishes a canonical accepted journal and material checkpoint after each successful chunk, including before the final PNG. A failed later chunk leaves the previous successful revision available. It never replays a log to render a committed revision. `--look` on `render-state` uses the existing bounded look renderer instead of native resolution. Gallery is the display default; painter look stays unchanged.
 
-For a live painting, compile its normal build with the additional `state-store` feature and set `EASEL_STATE_SESSION` to that exact session name before opening it. A one-painting studio uses `EASEL_STATE_SESSION=painting`; a named developer sketch might use `EASEL_STATE_SESSION=sketch-study`. The store lives in `out/easel/<name>/state`. Only that selected painting opts in; scratch sessions keep their existing separate journal behavior. Do not set this environment variable on running painters until the rollout is approved.
+For a live painting, compile the shared default-feature binary with the additional `state-store` feature and set `EASEL_STATE_SESSION` to that exact session name before opening it. A one-painting studio uses `EASEL_STATE_SESSION=painting`; a named developer sketch might use `EASEL_STATE_SESSION=sketch-study`. The store lives in `out/easel/<name>/state`. Only that selected painting opts in; scratch sessions keep their existing separate journal behavior. Do not set this environment variable on running painters until the rollout is approved.
 
 The disk quota defaults to 2048 MiB. Override it with `--state-budget-mib N` for `run` or `EASEL_STATE_DISK_MIB=N` for a live selected painting. Values are 1–65536 MiB.
 

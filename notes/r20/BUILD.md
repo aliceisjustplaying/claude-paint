@@ -1,5 +1,9 @@
 # Round 20: per-painter tube boxes and four "in the manner of" studios
 
+The per-box builds below describe round 20. Current oil studios share one
+binary; [studio selection](../easel.md#studio-selection) describes its
+runtime setting and painter restrictions.
+
 Tag `round-20` (c2901f8): the tip of the branch `r20-base` (since removed),
 cut from `r19-base` (5069814, tag `round-19`). Export with
 `R16_BRANCH=round-20 scripts/export_r16_studio <profile> <dest>`. This file and

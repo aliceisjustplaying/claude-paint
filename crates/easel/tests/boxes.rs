@@ -2,7 +2,6 @@
 //! (a studio's `bin/box`), else EASEL_BOX, else the default tube box; its log
 //! names the box, and every replay uses the log's box whatever easel runs it.
 // The replay build: EASEL_ROOT, named sessions and `easel run`.
-#![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

@@ -312,5 +312,4 @@ does; this says how to use them. What you paint is yours to choose.
 
 ## Finishing
 
-- An unvarnished picture keeps its matte and glossy passages as painted.
-  A varnish (where the easel has one) makes it all glossy: darks deepen.
+- This easel has no varnish: the picture keeps its matte and glossy passages as painted.

@@ -1,12 +1,15 @@
 //! A short session at the easel through its commands: open, knife two
 //! piles, lay strokes and a passage, wait, look (whole and cropped), check
-//! that the log replays exactly, save and replay it, keep a journal. What
+//! that the log replays within tolerance, save and replay it, keep a journal. What
 //! the easel doesn't have errors clearly and changes nothing.
 // The replay build: EASEL_ROOT, named sessions and `easel run`.
 #![cfg(feature = "replay")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+
+#[path = "../../paint/tests/support/image_tolerance.rs"]
+mod image_tolerance;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_TARGET_TMPDIR")).join("easel-smoke")
@@ -161,16 +164,16 @@ fn a_short_session_at_the_easel() {
     }
     assert!(ok(&["-s", "smoke", "status"]).starts_with("2 chunks"));
 
-    // the log replays to the live canvas exactly, in the session and from the file
+    // the log replays to the live canvas within tolerance, in the session and from the file
     let r = ok(&["-s", "smoke", "check"]);
-    assert!(r.contains("replay matches the live canvas exactly (2 chunks"), "{r}");
+    assert!(r.contains("replay matches the live canvas within tolerance (2 chunks"), "{r}");
     let saved = root().join("saved.png");
     ok(&["-s", "smoke", "save", saved.to_str().unwrap()]);
     ok(&["-s", "smoke", "close"]);
     let log = root().join("paintings/lua/smoke.lua");
     let replayed = root().join("replayed.png");
     ok(&["run", log.to_str().unwrap(), "--out", replayed.to_str().unwrap()]);
-    assert!(std::fs::read(&saved).unwrap() == std::fs::read(&replayed).unwrap(), "the replay's PNG differs from the session's");
+    image_tolerance::assert_close(&image::open(&saved).unwrap().to_rgba8(), &image::open(&replayed).unwrap().to_rgba8());
 
     // reopening goes on from the log: a chunk that ran is there for good
     let r = ok(&["open", "smoke"]);

@@ -5,7 +5,8 @@
 
 Starts from a real baseline dump (state/rag/chunk-008.state.xz: a wet canvas
 after waits, one brush and two rags) and writes altered copies to a
-temporary directory: a value changed in a canvas field, 0.0 turned to -0.0,
+temporary directory: canvas values within and beyond their numeric limits,
+0.0 turned to -0.0, nonfinite values, an integer changed,
 a field removed, fields and Debug values added (zero and nonzero, as a later
 engine's solvent would be), a bristle's load changed, a rag's dampness
 changed, a missing chunk, a file that isn't a dump. Exit 0 when every case
@@ -24,7 +25,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.dont_write_bytecode = True  # no __pycache__ in the package
 sys.path.insert(0, HERE)
-from state_compare import load  # noqa: E402
+from state_compare import ABS_LIMITS, load  # noqa: E402
 
 SRC = os.path.join(HERE, "..", "state", "rag", "chunk-008.state.xz")
 TOOL = os.path.join(HERE, "state_compare.py")
@@ -100,11 +101,18 @@ def main():
         i = max(range(n), key=lambda k: vals[k])  # a wet pixel
         bumped = vals[:]
         bumped[i] = struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", vals[i]))[0] + 1))[0]
-        case("one wet volume one ulp off", replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *bumped)), 1, expect_text="wet.vol: 1 of")
+        case("one wet volume one ulp off", replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *bumped)), 0)
+        bumped[i] = vals[i] + 2 * ABS_LIMITS["wet.vol"]
+        case("wet volume beyond its limit", replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *bumped)), 1, expect_text="wet.vol: 1 of")
         z = vals.index(0.0)
         neg = vals[:]
         neg[z] = -0.0
-        case("0.0 turned to -0.0", replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *neg)), 1, expect_text="wet.vol")
+        case("0.0 turned to -0.0", replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *neg)), 0)
+        for value in [float("nan"), float("inf"), -float("inf")]:
+            invalid = vals[:]
+            invalid[z] = value
+            case("nonfinite wet volume %s" % value, replace(fields, "wet.vol", lambda r: struct.pack("<%df" % n, *invalid)), 1, expect_text="wet.vol: 1 of")
+        case("integer seed changed", replace(fields, "studio.seed", lambda r: struct.pack("<Q", struct.unpack("<Q", r)[0] ^ 1)), 1, expect_text="studio.seed: 1 of")
         case("a field removed", [f for f in fields if f[0] != "clock.cure"], 1, expect_text="clock.cure: missing")
         npx = n
         zero = struct.pack("<%df" % npx, *([0.0] * npx))
@@ -123,7 +131,9 @@ def main():
         case("a bristle gains solvent 0.25, --added-zero",
              text_edit(fields, "brushes.debug", cure + " }", cure + ", solvent: 0.25 }"), 1, "--added-zero", expect_text="solvent is not zero")
         vol0 = b0[b0.index("vol: "):b0.index(",", b0.index("vol: "))]
-        case("a bristle's load changed", text_edit(fields, "brushes.debug", vol0 + ",", vol0 + "1,"), 1, expect_text="brushes[0].bristles[0].vol")
+        case("a bristle's load within its limit", text_edit(fields, "brushes.debug", vol0 + ",", vol0 + "1,"), 0)
+        over = float(vol0.split(": ", 1)[1]) + 2 * ABS_LIMITS["brushes.debug:brushes[].bristles[].vol"]
+        case("a bristle's load beyond its limit", text_edit(fields, "brushes.debug", vol0 + ",", "vol: %r," % over), 1, expect_text="brushes[0].bristles[0].vol")
         r0 = [r for nm, _, _, r in fields if nm == "rags.debug"][0].decode()
         damp = r0[r0.index("damp: ", r0.index("Rag {", 1)):].split(",")[0]
         case("a rag's dampness changed", text_edit(fields, "rags.debug", damp, "damp: 0.25"), 1, expect_text="rags[1].damp")

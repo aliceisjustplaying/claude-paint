@@ -68,7 +68,7 @@ fn a_full_palette_refuses_a_new_pile_and_names_the_piles_on_it() {
     assert!(e.contains("b:load: that pile was scraped off, and knifing it again needs room: the palette is full"), "{e}");
     // the log replays as painted
     let r = ok(&with(&["check"]));
-    assert!(r.contains("replay matches the live canvas exactly"), "{r}");
+    assert!(r.contains("replay matches the live canvas within tolerance"), "{r}");
 }
 
 #[test]

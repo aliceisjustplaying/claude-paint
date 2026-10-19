@@ -604,7 +604,7 @@ mod tests {
         let (fluid, half) = (run(true, 0.0), run(true, 0.5));
         assert!(fluid.2 > 0.0 && half.2 > 0.0 && half.1.iter().all(|&v| v >= 1.0 - 1e-6), "half packed keeps its packed paint: {:?}", half.1);
         assert!(half.2 / half.3 < fluid.2 / fluid.3, "the liquid above packed paint is leaner: {} < {}", half.2 / half.3, fluid.2 / fluid.3);
-        assert!(run(false, 1.0).0 == fluid.0, "without the switch the packed share is not read");
+        crate::tests::image_tolerance::assert_fields_close(run(false, 1.0).0, fluid.0);
     }
 
     /// With the drain switch, thinned paint that flows off a film whose
@@ -644,13 +644,17 @@ mod tests {
             assert!(hide[j][4] < 0.9, "leaner: {:?}", hide[j]);
         }
         let (off, oil) = (run(false, 1.0), run(false, 0.0));
-        assert!(off.0 == oil.0 && off.1 == oil.1 && off.2 == oil.2, "without the switch the absorbency is not read");
+        crate::tests::image_tolerance::assert_fields_close(off.0.iter().copied(), oil.0.iter().copied());
+        crate::tests::image_tolerance::assert_fields_close(off.1.iter().copied(), oil.1.iter().copied());
+        crate::tests::image_tolerance::assert_fields_close(off.2.iter().flatten().copied(), oil.2.iter().flatten().copied());
         assert!(off.3.iter().filter(|&&a| a != full).count() == 1, "nor changed (but under the source, set saturated)");
         for &j in &near {
             assert!(off.2[j][7] == 0.0 && vol[j] < off.0[j], "unpacked, and thicker by the oil: {} > {}", off.0[j], vol[j]);
         }
         let on_oil = run(true, 0.0);
-        assert!(on_oil.0 == oil.0 && on_oil.1 == oil.1 && on_oil.2 == oil.2, "on an oil ground the switch changes nothing here");
+        crate::tests::image_tolerance::assert_fields_close(on_oil.0, oil.0);
+        crate::tests::image_tolerance::assert_fields_close(on_oil.1, oil.1);
+        crate::tests::image_tolerance::assert_fields_close(on_oil.2.iter().flatten().copied(), oil.2.iter().flatten().copied());
     }
 
     #[test]

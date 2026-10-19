@@ -144,6 +144,7 @@
   .th { margin:10px 0 12px; padding:2px 0 2px 13px; border-left:2px solid #5e5e6d; font-size:15px; line-height:1.6; color:var(--soft); word-break:break-word }
   .th.last { color:#ffffff } .say { margin:13px 0; color:var(--fg); font-size:15px; line-height:1.6; word-break:break-word }
   /* the painter's markdown, rendered (escaped first: see md()) */
+  .critic { padding:8px 12px; border-left:2px solid #c9a96e; background:#1c1c22; border-radius:4px } .cq { margin:.2em 0 .5em; font-size:13px; color:var(--soft) }
   .th p, .say p { margin:0 0 .6em } .th > :last-child, .say > :last-child { margin-bottom:0 }
   .th ul, .th ol, .say ul, .say ol { margin:0 0 .6em; padding-left:1.4em } .th li, .say li { margin:.1em 0 }
   .mh { margin:.5em 0 .3em; font-size:1em; font-weight:700; color:var(--fg) } .th b, .say b { color:var(--fg); font-weight:650 }
@@ -697,6 +698,7 @@ function kindOf(e) {
     return [ok ? 'code' : e.err ? 'fail' : 'code', '🖌', ok ? 'paints' + on : (e.err ? `paints${on}, but its code has an error` : 'paints' + on)]; }
   if (e.kind === 'jnote') return ['notes', '📝', 'writes in the journal'];
   if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];
+  if (e.kind === 'critic') return ['notes', '🗣', 'asks the critic'];
   if (e.kind === 'cmd') {
     const c = (e.text || '').replace(/^\s*((cd\s+\S+|export\s+[^;&\n]*|source\s+\S+|set\s+-\S+)\s*(&&|;|\n)\s*)+/, ''), fail = /error(\[|:)|panicked|FAILED/.test(e.out || '');
     if (/cargo paint/.test(c)) { const w = (c.match(/--crop\s+(\S+)/)||[])[1], r = (c.match(/--resume\s+("[^"]+"|\S+)/)||[])[1];
@@ -738,7 +740,7 @@ function status() {
 }
 function doing(isLive) {
   const e = events[pos]; let c = kindOf(e), what, detail = '';
-  const busy = ['cmd','tool','write','edit','read'].includes(e.kind) && e.out === undefined;
+  const busy = ['cmd','tool','write','edit','read','critic'].includes(e.kind) && e.out === undefined;
   if (e.kind === 'sitting') { what = '🪑 ' + sitLabel(e); detail = 'a new session begins'; }
   else if (e.kind === 'think') { what = '💭 thinking'; detail = plain(e.text.split('\n').filter(l => l.trim()).slice(-1)[0] || ''); }
   else if (e.kind === 'say') { what = '💬 says'; detail = plain(e.text.split('\n').find(l => l.trim()) || ''); }
@@ -918,6 +920,8 @@ function journal(i, scroll) {
     if (item?.event !== e) {
       let html = '';
       if (e.kind === 'think' || e.kind === 'say') html = md(e.text.trim());
+      else if (e.kind === 'critic') html = '<div class="cq">🗣 asks the critic</div>' + (e.text.trim() ? md(e.text.trim()) : '') +
+        '<div class="cq">' + (e.out === undefined ? '🧐 the critic is looking…' : e.err ? '🧐 the critic couldn’t come' : '🧐 the critic writes back') + '</div>' + (e.out ? md(e.out.trim()) : '');
       else if (e.kind === 'sitting') { const gap = (t - Date.parse(events[k - 1].ts)) / 1000;
         html = '🪑 ' + esc(sitLabel(e)) + (gap > 120 ? ' <span>· after ' + ago(gap).replace(' ago', '') + ' away</span>' : ''); }
       else { const c = kindOf(e);
@@ -934,6 +938,7 @@ function journal(i, scroll) {
     if (e.kind === 'think') { flush(); blocks.push({ key:'think:' + k, cls:'th' + (k === lastThink ? ' last' : ''), html:item.html, k }); }
     else if (e.kind === 'sitting') { flush(); blocks.push({ key:'sit:' + k, cls:'sit', html:item.html }); lastTm = t; }
     else if (e.kind === 'say') { flush(); blocks.push({ key:'say:' + k, cls:'say', html:item.html }); }
+    else if (e.kind === 'critic') { flush(); blocks.push({ key:'critic:' + k, cls:'say critic', html:item.html }); }
     else if (item.html) { if (!chips.length) firstChip = k; chips.push(item.html); }
   }
   flush();

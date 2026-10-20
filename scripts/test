@@ -178,7 +178,7 @@ check painter-inbox-hooks 'node --test --test-reporter=tap harness/painter/test/
 check painter-limit-abort 'node --test --test-reporter=tap harness/painter/test/limit-abort.test.ts' '^# pass [1-9]'
 check painter-concepts 'node --test --test-name-pattern="file size limit" --test-reporter=tap harness/painter/test/concepts.test.ts' '^# pass [1-9]'
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
-check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py -v' "$unittest"
+check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
 check replay-batch 'uv run --no-project python -m unittest scripts/tests/replay_batch_test.py -v' "$unittest"
 check replay-clip 'uv run --no-project python -m unittest scripts/tests/replay_clip_test.py -v' "$unittest"

@@ -136,7 +136,7 @@ pub fn start(conn: UnixStream, input: Input) -> Result<Job, String> {
 /// if a chunk failed or the check was stopped.
 fn replay(conn: &UnixStream, input: &Input, stop: &Arc<AtomicBool>) -> Result<bool, String> {
     let give_up = |stop: &AtomicBool, conn: &UnixStream| stop.load(Ordering::Relaxed) || client_gone(conn);
-    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).map_err(|e| e.to_string())?.with_paper(input.paper);
+    let mut fresh = Session::replay_with(input.width, input.tubes.clone()).and_then(|s| s.with_paper(input.paper)).map_err(|e| e.to_string())?;
     {
         let (stop, conn) = (stop.clone(), conn.try_clone().map_err(|e| e.to_string())?);
         fresh

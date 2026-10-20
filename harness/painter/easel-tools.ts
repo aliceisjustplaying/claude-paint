@@ -216,6 +216,8 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				ref: Type.Optional(Type.String()),
 				hold: Type.Optional(Type.String()),
 				at: Type.Optional(Type.String()),
+				pose: Type.Optional(Type.String()),
+				side: Type.Optional(Type.String()),
 				palette: Type.Optional(Type.Boolean()),
 				size: Type.Optional(Type.Number()),
 				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),

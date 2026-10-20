@@ -198,6 +198,24 @@ def test_unchanged_picker_survives_revalidation_and_time_changes(browser, site):
     page.close()
 
 
+def test_denied_storage_still_loads_the_static_viewer_and_takes_its_writes(browser, site):
+    base, requests, _ = site
+    context = browser.new_context(viewport={"width": 1280, "height": 720})
+    context.set_default_timeout(5000)
+    context.add_init_script("Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } })")
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(base + "/studio/", wait_until="domcontentloaded")
+    page.wait_for_function("document.querySelector('#pklist button') !== null")
+    assert any(url.startswith("/studio/data/sessions.json") for url, _ in requests)
+    page.evaluate("document.getElementById('all').click()")
+    page.locator("#introok").click()
+    assert page.locator("#intro").is_hidden()
+    assert errors == []
+    context.close()
+
+
 def test_sessions_revalidation_reuses_the_unchanged_http_body(browser, site):
     base, requests, responses = site
     page = browser.new_page()

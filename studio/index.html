@@ -531,7 +531,7 @@ async function loadSessions() {
   renderHeader(); if (otherK >= 0 && events[otherK] && events[otherK].ref) second(otherK);  // (the reference's label names the artist once the list has it)
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus
 }
-$('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
+$('all').onchange = () => { try { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); } catch (e) {} renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
@@ -1415,7 +1415,7 @@ document.onkeydown = e => {
   if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1, true); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1, true); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); $('zoom').style.display = 'none'; } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-$('all').checked = localStorage.getItem('studio.all') === '1';
+try { $('all').checked = localStorage.getItem('studio.all') === '1'; } catch (e) {}
 const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(location.search);
 Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;
 if (initial && qOf(initial) === Q) allSessions = [initial];
@@ -1433,8 +1433,10 @@ setInterval(() => { status(); if (events.length && resting() !== rested) picture
 setInterval(() => loadSessions().catch(() => {}), 30000);
 if (STATIC) {
   document.body.classList.add('static');
-  if (!localStorage.getItem('studio.intro') && !STREAM) $('intro').hidden = false;  // (not over a livestream)
-  $('introok').onclick = () => { $('intro').hidden = true; localStorage.setItem('studio.intro', '1'); };
+  let introSeen = null;
+  try { introSeen = localStorage.getItem('studio.intro'); } catch (e) {}
+  if (!introSeen && !STREAM) $('intro').hidden = false;  // (not over a livestream)
+  $('introok').onclick = () => { $('intro').hidden = true; try { localStorage.setItem('studio.intro', '1'); } catch (e) {} };
 }
 </script>
 </body></html>

@@ -41,7 +41,7 @@ import { buildSummary, CANVAS_VIEW } from "./summary.ts";
 import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
-import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
+import { requestTokens, retryablePerMinuteQuota, TokenPace, tokensPerMinuteFromEnv } from "./pace.ts";
 import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 import { text } from "./easel-client.ts";
 import { CRITIQUE, criticFromEnv, leaveNote, passagesToTakeUp, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
@@ -65,8 +65,7 @@ export default function painter(pi: ExtensionAPI) {
 	onlyOurSystemPrompt(pi);
 
 	const limits = limitsFromEnv();
-	const tpm = process.env.PAINTER_INPUT_TPM ? Number(process.env.PAINTER_INPUT_TPM) : undefined;
-	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
+	const tpm = tokensPerMinuteFromEnv();
 	const limitWait = limitWaitFromEnv();
 	let sittingRecovery = process.env.PAINTER_SITTING_RECOVERY === "1";
 	const passagesFirst = process.env.PAINTER_OPEN_PASSAGES === "1";

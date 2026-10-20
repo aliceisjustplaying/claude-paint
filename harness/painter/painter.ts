@@ -136,8 +136,15 @@ export default function painter(pi: ExtensionAPI) {
 		if (pace) {
 			const wait = pace.waitMs(lastRequest, Date.now());
 			if (wait > 0) await new Promise<void>((resolve) => {
-				const timer = setTimeout(resolve, wait);
-				ctx.signal?.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
+				const signal = ctx.signal;
+				if (signal?.aborted) return resolve();
+				const done = () => {
+					clearTimeout(timer);
+					signal?.removeEventListener("abort", done);
+					resolve();
+				};
+				const timer = setTimeout(done, wait);
+				signal?.addEventListener("abort", done, { once: true });
 			});
 		}
 		return dropped > 0 || shown ? { messages } : undefined;

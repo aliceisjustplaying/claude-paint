@@ -844,7 +844,7 @@ impl Canvas {
                     let i = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint pigment is invalid"))?;
                     let amount = get_f32(r)?;
                     if !amount.is_finite() || amount < 0.0 || pixel.parts.iter().any(|p| p.0 == i) {
-                        return Err(bad("checkpoint pigment amount is invalid"));
+                        return Err(bad("checkpoint pigment list is invalid"));
                     }
                     pixel.parts.push((i, amount));
                 }

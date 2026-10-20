@@ -1640,8 +1640,9 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     if tubes.carried_paint && st.borrow().board.dirty > 0.0 && !h.blender && pile.is_some() {
         let mut sources: Vec<_> = match &graded {
             Some(ps) => ps.iter().map(|(p, _)| p.clone()).collect(),
-            None => pile.iter().cloned().collect(),
+            None => Vec::new(),
         };
+        sources.extend(pile.iter().cloned());
         sources.extend(second_pile);
         h.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), sources, h.mix_jitter));
     }
@@ -2570,6 +2571,11 @@ mod carried_palette_tests {
                 assert!(blue > 0.02 && white == 0.0, "legacy white={white}, blue={blue}");
             }
             assert_eq!(s.program("palette").contains(CARRIED_PAINT_MARK), carried);
+            let path = std::env::temp_dir().join(format!("easel-carried-paint-{}-{carried}.ckpt", std::process::id()));
+            crate::save::write(&s, &s.program("palette"), &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.carried_paint, carried);
         }
         assert!(box_for(None).unwrap().carried_paint);
         assert!(!box_for(Some("--@ engine 8\n--@ chunk 1\n--@ palette-carried-paint\n")).unwrap().carried_paint);
@@ -2580,6 +2586,7 @@ mod carried_palette_tests {
         for pass in [
             "work(rect(100,100,800,800),{pile=red,tool={kind='flat',width=50},length={80,80},coverage=1,dips={1,0.8,0},mix_jitter=0,fill=false,seed=11})",
             "stipple(rect(100,100,800,800),{pile=red,tool={kind='round',width=50},coverage=1,dips={1,0.8,0},mix_jitter=0,seed=11})",
+            "work(rect(100,100,800,800),{pile=red,piles={{white,0},{blue,0}},second={pile=white,load=0.2},tool={kind='flat',width=50},length={80,80},coverage=1,dips={1,0.8,0},mix_jitter=0,fill=false,seed=11})",
         ] {
             let mut s = painting(true);
             s.run("work(rect(0,0,1000,1000),{pile=blue,tool={kind='flat',width=80},coverage=3,fill=true,mix_jitter=0,seed=2})").unwrap();

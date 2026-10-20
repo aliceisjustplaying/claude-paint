@@ -62,6 +62,14 @@ test("a first sitting's message is left as it is", () => {
 	assert.deepEqual(requests[0].filter((m) => m.role === "user").map((m) => [m.text, m.images]), [["Your brief is in BRIEF.md.", 0]]);
 });
 
+test("failed recovery and compaction attachments are reported and retried until an image is loaded", () => {
+	const at = studio();
+	const easel = join(at.studio, "bin/easel");
+	writeFileSync(easel, readFileSync(easel, "utf8").replace("echo 'out/easel/painting/look-0007.png", "chmod 000 out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png"));
+	run({}, "Test recovery hooks.", at, ["-e", join(HERE, "test/fixtures/recovery-hooks.ts")]);
+	assert.equal(readFileSync(join(at.studio, "recovery-hooks-ok"), "utf8"), "passed");
+});
+
 /** The first request after a compaction, and the index of the summary in it. */
 function compacted(extra: Record<string, string> = {}): { after: Requests[number]; i: number } {
 	// a long answer puts the session over the (lowered) compaction point; the next prompt compacts first

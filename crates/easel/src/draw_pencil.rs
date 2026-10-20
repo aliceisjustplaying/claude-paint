@@ -358,7 +358,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => seed_of(&st1, o)?,
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
-            let graded = o.as_ref().map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false);
+            let graded = if st1.borrow().paper {
+                o.as_ref().map(|o| o.get::<Option<bool>>("graded")).transpose()?.flatten().unwrap_or(false)
+            } else {
+                false
+            };
             let marks = graphite::hatch_marks_graded(&m, angle, spacing, length, pressure, graded, seed);
             if is_stick(&st1, &p)? {
                 return stick_marks(lua, &st1, &p, &marks);
@@ -937,6 +941,51 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
             } else {
                 assert!(result.unwrap_err().contains("hatch: unknown option \"graded\""));
             }
+        }
+    }
+
+    #[test]
+    fn legacy_hatching_never_reads_inherited_graded() {
+        let mut baseline = Session::replay_with(64, crate::session::box_for(Some("--@ engine 8\n")).unwrap()).unwrap();
+        run(&mut baseline, CANVAS);
+        let blank = baseline.canvas().unwrap().pixels().to_vec();
+        run(&mut baseline, "pencil():hatch(rect(100, 100, 500, 500), {seed=9})");
+        let expected = baseline.canvas().unwrap().pixels().to_vec();
+        assert!(expected != blank, "the baseline hatch drew nothing");
+        assert!(!logged_paper(&baseline.program("legacy hatch")));
+
+        for index in [
+            "{graded=true}",
+            "{graded=false}",
+            "function(_, key) if key == 'graded' then graded_reads = graded_reads + 1; return true end end",
+        ] {
+            let mut s = Session::replay_with(64, crate::session::box_for(Some("--@ engine 8\n")).unwrap()).unwrap();
+            run(&mut s, CANVAS);
+            run(&mut s, &format!("graded_reads = 0; pencil():hatch(rect(100, 100, 500, 500), setmetatable({{seed=9}}, {{__index={index}}})); assert(graded_reads == 0)"));
+            assert!(s.canvas().unwrap().pixels() == expected, "__index={index} changed the legacy hatch");
+        }
+    }
+
+    #[test]
+    fn paper_hatching_still_uses_graded() {
+        let mut pixels = Vec::new();
+        for options in ["{seed=9, graded=false}", "{seed=9, graded=true}", "setmetatable({seed=9}, {__index={graded=true}})"] {
+            let mut s = Session::replay_with(64, crate::session::box_for(Some("--@ engine 8\n--@ paper\n")).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, CANVAS);
+            run(&mut s, &format!("pencil():hatch(rect(100, 100, 500, 500), {options})"));
+            pixels.push(s.canvas().unwrap().pixels().to_vec());
+        }
+        assert!(pixels[0] != pixels[1], "graded did not change the paper-enabled hatch");
+        assert!(pixels[1] == pixels[2], "inherited graded differs from raw graded with paper enabled");
+    }
+
+    #[test]
+    fn hatching_rejects_raw_unknown_options() {
+        for paper in [false, true] {
+            let mut s = Session::new(64).unwrap().with_paper(paper).unwrap();
+            run(&mut s, CANVAS);
+            let e = s.run("pencil():hatch(rect(100, 100, 500, 500), {seed=9, unknown=true})").unwrap_err();
+            assert!(e.contains("hatch: unknown option \"unknown\""), "{e}");
         }
     }
 

@@ -16,6 +16,11 @@ def library_at(path):
         for entry in library
     ):
         raise ValueError("reference: invalid notes/reference-library.json")
+    seen = set()
+    for entry in library:
+        if entry["id"] in seen:
+            raise ValueError(f'reference: notes/reference-library.json has duplicate id "{entry["id"]}"; give each entry its own id')
+        seen.add(entry["id"])
     return library
 
 

@@ -83,10 +83,15 @@ def site(exported):
             responses.append((self.path, code))
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(exported)))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_port}", requests, responses
-    server.shutdown()
-    server.server_close()
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", requests, responses
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1)
+        assert not thread.is_alive()
 
 
 @pytest.fixture

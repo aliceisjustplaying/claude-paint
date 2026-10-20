@@ -32,7 +32,7 @@ READING = (
 TOOLS = "paint,look,probe,note,status,log,read,reference,reference_list"
 DIE_ROLL_SECTION = (
     "## Choosing the picture\n"
-    "Before you paint, write eight different pictures you could make from this brief in notes/concepts.md, numbered 1 to 8, each in a sentence or two. After each one, write your estimate of how many painters out of a hundred given this brief would make that picture. The studio sets aside the two with the highest estimates, rolls a die among the other six and tells you which one is yours. You make every decision from there, and the picture can develop wherever the painting takes it.\n\n"
+    "Before you paint, write sixteen different pictures you could make from this brief in notes/concepts.md, numbered 1 to 16, each in a sentence or two. After each one, write your estimate of how many painters out of a hundred given this brief would make that picture. The studio sets aside the ten with the highest estimates, rolls a die among the other six and tells you which one is yours. You make every decision from there, and the picture can develop wherever the painting takes it.\n\n"
 )
 # --critic (harness/painter/visit.ts): a second painter visits as a critic
 CRITIC_READING = (
@@ -178,7 +178,7 @@ def main():
     parser.add_argument("--critic", action="store_true", help="a second painter visits as a critic (harness/painter/visit.ts)")
     parser.add_argument("--painter", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
     parser.add_argument("--critic-model", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
-    parser.add_argument("--die-roll", action="store_true", help="write eight concepts in sitting 0, then roll among the six least common")
+    parser.add_argument("--die-roll", action="store_true", help="write sixteen concepts in sitting 0, then roll among the six least common")
     args = parser.parse_args()
     if args.critic_model is not None and not args.critic:
         parser.error("--critic-model requires --critic")

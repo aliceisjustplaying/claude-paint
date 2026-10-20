@@ -58,7 +58,9 @@ def load_jobs(manifest, args):
         slots = max(workers, encoder + 2)
         if slots > args.cpu_budget:
             raise ValueError(f"job {index}: needs {slots} CPU slots, budget is {args.cpu_budget}")
-        owned = [out, Path(f"{out}.frames"), Path(f"{out}.frames.log"), Path(f"{out}.batch.log")]
+        checkpoint = Path(f"{out}.frames.replay.ckpt")
+        owned = [out, Path(f"{out}.frames"), Path(f"{out}.frames.log"), Path(f"{out}.batch.log"),
+                 checkpoint, checkpoint.with_suffix(".replay-progress.json")]
         for path in owned:
             if path.exists() or path.is_symlink():
                 raise ValueError(f"job {index}: output path already exists: {path}")

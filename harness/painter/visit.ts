@@ -74,12 +74,14 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		: `The painter reads it as soon as you finish, and it is saved in the studio as ${CRITIQUE}.`;
 	return [
 		why,
-		"Look at it as closely as you like: the whole canvas, detail crops, the value, squint, mirror, relief and gallery views and the palette. " + read,
+		"Start with the whole canvas, then take only the few views that answer what you noticed there: a detail crop, the value, squint, " +
+			"mirror, relief or gallery view, the palette. Don't look again at a view you've already seen. " + read,
 		list,
-		"Then tell the painter what you would fix and why, as one painter talking to another: what you see, what it does " +
-			"to the picture and what you would do about it. Say which passage, if any, you would take up first, whether or not " +
-			"it is on the painter's list. Your last message is what the painter gets. " + gets +
-			" The painter decides what to do with it.",
+		"Then tell the painter what you would fix and why, as one painter talking to another: the one to five things that matter most to the " +
+			"picture. For each, say what you see, what it does to the picture and what you would do about it. Go with what you see rather than " +
+			"weighing every alternative, and leave the rest for a later visit. Write your notes once, as you would say them. Say which passage, " +
+			"if any, you would take up first, whether or not it is on the painter's list. Your last message is what the painter gets. " + gets +
+			" The painter decides what to do with it. Once you've written your notes, your visit is over.",
 	].join("\n\n");
 }
 

@@ -9,6 +9,14 @@ SCRIPT = Path(__file__).resolve().parents[1] / "replay_clip"
 
 
 class OverlapTests(unittest.TestCase):
+    def setUp(self):
+        tools = tempfile.TemporaryDirectory()
+        self.addCleanup(tools.cleanup)
+        ffmpeg = Path(tools.name) / "ffmpeg"
+        ffmpeg.write_text("#!/usr/bin/env bash\nexit 99\n")
+        ffmpeg.chmod(0o755)
+        self.env = {**os.environ, "PATH": f"{tools.name}:{os.environ['PATH']}"}
+
     def test_disjoint_paths_reach_replay(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -19,7 +27,7 @@ class OverlapTests(unittest.TestCase):
             easel.chmod(0o755)
             result = subprocess.run(
                 [str(SCRIPT), str(source), str(root / "clip.mp4"), "--easel", str(easel)],
-                capture_output=True, text=True,
+                capture_output=True, text=True, env=self.env,
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(Path(f"{easel}.called").read_text(), "called")
@@ -79,7 +87,7 @@ class OverlapTests(unittest.TestCase):
                 result = subprocess.run(
                     [str(SCRIPT), str(source), str(out), "--frames-dir", str(frames),
                      "--sheet", str(sheet), "--easel", "/bin/false"],
-                    capture_output=True, text=True,
+                    capture_output=True, text=True, env=self.env,
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertTrue(source.exists(), result.stderr)

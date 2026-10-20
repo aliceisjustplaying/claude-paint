@@ -457,6 +457,22 @@ async function pollUpdate(v, i, replacement) {
     assert(!shown.code.join('\n').includes('main_only'));
     await edge.page.close();
     report.checks.push('live scratch source keeps its own file name while the scratch response is pending');
+    const drift = await viewer(browser, [ev('start', { cwd:'/painter' }), ev('write', { path:'/painter/paintings/lua/painting.lua', content:'local main_only = 1\n', out:'ok' }, 1)], { liveFile:false });
+    drift.state.file = 'local main_only = 1\n';
+    await drift.page.waitForFunction(() => liveText === 'local main_only = 1\n' && liveTextPath === '/painter/paintings/lua/painting.lua');
+    let settle;
+    const pendingRun = new Promise(resolve => { settle = resolve; });
+    await drift.page.route(u => u.pathname === '/api/file' && u.searchParams.get('f') === 'paintings/src/bin/foo.rs', async route => { await pendingRun; await route.fulfill({ contentType:'text/plain', body:'local main_only = 1\n' }); });
+    drift.state.events.push(...[2, 3, 4, 5].map(k => ev('cmd', { text:'cargo paint foo', out:'ok' }, k)));
+    await drift.page.waitForFunction(() => document.getElementById('file').textContent === 'foo.rs');
+    await seek(drift.page, 4);
+    settle();
+    await drift.page.waitForFunction(() => liveTextPath === '/painter/paintings/src/bin/foo.rs');
+    await seek(drift.page, 4);
+    assert.equal(await drift.page.locator('#file').textContent(), 'foo.rs');
+    assert((await snapshot(drift.page)).code.join('\n').includes('main_only'), 'a response that arrives while rewound replaces the blank pending view');
+    await drift.page.close();
+    report.checks.push('an identical file response that arrives while rewound replaces the blank pending view');
     const previousFirst = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local first=1', out:'ok' }, 1), ev('look', { text:'' }, 2), ev('image', { img:0, look:'' }, 2),
       ev('paint', { code:'local second=2', out:'ok' }, 3), ev('look', { text:'' }, 4), ev('image', { img:1, look:'' }, 4)];
     const previous = await viewer(browser, previousFirst);

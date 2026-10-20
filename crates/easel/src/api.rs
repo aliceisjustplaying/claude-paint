@@ -1662,18 +1662,47 @@ fn pass_pile(st: &S, value: &Value, what: &str) -> Result<PileU> {
 
 fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes: Palette, piles: Vec<PileU>, jitter: f32) -> paint::handling::Dip<'static> {
     let sources: Vec<_> = piles.into_iter().map(|p| (p.heap, p.mix.clone(), p.medium, p.thinner())).collect();
-    Box::new(move |held, source, seed| {
-        let (id, original, medium, thinner) = &sources[source];
+    Box::new(move |held, weights, seed| {
         let mut board = board.lock().unwrap();
-        board.visit_with(*id, held.fullness().min(1.0), &held.carried_parts()).expect("pass heaps were prepared before painting");
-        let (mix, medium, thinner) = match board.heap(*id) {
-            Some(heap) if heap.changed => {
-                let mut mix = tubes.pile(heap.fractions());
-                mix.solvent = heap.solvent;
-                mix.oil_rate = heap.oil_rate;
-                (mix, heap.medium, heap.thinner)
+        let carry = held.carried_parts();
+        let mut resolved = Vec::new();
+        for &(source, weight) in weights {
+            let (id, original, medium, thinner) = &sources[source];
+            board.visit_with(*id, held.fullness().min(1.0), &carry).expect("pass heaps were prepared before painting");
+            let (mix, medium, thinner) = match board.heap(*id) {
+                Some(heap) if heap.changed => {
+                    let mut mix = tubes.pile(heap.fractions());
+                    mix.solvent = heap.solvent;
+                    mix.oil_rate = heap.oil_rate;
+                    (mix, heap.medium, heap.thinner)
+                }
+                _ => (original.clone(), *medium, *thinner),
+            };
+            resolved.push((mix, medium, thinner, weight));
+        }
+        let (mix, medium, thinner) = if resolved.len() == 1 {
+            let (mix, medium, thinner, _) = resolved.pop().unwrap();
+            (mix, medium, thinner)
+        } else {
+            let mut parts: Vec<(usize, f32)> = Vec::new();
+            let (mut medium, mut thinner, mut solvent, mut oil_rate) = (0.0, 0.0, 0.0, 0.0);
+            for (mix, md, th, weight) in resolved {
+                let sum = mix.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+                for (i, fraction) in mix.parts {
+                    match parts.iter_mut().find(|p| p.0 == i) {
+                        Some(p) => p.1 += weight * fraction / sum,
+                        None => parts.push((i, weight * fraction / sum)),
+                    }
+                }
+                medium += weight * md;
+                thinner += weight * th;
+                solvent += weight * mix.solvent;
+                oil_rate += weight * mix.oil_rate;
             }
-            _ => (original.clone(), *medium, *thinner),
+            let mut mix = tubes.pile(parts);
+            mix.solvent = solvent;
+            mix.oil_rate = oil_rate;
+            (mix, medium, thinner)
         };
         thinned(tubes.remix(&mix, jitter, &mut Rng::new(seed)).laid(medium), thinner)
     })
@@ -2571,6 +2600,25 @@ mod carried_palette_tests {
         }
         assert!(box_for(None).unwrap().carried_paint);
         assert!(!box_for(Some("--@ engine 8\n--@ chunk 1\n--@ palette-carried-paint\n")).unwrap().carried_paint);
+    }
+
+    #[test]
+    fn graded_dips_preserve_palette_tint_strength_at_negligible_dirt() {
+        let latent = |dirty: f32| {
+            let mut s = painting(true);
+            s.run(&format!(r#"strong=pile{{{{"Prussian blue",1}}}}
+                palette{{dirty={dirty}}}
+                work(rect(100,100,800,800),{{piles={{{{white,0.5}},{{strong,0.5}}}},tool={{kind="flat",width=50}},length={{80,80}},coverage=1,dips={{1,0.8,1}},mix_jitter=0,fill=false,seed=11}})"#)).unwrap();
+            s.canvas().unwrap().state_fields().into_iter().find_map(|f| match f.values {
+                paint::state_dump::Values::F32(v) if f.name == "wet.lat" => Some(v),
+                _ => None,
+            }).unwrap()
+        };
+        let (clean, dirty) = (latent(0.0), latent(1e-8));
+        assert_eq!(clean.len(), dirty.len());
+        assert!(clean.iter().any(|v| *v != 0.0));
+        let difference = clean.iter().zip(&dirty).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        assert!(difference < 1e-6, "negligible palette dirt changed graded pigment mixing by {difference}");
     }
 
     #[test]

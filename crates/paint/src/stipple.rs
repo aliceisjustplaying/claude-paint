@@ -455,7 +455,7 @@ impl Canvas {
             for (k, p) in plans[ti].iter().enumerate() {
                 if let Some(paint) = p.dip.clone() {
                     held.wipe(sp.wipe);
-                    let paint = sp.dip_with.as_ref().map_or(paint, |dip| dip(&held, 0, p.dip_seed));
+                    let paint = sp.dip_with.as_ref().map_or(paint, |dip| dip(&held, &[(0, 1.0)], p.dip_seed));
                     held.load(paint, sp.load);
                 }
                 if p.rect.2 <= p.rect.0 {

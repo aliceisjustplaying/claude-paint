@@ -18,7 +18,7 @@ use crate::tally::Piles;
 use crate::wet::Paint;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
-pub type Dip<'a> = Box<dyn Fn(&Held, usize, u64) -> Paint + Sync + 'a>;
+pub type Dip<'a> = Box<dyn Fn(&Held, &[(usize, f32)], u64) -> Paint + Sync + 'a>;
 
 pub struct Handling<'a> {
     pub dip_with: Option<Dip<'a>>,
@@ -1005,34 +1005,18 @@ impl Canvas {
                         held.wipe(0.9);
                     } else {
                         held.wipe(hd.wipe);
-                        if let Some(dip) = &hd.dip_with {
-                            for &(source, weight) in &p.sources {
-                                let paint = dip(&held, source, p.dip_seed ^ source as u64);
-                                if hd.part == crate::bristle::Part::ALL {
-                                    held.load(paint, p.load * weight);
-                                } else {
-                                    let seed = (p.pts[0].0.to_bits() as u64) << 21 ^ p.pts[0].1.to_bits() as u64 ^ 0x57EA;
-                                    held.load_part(paint, p.load * weight, &crate::bristle::Part { seed, ..hd.part });
-                                }
-                            }
-                            if let (Some((_, load2, _)), Some(s2)) = (&p.dip2, hd.second.as_ref()) {
-                                let source = hd.piles_at.as_ref().map_or(1, |piles| piles.len() + 1);
-                                let paint = dip(&held, source, p.dip2_seed);
-                                let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
-                                held.load_part(paint, *load2, &crate::bristle::Part { seed, ..s2.part });
-                            }
+                        let paint = hd.dip_with.as_ref().map_or(paint, |dip| dip(&held, &p.sources, p.dip_seed));
+                        if hd.part == crate::bristle::Part::ALL {
+                            held.load(paint, p.load);
                         } else {
-                            if hd.part == crate::bristle::Part::ALL {
-                                held.load(paint, p.load);
-                            } else {
-                                // a new streak pattern every dip, from where the stroke starts
-                                let seed = (p.pts[0].0.to_bits() as u64) << 21 ^ p.pts[0].1.to_bits() as u64 ^ 0x57EA;
-                                held.load_part(paint, p.load, &crate::bristle::Part { seed, ..hd.part });
-                            }
-                            if let (Some((paint2, load2, _)), Some(s2)) = (p.dip2.clone(), hd.second.as_ref()) {
-                                let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
-                                held.load_part(paint2, load2, &crate::bristle::Part { seed, ..s2.part });
-                            }
+                            let seed = (p.pts[0].0.to_bits() as u64) << 21 ^ p.pts[0].1.to_bits() as u64 ^ 0x57EA;
+                            held.load_part(paint, p.load, &crate::bristle::Part { seed, ..hd.part });
+                        }
+                        if let (Some((paint2, load2, _)), Some(s2)) = (p.dip2.clone(), hd.second.as_ref()) {
+                            let source = hd.piles_at.as_ref().map_or(1, |piles| piles.len() + 1);
+                            let paint2 = hd.dip_with.as_ref().map_or(paint2, |dip| dip(&held, &[(source, 1.0)], p.dip2_seed));
+                            let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
+                            held.load_part(paint2, load2, &crate::bristle::Part { seed, ..s2.part });
                         }
                     }
                 }

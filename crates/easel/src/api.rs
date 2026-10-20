@@ -1029,18 +1029,18 @@ pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
 /// it was knifed is the pile exactly as knifed.
 pub(crate) fn pile_now(st: &S, v: &Value, what: &str, carry: f32) -> Result<PileU> {
     let p = pile_of(v, what)?;
-    visit(st, &p, carry, what)?;
+    visit(st, &p, carry, what, &[])?;
     Ok(resolve(st, p))
 }
 
 /// The hand goes to the pile's heap with a brush carrying `carry` of the last paint (board.rs
 /// `visit`): a heap scraped off is knifed again, which a full palette may refuse.
-fn visit(st: &S, p: &PileU, carry: f32, what: &str) -> Result<()> {
+fn visit(st: &S, p: &PileU, carry: f32, what: &str, parts: &[(usize, f32)]) -> Result<()> {
     if p.heap == 0 {
         return Ok(());
     }
     let s = &mut *st.borrow_mut();
-    if s.tubes.carried_paint { s.board.visit_with(p.heap, carry, &[]) } else { s.board.visit(p.heap, carry) }.map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
+    if s.tubes.carried_paint { s.board.visit_with(p.heap, carry, parts) } else { s.board.visit(p.heap, carry) }.map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
 }
 
 /// The pile as its heap is on the board now.
@@ -1111,17 +1111,9 @@ fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32, parts: &[
     if !extra.is_nil() {
         return err(format!("b:{what}(pile, amount): a pile carries its own medium; mix another pile for other paint"));
     }
-    let p = if st.borrow().tubes.carried_paint {
-        let p = pile_of(p, &format!("b:{what}"))?;
-        let mut s = st.borrow_mut();
-        if p.heap != 0 {
-            s.board.visit_with(p.heap, carry, parts).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, what)))?;
-        }
-        drop(s);
-        resolve(st, p)
-    } else {
-        pile_now(st, p, &format!("b:{what}"), carry)?
-    };
+    let p = pile_of(p, &format!("b:{what}"))?;
+    visit(st, &p, carry, &format!("b:{what}"), parts)?;
+    let p = resolve(st, p);
     let sty = style(st)?;
     let mut s = st.borrow_mut();
     let tubes = s.tubes.clone();
@@ -1663,7 +1655,7 @@ fn pass_pile(st: &S, value: &Value, what: &str) -> Result<PileU> {
     let p = pile_of(value, what)?;
     if p.heap != 0 {
         let mut s = st.borrow_mut();
-        s.board.reknife(p.heap).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, what)))?;
+        s.board.reknife(p.heap).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))?;
     }
     Ok(resolve(st, p))
 }
@@ -2110,7 +2102,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             for e in t.sequence_values::<Table>() {
                 let e = e?;
                 let p = pile_of(&e.get::<Value>(1)?, "mix")?;
-                visit(&st, &p, 0.35, "mix")?;
+                visit(&st, &p, 0.35, "mix", &[])?;
                 let p = resolve(&st, p);
                 let w: f32 = e.get::<Option<f32>>(2)?.unwrap_or(1.0);
                 if !(w > 0.0 && w.is_finite()) {

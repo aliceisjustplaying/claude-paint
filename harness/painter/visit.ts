@@ -128,26 +128,32 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	mkdirSync(critic.dir, { recursive: true });
 	const started = stamp();
 	const sessions = join(critic.dir, "sessions", started);
+	let timedOut = false;
 	const { code, out, err } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
-		const p = spawn(pi, criticArgs(studio, critic, occasion, sessions), { cwd: studio, stdio: ["ignore", "pipe", "pipe"], detached: true });
-		const kill = () => {
-			try {
-				process.kill(-p.pid!, "SIGTERM");
-			} catch {
-				p.kill("SIGTERM");
-			}
+		const p = spawn(process.execPath, [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
+			{ cwd: studio, stdio: ["pipe", "pipe", "pipe"], detached: true });
+		const kill = () => p.stdin.end();
+		const timeout = setTimeout(() => {
+			timedOut = true;
+			kill();
+		}, 20 * 60_000);
+		const cleanup = () => {
+			clearTimeout(timeout);
+			signal?.removeEventListener("abort", kill);
 		};
 		signal?.addEventListener("abort", kill, { once: true });
+		p.stdin.on("error", () => {});
 		let out = "";
 		let err = "";
 		p.stdout.on("data", (d) => (out += d));
 		p.stderr.on("data", (d) => (err += d));
-		p.on("error", (e) => (signal?.removeEventListener("abort", kill), fail(e)));
-		p.on("close", (code) => (signal?.removeEventListener("abort", kill), done({ code, out, err })));
+		p.on("error", (e) => (cleanup(), fail(e)));
+		p.on("close", (code) => (cleanup(), done({ code, out, err })));
 	});
 	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: exit ${code}, ${out.trim().length} characters\n${err}`);
 	if (signal?.aborted) throw new Error("Operation aborted");
+	if (timedOut) throw new Error("critic timed out after 20 minutes and was stopped");
 	const reply = (code === 0 ? sessionReply(sessions) : undefined) ?? out.trim();
 	if (code !== 0 || !reply) throw new Error(`the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}`);
 	const notes = `${HEADER[occasion]}\n\n${reply}\n`;

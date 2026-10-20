@@ -30,6 +30,87 @@ impl Drop for Temp {
     }
 }
 
+fn finish(checkpoint: &str, out: &str, source: &str) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["finish", checkpoint, out, "--log", source, "--no-varnish", "--no-cracks"])
+        .env("RAYON_NUM_THREADS", "2")
+        .output().unwrap()
+}
+
+#[test]
+fn finishing_refuses_source_and_checkpoint_output_aliases() {
+    use std::os::unix::fs::symlink;
+    let temp = Temp::new("finish-aliases");
+    let source = temp.source("painting.lua", false);
+    let checkpoint = temp.file("live.ckpt");
+    let out = temp.file("out.png");
+    let result = run(&source, &out, &checkpoint, &[]);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    std::fs::remove_file(&out).unwrap();
+    for victim in [&source, &checkpoint] {
+        for hard_link in [false, true] {
+            let original = std::fs::read(victim).unwrap();
+            if hard_link { std::fs::hard_link(victim, &out).unwrap(); }
+            else { symlink(victim, &out).unwrap(); }
+            let result = finish(&checkpoint, &out, &source);
+            assert_eq!(std::fs::read(victim).unwrap(), original, "finish changed {victim}");
+            assert!(!result.status.success());
+            assert!(String::from_utf8_lossy(&result.stderr).contains("must differ"));
+            std::fs::remove_file(&out).unwrap();
+        }
+    }
+    let result = finish(&checkpoint, &out, &source);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(std::fs::read(&out).unwrap().starts_with(b"\x89PNG"));
+}
+
+#[test]
+fn finishing_wrapper_preserves_sources_for_part_and_final_output_aliases() {
+    use std::os::unix::fs::symlink;
+    let temp = Temp::new("finish-wrapper");
+    let scripts = temp.0.join("scripts");
+    std::fs::create_dir_all(&scripts).unwrap();
+    std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/finish_painting"), scripts.join("finish_painting")).unwrap();
+    std::fs::write(scripts.join("replay_easel"), format!("#!/usr/bin/env bash\nprintf '%s\\n' '{}'\n", env!("CARGO_BIN_EXE_easel"))).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(scripts.join("replay_easel"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let logs = temp.0.join("studio/paintings/lua");
+    std::fs::create_dir_all(&logs).unwrap();
+    let source = temp.source("studio/paintings/lua/painting.lua", false);
+    let original = std::fs::read(&source).unwrap();
+    let checkpoint = temp.file("studio/out/easel/painting/live.ckpt");
+    let out = temp.file("out.png");
+    let result = run(&source, &out, &checkpoint, &[]);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    std::fs::remove_file(&out).unwrap();
+    let saved = std::fs::read(&checkpoint).unwrap();
+    let invoke = || Command::new("bash").arg(scripts.join("finish_painting"))
+        .args([&source, &out, "--no-varnish", "--no-cracks"])
+        .env("RAYON_NUM_THREADS", "2").env_remove("EASEL_WIDTH").output().unwrap();
+    for victim in [&source, &checkpoint] {
+        for destination in [&out, &temp.file("out.lua")] {
+            for hard_link in [false, true] {
+                if hard_link { std::fs::hard_link(victim, destination).unwrap(); }
+                else { symlink(victim, destination).unwrap(); }
+                let result = invoke();
+                assert_eq!(std::fs::read(&source).unwrap(), original);
+                assert_eq!(std::fs::read(&checkpoint).unwrap(), saved);
+                assert!(!result.status.success());
+                std::fs::remove_file(destination).unwrap();
+                assert!(!Path::new(&out).exists());
+                assert!(!temp.0.join("out.lua").exists());
+            }
+        }
+    }
+    std::fs::hard_link(&source, temp.0.join("out.lua.part")).unwrap();
+    let result = invoke();
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_eq!(std::fs::read(temp.0.join("out.lua.part")).unwrap(), original);
+    assert_eq!(std::fs::read(temp.0.join("out.lua")).unwrap(), original);
+    assert!(std::fs::read(&out).unwrap().starts_with(b"\x89PNG"));
+}
+
 fn run(source: &str, out: &str, checkpoint: &str, extra: &[String]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_easel")).env_remove("EASEL_WIDTH")
         .args(["run", source, "--width", "32", "--out", out, "--checkpoint-out", checkpoint])

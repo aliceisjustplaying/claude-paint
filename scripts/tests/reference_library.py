@@ -140,17 +140,23 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("particular detail", brief)
 
     def test_crash_limit_exits_nonzero_and_writes_no_painted_marker(self):
-        prep = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
-        (self.studio / "BRIEF.md").unlink()
-        (self.studio / "bin/box").write_text("friedrich")
-        (self.studio / "paintings/lua").mkdir(parents=True)
-        (self.studio / "notes/journal.md").write_text("")
         house = self.root / "house-r41"
         house.mkdir()
         for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "studio_notes.md"):
             shutil.copy(REPO / "notes/round29/runner" / name, house / name)
         for name in ("brief_template.md", "r21_chains.py"):
             shutil.copy(REPO / "scripts/tests/fixtures/r41" / name, house / name)
+        self.assert_crash_limit(house)
+
+    def test_round29_prepared_entrypoint_exits_nonzero_and_writes_no_painted_marker(self):
+        self.assert_crash_limit(REPO / "notes/round29/runner")
+
+    def assert_crash_limit(self, house):
+        prep = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
+        (self.studio / "BRIEF.md").unlink()
+        (self.studio / "bin/box").write_text("friedrich")
+        (self.studio / "paintings/lua").mkdir(parents=True)
+        (self.studio / "notes/journal.md").write_text("")
         runner = self.root / "runner"
         run = self.root / "prepared-run"
         prep["prepare"](self.studio, house, runner, house / "studio_notes.md", run, die_roll=False)

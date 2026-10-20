@@ -569,6 +569,7 @@ async function poll() {
           renderHeader(); if ($('picker').hidden) renderPicker();
         } else {
         const a = await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json` : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`, STATIC ? {cache: 'no-cache'} : {});
+        if (!a.ok) throw Error('live data unavailable');
         const v = STATIC && a.ok && [a.headers.get('etag'), a.headers.get('last-modified')].join();
         if (v && v !== ',' && v === staticV && g === gen && epoch !== null) { lastStatic = Date.now(); return; }
         r = await a.json(); if (g === gen) staticV = v;

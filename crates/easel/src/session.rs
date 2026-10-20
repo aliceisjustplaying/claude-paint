@@ -37,6 +37,9 @@ pub const TILES_MARK: &str = "--@ work-tiles";
 /// only from within their own width (`paint::Outline::body`): every new
 /// painting. A log without it replays its limbs joined to the spine.
 pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
+/// Marks a painting whose `b:reload` refuses a nonfinite amount, as `b:load`
+/// does: every new painting. A log without it replays its NaN reload.
+pub const RELOAD_FINITE_MARK: &str = "--@ reload-finite";
 pub const CARRIED_PAINT_MARK: &str = "--@ palette-carried-paint";
 /// A log's head line: its `glaze` and `scumble` passes lay a thin film,
 /// their coverage the share of the mask it reaches
@@ -632,6 +635,9 @@ impl Session {
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
+        }
+        if self.st.borrow().tubes.reload_finite {
+            let _ = writeln!(s, "{RELOAD_FINITE_MARK}");
         }
         if self.st.borrow().tubes.blend_feather {
             let _ = writeln!(s, "{BLEND_FEATHER_MARK}");
@@ -1372,6 +1378,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.engine = paint::REACH_END;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
+        b.reload_finite = true;
         b.carried_paint = true;
         b.glaze_film = true;
         b.liquid_film_levels = true;
@@ -1427,6 +1434,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.knife_skim = knife_skim;
     b.carried_paint = head(CARRIED_PAINT_MARK);
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
+    b.reload_finite = head(RELOAD_FINITE_MARK);
     b.glaze_film = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == GLAZE_FILM_MARK);
     b.liquid_film_levels = head(LIQUID_FILM_LEVELS_MARK);
     b.sealed_drawing_guide = head(SEALED_DRAWING_GUIDE_MARK);

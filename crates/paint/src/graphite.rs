@@ -687,6 +687,15 @@ impl Canvas {
         for (k, g) in d.guide.iter_mut().enumerate() {
             let mv = m.data[k].min(1.0);
             if mv > 0.0 && *g > 0.0 && !sheet.is_some_and(|s| s.covers_whole_pixel(f, k)) {
+                if self.sealed_drawing_guide {
+                    let (x, y) = (k % f.full_w, k / f.full_w);
+                    if x >= f.x0 && x < f.x0 + f.w && y >= f.y0 && y < f.y0 + f.h {
+                        let i = (y - f.y0) * f.w + x - f.x0;
+                        if self.film[i] > d.cells[i].film.max(0.0) + 1e-4 || self.wet.vol[i] > 1e-5 {
+                            continue;
+                        }
+                    }
+                }
                 let floor = d.guide_floor.as_ref().map_or(0.0, |fl| fl[k]);
                 *g = (*g * (1.0 - (st * mv * GUIDE_LIFT).min(0.97))).max(floor.min(*g));
             }
@@ -840,6 +849,34 @@ mod tests {
         c.draw(&Lead::pencil("2B").unwrap(), &m, 0.0, 9);
         let dark: f32 = c.pixels().iter().map(|q| 0.8 - q[0]).sum();
         (c, dark)
+    }
+
+    #[test]
+    fn sealed_guides_survive_erasing_in_whole_and_windowed_canvases() {
+        for crop in [None, Some(crate::Crop { units: [350.0, 50.0, 850.0, 150.0], margin: 0.0 })] {
+            for enabled in [false, true] {
+                let mut c = Canvas::new_window(400, 1.5, [0.8; 3], crop).with_size_mm(440.0).with_sealed_drawing_guide(enabled);
+                let mark = hand_line(&[(100.0, 100.0), (900.0, 100.0)], &[0.6], false, true, 0.0, 5);
+                c.draw(&Lead::pencil("2B").unwrap(), &mark, 0.0, 9);
+                let f = c.window();
+                for i in 0..c.px.len() {
+                    let x = f.ux(i % f.w);
+                    if x < 500.0 {
+                        c.film[i] += 1.0;
+                    } else if x > 650.0 {
+                        c.wet.vol[i] = 1.0;
+                    }
+                }
+                let before = c.drawing.as_ref().unwrap().guide.clone();
+                c.erase(&Mask::full(c.frame()), 1.0);
+                let after = &c.drawing.as_ref().unwrap().guide;
+                for (i, &g) in before.iter().enumerate() {
+                    let (x, y) = (c.frame().ux(i % f.full_w), c.frame().uy(i / f.full_w));
+                    let sealed = enabled && f.holds(x, y) && (x < 500.0 || x > 650.0);
+                    assert_eq!(after[i], if sealed { g } else { g * (1.0 - GUIDE_LIFT) }, "guide pixel {i}, enabled={enabled}, window={f:?}");
+                }
+            }
+        }
     }
 
     /// Graded hatching presses each stroke by the weight under it: over a

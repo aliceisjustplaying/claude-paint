@@ -503,7 +503,7 @@ $('pklist').onclick = e => {
 };
 $('picker').onkeydown = e => {
   if (e.key === 'Escape') { e.preventDefault(); closePicker(true); return; }
-  const bs = pickable(), i = bs.indexOf(document.activeElement); if (i < 0 && !/^Arrow|^Home$|^End$/.test(e.key)) return;
+  const bs = pickable(), i = bs.indexOf(document.activeElement); if (!bs.length || (i < 0 && !/^Arrow|^Home$|^End$/.test(e.key))) return;
   // arrows move through the painters in reading order; Enter or space picks one
   const k = {ArrowDown:1, ArrowRight:1, ArrowUp:-1, ArrowLeft:-1}[e.key];
   if (k) { e.preventDefault(); bs[Math.max(0, Math.min(bs.length - 1, i + k))].focus(); }

@@ -44,6 +44,7 @@ const STROKE_KEYS: &[&str] = &["force", "alt", "azimuth", "roll", "speed"];
 /// A pencil's pressure 0..1 as a hand's force on a pastel, N (light 0.1–0.5,
 /// normal 0.5–2, heavy 2–5: notes/research/pastel_stick_tribology.md §5).
 const FORCE_AT_FULL: f32 = 5.0;
+const PASTEL_RESAMPLING_ERROR: &str = "pastel path: too much resampling; draw a shorter path or use fewer points";
 
 fn validate_pastel_path(c: &Canvas, pts: &[(f32, f32)], pad_radius_mm: Option<f32>) -> Result<()> {
     if pts.len() > 4096 {
@@ -70,7 +71,26 @@ fn validate_pastel_path(c: &Canvas, pts: &[(f32, f32)], pad_radius_mm: Option<f3
         samples = (total / c.px_mm()).ceil().max(1.0) as f64 + 1.0;
     }
     if !total.is_finite() || !samples.is_finite() || samples > 100_000.0 || (pad_radius_mm.is_none() && samples * pts.len() as f64 > 10_000_000.0) {
-        return err("pastel path: too much resampling; draw a shorter path or use fewer points");
+        return err(PASTEL_RESAMPLING_ERROR);
+    }
+    Ok(())
+}
+
+fn validate_pastel_marks(st: &S, pts: &[(f32, f32)], sketch: Option<(bool, usize)>) -> Result<()> {
+    let s = st.borrow();
+    let c = s.canvas.as_ref().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
+    validate_pastel_path(c, pts, None)?;
+    let samples = 1.0 + pts.windows(2).map(|w| (paint::path::dist(w[0], w[1]) / 0.25).ceil().max(1.0) as f64).sum::<f64>();
+    if !samples.is_finite() || samples > 100_000.0 {
+        return err(PASTEL_RESAMPLING_ERROR);
+    }
+    if let Some((smooth, passes)) = sketch {
+        let dense = graphite::resample(pts, smooth, 0.25);
+        let total = paint::path::arclen(&dense).last().copied().unwrap_or(0.0) as f64;
+        let generated = passes as f64 * (1.1 * total / 0.25 + 2.0 * (1.0 + total / 100.0));
+        if !total.is_finite() || generated > 100_000.0 || samples * generated > 10_000_000.0 {
+            return err(PASTEL_RESAMPLING_ERROR);
+        }
     }
     Ok(())
 }
@@ -269,8 +289,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => seed_of(&st1, o)?,
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
+            let stick = is_stick(&st1, &p)?;
+            if stick {
+                validate_pastel_marks(&st1, &pts, None)?;
+            }
             let m = graphite::hand_line(&pts, &prof, smooth, ruler, tremor, seed);
-            if is_stick(&st1, &p)? {
+            if stick {
                 return stick_marks(lua, &st1, &p, &[m]);
             }
             draw_marks(&st1, &p, &[m], seed)
@@ -292,8 +316,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => seed_of(&st1, o)?,
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
+            let stick = is_stick(&st1, &p)?;
+            if stick {
+                validate_pastel_marks(&st1, &[a[0], b[0]], None)?;
+            }
             let m = graphite::hand_line(&[a[0], b[0]], &prof, false, true, 0.0, seed);
-            if is_stick(&st1, &p)? {
+            if stick {
                 return stick_marks(lua, &st1, &p, &[m]);
             }
             draw_marks(&st1, &p, &[m], seed)
@@ -324,8 +352,12 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 Some(o) => seed_of(&st1, o)?,
                 None => seed_of(&st1, &lua.create_table()?)?,
             };
+            let stick = is_stick(&st1, &p)?;
+            if stick {
+                validate_pastel_marks(&st1, &pts, Some((smooth, passes)))?;
+            }
             let marks = graphite::sketch_marks(&pts, pressure, passes, wander, smooth, tremor, seed);
-            if is_stick(&st1, &p)? {
+            if stick {
                 return stick_marks(lua, &st1, &p, &marks);
             }
             draw_marks(&st1, &p, &marks, seed)
@@ -850,6 +882,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
 // every test here paints from the default box
 #[cfg(test)]
 mod tests {
+    use super::PASTEL_RESAMPLING_ERROR;
     use crate::session::{Session, logged_paper, parse_program};
 
     const W: usize = 160;
@@ -1014,6 +1047,44 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
         let e = s.run("local path = {} for i=1,4096 do path[i]={i*20,100} end p:stroke(path)").unwrap_err();
         assert!(e.contains("too much resampling"), "{e}");
         run(&mut s, "p:stroke({{100,100}, {100,100}}); smudge({{100,100}, {100,100}})");
+    }
+
+    #[test]
+    fn inherited_pastel_paths_are_bounded_before_native_marks() {
+        let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
+        run(&mut s, PAPER);
+        run(&mut s, r#"p = pastel(pile{{"vermilion", 1}})"#);
+        for (call, length) in [
+            ("p:line(path)", 25_000),
+            ("p:line(path, {smooth=false})", 25_000),
+            ("p:line(path, {ruler=true})", 25_000),
+            ("p:rule(path[1], path[2])", 25_000),
+            ("p:sketch(path, {passes=12})", 500),
+            ("p:sketch(path, {passes=12, smooth=false})", 500),
+        ] {
+            let src = format!("local path = {{{{100,100}}, {{{},100}}}}; {call}", 100 + length);
+            let e = s.run(&src).unwrap_err();
+            assert!(e.contains(PASTEL_RESAMPLING_ERROR), "{src}: {e}");
+            for (path, want) in [
+                ("{{100, 100}, {math.huge, 100}}", "finite numbers"),
+                ("{{100, 100}, {-math.huge, 100}}", "finite numbers"),
+                ("{{100, 100}, {0/0, 100}}", "finite numbers"),
+                ("{{100, 100}, {1e100, 100}}", "finite numbers"),
+                ("{{-3e38, 100}, {3e38, 100}}", "too much resampling"),
+            ] {
+                let src = format!("local path = {path}; {call}");
+                let e = s.run(&src).unwrap_err();
+                assert!(e.contains(want), "{src}: {e}");
+            }
+            if !call.contains(":rule") {
+                let src = format!("local path = {{}} for i=1,4097 do path[i]={{100,100}} end {call}");
+                let e = s.run(&src).unwrap_err();
+                assert!(e.contains("at most 4096 points"), "{src}: {e}");
+            }
+            run(&mut s, &format!("local path = {{{{100,100}}, {{120,110}}, {{140,100}}}}; {call}"));
+        }
+        let e = s.run("p:sketch({{1e38,1e38}, {1e38,1e38}}, {smooth=true})").unwrap_err();
+        assert!(e.contains(PASTEL_RESAMPLING_ERROR), "{e}");
     }
 
     /// A stick on paper: it lays, wears (its facets in the Lua heap), the

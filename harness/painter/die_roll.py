@@ -9,20 +9,20 @@ SITTING_ZERO = (
     'Use plain text and put nothing else in the file. Use write_concepts to save the whole file at once. Each save replaces it.'
 )
 RETRY = (
-    "Your brief is in BRIEF.md. notes/concepts.md is missing or didn't parse. Replace it with eight entries as described under Choosing the picture, "
-    'numbered 1 to 8, each with a picture in a sentence or two '
+    "Your brief is in BRIEF.md. notes/concepts.md is missing or didn't parse. Replace it with sixteen entries as described under Choosing the picture, "
+    'numbered 1 to 16, each with a picture in a sentence or two '
     'followed by its own line Estimate: N/100, where N is a whole number from 0 to 100. '
     'Use plain text and put nothing else in the file. Use write_concepts to save the whole file at once. Each save replaces it.'
 )
 
 
 def parse_concepts(text):
-    entries = list(re.finditer(r"(?m)^[ \t]*([1-8])[.)][ \t]+", text))
-    if len(entries) != 8 or [int(m[1]) for m in entries] != list(range(1, 9)) or text[:entries[0].start()].strip():
-        raise ValueError("expected exactly eight entries numbered 1 to 8")
+    entries = list(re.finditer(r"(?m)^[ \t]*(1[0-6]|[1-9])[.)][ \t]+", text))
+    if len(entries) != 16 or [int(m[1]) for m in entries] != list(range(1, 17)) or text[:entries[0].start()].strip():
+        raise ValueError("expected exactly sixteen entries numbered 1 to 16")
     concepts = []
     for i, match in enumerate(entries):
-        body = text[match.end():entries[i + 1].start() if i < 7 else len(text)].strip()
+        body = text[match.end():entries[i + 1].start() if i < 15 else len(text)].strip()
         estimate = re.search(r"(?:^|\n)[ \t]*Estimate: ([0-9]{1,3})/100[ \t]*$", body)
         if not estimate or int(estimate[1]) > 100:
             raise ValueError(f"concept {i + 1}: expected a final Estimate: N/100 line, from 0 to 100")
@@ -34,7 +34,7 @@ def parse_concepts(text):
 
 
 def roll(concepts):
-    dropped = sorted(concepts, key=lambda c: (-c["estimate"], c["number"]))[:2]
+    dropped = sorted(concepts, key=lambda c: (-c["estimate"], c["number"]))[:10]
     remaining = [c for c in concepts if c not in dropped]
     return {"concepts": concepts, "dropped": [c["number"] for c in dropped], "pick": secrets.choice(remaining)}
 

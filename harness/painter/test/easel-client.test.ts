@@ -203,7 +203,7 @@ test("log's find gives the lines that hold the text, numbered as in the file, wi
 	assert.equal(logFind("a\nb", "a", "paintings/lua/scratch.lua"), '1 line of paintings/lua/scratch.lua holds "a"\n1: a\n2- b');
 	assert.equal(logFind(log, "mask", "paintings/lua/painting.lua"), 'no line of paintings/lua/painting.lua holds "mask"');
 	const many = logFind(Array.from({ length: 150 }, (_, i) => `m${i}`).join("\n"), "m", "paintings/lua/painting.lua");
-	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 are shown\)\n1: m0\n/);
+	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 matches are shown with the lines around them\)\n1: m0\n/);
 	assert.match(many, /\n100: m99\n101: m100\n102: m101$/);
 });
 
@@ -288,6 +288,18 @@ test("a tool's opening status keeps to the tool's time limit, and a busy easel i
 		await assert.rejects(atEasel(studio, ["status"], undefined), /isn't answering/);
 		assert.ok(Date.now() - t0 < 5000);
 		assert.deepEqual(calls(studio), ["status"]);
+	} finally {
+		WAIT_MS.other = other;
+	}
+});
+
+test("a probe or a note that times out says how to recover, not to look in the painting's log", async () => {
+	const studio = stubStudio('[ "$1" = probe ] && sleep 30\n[ "$1" = note ] && sleep 30\necho ok');
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		await assert.rejects(atEasel(studio, ["probe", "--at", "1,1"], undefined), /^Error: the easel didn't answer; `probe` changes nothing, so it can be asked again$/);
+		await assert.rejects(atEasel(studio, ["note", "-"], "an entry"), /^Error: the easel didn't answer; the entry may have been added all the same, so read notes\/journal\.md before adding it again$/);
 	} finally {
 		WAIT_MS.other = other;
 	}

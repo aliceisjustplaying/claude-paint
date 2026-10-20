@@ -208,6 +208,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.adaptive_sweep = canvas.adaptive_sweep();
     tubes.glaze_film = canvas.glaze_film();
     tubes.liquid_film_levels = canvas.liquid_film_levels();
+    tubes.sealed_drawing_guide = canvas.sealed_drawing_guide();
     tubes.rag_lift = canvas.rag_lift();
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();

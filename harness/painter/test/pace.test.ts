@@ -1,7 +1,7 @@
 // node --test harness/painter/test/pace.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { requestTokens, retryablePerMinuteQuota, TokenPace } from "../pace.ts";
+import { requestTokens, retryablePerMinuteQuota, TokenPace, tokensPerMinuteFromEnv } from "../pace.ts";
 
 test("requests wait until the last minute's input tokens plus the next fit the budget", () => {
 	const p = new TokenPace(1_000_000);
@@ -48,5 +48,13 @@ test("a request over the whole budget goes at once when the window is empty", ()
 	p.record(2_000_000, 0);
 	assert.equal(p.waitMs(2_000_000, 30_000), 30_000);
 	assert.equal(p.waitMs(2_000_000, 61_000), 0); // the oversized one aged out: no crash
+});
+
+test("PAINTER_INPUT_TPM is unset or a finite positive number of tokens a minute", () => {
+	assert.equal(tokensPerMinuteFromEnv({}), undefined);
+	assert.equal(tokensPerMinuteFromEnv({ PAINTER_INPUT_TPM: "2000000" }), 2_000_000);
+	for (const raw of ["Infinity", "1e400", "0", "-5", "lots"]) {
+		assert.throws(() => tokensPerMinuteFromEnv({ PAINTER_INPUT_TPM: raw }), /want tokens per minute/, raw);
+	}
 });
 

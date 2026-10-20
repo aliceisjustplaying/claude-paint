@@ -74,6 +74,31 @@ class StudioGuideTests(unittest.TestCase):
         self.assertNotIn("`probe`", WATERCOLOR)
         self.assertNotIn("`ask_critic`", WATERCOLOR)
 
+    def test_friedrich_invalid_inputs_leave_studio_unchanged_and_allow_retry(self):
+        prep = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
+        for invalid in ("notes", "guide header", "guide end"):
+            with self.subTest(invalid=invalid):
+                fixture = self.fixture()
+                studio, result = fixture.export(profile="blank")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                (studio / "bin/box").write_text("friedrich\n")
+                guide = studio / "notes/easel_guide.md"
+                valid_guide = guide.read_text()
+                notes = fixture.root / "approved.md"
+                if invalid != "notes":
+                    notes.write_text("Approved fixture notes.\n")
+                    guide.write_text("Malformed guide.\n" if invalid == "guide header" else "| tool | what it does |\n|---|---|\n| `paint` | paint |\n")
+                before = {str(p.relative_to(studio)): p.read_bytes() for p in studio.rglob("*") if p.is_file()}
+                runner = fixture.root / "runner"
+                with self.assertRaises((FileNotFoundError, ValueError)):
+                    prep["prepare"](studio, REPO / "notes/round29/runner", runner, notes, critic=True)
+                self.assertFalse(runner.exists())
+                self.assertEqual({str(p.relative_to(studio)): p.read_bytes() for p in studio.rglob("*") if p.is_file()}, before)
+                notes.write_text("Approved fixture notes.\n")
+                guide.write_text(valid_guide)
+                prep["prepare"](studio, REPO / "notes/round29/runner", runner, notes, critic=True)
+                self.assertTrue((runner / "run-config.json").is_file())
+
     def test_watercolor_export_copies_the_committed_guide_to_both_paths(self):
         fixture = self.fixture()
         revision = fixture.root / "revisions/HEAD"

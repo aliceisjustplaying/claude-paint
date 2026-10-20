@@ -41,7 +41,7 @@ import { buildSummary, CANVAS_VIEW } from "./summary.ts";
 import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
 import { limitsFromEnv, pruneImages } from "./context-images.ts";
-import { requestTokens, retryablePerMinuteQuota, TokenPace } from "./pace.ts";
+import { requestTokens, retryablePerMinuteQuota, TokenPace, tokensPerMinuteFromEnv } from "./pace.ts";
 import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 import { text } from "./easel-client.ts";
 import { CRITIQUE, criticFromEnv, leaveNote, passagesToTakeUp, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
@@ -65,17 +65,20 @@ export default function painter(pi: ExtensionAPI) {
 	onlyOurSystemPrompt(pi);
 
 	const limits = limitsFromEnv();
-	const tpm = process.env.PAINTER_INPUT_TPM ? Number(process.env.PAINTER_INPUT_TPM) : undefined;
-	if (tpm !== undefined && !(tpm > 0)) throw new Error(`PAINTER_INPUT_TPM=${process.env.PAINTER_INPUT_TPM}: want tokens per minute`);
+	const tpm = tokensPerMinuteFromEnv();
 	const limitWait = limitWaitFromEnv();
 	let sittingRecovery = process.env.PAINTER_SITTING_RECOVERY === "1";
 	const passagesFirst = process.env.PAINTER_OPEN_PASSAGES === "1";
 	const critic = criticFromEnv();
+	let sitting = new AbortController();
+	pi.on("before_agent_start", () => { sitting = new AbortController(); });
+	pi.on("agent_settled", () => sitting.abort());
+	pi.on("session_shutdown", () => sitting.abort());
 	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY", "PAINTER_OPEN_PASSAGES", "PAINTER_CRITIC"]) delete process.env[k];
 	const studio = process.cwd();
 	const read = createReadToolDefinition(studio);
 	const views = new Map<string, unknown[]>();
-	/** The image blocks of a canvas view in the studio (read once). */
+	/** The image blocks of a canvas view in the studio (successful reads cached). */
 	async function viewImages(path: string, ctx: Parameters<typeof read.execute>[4]): Promise<unknown[]> {
 		let imgs = views.get(path);
 		if (!imgs) {
@@ -85,10 +88,11 @@ export default function painter(pi: ExtensionAPI) {
 			} catch {
 				imgs = [];
 			}
-			views.set(path, imgs);
+			if (imgs.length) views.set(path, imgs);
 		}
 		return imgs;
 	}
+	const unavailableView = (path: string) => `Canvas image unavailable: the summary names a saved canvas PNG at ${path}, but it could not be attached, so that image has not been shown.`;
 
 	// a later sitting opens with what a compaction summary holds, and the canvas as it is
 	pi.on("input", async (event, ctx) => {
@@ -97,9 +101,10 @@ export default function painter(pi: ExtensionAPI) {
 		const { summary } = await buildSummary(studio, [], undefined, "");
 		const view = CANVAS_VIEW.exec(summary)?.[1];
 		const images = view ? await viewImages(view, ctx) : [];
-		const text = passagesFirst
+		let text = passagesFirst
 			? `${passagesToTakeUp(studio, critic !== undefined)}\n\n${event.text}\n\n${summary}`
 			: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
+		if (view && !images.length) text += `\n\n${unavailableView(view)}`;
 		return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
 	});
 	registerInbox(pi);
@@ -118,9 +123,9 @@ export default function painter(pi: ExtensionAPI) {
 			const summary = (m as { role?: string; summary?: string }).role === "compactionSummary" ? (m as { summary?: string }).summary : undefined;
 			const view = summary ? CANVAS_VIEW.exec(summary)?.[1] : undefined;
 			const images = view ? await viewImages(view, ctx) : [];
-			if (images.length) {
+			if (view) {
 				withViews.push({ role: "custom", customType: "painter-canvas-view", display: false, timestamp: (m as { timestamp?: number }).timestamp ?? 0,
-					content: [{ type: "text", text: `The canvas as it was when this was written (${view}):` }, ...images] } as never);
+					content: [{ type: "text", text: images.length ? `The canvas as it was when this was written (${view}):` : unavailableView(view) }, ...images] } as never);
 				shown = true;
 			}
 		}
@@ -160,9 +165,9 @@ export default function painter(pi: ExtensionAPI) {
 	pi.on("agent_before_settle", async (event, ctx) => {
 		if (!pendingLimit || !limited) {
 			// the end of the sitting: the critic's visit (not after a usage limit, which it would meet too)
-			if (critic && !limited) {
+			if (critic) {
 				try {
-					await visit(studio, critic, "sitting");
+					await visit(studio, critic, "sitting", ctx.signal ? AbortSignal.any([sitting.signal, ctx.signal]) : sitting.signal);
 				} catch (e) {
 					console.error(`painter: ${(e as Error).message}`);
 				}
@@ -206,7 +211,7 @@ export default function painter(pi: ExtensionAPI) {
 				parameters: Type.Object({ note: Type.Optional(Type.String()) }),
 				async execute(_id, p, signal) {
 					if (p.note?.trim()) leaveNote(studio, critic, p.note);
-					return text(await visit(studio, critic, "asked", signal));
+					return text(await visit(studio, critic, "asked", signal ? AbortSignal.any([sitting.signal, signal]) : sitting.signal));
 				},
 			}),
 			executionMode: "sequential",

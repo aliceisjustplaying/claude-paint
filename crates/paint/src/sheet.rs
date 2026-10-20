@@ -50,11 +50,9 @@ use crate::graphite::{cover, uncover};
 use crate::mask::Mask;
 use crate::pastel::PARTICLE_UM;
 
-fn coverage_after_pastel_removal(coverage: f32, before: f32, after: f32) -> f32 {
-    let clear = (-before / PARTICLE_UM).exp();
-    let other = ((coverage - (1.0 - clear)) / clear.max(1e-6)).clamp(0.0, coverage);
-    let kept = 1.0 - (-after / PARTICLE_UM).exp();
-    (other + (1.0 - other) * kept).clamp(0.0, coverage)
+fn coverage_after_pastel_removal(coverage: f32, non_pastel: f32, before: f32, after: f32) -> f32 {
+    let cov = |v: f32| 1.0 - (-v / PARTICLE_UM).exp();
+    (non_pastel + (coverage - non_pastel).max(0.0) * cov(after) / cov(before).max(1e-6)).clamp(0.0, coverage)
 }
 
 /// A sheet of paper laid on the picture.
@@ -438,7 +436,7 @@ impl Canvas {
             return 0.0;
         }
         c.loose -= ex;
-        let a1 = coverage_after_pastel_removal(c.a, v, keep).max(c.floor.min(c.a));
+        let a1 = coverage_after_pastel_removal(c.a, c.non_pastel, v, keep).max(c.floor.min(c.a));
         let under = uncover(*px, c.a, c.r);
         c.a = a1;
         *px = cover(under, c.a, c.r);
@@ -549,7 +547,9 @@ impl Canvas {
                         // cut fibers take what is bound to them too: freed,
                         // it comes off with the loose (its coverage with it)
                         let cut = (cl.bound - keep).max(0.0);
-                        cl.floor = coverage_after_pastel_removal(cl.floor, cl.bound, cl.bound - cut);
+                        if cut > 0.0 {
+                            cl.floor = coverage_after_pastel_removal(cl.floor, cl.non_pastel_floor, cl.bound, cl.bound - cut);
+                        }
                         cl.bound -= cut;
                         cl.loose += cut;
                     }
@@ -1130,7 +1130,8 @@ mod tests {
             for keep in [bound + 4.0, bound] {
                 let mut cell = crate::graphite::Cell {
                     a: other + (1.0 - other) * cov(bound + 8.0), r: [0.1; 3],
-                    lift: 0.55, floor, film: 0.0, loose: 8.0, bound,
+                    lift: 0.55, floor, film: 0.0, loose: 8.0, bound, non_pastel: other,
+                    non_pastel_floor: if fixed { other } else { 0.0 },
                 };
                 let mut px = cover([0.55; 3], cell.a, cell.r);
                 let removed = Canvas::take_loose(&mut cell, &mut px, keep);
@@ -1161,15 +1162,34 @@ mod tests {
         let mut rng = crate::rng::Rng::new(7);
         let px_um2 = (c.px_mm() * 1000.0).powi(2);
         crate::pastel::lay_crumbs(&mut d, &c.film, &mut c.px, &bed, bed.len() as f32 * 8.0, [0.02; 3], &mut rng, 300.0, px_um2);
+        d.sticks = true;
         c.drawing = Some(d);
+        let mut checkpoint = Vec::new();
+        c.write_state(&mut checkpoint, "").unwrap();
+        let (mut c, _) = Canvas::read_state(&mut std::io::Cursor::new(checkpoint)).unwrap();
         let mut held = 0.0;
         let (removed, _) = c.dust_pastel(30.0, 2.0, &[(0.0, 500.0), (1000.0, 500.0)], &mut held, 1e9);
         assert!(removed > 0.0);
         for (cell, floor) in c.drawing.as_ref().unwrap().cells.iter().zip(floors) {
             assert_eq!(cell.floor, floor);
+            assert_eq!(cell.non_pastel, floor);
+            assert_eq!(cell.non_pastel_floor, floor);
             assert!(cell.a >= floor);
             assert_eq!(cell.bound, 0.0);
         }
+    }
+
+    #[test]
+    fn removing_all_smudged_pastel_leaves_no_phantom_coverage() {
+        let mut cell = crate::graphite::Cell {
+            a: 1.0 - (-8.0f32 / (PARTICLE_UM / 3.0)).exp(), r: [0.1; 3],
+            lift: 0.55, loose: 8.0, ..crate::graphite::Cell::default()
+        };
+        let mut px = cover([0.55; 3], cell.a, cell.r);
+        Canvas::take_loose(&mut cell, &mut px, 0.0);
+        assert_eq!(cell.a, 0.0);
+        assert_eq!(cell.loose, 0.0);
+        for value in px { assert!((value - 0.55).abs() < 1e-6); }
     }
 
     fn pose(force: f32, alt_deg: f32) -> Pose {
@@ -1244,13 +1264,13 @@ mod tests {
     #[test]
     fn a_sheet_keeps_fixative_off_the_drawing_guide() {
         for crop in [None, Some(Crop { units: [200.0, 200.0, 800.0, 800.0], margin: 0.0 })] {
-            let (base, covered) = graphite_and_sheet_mask(crop);
-            let all = Mask::full(base.frame());
-            for mask in [None, Some(Mask::from_fn(base.frame(), |x, _| if x < 650.0 { 1.0 } else { 0.0 }))] {
-                let mut expected = base.clone();
+            let (non_pastel, covered) = graphite_and_sheet_mask(crop);
+            let all = Mask::full(non_pastel.frame());
+            for mask in [None, Some(Mask::from_fn(non_pastel.frame(), |x, _| if x < 650.0 { 1.0 } else { 0.0 }))] {
+                let mut expected = non_pastel.clone();
                 let open = mask.clone().unwrap_or_else(|| all.clone()).mul(&covered.clone().invert());
                 expected.fix_drawing(Some(&open));
-                let mut c = base.clone();
+                let mut c = non_pastel.clone();
                 c.lay_sheet(&covered, 150.0, 8.0, [0.85; 3]).unwrap();
                 c.fix_drawing(mask.as_ref());
                 assert_eq!(

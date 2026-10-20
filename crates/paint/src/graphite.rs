@@ -154,6 +154,8 @@ pub(crate) struct Cell {
     /// lies, packed): loose, and bound by fixative (`crate::pastel`).
     pub(crate) loose: f32,
     pub(crate) bound: f32,
+    pub(crate) non_pastel: f32,
+    pub(crate) non_pastel_floor: f32,
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -283,8 +285,8 @@ pub fn hand_line(pts: &[(f32, f32)], profile: &[f32], smooth: bool, ruler: bool,
 /// broken into more pieces the longer the path (about one per 120-400
 /// units); the first pass at 0.75 of `pressure`.
 pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f32, smooth: bool, tremor: f32, seed: u64) -> Vec<Mark> {
-    let base = resample(pts, smooth, 0.25);
-    let s = arclen(&base);
+    let non_pastel = resample(pts, smooth, 0.25);
+    let s = arclen(&non_pastel);
     let total = s.last().copied().unwrap_or(0.0);
     if total <= 0.0 {
         return Vec::new();
@@ -310,12 +312,12 @@ pub fn sketch_marks(pts: &[(f32, f32)], pressure: f32, passes: usize, wander: f3
             if hi - lo < 0.5 {
                 continue;
             }
-            // points along the base path (extended straight past its ends)
+            // points along the non_pastel path (extended straight past its ends)
             let n = ((hi - lo) / 0.25).ceil() as usize + 1;
             let mut p = Vec::with_capacity(n);
             for j in 0..n {
                 let a = lo + (hi - lo) * j as f32 / (n - 1) as f32;
-                let (pt, nm) = point_at(&base, &s, a);
+                let (pt, nm) = point_at(&non_pastel, &s, a);
                 let d = side + amp * (2.0 * vnoise(a / 45.0, k as f32 * 3.1, ps) - 1.0) + tremor * (vnoise(a / 4.0, 1.7, ps + 1) - 0.5);
                 p.push((pt.0 + nm.0 * d, pt.1 + nm.1 * d));
             }
@@ -459,40 +461,43 @@ impl Drawing {
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
-    /// and chalk only, 2 with a pastel stick's pastel (`sticks`).
+    /// and chalk only, 3 with pastel and the non-pastel coverage (`sticks`).
     pub(crate) fn layout(&self) -> u64 {
-        if self.sticks { 2 } else { 1 }
+        if self.sticks { 3 } else { 1 }
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
-    /// stick pastel, layout 2: a, r, g, b, lift, floor, film, loose, bound),
+    /// stick pastel, layout 3: a, r, g, b, lift, floor, film, loose, bound,
+    /// non_pastel and non_pastel_floor),
     /// the guide (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
         let sticks = self.sticks;
         let cells = self.cells.iter().flat_map(move |c| {
-            let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0] };
-            q.into_iter().take(if sticks { 9 } else { 5 })
+            let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
+            q.into_iter().take(if sticks { 11 } else { 5 })
         });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
     }
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
-    /// pixels, `whole` canvas pixels, `layout` the serialized layout (1 or
-    /// 2, `layout`). None if the data is inconsistent.
+    /// pixels, `whole` canvas pixels, `layout` the serialized layout (1, 2
+    /// or 3; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
     pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
         let sticks = layout >= 2;
-        let cells: Vec<Cell> = if sticks {
-            get(n * 9)?.as_chunks::<9>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8] }).collect()
+        let cells: Vec<Cell> = if layout == 3 {
+            get(n * 11)?.as_chunks::<11>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10] }).collect()
+        } else if sticks {
+            get(n * 9)?.as_chunks::<9>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: if q[7] == 0.0 && q[8] == 0.0 { q[0] } else if q[8] == 0.0 { q[5] } else { 0.0 }, non_pastel_floor: if q[8] == 0.0 { q[5] } else { 0.0 } }).collect()
         } else {
-            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], ..Cell::default() }).collect()
+            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], non_pastel: q[0], non_pastel_floor: q[3], ..Cell::default() }).collect()
         };
         let guide = get(whole)?;
         let has_floor = get(1)?[0];
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && c.film.is_finite() && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks }))
     }
@@ -657,6 +662,7 @@ impl Canvas {
                 c.r = c.r.map(|r| (c.a * r + da * lead.flake) / a1);
                 c.lift = (c.a * c.lift + da * lift) / a1;
                 c.a = a1;
+                c.non_pastel = (c.non_pastel + da).min(a1);
                 px[i] = cover(under, c.a, c.r);
             }
         }
@@ -711,6 +717,7 @@ impl Canvas {
                 c.loose *= if removable > 0.0 { (a1 - c.floor).max(0.0) / removable } else { 0.0 };
             }
             c.a = a1;
+            c.non_pastel = (c.non_pastel * (1.0 - take)).max(c.non_pastel_floor.min(c.non_pastel));
             self.px[i] = cover(under, c.a, c.r);
         }
     }
@@ -728,6 +735,7 @@ impl Canvas {
         for (i, c) in d.cells.iter_mut().enumerate() {
             if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) && !sheet.is_some_and(|s| s.over[i]) {
                 c.floor = c.a;
+                c.non_pastel_floor = c.non_pastel;
             }
         }
         let fl = d.guide_floor.get_or_insert_with(|| vec![0.0; d.guide.len()]);
@@ -857,6 +865,19 @@ mod tests {
 
     /// A drawing in graphite alone keeps its old serialized layout (five
     /// numbers a cell, flag 1), so older states and digests are unchanged.
+    #[test]
+    fn pastel_legacy_cells_are_still_readable() {
+        for (loose, bound) in [(0.0, 0.0), (8.0, 0.0), (8.0, 4.0)] {
+            let mut values = [0.8, 0.1, 0.2, 0.3, 0.55, 0.4, 0.0, loose, bound, 0.0].into_iter();
+            let d = Drawing::from_f32s::<()>(1, 0, 2, |n| Ok(values.by_ref().take(n).collect())).unwrap().unwrap();
+            assert_eq!(d.layout(), 3);
+            assert_eq!(d.cells[0].loose, loose);
+            assert_eq!(d.cells[0].bound, bound);
+            assert_eq!(d.cells[0].floor, 0.4);
+            assert!(values.next().is_none());
+        }
+    }
+
     #[test]
     fn graphite_drawing_keeps_its_layout() {
         let (c, _) = laid(&[0.6]);

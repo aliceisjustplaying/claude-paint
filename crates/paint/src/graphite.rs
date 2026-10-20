@@ -20,8 +20,13 @@
 //!   eraser no longer lifts it; once paint has gone over it, it is sealed in
 //!   the picture.
 //!
+//! A pastel stick (`crate::pastel`) lays its colored particles into the
+//! same drawing: a cell's reflectance is RGB (gray for graphite and chalk,
+//! the same arithmetic per channel) and it keeps the pastel in the tooth.
+//!
 //! The bookkeeping (`Drawing`) exists only on a canvas that has been drawn
-//! on, so paintings without a drawing are unchanged.
+//! on, so paintings without a drawing are unchanged; a drawing with no
+//! stick pastel in it keeps its old layout (`to_f32s`) bit for bit.
 
 use crate::canvas::Canvas;
 use crate::color::Rgb;
@@ -132,18 +137,23 @@ impl Lead {
 
 /// One pixel of the drawing's bookkeeping.
 #[derive(Clone, Copy, Default)]
-struct Cell {
+pub(crate) struct Cell {
     /// Fraction of the pixel covered.
-    a: f32,
-    /// Mean reflectance of the flakes.
-    r: f32,
+    pub(crate) a: f32,
+    /// Mean reflectance of the flakes (linear RGB; gray for graphite and
+    /// chalk).
+    pub(crate) r: Rgb,
     /// How readily an eraser lifts it (coverage-weighted).
-    lift: f32,
+    pub(crate) lift: f32,
     /// Fixed coverage: the eraser can't lift below this.
-    floor: f32,
+    pub(crate) floor: f32,
     /// The canvas's film (coats) when this was drawn: once paint has gone
     /// over it the film is thicker, and the drawing is sealed.
-    film: f32,
+    pub(crate) film: f32,
+    /// A pastel stick's pastel in the tooth, µm (volume per area as it
+    /// lies, packed): loose, and bound by fixative (`crate::pastel`).
+    pub(crate) loose: f32,
+    pub(crate) bound: f32,
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -151,7 +161,7 @@ struct Cell {
 #[derive(Clone)]
 pub struct Drawing {
     /// The deposit, per pixel of the window (the canvas's optical buffers).
-    cells: Vec<Cell>,
+    pub(crate) cells: Vec<Cell>,
     /// The drawn lines as geometry, per pixel of the whole canvas (not just
     /// the window of a crop render): the coverage each line would lay on a
     /// perfectly smooth ground (the lead's rate and cap at the pressure),
@@ -160,6 +170,10 @@ pub struct Drawing {
     guide: Vec<f32>,
     /// What fixative bound of the guide: the eraser can't lift below this.
     guide_floor: Option<Vec<f32>>,
+    /// Whether a pastel stick's pastel has landed in the tooth (or the
+    /// finger has moved some): the cells are then serialized with their
+    /// color and the pastel in the tooth (`to_f32s`).
+    pub(crate) sticks: bool,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -334,13 +348,22 @@ fn point_at(p: &[(f32, f32)], s: &[f32], a: f32) -> ((f32, f32), (f32, f32)) {
 /// `angle`, `spacing` units apart, each at most `length` units, bowed by up
 /// to 6% of its length, heavy where it starts and lifting off at the end.
 pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, seed: u64) -> Vec<Mark> {
+    hatch_marks_graded(m, angle, spacing, length, pressure, false, seed)
+}
+
+/// `hatch_marks`, and with `graded` the mask is a weight, not a shape:
+/// strokes run wherever it is above a trace (0.04), each pressed at every
+/// point in proportion to the mask's value there, so a hatched passage
+/// fades into the next instead of stopping at a line.
+pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f32, graded: bool, seed: u64) -> Vec<Mark> {
+    let level = if graded { 0.04 } else { 0.5 };
     let f = m.f;
     let (w, h) = (f.width(), f.height());
     let (ca, sa) = (angle.cos(), angle.sin());
     // bounding box of the mask (units)
     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for (i, &v) in m.data.iter().enumerate() {
-        if v > 0.5 {
+        if v > level {
             let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
             x0 = x0.min(x);
             y0 = y0.min(y);
@@ -367,7 +390,7 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
     let step = (0.5 / f.scale).max(0.2);
     let inside = |u: f32, v: f32| {
         let (x, y) = (u * ca - v * sa, u * sa + v * ca);
-        x >= 0.0 && y >= 0.0 && x < w && y < h && m.sample(x, y) > 0.5
+        x >= 0.0 && y >= 0.0 && x < w && y < h && m.sample(x, y) > level
     };
     let mut out = Vec::new();
     let mut v = v0 + rng.range(0.0, spacing);
@@ -411,7 +434,18 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
                     .collect();
                 let p = pressure * rng.range(0.85, 1.12);
                 let s = arclen(&pts);
-                out.push(Mark { pressure: pressure_along(&[p * 0.8, p, p * 0.8, p * 0.25], &s), pts });
+                let mut pr = pressure_along(&[p * 0.8, p, p * 0.8, p * 0.25], &s);
+                if graded {
+                    // pressed as hard as the weight there asks
+                    for (q, pt) in pr.iter_mut().zip(&pts) {
+                        let (x, y) = (pt.0.clamp(0.0, w - 1e-3), pt.1.clamp(0.0, h - 1e-3));
+                        *q *= m.sample(x, y).clamp(0.0, 1.0);
+                    }
+                    if pr.iter().cloned().fold(0.0, f32::max) < 0.03 {
+                        continue;
+                    }
+                }
+                out.push(Mark { pressure: pr, pts });
             }
         }
         v += spacing;
@@ -421,30 +455,46 @@ pub fn hatch_marks(m: &Mask, angle: f32, spacing: f32, length: f32, pressure: f3
 
 impl Drawing {
     fn new(n: usize, whole: usize) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None }
+        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false }
     }
 
-    /// Serialized as f32s: the window's cells (a, r, lift, floor, film), the
-    /// guide (whole canvas), then 0 or 1 and the guide's floor.
+    /// The serialized layout (the checkpoint's drawing flag): 1 graphite
+    /// and chalk only, 2 with a pastel stick's pastel (`sticks`).
+    pub(crate) fn layout(&self) -> u64 {
+        if self.sticks { 2 } else { 1 }
+    }
+
+    /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
+    /// stick pastel, layout 2: a, r, g, b, lift, floor, film, loose, bound),
+    /// the guide (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
-        let cells = self.cells.iter().flat_map(|c| [c.a, c.r, c.lift, c.floor, c.film]);
+        let sticks = self.sticks;
+        let cells = self.cells.iter().flat_map(move |c| {
+            let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0] };
+            q.into_iter().take(if sticks { 9 } else { 5 })
+        });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
     }
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
-    /// pixels, `whole` canvas pixels. None if the data is inconsistent.
-    pub(crate) fn from_f32s<E>(n: usize, whole: usize, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
-        let raw = get(n * 5)?;
-        let cells: Vec<Cell> = raw.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: q[1], lift: q[2], floor: q[3], film: q[4] }).collect();
+    /// pixels, `whole` canvas pixels, `layout` the serialized layout (1 or
+    /// 2, `layout`). None if the data is inconsistent.
+    pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
+        let sticks = layout >= 2;
+        let cells: Vec<Cell> = if sticks {
+            get(n * 9)?.as_chunks::<9>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8] }).collect()
+        } else {
+            get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], ..Cell::default() }).collect()
+        };
         let guide = get(whole)?;
         let has_floor = get(1)?[0];
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && ok(c.r) && ok(c.lift) && ok(c.floor) && c.film.is_finite())
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && c.film.is_finite() && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor }))
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks }))
     }
 }
 
@@ -496,7 +546,7 @@ impl Canvas {
         self.drawing.is_some()
     }
 
-    fn drawing_mut(&mut self) -> &mut Drawing {
+    pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {
         let (n, whole) = (self.px.len(), self.f.full_w * self.f.full_h);
         self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n, whole)))
     }
@@ -604,7 +654,7 @@ impl Canvas {
                 }
                 let a1 = c.a + da;
                 let under = uncover(px[i], c.a, c.r);
-                c.r = (c.a * c.r + da * lead.flake) / a1;
+                c.r = c.r.map(|r| (c.a * r + da * lead.flake) / a1);
                 c.lift = (c.a * c.lift + da * lift) / a1;
                 c.a = a1;
                 px[i] = cover(under, c.a, c.r);
@@ -618,27 +668,30 @@ impl Canvas {
     /// A kneaded eraser pressed and rolled over `m` (coverage 0..1): lifts
     /// loose drawing (not fixed, not painted over) by up to `strength` 0..1
     /// of what is there, better from the tops of the tooth than from the
-    /// hollows, and never quite all of it. It lifts the guide too (see
-    /// `drawing_guide`), wherever it goes.
+    /// hollows, and never quite all of it. Loose stick pastel leaves the
+    /// tooth with what it lifts, so an erased passage takes pastel again. It
+    /// doesn't reach under a sheet laid on the picture. It lifts the guide
+    /// too (see `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
         self.check_mask(m);
+        let f = self.f;
         let Some(d) = self.drawing.as_mut() else { return };
+        let sheet = self.sheet.as_ref();
         let st = strength.clamp(0.0, 1.0);
         for (k, g) in d.guide.iter_mut().enumerate() {
             let mv = m.data[k].min(1.0);
-            if mv > 0.0 && *g > 0.0 {
+            if mv > 0.0 && *g > 0.0 && !sheet.is_some_and(|s| s.covers_whole_pixel(f, k)) {
                 let floor = d.guide_floor.as_ref().map_or(0.0, |fl| fl[k]);
                 *g = (*g * (1.0 - (st * mv * GUIDE_LIFT).min(0.97))).max(floor.min(*g));
             }
         }
-        let f = self.f;
         let rt = (0.35 / (self.mm_per_unit / f.scale)).round().max(1.0) as isize;
         let (w, h) = (f.w as isize, f.h as isize);
         let height = &self.height;
         for i in 0..self.px.len() {
             let mv = m.data[f.whole_index(i)];
             let c = &mut d.cells[i];
-            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.vol[i] > 1e-5 {
+            if mv <= 0.0 || c.a <= 0.0 || self.film[i] > c.film + 1e-4 || self.wet.vol[i] > 1e-5 || self.sheet.as_ref().is_some_and(|s| s.over[i]) {
                 continue;
             }
             let (x, y) = ((i % f.w) as isize, (i / f.w) as isize);
@@ -653,6 +706,10 @@ impl Canvas {
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
             let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
             let under = uncover(self.px[i], c.a, c.r);
+            if c.loose > 0.0 && take > 0.0 {
+                let removable = c.a - c.floor;
+                c.loose *= if removable > 0.0 { (a1 - c.floor).max(0.0) / removable } else { 0.0 };
+            }
             c.a = a1;
             self.px[i] = cover(under, c.a, c.r);
         }
@@ -666,14 +723,16 @@ impl Canvas {
         }
         let f = self.f;
         let Some(d) = self.drawing.as_mut() else { return };
+        // (a sheet laid on the picture keeps the spray off what it covers)
+        let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
-            if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) {
+            if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) && !sheet.is_some_and(|s| s.over[i]) {
                 c.floor = c.a;
             }
         }
         let fl = d.guide_floor.get_or_insert_with(|| vec![0.0; d.guide.len()]);
         for (k, (v, g)) in fl.iter_mut().zip(&d.guide).enumerate() {
-            if m.is_none_or(|m| m.data[k] > 0.5) {
+            if m.is_none_or(|m| m.data[k] > 0.5) && !sheet.is_some_and(|s| s.covers_whole_pixel(f, k)) {
                 *v = *g;
             }
         }
@@ -729,15 +788,81 @@ impl Canvas {
 }
 
 /// The ground under a deposit of coverage `a` and flake reflectance `r`.
-fn uncover(p: Rgb, a: f32, r: f32) -> Rgb {
+pub(crate) fn uncover(p: Rgb, a: f32, r: Rgb) -> Rgb {
     if a <= 0.0 {
         return p;
     }
     let k = 1.0 / (1.0 - a).max(1e-3);
-    [((p[0] - a * r) * k).max(0.0), ((p[1] - a * r) * k).max(0.0), ((p[2] - a * r) * k).max(0.0)]
+    [((p[0] - a * r[0]) * k).max(0.0), ((p[1] - a * r[1]) * k).max(0.0), ((p[2] - a * r[2]) * k).max(0.0)]
 }
 
 /// A deposit of coverage `a` and flake reflectance `r` over `under`.
-fn cover(under: Rgb, a: f32, r: f32) -> Rgb {
-    [under[0] * (1.0 - a) + a * r, under[1] * (1.0 - a) + a * r, under[2] * (1.0 - a) + a * r]
+pub(crate) fn cover(under: Rgb, a: f32, r: Rgb) -> Rgb {
+    [under[0] * (1.0 - a) + a * r[0], under[1] * (1.0 - a) + a * r[1], under[2] * (1.0 - a) + a * r[2]]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flat() -> Canvas {
+        Canvas::new_window(400, 1.5, [0.8; 3], None).with_size_mm(440.0)
+    }
+
+    /// Mean color over a band of the window (units).
+    fn band_mean(c: &Canvas, y0: f32, y1: f32, x0: f32, x1: f32) -> Rgb {
+        let f = c.window();
+        let (mut s, mut n) = ([0.0f32; 3], 0.0);
+        for (i, q) in c.pixels().iter().enumerate() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            if x >= x0 && x < x1 && y >= y0 && y < y1 {
+                for k in 0..3 {
+                    s[k] += q[k];
+                }
+                n += 1.0;
+            }
+        }
+        s.map(|v| v / n)
+    }
+
+    /// Darkening laid by one 2B line at pressure `p` on a flat ground.
+    fn laid(p: &[f32]) -> (Canvas, f32) {
+        let mut c = flat();
+        let m = hand_line(&[(100.0, 100.0), (900.0, 100.0)], p, false, true, 0.0, 5);
+        c.draw(&Lead::pencil("2B").unwrap(), &m, 0.0, 9);
+        let dark: f32 = c.pixels().iter().map(|q| 0.8 - q[0]).sum();
+        (c, dark)
+    }
+
+    /// Graded hatching presses each stroke by the weight under it: over a
+    /// ramp it lays more where the weight is high, nothing where it is zero,
+    /// and the passage fades with no line where an ungraded hatch stops.
+    #[test]
+    fn graded_hatching_follows_the_weight() {
+        let f = flat().frame();
+        let ramp = Mask::from_fn(f, |x, _| ((x - 200.0) / 600.0).clamp(0.0, 1.0));
+        let mut c = flat();
+        let lead = Lead::pencil("4B").unwrap();
+        for m in hatch_marks_graded(&ramp, 1.2, 4.0, 30.0, 0.8, true, 3) {
+            c.draw(&lead, &m, 0.0, 7);
+        }
+        let dark = |x0: f32, x1: f32| 0.8 - band_mean(&c, 60.0, 600.0, x0, x1)[0];
+        let (d0, d1, d2, d3) = (dark(100.0, 190.0), dark(300.0, 400.0), dark(500.0, 600.0), dark(700.0, 800.0));
+        assert!(d0 < 1e-4, "no weight, nothing laid: {d0}");
+        assert!(d1 < d2 && d2 < d3, "graded: {d1} {d2} {d3}");
+        // the old call is unchanged: hatch_marks is the ungraded one
+        let (a, b) = (hatch_marks(&ramp, 1.2, 4.0, 30.0, 0.8, 3), hatch_marks_graded(&ramp, 1.2, 4.0, 30.0, 0.8, false, 3));
+        assert!(a.len() == b.len() && a.iter().zip(&b).all(|(a, b)| a.pts == b.pts && a.pressure == b.pressure));
+    }
+
+    /// A drawing in graphite alone keeps its old serialized layout (five
+    /// numbers a cell, flag 1), so older states and digests are unchanged.
+    #[test]
+    fn graphite_drawing_keeps_its_layout() {
+        let (c, _) = laid(&[0.6]);
+        let d = c.drawing.as_ref().unwrap();
+        assert!(!d.sticks && d.layout() == 1);
+        let n = c.pixels().len();
+        assert_eq!(d.to_f32s().count(), n * 5 + c.frame().w * c.frame().h + 1);
+    }
 }

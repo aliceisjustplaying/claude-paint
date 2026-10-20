@@ -517,7 +517,7 @@ shore = outline{{0, 500}, {500, 480}, {1000, 550}, open=true}
 land = shore:below()
 ```
 
-## Drawing: pencil, chalk and eraser
+## Drawing: pencil, chalk, pastel and eraser
 
 ```lua
 h = pencil("2H")                  -- or pencil{grade="2H"}: 9H..H, F, HB, B..9B
@@ -526,6 +526,7 @@ h:sketch(pts, {pressure=0.3})     -- a few light passes (passes=3, wander= units
 h:line(pts, {pressure={0.5, 0.7, 0.4}})    -- one line through the points (smooth=false keeps corners)
 h:rule({120, 700}, {860, 180}, {pressure=0.3})  -- straight, against a ruler
 h:hatch(m, {angle=-1.1, pressure=0.35})         -- short parallel strokes (spacing=, length=)
+h:hatch(m, {pressure=0.6, graded=true})         -- the mask as a weight: each stroke pressed by its value there
 h:width()   h.worn   h:sharpen()  -- the point blunts as you draw
 erase(pts, {strength=0.9, width=9})  -- a kneaded eraser along a path, or erase(mask, {strength=})
 fix()                                -- fixative (or fix(mask)): the eraser no longer lifts it
@@ -537,6 +538,133 @@ hollows. Soft leads lay darker, glossier lines, hard ones pale silver
 lines. The eraser lifts most of a line, more from the tops than the
 hollows, and leaves a ghost. Once paint has gone over the drawing it is
 sealed: thin paint lets it show through, body paint hides it.
+
+**Pastel.** A pastel is a stick of pigment with a little gum and chalk:
+a solid that rests on the tooth, wears and sheds what it abrades.
+
+```lua
+p = pastel(pile{{"vermilion", 1}, {"lead white", 2}}, {kind="soft"})   -- a round stick, Ø12 mm (diameter=)
+h = pastel(pile{{"bone black", 1}}, {kind="hard"})                     -- a square stick, 6.35 mm
+q = pastel(pile{{"lead white", 1}}, {kind="pencil"})                   -- a pastel pencil's core, sharpened
+p:stroke(pts, {force=2, alt=60, azimuth=45, roll=0, speed=80})          -- one stroke; each may be a list along pts
+p:side(pts, {force=1.5})       -- laid flat across the stroke: a piece as wide as it is long (p:snap(mm) breaks one)
+p:roll(30)                     -- turn it in the fingers: the next stroke meets a fresh edge
+p:line(pts, {pressure=0.5})    -- a pencil's call: pressure as force (5 N at 1), held at 60°
+smudge(pts, {force=1, pad=})   -- a finger drawn along a path (pad: a stump's few mm²)
+smudge(mask, {angle=30, passes=2, pattern=})      -- a fingertip in loose circles over an area (pad<=60: a stump, strokes)
+fix(mask)                      -- binds what is there, and darkens it a little
+feel(x, y)                     -- what a fingertip feels there
+```
+
+- **One stroke at a time.** `stroke` is a single movement of the hand:
+  `force` in newtons (a feathered touch 0.1–0.5, normal 0.5–2, heavy 2–5),
+  `alt` the stick's angle to the paper in degrees (upright 90, on its side 0),
+  `azimuth` where its upper end points (degrees: 0 to the right, 90 down the
+  canvas; a right hand holds it at about 45), `roll` turned about its axis,
+  `speed` in mm/s. Each is a number or a list along the points. The hand
+  lands and lifts as a hand does: its force comes up from nothing over about
+  50 ms of the stroke and falls back over about 40 ms.
+- **The stick rests on the tooth.** Under the force it sinks into the paper's
+  micro-relief until the material it meets carries the force: the paper gives
+  a little (it is compressible), and the soft pastel yields on the tops it
+  touches. A light stroke touches only the highest fibers and leaves the
+  paper's grain broken through the mark; a heavy one reaches into the pores.
+- **It wears.** It lays what it abrades, in proportion to the force and the
+  distance (Archard's law), and wears flat against the paper: a stick held
+  one way grows a facet and draws wider as it does; rolled or tilted it cuts a
+  new, sharp-edged one; a new stick's first strokes are narrow. `print(p)`
+  says how many facets it has and how long it is.
+- **Crumbs.** Most of what the stick abrades comes away as crumbs that ride
+  under its face and settle into the tooth along and beside the stroke, the
+  hollows taking more: a mark covers several times what the stick touches,
+  as discrete specks. Crumbs that fall on wet paint are lost in it.
+- **The tooth fills.** Loose pastel in the pores is a third body the stick
+  slides on: the more there is, the less a stroke lays, until the paper
+  refuses it. Fixative binds it into a rough crust that files the stick again,
+  so a fixed passage takes more pastel; and darkens it a little, as the resin
+  wets the particles.
+  The eraser lifts loose pastel out of the tooth with the coverage it takes,
+  so an erased passage takes pastel again.
+- **The finger** picks up loose pastel and lays it down along its path as fine
+  grains pressed into the pores: colors drag into each other and the passage
+  covers more for its thickness. It leaves fixed pastel where it is.
+  Given a mask, `smudge` works the finger over the area as a pastellist
+  does: a fingertip at 0.6 N in loose circles 15 mm across drifting along
+  lanes at `angle` (degrees, as an azimuth), a stump (`pad` up to 60 mm²) at
+  1 N in straight strokes there and back along each lane
+  (`pattern="circles"|"strokes"` overrides), two passes, the second across
+  the first. It presses `force` × the mask and lifts where the mask fades
+  out; in circles a soft-edged mask softens the blend only through the
+  contact's size, which changes little, so for a blend that fades out use
+  `pattern="strokes"` or a smaller mask. It is the same finger as along a
+  path, not a blur: what it picks up it carries on. Sources and which
+  numbers are estimates: notes/research/pastel_blending.md.
+- **Color.** A stick is its pigments as they look dry: absorption as in oil,
+  scattering raised by the contrast between each pigment and air (much for
+  ultramarine, Prussian blue, the lakes and the earths' clays; little for
+  vermilion and the chromes). Dry blacks are a little grayer than in oil.
+- **Feel.** `feel(x, y)` answers in words: the surface (paper, paint and how
+  far it has set) and the pastel in the tooth (loose or fixed; a little, the
+  tooth taking it, half full and more, full).
+- Pastel skips wet paint, as graphite does; let the paint set first. Paint
+  laid over pastel seals it, as it seals a drawing.
+
+```lua
+lay_sheet(m, {grammage=120, tone={{"lead white", 3}}})   -- a sheet of paper laid over the mask
+lift_sheet()                                              -- taken away, with what it caught
+b:dust(pts, {pressure=0.6, tip=50})   -- a dry brush over pastel: lifts what its tips reach
+k:scrape(pts, {pressure=, edge=100})  -- a knife over pastel: sinks into the paper, takes the loose
+blow(x, y, {distance=50, speed=12})   -- a puff of air (mm from the paper; m/s from the lips)
+tap({g=100})                          -- the board's edge struck on the table (an upright sheet: g=1)
+```
+
+- **The sheet** keeps what it covers clean. It lies a paper's thickness
+  above the picture, so a stick rests on it like any surface; near its
+  edge the stick bridges from sheet to picture, and the edge left behind is
+  as sharp as the stick's angle and force make it (a stick laid flat leaves
+  a wider margin than its point). Strokes and crumbs that land on the sheet
+  stay on it; the finger, the eraser and fixative don't reach under it. Lay
+  and lift it in one chunk. While it is down, only pastel, the finger, a dry
+  brush, a puff, a tap, the eraser and fixative work: wet paint and graphite
+  aren't modeled under a sheet and refuse.
+- **A dry brush** (`b:dust`, the brush wiped clean) lifts loose pastel as
+  far as its bristles' tips reach into the tooth and no deeper: a hog's tip
+  (about 50 µm) reaches only the top micrometers of the pores, so what fills
+  them stays as a ghost; a finer `tip` reaches further. Fixed pastel stays.
+  The bristles keep what they lift until they are full (a brush a centimeter
+  wide holds a few milligrams; `b:wipe(1)` empties it); then the rest is pushed
+  ahead and left as a ridge of crumbs where the brush lifts. Over a
+  speckled passage it smears more than it cleans.
+- **The knife** (`k:scrape`) over pastel on paper: the hand's force (1–5 N by
+  `pressure`) bears along the blade's edge, so a wide palette knife presses
+  lightly and a short edge hard. The edge sinks into the paper as far as
+  the sheet's compression and its surface's stiffness allow, and takes the
+  loose pastel above that depth; a stiff blade rides the paper's high spots
+  and bridges its low ones, so a scrape is mottled. Pressed hard enough it
+  sets the paper: burnished, flatter, the pores shallower (less tooth). Its
+  drag can tear fibers loose: raised nap, more tooth there. `edge` is the
+  edge's radius in µm (a painting knife 20–500; a scalpel about 1): a
+  scalpel on a short edge cuts, shaving a fiber layer and taking even fixed
+  pastel. Otherwise fixed pastel stays.
+- **A puff** (`blow`) shears the surface in a ring around where it is aimed
+  (nothing at the very center): loose crumbs heaped on the tooth go easily;
+  the pores' fine grains only under a hard blow close in, and only their
+  top few micrometers. Most crumbs it lifts roll outward and settle in a
+  broad ring past where it stops lifting them; some hop further, a few
+  centimeters, and over ten from a hard blow close in; a little of the fine
+  grains settles thinly further out, and most are carried off. Crumbs
+  landing on a paper mask go with it.
+- **A tap** (`tap`) shakes off the crumbs heavy enough to beat their hold:
+  heaps and ridges go, the grains in the pores stay, and fixed pastel stays.
+- **Holding a stick up to the picture:** `look` with `hold: "<stick>"` and
+  `at: "x,y"` (see Looking).
+
+Pastel is there in a painting begun since it came, with paper (its log's
+head says `--@ paper`); an older painting replays as it was painted, and
+has no `pastel`, `smudge`, `feel`, `lay_sheet`, `lift_sheet`, `blow` or
+`tap`, no `b:dust`, no `edge=` on `k:scrape`, and no stick to hold up. The numbers (how hard a stick is, how
+fast it wears, what dry pigment looks like) are estimates, not
+measurements (notes/pastel.md).
 
 ## The rag
 
@@ -735,6 +863,7 @@ other option, and nothing on the canvas or the clock changes.
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
 | `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
 | `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `hold: "<a pastel stick>"`, `at: "x,y"`, `pose: "force,alt,azimuth"` or `side: "<direction>"` | (with pastel) the stick held there, seen from above over the passage (120 units around the point, or your `crop`): its low end as a light shadow, where it rests on the tooth at that force in its color, and the band where its crumbs would settle, tinted; `side` lays it flat across a stroke going that way; with neither, 1.5 N at 60°. The reply says how much it touches and how much its crumbs would reach, in mm². The stick can be a field of a table (`P.glow`). It shows where a stroke from there would lay, not what it would leave |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
 The reply lists the remaining tile paths; read them one at a time to inspect

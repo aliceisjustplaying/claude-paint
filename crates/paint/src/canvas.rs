@@ -270,6 +270,8 @@ pub struct Canvas {
     /// The drain switch (`with_drain`): an absorbent ground drains paint as
     /// its pigment packs (`bristle::ground_drain`).
     pub(crate) drain: bool,
+    /// A sheet of paper laid over part of the picture (`sheet.rs`).
+    pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
 
 impl Canvas {
@@ -331,6 +333,7 @@ impl Canvas {
             receptive: None,
             soak: None,
             drain: false,
+            sheet: None,
         }
     }
 
@@ -473,6 +476,34 @@ impl Canvas {
         // bare paper is matte
         self.gloss.iter_mut().for_each(|v| *v = 0.05);
         self
+    }
+
+    /// The micro-roughness at pixel `i` of the window, µm (see `micro`): the
+    /// paper's where paper is bare or only stained; over a paint film, the
+    /// film's own, which follows its gloss (a glossy film is smooth, about
+    /// 0.1 µm; a lean, matte one has its pigment standing proud, about
+    /// 2 µm: notes/research/dry_pigment_optics.md §4, estimates).
+    pub(crate) fn micro_um(&self, i: usize) -> f32 {
+        let paint = crate::lerp(2.0, 0.1, self.gloss[i].clamp(0.0, 1.0));
+        match self.micro.get(i) {
+            // a film thinner than the pores leaves them open
+            Some(&m) => {
+                let film_um = self.film[i] * crate::surface::COAT_UM;
+                let t = (film_um / m.max(1e-3)).min(1.0);
+                crate::lerp(m, paint, t)
+            }
+            None => paint,
+        }
+    }
+
+    /// How stiffly the surface at pixel `i` gives under a point load, MPa
+    /// per µm (a Winkler foundation: the sheet's z modulus over its
+    /// caliper). A canvas on its stretcher, or a board, is all but rigid.
+    pub(crate) fn give_mpa_per_um(&self, _i: usize) -> f32 {
+        match self.paper {
+            Some(p) => p.z_mpa / p.caliper_um().max(10.0),
+            None => 10.0,
+        }
     }
 
     /// Use a woven linen support.

@@ -427,6 +427,8 @@ def _parse(path):
                     ev["scratch_reset"] = True
                 if txt:
                     ev["out"] = txt if ev["kind"] == "critic" else txt[-1500:]
+                    if ev["kind"] == "look" and STICK_HELD.search(txt):
+                        ev["held"] = "stick"
                 if m.get("isError"):
                     ev["err"] = True
                 c["changed"].append(parent)
@@ -441,6 +443,8 @@ def _parse(path):
                     display_path = ""
                     if parent is not None and c["events"][parent]["kind"] == "look":
                         ev["look"] = c["events"][parent]["text"]  # what the painter asked to see (see is_whole)
+                        if c["events"][parent].get("held"):
+                            ev["held"] = c["events"][parent]["held"]
                         if picture_n < len(picture_paths):
                             display_path = picture_paths[picture_n]
                     elif parent is not None and c["events"][parent]["kind"] == "read" and not c["events"][parent].get("ref"):
@@ -684,9 +688,15 @@ def look_text(args):
     return ", ".join(f"{k} {v}" for k, v in args.items())
 
 
+# a look's reply when it held a pastel stick over the canvas ("<look> (WxH, 0.12s): P.glow held at 400,300: <what
+# it shows>", main.rs), not a knife or a pile ("... held up to the canvas at 400,300"): the request alone can't tell,
+# a stick held without pose or side taking the easel's default pose
+STICK_HELD = re.compile(r"\): .+ held at -?[0-9.]+,-?[0-9.]+: ")
+
+
 def is_whole(look):
     """A look request that shows the whole canvas as it is: no crop, no mode (value, squint, mirror), no light,
-    not the palette, not a survey's tile, not a comparison, not a held knife, not the motif pinned beside it and not
+    not the palette, not a survey's tile, not a comparison, not a held knife or stick, not the motif pinned beside it and not
     the scratch canvas."""
     if look is None:
         return False

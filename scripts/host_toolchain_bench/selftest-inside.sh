@@ -20,6 +20,7 @@ export CARGO_TARGET_DIR="$result/target-good"
 cargo test --no-run --test smoke --message-format=json-render-diagnostics >"$result/good.json" 2>"$result/good.log"
 {
   printf 'kache: diagnostic reproduction\nbackground daemon does not inherit KACHE_LOCAL_ONLY\n[cache.remote]\n'
+  printf '[libc 0.2.189] cargo:rerun-if-changed=build.rs\n[libc 0.2.189] cargo:rustc-cfg=freebsd12\n[libc 0.2.189] cargo:rustc-check-cfg=cfg(freebsd12)\n'
   cat "$result/good.json"
   printf 'kache: trailing diagnostic\n'
 } >"$result/mixed.json"
@@ -27,6 +28,9 @@ exe=$(uv run --no-project python "$bundle/artifact_executable.py" "$result/mixed
 "$exe" >"$result/executable.log"
 grep -qF 'tiny cargo proof' "$result/executable.log"
 grep -qF 'background daemon does not inherit' "$result/mixed.diagnostics.log"
+grep -qF '[libc 0.2.189] cargo:rerun-if-changed=build.rs' "$result/mixed.diagnostics.log"
+grep -qF '[libc 0.2.189] cargo:rustc-cfg=freebsd12' "$result/mixed.diagnostics.log"
+grep -qF '[libc 0.2.189] cargo:rustc-check-cfg=cfg(freebsd12)' "$result/mixed.diagnostics.log"
 printf '{malformed cargo JSON\n' >"$result/malformed.json"
 if uv run --no-project python "$bundle/artifact_executable.py" "$result/malformed.json" "$result/malformed.diagnostics.log" >"$result/malformed.out" 2>&1; then
   echo 'parser accepted malformed Cargo JSON' >&2; exit 1

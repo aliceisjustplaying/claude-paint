@@ -863,8 +863,6 @@ mod tests {
         assert!(a.len() == b.len() && a.iter().zip(&b).all(|(a, b)| a.pts == b.pts && a.pressure == b.pressure));
     }
 
-    /// A drawing in graphite alone keeps its old serialized layout (five
-    /// numbers a cell, flag 1), so older states and digests are unchanged.
     #[test]
     fn pastel_legacy_cells_are_still_readable() {
         for (loose, bound) in [(0.0, 0.0), (8.0, 0.0), (8.0, 4.0)] {
@@ -878,6 +876,8 @@ mod tests {
         }
     }
 
+    /// A drawing in graphite alone keeps its old serialized layout (five
+    /// numbers a cell, flag 1), so older states and digests are unchanged.
     #[test]
     fn graphite_drawing_keeps_its_layout() {
         let (c, _) = laid(&[0.6]);

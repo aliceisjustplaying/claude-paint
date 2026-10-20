@@ -1060,7 +1060,7 @@ const HOLD_HALF: f32 = 120.0;
 /// It shows the paint on the knife and nothing of how it would look laid: not thinned by
 /// a brush, not mixed into what is wet there, not over what is under it, not dried.
 /// Only reads: no hand time, nothing in the log, the canvas and state untouched.
-fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>), String> {
+fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>, [f32; 4]), String> {
     use image::ImageEncoder;
     if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
         return Err("look --hold takes --at, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
@@ -1114,7 +1114,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (w, h) = (passage.width(), passage.height());
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new(&mut out).write_image(passage.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
-    Ok((w as usize, h as usize, out))
+    Ok((w as usize, h as usize, out, crop))
 }
 
 /// With the paper-and-pastel switch: a pastel stick held over the canvas
@@ -1589,10 +1589,10 @@ impl Server {
             if pose.is_some() || side.is_some() {
                 return Err(format!("look --hold {pile}: --pose and --side hold a pastel stick, not a knife or a pile"));
             }
-            let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
+            let (w, h, png, crop) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             let c = self.s.canvas().unwrap();
-            let scale = look::crop_scale(c.window(), &v, w, h)?;
+            let scale = look::crop_scale(c.window(), &look::View { crop: Some(crop), ..v }, w, h)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}{scale}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
         }
         if survey {

@@ -250,7 +250,7 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
         spec.loader.exec_module(viewer)
         viewer.SESSIONS = str(self.sessions)
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), viewer.H)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         url = f"http://127.0.0.1:{server.server_port}"
         try:
@@ -269,6 +269,8 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await asyncio.to_thread(server.shutdown)
             server.server_close()
+            thread.join(timeout=1)
+            self.assertFalse(thread.is_alive())
             sys.path.remove(str(studio_dir))
 
 

@@ -90,6 +90,54 @@ fn committed_frames_are_numbered_atomic_and_not_replayed() {
 }
 
 #[test]
+fn interrupted_index_publication_recovers_at_the_next_commit_after_checkpoint_resume() {
+    let studio = Studio::new("index-recovery");
+    std::fs::create_dir_all(studio.frames()).unwrap();
+    let index = studio.frames().join("index.tsv");
+    std::fs::create_dir(&index).unwrap();
+    studio.ok(&["do", CANVAS]);
+    assert!(studio.frames().join("000001.jpg").is_file());
+    let log = std::fs::read_to_string(studio.0.join("out/easel/painting/server.log")).unwrap();
+    assert!(log.contains("chunk 1 committed, frame not saved"), "{log}");
+    for chunk in [PREPARE, MARK, "wait(1)", "wait(1)", "wait(1)", "wait(1)", "wait(1)", "wait(1)", "wait(1)"] {
+        studio.ok(&["do", chunk]);
+    }
+    assert!(studio.0.join("out/easel/painting/replay.ckpt").is_file());
+    studio.ok(&["close"]);
+    let frames: Vec<_> = (1..=10).map(|chunk| {
+        let path = studio.frames().join(format!("{chunk:06}.jpg"));
+        let bytes = std::fs::read(&path).unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        (path, bytes, modified)
+    }).collect();
+    std::fs::remove_dir(&index).unwrap();
+    studio.ok(&["open", "painting"]);
+    let log = std::fs::read_to_string(studio.0.join("out/easel/painting/server.log")).unwrap();
+    assert!(log.contains("reconstructed 10 chunks from"), "{log}");
+    studio.ok(&["do", "wait(1)"]);
+    let text = std::fs::read_to_string(&index).unwrap();
+    let rows: Vec<_> = text.lines().skip(1).collect();
+    assert_eq!(rows.len(), 11, "{text}");
+    for (chunk, row) in (1..=11).zip(&rows) {
+        assert_eq!(row.split('\t').next().unwrap(), chunk.to_string());
+    }
+    assert_eq!(rows[0], "1\t0\t0");
+    let latest: Vec<_> = rows.last().unwrap().split('\t').collect();
+    assert!(latest[1].parse::<f64>().unwrap() > 0.0);
+    assert_eq!(latest[2], "1");
+    for (path, bytes, modified) in frames {
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::metadata(path).unwrap().modified().unwrap(), modified);
+    }
+    studio.ok(&["close"]);
+    studio.ok(&["open", "painting"]);
+    studio.ok(&["do", "wait(1)"]);
+    let text = std::fs::read_to_string(&index).unwrap();
+    assert_eq!(text.lines().filter(|line| *line == "1\t0\t0").count(), 1);
+    assert_eq!(text.lines().count(), 13);
+}
+
+#[test]
 fn recording_leaves_painting_bytes_and_replay_unchanged() {
     let on = Studio::new("on");
     let off = Studio::new("off");

@@ -103,6 +103,8 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
   replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
+  replay_checkpoint::tests::batch_identity_is_only_built_for_checkpoints_or_frames \
+  replay_checkpoint::tests::checkpoint_resume_rejects_changed_build_width_and_environment \
   replay_checkpoint::tests::progress_is_published_at_every_chunk_and_batch_boundary \
   replay_checkpoint::tests::trace_failure_cannot_be_hidden_by_lua_pcall \
   replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files \
@@ -143,6 +145,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   check::tests::nonfinite_color_and_surface_never_match \
   check::tests::color_and_surface_counts_must_match \
   live_frames::tests::atomic_frame_publication_keeps_the_previous_file_on_failure \
+  live_frames::tests::index_write_failure_keeps_metadata_for_the_next_frame_and_upserts_once \
   live_frames::tests::portrait_frames_fit_the_long_side_and_existing_frames_are_untouched \
   session::tests::a_subnormal_blend_stays_finite_through_a_scrape_and_wait \
   look::tests::crops_of_any_span_are_bounded_and_report_the_actual_scale \
@@ -175,7 +178,7 @@ check painter-inbox-hooks 'node --test --test-reporter=tap harness/painter/test/
 check painter-limit-abort 'node --test --test-reporter=tap harness/painter/test/limit-abort.test.ts' '^# pass [1-9]'
 check painter-concepts 'node --test --test-name-pattern="file size limit" --test-reporter=tap harness/painter/test/concepts.test.ts' '^# pass [1-9]'
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
-check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py -v' "$unittest"
+check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
 check replay-batch 'uv run --no-project python -m unittest scripts/tests/replay_batch_test.py -v' "$unittest"
 check replay-clip 'uv run --no-project python -m unittest scripts/tests/replay_clip_test.py -v' "$unittest"

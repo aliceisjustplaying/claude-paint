@@ -30,35 +30,37 @@ class KnownRagTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.scenes = self.root / "scenes"
-        for scene in (guard.BASE / "state").iterdir():
-            destination = self.scenes / scene.name
-            destination.mkdir(parents=True)
-            for chunk, source in sc.state_files(str(scene)).items():
-                _, fields = sc.load(source)
-                if scene.name == "rag":
-                    for number, field, index, value, _ in guard.SIGNATURE:
-                        if chunk != "chunk-%03d" % number:
-                            continue
-                        dtype, shape, raw = fields[field]
-                        if isinstance(index, int):
-                            raw = bytearray(raw)
-                            struct.pack_into("<" + sc.DT[dtype][0], raw, index * sc.DT[dtype][1], value)
-                            raw = bytes(raw)
-                        else:
-                            values = sc.debug_values(field, raw.decode())
-                            if index.endswith("mobile.mm3"):
-                                mobile = "Mobile { mm3: %s, lat: [%s], hide: [%s], cure: 0.0, solv_mm3: 0.0, at_min: 0.0, at_secs: 0.0 }" % (value, ", ".join(["0.0"] * 7), ", ".join(["0.0"] * 5))
-                                raw = raw.replace(b" }", (", mobile: " + mobile + " }").encode(), 1)
-                            else:
-                                old = index.split(".")[-1] + ": " + values[index][1]
-                                self.assertEqual(raw.count(old.encode()), 1)
-                                raw = raw.replace(old.encode(), (index.split(".")[-1] + ": " + str(value)).encode(), 1)
-                            shape = (len(raw),)
-                        fields[field] = dtype, shape, raw
-                dump(destination / (chunk + ".state"), fields)
+        self.prepare_scene(guard.BASE / "state" / "rag")
         self.rag = self.scenes / "rag"
         self.report = self.root / "image-report.txt"
         self.report.write_text(IMAGE + "\n")
+
+    def prepare_scene(self, scene):
+        destination = self.scenes / scene.name
+        destination.mkdir(parents=True)
+        for chunk, source in sc.state_files(str(scene)).items():
+            _, fields = sc.load(source)
+            if scene.name == "rag":
+                for number, field, index, value, _ in guard.SIGNATURE:
+                    if chunk != "chunk-%03d" % number:
+                        continue
+                    dtype, shape, raw = fields[field]
+                    if isinstance(index, int):
+                        raw = bytearray(raw)
+                        struct.pack_into("<" + sc.DT[dtype][0], raw, index * sc.DT[dtype][1], value)
+                        raw = bytes(raw)
+                    else:
+                        values = sc.debug_values(field, raw.decode())
+                        if index.endswith("mobile.mm3"):
+                            mobile = "Mobile { mm3: %s, lat: [%s], hide: [%s], cure: 0.0, solv_mm3: 0.0, at_min: 0.0, at_secs: 0.0 }" % (value, ", ".join(["0.0"] * 7), ", ".join(["0.0"] * 5))
+                            raw = raw.replace(b" }", (", mobile: " + mobile + " }").encode(), 1)
+                        else:
+                            old = index.split(".")[-1] + ": " + values[index][1]
+                            self.assertEqual(raw.count(old.encode()), 1)
+                            raw = raw.replace(old.encode(), (index.split(".")[-1] + ": " + str(value)).encode(), 1)
+                        shape = (len(raw),)
+                    fields[field] = dtype, shape, raw
+            dump(destination / (chunk + ".state"), fields)
 
     def edit(self, chunk, field, transform, scene="rag"):
         path = self.scenes / scene / ("chunk-%03d.state" % chunk)
@@ -155,6 +157,9 @@ class KnownRagTests(unittest.TestCase):
                     self.assertEqual(guard.main(), expected)
 
     def baseline(self, extra_env=None):
+        for scene in (guard.BASE / "state").iterdir():
+            if not (self.scenes / scene.name).exists():
+                self.prepare_scene(scene)
         bins = self.root / "bin"
         bins.mkdir(exist_ok=True)
         programs = {

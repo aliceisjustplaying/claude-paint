@@ -244,6 +244,7 @@ pub struct Canvas {
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
     pub(crate) sealed_drawing_guide: bool,
+    pub(crate) drawing_optics: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -326,6 +327,7 @@ impl Canvas {
             adaptive_sweep: false,
             liquid_film_levels: false,
             sealed_drawing_guide: false,
+            drawing_optics: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -426,6 +428,17 @@ impl Canvas {
 
     pub fn sealed_drawing_guide(&self) -> bool {
         self.sealed_drawing_guide
+    }
+
+    /// Select separate retained/removable color before the first drawing.
+    pub fn with_drawing_optics(mut self, enabled: bool) -> Self {
+        assert!(self.drawing.is_none() || self.drawing_optics == enabled, "drawing optics must be selected before drawing");
+        self.drawing_optics = enabled;
+        self
+    }
+
+    pub fn drawing_optics(&self) -> bool {
+        self.drawing_optics
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

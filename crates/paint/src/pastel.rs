@@ -49,7 +49,9 @@
 
 use crate::canvas::Canvas;
 use crate::color::Rgb;
-use crate::graphite::{Cell, cover, uncover};
+use crate::graphite::{cover, uncover};
+#[cfg(test)]
+use crate::graphite::Cell;
 
 /// The stick's cross-section.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -337,19 +339,15 @@ pub(crate) fn lay_crumbs(d: &mut crate::graphite::Drawing, film: &[f32], pxs: &m
         }
         let c = &mut d.cells[i];
         if c.film < 0.0 || film[i] > c.film + 1e-4 {
-            *c = Cell { film: film[i], ..Cell::default() };
+            c.restart(film[i], pxs[i]);
         }
         // pressed flat into the hollow by the face going over it: particles
         // about PARTICLE_UM thick, as the contact's own deposit
         let q = 1.0 - (-dv / PARTICLE_UM).exp();
-        let under_px = uncover(pxs[i], c.a, c.r);
-        let old = c.a * (1.0 - q);
-        let w = old + q;
-        c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * color[k]) / w.max(1e-6)).clamp(0.0, 1.0));
-        c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
-        c.a = (c.a + (1.0 - c.a) * q).min(0.995);
+        let before = (c.a, c.reflectance());
+        c.add_pastel(q, color, dv);
         c.loose += dv;
-        pxs[i] = cover(under_px, c.a, c.r);
+        pxs[i] = c.repaint(pxs[i], before);
     }
     lost
 }
@@ -508,7 +506,7 @@ impl Canvas {
                     let c = &mut d.cells[i];
                     if c.film < 0.0 || film[i] > c.film + 1e-4 {
                         // bare, or painted over since: a new layer on top
-                        *c = Cell { film: film[i], ..Cell::default() };
+                        c.restart(film[i], pxs[i]);
                     }
                     let v = c.loose + c.bound;
                     // the pastel in the pores fills them from the bottom up,
@@ -530,16 +528,11 @@ impl Canvas {
                         continue;
                     }
                     let q = 1.0 - (-dv / PARTICLE_UM).exp();
-                    let under_px = uncover(pxs[i], c.a, c.r);
-                    let old = c.a * (1.0 - q);
-                    let a1 = (c.a + (1.0 - c.a) * q).min(0.995);
-                    let w = old + q;
-                    c.r = [0, 1, 2].map(|k| ((old * c.r[k] + q * stick.color[k]) / w.max(1e-6)).clamp(0.0, 1.0));
-                    c.lift = (old * c.lift + q * 0.55) / w.max(1e-6);
-                    c.a = a1;
+                    let before = (c.a, c.reflectance());
+                    c.add_pastel(q, stick.color, dv);
                     c.loose += dv;
                     laid = true;
-                    pxs[i] = cover(under_px, c.a, c.r);
+                    pxs[i] = c.repaint(pxs[i], before);
                 }
                 // the bed the crumbs can settle in: the paper (or the sheet)
                 // under the face, not in contact, within a crumb's size of it
@@ -708,6 +701,12 @@ impl Canvas {
         let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
             if m.is_some_and(|m| m.data[f.whole_index(i)] <= 0.5) || self.film[i] > c.film + 1e-4 || sheet.is_some_and(|s| s.over[i]) {
+                continue;
+            }
+            if c.optics.is_some() {
+                let before = (c.a, c.reflectance());
+                c.bind(w);
+                self.px[i] = c.repaint(self.px[i], before);
                 continue;
             }
             c.floor = c.a;
@@ -1172,10 +1171,11 @@ impl Rubbing<'_> {
                 pad.col[q] = (pad.col[q] * pad.load + cell.r[q] * take * a_px) / total.max(1e-9);
             }
             pad.load = total;
-            let under_px = uncover(self.pxs[i], cell.a, cell.r);
-            cell.a = (cell.floor + (cell.a - cell.floor).max(0.0) * (1.0 - take / cell.loose)).max(cell.non_pastel);
+            let before = (cell.a, cell.reflectance());
+            let base = if cell.optics.is_some() { cell.floor + cell.non_pastel - cell.non_pastel_floor } else { cell.floor };
+            cell.a = (base + (cell.a - base).max(0.0) * (1.0 - take / cell.loose)).max(cell.non_pastel);
             cell.loose -= take;
-            self.pxs[i] = cover(under_px, cell.a, cell.r);
+            self.pxs[i] = cell.repaint(self.pxs[i], before);
             self.moved |= take > 0.0;
         }
         // lay a share of the load over the pad, as fine grains
@@ -1190,18 +1190,14 @@ impl Rubbing<'_> {
                 continue;
             }
             if cell.film < 0.0 || self.film[i] > cell.film + 1e-4 {
-                *cell = Cell { film: self.film[i], ..Cell::default() };
+                cell.restart(self.film[i], self.pxs[i]);
             }
             // fine grains: a third of a stroke's particles' thickness
             let q = 1.0 - (-per / (PARTICLE_UM / 3.0)).exp();
-            let under_px = uncover(self.pxs[i], cell.a, cell.r);
-            let old = cell.a * (1.0 - q);
-            let wsum = old + q;
-            cell.r = [0, 1, 2].map(|k| ((old * cell.r[k] + q * pad.col[k]) / wsum.max(1e-6)).clamp(0.0, 1.0));
-            cell.lift = (old * cell.lift + q * 0.55) / wsum.max(1e-6);
-            cell.a = (cell.a + (1.0 - cell.a) * q).min(0.995);
+            let before = (cell.a, cell.reflectance());
+            cell.add_pastel(q, pad.col, per);
             cell.loose += per;
-            self.pxs[i] = cover(under_px, cell.a, cell.r);
+            self.pxs[i] = cell.repaint(self.pxs[i], before);
         }
         pad.load -= give;
     }
@@ -1367,7 +1363,41 @@ mod tests {
     use crate::paper::Paper;
 
     fn sheet(width: usize) -> Canvas {
-        Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        static SMALL: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        static LARGE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        let prototype = match width {
+            160 => &SMALL,
+            600 => &LARGE,
+            _ => panic!("unsupported test sheet width: {width}"),
+        };
+        prototype.get_or_init(|| {
+            Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        }).clone()
+    }
+
+    #[test]
+    fn reused_sheets_match_fresh_paper_and_mutate_independently() {
+        let state = |c: &Canvas| {
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        for width in [160, 600] {
+            let fresh = Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
+            let expected = state(&fresh);
+            let mut changed = sheet(width);
+            let untouched = sheet(width);
+            assert_eq!(state(&changed), expected);
+            assert_eq!(state(&untouched), expected);
+            line(&mut changed, &mut Stick::round([0.02; 3], 0.8, 12.0), 500.0, 3.0, 60.0);
+            assert_ne!(changed.pixels(), untouched.pixels());
+            changed.height[0] += 1.0;
+            changed.micro[0] += 1.0;
+            changed.wet.vol[0] = 1.0;
+            assert_ne!(state(&changed), expected);
+            assert_eq!(state(&untouched), expected);
+            assert_eq!(state(&sheet(width)), expected);
+        }
     }
 
     fn pose(force: f32, alt_deg: f32) -> Pose {

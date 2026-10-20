@@ -29,6 +29,7 @@ use std::path::PathBuf;
 /// The recorder's state after a chunk: one line of `frames.states`.
 #[derive(serde::Serialize, serde::Deserialize, PartialEq)]
 struct Saved {
+    identity: crate::replay_checkpoint::Identity,
     every: f64,
     width: u32,
     light: Option<(f32, f32)>,
@@ -77,16 +78,16 @@ pub enum Kind {
 /// Start recording on this thread: a frame every `every` seconds of hand
 /// time into `dir`, `width` px wide. With `resume` (the chunks a resumed
 /// replay has already painted), carry on from the frames those chunks left.
-pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, resume: Option<usize>) -> Result<(), String> {
+pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, resume: Option<(usize, crate::replay_checkpoint::Identity)>) -> Result<(), String> {
     if !(every.is_finite() && every > 0.0) {
         return Err(format!("--frames-every {every}: want seconds > 0"));
     }
     if width < 16 {
         return Err(format!("--frame-width {width}: want at least 16 px"));
     }
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let rec = match resume {
         None => {
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
             for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
                 let p = entry.map_err(|e| e.to_string())?.path();
                 if p.extension().is_some_and(|e| e == "png") && p.file_stem().and_then(|n| n.to_str()).is_some_and(|n| n.parse::<usize>().is_ok()) {
@@ -98,7 +99,7 @@ pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, re
             std::fs::File::create(dir.join("frames.states")).map_err(|e| e.to_string())?;
             Recorder { every, dir, width, light, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None }
         }
-        Some(done) => resumed(every, dir, width, light, done)?,
+        Some((done, identity)) => resumed(every, dir, width, light, done, &identity)?,
     };
     REC.with(|r| *r.borrow_mut() = Some(rec));
     paint::tally::hand_hook::set(Some(Box::new(|c: &Canvas| observe(c, c.tally().clocked))));
@@ -107,7 +108,7 @@ pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, re
 
 /// The recorder as chunk `done` left it: its `frames.states` line, with
 /// `frames.tsv` and the frames cut back to what it had written then.
-fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done: usize) -> Result<Recorder, String> {
+fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done: usize, identity: &crate::replay_checkpoint::Identity) -> Result<Recorder, String> {
     let states = dir.join("frames.states");
     let file = std::fs::File::open(&states).map_err(|e| format!("{}: {e} (frames can't resume)", states.display()))?;
     let mut saved = None;
@@ -117,6 +118,9 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
         if s.chunk == done { saved = Some(s); break; }
     }
     let s = saved.ok_or_else(|| format!("{}: no frames state after chunk {done}; frames can't resume", states.display()))?;
+    if &s.identity != identity {
+        return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into());
+    }
     if s.every != every || s.width != width || s.light != light {
         return Err("frames: --frames-every, --frame-width and the light must match the replay being resumed".into());
     }
@@ -125,6 +129,17 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
     let kept: Vec<&str> = text.lines().take(s.written + 1).collect();
     if kept.len() != s.written + 1 {
         return Err(format!("{}: fewer frames than the state after chunk {done} records", tsv.display()));
+    }
+    for (i, row) in kept.iter().skip(1).enumerate() {
+        let name = format!("{:05}.png", i + 1);
+        if row.split('\t').next() != Some(name.as_str()) {
+            return Err(format!("{}: fewer frames than the state after chunk {done} records", tsv.display()));
+        }
+        let path = dir.join(name);
+        let metadata = std::fs::metadata(&path).map_err(|e| format!("{}: {e} (frames can't resume)", path.display()))?;
+        if !metadata.is_file() {
+            return Err(format!("{}: frames can't resume", path.display()));
+        }
     }
     replace(&tsv, &(kept.join("\n") + "\n"))?;
     for entry in std::fs::read_dir(&dir).map_err(|e| e.to_string())? {
@@ -197,7 +212,7 @@ fn observe(c: &Canvas, secs: f64) {
 /// The end of chunk `n`: its frame (once there is a canvas) and the
 /// recorder's state. An error in any frame so far fails the chunk, so a
 /// replay checkpoint never gets ahead of the frames.
-pub fn chunk_end(c: Option<&Canvas>, n: usize) -> Result<(), String> {
+pub fn chunk_end(c: Option<&Canvas>, n: usize, identity: &crate::replay_checkpoint::Identity) -> Result<(), String> {
     REC.with(|r| {
         let mut g = r.borrow_mut();
         let Some(rec) = g.as_mut() else { return Ok(()) };
@@ -208,7 +223,7 @@ pub fn chunk_end(c: Option<&Canvas>, n: usize) -> Result<(), String> {
         if let Some(e) = rec.err.clone() {
             return Err(format!("frames: {e}"));
         }
-        rec.save_state().map_err(|e| format!("frames: {e}"))
+        rec.save_state(identity).map_err(|e| format!("frames: {e}"))
     })
 }
 
@@ -226,11 +241,11 @@ pub fn finish(c: &Canvas) {
 }
 
 impl Recorder {
-    fn save_state(&mut self) -> Result<(), String> {
+    fn save_state(&mut self, identity: &crate::replay_checkpoint::Identity) -> Result<(), String> {
         if let Some(ix) = self.index.as_mut() {
             ix.sync_data().map_err(|e| e.to_string())?;
         }
-        let saved = Saved { every: self.every, width: self.width, light: self.light, base: self.base, next: self.next, hand: self.hand, written: self.written, ticks: self.ticks, chunk: self.chunk };
+        let saved = Saved { identity: identity.clone(), every: self.every, width: self.width, light: self.light, base: self.base, next: self.next, hand: self.hand, written: self.written, ticks: self.ticks, chunk: self.chunk };
         let line = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
         let p = self.dir.join("frames.states");
         let mut f = std::fs::OpenOptions::new().append(true).create(true).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;

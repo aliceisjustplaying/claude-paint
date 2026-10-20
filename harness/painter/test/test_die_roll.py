@@ -180,5 +180,72 @@ class PreparationTests(unittest.TestCase):
                 self.assertEqual(namespace["paint"](2, 1, False), "later")
 
 
+class PreparationInputTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.studio, self.house, self.runner = (self.root / name for name in ("studio", "house", "prepared/runner"))
+        (self.studio / "bin").mkdir(parents=True)
+        (self.studio / "notes/research").mkdir(parents=True)
+        (self.studio / "paintings/lua").mkdir(parents=True)
+        (self.studio / "bin/box").write_text("friedrich\n")
+        (self.studio / "notes/journal.md").write_text("")
+        (self.studio / "notes/reference-library.json").write_text("{}")
+        self.house.mkdir()
+        (self.house / "r21_chains.py").write_text(HOUSE)
+        (self.house / "brief_template.md").write_text("{OPENING}\n{STUDIO}\n{READING}\n\n## Working\nWork.\n")
+        for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "studio_notes.md"):
+            (self.house / name).write_text("plain\n")
+        self.before = {p.relative_to(self.studio): p.read_bytes() for p in self.studio.rglob("*") if p.is_file()}
+
+    def test_missing_house_helper_leaves_no_residue_and_allows_retry(self):
+        for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py"):
+            with self.subTest(name=name):
+                helper = self.house / name
+                data = helper.read_bytes()
+                helper.unlink()
+                with self.assertRaises(FileNotFoundError):
+                    PREPARE["prepare"](self.studio, self.house, self.runner, self.house / "studio_notes.md")
+                self.assertFalse(self.runner.parent.exists())
+                self.assertEqual({p.relative_to(self.studio): p.read_bytes() for p in self.studio.rglob("*") if p.is_file()}, self.before)
+                helper.write_bytes(data)
+                PREPARE["prepare"](self.studio, self.house, self.runner, self.house / "studio_notes.md")
+                self.assertEqual((self.runner / name).read_bytes(), data)
+                self.assertTrue((self.runner / "run-config.json").is_file())
+                self.assertEqual((self.runner / "run.py").stat().st_mode, (REPO / "harness/painter/run_friedrich.py").stat().st_mode)
+                PREPARE["shutil"].rmtree(self.runner.parent)
+                (self.studio / "BRIEF.md").unlink()
+                (self.studio / "notes/studio_notes.md").unlink()
+
+    def test_runtime_inputs_are_checked_before_destinations_and_allow_retry(self):
+        read_bytes = Path.read_bytes
+        for die_roll, name, invalid in ((False, "run_friedrich.py", "missing"),
+                                        (True, "run_friedrich.py", "missing"),
+                                        (True, "die_roll.py", "missing"),
+                                        (True, "run_friedrich.py", "no hook"),
+                                        (True, "run_friedrich.py", "duplicate hook")):
+            with self.subTest(die_roll=die_roll, name=name, invalid=invalid):
+                path = REPO / "harness/painter" / name
+                def read_input(candidate):
+                    if candidate != path:
+                        return read_bytes(candidate)
+                    if invalid == "missing":
+                        raise FileNotFoundError(str(candidate))
+                    if invalid == "no hook":
+                        return b"pass\n"
+                    return read_bytes(candidate) * 2
+                with patch.object(Path, "read_bytes", read_input), self.assertRaises((FileNotFoundError, ValueError)):
+                    PREPARE["prepare"](self.studio, self.house, self.runner, self.house / "studio_notes.md", die_roll=die_roll)
+                self.assertFalse(self.runner.parent.exists())
+                self.assertEqual({p.relative_to(self.studio): p.read_bytes() for p in self.studio.rglob("*") if p.is_file()}, self.before)
+                PREPARE["prepare"](self.studio, self.house, self.runner, self.house / "studio_notes.md", die_roll=die_roll)
+                self.assertTrue((self.runner / "run-config.json").is_file())
+                self.assertEqual((self.runner / "die_roll.py").exists(), die_roll)
+                PREPARE["shutil"].rmtree(self.runner.parent)
+                (self.studio / "BRIEF.md").unlink()
+                (self.studio / "notes/studio_notes.md").unlink()
+
+
 if __name__ == "__main__":
     unittest.main()

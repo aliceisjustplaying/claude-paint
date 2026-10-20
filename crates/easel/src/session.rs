@@ -40,6 +40,7 @@ pub const LIMBS_MARK: &str = "--@ limbs-join-nearest";
 /// Marks a painting whose `b:reload` refuses a nonfinite amount, as `b:load`
 /// does: every new painting. A log without it replays its NaN reload.
 pub const RELOAD_FINITE_MARK: &str = "--@ reload-finite";
+pub const CARRIED_PAINT_MARK: &str = "--@ palette-carried-paint";
 /// A log's head line: its `glaze` and `scumble` passes lay a thin film,
 /// their coverage the share of the mask it reaches
 /// (`paint::Canvas::with_glaze_film`). Every new painting has it; it
@@ -437,7 +438,7 @@ impl Session {
             (k, h)
         }).collect();
         let rags = s.live_rags().into_iter().map(|r| {
-            let v = *r.borrow();
+            let v = r.borrow().clone();
             (r, v)
         }).collect();
         Ok(Snap { recording_ground: s.recording_ground, canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
@@ -459,7 +460,7 @@ impl Session {
             *k.borrow_mut() = h.clone();
         }
         for (r, v) in &snap.rags {
-            *r.borrow_mut() = *v;
+            *r.borrow_mut() = v.clone();
         }
         let mut s = self.st.borrow_mut();
         s.canvas = snap.canvas.clone();
@@ -628,6 +629,9 @@ impl Session {
         }
         if self.st.borrow().tubes.knife_skim {
             let _ = writeln!(s, "{KNIFE_SKIM_MARK}");
+        }
+        if self.st.borrow().tubes.carried_paint {
+            let _ = writeln!(s, "{CARRIED_PAINT_MARK}");
         }
         if self.st.borrow().tubes.limbs_join_nearest {
             let _ = writeln!(s, "{LIMBS_MARK}");
@@ -1375,6 +1379,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.knife_skim = true;
         b.limbs_join_nearest = true;
         b.reload_finite = true;
+        b.carried_paint = true;
         b.glaze_film = true;
         b.liquid_film_levels = true;
         b.sealed_drawing_guide = true;
@@ -1427,6 +1432,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.quarter_tiles = logged_quarter_tiles(text)?;
     b.adaptive_sweep = adaptive_sweep;
     b.knife_skim = knife_skim;
+    b.carried_paint = head(CARRIED_PAINT_MARK);
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
     b.reload_finite = head(RELOAD_FINITE_MARK);
     b.glaze_film = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == GLAZE_FILM_MARK);

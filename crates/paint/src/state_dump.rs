@@ -82,7 +82,7 @@ impl Canvas {
             Field { name: "height", shape: px(1), values: Values::F32(self.height.clone()) },
             Field { name: "film", shape: px(1), values: Values::F32(self.film.clone()) },
             Field { name: "wet.vol", shape: px(1), values: Values::F32(wt.vol.clone()) },
-            Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| *l).collect()) },
+            Field { name: "wet.lat", shape: px(LAT), values: Values::F32(wt.lat.iter().flat_map(|l| l.color).collect()) },
             // Keep the legacy hiding/stiffness/drying field byte-compatible.
             // Engine 4's additional properties have their own fields below.
             Field { name: "wet.hide", shape: px(3), values: Values::F32(wt.hide.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()) },
@@ -96,6 +96,21 @@ impl Canvas {
             Field { name: "clock.mark", shape: vec![1], values: Values::U32(vec![ck.mark]) },
             Field { name: "clock.tacky", shape: vec![5], values: Values::U64(boxed(ck.tacky)) },
         ];
+        if wt.lat.iter().any(|l| !l.parts.is_empty()) {
+            let mut offsets = vec![0u64];
+            let mut tubes = Vec::new();
+            let mut amounts = Vec::new();
+            for pixel in &wt.lat {
+                for &(i, amount) in &pixel.parts {
+                    tubes.push(i as u64);
+                    amounts.push(amount);
+                }
+                offsets.push(tubes.len() as u64);
+            }
+            v.push(Field { name: "wet.parts.offsets", shape: vec![offsets.len()], values: Values::U64(offsets) });
+            v.push(Field { name: "wet.parts.tubes", shape: vec![tubes.len()], values: Values::U64(tubes) });
+            v.push(Field { name: "wet.parts.amounts", shape: vec![amounts.len()], values: Values::F32(amounts) });
+        }
         // per-pixel drying state: empty (shape [0]) until the first wait
         let n = if ck.px.is_empty() { None } else { Some(px(1)) };
         type Get = fn(&crate::drying::Px) -> f32;

@@ -1412,7 +1412,8 @@ impl Server {
     }
 
     fn start_hand_frames(&mut self, done: Option<usize>) -> Result<(), String> {
-        frames::start(60.0, session_dir(&self.name).join("hand-frames"), 1000, Some(GALLERY_LIGHT), done)?;
+        let resume = done.map(|n| self.replay.identity(&self.s.program(&self.name), self.s.st.borrow().width).map(|identity| (n, identity))).transpose()?;
+        frames::start(60.0, session_dir(&self.name).join("hand-frames"), 1000, Some(GALLERY_LIGHT), resume)?;
         self.hand_frames = frames::stop();
         Ok(())
     }
@@ -1428,9 +1429,11 @@ impl Server {
     fn record_replay(&mut self) -> Result<(), String> {
         let n = self.s.log.len();
         if n == 0 { return Ok(()); }
-        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), n))?;
         let width = self.s.st.borrow().width;
-        self.replay.completed(&session_dir(&self.name).join("replay.ckpt"), &self.s, &self.s.program(&self.name), width)
+        let source = self.s.program(&self.name);
+        let identity = self.replay.identity(&source, width)?;
+        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), n, &identity))?;
+        self.replay.completed(&session_dir(&self.name).join("replay.ckpt"), &self.s, &source, width)
     }
 
     fn record_frame(&self) {
@@ -2368,8 +2371,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut s = Session::replay_with(width, tubes).and_then(|s| s.with_paper(session::logged_paper(&text))).map_err(|e| e.to_string())?;
     let mut batch = replay_checkpoint::Batch::open(args, &text, width, &mut s, &chunks, &out)?;
     if let Some((every, dir, fw)) = frames.clone() {
-        frames::start(every, dir, fw, light, (batch.done > 0).then_some(batch.done))?;
+        frames::start(every, dir, fw, light, (batch.done > 0).then(|| (batch.done, batch.identity().clone())))?;
     }
+    batch.begin()?;
     let frames = frames.is_some();
     // --state-digest: one line of state digests after every chunk (see `state_digest_line`)
     let mut digests = flag(args, "--state-digest").map(|p| std::fs::File::create(&p).map_err(|e| format!("{p}: {e}"))).transpose()?;
@@ -2398,7 +2402,7 @@ fn run(args: &[String]) -> Result<(), String> {
             state_dump::write_chunk(&s, i + 1, Path::new(&d))?;
         }
         if frames {
-            frames::chunk_end(s.canvas().as_deref(), i + 1)?;
+            frames::chunk_end(s.canvas().as_deref(), i + 1, batch.identity())?;
         }
         if batch.completed(&s, i + 1)? { break; }
     }

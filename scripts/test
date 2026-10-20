@@ -103,6 +103,8 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
   replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
+  replay_checkpoint::tests::batch_identity_is_only_built_for_checkpoints_or_frames \
+  replay_checkpoint::tests::checkpoint_resume_rejects_changed_build_width_and_environment \
   replay_checkpoint::tests::progress_is_published_at_every_chunk_and_batch_boundary \
   replay_checkpoint::tests::trace_failure_cannot_be_hidden_by_lua_pcall \
   replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files \

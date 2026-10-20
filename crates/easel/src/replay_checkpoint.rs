@@ -187,7 +187,7 @@ fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl Fn
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-struct Identity {
+pub(crate) struct Identity {
     build: [u8; 32],
     source: [u8; 32],
     width: usize,
@@ -315,7 +315,7 @@ impl Live {
         Self { trace: Trace { enabled: true, ..Trace::default() }, identity: IDENTITY.get_or_init(|| Identity::new("", 0)).clone(), done: 0, written: Instant::now() }
     }
 
-    fn identity(&self, source: &str, width: usize) -> Result<Identity, String> {
+    pub(crate) fn identity(&self, source: &str, width: usize) -> Result<Identity, String> {
         let mut identity = self.identity.clone()?;
         identity.source = Sha256::digest(source.as_bytes()).into();
         identity.width = width;
@@ -423,9 +423,14 @@ impl Batch {
         } else if batch.checkpoint.is_some() {
             TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, ..Trace::default() });
         }
-        batch.publish(if batch.done == batch.total { "complete" } else if batch.stopped() { "paused" } else { "running" }, batch.done.checked_add(1).filter(|n| *n <= batch.total && !batch.stopped()))?;
         Ok(batch)
     }
+
+    pub fn begin(&self) -> Result<(), String> {
+        self.publish(if self.done == self.total { "complete" } else if self.stopped() { "paused" } else { "running" }, self.done.checked_add(1).filter(|n| *n <= self.total && !self.stopped()))
+    }
+
+    pub(crate) fn identity(&self) -> &Identity { self.identity.as_ref().unwrap() }
 
     fn elapsed(&self) -> f64 { self.elapsed_before + self.started.elapsed().as_secs_f64() }
 
@@ -689,6 +694,8 @@ print(counter,rand(),drying(300,300))
         let mut s = session();
         let mut batch = Batch::open(&args(&dir.0, 2), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
         let progress = dir.0.join("replay.replay-progress.json");
+        assert!(!progress.exists());
+        batch.begin().unwrap();
         let read = || serde_json::from_slice::<serde_json::Value>(&std::fs::read(&progress).unwrap()).unwrap();
         assert_eq!(read()["chunks_done"], 0);
         for (i, chunk) in chunks.iter().take(2).enumerate() {

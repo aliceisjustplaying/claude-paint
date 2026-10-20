@@ -63,5 +63,5 @@ export function limitWaitFromEnv(env: NodeJS.ProcessEnv = process.env): LimitWai
 export function limitWaitMs(text: string, since: number, now: number, w: LimitWait): number | undefined {
 	if (now - since >= w.giveUpMs) return undefined;
 	const reset = limitResetMs(text);
-	return Math.min(reset !== undefined ? reset + 60_000 : w.probeMs, w.giveUpMs - (now - since));
+	return Math.min(reset !== undefined ? reset + 60_000 : w.probeMs, w.giveUpMs - (now - since), MAX_TIMER_MS);
 }

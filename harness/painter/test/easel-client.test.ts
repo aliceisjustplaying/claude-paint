@@ -203,7 +203,7 @@ test("log's find gives the lines that hold the text, numbered as in the file, wi
 	assert.equal(logFind("a\nb", "a", "paintings/lua/scratch.lua"), '1 line of paintings/lua/scratch.lua holds "a"\n1: a\n2- b');
 	assert.equal(logFind(log, "mask", "paintings/lua/painting.lua"), 'no line of paintings/lua/painting.lua holds "mask"');
 	const many = logFind(Array.from({ length: 150 }, (_, i) => `m${i}`).join("\n"), "m", "paintings/lua/painting.lua");
-	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 are shown\)\n1: m0\n/);
+	assert.match(many, /^150 lines of paintings\/lua\/painting\.lua hold "m" \(the first 100 matches are shown with the lines around them\)\n1: m0\n/);
 	assert.match(many, /\n100: m99\n101: m100\n102: m101$/);
 });
 

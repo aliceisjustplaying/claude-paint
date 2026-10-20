@@ -711,6 +711,7 @@ impl Canvas {
                 continue;
             }
             c.floor = c.a;
+            c.non_pastel_floor = c.non_pastel;
             if c.loose > 0.0 {
                 c.bound += c.loose;
                 c.loose = 0.0;
@@ -1172,7 +1173,7 @@ impl Rubbing<'_> {
             }
             pad.load = total;
             let under_px = uncover(self.pxs[i], cell.a, cell.r);
-            cell.a = cell.floor + (cell.a - cell.floor).max(0.0) * (1.0 - take / cell.loose);
+            cell.a = (cell.floor + (cell.a - cell.floor).max(0.0) * (1.0 - take / cell.loose)).max(cell.non_pastel);
             cell.loose -= take;
             self.pxs[i] = cover(under_px, cell.a, cell.r);
             self.moved |= take > 0.0;
@@ -1410,7 +1411,7 @@ mod tests {
     fn smudge_lightens_its_source_and_makes_erasable_deposits() {
         let mut c = Canvas::new_window(40, 1.0, [0.55; 3], None).with_size_mm(40.0);
         let i = 20 * 40 + 20;
-        let source = Cell { a: 0.8, r: [0.02; 3], lift: 0.55, floor: 0.3, film: 0.0, loose: 12.0, bound: 8.0 };
+        let source = Cell { a: 0.8, r: [0.02; 3], lift: 0.55, floor: 0.3, film: 0.0, loose: 12.0, bound: 8.0, ..Cell::default() };
         c.drawing_mut().cells[i] = source;
         c.px[i] = cover(c.px[i], source.a, source.r);
         let before = c.px[i];
@@ -1440,7 +1441,7 @@ mod tests {
     fn erasing_loose_pastel_preserves_bound_pigment_and_releases_the_tooth() {
         for (coverage, floor) in [(0.8, 0.0), (0.99, 0.9), (0.995, 0.995)] {
             let mut c = Canvas::new_window(4, 1.0, [0.55; 3], None).with_size_mm(4.0);
-            let source = Cell { a: coverage, r: [0.02; 3], lift: 0.55, floor, film: 0.0, loose: 12.0, bound: 8.0 };
+            let source = Cell { a: coverage, r: [0.02; 3], lift: 0.55, floor, film: 0.0, loose: 12.0, bound: 8.0, ..Cell::default() };
             c.drawing_mut().cells[0] = source;
             c.px[0] = cover(c.px[0], source.a, source.r);
             c.erase(&crate::Mask::full(c.window().whole()), 1.0);

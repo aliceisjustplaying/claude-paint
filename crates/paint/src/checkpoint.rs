@@ -43,8 +43,9 @@
 //! thickness (for craquelure fitted to the ground); each wet pixel's paint
 //! coverage (pointed-tip marks); the drawing (`graphite::Drawing`), if any:
 //! every cell of the deposit (coverage, flake reflectance, lift, fixed
-//! floor, film when drawn; with a pastel stick's pastel, flag 2, the
-//! reflectance in color and the pastel in the tooth, loose and bound) and
+//! floor, film when drawn; with a pastel stick's pastel, flag 3, the
+//! reflectance in color, the pastel in the tooth, loose and bound, and the
+//! non-pastel coverage and its fixed floor; flag 2 lacks those last two) and
 //! the whole-canvas guide with its fixed floor;
 //! and hand time (`tally`): the slice setting and the complete ledger, with
 //! the part already on the clock, so a resumed hand-timed painting keeps
@@ -505,8 +506,8 @@ impl Canvas {
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
-                // 1: graphite and chalk; 2: with a pastel stick's pastel, its
-                // cells in color with what lies in the tooth (graphite.rs)
+                // 1: graphite and chalk; 3: with pastel, its colored cells,
+                // what lies in the tooth and non-pastel coverage (graphite.rs)
                 put_u64(w, d.layout())?;
                 put_all(w, d.to_f32s())?;
             }
@@ -671,7 +672,7 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            v @ (1 | 2) => {
+            v @ (1 | 2 | 3) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
                 let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
@@ -996,7 +997,7 @@ mod tests {
     /// A sheet of paper with stick pastel in its tooth survives a
     /// checkpoint bit for bit (the paper, its micro-roughness, the loose and
     /// bound pastel), and goes on taking pastel as it would have; a drawing
-    /// with stick pastel is flag 2, and a corrupt one is refused.
+    /// with stick pastel is flag 3, and a corrupt one is refused.
     #[test]
     fn paper_and_stick_pastel_survive_a_checkpoint() {
         use crate::pastel::{Pose, Stick, StrokePoint};
@@ -1008,7 +1009,7 @@ mod tests {
         c.fix_pastel(None, 0.15);
         c.stick_stroke(&mut st, &line(260.0));
         let d = c.drawing.as_ref().unwrap();
-        assert!(d.layout() == 2 && d.cells.iter().any(|c| c.loose > 0.0) && d.cells.iter().any(|c| c.bound > 0.0));
+        assert!(d.layout() == 3 && d.cells.iter().any(|c| c.loose > 0.0) && d.cells.iter().any(|c| c.bound > 0.0));
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
         let (mut r, _) = Canvas::read_state(&mut Cursor::new(b.clone())).unwrap();

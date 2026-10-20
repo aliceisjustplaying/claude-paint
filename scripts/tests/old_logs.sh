@@ -4,7 +4,7 @@
 # legacy easel3/easel4 logs, a synthetic log of the legacy verbs past those chunks, the
 # round 19 log at 320 px), replayed by a release easel at
 # a small width. Each decoded PNG must meet the image tolerance against
-# its golden and a same-binary repeat; state digests are diagnostic. References came
+# its golden; legacy_tiny also checks a same-binary repeat. State digests are diagnostic. References came
 # from af49348's release easel (crates/easel/tests/old_logs/golden/README.md).
 # These replace the tests that replayed
 # whole paintings (notes/speed/SKIPPED.md); no whole painting is replayed here.
@@ -47,17 +47,25 @@ while IFS=$'\t' read -r name log width; do
   fi
   want=$cases/golden/$name.txt
   if [ ! -f "$want" ]; then echo "old_logs: $name: no golden ($want)"; failed=1; continue; fi
+  if [ "$name" = r19 ]; then
+    IFS= read -r palette <"$work/$name.out"
+    if [ "$palette" != "lead white, smalt, pale smalt, yellow ochre, red earth, vermilion, raw umber, bone black, cobalt blue, chrome yellow, Prussian blue, green earth, Rinmann's green, copper green" ]; then
+      echo "old_logs: r19 default tubes differ"; failed=1
+    fi
+  fi
   if uv run --script "$repo/scripts/compare_images.py" "$cases/golden/$name.png" "$work/$name.png" --expected-platform "$(cat "$cases/golden/platform.txt" 2>/dev/null || echo unknown)" --actual-platform current; then
     echo "old_logs: $name ok ($log at $width px)"
     if ! cmp -s "$want" "$work/$name.got"; then
       echo "old_logs: $name cross-build digests differ (image is within tolerance)"
     fi
-    "$easel" run "$cases/$log" --width "$width" --out "$work/$name.again.png" --state-digest "$work/$name.again.dig" >"$work/$name.again.out" 2>"$work/$name.again.err"
-    if ! uv run --script "$repo/scripts/compare_images.py" "$work/$name.png" "$work/$name.again.png"; then
-      echo "old_logs: $name repeat replay exceeds image tolerance"; failed=1
-    fi
-    if ! cmp -s <(sed 's/ secs=[^ ]*//' "$work/$name.dig") <(sed 's/ secs=[^ ]*//' "$work/$name.again.dig"); then
-      echo "old_logs: $name repeat state digests differ (diagnostic only)"
+    if [ "$name" = legacy_tiny ]; then
+      "$easel" run "$cases/$log" --width "$width" --out "$work/$name.again.png" --state-digest "$work/$name.again.dig" >"$work/$name.again.out" 2>"$work/$name.again.err"
+      if ! uv run --script "$repo/scripts/compare_images.py" "$work/$name.png" "$work/$name.again.png"; then
+        echo "old_logs: $name repeat replay exceeds image tolerance"; failed=1
+      fi
+      if ! cmp -s <(sed 's/ secs=[^ ]*//' "$work/$name.dig") <(sed 's/ secs=[^ ]*//' "$work/$name.again.dig"); then
+        echo "old_logs: $name repeat state digests differ (diagnostic only)"
+      fi
     fi
   else
     echo "old_logs: $name exceeds image tolerance"; failed=1

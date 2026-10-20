@@ -940,7 +940,7 @@ mod tests {
     fn drained_masking_sheets_keep_each_support() {
         for drain in [false, true] {
             for support in 0..3 {
-                let mut c = Canvas::new_window(32, 1.0, [0.5; 3], None).with_drain(drain);
+                let mut c = Canvas::new_window(32, 1.0, [0.5; 3], None).with_size_mm(8.0).with_drain(drain);
                 match support {
                     1 => c = c.with_paper(crate::paper::Paper::drawing(2)),
                     2 => c.raw_canvas(crate::soak::Fabric::cotton_duck(), 2),

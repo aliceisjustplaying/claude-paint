@@ -1366,8 +1366,8 @@ mod tests {
     use super::*;
     use crate::paper::Paper;
 
-    fn sheet() -> Canvas {
-        Canvas::new_window(600, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+    fn sheet(width: usize) -> Canvas {
+        Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
     }
 
     fn pose(force: f32, alt_deg: f32) -> Pose {
@@ -1463,7 +1463,7 @@ mod tests {
     #[test]
     fn a_stroke_lays_in_proportion_to_its_force() {
         let black = [0.02f32; 3];
-        let (mut c1, mut c2) = (sheet(), sheet());
+        let (mut c1, mut c2) = (sheet(160), sheet(160));
         let (mut s1, mut s2) = (Stick::round(black, 0.7, 12.0), Stick::round(black, 0.7, 12.0));
         // (a first stroke to wear a facet, off the measured band)
         line(&mut c1, &mut s1, 900.0, 1.0, 60.0);
@@ -1478,7 +1478,7 @@ mod tests {
     /// cuts a new one.
     #[test]
     fn the_stick_wears_to_a_facet() {
-        let mut c = sheet();
+        let mut c = sheet(160);
         let mut st = Stick::round([0.5; 3], 0.8, 12.0);
         let n0 = st.facets.len();
         line(&mut c, &mut st, 300.0, 2.0, 50.0);
@@ -1495,7 +1495,7 @@ mod tests {
     /// after fixing, it lays more again.
     #[test]
     fn the_tooth_fills_and_fixative_gives_it_back() {
-        let mut c = sheet();
+        let mut c = sheet(160);
         let mut st = Stick::round([0.1, 0.1, 0.5], 0.8, 12.0);
         let mut v = Vec::new();
         for _ in 0..8 {
@@ -1511,7 +1511,7 @@ mod tests {
     /// darkens what lies past it, and bound pastel doesn't move.
     #[test]
     fn the_finger_moves_loose_pastel() {
-        let mut c = sheet();
+        let mut c = sheet(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         for k in 0..6 {
             let x = 300.0 + 8.0 * k as f32;
@@ -1568,7 +1568,7 @@ mod tests {
     /// says it laid.
     #[test]
     fn crumbs_spread_a_stroke_beyond_its_contact() {
-        let mut c = sheet();
+        let mut c = sheet(600);
         let mut st = Stick::round([0.05; 3], 0.8, 12.0);
         let pts = [StrokePoint { x: 300.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }, StrokePoint { x: 700.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }];
         let out = c.stick_stroke(&mut st, &pts);
@@ -1594,11 +1594,11 @@ mod tests {
     #[test]
     fn crumbs_on_wet_paint_are_lost() {
         let pts = [StrokePoint { x: 300.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }, StrokePoint { x: 700.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }];
-        let (mut dry, mut wet) = (sheet(), sheet());
+        let (mut dry, mut wet) = (sheet(600), sheet(600));
         let mut s1 = Stick::round([0.05; 3], 0.8, 12.0);
         let mut s2 = s1.clone();
         // (where the stick touches: from a stroke on a third sheet)
-        let mut probe = sheet();
+        let mut probe = sheet(600);
         let mut s0 = s1.clone();
         probe.stick_stroke(&mut s0, &pts);
         let touch = contacts(&probe, &s0, 500.0, 300.0, 700.0, 2.0, 60.0);
@@ -1635,7 +1635,7 @@ mod tests {
     /// again; fixed pastel stays.
     #[test]
     fn the_eraser_lifts_loose_pastel() {
-        let mut c = sheet();
+        let mut c = sheet(160);
         let mut st = Stick::round([0.1, 0.1, 0.5], 0.8, 12.0);
         for _ in 0..4 {
             line(&mut c, &mut st, 500.0, 3.0, 55.0);

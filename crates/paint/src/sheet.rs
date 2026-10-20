@@ -46,7 +46,7 @@
 
 use crate::canvas::{Canvas, Frame};
 use crate::color::Rgb;
-use crate::graphite::{cover, uncover};
+use crate::graphite::cover;
 use crate::mask::Mask;
 use crate::pastel::PARTICLE_UM;
 
@@ -431,15 +431,21 @@ impl Canvas {
     fn take_loose(c: &mut crate::graphite::Cell, px: &mut Rgb, keep: f32) -> f32 {
         let v = c.loose + c.bound;
         let keep = keep.max(c.bound).min(v);
-        let ex = v - keep;
-        if ex <= 1e-6 {
+        let ex = if c.optics.is_some() { c.loose - (keep - c.bound).max(0.0) } else { v - keep };
+        if ex <= if c.optics.is_some() { 0.0 } else { 1e-6 } {
             return 0.0;
         }
-        c.loose -= ex;
-        let a1 = coverage_after_pastel_removal(c.a, c.non_pastel, v, keep).max(c.floor.min(c.a));
-        let under = uncover(*px, c.a, c.r);
+        let loose = c.loose;
+        let before = (c.a, c.reflectance());
+        c.loose = if c.optics.is_some() { (c.loose - ex).max(0.0) } else { c.loose - ex };
+        let a1 = if c.optics.is_some() {
+            let base = c.floor + c.non_pastel - c.non_pastel_floor;
+            coverage_after_pastel_removal(c.a, base, loose, c.loose)
+        } else {
+            coverage_after_pastel_removal(c.a, c.non_pastel, v, keep).max(c.floor.min(c.a))
+        };
         c.a = a1;
-        *px = cover(under, c.a, c.r);
+        *px = c.repaint(*px, before);
         ex
     }
 
@@ -542,17 +548,21 @@ impl Canvas {
                     let mu = self.micro_um(i);
                     let v = cl.loose + cl.bound;
                     let keep = Self::below(v, mu, z + shave);
-                    let r = cl.r;
                     if shave > 0.0 {
                         // cut fibers take what is bound to them too: freed,
                         // it comes off with the loose (its coverage with it)
                         let cut = (cl.bound - keep).max(0.0);
+                        let before = (cl.a, cl.reflectance());
                         if cut > 0.0 {
-                            cl.floor = coverage_after_pastel_removal(cl.floor, cl.non_pastel_floor, cl.bound, cl.bound - cut);
+                            cl.free_bound(coverage_after_pastel_removal(cl.floor, cl.non_pastel_floor, cl.bound, cl.bound - cut), cut);
                         }
                         cl.bound -= cut;
                         cl.loose += cut;
+                        if cl.optics.is_some() {
+                            pxs[i] = cl.repaint(pxs[i], before);
+                        }
                     }
+                    let r = cl.r;
                     let ex = Self::take_loose(cl, &mut pxs[i], keep);
                     if ex > 0.0 {
                         let tot = pushed + ex * 0.35;
@@ -1122,6 +1132,137 @@ mod tests {
         Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
     }
 
+    fn graphite_under_colored_pastel(optics: bool) -> (Canvas, Canvas) {
+        let mut c = Canvas::new_window(64, 1.0, [0.55; 3], None).with_size_mm(64.0).with_paper(Paper::drawing(4)).with_drawing_optics(optics);
+        let mark = hand_line(&[(100.0, 500.0), (900.0, 500.0)], &[0.8], false, true, 0.0, 5);
+        c.draw(&Lead::pencil("6B").unwrap(), &mark, 0.0, 9);
+        c.fix_drawing(None);
+        let original = c.clone();
+        let mut stick = Stick::round([0.7, 0.06, 0.02], 0.8, 12.0);
+        c.stick_stroke(&mut stick, &[
+            StrokePoint { x: 100.0, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 },
+            StrokePoint { x: 900.0, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 },
+        ]);
+        assert!(c.drawing.as_ref().unwrap().cells.iter().any(|c| c.non_pastel_floor > 0.0 && c.loose > 0.0));
+        assert!(c.pixels().iter().zip(original.pixels()).any(|(a, b)| (a[0] - b[0]).abs() > 0.01));
+        (original, c)
+    }
+
+    fn assert_original_graphite(original: &Canvas, c: &Canvas) {
+        for (i, (before, after)) in original.drawing.as_ref().unwrap().cells.iter().zip(&c.drawing.as_ref().unwrap().cells).enumerate() {
+            assert!((before.a - after.a).abs() < 1e-6, "coverage at {i}: {} -> {}", before.a, after.a);
+            assert_eq!(after.bound, 0.0);
+            if before.a > 0.0 {
+                assert_eq!(after.loose, 0.0);
+                for (a, b) in before.reflectance().into_iter().zip(after.reflectance()) {
+                    assert!((a - b).abs() < 2e-6, "original graphite reflectance at {i}: {a} -> {b}");
+                }
+            }
+            for (a, b) in original.pixels()[i].into_iter().zip(c.pixels()[i]) {
+                assert!((a - b).abs() < 2e-5, "original canvas pixel at {i}: {a} -> {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn erasing_colored_pastel_recovers_original_graphite_after_checkpoint() {
+        for optics in [false, true] {
+            let (original, mut c) = graphite_under_colored_pastel(optics);
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            let (mut restored, _) = Canvas::read_state(&mut std::io::Cursor::new(&bytes)).unwrap();
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "").unwrap();
+            assert_eq!(bytes, again);
+            assert_eq!(restored.drawing_optics(), optics);
+            assert_eq!(restored.drawing.as_ref().unwrap().layout(), if optics { 4 } else { 3 });
+            let mask = Mask::full(c.frame());
+            for _ in 0..50 {
+                c.erase(&mask, 1.0);
+                restored.erase(&mask, 1.0);
+            }
+            assert_eq!(c.pixels(), restored.pixels());
+            if optics {
+                assert_original_graphite(&original, &restored);
+            } else {
+                assert!(original.pixels().iter().zip(restored.pixels()).any(|(a, b)| (a[0] - b[0]).abs() > 0.01), "legacy replay retains its mixed-color behavior");
+            }
+        }
+    }
+
+    #[test]
+    fn loose_pastel_tools_do_not_recolor_retained_graphite() {
+        let (original, painted) = graphite_under_colored_pastel(true);
+        for tool in ["remove", "finger", "brush", "blade", "puff", "tap"] {
+            let mut c = painted.clone();
+            let path = [(0.0, 500.0), (1000.0, 500.0)];
+            match tool {
+                "finger" => { c.rub(&path, 1.0, None, 40.0); }
+                "brush" => { c.dust_pastel(30.0, 2.0, &path, &mut 0.0, 1e9); }
+                "blade" => { c.scrape_pastel(30.0, 100.0, &path, (2.0, 2.0), None); }
+                "puff" => { c.blow_pastel(500.0, 500.0, 10.0, 100.0, 5.0); }
+                "tap" => { c.tap_pastel(20.0); }
+                _ => {}
+            }
+            let d = c.drawing.as_mut().unwrap();
+            for (cell, px) in d.cells.iter_mut().zip(&mut c.px) {
+                Canvas::take_loose(cell, px, 0.0);
+            }
+            assert_original_graphite(&original, &c);
+        }
+    }
+
+    #[test]
+    fn removable_chalk_and_pastel_leave_fixed_graphite_color_unchanged() {
+        let (original, mut c) = graphite_under_colored_pastel(true);
+        let mark = hand_line(&[(100.0, 500.0), (900.0, 500.0)], &[1.0], false, true, 0.0, 5);
+        c.draw(&Lead::chalk(), &mark, 0.0, 11);
+        assert!(c.drawing.as_ref().unwrap().cells.iter().any(|c| c.non_pastel > c.non_pastel_floor));
+        for _ in 0..50 { c.erase(&Mask::full(c.frame()), 1.0); }
+        assert_original_graphite(&original, &c);
+    }
+
+    #[test]
+    fn bound_pastel_keeps_its_color_after_checkpoint_and_loose_removal() {
+        let (graphite, mut c) = graphite_under_colored_pastel(true);
+        c.fix_pastel(None, 0.15);
+        let original = c.clone();
+        let mut blue = Stick::round([0.03, 0.05, 0.6], 0.8, 12.0);
+        c.stick_stroke(&mut blue, &[
+            StrokePoint { x: 100.0, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 },
+            StrokePoint { x: 900.0, y: 500.0, pose: pose(3.0, 60.0), speed: 50.0 },
+        ]);
+        let mut bytes = Vec::new();
+        c.write_state(&mut bytes, "").unwrap();
+        let (mut c, _) = Canvas::read_state(&mut std::io::Cursor::new(bytes)).unwrap();
+        for (cell, px) in c.drawing.as_mut().unwrap().cells.iter_mut().zip(&mut c.px) {
+            Canvas::take_loose(cell, px, cell.bound);
+        }
+        for (before, after) in original.drawing.as_ref().unwrap().cells.iter().zip(&c.drawing.as_ref().unwrap().cells) {
+            assert_eq!(before.bound, after.bound);
+            assert_eq!(after.loose, 0.0);
+            assert!((before.a - after.a).abs() < 1e-6);
+            for (a, b) in before.reflectance().into_iter().zip(after.reflectance()) { assert!((a - b).abs() < 2e-6); }
+        }
+        for (before, after) in original.pixels().iter().zip(c.pixels()) {
+            for (a, b) in before.iter().zip(after) { assert!((a - b).abs() < 2e-5, "bound pigment pixel: {a} -> {b}"); }
+        }
+        for (cell, px) in c.drawing.as_mut().unwrap().cells.iter_mut().zip(&mut c.px) {
+            if cell.bound <= 0.0 { continue; }
+            let before = (cell.a, cell.reflectance());
+            cell.free_bound(cell.non_pastel_floor, cell.bound);
+            cell.loose += cell.bound;
+            cell.bound = 0.0;
+            *px = cell.repaint(*px, before);
+            Canvas::take_loose(cell, px, 0.0);
+        }
+        assert_original_graphite(&graphite, &c);
+        c.drawing.as_mut().unwrap().cells[0].optics.as_mut().unwrap().fixed = f32::NAN;
+        let mut bad = Vec::new();
+        c.write_state(&mut bad, "").unwrap();
+        assert!(Canvas::read_state(&mut std::io::Cursor::new(bad)).is_err());
+    }
+
     #[test]
     fn loose_removal_preserves_fixed_and_non_pastel_coverage() {
         let cov = |v: f32| 1.0 - (-v / PARTICLE_UM).exp();
@@ -1132,6 +1273,7 @@ mod tests {
                     a: other + (1.0 - other) * cov(bound + 8.0), r: [0.1; 3],
                     lift: 0.55, floor, film: 0.0, loose: 8.0, bound, non_pastel: other,
                     non_pastel_floor: if fixed { other } else { 0.0 },
+                    ..crate::graphite::Cell::default()
                 };
                 let mut px = cover([0.55; 3], cell.a, cell.r);
                 let removed = Canvas::take_loose(&mut cell, &mut px, keep);

@@ -220,7 +220,7 @@ impl Style {
                         if header == *key {
                             // (written with the drain switch on to keep the
                             // paint's packing, below; prepared, it is off)
-                            return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim);
+                            return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim);
                         }
                     }
                 }
@@ -251,7 +251,7 @@ impl Style {
                 if saved.is_err() { let _ = std::fs::remove_file(temp); }
             }
         }
-        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
+        c.with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
     }
 
     /// A sheet of paper of this style's width, with its ground layers (if
@@ -259,7 +259,7 @@ impl Style {
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
         let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
-        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
+        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
     }
 
     /// This style's ground layers laid on `c`, bottom first.

@@ -149,6 +149,7 @@ const BRUSH_SKIM: u64 = 1 << 38;
 const RAG_LIFT: u64 = 1 << 39;
 const LIQUID_FILM_LEVELS: u64 = 1 << 40;
 const SEALED_DRAWING_GUIDE: u64 = 1 << 41;
+const DRAWING_OPTICS: u64 = 1 << 42;
 
 /// Why an engine-3 PAINTCK8 file can't be read.
 const OLD_ENGINE3: &str = "an engine-3 canvas saved before the thinner (format PAINTCK8, by the easel at af49348): this easel saves engine 3 as PAINTCK9 and doesn't convert old saves; open it with that version (git af49348) or replay its log";
@@ -529,7 +530,7 @@ impl Canvas {
         for v in self.tally.to_words() {
             put_u64(w, v)?;
         }
-        put_u64(w, self.engine as u64 | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
+        put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
         if version >= 11 {
             put_all(w, self.gloss.iter().copied())?;
@@ -693,7 +694,7 @@ impl Canvas {
         c.wet = wet;
         c.drawing = match get_u64(r)? {
             0 => None,
-            v @ (1 | 2 | 3) => {
+            v @ (1 | 2 | 3 | 4) => {
                 let whole = full_w.checked_mul(full_h).filter(|&m| m <= 1 << 31).ok_or_else(|| bad("checkpoint frame is invalid"))?;
                 let d = crate::graphite::Drawing::from_f32s(n, whole, v, |k| get_all(r, k))?;
                 Some(Box::new(d.ok_or_else(|| bad("checkpoint drawing is invalid"))?))
@@ -723,11 +724,15 @@ impl Canvas {
             c.brush_skim = word & BRUSH_SKIM != 0;
             c.liquid_film_levels = word & LIQUID_FILM_LEVELS != 0;
             c.sealed_drawing_guide = word & SEALED_DRAWING_GUIDE != 0;
-            match u32::try_from(word & !(SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
+            c.drawing_optics = word & DRAWING_OPTICS != 0;
+            match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
                 Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
+        if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
+            return Err(bad("checkpoint drawing optics do not match its layout"));
+        }
         if version >= 11 {
             if c.engine < 4 {
                 return Err(bad("checkpoint material format holds a canvas of an engine before 4"));

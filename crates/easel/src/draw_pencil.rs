@@ -517,12 +517,17 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut s = st1.borrow_mut();
             let paper = s.paper;
             let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
-            c.fix_drawing(m.as_deref());
+            if !c.drawing_optics() {
+                c.fix_drawing(m.as_deref());
+            }
             if paper {
                 // a light spray wets about 0.15 of the particles (pastel.rs
                 // `fix_pastel`; over graphite alone it sets the floor
                 // `fix_drawing` just set, and nothing else)
                 c.fix_pastel(m.as_deref(), 0.15);
+            }
+            if c.drawing_optics() {
+                c.fix_drawing(m.as_deref());
             }
             Ok(())
         })?)?;
@@ -891,6 +896,39 @@ mod tests {
 
     fn run(s: &mut Session, src: &str) -> String {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
+    }
+
+    #[test]
+    fn graphite_color_survives_pastel_erasing_save_and_replay() {
+        use crate::session::{DRAWING_OPTICS_MARK, box_for};
+        for enabled in [false, true] {
+            let old = "--@ engine 8\n--@ paper\n--@ sealed-drawing-guide\n";
+            let mut s = Session::with_box(64, box_for(if enabled { None } else { Some(old) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, r#"canvas{size=64, aspect=1, seed=4, paper={grammage=200}}
+                p=pencil("6B") p:line({{100,500},{900,500}}, {ruler=true, pressure=0.8}) fix()"#);
+            let original = s.canvas().unwrap().pixels().to_vec();
+            run(&mut s, r#"red=pastel(pile{{"vermilion",1}}, {kind="soft"})
+                red:stroke({{100,500},{900,500}}, {force=3, alt=60})"#);
+            let program = s.program("optics");
+            assert_eq!(program.lines().any(|l| l == DRAWING_OPTICS_MARK), enabled);
+            assert!(!box_for(Some(&format!("{old}--@ chunk 1\n{DRAWING_OPTICS_MARK}\n"))).unwrap().drawing_optics);
+            let mut replay = Session::replay_with(64, box_for(Some(&program)).unwrap()).unwrap().with_paper(true).unwrap();
+            for chunk in parse_program(&program) { run(&mut replay, &chunk); }
+            assert_eq!(replay.canvas().unwrap().pixels(), s.canvas().unwrap().pixels());
+            let path = std::env::temp_dir().join(format!("easel-drawing-optics-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let mut restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.canvas().unwrap().drawing_optics(), enabled);
+            assert_eq!(restored.program("optics").lines().any(|l| l == DRAWING_OPTICS_MARK), enabled);
+            let erase = "for i=1,50 do erase(everywhere(), {strength=1}) end";
+            for session in [&mut s, &mut replay, &mut restored] { run(session, erase); }
+            assert_eq!(s.canvas().unwrap().pixels(), replay.canvas().unwrap().pixels());
+            assert_eq!(s.canvas().unwrap().pixels(), restored.canvas().unwrap().pixels());
+            let difference = s.canvas().unwrap().pixels().iter().zip(&original).flat_map(|(a, b)| a.iter().zip(b).map(|(a, b)| (a - b).abs())).fold(0.0f32, f32::max);
+            if enabled { assert!(difference < 2e-5, "original graphite pixels: {difference}"); }
+            else { assert!(difference > 2e-5, "legacy replay: {difference}"); }
+        }
     }
 
     #[test]

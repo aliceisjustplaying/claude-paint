@@ -1363,7 +1363,41 @@ mod tests {
     use crate::paper::Paper;
 
     fn sheet(width: usize) -> Canvas {
-        Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        static SMALL: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        static LARGE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        let prototype = match width {
+            160 => &SMALL,
+            600 => &LARGE,
+            _ => panic!("unsupported test sheet width: {width}"),
+        };
+        prototype.get_or_init(|| {
+            Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        }).clone()
+    }
+
+    #[test]
+    fn reused_sheets_match_fresh_paper_and_mutate_independently() {
+        let state = |c: &Canvas| {
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        for width in [160, 600] {
+            let fresh = Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
+            let expected = state(&fresh);
+            let mut changed = sheet(width);
+            let untouched = sheet(width);
+            assert_eq!(state(&changed), expected);
+            assert_eq!(state(&untouched), expected);
+            line(&mut changed, &mut Stick::round([0.02; 3], 0.8, 12.0), 500.0, 3.0, 60.0);
+            assert_ne!(changed.pixels(), untouched.pixels());
+            changed.height[0] += 1.0;
+            changed.micro[0] += 1.0;
+            changed.wet.vol[0] = 1.0;
+            assert_ne!(state(&changed), expected);
+            assert_eq!(state(&untouched), expected);
+            assert_eq!(state(&sheet(width)), expected);
+        }
     }
 
     fn pose(force: f32, alt_deg: f32) -> Pose {

@@ -1129,7 +1129,33 @@ mod tests {
     use crate::pastel::{PARTICLE_UM, Pose, Stick, StrokePoint};
 
     fn drawing_paper() -> Canvas {
-        Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        static PROTOTYPE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        PROTOTYPE.get_or_init(|| {
+            Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        }).clone()
+    }
+
+    #[test]
+    fn reused_drawing_paper_matches_fresh_paper_and_mutates_independently() {
+        let state = |c: &Canvas| {
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let fresh = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
+        let expected = state(&fresh);
+        let mut changed = drawing_paper();
+        let untouched = drawing_paper();
+        assert_eq!(state(&changed), expected);
+        assert_eq!(state(&untouched), expected);
+        band(&mut changed, &mut Stick::round([0.02; 3], 0.8, 12.0), 500.0, 501.0, 3.0);
+        assert_ne!(changed.pixels(), untouched.pixels());
+        changed.height[0] += 1.0;
+        changed.micro[0] += 1.0;
+        changed.wet.vol[0] = 1.0;
+        assert_ne!(state(&changed), expected);
+        assert_eq!(state(&untouched), expected);
+        assert_eq!(state(&drawing_paper()), expected);
     }
 
     fn graphite_under_colored_pastel(optics: bool) -> (Canvas, Canvas) {

@@ -191,7 +191,7 @@ impl Canvas {
     /// render then skips the tiles that miss its window (they paint nothing
     /// it holds; the rest keep their relative order), after the ids are
     /// handed out, so it paints with the same ids as the whole canvas.
-    pub(crate) fn paint_pass(&mut self, pass: Pass, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
+    pub(crate) fn paint_pass(&mut self, pass: Pass, serial: bool, paint: impl Fn(Surf, usize, u32) -> Bounds + Sync) {
         let Pass { grid, order, rects, secs, ids, slice } = pass;
         let regroup = matches!(order, TileOrder::Quarter(_));
         let order = match order {
@@ -226,7 +226,11 @@ impl Canvas {
             // done
             let stats = crate::engine7::stats().then(crate::engine7::BatchStats::default);
             let t0 = std::time::Instant::now();
-            let dirty = run_ordered(&order, &rects, stats.as_ref(), |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union);
+            let dirty = if serial {
+                order.iter().map(|&t| paint(surf, t, first.wrapping_add(offsets[t]))).fold(None, union)
+            } else {
+                run_ordered(&order, &rects, stats.as_ref(), |t| paint(surf, t, first.wrapping_add(offsets[t]))).into_iter().fold(None, union)
+            };
             if let Some(st) = &stats {
                 st.print(order.len(), t0.elapsed().as_secs_f64());
             }

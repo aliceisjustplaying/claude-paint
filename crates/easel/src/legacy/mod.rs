@@ -367,7 +367,7 @@ pub fn brushload(st: &S, p: &Value, extra: &Value) -> Result<Option<(paint::Pain
     if let Value::UserData(u) = p
         && let Ok(pu) = u.borrow::<PaintU>()
     {
-        return Ok(Some((pu.0, pu.0.color)));
+        return Ok(Some((pu.0.clone(), pu.0.color)));
     }
     if !matches!(p, Value::String(_) | Value::Table(_)) && !matches!(p, Value::UserData(u) if u.borrow::<Col>().is_ok()) {
         return Ok(None);
@@ -394,7 +394,7 @@ fn paint_of(want: Rgb, o: Option<&Table>) -> Result<paint::Paint> {
     Ok(paint::Paint::new(want, h, s))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct PaintU(pub paint::Paint);
 impl UserData for PaintU {
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {

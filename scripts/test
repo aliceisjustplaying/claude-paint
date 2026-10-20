@@ -139,7 +139,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   handling::wet_edges::a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops \
   handling::wet_edges::a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend \
   handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint \
-  rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask
+  rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask \
+  paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \

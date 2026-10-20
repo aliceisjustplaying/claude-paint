@@ -31,7 +31,7 @@ async function viewer(browser, fixture, { old = false, staticMode = false, liveF
     if (u.pathname === '/api/sessions' || u.pathname === '/data/sessions.json') return route.fulfill({ json:listed ? [{ p:'fixture', folder:'fixture', painter:true, sittings, mtime:0, title:'Fixture' }] : [] });
     if (u.pathname === '/paintings.json') return route.fulfill({ json:[] });
     if (u.pathname === '/api/events' || u.pathname.endsWith('/events.json')) {
-      if (state.failing) return route.fulfill({ status:503, body:'' });
+      if (state.failing) return route.fulfill({ status:503, json:{ error:'unavailable' } });
       const since = staticMode || u.searchParams.has('epoch') && u.searchParams.get('epoch') !== state.epoch ? 0 : +(u.searchParams.get('since') || 0);
       const updates = state.updates.splice(0);
       return route.fulfill({ json:{ epoch:state.epoch, sittings:state.sittings, events:state.events.slice(since), updates, nupdates:state.nupdates, total:state.events.length } });
@@ -501,9 +501,11 @@ async function pollUpdate(v, i, replacement) {
     const fresh = () => initial.map(e => ({ ...e, ts:new Date().toISOString() }));
     const dropped = await viewer(browser, fresh());
     assert.equal(await dropped.page.locator('#badge').textContent(), 'LIVE');
+    const loaded = await dropped.page.evaluate(() => events);
     dropped.state.failing = true;
+    await dropped.page.waitForFunction(() => disconnected);
     await dropped.page.waitForFunction(() => document.getElementById('badge').className !== 'live' && document.getElementById('badge').textContent !== 'LIVE');
-    assert.equal(await dropped.page.evaluate(() => events.length), initial.length, 'a failed refresh keeps what was loaded');
+    assert.deepEqual(await dropped.page.evaluate(() => events), loaded, 'a failed refresh keeps what was loaded');
     dropped.state.failing = false;
     await dropped.page.waitForFunction(() => document.getElementById('badge').textContent === 'LIVE');
     await dropped.page.close();

@@ -419,7 +419,7 @@ impl Canvas {
                     let l = v + s;
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
-                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i], wet.hide[i], cure_of(i));
+                    let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i].clone(), wet.hide[i], cure_of(i));
                     let pk = packed(wet, i);
                     if pk > 0.0 && gone > 0.0 {
                         // the liquid left from above the packed paint, which
@@ -488,7 +488,7 @@ impl Canvas {
             active.extend(next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))));
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap)) in next.iter().copied().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap)) in next.iter().cloned().enumerate() {
                 if !changed {
                     continue;
                 }
@@ -589,7 +589,7 @@ mod tests {
             for &i in &spots {
                 c.wet.vol[i] = 2.0;
                 c.wet.solv[i] = super::COAT_UM;
-                c.wet.lat[i] = lat;
+                c.wet.lat[i] = lat.clone();
                 c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.6, pk, 0.5, 0.0];
                 c.wet.stroke[i] = 1;
             }

@@ -162,7 +162,7 @@ impl Board {
         self.heaps.iter_mut().find(|h| h.id == id)
     }
 
-    fn reknife(&mut self, id: u64) -> Result<(), Full> {
+    pub(crate) fn reknife(&mut self, id: u64) -> Result<(), Full> {
         if let Some(pos) = self.heaps.iter().position(|h| h.id == id && h.scraped) {
             if self.refuses_full && self.live().len() >= LIVE {
                 return Err(Full);
@@ -191,14 +191,19 @@ impl Board {
     /// smears follow it. A scraped heap is knifed again, fresh. Nothing
     /// happens on a clean board.
     pub fn visit(&mut self, id: u64, carry: f32) -> Result<(), Full> {
+        let last = self.last.as_ref().map(|p| p.0.clone());
+        self.visit_with(id, carry, last.as_deref().unwrap_or(&[]))
+    }
+
+    pub fn visit_with(&mut self, id: u64, carry: f32, parts: &[(usize, f32)]) -> Result<(), Full> {
         self.reknife(id)?;
         if self.dirty <= 0.0 {
             return Ok(());
         }
         let dirty = self.dirty;
-        let last = self.last.clone();
         let Some(h) = self.heap_mut(id) else { return Ok(()) };
-        if let Some((lp, _)) = &last {
+        if !parts.is_empty() {
+            let lp = parts;
             let own = h.fractions();
             // what differs from the heap is what dirties it
             let differs: f32 = lp.iter().map(|&(i, f)| (f - own.iter().find(|p| p.0 == i).map(|p| p.1).unwrap_or(0.0)).max(0.0)).sum();

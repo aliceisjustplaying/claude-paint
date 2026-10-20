@@ -29,7 +29,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
         // laid thick enough to be black, so a smear over it shows how much it hides
         for _ in 0..3 {
             let mut k = Knife::new(34.0);
-            k.load(dark, 1.0);
+            k.load(dark.clone(), 1.0);
             c.knife(&mut k, &[(cx + 100.0, y), (cx + 240.0, y)], (0.3, 0.3), Some(std::f32::consts::FRAC_PI_2), true, 0.0);
         }
     }
@@ -43,7 +43,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
         let paint = mix.laid(h.medium);
         // the heap: a thick slab, the bead left standing where the knife lifts
         let mut k = Knife::new(46.0);
-        k.load(paint, 1.0);
+        k.load(paint.clone(), 1.0);
         c.knife(&mut k, &[(cx + 40.0, cy + 70.0), (cx + 70.0, cy + 76.0)], (0.12, 0.08), None, true, 0.25);
         // the smear: from thick to thin across the light board and the dark stripe
         let mut s = Knife::new(30.0);

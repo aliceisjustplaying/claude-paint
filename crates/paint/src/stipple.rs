@@ -34,6 +34,7 @@ type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
 
 /// The parameters of a stipple pass over a region (see the module docs).
 pub struct Stipple<'a> {
+    pub dip_with: Option<crate::handling::Dip<'a>>,
     /// The brush (default `Tool::stippler(2.0)`): its width sets the mark size.
     pub tool: Tool,
     /// Peak pressure range; a random value in it per touch. Harder touches
@@ -88,7 +89,7 @@ pub struct Stipple<'a> {
 impl<'a> Stipple<'a> {
     pub fn new(tool: Tool) -> Self {
         Stipple {
-            tool,
+            dip_with: None,            tool,
             pressure: (0.4, 0.75),
             coverage: Box::new(|_, _| 1.0),
             color: Box::new(|_, _| [0.5; 3]),
@@ -201,6 +202,7 @@ impl<'a> Stipple<'a> {
 
 /// One planned touch.
 struct Plan {
+    dip_seed: u64,
     touch: Touch,
     /// Paint to dip into first (None = keep going with what's on the brush).
     dip: Option<Paint>,
@@ -377,7 +379,7 @@ impl Canvas {
                             angle: rng.range(0.0, std::f32::consts::TAU),
                         };
                         let rect = touch_footprint(&sp.tool, &touch, f.scale, f.w, f.h).unwrap_or((0, 0, 0, 0));
-                        Plan { touch, dip, color_at, rect, want: [0.0; 3] }
+                        Plan { dip_seed: 0, touch, dip, color_at, rect, want: [0.0; 3] }
                     })
                     .collect()
             })
@@ -391,9 +393,10 @@ impl Canvas {
                 if let Some(d) = p.dip.as_mut() {
                     if let Some((pal, pile, medium)) = &sp.pile {
                         p.want = pile.color;
-                        *d = pal.remix(pile, sp.mix_jitter, &mut Rng::new(prng.next_u64())).laid(*medium);
+                        p.dip_seed = prng.next_u64();
+                        *d = pal.remix(pile, sp.mix_jitter, &mut Rng::new(p.dip_seed)).laid(*medium);
                         if sp.thinner > 0.0 {
-                            *d = d.with_thinner(sp.thinner);
+                            *d = d.clone().with_thinner(sp.thinner);
                         }
                         continue;
                     }
@@ -443,15 +446,16 @@ impl Canvas {
             .collect();
         let order: Vec<usize> = phases.iter().flat_map(|&(px, py)| (0..plans.len()).filter(move |&i| (i % tw) % 2 == px && (i / tw) % 2 == py)).collect();
         let ids = plans.iter().map(|t| t.len() as u32).collect();
-        let slice = self.covering_slice_secs(self.hand_slice_secs(), plans.iter().flatten().filter_map(|p| p.dip), &tile_secs);
+        let slice = self.covering_slice_secs(self.hand_slice_secs(), plans.iter().flatten().filter_map(|p| p.dip.clone()), &tile_secs);
         let pass = crate::sched::Pass { grid: (tw, th), order: crate::sched::TileOrder::Default(order), rects, secs: tile_secs, ids, slice };
-        self.paint_pass(pass, |surf, ti, first_id| {
+        self.paint_pass(pass, sp.dip_with.is_some(), |surf, ti, first_id| {
             let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
             let mut scratch = Vec::new();
             let mut b: Bounds = None;
             for (k, p) in plans[ti].iter().enumerate() {
-                if let Some(paint) = p.dip {
+                if let Some(paint) = p.dip.clone() {
                     held.wipe(sp.wipe);
+                    let paint = sp.dip_with.as_ref().map_or(paint, |dip| dip(&held, 0, p.dip_seed));
                     held.load(paint, sp.load);
                 }
                 if p.rect.2 <= p.rect.0 {

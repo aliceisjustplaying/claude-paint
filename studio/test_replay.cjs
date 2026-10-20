@@ -214,11 +214,13 @@ async function pollUpdate(v, i, replacement) {
       ev('say', { text:'after the reset' }, 4)];
     const implicit = await viewer(browser, implicitReset, { liveFile:false });
     await seek(implicit.page, 4); await seek(implicit.page, 3);
+    await implicit.page.waitForFunction(() => document.querySelector('#code').textContent.includes('local fresh_scratch = 2'));
     const reset = await snapshot(implicit.page);
     assert.equal(reset.file, 'scratch.lua');
     assert(reset.code.join('\n').includes('--@ chunk 1\nlocal fresh_scratch = 2'), 'a scratch reset reported by the result starts a new log');
     assert(!reset.code.join('\n').includes('old_scratch'), 'a scratch reset reported by the result drops the previous canvas');
     await seek(implicit.page, 2);
+    await implicit.page.waitForFunction(() => document.querySelector('#code').textContent.includes('local old_scratch = 1'));
     assert((await snapshot(implicit.page)).code.join('\n').includes('--@ chunk 1\nlocal old_scratch = 1'), 'a failed scratch chunk without a reset keeps the earlier log');
     report.checks.push('implicit scratch resets start a new reconstructed log, failed chunks without a reset keep it'); await implicit.page.close();
     for (const streamMode of [false, true]) {

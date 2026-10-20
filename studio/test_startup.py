@@ -115,6 +115,9 @@ def test_returned_canvas_and_header_survive_delayed_metadata_then_become_interac
     assert static_page.locator("#clockbox").is_hidden()
     assert static_page.locator("#img").evaluate("e => e.naturalWidth > 0")
     assert static_page.locator("#img").get_attribute("src") == f"/studio/data/{painter}/v/0.jpg"
+    assert static_page.locator("#img").get_attribute("tabindex") == "0"
+    assert static_page.locator("#img").get_attribute("role") == "button"
+    assert static_page.locator("#img").get_attribute("aria-label") == "Open the painting at full size"
     plain.close()
     context = browser.new_context(viewport={"width": width, "height": height})
     context.set_default_timeout(5000)
@@ -240,6 +243,7 @@ def test_sessions_revalidation_reuses_the_unchanged_http_body(browser, site):
     page = browser.new_page()
     page.clock.install()
     page.goto(base + f"/studio/?p={PAINTER}")
+    page.wait_for_function("sessionsLoaded")
     with page.expect_response(lambda r: r.url.endswith("/data/sessions.json")):
         page.clock.fast_forward(30001)
     session_headers = [h for path, h in requests if path == "/studio/data/sessions.json"]

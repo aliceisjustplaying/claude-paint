@@ -856,6 +856,44 @@ mod tests {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
     }
 
+    #[test]
+    fn erasing_a_sealed_drawing_keeps_its_guide() {
+        let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
+        run(&mut s, CANVAS);
+        run(&mut s, r#"p = pencil("2B") p:line({{100, 200}, {900, 200}}, {ruler=true, pressure=0.7})
+work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=true, clip=true, seed=9})"#);
+        let guide = s.canvas().unwrap().drawing_guide().data;
+        assert!(guide.iter().any(|&v| v > 0.0));
+        let program = s.program("sealed");
+        let mark = crate::session::SEALED_DRAWING_GUIDE_MARK;
+        assert!(program.lines().any(|line| line == mark));
+        let path = std::env::temp_dir().join(format!("easel-sealed-guide-{}.ckpt", std::process::id()));
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        std::fs::remove_file(&path).unwrap();
+        assert!(restored.canvas().unwrap().sealed_drawing_guide());
+        assert!(restored.program("sealed").lines().any(|line| line == mark));
+        restored.st.borrow_mut().canvas.as_mut().unwrap().dry();
+        let dry_pixels = restored.canvas().unwrap().pixels().to_vec();
+        run(&mut restored, "erase(everywhere(), {strength=1})");
+        assert_eq!(restored.canvas().unwrap().pixels(), dry_pixels);
+        assert!(restored.canvas().unwrap().drawing_guide().data == guide, "dry paint lost its sealed guide after saving");
+        let pixels = s.canvas().unwrap().pixels().to_vec();
+        run(&mut s, "erase(everywhere(), {strength=1})");
+        assert_eq!(s.canvas().unwrap().pixels(), pixels);
+        assert!(s.canvas().unwrap().drawing_guide().data == guide, "wet paint lost its sealed guide");
+        for enabled in [false, true] {
+            let log = if enabled { program.clone() } else { program.replace(&format!("{mark}\n"), "") };
+            let mut replay = Session::replay_with(W, crate::session::box_for(Some(&log)).unwrap()).unwrap();
+            for chunk in parse_program(&log) {
+                run(&mut replay, &chunk);
+            }
+            assert_eq!(replay.program("sealed"), log);
+            run(&mut replay, "erase(everywhere(), {strength=1})");
+            assert_eq!(replay.canvas().unwrap().drawing_guide().data == guide, enabled);
+        }
+    }
+
     /// Every global's name, sorted, and the pencil's methods.
     fn names(s: &mut Session) -> (Vec<String>, String) {
         let g = run(s, "local k = {} for n in pairs(_G) do k[#k + 1] = tostring(n) end table.sort(k) print(table.concat(k, ' '))");

@@ -120,14 +120,23 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die
         template = template.replace("## Working\n", DIE_ROLL_SECTION + "## Working\n")
     brief = template.replace("{OPENING}", OPENING).replace("{STUDIO}", str(studio)).replace("{READING}", reading)
     strip = runpy.run_path(str(Path(__file__).with_name("strip_sources")))["strip"]
+    notes = strip(studio_notes.read_text())
+    repo = Path(__file__).resolve().parent.parent
+    guide = studio / "notes/easel_guide.md"
+    critic_guide = None
+    if critic and guide.is_file():
+        text = guide.read_text()
+        table = "| tool | what it does |\n|---|---|\n"
+        start = text.index(table) + len(table)
+        end = text.index("\n\n", start) + 1
+        description = json.loads((repo / "harness/easel_mcp/critic-tools.json").read_text())[0]["description"]
+        critic_guide = text[:end] + f"| `ask_critic` | {description} |\n" + text[end:]
     runner.mkdir(parents=True)
     for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "brief_template.md"):
         shutil.copy2(house / name, runner / name)
     (runner / "r21_chains.py").write_text(source)
-    notes = strip(studio_notes.read_text())
     (studio / "notes/studio_notes.md").write_text(notes)
     (runner / "studio_notes.md").write_text(notes)
-    repo = Path(__file__).resolve().parent.parent
     if die_roll:
         (runner / "brief_template.md").write_text(template)
         shutil.copy2(repo / "harness/painter/die_roll.py", runner / "die_roll.py")
@@ -141,14 +150,8 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die
     revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
     (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {}), **({"die_roll": True} if die_roll else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
-    guide = studio / "notes/easel_guide.md"
-    if critic and guide.is_file():
-        text = guide.read_text()
-        table = "| tool | what it does |\n|---|---|\n"
-        start = text.index(table) + len(table)
-        end = text.index("\n\n", start) + 1
-        description = json.loads((repo / "harness/easel_mcp/critic-tools.json").read_text())[0]["description"]
-        guide.write_text(text[:end] + f"| `ask_critic` | {description} |\n" + text[end:])
+    if critic_guide is not None:
+        guide.write_text(critic_guide)
 
 
 def main():

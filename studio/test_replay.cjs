@@ -366,6 +366,15 @@ async function pollUpdate(v, i, replacement) {
     for (const i of [1, 2, 3, 4, 5, 2, 4]) { await seek(v.page, i); if (old) { await seek(old.page, i); await compare(v.page, old.page); } }
     const r = await snapshot(v.page); assert.equal(r.file, 'a.rs'); assert.deepEqual(r.code, ['fn a() { two(); }']); assert.deepEqual(r.changed, [1]);
     report.checks.push('write/edit reconstruction and first-file tie ordering'); await v.page.close(); if (old) await old.page.close();
+    // An edit with no complete copy before it has an unknown source: the current file is not shown as that history.
+    const unknown = [ev('start', { cwd:'/painter' }), ev('edit', { path:'/painter/unknown.lua', edits:[{ oldText:'before', newText:'after' }], out:'ok' }, 1), ev('say', { text:'end' }, 2)];
+    const u = await viewer(browser, unknown);
+    await seek(u.page, 1);
+    const unknownView = await u.page.evaluate(() => ({ code:document.querySelector('#code').textContent, label:document.querySelector('#codeformat').textContent, file:document.querySelector('#file').textContent }));
+    assert.doesNotMatch(unknownView.code, /live\s*=\s*99/, 'an unknown historical source must not show the current file');
+    assert.match(unknownView.label, /unknown/, 'an unknown historical source must say so in the header');
+    assert.equal(unknownView.file, 'unknown.lua');
+    report.checks.push('an edit with no complete copy before it is marked unknown, never shown as the current file'); await u.page.close();
     // A sliding 251-event journal retains exact grouping and stable block nodes.
     const large = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local stable=1', out:'ok' }, 1)];
     for (let k = 2; k < 330; k++) large.push(ev(k % 3 === 0 ? 'think' : 'cmd', { text:k % 3 === 0 ? ('## Thought ' + k + '\n\n' + 'A **long** line with `code` & <safe>.\n').repeat(30) : 'echo ' + k, out:'ok' }, k));
@@ -470,7 +479,8 @@ async function pollUpdate(v, i, replacement) {
     await drift.page.waitForFunction(() => liveTextPath === '/painter/paintings/src/bin/foo.rs');
     await seek(drift.page, 4);
     assert.equal(await drift.page.locator('#file').textContent(), 'foo.rs');
-    assert((await snapshot(drift.page)).code.join('\n').includes('main_only'), 'a response that arrives while rewound replaces the blank pending view');
+    assert.match(await drift.page.locator('#codeformat').textContent(), /unknown/, 'a rewound source with no complete copy says so in the header');
+    assert(!(await snapshot(drift.page)).code.join('\n').includes('main_only'), 'a rewound source with no complete copy never shows the current file');
     await drift.page.close();
     report.checks.push('an identical file response that arrives while rewound replaces the blank pending view');
     const previousFirst = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local first=1', out:'ok' }, 1), ev('look', { text:'' }, 2), ev('image', { img:0, look:'' }, 2),

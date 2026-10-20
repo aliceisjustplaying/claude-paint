@@ -891,16 +891,28 @@ function renderCode(path, text, newLines, before = null, stepping = false) {
     codeWorker.postMessage({ id, input:text, previous, changed:[...newLines] });
   } catch (e) { if (codeWorker) codeWorker.terminate(); codeWorker = false; raw(); }
 }
+function unknownCode(path) {
+  clearCode();
+  const note = document.createElement('div');
+  note.textContent = 'Source unknown at this point. No complete copy of this file was recorded before it, so the current file is not shown.';
+  note.style.padding = '12px 16px';
+  $('code').replaceChildren(note);
+  $('file').textContent = fname(path);
+  $('codeformat').textContent = 'historical source unknown';
+  $('codeformat').title = 'No complete copy of this file was recorded before this point. The current file is not shown.';
+  $('togglecode').disabled = false; $('togglecode').title = 'show/hide code  c';
+}
 function codeAt(i, stepping = false) {
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1;
   if (atLive && liveText != null) return renderCode(p, liveText, new Set(), null, stepping);
   const s = source(p, i);
-  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
-  const { text, before, changed, known } = s;
-  const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
-  renderCode(p, known ? text : (liveText || ''), nl, before, stepping);
-  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest, format:codeFormatAllowed(stepping) };
+  if (!s.known) return unknownCode(p);
+  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
+  const { text, before, changed } = s;
+  const nl = new Set(); let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); });
+  renderCode(p, text, nl, before, stepping);
+  codeSelection = { path:p, source:s, request:codeRequest, format:codeFormatAllowed(stepping) };
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips

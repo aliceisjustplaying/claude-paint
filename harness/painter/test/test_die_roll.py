@@ -14,7 +14,7 @@ SPEC = importlib.util.spec_from_file_location("die_roll", REPO / "harness/painte
 D = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(D)
 PREPARE = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
-GOOD = "\n\n".join(f"{i}. Picture {i}.\nEstimate: {i}/100" for i in range(1, 9))
+GOOD = "\n\n".join(f"{i}. Picture {i}.\nEstimate: {i}/100" for i in range(1, 17))
 HOUSE = '''TOOLS = "old"
 READING = {}
 READING['friedrich'] = "old"
@@ -34,7 +34,7 @@ class ParserTests(unittest.TestCase):
     def test_good_preserves_picture_text(self):
         text = GOOD.replace("Picture 1.", "A cowboy.\nA zombie.")
         concepts = D.parse_concepts(text)
-        self.assertEqual(len(concepts), 8)
+        self.assertEqual(len(concepts), 16)
         self.assertEqual(concepts[0], {"number": 1, "text": "A cowboy.\nA zombie.", "estimate": 1})
         self.assertEqual(D.opening({"pick": concepts[0]}), "The die picked concept 1: A cowboy.\nA zombie.")
 
@@ -42,22 +42,22 @@ class ParserTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             D.parse_concepts(GOOD.replace("Estimate: 4/100", ""))
 
-    def test_seven_entries(self):
+    def test_fifteen_entries(self):
         with self.assertRaises(ValueError):
-            D.parse_concepts(GOOD[:GOOD.index("8.")])
+            D.parse_concepts(GOOD[:GOOD.index("16.")])
 
     def test_malformed_estimates_and_numbering(self):
         for text in (GOOD.replace("4/100", "101/100"), GOOD.replace("4/100", "4.5/100"),
-                     GOOD.replace("4.", "3."), GOOD + "\n9. Extra.\nEstimate: 1/100",
+                     GOOD.replace("4.", "3."), GOOD + "\n17. Extra.\nEstimate: 1/100",
                      GOOD.replace("Picture 4.", "Picture 4.\nEstimate: 3/100")):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 D.parse_concepts(text)
 
-    def test_drop_two_highest_and_roll_over_six(self):
+    def test_drop_ten_highest_and_roll_over_six(self):
         concepts = D.parse_concepts(GOOD)
         with patch.object(D.secrets, "choice", side_effect=lambda options: options[0]) as choice:
             result = D.roll(concepts)
-        self.assertEqual(result["dropped"], [8, 7])
+        self.assertEqual(result["dropped"], [16, 15, 14, 13, 12, 11, 10, 9, 8, 7])
         self.assertEqual(choice.call_args.args[0], concepts[:6])
         self.assertEqual(result["pick"], concepts[0])
 
@@ -67,8 +67,8 @@ class ParserTests(unittest.TestCase):
             concept["estimate"] = 10
         with patch.object(D.secrets, "choice", side_effect=lambda options: options[-1]) as choice:
             result = D.roll(concepts)
-        self.assertEqual(result["dropped"], [1, 2])
-        self.assertEqual(choice.call_args.args[0], concepts[2:])
+        self.assertEqual(result["dropped"], list(range(1, 11)))
+        self.assertEqual(choice.call_args.args[0], concepts[10:])
 
 
 class SittingTests(unittest.TestCase):
@@ -101,7 +101,7 @@ class SittingTests(unittest.TestCase):
         result = D.choose(self.runner, self.model, self.studio, self.run)
         record = json.loads((self.run / "die_roll.json").read_text())
         self.assertEqual(record["concepts"], D.parse_concepts(GOOD))
-        self.assertEqual(record["dropped"], [8, 7])
+        self.assertEqual(record["dropped"], [16, 15, 14, 13, 12, 11, 10, 9, 8, 7])
         self.assertEqual(result, D.opening(record))
         self.assertEqual(D.choose(self.runner, self.model, self.studio, self.run), result)
         self.assertEqual(self.messages, [D.SITTING_ZERO])

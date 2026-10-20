@@ -145,6 +145,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   check::tests::nonfinite_color_and_surface_never_match \
   check::tests::color_and_surface_counts_must_match \
   live_frames::tests::atomic_frame_publication_keeps_the_previous_file_on_failure \
+  live_frames::tests::index_write_failure_keeps_metadata_for_the_next_frame_and_upserts_once \
   live_frames::tests::portrait_frames_fit_the_long_side_and_existing_frames_are_untouched \
   session::tests::a_subnormal_blend_stays_finite_through_a_scrape_and_wait \
   look::tests::crops_of_any_span_are_bounded_and_report_the_actual_scale \

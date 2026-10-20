@@ -1219,10 +1219,11 @@ function cropOf(req) {
   const m = (req || '').match(/crop\W*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/); if (!m) return null;
   const [a, b, c, d] = m.slice(1).map(Number); return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
 }
-// the painter has stopped (finished, or between sittings): its closing words said and a couple of quiet minutes
-// since, or half an hour of nothing
+// the painter has stopped (finished, between sittings, or not running as the static export's card says): its closing
+// words said and a couple of quiet minutes since, or half an hour of nothing
 function stopped() {
-  if (outcomeLabel(allSessions.find(s => qOf(s) === Q))) return true;
+  const cur = allSessions.find(s => qOf(s) === Q);
+  if (outcomeLabel(cur) || STATIC && cur?.active !== true) return true;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000;
   return age >= ACTIVE || (last.kind === 'say' && age >= 120);
 }

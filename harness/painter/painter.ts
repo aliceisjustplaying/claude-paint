@@ -157,7 +157,7 @@ export default function painter(pi: ExtensionAPI) {
 	// a run that ended on a usage limit waits, then goes on with nothing added to the conversation:
 	// the errored response is left out of the model's context (a context_edit; the session file
 	// keeps it), so the next request is the conversation as it was before the limit
-	pi.on("agent_before_settle", async (event) => {
+	pi.on("agent_before_settle", async (event, ctx) => {
 		if (!pendingLimit || !limited) {
 			// the end of the sitting: the critic's visit (not after a usage limit, which it would meet too)
 			if (critic && !limited) {
@@ -177,8 +177,19 @@ export default function painter(pi: ExtensionAPI) {
 			console.error(`painter: usage limit since ${new Date(limited.since).toISOString()}; settling on it`);
 			return undefined;
 		}
+		const signal = ctx.signal;
+		if (signal?.aborted) return undefined;
 		console.error(`painter: usage limit; asking again in ${Math.round(wait / 60_000)} min`);
-		await new Promise<void>((resolve) => setTimeout(resolve, wait));
+		await new Promise<void>((resolve) => {
+			const done = () => {
+				clearTimeout(timer);
+				signal?.removeEventListener("abort", done);
+				resolve();
+			};
+			const timer = setTimeout(done, wait);
+			signal?.addEventListener("abort", done, { once: true });
+		});
+		if (signal?.aborted) return undefined;
 		return { entries: [{ type: "context_edit" as const, targetId: last.sourceEntry.id, replacement: null }], continue: true };
 	});
 

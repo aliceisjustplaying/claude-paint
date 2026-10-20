@@ -349,7 +349,7 @@ export function logFind(log: string, find: string, whole: string): string {
 	const hits = lines.flatMap((line, i) => (line.toLowerCase().includes(want) ? [i] : []));
 	if (hits.length === 0) return `no line of ${whole} holds "${find}"`;
 	const hit = new Set(hits);
-	const out = [`${hits.length} ${hits.length === 1 ? "line" : "lines"} of ${whole} ${hits.length === 1 ? "holds" : "hold"} "${find}"${hits.length > 100 ? " (the first 100 are shown)" : ""}`];
+	const out = [`${hits.length} ${hits.length === 1 ? "line" : "lines"} of ${whole} ${hits.length === 1 ? "holds" : "hold"} "${find}"${hits.length > 100 ? " (the first 100 matches are shown with the lines around them)" : ""}`];
 	let last = -1;
 	for (const i of hits.slice(0, 100)) {
 		const from = Math.max(i - 2, last + 1);

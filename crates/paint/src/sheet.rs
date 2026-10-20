@@ -1113,13 +1113,13 @@ impl Canvas {
 mod tests {
     use super::BRUSH_HOLDS_MG_MM3;
     use crate::canvas::{Canvas, Crop};
-    use crate::graphite::{Lead, cover, hand_line};
+    use crate::graphite::{Cell, Lead, cover, hand_line};
     use crate::mask::Mask;
     use crate::paper::Paper;
     use crate::pastel::{PARTICLE_UM, Pose, Stick, StrokePoint};
 
     fn drawing_paper() -> Canvas {
-        Canvas::new_window(600, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+        Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
     }
 
     #[test]
@@ -1305,16 +1305,19 @@ mod tests {
         assert!(c.lift_sheet() && !c.has_sheet());
     }
 
-    /// Dense crossing passes: the pores full, the tooth packed.
+    /// A packed tooth and a loose heap, independent of stick deposition.
     fn dense(c: &mut Canvas, st: &mut Stick, y0: f32, y1: f32) {
-        for pass in 0..3 {
-            let az = (60.0 + 25.0 * pass as f32).to_radians();
-            let mut x = 100.0;
-            while x < 900.0 {
-                let p = Pose { force: 3.0, alt: 50f32.to_radians(), az, roll: 0.0 };
-                c.stick_stroke(st, &[StrokePoint { x, y: y0, pose: p, speed: 50.0 }, StrokePoint { x: x + 30.0, y: y1, pose: p, speed: 50.0 }]);
-                x += 8.0;
+        let f = c.window();
+        c.drawing_mut().sticks = true;
+        for i in 0..c.px.len() {
+            let (x, y) = (f.ux(i % f.w), f.uy(i / f.w));
+            if !(100.0..900.0).contains(&x) || !(y0..y1).contains(&y) {
+                continue;
             }
+            let loose = 2.0 * c.micro_um(i) + PARTICLE_UM;
+            let a = (1.0 - (-loose / PARTICLE_UM).exp()).min(0.995);
+            c.drawing.as_mut().unwrap().cells[i] = Cell { a, r: st.color, lift: 0.55, film: c.film[i], loose, ..Cell::default() };
+            c.px[i] = cover(c.px[i], a, st.color);
         }
     }
 

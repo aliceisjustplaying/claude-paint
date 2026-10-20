@@ -174,6 +174,7 @@ check reference-library 'uv run --no-project --script scripts/tests/reference_li
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
 check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
+check replay-pace 'uv run --script scripts/tests/replay_pace_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/check_painting_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'

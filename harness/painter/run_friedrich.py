@@ -29,10 +29,18 @@ R.BRANCH = CONFIG["source_revision"]
 R.H = SOURCE / "harness/painter"
 R.RUN = RUN
 R.HARNESS = ["--no-extensions", "-e", str(R.H / "painter.ts"), "-e", str(R.H / "compaction.ts"), "--system-prompt", str(R.H / "system_prompt.md"), "--tools", R.TOOLS, "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
-MODEL = R.model("anthropic", "claude-opus-5-5", "xhigh", black=True)
+
+
+def configured_model(field):
+    provider, rest = CONFIG.get(field, "anthropic/claude-opus-5-5:xhigh").split("/", 1)
+    name, thinking = rest.rsplit(":", 1)
+    return R.model(provider, name, thinking, black=provider == "anthropic")
+
+
+MODEL = configured_model("painter")
 if CONFIG.get("critic"):
-    # the critic (harness/painter/visit.ts) on the painter's model; its sessions and notes beside the run's records
-    MODEL["env"] = {**(MODEL["env"] or {}), "PAINTER_CRITIC": json.dumps({"args": (["-e", str(R.BLACK)] if MODEL["black"] else []) + MODEL["args"], "dir": str(RUN / "critic")})}
+    critic = configured_model("critic_model")
+    MODEL["env"] = {**(MODEL["env"] or {}), "PAINTER_CRITIC": json.dumps({"args": (["-e", str(R.BLACK)] if critic["black"] else []) + critic["args"], "dir": str(RUN / "critic")})}
 R.LANES = {"OPUS": R.lane("friedrich", MODEL, record_kind="none", reference=False)}
 R.MY_LANES = ["OPUS"]
 launch = R.run

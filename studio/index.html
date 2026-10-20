@@ -816,14 +816,14 @@ function source(path, upto) {
   if (touched) s.value = { text, before, changed, known };
   return s.value;
 }
-let liveText = null;
+let liveText = null, liveTextPath = null;
 // Prepare the current view even while closed. Opening only reveals already laid-out code.
 const codeShown = () => !document.body.classList.contains('nocode');
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
   const q = Q, g = gen, revision = liveRevision, r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q || g !== gen || HOSTED && revision !== liveRevision) return;
-  const t = await r.text(); if (q !== Q || g !== gen || HOSTED && revision !== liveRevision) return; if (t !== liveText) { const old = liveText; liveText = t; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
+  const t = await r.text(); if (q !== Q || g !== gen || HOSTED && revision !== liveRevision || p !== paintingFile(events.length - 1)) return; const old = liveTextPath === p ? liveText : null; if (t !== old) { liveText = t; liveTextPath = p; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
 }
 const { diffLines, lineHTML } = CodeDisplay;
 let codeWorker = null, codeRequest = 0, codeCache = null, codeBatch = null, codeSelection = null;
@@ -893,13 +893,13 @@ function renderCode(path, text, newLines, before = null, stepping = false) {
 }
 function codeAt(i, stepping = false) {
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
-  const atLive = live && i === events.length - 1;
-  if (atLive && liveText != null) return renderCode(p, liveText, new Set(), null, stepping);
+  const atLive = live && i === events.length - 1, fetched = liveTextPath === p ? liveText : null;
+  if (atLive && fetched != null) return renderCode(p, fetched, new Set(), null, stepping);
   const s = source(p, i);
   if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
   const { text, before, changed, known } = s;
   const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
-  renderCode(p, known ? text : (liveText || ''), nl, before, stepping);
+  renderCode(p, known ? text : (fetched || ''), nl, before, stepping);
   codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest, format:codeFormatAllowed(stepping) };
 }
 

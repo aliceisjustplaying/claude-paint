@@ -3,6 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow"]
 # ///
+import gzip
 import importlib.util
 import os
 from pathlib import Path
@@ -231,9 +232,66 @@ class CheckpointTests(unittest.TestCase):
         encode.assert_not_called()
         self.assertFalse(self.out.exists())
 
+    def test_gzip_only_closed_state_renders_from_its_decompressed_checkpoint(self):
+        with gzip.open(self.session / "live.ckpt.gz", "wb") as target:
+            target.write(b"fixture checkpoint")
+        self.checkpoint.unlink()
+        rendered = []
+
+        def render(command, **kwargs):
+            self.assertEqual(command[:2], [str(self.easel), "render-checkpoint"])
+            rendered.append(Path(command[2]).read_bytes())
+            Path(command[3]).write_bytes(b"full resolution PNG fixture")
+            return subprocess.CompletedProcess(command, 0)
+
+        def encode(sequence, path, work):
+            path.write_bytes(b"verified clip fixture")
+            return {"verified": True}
+
+        with patch.dict(os.environ, {"EASEL_BOX": "hopper"}), \
+             patch.object(exporter.subprocess, "run", side_effect=render) as run, \
+             patch.object(exporter, "encode_clip", side_effect=encode), \
+             patch.object(exporter.shutil, "which", return_value="fixture"):
+            self.assertEqual(exporter.export(self.studio, self.easel, "friedrich", "test", self.out),
+                             {"verified": True})
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(rendered, [b"fixture checkpoint"] * 2)
+        self.assertEqual((self.out / "test-gallery.png").read_bytes(), b"full resolution PNG fixture")
+
     def test_profile_metadata_is_required_unless_explicit(self):
         with self.assertRaisesRegex(ValueError, "pass --profile"):
             exporter.export(self.studio, self.easel, None, "test", self.out)
+
+    def test_dangling_output_symlinks_are_never_followed(self):
+        for filename in ("test-gallery.png", "test-plain.png", "test-timelapse.mp4"):
+            for late in (False, True):
+                with self.subTest(filename=filename, late=late):
+                    out = self.out / filename / str(late)
+                    out.mkdir(parents=True)
+                    outside = self.root / f"outside-{filename}-{late}"
+                    output = out / filename
+                    if not late:
+                        output.symlink_to(outside)
+
+                    def render(command, **kwargs):
+                        Path(command[3]).write_bytes(b"PNG fixture")
+                        return subprocess.CompletedProcess(command, 0)
+
+                    def encode(sequence, path, work):
+                        path.write_bytes(b"clip fixture")
+                        if late:
+                            output.symlink_to(outside)
+                        return {"verified": True}
+
+                    with patch.object(exporter.subprocess, "run", side_effect=render) as run, \
+                         patch.object(exporter, "encode_clip", side_effect=encode), \
+                         patch.object(exporter.shutil, "which", return_value="fixture"):
+                        with self.assertRaises((ValueError, FileExistsError)):
+                            exporter.export(self.studio, self.easel, "friedrich", "test", out)
+                    self.assertTrue(output.is_symlink())
+                    self.assertFalse(outside.exists())
+                    if not late:
+                        run.assert_not_called()
 
 
 if __name__ == "__main__":

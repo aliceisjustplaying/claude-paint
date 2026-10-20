@@ -46,6 +46,15 @@ test("PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense 
 	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "soon" }), /want seconds/);
 });
 
+test("a limit wait the runtime can't honor is refused: nonfinite, negative, or past setTimeout's range", () => {
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "Infinity" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "2147484" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "-1" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_GIVE_UP_H: "Infinity" }), /want finite hours/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_GIVE_UP_H: "1e308" }), /want finite hours/);
+	assert.equal(limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "2147483" }).probeMs, 2_147_483_000);
+});
+
 test("a run cut off by usage limits goes on when they lift, asking with the conversation as it was", () => {
 	const tmp = process.env.TMPDIR;
 	assert.ok(tmp, "set TMPDIR to a scratch directory");

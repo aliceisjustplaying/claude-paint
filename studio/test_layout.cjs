@@ -198,6 +198,13 @@ const sizes = [[1280, 900], [1700, 1000], [1920, 1080], [390, 844], [393, 852], 
           await page.waitForFunction(() => typingThought === null);
           assert.equal(await scroller.evaluate(el => el.scrollTop), 0, label + ': scrolling up interrupts typewriter following');
         }
+        if (!mobile) {
+          await scroller.evaluate(el => el.scrollTop = 0);
+          assert(await gap() > 24, label + ': the desktop journal is long enough to scroll up');
+          await appendThought();
+          await page.waitForFunction(() => typingThought === null);
+          assert.equal(await scroller.evaluate(el => el.scrollTop), 0, label + ': a live append leaves a desktop journal scrolled up in place');
+        }
         await page.evaluate(() => { live = false; show(11); });
         await page.waitForFunction(() => typingThought === null);
         assert(await gap() <= 24, label + ': backward seek shows the selected thought');

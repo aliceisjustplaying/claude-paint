@@ -35,6 +35,7 @@ visible change is spread over the clip (per tenth).
 """
 
 import argparse
+import hashlib
 import math
 import sys
 from pathlib import Path
@@ -67,27 +68,32 @@ def load(p: Path):
 def changes(d: Path, ms):
     """change_i (arriving at moment i; 0 for the first), cached per file pair."""
     cache = d / "pace-change.tsv"
+    hashes = {f: hashlib.sha256((d / f).read_bytes()).hexdigest() for f in dict(ms)}
     known = {}
     if cache.exists():
         for line in cache.read_text().splitlines():
-            a, b, c = line.split("\t")
-            known[(a, b)] = float(c)
+            fields = line.split("\t")
+            if len(fields) == 3:
+                continue
+            a, b, c, ha, hb = fields
+            known[(a, b)] = (float(c), ha, hb)
     out, prev, prev_f, new = [0.0], None, ms[0][0], []
     for f, _ in ms[1:]:
         key = (prev_f, f)
-        if key not in known:
+        fingerprints = (hashes[prev_f], hashes[f])
+        if key not in known or known[key][1:] != fingerprints:
             if prev is None:
                 prev = load(d / prev_f)
             cur = load(d / f)
-            known[key] = float(np.abs(cur - prev).mean())
+            known[key] = (float(np.abs(cur - prev).mean()), *fingerprints)
             new.append(key)
             prev = cur
         else:
             prev = None
-        out.append(known[key])
+        out.append(known[key][0])
         prev_f = f
     if new:
-        cache.write_text("".join(f"{a}\t{b}\t{known[(a, b)]:.5f}\n" for a, b in known))
+        cache.write_text("".join(f"{a}\t{b}\t{c:.5f}\t{ha}\t{hb}\n" for (a, b), (c, ha, hb) in known.items()))
     return np.array(out)
 
 

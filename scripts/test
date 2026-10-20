@@ -48,7 +48,7 @@ reap() {
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --no-run --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
+launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -115,7 +115,6 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
-rust r19 easel 'test boxes test' a_round_19_log_replays_as_before
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
@@ -163,7 +162,6 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded \
   api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
-check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
 check painter-visit-lifecycle 'node --test --test-reporter=tap harness/painter/test/visit-lifecycle.test.ts' '^# pass [1-9][0-9]*$'

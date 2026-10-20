@@ -16,7 +16,7 @@ sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 import export_static as E
 import studio as S
-from test_studio import PAINTER, home, line, look, png_of, say, start
+from test_studio import PAINTER, call, export, home, line, look, png_of, result, say, start
 
 OTHER = "paint-studio-def456"
 TITLE = 'Barn & "Sky" <west>'
@@ -95,6 +95,45 @@ def browser():
         browser = p.chromium.launch()
         yield browser
         browser.close()
+
+
+def test_static_reexport_refreshes_rewound_source_with_the_same_epoch(browser, site, exported, home):
+    root, studio, log = home
+    snapshots = []
+    for code in ("local old=1", "local new=2"):
+        log.write_text(start(str(studio)) + call("c1", code) + result("c1", "ok") + say("Done"))
+        run = export(root, exported)
+        assert run.returncode == 0, run.stderr
+        snapshots.append(json.loads((exported / "data" / PAINTER / "events.json").read_text()))
+    before, after = snapshots
+    assert before["epoch"] == after["epoch"] == 0
+    paint = next(i for i, e in enumerate(before["events"]) if e["kind"] == "paint")
+    assert before["events"][paint]["code"] == "local old=1"
+    assert after["events"][paint]["code"] == "local new=2"
+    expected = json.loads(json.dumps(before))
+    expected["events"][paint]["code"] = "local new=2"
+    assert after == expected
+    base, _, _ = site
+    page = browser.new_page()
+    page.set_default_timeout(5000)
+    current = before
+    page.route("**/events.json", lambda route: route.fulfill(json=current))
+    page.goto(base + f"/studio/?p={PAINTER}")
+    page.wait_for_function("events.length > 0")
+    page.locator("#scrub").evaluate("""(el, i) => {
+      el.value = String(i); el.dispatchEvent(new Event('input', {bubbles:true}));
+    }""", paint)
+    page.wait_for_function("/local old\\s*=\\s*1/.test(document.querySelector('#code').textContent)")
+    generation = page.evaluate("gen")
+    revision = page.evaluate("replayRevision")
+    current = after
+    page.evaluate("async () => { lastStatic = 0; await poll(); }")
+    assert page.evaluate("i => events[i].code", paint) == "local new=2"
+    page.wait_for_function("/local new\\s*=\\s*2/.test(document.querySelector('#code').textContent)")
+    assert "old" not in page.locator("#code").text_content()
+    assert page.evaluate("[pos, live, epoch, gen]") == [paint, False, 0, generation]
+    assert page.evaluate("replayRevision") > revision
+    page.close()
 
 
 @pytest.mark.parametrize("path,painter,title,model,width,height", [

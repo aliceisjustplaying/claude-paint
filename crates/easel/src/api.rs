@@ -507,10 +507,11 @@ impl UserData for Brush {
         });
         // b:reload(pile, amount?): wipe most of the old paint off, then load
         m.add_method("reload", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
+            let amount = if b.st.borrow().tubes.reload_finite { load_amount(amount, 0.8, "b:reload")? } else { amount.unwrap_or(0.8) };
             // it is wiped first: only what the rag left goes into the heap
             let carry = 0.15 * b.held.borrow().fullness().min(1.0);
             let (paint, color) = brushload(&b.st, &p, &extra, "reload", carry)?;
-            b.held.borrow_mut().reload(paint, amount.unwrap_or(0.8));
+            b.held.borrow_mut().reload(paint, amount);
             time::trip(&b.st, color);
             Ok(())
         });
@@ -2614,5 +2615,51 @@ work(rect(495, 600, 10, 300), {hand="glaze", pile=dk, angle=0, coverage=1.5, see
         assert!(beside < 0.01, "the unclipped glaze carried paint 60 units past its mask ({beside})");
         let (above, beside) = reach(&mut older_log());
         assert!(above > 0.02 && beside > 0.02, "an older log no longer replays its long reach ({above}, {beside})");
+    }
+}
+
+#[cfg(test)]
+mod reload_finite_tests {
+    use crate::session::{Session, box_for};
+
+    const CANVAS: &str = r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",3},{"yellow ochre",1}}, um=120, apply="knife"}}}"#;
+    const LOAD: &str = r#"b = brush("filbert", 8) p = pile{{"lead white", 2}, {"yellow ochre", 1}} b:load(p, 0.5)"#;
+
+    fn new_painting() -> Session {
+        let mut s = Session::with_box(320, box_for(None).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(LOAD).unwrap();
+        s
+    }
+
+    fn older_log() -> Session {
+        let mut s = Session::replay_with(320, box_for(Some("--@ engine 7\n")).unwrap()).unwrap();
+        s.run(CANVAS).unwrap();
+        s.run(LOAD).unwrap();
+        s
+    }
+
+    /// In a new painting `b:reload` refuses a nonfinite amount before it
+    /// wipes the brush: it used to load the NaN, and the brush's fullness
+    /// stayed NaN. A save keeps this; a log from before replays its NaN.
+    #[test]
+    fn reload_refuses_a_nonfinite_amount() {
+        let mut s = new_painting();
+        let e = s.run("b:reload(p, 0/0)").unwrap_err();
+        assert!(e.contains("b:reload: the amount is a share of a full load (0..1)"), "{e}");
+        s.run("assert(b:fullness() == b:fullness(), 'the brush holds a NaN')").unwrap();
+
+        let path = std::env::temp_dir().join(format!("easel-reload-{}.ckpt", std::process::id()));
+        let program = s.program("painting");
+        crate::save::write(&s, &program, &path).unwrap();
+        let mut restored = crate::save::read(&path).unwrap().session;
+        let _ = std::fs::remove_file(&path);
+        restored.run(LOAD).unwrap();
+        let e = restored.run("b:reload(p, 0/0)").unwrap_err();
+        assert!(e.contains("b:reload: the amount is a share of a full load (0..1)"), "{e}");
+
+        let mut old = older_log();
+        old.run("b:reload(p, 0/0)").unwrap();
+        old.run("assert(b:fullness() ~= b:fullness(), 'an older log no longer reloads a NaN')").unwrap();
     }
 }

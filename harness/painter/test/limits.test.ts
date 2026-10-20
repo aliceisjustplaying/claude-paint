@@ -26,8 +26,18 @@ test("the wait is the reset time the error names plus a minute, else the probe i
 });
 
 test("after a day of limits in a row the run settles on the error", () => {
-	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs - 1, LIMIT_WAIT), LIMIT_WAIT.probeMs);
+	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs - 1, LIMIT_WAIT), 1);
 	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs, LIMIT_WAIT), undefined);
+});
+
+test("each wait is bounded by the remaining give-up duration", () => {
+	const w = { probeMs: 2_000, giveUpMs: 1_000 };
+	const text = "Usage limit reached. Resets in 2 days";
+	assert.equal(limitWaitMs(text, 0, 0, { ...w, probeMs: 1 }), 1_000);
+	assert.equal(limitWaitMs(text, 100, 850, w), 250);
+	assert.equal(limitWaitMs(GO_LIMIT, 100, 850, w), 250);
+	assert.equal(limitWaitMs(text, 100, 1_100, w), undefined);
+	assert.equal(limitWaitMs(text, 100, 1_101, w), undefined);
 });
 
 test("PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense is refused", () => {

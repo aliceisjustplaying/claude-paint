@@ -11,7 +11,13 @@ interface Reference {
 function library(studio: string): Reference[] {
 	const path = studioPath(studio, "notes/reference-library.json");
 	if (!path || !existsSync(path)) throw new Error("reference: this studio has no reference library");
-	return JSON.parse(readFileSync(path, "utf8"));
+	const entries: Reference[] = JSON.parse(readFileSync(path, "utf8"));
+	const seen = new Set<string>();
+	for (const { id } of entries) {
+		if (seen.has(id)) throw new Error(`reference: notes/reference-library.json has duplicate id "${id}"; give each entry its own id`);
+		seen.add(id);
+	}
+	return entries;
 }
 
 export function referenceList(studio: string, params: Record<string, unknown>) {

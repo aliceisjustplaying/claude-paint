@@ -78,7 +78,7 @@ pub fn patch_with(c: &mut Canvas, paint: Paint, load: f32, pressure: f32, x: (f3
     let rows = ((y.1 - y.0) / 25.0).ceil().max(1.0) as usize;
     for k in 0..rows {
         let yk = y.0 + (y.1 - y.0) * (k as f32 + 0.5) / rows as f32;
-        let mut h = brush(Tool::hog_flat(40.0), seed + k as u64, paint, load);
+        let mut h = brush(Tool::hog_flat(40.0), seed + k as u64, paint.clone(), load);
         stroke(c, &mut h, vec![(x.0, yk), (x.1, yk + 3.0)], pressure);
     }
 }

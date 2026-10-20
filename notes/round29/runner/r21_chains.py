@@ -1121,10 +1121,17 @@ def stop_leftovers(d, keep_server=False):
     server with keep_server: the session stays open across sittings)."""
     r = subprocess.run(["/bin/ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
     for line in r.splitlines():
-        pid, _, cmd = line.strip().partition(" ")
+        parts = line.split(None, 1)
+        if len(parts) != 2 or not parts[0].isdigit():
+            continue
+        pid, cmd = parts
+        if int(pid) <= 1 or int(pid) == os.getpid():
+            continue
+        if not re.match(re.escape(str(d / "bin/easel")) + r"(?:\s|$)", cmd):
+            continue
         if keep_server and " serve " in f" {cmd} ":
             continue
-        if str(d) in cmd and "easel" in cmd and "finish_painting" not in cmd and "check_painting" not in cmd:
+        if "finish_painting" not in cmd and "check_painting" not in cmd:
             subprocess.run(["kill", pid])
             log(f"stopped leftover {pid}: {cmd[:100]}")
 

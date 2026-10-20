@@ -432,7 +432,7 @@ def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
             if im:
                 data = im[1]
                 mine.append(os.path.join(out, "data", p, "img", f"{i}.{ext}"))
-                changed = write(mine[-1], data)
+                write(mine[-1], data)
                 for j, light in enumerate(S.DISPLAY_LIGHTS, 1):
                     lit = S.image_bytes(st, i, light=light)
                     if lit:
@@ -442,10 +442,7 @@ def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
                         complete = False
                 if Image:
                     t, v = (os.path.join(out, "data", p, d, f"{i}.jpg") for d in ("t", "v"))
-                    if changed or not (os.path.isfile(t) and os.path.isfile(v)):
-                        jobs[i] = pool.submit(web_copies, data, t, v)
-                    else:
-                        web[i] = 1
+                    jobs[i] = pool.submit(web_copies, data, t, v)
                     mine += [t, v]
                     WRITTEN.update((os.path.abspath(t), os.path.abspath(v)))
             if complete:

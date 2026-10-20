@@ -704,6 +704,35 @@ def test_export_retries_failed_image_reads_without_source_changes(home, monkeypa
     assert reads == []
 
 
+def test_export_never_promotes_stale_web_copies_after_failed_conversion(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "EXPORTED", {})
+    log.write_text(start(str(studio)) + look("l1", png_of("blue")))
+    out = root / "export"
+    E.export(str(out))
+    dest = out / "data" / PAINTER
+    assert json.loads((dest / "events.json").read_text())["web"] == [1]
+    assert all((dest / folder / "0.jpg").is_file() for folder in ("t", "v"))
+
+    truncated = png_of("red")[:48]
+    with pytest.raises(OSError):
+        E.Image.open(io.BytesIO(truncated)).load()
+    replaced = log.with_suffix(".new")
+    replaced.write_text(start(str(studio)) + look("l1", truncated))
+    os.replace(replaced, log)
+    for _ in range(2):
+        E.export(str(out))
+        assert (dest / "img/0.png").read_bytes() == truncated
+        assert json.loads((dest / "events.json").read_text())["web"] == [0]
+        assert (str(out), PAINTER, 0) not in E.EXPORTED
+        assert metadata(out / "share" / (PAINTER + ".html"))["og:image"] == E.DEFAULT_IMAGE["url"]
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

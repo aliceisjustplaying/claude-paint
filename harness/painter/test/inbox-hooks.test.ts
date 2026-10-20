@@ -74,3 +74,24 @@ test("a backlog larger than the default subprocess buffer still reaches the open
 	assert.equal(reply.text.split("End of message.").length - 1, 40);
 	assert.equal(log().filter((m: any) => m.delivery.state === "attaching").length, 40);
 });
+
+test("failed transcript writes release live attachments before the painter sees them", () => {
+	for (const opening of [true, false]) {
+		const { handlers, ctx, session, send, log } = harness();
+		const missingSession = join(session, "missing.jsonl");
+		ctx.sessionManager.getSessionFile = () => missingSession;
+		if (!opening) handlers.input({ text: "Opening." }, ctx);
+		send("Retry this message.");
+		const event = { toolCallId: "failed-call", toolName: "status", content: [{ type: "text", text: "ok" }], details: { kept: true } };
+		const reply = opening ? handlers.input({ text: "Opening." }, ctx) : handlers.tool_result(event, ctx);
+		const message = opening ? { role: "user", content: reply.text } : { role: "toolResult", toolCallId: event.toolCallId, ...reply };
+		assert.throws(() => writeFileSync(missingSession, JSON.stringify({ message })), { code: "ENOENT" });
+		const request = handlers.context({ messages: [message] });
+		assert.deepEqual(request.messages, [opening ? { role: "user", content: "Opening." } : { role: "toolResult", toolCallId: event.toolCallId, content: event.content, details: event.details }]);
+		assert.equal(log()[0].delivery, undefined);
+		assert.equal(handlers.tool_result({ ...event, toolCallId: "retry-call" }, ctx).details.painterInbox.length, 1);
+		handlers.agent_end();
+		assert.equal(log()[0].delivery, undefined);
+		assert.deepEqual(handlers.context({ messages: [message] }), request);
+	}
+});

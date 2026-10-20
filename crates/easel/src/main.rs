@@ -2542,6 +2542,12 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     let [save, out] = files.as_slice() else { return Err(FINISH_USAGE.into()) };
+    if same_file(Path::new(save), Path::new(out))? {
+        return Err("finish output must differ from the save and source log".into());
+    }
+    if let Some(l) = &log && same_file(Path::new(l), Path::new(out))? {
+        return Err("finish output must differ from the save and source log".into());
+    }
     let t0 = Instant::now();
     let r = save::read(Path::new(save))?;
     if let Some(l) = &log {

@@ -14,8 +14,8 @@ Process sampling is uniform over recorded chunks, starting at painted=1.
 The clip uses the existing 1000px-wide framing, 15 Gallery-final frames,
 495 process frames and 90 final frames (Gallery for Friedrich, plain otherwise).
 PNG exports keep the canvas's full resolution. Closed studios render live.ckpt
-(or live.ckpt.zst), validated against paintings/lua/painting.lua, using a
-render-checkpoint-capable --easel. --live uses client-only save instead, including
+(or live.ckpt.zst or live.ckpt.gz), validated against paintings/lua/painting.lua,
+using a render-checkpoint-capable --easel. --live uses client-only save instead, including
 after a studio reopens and its previous checkpoint becomes stale. Without a
 checkpoint, save connects to the running studio.
 No finishing is applied. A failed render or connection never starts a replay.
@@ -23,6 +23,7 @@ No finishing is applied. A failed render or connection never starts a replay.
 
 import argparse
 import csv
+import gzip
 import json
 import math
 import os
@@ -140,18 +141,23 @@ def export(studio, easel, profile, name, destination, live=False):
             raise ValueError(f"missing {command}")
     session = studio / "out/easel/painting"
     process = recorded_frames(session / "frames")
-    checkpoint = None if live else next((session / filename for filename in ("live.ckpt", "live.ckpt.zst")
+    checkpoint = None if live else next((session / filename for filename in ("live.ckpt", "live.ckpt.zst", "live.ckpt.gz")
                                         if (session / filename).is_file()), None)
     log = (studio / "paintings/lua/painting.lua").resolve(strict=True) if checkpoint else None
     names = [f"{name}-gallery.png", f"{name}-plain.png", f"{name}-timelapse.mp4"]
     for filename in names:
-        if (destination / filename).exists():
+        if os.path.lexists(destination / filename):
             raise ValueError(f"output already exists: {destination / filename}")
     env = dict(os.environ, EASEL_ROOT=str(studio), EASEL_SESSION="painting")
     env.pop("EASEL_BOX", None)
     with tempfile.TemporaryDirectory(prefix="export-", dir=session) as temporary:
         work = Path(temporary)
         gallery, plain, clip = [work / filename for filename in names]
+        if checkpoint and checkpoint.suffix == ".gz":
+            uncompressed = work / "live.ckpt"
+            with gzip.open(checkpoint, "rb") as source, uncompressed.open("wb") as target:
+                shutil.copyfileobj(source, target)
+            checkpoint = uncompressed
         for path, mode in ((gallery, "gallery"), (plain, "color")):
             if checkpoint:
                 command = [str(easel), "render-checkpoint", str(checkpoint), str(path),
@@ -162,7 +168,8 @@ def export(studio, easel, profile, name, destination, live=False):
         info = encode_clip(clip_frames(process, gallery, plain, profile), clip, work)
         destination.mkdir(parents=True, exist_ok=True)
         for filename in names:
-            shutil.copyfile(work / filename, destination / filename)
+            with (work / filename).open("rb") as source, (destination / filename).open("xb") as output:
+                shutil.copyfileobj(source, output)
     return info
 
 

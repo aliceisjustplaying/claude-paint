@@ -1201,6 +1201,13 @@ def test_notebook_calls_are_events_like_journal_notes(home, server):
         assert "if (e.kind === 'notebook') return ['notes', '📓', 'writes in the notebook'];" in fh.read()
 
 
+def test_the_event_slider_is_named_and_described_by_its_position():
+    html = open(os.path.join(HERE, "index.html")).read()
+    scrub = re.search(r'<input type="range" id="scrub"[^>]*>', html).group(0)
+    assert re.search(r'aria-label="[^"]+"', scrub)
+    assert 'aria-describedby="pos"' in scrub and 'id="pos"' in html
+
+
 def test_ask_critic_shows_the_note_and_the_whole_reply(home, server):
     _, studio, log = home
     reply = "The horizon sits too high. " * 100

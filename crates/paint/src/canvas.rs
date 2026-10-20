@@ -243,6 +243,7 @@ pub struct Canvas {
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
+    pub(crate) sealed_drawing_guide: bool,
     /// Engine 7: the `glaze` and `scumble` hands lay a thin film, and their
     /// coverage is the share of the passage it reaches (`Handling::film`).
     pub(crate) glaze_film: bool,
@@ -324,6 +325,7 @@ impl Canvas {
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
+            sealed_drawing_guide: false,
             glaze_film: false,
             film_pass: None,
             rag_lift: false,
@@ -415,6 +417,15 @@ impl Canvas {
 
     pub fn liquid_film_levels(&self) -> bool {
         self.liquid_film_levels
+    }
+
+    pub fn with_sealed_drawing_guide(mut self, enabled: bool) -> Self {
+        self.sealed_drawing_guide = enabled;
+        self
+    }
+
+    pub fn sealed_drawing_guide(&self) -> bool {
+        self.sealed_drawing_guide
     }
 
     pub fn with_rag_lift(mut self, enabled: bool) -> Self {

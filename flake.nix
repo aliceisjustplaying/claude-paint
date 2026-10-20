@@ -16,6 +16,7 @@
           UV_PYTHON_DOWNLOADS = "never";
         } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "${cc}/bin/cc";
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
         });
       });
   };

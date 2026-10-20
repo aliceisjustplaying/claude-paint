@@ -44,6 +44,7 @@ pub const CARRIED_PAINT_MARK: &str = "--@ palette-carried-paint";
 /// requires engine 7 or 8.
 pub const GLAZE_FILM_MARK: &str = "--@ glaze-film";
 pub const LIQUID_FILM_LEVELS_MARK: &str = "--@ liquid-film-levels";
+pub const SEALED_DRAWING_GUIDE_MARK: &str = "--@ sealed-drawing-guide";
 /// Marks a painting whose full palette board refuses a new heap instead of scraping off the
 /// oldest (board.rs): every new painting. A log without it replays with the oldest scraped off.
 pub const FULL_PALETTE_MARK: &str = "--@ full-palette-refuses";
@@ -646,6 +647,9 @@ impl Session {
         }
         if self.st.borrow().tubes.liquid_film_levels {
             let _ = writeln!(s, "{LIQUID_FILM_LEVELS_MARK}");
+        }
+        if self.st.borrow().tubes.sealed_drawing_guide {
+            let _ = writeln!(s, "{SEALED_DRAWING_GUIDE_MARK}");
         }
         if self.st.borrow().tubes.rag_lift {
             let _ = writeln!(s, "{RAG_LIFT_MARK}");
@@ -1371,6 +1375,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.carried_paint = true;
         b.glaze_film = true;
         b.liquid_film_levels = true;
+        b.sealed_drawing_guide = true;
         b.full_palette_refuses = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
@@ -1424,6 +1429,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.limbs_join_nearest = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == LIMBS_MARK);
     b.glaze_film = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == GLAZE_FILM_MARK);
     b.liquid_film_levels = head(LIQUID_FILM_LEVELS_MARK);
+    b.sealed_drawing_guide = head(SEALED_DRAWING_GUIDE_MARK);
     if b.liquid_film_levels && engine < 4 {
         return Err(format!("the log's liquid film leveling switch ({LIQUID_FILM_LEVELS_MARK}) requires engine 4 or later"));
     }

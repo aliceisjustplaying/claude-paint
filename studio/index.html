@@ -288,7 +288,7 @@
     <button id="play" title="watch the painting grow, one look at a time  space">▶ Replay</button>
     <select id="speed" title="replay speed: pictures per second"><option value="0.5">slow</option><option value="1" selected>1 / s</option><option value="2">2 / s</option><option value="4">4 / s</option></select>
     <button id="nextlook" title="next look  ]">⏭</button>
-    <div id="scrubwrap"><input type="range" id="scrub" min="0" max="0" value="0"><div id="ticks"></div></div>
+    <div id="scrubwrap"><input type="range" id="scrub" min="0" max="0" value="0" aria-label="Painting event" aria-describedby="pos"><div id="ticks"></div></div>
     <span id="pos"></span>
     <button id="togglecode" title="preparing code" aria-controls="codepane" aria-expanded="false" disabled>code</button>
     <button id="golive" title="jump to live  l">● LIVE</button>
@@ -503,7 +503,7 @@ $('pklist').onclick = e => {
 };
 $('picker').onkeydown = e => {
   if (e.key === 'Escape') { e.preventDefault(); closePicker(true); return; }
-  const bs = pickable(), i = bs.indexOf(document.activeElement); if (i < 0 && !/^Arrow|^Home$|^End$/.test(e.key)) return;
+  const bs = pickable(), i = bs.indexOf(document.activeElement); if (!bs.length || (i < 0 && !/^Arrow|^Home$|^End$/.test(e.key))) return;
   // arrows move through the painters in reading order; Enter or space picks one
   const k = {ArrowDown:1, ArrowRight:1, ArrowUp:-1, ArrowLeft:-1}[e.key];
   if (k) { e.preventDefault(); bs[Math.max(0, Math.min(bs.length - 1, i + k))].focus(); }
@@ -531,7 +531,7 @@ async function loadSessions() {
   renderHeader(); if (otherK >= 0 && events[otherK] && events[otherK].ref) second(otherK);  // (the reference's label names the artist once the list has it)
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus
 }
-$('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
+$('all').onchange = () => { try { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); } catch (e) {} renderPicker(); };
 let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
@@ -802,7 +802,7 @@ function source(path, upto) {
   for (let k = s.at + 1; k <= upto; k++) { const e = events[k];
     if (paint) {
       if (e.kind !== 'paint' || !!e.scratch !== sc) continue;
-      if (sc && e.new_scratch) { text = ''; s.n = 0; touched = true; }  // a fresh scratch canvas: a new log
+      if (sc && scratchReset(e)) { text = ''; s.n = 0; touched = true; }  // a fresh scratch canvas: a new log
       if (!paintOK(e)) continue;
       const head = `--@ chunk ${++s.n}\n`; before = text; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; touched = true;
     } else {
@@ -891,16 +891,28 @@ function renderCode(path, text, newLines, before = null, stepping = false) {
     codeWorker.postMessage({ id, input:text, previous, changed:[...newLines] });
   } catch (e) { if (codeWorker) codeWorker.terminate(); codeWorker = false; raw(); }
 }
+function unknownCode(path) {
+  clearCode();
+  const note = document.createElement('div');
+  note.textContent = 'Source unknown at this point. No complete copy of this file was recorded before it, so the current file is not shown.';
+  note.style.padding = '12px 16px';
+  $('code').replaceChildren(note);
+  $('file').textContent = fname(path);
+  $('codeformat').textContent = 'historical source unknown';
+  $('codeformat').title = 'No complete copy of this file was recorded before this point. The current file is not shown.';
+  $('togglecode').disabled = false; $('togglecode').title = 'show/hide code  c';
+}
 function codeAt(i, stepping = false) {
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1;
   if (atLive && liveText != null) return renderCode(p, liveText, new Set(), null, stepping);
   const s = source(p, i);
-  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
-  const { text, before, changed, known } = s;
-  const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
-  renderCode(p, known ? text : (liveText || ''), nl, before, stepping);
-  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest, format:codeFormatAllowed(stepping) };
+  if (!s.known) return unknownCode(p);
+  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
+  const { text, before, changed } = s;
+  const nl = new Set(); let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); });
+  renderCode(p, text, nl, before, stepping);
+  codeSelection = { path:p, source:s, request:codeRequest, format:codeFormatAllowed(stepping) };
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips
@@ -909,7 +921,7 @@ let typed = -1, typer = null, jgen = 0, journalView = null, journalItems = new M
 $('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i, true); } };
 function journalScroll() {
   const jb = $('jbody'), el = getComputedStyle(jb).overflowY === 'visible' ? jb.closest('main') : jb;
-  return { el, following:el === jb || el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
+  return { el, following:el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
 }
 function journal(i, scroll) {
   const jb = $('jbody');
@@ -965,7 +977,7 @@ function journal(i, scroll) {
     if (g !== jgen || generation !== gen) return;
     const state = firstPiece ? scroll : journalScroll(), following = firstPiece ? initiallyFollowing : state.following;
     firstPiece = false;
-    const h = jb.scrollHeight; let size = 0;
+    let size = 0;
     while (at > 0 && size < 12000) {
       const b = blocks[--at]; let entry = journalNodes.get(b.key);
       const typing = b.k === lastThink && (keepTyping || startTyping);
@@ -978,11 +990,10 @@ function journal(i, scroll) {
       if (el.parentNode !== jb || el.nextSibling !== anchor) jb.insertBefore(el, anchor);
       anchor = el;
     }
-    if (state.el === jb) jb.scrollTop += jb.scrollHeight - h;
-    else if (following) state.el.scrollTop = 1e9;
+    if (following) state.el.scrollTop = 1e9;
     if (at) setTimeout(piece, 0);
   };
-  piece(); if (scroll.el === jb) jb.scrollTop = 1e9;
+  piece();
   if (startTyping) {
     typed = lastThink;
     const el = journalNodes.get('think:' + lastThink).el, txt = events[lastThink].text.trim();
@@ -1219,10 +1230,11 @@ function cropOf(req) {
   const m = (req || '').match(/crop\W*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/); if (!m) return null;
   const [a, b, c, d] = m.slice(1).map(Number); return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
 }
-// the painter has stopped (finished, or between sittings): its closing words said and a couple of quiet minutes
-// since, or half an hour of nothing
+// the painter has stopped (finished, between sittings, or not running as the static export's card says): its closing
+// words said and a couple of quiet minutes since, or half an hour of nothing
 function stopped() {
-  if (outcomeLabel(allSessions.find(s => qOf(s) === Q))) return true;
+  const cur = allSessions.find(s => qOf(s) === Q);
+  if (outcomeLabel(cur) || STATIC && cur?.active !== true) return true;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000;
   return age >= ACTIVE || (last.kind === 'say' && age >= 120);
 }
@@ -1385,7 +1397,7 @@ $('play').onclick = () => {
   const step = () => { if (j >= W.length) { playing = null; goLive(); return; } show(W[j++]); playing = setTimeout(step, 1000 / +$('speed').value); };
   playing = true; step();
 };
-$('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1], true); };
+$('prevlook').onclick = () => { stop(); live = false; const L = looks().filter(k => k < pos); if (L.length) show(L[L.length - 1], true); else status(); };
 $('nextlook').onclick = () => { stop(); const L = looks().filter(k => k > pos); if (L.length) { live = false; show(L[0], true); } else goLive(); };
 $('golive').onclick = goLive;
 $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value, true); };
@@ -1403,7 +1415,7 @@ document.onkeydown = e => {
   if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1, true); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1, true); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
   else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); $('zoom').style.display = 'none'; } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
-$('all').checked = localStorage.getItem('studio.all') === '1';
+try { $('all').checked = localStorage.getItem('studio.all') === '1'; } catch (e) {}
 const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(location.search);
 Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;
 if (initial && qOf(initial) === Q) allSessions = [initial];
@@ -1421,8 +1433,10 @@ setInterval(() => { status(); if (events.length && resting() !== rested) picture
 setInterval(() => loadSessions().catch(() => {}), 30000);
 if (STATIC) {
   document.body.classList.add('static');
-  if (!localStorage.getItem('studio.intro') && !STREAM) $('intro').hidden = false;  // (not over a livestream)
-  $('introok').onclick = () => { $('intro').hidden = true; localStorage.setItem('studio.intro', '1'); };
+  let introSeen = null;
+  try { introSeen = localStorage.getItem('studio.intro'); } catch (e) {}
+  if (!introSeen && !STREAM) $('intro').hidden = false;  // (not over a livestream)
+  $('introok').onclick = () => { $('intro').hidden = true; try { localStorage.setItem('studio.intro', '1'); } catch (e) {} };
 }
 </script>
 </body></html>

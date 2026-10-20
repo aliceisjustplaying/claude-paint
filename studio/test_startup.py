@@ -152,6 +152,25 @@ def test_returned_canvas_and_header_survive_delayed_metadata_then_become_interac
     context.close()
 
 
+@pytest.mark.parametrize("active", [False, True])
+def test_static_header_says_live_only_when_the_picker_card_is_working(browser, site, active):
+    base, _, _ = site
+    page = browser.new_page()
+    page.set_default_timeout(5000)
+    now = datetime(2026, 9, 29, 10, 1, tzinfo=timezone.utc)
+    page.clock.install(time=now)
+    sessions = [dict(p=PAINTER, painter=True, title="Selected", model="gpt-6.1-sol", mtime=now.timestamp(),
+                     active=active, look=0, said=True)]
+    page.route("**/paintings.json", lambda route: route.fulfill(json=[]))
+    page.route("**/data/sessions.json", lambda route: route.fulfill(json=sessions))
+    page.goto(base + f"/studio/?p={PAINTER}", wait_until="domcontentloaded")
+    page.wait_for_function("sessionsLoaded")
+    page.clock.run_for(1000)
+    assert ("painting now" in page.locator("#pklist .pks").first.text_content()) == active
+    assert (page.locator("#badge").inner_text() == "LIVE") == active
+    page.close()
+
+
 def test_unchanged_picker_survives_revalidation_and_time_changes(browser, site):
     base, _, _ = site
     page = browser.new_page(timezone_id="UTC")
@@ -196,6 +215,24 @@ def test_unchanged_picker_survives_revalidation_and_time_changes(browser, site):
     assert page.locator("#pklist .pk").count() == 1
     assert "May 18" in page.locator("#pklist .pks").inner_text()
     page.close()
+
+
+def test_denied_storage_still_loads_the_static_viewer_and_takes_its_writes(browser, site):
+    base, requests, _ = site
+    context = browser.new_context(viewport={"width": 1280, "height": 720})
+    context.set_default_timeout(5000)
+    context.add_init_script("Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } })")
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(base + "/studio/", wait_until="domcontentloaded")
+    page.wait_for_function("document.querySelector('#pklist button') !== null")
+    assert any(url.startswith("/studio/data/sessions.json") for url, _ in requests)
+    page.evaluate("document.getElementById('all').click()")
+    page.locator("#introok").click()
+    assert page.locator("#intro").is_hidden()
+    assert errors == []
+    context.close()
 
 
 def test_sessions_revalidation_reuses_the_unchanged_http_body(browser, site):

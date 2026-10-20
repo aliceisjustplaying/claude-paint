@@ -45,6 +45,17 @@ test("every page reconstructs the full text, including multibyte boundaries", ()
 	assert.throws(() => reference(root, { id: "a", page: page + 1 }));
 });
 
+test("duplicate ids are rejected, so a read never returns another entry's text", () => {
+	const root = studio();
+	writeFileSync(join(root, "notes/reference-library.json"), JSON.stringify([
+		{ id: "same", title: "First", keywords: [], text: "First entry text." },
+		{ id: "same", title: "Second", keywords: [], text: "Second entry text." },
+	]));
+	assert.throws(() => referenceList(root, {}), /duplicate id "same"/);
+	assert.throws(() => reference(root, { query: "second" }), /duplicate id "same"/);
+	assert.throws(() => reference(root, { id: "same" }), /duplicate id "same"/);
+});
+
 test("a missing library or escaping symlink is not read", () => {
 	const root = studio();
 	assert.throws(() => reference(root, { query: "anything" }), /no reference library/);

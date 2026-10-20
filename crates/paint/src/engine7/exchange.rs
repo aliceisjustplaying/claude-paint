@@ -115,7 +115,7 @@ unsafe fn packed(sf: &Surf, i: usize, hd: &Prop, cure: f32) -> [f32; PACK] {
         let l = &*sf.lat.add(i);
         let mut p = [0.0f32; PACK];
         p[VOL] = 1.0;
-        p[LAT0..LAT0 + LAT].copy_from_slice(l);
+        p[LAT0..LAT0 + LAT].copy_from_slice(&l.color);
         p[HIDE0..HIDE0 + hd.len()].copy_from_slice(hd);
         p[CURE] = cure;
         p
@@ -391,6 +391,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         let film = Film::of(sf);
         let laying = Paint7::new(sf.lean, sf.drain, &br.lat, br.hide, br.cure);
         let mut got = [0.0f32; PACK];
+        let mut got_parts = Latent::default();
         let mut got_s = 0.0f32;
         let mut laid_liq = 0.0f32;
         let mut ploughed = 0.0f32;
@@ -426,6 +427,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     // down, `bristle::take_from`; without, the film's)
                     let hp = sf.take(i, tk);
                     accumulate(&mut got, &packed(sf, i, &hp, cure), tk * px_area);
+                    got_parts.add_parts(&*sf.lat.add(i), tk * px_area);
                 }
             }
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
@@ -520,7 +522,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 src[COVER] = src_cover;
                 src[SOLV] = src_solv;
                 for &(tx, ty, j, mm) in &moves[..n_moves] {
-                    accumulate(&mut win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands")).a, &src, mm);
+                    let cell = win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands"));
+                    accumulate(&mut cell.a, &src, mm);
+                    cell.parts.add_parts(&*sf.lat.add(i), mm);
                 }
                 ploughed += out_m * px_area;
             }
@@ -538,7 +542,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             if !inv.is_finite() {
                 continue;
             }
-            let mut lat: Latent = [0.0; LAT];
+            let mut lat: Latent = Latent::default();
+            lat.parts = c.parts.parts.clone();
+            lat.scale_parts(inv);
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;
             }
@@ -565,7 +571,9 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         br.solvent += got_s;
         let got_v = got[VOL];
         if got_v > 0.0 {
-            let mut got_l: Latent = [0.0; LAT];
+            let mut got_l: Latent = Latent::default();
+            got_l.parts = got_parts.parts;
+            got_l.scale_parts(1.0 / got_v);
             for k in 0..LAT {
                 got_l[k] = got[LAT0 + k] / got_v;
             }
@@ -604,7 +612,7 @@ mod tests {
             for x in (r.0 * s) as usize..((r.2 * s) as usize).min(w) {
                 let i = y * w + x;
                 c.wet.vol[i] = coats;
-                c.wet.lat[i] = lat;
+                c.wet.lat[i] = lat.clone();
                 c.wet.hide[i] = prop;
             }
         }

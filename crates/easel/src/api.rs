@@ -409,7 +409,7 @@ impl UserData for KnifeU {
             let amount = load_amount(amount, 0.6, "k:load")?;
             if !(0.0..=1.0).contains(&amount) { return err("k:load: amount is a share of a full load (0..1)"); }
             let carry = 0.5 * k.k.borrow().fullness().min(1.0);
-            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load", carry)?;
+            let (paint, color) = brushload(&k.st, &p, &Value::Nil, "load", carry, &k.k.borrow().carried_parts())?;
             k.k.borrow_mut().load(paint, amount);
             time::trip(&k.st, color);
             Ok(())
@@ -493,14 +493,14 @@ impl UserData for Brush {
                 check_keys(t, PART_KEYS, "b:load")?;
                 let mut part = part_of(t, "b:load")?;
                 let carry = b.held.borrow().fullness().min(1.0);
-                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load", carry)?;
+                let (paint, color) = brushload(&b.st, &p, &Value::Nil, "load", carry, &b.held.borrow().carried_parts())?;
                 part.seed = b.st.borrow_mut().rng.next_u64();
                 b.held.borrow_mut().load_part(paint, amount, &part);
                 time::trip(&b.st, color);
                 return Ok(());
             }
             let carry = b.held.borrow().fullness().min(1.0);
-            let (paint, color) = brushload(&b.st, &p, &extra, "load", carry)?;
+            let (paint, color) = brushload(&b.st, &p, &extra, "load", carry, &b.held.borrow().carried_parts())?;
             b.held.borrow_mut().load(paint, amount);
             time::trip(&b.st, color);
             Ok(())
@@ -509,7 +509,7 @@ impl UserData for Brush {
         m.add_method("reload", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
             // it is wiped first: only what the rag left goes into the heap
             let carry = 0.15 * b.held.borrow().fullness().min(1.0);
-            let (paint, color) = brushload(&b.st, &p, &extra, "reload", carry)?;
+            let (paint, color) = brushload(&b.st, &p, &extra, "reload", carry, &b.held.borrow().carried_parts())?;
             b.held.borrow_mut().reload(paint, amount.unwrap_or(0.8));
             time::trip(&b.st, color);
             Ok(())
@@ -1029,18 +1029,18 @@ pub(crate) fn pile_of(v: &Value, what: &str) -> Result<PileU> {
 /// it was knifed is the pile exactly as knifed.
 pub(crate) fn pile_now(st: &S, v: &Value, what: &str, carry: f32) -> Result<PileU> {
     let p = pile_of(v, what)?;
-    visit(st, &p, carry, what)?;
+    visit(st, &p, carry, what, &[])?;
     Ok(resolve(st, p))
 }
 
 /// The hand goes to the pile's heap with a brush carrying `carry` of the last paint (board.rs
 /// `visit`): a heap scraped off is knifed again, which a full palette may refuse.
-fn visit(st: &S, p: &PileU, carry: f32, what: &str) -> Result<()> {
+fn visit(st: &S, p: &PileU, carry: f32, what: &str, parts: &[(usize, f32)]) -> Result<()> {
     if p.heap == 0 {
         return Ok(());
     }
     let s = &mut *st.borrow_mut();
-    s.board.visit(p.heap, carry).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
+    if s.tubes.carried_paint { s.board.visit_with(p.heap, carry, parts) } else { s.board.visit(p.heap, carry) }.map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
 }
 
 /// The pile as its heap is on the board now.
@@ -1103,7 +1103,7 @@ fn check_set_out(st: &S, parts: &[(usize, f32)], what: &str) -> Result<()> {
 
 /// Paint for one brushload from a pile: the pile, remixed a little (a pile
 /// knifed by hand is uneven), and the pile's color (for the palette ledger).
-fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32) -> Result<(paint::Paint, Rgb)> {
+fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32, parts: &[(usize, f32)]) -> Result<(paint::Paint, Rgb)> {
     // a legacy canvas's brushes load colors (legacy.rs)
     if let Some(r) = crate::legacy::brushload(st, p, extra)? {
         return Ok(r);
@@ -1111,7 +1111,9 @@ fn brushload(st: &S, p: &Value, extra: &Value, what: &str, carry: f32) -> Result
     if !extra.is_nil() {
         return err(format!("b:{what}(pile, amount): a pile carries its own medium; mix another pile for other paint"));
     }
-    let p = pile_now(st, p, &format!("b:{what}"), carry)?;
+    let p = pile_of(p, &format!("b:{what}"))?;
+    visit(st, &p, carry, &format!("b:{what}"), parts)?;
+    let p = resolve(st, p);
     let sty = style(st)?;
     let mut s = st.borrow_mut();
     let tubes = s.tubes.clone();
@@ -1404,7 +1406,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
                 {
                     return err(format!("work piles: a weight is a number or function(x, y), not {n}"));
                 }
-                v.push((pile_now(st, &e.get::<Value>(1)?, "work piles", 0.5)?, w));
+                v.push((pass_pile(st, &e.get::<Value>(1)?, "work piles")?, w));
             }
             if v.len() < 2 {
                 return err("work: piles={{pile, weight}, {pile, weight}, ...} takes two or more piles");
@@ -1417,7 +1419,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         Value::Nil if blending => None,
         // a legacy canvas's passes paint colors (legacy.rs)
         Value::Nil if crate::legacy::on(st) => None,
-        v => Some(pile_now(st, &v, "work", 0.5)?),
+        v => Some(pass_pile(st, &v, "work")?),
     };
     let tubes = st.borrow().tubes.clone();
     let mut h: Handling = match hand.as_str() {
@@ -1471,15 +1473,17 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h.part = paint::Part { streak: v, ..paint::Part::ALL };
     }
     // second={pile=, load=, side=, share=, streak=}: then part of the brush in a second pile
+    let mut second_pile = None;
     if let Some(t) = o.get::<Option<Table>>("second")? {
         check_keys(&t, &["pile", "load", "side", "share", "streak"], "work second")?;
         if pile.is_none() {
             return err("work: second= is a second dip after the pile's; give pile= too");
         }
-        let p2 = pile_now(st, &t.get::<Value>("pile")?, "work second", 0.5)?;
+        let p2 = pass_pile(st, &t.get::<Value>("pile")?, "work second")?;
         let part = part_of(&t, "work second")?;
         let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
         h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
+        second_pile = Some(p2);
     }
     if pile.is_none() && crate::legacy::on(st) {
         crate::legacy::work(st, &o, &mut h, &hand, blending, b)?;
@@ -1624,10 +1628,83 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     h.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = pass_seed;
+    let board = std::sync::Arc::new(std::sync::Mutex::new(st.borrow().board.clone()));
+    if tubes.carried_paint && st.borrow().board.dirty > 0.0 && !h.blender && pile.is_some() {
+        let mut sources: Vec<_> = match &graded {
+            Some(ps) => ps.iter().map(|(p, _)| p.clone()).collect(),
+            None => Vec::new(),
+        };
+        sources.extend(pile.iter().cloned());
+        sources.extend(second_pile);
+        h.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), sources, h.mix_jitter));
+    }
     // (dipping into the piles on the palette)
     time::verb(st, Verb::Pass, |s| {
         s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
+        if h.dip_with.is_some() {
+            s.board = board.lock().unwrap().clone();
+        }
         Ok(())
+    })
+}
+
+fn pass_pile(st: &S, value: &Value, what: &str) -> Result<PileU> {
+    if !st.borrow().tubes.carried_paint {
+        return pile_now(st, value, what, 0.5);
+    }
+    let p = pile_of(value, what)?;
+    if p.heap != 0 {
+        let mut s = st.borrow_mut();
+        s.board.reknife(p.heap).map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))?;
+    }
+    Ok(resolve(st, p))
+}
+
+fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes: Palette, piles: Vec<PileU>, jitter: f32) -> paint::handling::Dip<'static> {
+    let sources: Vec<_> = piles.into_iter().map(|p| (p.heap, p.mix.clone(), p.medium, p.thinner())).collect();
+    Box::new(move |held, weights, seed| {
+        let mut board = board.lock().unwrap();
+        let carry = held.carried_parts();
+        let mut resolved = Vec::new();
+        for &(source, weight) in weights {
+            let (id, original, medium, thinner) = &sources[source];
+            board.visit_with(*id, held.fullness().min(1.0), &carry).expect("pass heaps were prepared before painting");
+            let (mix, medium, thinner) = match board.heap(*id) {
+                Some(heap) if heap.changed => {
+                    let mut mix = tubes.pile(heap.fractions());
+                    mix.solvent = heap.solvent;
+                    mix.oil_rate = heap.oil_rate;
+                    (mix, heap.medium, heap.thinner)
+                }
+                _ => (original.clone(), *medium, *thinner),
+            };
+            resolved.push((mix, medium, thinner, weight));
+        }
+        let (mix, medium, thinner) = if resolved.len() == 1 {
+            let (mix, medium, thinner, _) = resolved.pop().unwrap();
+            (mix, medium, thinner)
+        } else {
+            let mut parts: Vec<(usize, f32)> = Vec::new();
+            let (mut medium, mut thinner, mut solvent, mut oil_rate) = (0.0, 0.0, 0.0, 0.0);
+            for (mix, md, th, weight) in resolved {
+                let sum = mix.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
+                for (i, fraction) in mix.parts {
+                    match parts.iter_mut().find(|p| p.0 == i) {
+                        Some(p) => p.1 += weight * fraction / sum,
+                        None => parts.push((i, weight * fraction / sum)),
+                    }
+                }
+                medium += weight * md;
+                thinner += weight * th;
+                solvent += weight * mix.solvent;
+                oil_rate += weight * mix.oil_rate;
+            }
+            let mut mix = tubes.pile(parts);
+            mix.solvent = solvent;
+            mix.oil_rate = oil_rate;
+            (mix, medium, thinner)
+        };
+        thinned(tubes.remix(&mix, jitter, &mut Rng::new(seed)).laid(medium), thinner)
     })
 }
 
@@ -1686,10 +1763,12 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     let tubes = st.borrow().tubes.clone();
     // a legacy canvas stipples colors (legacy.rs)
     let legacy = o.get::<Value>("pile")?.is_nil() && crate::legacy::on(st);
+    let mut source_pile = None;
     let mut sp = if legacy {
         Stipple::new(tool)
     } else {
-        let pile = pile_now(st, &o.get::<Value>("pile")?, "stipple", 0.5)?;
+        let pile = pass_pile(st, &o.get::<Value>("pile")?, "stipple")?;
+        source_pile = Some(pile.clone());
         Stipple::new(tool).piled(&tubes, pile.mix.clone(), pile.medium).thinner(pile.thinner())
     };
     if legacy {
@@ -1732,8 +1811,17 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     }
     sp.tool.validate().map_err(mlua::Error::runtime)?;
     let seed = seed_of(st, &o)?;
+    let board = std::sync::Arc::new(std::sync::Mutex::new(st.borrow().board.clone()));
+    if tubes.carried_paint && st.borrow().board.dirty > 0.0 {
+        if let Some(pile) = source_pile {
+            sp.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), vec![pile], sp.mix_jitter));
+        }
+    }
     time::verb(st, Verb::Pass, |s| {
         s.canvas.as_mut().ok_or_else(no_canvas)?.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        if sp.dip_with.is_some() {
+            s.board = board.lock().unwrap().clone();
+        }
         Ok(())
     })
 }
@@ -2043,7 +2131,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             for e in t.sequence_values::<Table>() {
                 let e = e?;
                 let p = pile_of(&e.get::<Value>(1)?, "mix")?;
-                visit(&st, &p, 0.35, "mix")?;
+                visit(&st, &p, 0.35, "mix", &[])?;
                 let p = resolve(&st, p);
                 let w: f32 = e.get::<Option<f32>>(2)?.unwrap_or(1.0);
                 if !(w > 0.0 && w.is_finite()) {
@@ -2469,6 +2557,94 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
 }
 
 // Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
+#[cfg(test)]
+mod carried_palette_tests {
+    use crate::session::{Session, box_for, CARRIED_PAINT_MARK};
+
+    fn painting(carried: bool) -> Session {
+        let log = format!("--@ engine 8\n{}\n", if carried { CARRIED_PAINT_MARK } else { "" });
+        let mut s = Session::replay_with(96, box_for(Some(&log)).unwrap()).unwrap();
+        s.run(r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",1}}, um=120, apply="knife"}}}
+            white=pile{{"lead white",1},name="white"}
+            blue=pile{{"cobalt blue",1},name="blue"}
+            red=pile{{"vermilion",1},name="red"}"#).unwrap();
+        s
+    }
+
+    fn dirt(s: &Session, heap: &str, tube: &str) -> f32 {
+        let s = s.st.borrow();
+        let i = s.tubes.tubes.iter().position(|t| t.name == tube).unwrap();
+        s.board.heaps.iter().find(|h| h.name.as_deref() == Some(heap)).unwrap().dirt.iter().filter(|p| p.0 == i).map(|p| p.1).sum()
+    }
+
+    #[test]
+    fn a_dip_brings_the_arriving_brushs_paint_not_another_brushs_history() {
+        for carried in [false, true] {
+            let mut s = painting(carried);
+            s.run(r#"w=brush("flat",12); b=brush("flat",12)
+                w:load(white); b:load(blue)
+                palette{dirty=1}
+                b:load(blue); w:load(red)"#).unwrap();
+            let (white, blue) = (dirt(&s, "red", "lead white"), dirt(&s, "red", "cobalt blue"));
+            if carried {
+                assert!(white > 0.02 && blue == 0.0, "white={white}, blue={blue}");
+            } else {
+                assert!(blue > 0.02 && white == 0.0, "legacy white={white}, blue={blue}");
+            }
+            assert_eq!(s.program("palette").contains(CARRIED_PAINT_MARK), carried);
+            let path = std::env::temp_dir().join(format!("easel-carried-paint-{}-{carried}.ckpt", std::process::id()));
+            crate::save::write(&s, &s.program("palette"), &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.carried_paint, carried);
+        }
+        assert!(box_for(None).unwrap().carried_paint);
+        assert!(!box_for(Some("--@ engine 8\n--@ chunk 1\n--@ palette-carried-paint\n")).unwrap().carried_paint);
+    }
+
+    #[test]
+    fn graded_dips_preserve_palette_tint_strength_at_negligible_dirt() {
+        let latent = |dirty: f32| {
+            let mut s = painting(true);
+            s.run(&format!(r#"strong=pile{{{{"Prussian blue",1}}}}
+                palette{{dirty={dirty}}}
+                work(rect(100,100,800,800),{{piles={{{{white,0.5}},{{strong,0.5}}}},tool={{kind="flat",width=50}},length={{80,80}},coverage=1,dips={{1,0.8,1}},mix_jitter=0,fill=false,seed=11}})"#)).unwrap();
+            s.canvas().unwrap().state_fields().into_iter().find_map(|f| match f.values {
+                paint::state_dump::Values::F32(v) if f.name == "wet.lat" => Some(v),
+                _ => None,
+            }).unwrap()
+        };
+        let (clean, dirty) = (latent(0.0), latent(1e-8));
+        assert_eq!(clean.len(), dirty.len());
+        assert!(clean.iter().any(|v| *v != 0.0));
+        let difference = clean.iter().zip(&dirty).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        assert!(difference < 1e-6, "negligible palette dirt changed graded pigment mixing by {difference}");
+    }
+
+    #[test]
+    fn every_internal_dip_carries_the_paint_retained_from_the_canvas() {
+        for pass in [
+            "work(rect(100,100,800,800),{pile=red,tool={kind='flat',width=50},length={80,80},coverage=1,dips={1,0.8,0},mix_jitter=0,fill=false,seed=11})",
+            "stipple(rect(100,100,800,800),{pile=red,tool={kind='round',width=50},coverage=1,dips={1,0.8,0},mix_jitter=0,seed=11})",
+            "work(rect(100,100,800,800),{pile=red,piles={{white,0},{blue,0}},second={pile=white,load=0.2},tool={kind='flat',width=50},length={80,80},coverage=1,dips={1,0.8,0},mix_jitter=0,fill=false,seed=11})",
+        ] {
+            let mut s = painting(true);
+            s.run("work(rect(0,0,1000,1000),{pile=blue,tool={kind='flat',width=80},coverage=3,fill=true,mix_jitter=0,seed=2})").unwrap();
+            s.run("palette{dirty=1}").unwrap();
+            s.run(pass).unwrap();
+            assert!(dirt(&s, "red", "cobalt blue") > 0.0, "no picked-up blue returned to red: {pass}");
+            assert!(s.st.borrow().board.residue_amount > 0.5, "only a setup-time visit: {pass}");
+            let c = s.canvas().unwrap();
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "palette").unwrap();
+            let (restored, _) = paint::Canvas::read_state(&mut &bytes[..]).unwrap();
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "palette").unwrap();
+            assert_eq!(bytes, again);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::session::Session;

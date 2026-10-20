@@ -122,6 +122,7 @@ const MAGIC12: &[u8; 8] = b"PAINTC12";
 const MAGIC14: &[u8; 8] = b"PAINTC14";
 const MAGIC16: &[u8; 8] = b"PAINTC16";
 const MAGIC17: &[u8; 8] = b"PAINTC17";
+const MAGIC18: &[u8; 8] = b"PAINTC18";
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
 /// Marks the paper's section ("PAPR"), and its version.
@@ -376,6 +377,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC14 => 14,
         m if m == MAGIC16 => 16,
         m if m == MAGIC17 => 17,
+        m if m == MAGIC18 => 18,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -400,6 +402,7 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
+        let pigments = self.wet.lat.iter().any(|p| !p.parts.is_empty());
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
@@ -428,7 +431,7 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(match version {
+        let magic = match version {
             14 => MAGIC14,
             16 => MAGIC16,
             17 => MAGIC17,
@@ -439,9 +442,11 @@ impl Canvas {
             10 => MAGIC10,
             9 => MAGIC9,
             _ => MAGIC,
-        })?;
+        };
+        w.write_all(if pigments { MAGIC18 } else { magic })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
+        if pigments { put_u64(w, version)?; }
         let f = self.f;
         for v in [f.w, f.h, f.x0, f.y0, f.full_w, f.full_h, self.keep.0, self.keep.1, self.keep.2, self.keep.3] {
             put_u64(w, v as u64)?;
@@ -474,7 +479,7 @@ impl Canvas {
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
-        put_all(w, wt.lat.iter().flat_map(|l| *l))?;
+        put_all(w, wt.lat.iter().flat_map(|l| l.color))?;
         if version >= 11 {
             // (engine 4's five properties: the pigment's packing, `Prop`'s
             // last five, is the drain section's, version 14; without it, it
@@ -559,12 +564,27 @@ impl Canvas {
         if let Some(s) = &self.sheet {
             write_sheet(w, s)?;
         }
+        if pigments {
+            for pixel in &self.wet.lat {
+                put_u64(w, pixel.parts.len() as u64)?;
+                for &(i, amount) in &pixel.parts {
+                    put_u64(w, i as u64)?;
+                    put_f32(w, amount)?;
+                }
+            }
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
+        let pigments = version == 18;
+        let version = if pigments {
+            let version = get_u64(r)?;
+            if !(8..=17).contains(&version) { return Err(bad("checkpoint base format is invalid")); }
+            version as u32
+        } else { version };
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -630,7 +650,7 @@ impl Canvas {
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
         let lat = get_all(r, n * LAT)?;
-        wet.lat = lat.as_chunks::<LAT>().0.to_vec();
+        wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')
         let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
@@ -766,7 +786,7 @@ impl Canvas {
                     h[5..].copy_from_slice(k);
                 }
                 c.drain = true;
-                if !raw && version == 14 && r.read(&mut [0u8; 1])? != 0 {
+                if !raw && version == 14 && !pigments && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
@@ -779,7 +799,7 @@ impl Canvas {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
             c.soak = Some(Box::new(read_soak(r, n)?));
-            if version != 17 && r.read(&mut [0u8; 1])? != 0 {
+            if version != 17 && !pigments && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -788,7 +808,7 @@ impl Canvas {
             let (p, micro) = read_paper(r, n)?;
             c.paper = Some(p);
             c.micro = micro;
-            if r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -812,12 +832,28 @@ impl Canvas {
                 return Err(bad("checkpoint sheet mark is wrong"));
             }
             c.sheet = Some(read_sheet_body(r, n)?);
-            if r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
-        if version == 7 && r.read(&mut [0u8; 1])? != 0 {
+        if version == 7 && !pigments && r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("version-7 checkpoint has trailing data"));
+        }
+        if pigments {
+            for pixel in &mut c.wet.lat {
+                let count = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint pigment count is invalid"))?;
+                for _ in 0..count {
+                    let i = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint pigment is invalid"))?;
+                    let amount = get_f32(r)?;
+                    if !amount.is_finite() || amount < 0.0 || pixel.parts.iter().any(|p| p.0 == i) {
+                        return Err(bad("checkpoint pigment list is invalid"));
+                    }
+                    pixel.parts.push((i, amount));
+                }
+            }
+            if r.read(&mut [0u8; 1])? != 0 {
+                return Err(bad("checkpoint has trailing data"));
+            }
         }
         Ok((c, header))
     }

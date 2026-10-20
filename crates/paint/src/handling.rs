@@ -18,7 +18,10 @@ use crate::tally::Piles;
 use crate::wet::Paint;
 
 type Field<'a, T> = Box<dyn Fn(f32, f32) -> T + Sync + 'a>;
+pub type Dip<'a> = Box<dyn Fn(&Held, &[(usize, f32)], u64) -> Paint + Sync + 'a>;
+
 pub struct Handling<'a> {
+    pub dip_with: Option<Dip<'a>>,
     pub tool: Tool,
     /// Stroke length range in units.
     pub length: (f32, f32),
@@ -199,6 +202,7 @@ impl<'a> Handling<'a> {
             load_at: None,
             scale_at: None,
             piles_at: None,
+            dip_with: None,
             cut_in: None,
             curve: 0.05,
             wave: 0.25,
@@ -428,6 +432,9 @@ impl<'a> Handling<'a> {
 
 /// One planned stroke.
 struct Plan {
+    sources: Vec<(usize, f32)>,
+    dip_seed: u64,
+    dip2_seed: u64,
     pts: Vec<(f32, f32)>,
     pressure: f32,
     fade: f32,
@@ -949,7 +956,7 @@ impl Canvas {
                         self.tally.reload((1 + p.dip2.is_some() as u8 + p.pickup.is_some() as u8) as f64 / crate::tally::pace::DABS_PER_RELOAD);
                     } else {
                         piles.trip(&mut self.tally, p.want);
-                        if let Some((_, _, want2)) = p.dip2 {
+                        if let Some((_, _, want2)) = p.dip2.clone() {
                             piles.trip(&mut self.tally, want2);
                         }
                         // (a graded dip's pickup from the next pile)
@@ -973,12 +980,12 @@ impl Canvas {
         } else {
             TileOrder::Default(order)
         };
-        let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.into_iter().chain(p.dip2.map(|(paint, _, _)| paint))), &secs);
+        let slice = self.covering_slice_secs(slice, tiles.iter().flatten().flat_map(|p| p.dip.clone().into_iter().chain(p.dip2.clone().map(|(paint, _, _)| paint))), &secs);
         let pass = crate::sched::Pass { grid: (tw, th), order, rects, secs, ids, slice };
         if hd.blender && self.blend_feather {
             self.receptive = Some(self.receptive(&tool));
         }
-        self.paint_pass(pass, |surf, ti, first_id| {
+        self.paint_pass(pass, hd.dip_with.is_some(), |surf, ti, first_id| {
             // (a blender lays back paint it lifted: it mixes as it always did)
             let surf = if hd.blender { crate::bristle::Surf { skim: 0.0, ..surf } } else { surf };
             let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
@@ -993,19 +1000,21 @@ impl Canvas {
                 if p.fresh {
                     held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
                 }
-                if let Some(paint) = p.dip {
+                if let Some(paint) = p.dip.clone() {
                     if hd.blender {
                         held.wipe(0.9);
                     } else {
                         held.wipe(hd.wipe);
+                        let paint = hd.dip_with.as_ref().map_or(paint, |dip| dip(&held, &p.sources, p.dip_seed));
                         if hd.part == crate::bristle::Part::ALL {
                             held.load(paint, p.load);
                         } else {
-                            // a new streak pattern every dip, from where the stroke starts
                             let seed = (p.pts[0].0.to_bits() as u64) << 21 ^ p.pts[0].1.to_bits() as u64 ^ 0x57EA;
                             held.load_part(paint, p.load, &crate::bristle::Part { seed, ..hd.part });
                         }
-                        if let (Some((paint2, load2, _)), Some(s2)) = (p.dip2, hd.second.as_ref()) {
+                        if let (Some((paint2, load2, _)), Some(s2)) = (p.dip2.clone(), hd.second.as_ref()) {
+                            let source = hd.piles_at.as_ref().map_or(1, |piles| piles.len() + 1);
+                            let paint2 = hd.dip_with.as_ref().map_or(paint2, |dip| dip(&held, &[(source, 1.0)], p.dip2_seed));
                             let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
                             held.load_part(paint2, load2, &crate::bristle::Part { seed, ..s2.part });
                         }
@@ -1091,6 +1100,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
     if let Some((pal, pile0, medium0)) = &hd.pile {
+        let mut sources = vec![(hd.piles_at.as_ref().map_or(0, Vec::len), 1.0)];
         // graded color: the piles mixed by their weights here
         let graded = hd.piles_at.as_ref().and_then(|ps| {
             let w: Vec<f32> = ps.iter().map(|p| (p.3)(c.0, c.1)).map(|v| if v.is_finite() { v.max(0.0) } else { 0.0 }).collect();
@@ -1098,6 +1108,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             if tot <= 1e-6 || !tot.is_finite() {
                 return None;
             }
+            sources = w.iter().enumerate().filter(|(_, w)| **w > 0.0).map(|(i, w)| (i, w / tot)).collect();
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut med, mut thinner, mut solv, mut oilr) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
             // the piles a painter goes to for this mix: the one that weighs
@@ -1139,16 +1150,19 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
             None => (pile.color, None),
         };
         // the pile on the palette, as knifed (its own mixing generator)
-        let mut prng = Rng::new(rng.next_u64());
+        let dip_seed = rng.next_u64();
+        let mut prng = Rng::new(dip_seed);
         let paint = pal.remix(pile, hd.mix_jitter, &mut prng).laid(*medium);
         let paint = if thinner > 0.0 { paint.with_thinner(thinner) } else { paint };
         let load = hd.load * load_k;
         // (its own generator, drawn only for a double-loaded brush: other passes plan as before)
+        let mut dip2_seed = 0;
         let dip2 = hd.second.as_ref().map(|s2| {
-            let mut r2 = Rng::new(prng.next_u64() ^ 0x2D1F);
+            dip2_seed = prng.next_u64() ^ 0x2D1F;
+            let mut r2 = Rng::new(dip2_seed);
             (s2.palette.remix(&s2.pile, hd.mix_jitter, &mut r2).laid(s2.medium).with_thinner(s2.thinner), s2.load * load_k, s2.pile.color)
         });
-        return (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want, dip2, tool: None, sized: false, pickup });
+        return (rect, Plan { sources, dip_seed, dip2_seed, pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want, dip2, tool: None, sized: false, pickup });
     }
     let target = (hd.color)(c.0, c.1);
     let lab = to_oklab(target);
@@ -1159,7 +1173,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     ]);
     let paint = Paint::new(col, hd.hiding, hd.stiff);
     let load = hd.load * load_k;
-    (rect, Plan { pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false, pickup: None })
+    (rect, Plan { sources: Vec::new(), dip_seed: 0, dip2_seed: 0, pts, pressure, fade, dip: Some(paint), load, swell: Vec::new(), passage: 0, fresh: false, id: None, want: target, dip2: None, tool: None, sized: false, pickup: None })
 }
 
 /// The part of a stroke through `c` that stays inside `mask` (≥ 0.5), pulled

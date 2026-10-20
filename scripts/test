@@ -91,6 +91,8 @@ passed='[1-9][0-9]* passed'
 unittest=$'^Ran [1-9]\n^OK'
 
 # longest first
+check pastel-engine "cd crates/paint && $(printf %q "$(exe 'lib paint test')") --include-ignored pastel::tests:: sheet::tests:: checkpoint::tests::paper_and_stick_pastel_survive_a_checkpoint checkpoint::tests::a_laid_sheet_survives_a_checkpoint checkpoint::tests::drained_masking_sheets_keep_each_support" '^test result: ok\. [1-9]'
+check pastel-session "cd crates/easel && $(printf %q "$(exe 'bin easel test')") api::draw_pencil::tests:: tests::a_held_stick tests::reference_looks_do_not_bypass_stick_pose_gating" '^test result: ok\. [1-9]'
 rust smoke easel 'test smoke test'
 rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
@@ -99,6 +101,7 @@ rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
+  replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
   replay_checkpoint::tests::progress_is_published_at_every_chunk_and_batch_boundary \
   replay_checkpoint::tests::trace_failure_cannot_be_hidden_by_lua_pcall \

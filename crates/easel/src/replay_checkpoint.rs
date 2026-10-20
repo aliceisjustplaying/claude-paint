@@ -612,6 +612,38 @@ print(counter,rand(),drying(300,300))
     }
 
     #[test]
+    fn pastel_checkpoints_reconstruct_stick_wear_and_dry_tools() {
+        let dir = Temp::new();
+        let path = dir.0.join("pastel.lua");
+        let mut plain = session().with_paper(true).unwrap();
+        for chunk in [
+            "canvas{size=200, aspect=1.25, seed=3, paper={grammage=200}}",
+            r#"p=pastel(pile{{"vermilion",1}}); b=brush("round",30); k=knife{width=20}"#,
+            "p:stroke({{100,400},{900,400}}, {force=3,alt=55})",
+            "lay_sheet(rect(0,0,500,800)); p:side({{100,400},{900,400}}); smudge({{100,400},{900,400}}); lift_sheet()",
+            "b:dust({{200,400},{700,400}}); k:scrape({{200,400},{700,400}}, {edge=10}); blow(500,400); tap()",
+            "smudge(rect(300,300,300,200), {pad=4,passes=1}); p:roll(45); p:stroke({{100,450},{900,450}}); print(feel(500,400))",
+        ] { plain.run(chunk).unwrap(); }
+        let source = plain.program("pastel");
+        let chunks = crate::session::parse_program(&source);
+        for until in [3, 5, chunks.len()] {
+            let mut s = Session::replay_with(64, crate::session::box_for(Some(&source)).unwrap()).unwrap().with_paper(true).unwrap();
+            let mut batch = Batch::open(&args(&dir.0, until), &path, &source, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            for (i, chunk) in chunks.iter().enumerate().skip(batch.done) {
+                s.run(chunk).unwrap();
+                if batch.completed(&s, i + 1).unwrap() { break; }
+            }
+            drop(batch);
+            if until == chunks.len() {
+                assert_eq!(canvas(&s), canvas(&plain));
+                assert_eq!(encode(&State::capture(&s.st)).unwrap(), encode(&State::capture(&plain.st)).unwrap());
+                assert_eq!(s.held_stick("p").unwrap(), plain.held_stick("p").unwrap());
+                assert_eq!(s.program("pastel"), source);
+            }
+        }
+    }
+
+    #[test]
     fn corrupt_and_mismatched_checkpoints_are_refused() {
         let dir = Temp::new();
         let source = dir.0.join("painting.lua");

@@ -212,7 +212,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
     let width: usize = parse(&h, "width")?;
-    let mut s = Session::replay_with(width, tubes.clone()).map_err(|e| e.to_string())?.with_paper(paper);
+    let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {
         let mut st = s.st.borrow_mut();
         st.seed = parse(&h, "seed")?;

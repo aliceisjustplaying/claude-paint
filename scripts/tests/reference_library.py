@@ -154,6 +154,8 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         runner = self.root / "runner"
         run = self.root / "prepared-run"
         prep["prepare"](self.studio, house, runner, house / "studio_notes.md", run, die_roll=False)
+        house_runner = runner / "r21_chains.py"
+        house_runner.write_text(house_runner.read_text() + "\n\ndef close_easel(studio):\n    pass\n")
         lane = run / "OPUS"
         lane.mkdir(parents=True)
         final = self.root / "final.txt"
@@ -161,7 +163,8 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         crashed = [{"sitting": k, "status": "crashed", "error": "synthetic crash", "final_file": str(final)} for k in range(1, 7)]
         (lane / "p1_sittings.json").write_text(json.dumps(crashed))
         result = subprocess.run([sys.executable, str(runner / "run.py")], capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertTrue((lane / "p1_outcome.json").is_file(), result.stdout + result.stderr)
         self.assertEqual(json.loads((lane / "p1_outcome.json").read_text())["status"], "crash_limit_reached")
         self.assertFalse((lane / "p1.painted").exists())
 

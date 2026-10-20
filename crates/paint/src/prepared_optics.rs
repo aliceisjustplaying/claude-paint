@@ -63,6 +63,11 @@ pub(crate) struct PreparedLighting {
     normals: Vec<[f32; 3]>,
 }
 
+fn round_nonnegative(value: f32) -> isize {
+    let whole = value as isize;
+    whole.saturating_add(isize::from(value - whole as f32 >= 0.5))
+}
+
 impl PreparedLighting {
     pub(crate) fn new(surface: &[f32], w: usize, h: usize, um_px: f32) -> Self {
         let (hi, lo) = surface
@@ -176,7 +181,7 @@ impl PreparedLighting {
                     if px < 0.0 || py < 0.0 || px >= w as f32 || py >= h as f32 {
                         break;
                     }
-                    let over = sat(px.round() as isize, py.round() as isize) - ray_height;
+                    let over = sat(round_nonnegative(px), round_nonnegative(py)) - ray_height;
                     if over > 0.0 {
                         // (grazing, anything higher hides the lamp)
                         lit = if grazing {
@@ -266,6 +271,29 @@ mod tests {
     #[test]
     fn row_preparation_preserves_material_lighting_bits_in_whole_and_cropped_frames() {
         use crate::pastel::{Pose, Stick, StrokePoint};
+        for value in [0.0, -0.0, f32::from_bits(1), f32::MIN_POSITIVE, f32::MAX] {
+            assert_eq!(round_nonnegative(value), value.round() as isize);
+        }
+        for whole in (0..4096)
+            .map(|n| n as f32)
+            .chain((12..=63).flat_map(|n| {
+                let whole = 2.0f32.powi(n);
+                [whole - 1.0, whole]
+            }))
+        {
+            for center in [whole, whole + 0.5] {
+                for value in [center.next_down(), center, center.next_up()] {
+                    if value >= 0.0 {
+                        assert_eq!(
+                            round_nonnegative(value),
+                            value.round() as isize,
+                            "rounding {value:?}, bits {:08x}",
+                            value.to_bits()
+                        );
+                    }
+                }
+            }
+        }
         for crop in [
             None,
             Some(crate::Crop {

@@ -12,7 +12,8 @@ Three things hold for every session:
   a rag or scrape it off with a knife.
 - **A chunk that stops with an error changes nothing.** The canvas, your
   variables, the paint on your brushes and the clock are as they were
-  before it, and it isn't written to the log.
+  before it, and it isn't written to the log. The one exception is a fresh
+  scratch canvas: see [The scratch canvas](#the-scratch-canvas).
 - **The log is the painting.** Every chunk that ran is appended to
   `paintings/lua/painting.lua`, and replaying it paints the same canvas.
 
@@ -468,7 +469,7 @@ Points are `{{x, y}, ...}` or a flat `{x1, y1, x2, y2, ...}`.
 
 Numbers and randomness: `rand(a, b)`, `randn(mean, sd)`, `math.random`,
 `lerp(a, b, t)`, `clamp(x, lo, hi)`, `smoothstep(a, b, x)`;
-`noise{seed=, octaves=4, period=200, persistence=0.5, kind="fbm"|"ridged"|"billow", warp={period, amount, twice}, stretch={angle, k}}`
+`noise{seed=, octaves=4, period=200, persistence=0.5, kind="fbm"|"ridged"|"billow"|"plain", warp={period, amount, twice}, stretch={angle, k}}`
 (call it as `n(x, y)` for about -1..1, `n:at01(x, y)` for 0..1; it can be
 passed to `coverage=` or `load_at=`); `worley{seed=, period=, jitter=}`
 (`c:at(x, y)` gives the distances to the nearest two cell points, how near
@@ -779,7 +780,10 @@ the view after it. Then `v:visible(x)`, `v:front(x)`, `v:behind(x)`,
 answers, and `v:cast_shadow{soft=, from=}` and `v:contact_shadow{reach=,
 from=}` are shadows that fall off with distance from what casts them.
 Things are named by body number, layer name, `"ground"`, `"water"`,
-`"surface"`, `"sky"`, `"bodies"`, `"layers"`, a mask or a list. Passes take
+`"surface"`, `"sky"`, `"bodies"`, `"layers"`, a mask or a list. Only
+bodies cast `v:cast_shadow` and `v:contact_shadow`: `from=` takes any of
+these names, but only the bodies among them cast, so a layer named there
+casts nothing. Passes take
 `visible=` (only where that is seen), `behind=` (only where nothing in
 front of it is) and `at=` (a depth in meters): strokes still overrun the
 mask's own edges and stop at what is in front.
@@ -840,6 +844,7 @@ position and width/height.
 | `crop: "300,200,500,350"` | a window in canvas units, at full detail |
 | `mode: "value"` | in grays |
 | `mode: "squint"` | blurred, as through half-closed eyes |
+| `mode: "edges"` | the picture's edges drawn over a dim gray of it: orange where an edge is hard, blue where it is soft, brighter the more the lightness changes across it; hard and soft as they read at the size of the image the look returns |
 | `mode: "mirror"` | flipped left to right |
 | `mode: "relief"` | under a raking light from the upper left, so the paint's ridges, furrows and slabs show (wet paint shines) |
 | `mode: "gallery"` | as the picture hangs: lit from above and a little left at 55°, so impasto models softly |
@@ -861,8 +866,8 @@ other option, and nothing on the canvas or the clock changes.
 | `look` with | shows |
 |---|---|
 | `survey: true` | the whole canvas at full detail, as several tiles of at most 500 units (2 × 2 for most canvases, 2 × 1 for one twice as wide as high), each a separate image; modes apply (`mode: "gallery"`) |
-| `compare: "<an earlier look's path>"` | that earlier image on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the earlier picture is only resized to its height, so repeat the earlier look's crop, modes, light and grid options to compare the same view |
-| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, and `light`; not mirror, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
+| `compare: "<an image's path>"` | an image in this studio, usually an earlier look, on the left and the current view on the right, at the same height. The right is the view the other options ask for (`size: 800` without `crop` or `size`); the image on the left is only resized to that height, so to compare an earlier look with the same view, repeat its crop, modes, light and grid options |
+| `hold: "<a knife's or a pile's name>"`, `at: "x,y"` | (speculative) the loaded knife held up to the canvas: the passage around the point (240 units square, clipped at the canvas's edges, or your `crop`) with the blade's end at it, the paint thick on the steel, seen in the same light and mode as the passage (`mode` value, squint, relief or gallery, `light` and `mask`; not mirror, edges, `grid`, `size`, `palette`, `survey` or `compare`). A knife shows what is on it, as full as it is up to a full load; a pile, a fresh full load. It shows the paint on the knife, not how it would look laid |
 | `hold: "<a pastel stick>"`, `at: "x,y"`, `pose: "force,alt,azimuth"` or `side: "<direction>"` | (with pastel) the stick held there, seen from above over the passage (120 units around the point, or your `crop`): its low end as a light shadow, where it rests on the tooth at that force in its color, and the band where its crumbs would settle, tinted; `side` lays it flat across a stroke going that way; with neither, 1.5 N at 60°. The reply says how much it touches and how much its crumbs would reach, in mm². The stick can be a field of a table (`P.glow`). It shows where a stroke from there would lay, not what it would leave |
 
 A survey can arrive in a partial batch to fit the painter's image budget.
@@ -931,6 +936,10 @@ with `scratch: true`; without it they work on the painting.
 - To use what worked, paint it on the painting: the same pile, the same handling.
 - `new_scratch: true` (with `scratch: true`) puts the scratch canvas aside and starts a
   fresh one before the chunk runs. The old log stays, as `paintings/lua/scratch-1.lua`, and so on.
+  The fresh canvas stays even if the chunk stops with an error: the old trial's marks,
+  variables and clock don't come back, though its log is still there to read.
+- A scratch canvas the easel can't reopen is put aside the same way the first time it is
+  used after the easel opens, and the reply says so.
 - A trial judges a passage only as far as it repeats that passage's conditions: lay the
   underlayer you mean to work over, and let it dry as long as it has on the painting.
 

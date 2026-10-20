@@ -1016,7 +1016,7 @@ impl Canvas {
                                 }
                             }
                             if let (Some((_, load2, _)), Some(s2)) = (&p.dip2, hd.second.as_ref()) {
-                                let source = hd.piles_at.as_ref().map_or(1, Vec::len);
+                                let source = hd.piles_at.as_ref().map_or(1, |piles| piles.len() + 1);
                                 let paint = dip(&held, source, p.dip2_seed);
                                 let seed = (p.pts[0].1.to_bits() as u64) << 19 ^ p.pts[0].0.to_bits() as u64 ^ 0x5EC0;
                                 held.load_part(paint, *load2, &crate::bristle::Part { seed, ..s2.part });
@@ -1116,7 +1116,7 @@ fn finish_plan(cv: &Canvas, hd: &Handling, tool: &Tool, c: (f32, f32), pts: Vec<
     let fade = rng.range(0.75, 1.05);
     let load_k = hd.load_at.as_ref().map_or(1.0, |f| f(c.0, c.1).max(0.0));
     if let Some((pal, pile0, medium0)) = &hd.pile {
-        let mut sources = vec![(0, 1.0)];
+        let mut sources = vec![(hd.piles_at.as_ref().map_or(0, Vec::len), 1.0)];
         // graded color: the piles mixed by their weights here
         let graded = hd.piles_at.as_ref().and_then(|ps| {
             let w: Vec<f32> = ps.iter().map(|p| (p.3)(c.0, c.1)).map(|v| if v.is_finite() { v.max(0.0) } else { 0.0 }).collect();

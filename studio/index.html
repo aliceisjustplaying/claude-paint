@@ -829,14 +829,14 @@ function source(path, upto) {
   if (touched) s.value = { text, before, changed, known };
   return s.value;
 }
-let liveText = null, liveTextPath = null;
+let liveText = null, liveTextPath = null, liveTextRequest = 0;
 // Prepare the current view even while closed. Opening only reveals already laid-out code.
 const codeShown = () => !document.body.classList.contains('nocode');
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
-  const q = Q, g = gen, revision = liveRevision, r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || q !== Q || g !== gen || HOSTED && revision !== liveRevision) return;
-  const t = await r.text(); if (q !== Q || g !== gen || HOSTED && revision !== liveRevision || p !== paintingFile(events.length - 1)) return; const old = liveTextPath === p ? liveText : null; if (t !== old) { liveText = t; liveTextPath = p; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
+  const request = ++liveTextRequest, q = Q, g = gen, revision = liveRevision, r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || request !== liveTextRequest || q !== Q || g !== gen || HOSTED && revision !== liveRevision) return;
+  const t = await r.text(); if (request !== liveTextRequest || q !== Q || g !== gen || HOSTED && revision !== liveRevision || p !== paintingFile(events.length - 1)) return; const old = liveTextPath === p ? liveText : null; if (t !== old) { liveText = t; liveTextPath = p; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
 }
 const { diffLines, lineHTML } = CodeDisplay;
 let codeWorker = null, codeRequest = 0, codeCache = null, codeBatch = null, codeSelection = null;

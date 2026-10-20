@@ -26,14 +26,33 @@ test("the wait is the reset time the error names plus a minute, else the probe i
 });
 
 test("after a day of limits in a row the run settles on the error", () => {
-	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs - 1, LIMIT_WAIT), LIMIT_WAIT.probeMs);
+	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs - 1, LIMIT_WAIT), 1);
 	assert.equal(limitWaitMs(GO_LIMIT, 0, LIMIT_WAIT.giveUpMs, LIMIT_WAIT), undefined);
+});
+
+test("each wait is bounded by the remaining give-up duration", () => {
+	const w = { probeMs: 2_000, giveUpMs: 1_000 };
+	const text = "Usage limit reached. Resets in 2 days";
+	assert.equal(limitWaitMs(text, 0, 0, { ...w, probeMs: 1 }), 1_000);
+	assert.equal(limitWaitMs(text, 100, 850, w), 250);
+	assert.equal(limitWaitMs(GO_LIMIT, 100, 850, w), 250);
+	assert.equal(limitWaitMs(text, 100, 1_100, w), undefined);
+	assert.equal(limitWaitMs(text, 100, 1_101, w), undefined);
 });
 
 test("PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense is refused", () => {
 	assert.deepEqual(limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "5", PAINTER_LIMIT_GIVE_UP_H: "1" }), { probeMs: 5_000, giveUpMs: 3_600_000 });
 	assert.deepEqual(limitWaitFromEnv({}), LIMIT_WAIT);
 	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "soon" }), /want seconds/);
+});
+
+test("a limit wait the runtime can't honor is refused: nonfinite, negative, or past setTimeout's range", () => {
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "Infinity" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "2147484" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "-1" }), /want seconds/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_GIVE_UP_H: "Infinity" }), /want finite hours/);
+	assert.throws(() => limitWaitFromEnv({ PAINTER_LIMIT_GIVE_UP_H: "1e308" }), /want finite hours/);
+	assert.equal(limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "2147483" }).probeMs, 2_147_483_000);
 });
 
 test("a run cut off by usage limits goes on when they lift, asking with the conversation as it was", () => {

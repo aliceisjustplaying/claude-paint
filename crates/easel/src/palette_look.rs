@@ -41,6 +41,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
         mix.solvent = h.solvent;
         mix.oil_rate = h.oil_rate;
         let paint = mix.laid(h.medium);
+        let paint = if h.thinner > 0.0 { paint.with_thinner(h.thinner) } else { paint };
         // the heap: a thick slab, the bead left standing where the knife lifts
         let mut k = Knife::new(46.0);
         k.load(paint.clone(), 1.0);

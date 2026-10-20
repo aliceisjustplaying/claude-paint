@@ -46,6 +46,14 @@ export class TokenPace {
 	}
 }
 
+export function tokensPerMinuteFromEnv(env: NodeJS.ProcessEnv = process.env): number | undefined {
+	const raw = env.PAINTER_INPUT_TPM;
+	if (!raw) return undefined;
+	const tpm = Number(raw);
+	if (!(tpm > 0 && Number.isFinite(tpm))) throw new Error(`PAINTER_INPUT_TPM=${raw}: want tokens per minute`);
+	return tpm;
+}
+
 /** The input tokens a response's usage says its request had (new plus cached). */
 export function requestTokens(usage: { input?: number; cacheRead?: number; cacheWrite?: number } | undefined): number {
 	return (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0);

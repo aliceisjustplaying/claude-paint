@@ -40,6 +40,16 @@ test("each wait is bounded by the remaining give-up duration", () => {
 	assert.equal(limitWaitMs(text, 100, 1_101, w), undefined);
 });
 
+test("an accepted monthly reset is bounded by the timer range and remaining give-up duration", () => {
+	const w = limitWaitFromEnv({ PAINTER_LIMIT_GIVE_UP_H: "744" });
+	const text = "Usage limit reached. Resets in 30 days";
+	assert.equal(w.giveUpMs, 31 * 86_400_000);
+	assert.equal(limitResetMs(text)! + 60_000, 2_592_060_000);
+	assert.equal(limitWaitMs(text, 0, 0, w), 2_147_483_647);
+	assert.equal(limitWaitMs(text, 0, 30 * 86_400_000, w), 86_400_000);
+	assert.equal(limitWaitMs(text, 0, w.giveUpMs, w), undefined);
+});
+
 test("PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H set the waits; nonsense is refused", () => {
 	assert.deepEqual(limitWaitFromEnv({ PAINTER_LIMIT_PROBE_S: "5", PAINTER_LIMIT_GIVE_UP_H: "1" }), { probeMs: 5_000, giveUpMs: 3_600_000 });
 	assert.deepEqual(limitWaitFromEnv({}), LIMIT_WAIT);

@@ -98,7 +98,9 @@ from pathlib import Path
 import sys
 
 source, frames, output, sheet = sys.argv[1:]
-paths = [source, frames, output, f"{frames}.log", f"{frames}.replay.ckpt"]
+checkpoint = Path(f"{frames}.replay.ckpt")
+paths = [source, frames, output, f"{frames}.log",
+         checkpoint, checkpoint.with_suffix(".replay-progress.json")]
 if sheet:
     paths.append(sheet)
 try:

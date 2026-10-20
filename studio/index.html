@@ -532,7 +532,7 @@ async function loadSessions() {
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus
 }
 $('all').onchange = () => { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); renderPicker(); };
-let gen = 0, busy = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
+let gen = 0, busy = false, disconnected = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
 function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
 function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; clearPic($('img')); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
@@ -540,7 +540,7 @@ function noPicture() { noPainting(); second(-1); palette(-1); $('zimg').removeAt
 async function poll() {
   // a static export is re-uploaded every minute or so while painters work: read it again at most once a minute
   if ((!Q && !HOSTED) || busy || (STATIC && !HOSTED && epoch !== null && Date.now() - lastStatic < 60000)) return;
-  const g = gen; busy = true; let r;
+  const g = gen; busy = true; let r, failed = false;
   try {
         if (HOSTED) {
           const get = async path => { const a = await fetch(path, {cache:'no-store'}); if (!a.ok) throw Error('live data unavailable'); return a.json(); };
@@ -565,11 +565,12 @@ async function poll() {
         if (v && v !== ',' && v === staticV && g === gen && epoch !== null) { lastStatic = Date.now(); return; }
         r = await a.json(); if (g === gen) staticV = v;
         } }
-  catch (e) {  // no such painter (yet): a stream opened before its painter begins waits for it
-    if (g === gen && !events.length) { $('nopic').innerHTML = "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
+  catch (e) {  // a painter the viewer has no record of yet is waited for; any other failed request is a lost connection
+    failed = true;
+    if (g === gen && !events.length) { $('nopic').innerHTML = allSessions.some(s => qOf(s) === Q) ? "Can't reach this painter's studio right now.<br>Still trying, and the canvas will appear when the connection returns." : "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
       $('badge').textContent = ''; $('badge').className = ''; for (const x of $('doing').children) x.textContent = ''; }
     return; }
-  finally { if (g === gen) busy = false; }
+  finally { if (g === gen) { busy = false; disconnected = failed; } }
   if (g !== gen) return;  // switched painters meanwhile
   const shifted = STATIC && events.some((e, i) => !r.events[i] || e.kind !== r.events[i].kind || e.ts !== r.events[i].ts || e.kind === 'sitting' && e.n !== r.events[i].n);
   const rebuilt = epoch !== null && r.epoch !== epoch || shifted;
@@ -595,6 +596,7 @@ async function poll() {
   }
   if (live) refreshLiveCode();
   if (HOSTED) pictures();
+  if (!events.length) $('nopic').hidden = true;
   status(); warmSoon();
 }
 // a new sitting: a divider in the looks strip and a tick on the scrub bar
@@ -729,12 +731,13 @@ function status() {
   if (!events.length) return;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000, atLive = live && pos === events.length - 1;
   const b = $('badge'), active = !stopped();  // (as the picture: at work until its closing words are two minutes old, or half an hour quiet)
-  if (atLive && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'last action ' + ago(age); }
+  if (atLive && disconnected) { b.className = ''; b.textContent = 'DISCONNECTED'; b.title = "Can't reach this painter's data; the painter last acted " + ago(age) + '.'; }
+  else if (atLive && active) { b.className = 'live'; b.textContent = 'LIVE'; b.title = 'last action ' + ago(age); }
   else if (atLive) { const cur = allSessions.find(s => qOf(s) === Q); b.className = ''; b.textContent = outcomeLabel(cur) || 'Paused'; b.title = cur?.outcome?.reason || 'last action ' + ago(age); }
   else if (playing) { b.className = 'replay'; b.textContent = 'REPLAY'; b.title = ''; }
   else { b.className = 'replay'; b.textContent = 'REWOUND'; b.title = (events.length - 1 - pos) + ' events behind live'; }
   // LIVE only while the painter works; after that the same control just goes to the end
-  const g = $('golive'); g.classList.toggle('on', atLive && active); g.classList.toggle('end', !active);
+  const g = $('golive'); g.classList.toggle('on', atLive && active && !disconnected); g.classList.toggle('end', !active);
   g.textContent = active ? '● LIVE' : 'End ⇥'; g.title = active ? 'jump to live  l' : 'go to the end  l';
   const t = atLive && active ? Date.now() : Date.parse(events[pos].ts), n = atLive ? nSittings : sitStarts.length, sitting = sittingAt(pos);
   $('clock').textContent = fmt(paintedFor(pos, t)); $('clockbox').hidden = false;
@@ -744,7 +747,7 @@ function status() {
     pc.title = `The easel keeps its own clock: every stroke takes the time a hand would take, and the painter can let hours or months pass for paint to dry. This is the latest recorded time (${ec.text}; it counts from 09:00 on day 1).`; }
   else { pc.querySelector('b').textContent = 'not recorded'; pc.title = 'This part of the session has no recorded painting time.'; }
   $('clockbox').title = n > 1 ? `time spent painting, summed over ${n} sittings (the gaps between sittings don't count)` : 'time since the session began';
-  doing(atLive && active);
+  doing(atLive && active && !disconnected);
 }
 function doing(isLive) {
   const e = events[pos]; let c = kindOf(e), what, detail = '';

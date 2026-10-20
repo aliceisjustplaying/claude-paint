@@ -42,8 +42,9 @@ pub(crate) struct Hit {
 
 /// Paint ploughed into one interior pixel during one contact: its buffer
 /// index, the clip's acceptance there (read once) and the packed sum.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Acc {
+    pub parts: crate::wet::Latent,
     pub j: usize,
     pub k: f32,
     pub a: [f32; PACK],
@@ -80,7 +81,7 @@ impl Window {
         self.used.clear();
         let n = interior.2.saturating_sub(interior.0) * interior.3.saturating_sub(interior.1);
         if self.cells.len() < n {
-            self.cells.resize(n, Acc { j: 0, k: 0.0, a: [0.0; PACK] });
+            self.cells.resize(n, Acc { parts: Default::default(), j: 0, k: 0.0, a: [0.0; PACK] });
             self.stamp.resize(n, 0);
         }
     }
@@ -95,7 +96,7 @@ impl Window {
         let c = (y - r.1) * (r.2 - r.0) + (x - r.0);
         if self.stamp[c] != self.generation {
             self.stamp[c] = self.generation;
-            self.cells[c] = Acc { j, k: k(), a: [0.0; PACK] };
+            self.cells[c] = Acc { parts: Default::default(), j, k: k(), a: [0.0; PACK] };
             self.used.push(c as u32);
         }
         &mut self.cells[c]

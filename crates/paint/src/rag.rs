@@ -188,7 +188,7 @@ pub const FULL: f32 = 0.95;
 /// Paint at the cloth's surface during one wipe (engine 3, `SMEAR`):
 /// coats × pixels, its mean color, hiding and cure, and its solvent (µm ×
 /// pixels).
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct Pool {
     vol: f32,
     lat: crate::wet::Latent,
@@ -203,7 +203,7 @@ struct Pool {
 /// already. mm³ of paint, its mean color, hiding and cure, mm³ of solvent,
 /// and when it was last brought up to date: minutes of painting time
 /// (`Canvas::now_min`) and hand seconds (`Tally::secs`).
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mobile {
     pub mm3: f32,
@@ -266,7 +266,7 @@ struct Seg {
 /// 1 dipped well, as of `wet_at`; refolding preserves this dampness, and
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rag {
     pub width: f32,
@@ -334,7 +334,7 @@ impl Rag {
     /// How damp the face in use is at `now_min` (`evaporate`), without
     /// changing the rag.
     pub fn damp_at(&self, now_min: f64) -> f32 {
-        let mut r = *self;
+        let mut r = self.clone();
         r.evaporate(now_min);
         r.damp
     }
@@ -643,6 +643,7 @@ impl Canvas {
                     let h = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
                     if pooled {
                         let l = &self.wet.lat[i];
+                        got.lat.add_parts(l, take);
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
                         }
@@ -731,6 +732,9 @@ impl Canvas {
         let v0 = pl.vol.max(0.0) * left;
         let t = v0 + got.vol;
         if t > 0.0 {
+            pl.lat.scale_parts(v0);
+            pl.lat.add_parts(&got.lat, 1.0);
+            pl.lat.scale_parts(1.0 / t);
             for q in 0..pl.lat.len() {
                 pl.lat[q] = (pl.lat[q] * v0 + got.lat[q]) / t;
             }
@@ -754,6 +758,7 @@ impl Canvas {
         for k in 0..l.len() {
             l[k] += (pl.lat[k] - l[k]) * a;
         }
+        l.blend_parts(&pl.lat, a);
         let hd = &mut self.wet.hide[i];
         // (the drain switch: the smear is fluid however packed it was where
         // the rag took it up, `Surf::add`)
@@ -869,7 +874,7 @@ impl Canvas {
     /// `busy_s` (the hand time of the contact about to begin, which the
     /// tally already counts).
     fn rag_pool(&self, rag: &Rag, busy_s: f64) -> Pool {
-        let m = rag.mobile;
+        let m = rag.mobile.clone();
         if m.mm3 <= 0.0 {
             return Pool::default();
         }
@@ -892,7 +897,7 @@ impl Canvas {
         let sunit = self.px_mm().powi(2) / 1000.0;
         let v = pl.vol.max(0.0);
         rag.mobile = if v > 0.0 {
-            Mobile { mm3: v * unit, lat: pl.lat, hide: pl.hide, cure: pl.cure, solv_mm3: pl.solv.max(0.0) * sunit, at_min: self.now_min(), at_secs: self.tally.secs }
+            Mobile { mm3: v * unit, lat: pl.lat.clone(), hide: pl.hide, cure: pl.cure, solv_mm3: pl.solv.max(0.0) * sunit, at_min: self.now_min(), at_secs: self.tally.secs }
         } else {
             Mobile::default()
         };
@@ -1298,7 +1303,7 @@ mod tests {
                 if i % 240 < 120 {
                     c.wet.vol[i] = 0.8;
                     c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, OIL_VOLUME, 0.0];
-                    c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+                    *c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
                     // (painted on before: its ground's pores are full)
                     c.absorb[i] = 0.0;
                 }

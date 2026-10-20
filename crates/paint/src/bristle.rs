@@ -499,7 +499,7 @@ impl Held {
                     seed: i as u64 * 7919 + seed,
                     prev: [None, None],
                     vol: 0.0,
-                    lat: [0.0; LAT],
+                    lat: Latent::default(),
                     hide: [0.5, 0.5, 1.0, 0.0, 1.0, crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, 0.0, crate::wet::OIL_VOLUME, 0.0],
                     cure: 0.0,
                     solvent: 0.0,
@@ -622,6 +622,19 @@ impl Held {
     /// `Canvas::wet_total` (coats × square units).
     pub fn carried(&self) -> (f64, f64) {
         self.bristles.iter().fold((0.0, 0.0), |(p, s), b| (p + b.vol as f64, s + b.solvent as f64))
+    }
+
+    pub fn carried_parts(&self) -> Vec<(usize, f32)> {
+        let mut paint = Latent::default();
+        let mut volume = 0.0;
+        for b in &self.bristles {
+            if b.vol > 0.0 {
+                paint.add_parts(&b.lat, b.vol);
+                volume += b.vol;
+            }
+        }
+        paint.scale_parts(1.0 / volume.max(1e-9));
+        paint.parts
     }
 }
 
@@ -862,6 +875,7 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
+            l.blend_parts(lat, a);
             // (the drain switch: paint laid is fluid however packed it was
             // where the brush took it up; the film's packed share, by
             // volume, thins)
@@ -1168,12 +1182,13 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     if k <= 0.0 || bristles.is_empty() {
         return;
     }
-    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, [0.0f32; LAT], [0.0f32; 10], 0.0f32, 0.0f32);
+    let (mut tv, mut lat, mut hide, mut cure, mut ts) = (0.0f32, Latent::default(), [0.0f32; 10], 0.0f32, 0.0f32);
     for b in bristles.iter() {
         tv += b.vol;
+        lat.add_parts(&b.lat, b.vol);
         ts += b.solvent;
         cure += b.cure * b.vol;
-        for (l, bl) in lat.iter_mut().zip(&b.lat) {
+        for (l, bl) in lat.iter_mut().zip(b.lat.iter()) {
             *l += bl * b.vol;
         }
         for (h, bh) in hide.iter_mut().zip(&b.hide) {
@@ -1183,9 +1198,10 @@ pub(crate) fn feed(bristles: &mut [Bristle], k: f32) {
     if tv <= 1e-12 {
         return;
     }
-    for l in &mut lat {
+    for l in lat.iter_mut() {
         *l /= tv;
     }
+    lat.scale_parts(1.0 / tv);
     hide = hide.map(|h| h / tv);
     cure /= tv;
     let share = k * tv / bristles.len() as f32;
@@ -1848,13 +1864,13 @@ pub(crate) unsafe fn exchange(
         let spread = dep.is_none();
 
         let mut got_v = 0.0f32;
-        let mut got_l = [0.0f32; LAT];
+        let mut got_l = Latent::default();
         let mut got_h: Prop = [0.0; 10];
         let mut got_c = 0.0f32;
         // solvent lifted with the paint, and wet film (paint + solvent) laid
         let mut got_s = 0.0f32;
         let mut laid_liq = 0.0f32;
-        let (blat, bhide, bcure) = (br.lat, br.hide, br.cure);
+        let (blat, bhide, bcure) = (br.lat.clone(), br.hide, br.cure);
         for y in y0..y1 {
             for x in x0..x1 {
                 let wt = wts[(y - y0) * bw + (x - x0)];
@@ -1885,6 +1901,7 @@ pub(crate) unsafe fn exchange(
                     if take > 0.0 {
                         let tv = take * px_area;
                         got_v += tv;
+                        got_l.add_parts(&*sf.lat.add(i), tv);
                         let l = &*sf.lat.add(i);
                         for k in 0..LAT {
                             got_l[k] += l[k] * tv;
@@ -1974,7 +1991,7 @@ pub(crate) unsafe fn exchange(
                         // paint it lifts; `add` writes `j != i`). Its cure is
                         // read per destination: `take` zeroes it when the
                         // film goes bare (see the kernel_traps tests)
-                        let l = *sf.lat.add(i);
+                        let l = (*sf.lat.add(i)).clone();
                         for &(tx, ty, share) in &to[..n_to] {
                             if share <= 0.0 {
                                 continue;
@@ -2048,6 +2065,7 @@ pub(crate) unsafe fn exchange(
             for k in 0..LAT {
                 got_l[k] /= got_v;
             }
+            got_l.scale_parts(1.0 / got_v);
             for g in &mut got_h {
                 *g /= got_v;
             }
@@ -2429,7 +2447,7 @@ impl Canvas {
             let ext = ra.max(rb) + 1.0;
             let (x0, x1) = ((px - ext).floor() as i64, (px + ext).ceil() as i64);
             let (y0, y1) = ((py - ext).floor() as i64, (py + ext).ceil() as i64);
-            let lat = b.lat;
+            let lat = b.lat.clone();
             let hide = b.hide;
             let cure = b.cure;
             // dome-shaped: thickest in the middle; weights normalised so the droplet's volume lands
@@ -2583,7 +2601,7 @@ mod kernel_traps {
         for i in 0..n {
             let thin = rng.f() < 0.5;
             c.wet.vol[i] = if thin { 1.0e-5 * (1.0 + 0.05 * rng.f()) } else { 2e-3 };
-            c.wet.lat[i] = lat;
+            c.wet.lat[i] = lat.clone();
             c.wet.clock.px[i].cure = if thin { 0.1 } else { 0.05 };
         }
         c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
@@ -2806,7 +2824,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: [0.0; LAT], hide: [0.0; 10], cure: 0.0, shows_packing: false }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false }
     }
     /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
     /// its `Debug` gives the paint's packing too.
@@ -2850,6 +2868,10 @@ impl Knife {
     /// Paint on the blade, relative to a full load.
     pub fn fullness(&self) -> f32 {
         (self.vol + self.solvent) / self.full()
+    }
+
+    pub fn carried_parts(&self) -> &[(usize, f32)] {
+        if self.vol > 0.0 { &self.lat.parts } else { &[] }
     }
 }
 
@@ -3032,7 +3054,7 @@ impl Canvas {
                         if ex <= 1e-7 {
                             continue;
                         }
-                        let l = *sf.lat.add(i);
+                        let l = (*sf.lat.add(i)).clone();
                         let cure = if sf.dry.is_null() { 0.0 } else { (*sf.dry.add(i)).cure };
                         let hd = sf.take(i, ex);
                         if !sf.solv.is_null() { *sf.solv.add(i) -= ex_solvent * crate::surface::COAT_UM; }

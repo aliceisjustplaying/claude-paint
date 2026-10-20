@@ -157,6 +157,9 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it \
   session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them \
   api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw \
+  api::carried_palette_tests::a_dip_brings_the_arriving_brushs_paint_not_another_brushs_history \
+  api::carried_palette_tests::graded_dips_preserve_palette_tint_strength_at_negligible_dirt \
+  api::carried_palette_tests::every_internal_dip_carries_the_paint_retained_from_the_canvas \
   api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded \
   api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'

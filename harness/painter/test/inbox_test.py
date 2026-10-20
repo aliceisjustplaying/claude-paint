@@ -3,6 +3,8 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -94,6 +96,59 @@ class InboxTests(unittest.TestCase):
         inbox.send(self.run, "One message.")
         self.assertEqual(len(inbox.receive(self.run, self.target())), 1)
         self.assertEqual(inbox.receive(self.run, self.target("call-2")), [])
+
+    def test_settle_releases_only_own_unpersisted_attachments_without_a_lease(self):
+        inbox.send(self.run, "Retry.")
+        inbox.receive(self.run, self.target())
+        with inbox.locked(self.run) as messages:
+            messages[0]["delivery"]["attached_at"] = "2000-01-01T00:00:00+00:00"
+        self.assertEqual(inbox.receive(self.run, self.target("call-2")), [])
+        self.assertEqual(inbox.settle(self.run, {"pid": os.getppid()}), [])
+        self.assertEqual(self.records()[0]["delivery"]["state"], "attaching")
+        self.assertEqual([m["text"] for m in inbox.settle(self.run, {"pid": os.getpid()})], ["Retry."])
+        self.assertEqual(len(inbox.receive(self.run, self.target("call-2"))), 1)
+
+    def test_settle_commits_saved_receipt_instead_of_releasing_it(self):
+        inbox.send(self.run, "Saved.")
+        self.persist(inbox.receive(self.run, self.target()))
+        self.assertEqual(inbox.settle(self.run, {"pid": os.getpid()}), [])
+        self.assertEqual(self.records()[0]["delivery"]["state"], "delivered")
+
+    def test_house_runner_enables_inbox_only_for_painter_sittings(self):
+        repo = Path(__file__).resolve().parents[3]
+        runner = self.run / "runner"
+        runner.mkdir()
+        shutil.copy2(repo / "harness/painter/run_friedrich.py", runner / "run.py")
+        studio = self.run / "studio"
+        (studio / "bin").mkdir(parents=True)
+        (studio / "bin/box").write_text("friedrich\n")
+        (studio / "BRIEF.md").write_text("Brief.")
+        (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo),
+            "source_revision": subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip(),
+            "run": str(self.run / "records")}))
+        (runner / "r21_chains.py").write_text('''import json
+TOOLS = "read"
+def model(*args, **kwargs): return {}
+def lane(*args, **kwargs): return {}
+def brief(*args, **kwargs): return "Brief."
+def run(cmd, cwd, out, err, env=None):
+    with (RUN / "calls.jsonl").open("a") as f:
+        f.write(json.dumps(env) + "\\n")
+    return 0
+def paint(name, n, studio, rd):
+    run(["pi"], studio, rd / "probe.txt", rd / "err", env={"KEEP": "yes"})
+    run(["pi"], studio, rd / "p1_s2_part3_final.txt", rd / "err", env={"KEEP": "yes"})
+    return True
+''')
+        subprocess.run(["uv", "run", "--no-project", "python", str(runner / "run.py")], check=True,
+                       env={**os.environ, "PAINTER_INBOX_DIR": "inherited", "PAINTER_INBOX_SITTING": "99"})
+        calls = [json.loads(line) for line in (self.run / "records/calls.jsonl").read_text().splitlines()]
+        inbox_dir = self.run / "records/OPUS"
+        self.assertEqual(calls, [{"KEEP": "yes"}, {"KEEP": "yes", "PAINTER_INBOX_DIR": str(inbox_dir),
+                                                  "PAINTER_INBOX_SITTING": "2"}])
+        self.assertEqual((studio / ".painter-run").read_text(), str(inbox_dir) + "\n")
+        subprocess.run([str(repo / "scripts/tell-painter"), str(studio), "Hello."], check=True, capture_output=True)
+        self.assertEqual(json.loads((inbox_dir / inbox.FILENAME).read_text())[0]["text"], "Hello.")
 
     def test_an_older_identical_opening_is_not_a_delivery_receipt(self):
         text = "Again."

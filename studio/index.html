@@ -896,11 +896,11 @@ function codeAt(i, stepping = false) {
   const atLive = live && i === events.length - 1, fetched = liveTextPath === p ? liveText : null;
   if (atLive && fetched != null) return renderCode(p, fetched, new Set(), null, stepping);
   const s = source(p, i);
-  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === liveText && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
+  if (codeSelection?.path === p && codeSelection.source === s && codeSelection.fallback === fetched && codeSelection.request === codeRequest && codeSelection.format === codeFormatAllowed(stepping)) return;
   const { text, before, changed, known } = s;
   const nl = new Set(); if (known) { let off = 0; text.split('\n').forEach((l, k) => { const a = off, b = off + l.length; off = b + 1; if (changed.some(([x, y]) => x <= b && y >= a)) nl.add(k); }); }
   renderCode(p, known ? text : (fetched || ''), nl, before, stepping);
-  codeSelection = { path:p, source:s, fallback:liveText, request:codeRequest, format:codeFormatAllowed(stepping) };
+  codeSelection = { path:p, source:s, fallback:fetched, request:codeRequest, format:codeFormatAllowed(stepping) };
 }
 
 // ---- journal: thoughts as prose, actions condensed into chips

@@ -425,6 +425,17 @@ async function pollUpdate(v, i, replacement) {
     assert.equal(await typing.page.locator('.th.last .cursor').count(), 0);
     assert.equal(await typing.page.locator('.th.last script').count(), 0);
     report.checks.push('every typewriter prefix preserves markdown'); await typing.page.close();
+    const previousFirst = [ev('start', { cwd:'/painter' }), ev('paint', { code:'local first=1', out:'ok' }, 1), ev('look', { text:'' }, 2), ev('image', { img:0, look:'' }, 2),
+      ev('paint', { code:'local second=2', out:'ok' }, 3), ev('look', { text:'' }, 4), ev('image', { img:1, look:'' }, 4)];
+    const previous = await viewer(browser, previousFirst);
+    const previousFeedback = await previous.page.evaluate(() => {
+      document.querySelector('#play').click();
+      const replaying = document.querySelector('#badge').textContent;
+      document.querySelector('#prevlook').click();
+      return { replaying, rewound:document.querySelector('#badge').textContent, play:document.querySelector('#play').textContent, playing, pos };
+    });
+    assert.deepEqual(previousFeedback, { replaying:'REPLAY', rewound:'REWOUND', play:'▶ Replay', playing:null, pos:3 }, 'Previous at the first look refreshes the badge with the stopped timer');
+    await previous.page.close();
     assert.deepEqual(report.pageErrors, []);
     fs.writeFileSync(path.join(root, 'replay-verification.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report));

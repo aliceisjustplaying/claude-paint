@@ -165,13 +165,16 @@ class PreparationTests(unittest.TestCase):
                     (studio / "BRIEF.md").unlink()
                     PREPARE["shutil"].rmtree(runner)
                 off, on = snapshots
+                self.assertEqual(off["runner/run.py"], (REPO / "harness/painter/run_friedrich.py").read_bytes())
                 revision = json.loads(off["runner/run-config.json"])["source_revision"]
-                normalized = {name: hashlib.sha256(data.replace(str(root).encode(), b"/fixture").replace(str(REPO).encode(), b"/repo").replace(revision.encode(), b"<revision>")).hexdigest() for name, data in off.items()}
+                normalized = {name: hashlib.sha256(data.replace(str(root).encode(), b"/fixture").replace(str(REPO).encode(), b"/repo").replace(revision.encode(), b"<revision>")).hexdigest() for name, data in off.items() if name != "runner/run.py"}
                 self.assertEqual(normalized, baseline["with_critic" if critic else "without_critic"])
                 self.assertEqual(on["studio/BRIEF.md"], off["studio/BRIEF.md"].replace(b"## Working\n", PREPARE["DIE_ROLL_SECTION"].encode() + b"## Working\n"))
                 self.assertEqual(on["runner/brief_template.md"], template.replace("## Working\n", PREPARE["DIE_ROLL_SECTION"] + "## Working\n").encode())
                 self.assertTrue(json.loads(on["runner/run-config.json"])["die_roll"])
-                self.assertIn(b"R.DIE_ROLL_OPENING = choose(R, MODEL, STUDIO, RUN)", on["runner/run.py"])
+                hook = b'    if R.paint("OPUS", 1, STUDIO, RUN / "OPUS") is None:\n'
+                self.assertEqual(off["runner/run.py"].count(hook), 1)
+                self.assertEqual(on["runner/run.py"], off["runner/run.py"].replace(hook, b"    from die_roll import choose\n    R.DIE_ROLL_OPENING = choose(R, MODEL, STUDIO, RUN)\n" + hook))
                 namespace = {"__name__": "generated", "t": {"profile": "other"}, "PAINTER_MSG": "start", "DIE_ROLL_OPENING": "The die picked concept 3: Picture 3.", "n": 1}
                 exec(on["runner/r21_chains.py"], namespace)
                 self.assertEqual(namespace["paint"](1, 0, False), "The die picked concept 3: Picture 3.\n\nstart")

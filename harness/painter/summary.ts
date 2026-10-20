@@ -105,6 +105,7 @@ export function latestClockInMessages(entries: readonly unknown[]): string | und
 			.map((c: { type?: string; text?: string }) => (c?.type === "text" ? (c.text ?? "") : ""))
 			.join("\n");
 		const lines = text.split("\n").map((l) => l.trim());
+		if (lines[0] === "[scratch canvas]") continue;
 		for (let j = lines.length - 1; j >= 0; j--) if (CLOCK_LINE.test(lines[j])) return lines[j];
 	}
 	return undefined;

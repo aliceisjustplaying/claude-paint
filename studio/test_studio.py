@@ -626,6 +626,31 @@ def test_a_painter_working_elsewhere_exports_as_live(home, monkeypatch):
         assert session["active"] is active
 
 
+def test_a_second_export_in_one_process_skips_unchanged_looks(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "EXPORTED", {})
+    log.write_text(start(str(studio)) + look("l1", png_of("blue")))
+    out = root / "export"
+    E.WRITTEN.clear()
+    E.export(str(out))
+    first = sorted(E.WRITTEN)
+    read = []
+    monkeypatch.setattr(S, "image_bytes", lambda *a, **k: read.append(a) or None)
+    with open(log, "a") as fh:
+        fh.write(line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "More sky."}]}}))
+    E.WRITTEN.clear()
+    E.export(str(out))
+    assert read == []
+    assert sorted(E.WRITTEN) == first
+    assert (out / "data" / PAINTER / "img/0.png").is_file()
+    assert json.loads((out / "data" / PAINTER / "events.json").read_text())["imgext"] == ["png"]
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

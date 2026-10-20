@@ -53,6 +53,9 @@ fn header(s: &Session, program: &str) -> String {
     if st.tubes.blend_at_masks {
         kv("masks", "blend-at".to_string());
     }
+    if st.tubes.reload_finite {
+        kv("reload", "finite".to_string());
+    }
     if st.tubes.drain {
         kv("drain", "1".to_string());
     }
@@ -211,6 +214,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.brush_skim = canvas.brush_skim();
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
+    tubes.reload_finite = h.get("reload") == Some(&"finite");
     let width: usize = parse(&h, "width")?;
     let mut s = Session::replay_with(width, tubes.clone()).and_then(|s| s.with_paper(paper)).map_err(|e| e.to_string())?;
     {

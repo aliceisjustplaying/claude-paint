@@ -68,12 +68,12 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			label: "paint",
 			description:
 				"Run a chunk of Lua at the easel (notes/easel_guide.md). The reply is what the chunk printed, the painting's current clock, then `ok`. " +
-				"A chunk that stops with an error changes nothing. " +
+				"A chunk that stops with an error changes nothing, with one exception: new_scratch replaces the scratch canvas before its chunk runs, so the old trial stays put aside even when the chunk fails. " +
 				"In `work`, `coverage` counts layers of strokes over each point, except for the `glaze` and `scumble` hands, where it is the share of the mask their thin film reaches (1: all of it).",
 			parameters: Type.Object({
 				lua: Type.String({ description: "the chunk" }),
 				scratch,
-				new_scratch: Type.Optional(Type.Boolean({ description: "with scratch: put the scratch canvas aside and start a fresh one before this chunk" })),
+				new_scratch: Type.Optional(Type.Boolean({ description: "with scratch: put the scratch canvas aside and start a fresh one before this chunk, even if the chunk then stops with an error" })),
 			}),
 			async execute(_id, p, signal) {
 				if (p.new_scratch && !p.scratch) throw new Error("paint: new_scratch goes with scratch: true");
@@ -201,9 +201,9 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
 				"grid: true, or a spacing in canvas units. " +
 				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
-				"compare: the path of an earlier look, shown left of the current view; supply matching crop, mode and light options explicitly. " +
+				"compare: the path of an image in this studio, usually an earlier look, resized to the current view's height and shown left of it; to compare an earlier look, supply matching crop, mode and light options explicitly. " +
 				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
-				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery and light; size, grid and mirror are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
+				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery, light and mask; size, grid, mirror and edges are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
 				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
 			parameters: Type.Object({
 				scratch,
@@ -234,11 +234,11 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 					ref = studioPath(studio, ref);
 					if (ref === undefined) throw new Error("look: ref is the path of a picture of the motif in this studio");
 				}
-				// compare: an earlier look of this studio, nothing outside it (as `read`)
+				// compare: an image in this studio, nothing outside it (as `read`)
 				let compare = p.compare || undefined; // (an empty path is none)
 				if (compare !== undefined) {
 					compare = studioPath(studio, compare);
-					if (compare === undefined) throw new Error("look: compare is the path of an earlier look in this studio");
+					if (compare === undefined) throw new Error("look: compare is the path of an image in this studio");
 				}
 				try {
 					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare, ref })], undefined, signal);

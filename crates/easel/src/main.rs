@@ -1060,10 +1060,10 @@ const HOLD_HALF: f32 = 120.0;
 /// It shows the paint on the knife and nothing of how it would look laid: not thinned by
 /// a brush, not mixed into what is wet there, not over what is under it, not dried.
 /// Only reads: no hand time, nothing in the log, the canvas and state untouched.
-fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>), String> {
+fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>, [f32; 4]), String> {
     use image::ImageEncoder;
     if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
-        return Err("look --hold takes --at, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+        return Err("look --hold takes --at, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (paint, blade, full) = s.held(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
@@ -1114,7 +1114,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (w, h) = (passage.width(), passage.height());
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new(&mut out).write_image(passage.as_raw(), w, h, image::ExtendedColorType::Rgb8).map_err(|e| e.to_string())?;
-    Ok((w as usize, h as usize, out))
+    Ok((w as usize, h as usize, out, crop))
 }
 
 /// With the paper-and-pastel switch: a pastel stick held over the canvas
@@ -1128,7 +1128,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
 fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
     use image::ImageEncoder;
     if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
-        return Err("look --hold takes --at, --pose or --side, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+        return Err("look --hold takes --at, --pose or --side, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (stick, turned) = s.held_stick(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
@@ -1515,7 +1515,7 @@ impl Server {
                 "--survey" => survey = true,
                 "--compare" => {
                     // (not a following option taken for the path)
-                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs the path of an image in this studio")?));
                     i += 1;
                 }
                 "--ref" => {
@@ -1589,10 +1589,10 @@ impl Server {
             if pose.is_some() || side.is_some() {
                 return Err(format!("look --hold {pile}: --pose and --side hold a pastel stick, not a knife or a pile"));
             }
-            let (w, h, png) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
+            let (w, h, png, crop) = hold_look(&self.s, &pile, (p[0], p[1]), &v)?;
             let path = new_look(&session_dir(&self.name), &png)?;
             let c = self.s.canvas().unwrap();
-            let scale = look::crop_scale(c.window(), &v, w, h)?;
+            let scale = look::crop_scale(c.window(), &look::View { crop: Some(crop), ..v }, w, h)?;
             return Ok(format!("{} ({w}x{h}, {:.2}s): {pile} held up to the canvas at {},{}{scale}\n", path.display(), t0.elapsed().as_secs_f64(), p[0], p[1]));
         }
         if survey {
@@ -1773,12 +1773,12 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (_, _, png) = look::render(&c, &v)?;
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
-        // an earlier look of this studio: a picture under its folder, nothing outside it
+        // an image of this studio (usually an earlier look): a picture under its folder, nothing outside it
         let studio = root().canonicalize().map_err(|e| e.to_string())?;
         let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
         let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
         if !real.starts_with(&studio) {
-            return Err(format!("--compare {}: an earlier look is a picture in this studio ({})", prev.display(), studio.display()));
+            return Err(format!("--compare {}: compare takes an image in this studio ({})", prev.display(), studio.display()));
         }
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();
@@ -2542,6 +2542,12 @@ fn finish_cmd(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     let [save, out] = files.as_slice() else { return Err(FINISH_USAGE.into()) };
+    if same_file(Path::new(save), Path::new(out))? {
+        return Err("finish output must differ from the save and source log".into());
+    }
+    if let Some(l) = &log && same_file(Path::new(l), Path::new(out))? {
+        return Err("finish output must differ from the save and source log".into());
+    }
     let t0 = Instant::now();
     let r = save::read(Path::new(save))?;
     if let Some(l) = &log {

@@ -44,6 +44,14 @@ test("the painting time comes only from paint results that succeeded, and only a
 	assert.equal(latestClockInMessages([result("read", "day 9999, 23:59")]), undefined);
 });
 
+test("scratch paint clocks do not count as the main painting's time", () => {
+	const paint = result("paint", "day 3, 14:05\nok");
+	const scratch = result("paint", "[scratch canvas]\nday 9, 23:59\nok");
+	assert.equal(latestClockInMessages([scratch]), undefined);
+	assert.equal(latestClockInMessages([paint, scratch]), "day 3, 14:05");
+	assert.equal(latestClockInMessages([scratch, paint]), "day 3, 14:05");
+});
+
 test("the journal is quoted as the painter's own notes: its headings can't pass for the summary's", async () => {
 	const s = studio(`[ "$1" = globals ] && exit 0`);
 	mkdirSync(join(s, "notes"));

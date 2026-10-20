@@ -66,19 +66,25 @@ opts=(--coats "$coats")
 [ $relief = 1 ] && opts+=(--relief)
 finishing=$("$easel" finish --print-chunk "${opts[@]}")
 
-mkdir -p "$(dirname "$out")"
-finished=${out%.png}.lua
-# the finished log goes next to the PNG: never over the log being finished
-if [ "$finished" -ef "$log" ]; then
-  echo "finish_painting: $finished is the log itself; write the PNG under another name or folder" >&2
-  exit 1
-fi
-{ cat "$log"; [ -z "$finishing" ] || printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished.part"
-mv "$finished.part" "$finished"
-
 # the save the painter's session wrote when it closed: <studio>/out/easel/<name>/live.ckpt
 name=$(basename "$log" .lua)
 save=$(cd "$(dirname "$log")/../.." && pwd)/out/easel/$name/live.ckpt
+finished=${out%.png}.lua
+for destination in "$out" "$finished"; do
+  for source in "$log" "$save" "$save.zst" "$save.gz"; do
+    if [ "$destination" -ef "$source" ]; then
+      echo "finish_painting: output must differ from the save and source log" >&2
+      exit 1
+    fi
+  done
+done
+mkdir -p "$(dirname "$out")"
+finished_part=$(mktemp "$finished.XXXXXX")
+trap 'rm -f "$finished_part"' EXIT
+{ cat "$log"; [ -z "$finishing" ] || printf '\n--@ chunk (finishing)\n%s\n' "$finishing"; } > "$finished_part"
+mv "$finished_part" "$finished"
+trap - EXIT
+
 for candidate in "$save" "$save.zst" "$save.gz"; do
   [ -f "$candidate" ] || continue
   input=$candidate

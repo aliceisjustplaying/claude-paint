@@ -29,18 +29,28 @@ def main():
     if not uv:
         parser.error("install uv before preparing the studio")
     with tempfile.TemporaryDirectory(prefix="capy-studio-") as temp:
+        staged = Path(temp) / "studio"
         env = dict(os.environ, R16_BRANCH=args.ref, TMPDIR=temp)
-        subprocess.run([str(repo / "scripts/export_r16_studio"), args.profile, str(dest)], env=env, stdout=sys.stderr, check=True)
-    if args.studio_notes:
-        shutil.copy2(args.studio_notes.expanduser(), dest / "notes/studio_notes.md")
-    missing = [path for path in re.findall(r"notes/[\w./-]+\.md", brief) if not (dest / path).is_file()]
-    if missing:
-        parser.error("the approved brief names missing notes: " + ", ".join(sorted(set(missing))))
-    (dest / "BRIEF.md").write_bytes(brief.encode())
+        subprocess.run([str(repo / "scripts/export_r16_studio"), args.profile, str(staged)], env=env, stdout=sys.stderr, check=True)
+        if args.studio_notes:
+            shutil.copy2(args.studio_notes.expanduser(), staged / "notes/studio_notes.md")
+        missing = [path for path in re.findall(r"notes/[\w./-]+\.md", brief) if not (staged / path).is_file()]
+        if missing:
+            parser.error("the approved brief names missing notes: " + ", ".join(sorted(set(missing))))
+        (staged / "BRIEF.md").write_bytes(brief.encode())
+        runtime = staged / "bin/mcp"
+        runtime.mkdir(exist_ok=True)
+        for name in ("server.py", "references.py", "tools.json", *(["remote.py"] if args.sessions_root else [])):
+            shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
+        if dest.exists():
+            if any(dest.iterdir()):
+                raise FileExistsError(dest)
+            for child in staged.iterdir():
+                shutil.move(str(child), dest / child.name)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staged), dest)
     runtime = dest / "bin/mcp"
-    runtime.mkdir(exist_ok=True)
-    for name in ("server.py", "references.py", "tools.json", *(["remote.py"] if args.sessions_root else [])):
-        shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
     registration = {
         "command": uv,
         "args": ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(dest)],

@@ -85,7 +85,8 @@ def process_start(pid):
                           capture_output=True, text=True, check=False).stdout.strip()
 
 
-def reconcile(messages):
+def reconcile(messages, receiver=None):
+    released = []
     for message in messages:
         delivery = message.get("delivery")
         if not delivery or delivery["state"] == "delivered":
@@ -101,8 +102,10 @@ def reconcile(messages):
             delivery.pop("opening_hash", None)
             delivery.pop("opening_chars", None)
             continue
-        if not alive:
+        if not alive or (receiver and delivery["pid"] == receiver["pid"]):
             message.pop("delivery")
+            released.append(message)
+    return released
 
 
 def send(run, text):
@@ -137,9 +140,16 @@ def receive(run, target=None):
         return pending
 
 
+def settle(run, receiver):
+    if not (run / FILENAME).exists():
+        return []
+    with locked(run) as messages:
+        return reconcile(messages, receiver)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("operation", choices=["send", "receive", "reconcile"])
+    ap.add_argument("operation", choices=["send", "receive", "reconcile", "settle"])
     ap.add_argument("run", type=Path)
     ap.add_argument("value", nargs="?")
     args = ap.parse_args()
@@ -147,7 +157,8 @@ def main():
     if args.operation == "send":
         print(json.dumps(send(run, args.value or ""), ensure_ascii=False))
     else:
-        messages = receive(run, json.loads(args.value) if args.value else None)
+        target = json.loads(args.value) if args.value else None
+        messages = settle(run, target) if args.operation == "settle" else receive(run, target)
         print(json.dumps([{"id": m["id"], "text": m["text"]} for m in messages], ensure_ascii=False))
 
 

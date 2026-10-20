@@ -1148,7 +1148,7 @@ def check(name, n, d):
 def stop_leftovers(d, keep_server=False):
     """Stop easel processes of this studio (not the runner's check and finishing; not the
     server with keep_server: the session stays open across sittings)."""
-    r = subprocess.run(["/bin/ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
+    r = subprocess.run(["ps", "-Ao", "pid=,command="], capture_output=True, text=True).stdout
     for line in r.splitlines():
         pid, _, cmd = line.strip().partition(" ")
         if keep_server and " serve " in f" {cmd} ":
@@ -1251,7 +1251,7 @@ def watchdog(stop):
             log(f"monitor error: {e}")
         try:
             mine = [str(A / name) for _, name in our_studios()]
-            ps = subprocess.run(["/bin/ps", "-Ao", "pid=,etime=,command="], capture_output=True, text=True).stdout.splitlines()
+            ps = subprocess.run(["ps", "-Ao", "pid=,etime=,command="], capture_output=True, text=True).stdout.splitlines()
             for pid, secs, where, cmd in overdue(ps, cwds_of_all() if mine else {}, mine, WATCHDOG_MIN * 60, str(os.getpid())):
                 subprocess.run(["kill", pid])
                 log(f"WATCHDOG stopped {pid} after {secs // 60} min in {where}: {cmd[:140]}")

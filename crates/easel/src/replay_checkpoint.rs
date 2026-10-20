@@ -381,7 +381,7 @@ impl Live {
 pub struct Batch {
     checkpoint: Option<PathBuf>,
     progress: PathBuf,
-    identity: Identity,
+    identity: Option<Identity>,
     pub done: usize,
     total: usize,
     until: usize,
@@ -404,11 +404,11 @@ impl Batch {
         if minutes.is_some_and(|m| !m.is_finite() || m <= 0.0) { return Err("--for-minutes needs a positive finite duration".into()); }
         if checkpoint.is_none() && (until < chunks.len() || minutes.is_some()) { return Err("batch limits require --replay-checkpoint".into()); }
         let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
-        let identity = Identity::new(source, width)?;
+        let identity = (checkpoint.is_some() || crate::flag(args, "--frames-every").is_some()).then(|| Identity::new(source, width)).transpose()?;
         let mut batch = Self { checkpoint, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
         if let Some(path) = batch.checkpoint.as_ref().filter(|p| p.exists()) {
             let (mut saved, canvas, elapsed_secs) = load(path)?;
-            if saved.identity != batch.identity { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
+            if Some(&saved.identity) != batch.identity.as_ref() { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
             if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
                 return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
             }
@@ -434,7 +434,7 @@ impl Batch {
     pub fn completed(&mut self, s: &Session, done: usize) -> Result<bool, String> {
         self.done = done;
         if let Some(path) = &self.checkpoint {
-            write_checkpoint(path, s, &self.identity, done, &self.digests, self.elapsed())?;
+            write_checkpoint(path, s, self.identity.as_ref().unwrap(), done, &self.digests, self.elapsed())?;
         }
         let stop = done >= self.until || self.minutes.is_some_and(|m| self.started.elapsed().as_secs_f64() >= m * 60.0);
         self.publish(if done == self.total { "complete" } else if stop { "paused" } else { "running" }, if done < self.total && !stop { Some(done + 1) } else { None })?;
@@ -570,6 +570,43 @@ print(counter,rand(),drying(300,300))
         let mut bytes = Vec::new();
         s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
         bytes
+    }
+
+    #[test]
+    fn batch_identity_is_only_built_for_checkpoints_or_frames() {
+        let dir = Temp::new();
+        let chunks = crate::session::parse_program(SOURCE);
+        for (args, expected) in [
+            (Vec::new(), false),
+            (args(&dir.0, chunks.len()), true),
+            (vec!["--frames-every".into(), "2".into(), "--frames-dir".into(), dir.0.join("frames").display().to_string()], true),
+        ] {
+            let batch = Batch::open(&args, SOURCE, 64, &mut session(), &chunks, &dir.0.join("out.png")).unwrap();
+            assert_eq!(batch.identity.is_some(), expected);
+        }
+    }
+
+    #[test]
+    fn checkpoint_resume_rejects_changed_build_width_and_environment() {
+        let chunks = crate::session::parse_program(SOURCE);
+        for change in 0..3 {
+            let dir = Temp::new();
+            let mut s = session();
+            let mut batch = Batch::open(&args(&dir.0, 1), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            let identity = batch.identity.as_mut().unwrap();
+            match change {
+                0 => identity.build[0] ^= 1,
+                1 => identity.width += 1,
+                _ => identity.environment.push((b"PAINT_TEST_IDENTITY".to_vec(), b"changed".to_vec())),
+            }
+            s.run(&chunks[0]).unwrap();
+            batch.completed(&s, 1).unwrap();
+            drop(batch);
+            let mut restored = session();
+            let result = Batch::open(&args(&dir.0, chunks.len()), SOURCE, 64, &mut restored, &chunks, &dir.0.join("out.png"));
+            assert!(result.err().unwrap().contains("differs; refusing resume"));
+            assert!(restored.log.is_empty());
+        }
     }
 
     #[test]

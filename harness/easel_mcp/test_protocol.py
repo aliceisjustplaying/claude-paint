@@ -494,9 +494,10 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(command[:2], [str(self.repo / "scripts/export_r16_studio"), "hopper"])
         self.assertEqual(options["env"]["R16_BRANCH"], "HEAD")
         self.assertTrue(Path(options["env"]["TMPDIR"]).is_dir())
-        (self.dest / "bin").mkdir(parents=True)
-        (self.dest / "notes").mkdir()
-        (self.dest / "notes/easel_guide.md").write_text("guide")
+        destination = Path(command[2])
+        (destination / "bin").mkdir(parents=True)
+        (destination / "notes").mkdir()
+        (destination / "notes/easel_guide.md").write_text("guide")
 
     def test_export_registration_and_brief_copy(self):
         output = StringIO()
@@ -532,6 +533,18 @@ class PreparationTests(unittest.TestCase):
         with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), patch.object(sys, "stderr", StringIO()), self.assertRaises(SystemExit):
             self.prepare.main()
         self.assertFalse((self.dest / "BRIEF.md").exists())
+        self.assertFalse(self.dest.exists())
+        self.brief.write_text(self.original)
+        self.test_export_registration_and_brief_copy()
+
+    def test_missing_approved_notes_preserves_empty_destination(self):
+        self.dest.mkdir()
+        self.notes.unlink()
+        with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), self.assertRaises(FileNotFoundError):
+            self.prepare.main()
+        self.assertEqual(list(self.dest.iterdir()), [])
+        self.notes.write_text("Approved observations.\n")
+        self.test_export_registration_and_brief_copy()
 
 
 @unittest.skipUnless(os.environ.get("EASEL_MCP_STUDIO"), "set EASEL_MCP_STUDIO to an exported painter studio")

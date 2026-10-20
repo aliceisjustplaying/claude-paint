@@ -173,7 +173,8 @@ export async function atEasel(studio: string, args: string[], input: string | un
 	const before = args[0] === "do" ? logText(log) : "";
 	const r = await step(studio, args, input, signal, deadline);
 	if (r.timedOut) {
-		if (args[0] !== "do") throw new Error("the easel didn't answer; `log` shows whether the chunk ran");
+		if (args[0] === "note") throw new Error("the easel didn't answer; the entry may have been added all the same, so read notes/journal.md before adding it again");
+		if (args[0] !== "do") throw new Error(`the easel didn't answer; \`${args[0]}\` changes nothing, so it can be asked again`);
 		// what landed: the chunk still running (its progress), in the log, or neither
 		const s = await easel(studio, ["status"], undefined, signal, 10_000);
 		if (signal?.aborted) throw new Error("Operation aborted");

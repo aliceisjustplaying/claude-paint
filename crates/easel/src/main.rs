@@ -1063,7 +1063,7 @@ const HOLD_HALF: f32 = 120.0;
 fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<(usize, usize, Vec<u8>), String> {
     use image::ImageEncoder;
     if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
-        return Err("look --hold takes --at, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+        return Err("look --hold takes --at, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (paint, blade, full) = s.held(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
@@ -1128,7 +1128,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
 fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
     use image::ImageEncoder;
     if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
-        return Err("look --hold takes --at, --pose or --side, --crop, --mode value, squint, relief or gallery and --light, nothing else".into());
+        return Err("look --hold takes --at, --pose or --side, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (stick, turned) = s.held_stick(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
@@ -1515,7 +1515,7 @@ impl Server {
                 "--survey" => survey = true,
                 "--compare" => {
                     // (not a following option taken for the path)
-                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs an earlier look's png")?));
+                    compare = Some(PathBuf::from(args.get(i + 1).filter(|a| !a.starts_with("--")).ok_or("--compare needs the path of an image in this studio")?));
                     i += 1;
                 }
                 "--ref" => {
@@ -1773,12 +1773,12 @@ impl Server {
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let (_, _, png) = look::render(&c, &v)?;
         let now = image::load_from_memory(&png).map_err(|e| e.to_string())?.to_rgb8();
-        // an earlier look of this studio: a picture under its folder, nothing outside it
+        // an image of this studio (usually an earlier look): a picture under its folder, nothing outside it
         let studio = root().canonicalize().map_err(|e| e.to_string())?;
         let prev = if prev.is_absolute() { prev.to_path_buf() } else { studio.join(prev) };
         let real = prev.canonicalize().map_err(|e| format!("--compare {}: {e}", prev.display()))?;
         if !real.starts_with(&studio) {
-            return Err(format!("--compare {}: an earlier look is a picture in this studio ({})", prev.display(), studio.display()));
+            return Err(format!("--compare {}: compare takes an image in this studio ({})", prev.display(), studio.display()));
         }
         let before = image::open(&real).map_err(|e| format!("--compare {}: {e}", prev.display()))?.to_rgb8();
         let h = now.height();

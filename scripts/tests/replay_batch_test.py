@@ -15,7 +15,7 @@ class ReplayBatchTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="replay-batch-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         shutil.copyfile(REPO / "scripts/replay_batch", self.root / "replay_batch")
         clip = self.root / "replay_clip"
         clip.write_text(f"#!{sys.executable}\nfrom pathlib import Path\n"

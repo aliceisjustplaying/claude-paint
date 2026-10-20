@@ -587,7 +587,7 @@ async function poll() {
   // events we already have whose result came in since: the server lists them; the static file just has them as they are now
   let ups = r.updates || [];
   if (STATIC) { lastStatic = Date.now(); ups = [];
-    for (let i = 0; i < events.length && i < r.events.length; i++) if (HOSTED ? JSON.stringify(r.events[i]) !== JSON.stringify(events[i]) : r.events[i].out !== events[i].out || r.events[i].err !== events[i].err || r.events[i].scratch_reset !== events[i].scratch_reset || r.events[i].display_pending !== events[i].display_pending || r.events[i].gallery !== events[i].gallery || r.events[i].relief !== events[i].relief) ups.push([i, r.events[i]]);
+    for (let i = 0; i < events.length && i < r.events.length; i++) if (JSON.stringify(r.events[i]) !== JSON.stringify(events[i])) ups.push([i, r.events[i]]);
     r.events = r.events.slice(events.length); }  // the file holds every event: keep the new ones
   epoch = r.epoch; nSittings = r.sittings; if (r.imgext) IMGEXT = r.imgext; if (r.web) WEB = r.web; if (r.nupdates !== undefined) nUpd = r.nupdates;
   for (const [i, e] of ups) if (i < events.length) { events[i] = e; invalidateReplay(i); }

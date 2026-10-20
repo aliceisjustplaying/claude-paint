@@ -10,7 +10,7 @@ export default function concepts(pi: ExtensionAPI) {
 		...defineTool({
 			name: "write_concepts",
 			label: "write_concepts",
-			description: "Replace notes/concepts.md with your eight numbered pictures and their estimates.",
+			description: "Replace notes/concepts.md with your sixteen numbered pictures and their estimates.",
 			parameters: Type.Object({ text: Type.String() }),
 			async execute(_id, p) {
 				const dir = join(process.cwd(), "notes");

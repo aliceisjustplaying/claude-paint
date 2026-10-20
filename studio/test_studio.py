@@ -284,7 +284,6 @@ def look(i, png):
 @pytest.mark.parametrize("public", [False, True])
 @pytest.mark.parametrize("lights", [("gallery",), ("relief",), S.DISPLAY_LIGHTS])
 def test_gallery_companions_are_display_only_and_exported(home, server, monkeypatch, public, lights):
-    import base64
     import io
     Image = pytest.importorskip("PIL.Image")
     monkeypatch.setattr(S, "PUBLIC", public)
@@ -341,9 +340,9 @@ def test_gallery_companions_are_display_only_and_exported(home, server, monkeypa
     exported_events = json.loads((d / "events.json").read_text())["events"]
     for light in S.DISPLAY_LIGHTS:
         assert [e.get(light, False) for e in exported_events if e["kind"] == "image"] == [light in lights, False, light in lights]
-        assert S.display_companion(str(studio), str(tmp_path / "outside.png"), light) is None
-    assert S.display_companion(str(studio), path, "../outside") is None
-    assert base64.b64decode(S.image(S.stream("p:" + PAINTER, [str(log), str(second)]), 0)[1]) == colour
+        assert S.display_companion_path(str(studio), str(tmp_path / "outside.png"), light) is None
+    assert S.display_companion_path(str(studio), path, "../outside") is None
+    assert S.image_bytes(S.stream("p:" + PAINTER, [str(log), str(second)]), 0) == ("image/png", colour)
 
 
 def test_background_companions_update_without_new_log_bytes(home, server):
@@ -700,6 +699,60 @@ def test_a_held_knife_is_never_the_picker_fallback(home):
     log.write_text(start(str(studio)) + looks_at_once(
         ("hold", {"hold": "p", "at": "50,50"}, png_of("blue"))))
     assert S.glance([str(log)])["look"] is None
+
+
+@pytest.mark.parametrize("replacement", ["atomic", "in-place"])
+def test_picker_refreshes_after_same_size_session_replacement(home, server, replacement):
+    _, studio, log = home
+    entries, pictures = [], []
+    for color, title in (("blue", "Blue"), ("red", "Reds")):
+        buf = io.BytesIO()
+        S.Image.new("RGB", (4, 4), color).save(buf, "PNG", compress_level=0)
+        pictures.append(buf.getvalue())
+        entries.append(start(str(studio)) + look("l1", pictures[-1]) + say(f"**{title}**\n\nA painting."))
+    assert len(entries[0].encode()) == len(entries[1].encode())
+    log.write_text(entries[0])
+    before = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    events = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    assert (before["look"], before["title"]) == (0, "Blue")
+    stat = log.stat()
+    if replacement == "atomic":
+        pending = log.with_suffix(".new")
+        pending.write_text(entries[1])
+        os.utime(pending, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        pending.replace(log)
+        assert log.stat().st_ino != stat.st_ino
+    else:
+        log.write_text(entries[1])
+        os.utime(log, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        assert log.stat().st_ino == stat.st_ino
+    assert log.stat().st_size == stat.st_size
+    updated = json.loads(server(f"/api/events?p={PAINTER}")[1])
+    assert updated["epoch"] > events["epoch"]
+    assert server(f"/img?p={PAINTER}&i=0") == (200, pictures[1])
+    after = next(s for s in json.loads(server("/api/sessions")[1]) if s.get("p") == PAINTER)
+    assert (after["look"], after["title"]) == (0, "Reds")
+    assert after["thumb_version"] != before["thumb_version"]
+
+
+def test_glance_only_parses_appended_lines(home, monkeypatch):
+    _, studio, log = home
+    request, response = look("l2", png_of("red")).splitlines(keepends=True)
+    log.write_text(start(str(studio)) + look("l1", png_of("blue")) + say("**Blue**") + request)
+    cached = S._glance_file(str(log))
+    version = cached["whole_version"]
+    appended = response + say("**Reds**")
+    with log.open("a") as fh:
+        fh.write(appended)
+    parsed, loads = [], S.json.loads
+    monkeypatch.setattr(S.json, "loads", lambda line: parsed.append(line) or loads(line))
+    after = S.glance([str(log)])
+    assert S._glances[str(log)] is cached
+    assert (cached["n"], after["look"], after["title"]) == (2, 1, "Reds")
+    assert after["version"] != version
+    assert parsed == appended.encode().splitlines(keepends=True)
+    assert S.glance([str(log)]) == after
+    assert parsed == appended.encode().splitlines(keepends=True)
 
 
 def test_glance_is_a_small_cached_jpeg(home, server, monkeypatch):

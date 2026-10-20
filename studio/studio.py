@@ -534,14 +534,6 @@ def display_companion_path(cwd, path, light):
         return None
 
 
-def display_companion(cwd, path, light):
-    companion = display_companion_path(cwd, path, light)
-    if companion:
-        with open(companion, "rb") as fh:
-            return fh.read()
-    return None
-
-
 def _signature(data):
     """A picture's proportions, its 32 x 24 grays (centered, scaled to unit spread) and its mean chroma (0-255;
     about 0 for a check in grays); None if it can't be read."""
@@ -772,9 +764,12 @@ def _glance_file(path):
     picture; nor are a look's other pictures (a survey's tile, a comparison, a held knife)."""
     with _lock("g:" + path):
         g = _glances.get(path)
-        size = os.path.getsize(path)
-        if not g or size < g["offset"]:
+        stat = os.stat(path)
+        size = stat.st_size
+        stamp = (stat.st_dev, stat.st_ino, stat.st_mtime_ns)
+        if not g or size < g["offset"] or stamp[:2] != g["stamp"][:2] or size <= g["size"] and stamp != g["stamp"]:
             g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "cwd": "", "worked": False, "concepts": False}
+        g.update(stamp=stamp, size=size)
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
             while True:
@@ -1031,12 +1026,6 @@ def image_bytes(st, i, light=None):
             return read_image(imgs[i]) if i < len(imgs) else None
         i -= ni
     return None
-
-
-def image(st, i, light=None):
-    """Compatibility view of image i: (mime, base64 data), or None."""
-    im = image_bytes(st, i, light)
-    return (im[0], base64.b64encode(im[1]).decode()) if im else None
 
 
 class H(http.server.BaseHTTPRequestHandler):

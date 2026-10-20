@@ -122,6 +122,16 @@ class ReferenceTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(params=params), self.assertRaises(ValueError):
                 await self.call(params)
 
+    async def test_duplicate_ids_are_rejected_before_any_entry_is_read(self):
+        self.entries[1]["id"] = "tree"
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'duplicate id "tree"'):
+            await self.easel.call("reference_list", {})
+        with self.assertRaisesRegex(ValueError, 'duplicate id "tree"'):
+            await self.call({"query": "ripples"})
+        with self.assertRaisesRegex(ValueError, 'duplicate id "tree"'):
+            await self.call({"id": "tree"})
+
     async def test_missing_library_is_clear_and_no_other_notes_are_read(self):
         self.library.unlink()
         (self.studio / "notes/other.json").write_text(json.dumps(self.entries))

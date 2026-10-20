@@ -658,6 +658,80 @@ def test_a_second_export_in_one_process_skips_unchanged_looks(home, monkeypatch)
     assert (out / "data" / PAINTER / "img/0.png").read_bytes() == png_of("red")
 
 
+@pytest.mark.parametrize("failed_light", [None, *S.DISPLAY_LIGHTS])
+def test_export_retries_failed_image_reads_without_source_changes(home, monkeypatch, failed_light):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "EXPORTED", {})
+    png = png_of("blue")
+    path = "out/easel/painting/look-0001.png"
+    for light in S.DISPLAY_LIGHTS:
+        companion = studio / f"out/easel/painting/.{light}/look-0001.png"
+        companion.parent.mkdir(parents=True)
+        companion.write_bytes(png)
+    rows = look("l1", png).splitlines()
+    entry = json.loads(rows[1])
+    entry["message"]["content"].insert(0, {"type": "text", "text": path + " (20x16)"})
+    log.write_text(start(str(studio)) + rows[0] + "\n" + line(entry))
+    reads, image_bytes = [], S.image_bytes
+    failing = True
+
+    def read_image(st, i, light=None):
+        reads.append(light)
+        return None if failing and light == failed_light else image_bytes(st, i, light=light)
+
+    monkeypatch.setattr(S, "image_bytes", read_image)
+    out = root / "export"
+    E.export(str(out))
+    dest = out / "data" / PAINTER
+    assert not (dest / (failed_light or "img") / "0.png").exists()
+    st = S.stream("p:" + PAINTER, S.painter_files(PAINTER))
+    sources = E.image_sources(st, 0)
+    assert sources and all(sources)
+    failing = False
+    E.export(str(out))
+    assert E.image_sources(st, 0) == sources
+    for folder in ("img", *S.DISPLAY_LIGHTS):
+        assert (dest / folder / "0.png").read_bytes() == png
+    assert json.loads((dest / "events.json").read_text())["imgext"] == ["png"]
+    reads.clear()
+    E.export(str(out))
+    assert reads == []
+
+
+def test_export_never_promotes_stale_web_copies_after_failed_conversion(home, monkeypatch):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "EXPORTED", {})
+    log.write_text(start(str(studio)) + look("l1", png_of("blue")))
+    out = root / "export"
+    E.export(str(out))
+    dest = out / "data" / PAINTER
+    assert json.loads((dest / "events.json").read_text())["web"] == [1]
+    assert all((dest / folder / "0.jpg").is_file() for folder in ("t", "v"))
+
+    truncated = png_of("red")[:48]
+    with pytest.raises(OSError):
+        E.Image.open(io.BytesIO(truncated)).load()
+    replaced = log.with_suffix(".new")
+    replaced.write_text(start(str(studio)) + look("l1", truncated))
+    os.replace(replaced, log)
+    for _ in range(2):
+        E.export(str(out))
+        assert (dest / "img/0.png").read_bytes() == truncated
+        assert json.loads((dest / "events.json").read_text())["web"] == [0]
+        assert (str(out), PAINTER, 0) not in E.EXPORTED
+        assert metadata(out / "share" / (PAINTER + ".html"))["og:image"] == E.DEFAULT_IMAGE["url"]
+
+
 def test_empty_and_imageless_exports_use_default_card(home):
     tmp_path, studio, log = home
     out = tmp_path / "out"

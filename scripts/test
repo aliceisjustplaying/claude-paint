@@ -163,6 +163,7 @@ check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check baseline-state "scripts/tests/baseline_state.sh $easel" '^baseline_state: all [1-9][0-9]* scenes'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
+check painter-visit-lifecycle 'node --test --test-reporter=tap harness/painter/test/visit-lifecycle.test.ts' '^# pass [1-9][0-9]*$'
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
 check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"

@@ -921,7 +921,7 @@ let typed = -1, typer = null, jgen = 0, journalView = null, journalItems = new M
 $('jbody').onclick = e => { const el = e.target.closest('.chip.look[data-i]'); if (el) { live = false; stop(); show(+el.dataset.i, true); } };
 function journalScroll() {
   const jb = $('jbody'), el = getComputedStyle(jb).overflowY === 'visible' ? jb.closest('main') : jb;
-  return { el, following:el === jb || el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
+  return { el, following:el.scrollHeight - el.clientHeight - el.scrollTop <= 24 };
 }
 function journal(i, scroll) {
   const jb = $('jbody');
@@ -977,7 +977,7 @@ function journal(i, scroll) {
     if (g !== jgen || generation !== gen) return;
     const state = firstPiece ? scroll : journalScroll(), following = firstPiece ? initiallyFollowing : state.following;
     firstPiece = false;
-    const h = jb.scrollHeight; let size = 0;
+    let size = 0;
     while (at > 0 && size < 12000) {
       const b = blocks[--at]; let entry = journalNodes.get(b.key);
       const typing = b.k === lastThink && (keepTyping || startTyping);
@@ -990,11 +990,10 @@ function journal(i, scroll) {
       if (el.parentNode !== jb || el.nextSibling !== anchor) jb.insertBefore(el, anchor);
       anchor = el;
     }
-    if (state.el === jb) jb.scrollTop += jb.scrollHeight - h;
-    else if (following) state.el.scrollTop = 1e9;
+    if (following) state.el.scrollTop = 1e9;
     if (at) setTimeout(piece, 0);
   };
-  piece(); if (scroll.el === jb) jb.scrollTop = 1e9;
+  piece();
   if (startTyping) {
     typed = lastThink;
     const el = journalNodes.get('think:' + lastThink).el, txt = events[lastThink].text.trim();

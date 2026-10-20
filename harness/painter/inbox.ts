@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 
 const FRAMING = "A message from the person who runs this studio:";
 type Message = { id: string; text: string };
+type Attachment = { ids: string[]; failed?: boolean; opening?: { text: string; original: string };
+	result?: Pick<ToolResultEvent, "toolCallId" | "content" | "details"> };
 
 export function registerInbox(pi: ExtensionAPI) {
 	const run = process.env.PAINTER_INBOX_DIR;
@@ -25,21 +27,45 @@ export function registerInbox(pi: ExtensionAPI) {
 		return call("receive", { session, sitting, tool_call, tool, pid: process.pid });
 	};
 	const frame = (messages: Message[]) => messages.map((m) => `${FRAMING}\n\n${m.text}\n\nEnd of message.`).join("\n\n");
+	let attachments: Attachment[] = [];
+	const settle = () => {
+		const released = new Set(call("settle", { pid: process.pid }).map((m) => m.id));
+		attachments = attachments.filter((a) => a.failed ||= a.ids.some((id) => released.has(id)));
+	};
 	let opening = true;
 	pi.on("input", (event, ctx) => {
 		if (!opening) return;
 		opening = false;
 		const messages = receive(ctx.sessionManager.getSessionFile(), null, null);
 		if (!messages.length) return;
-		return { action: "transform", text: `${frame(messages)}\n\n${event.text}`, images: event.images };
+		const text = `${frame(messages)}\n\n${event.text}`;
+		attachments.push({ ids: messages.map((m) => m.id), opening: { text, original: event.text } });
+		return { action: "transform", text, images: event.images };
 	});
 	pi.on("tool_result", (event, ctx) => {
 		if (event.parentToolCallId) return;
 		const messages = receive(ctx.sessionManager.getSessionFile(), event.toolCallId, event.toolName);
 		if (!messages.length) return;
+		attachments.push({ ids: messages.map((m) => m.id), result: { toolCallId: event.toolCallId, content: event.content, details: event.details } });
 		return { content: [...event.content, { type: "text", text: frame(messages) }],
 			details: { ...event.details, painterInbox: messages.map((m) => m.id) } };
 	});
-	pi.on("context", () => { call("reconcile"); });
-	pi.on("agent_end", () => { call("reconcile"); });
+	pi.on("context", (event) => {
+		settle();
+		if (!attachments.length) return;
+		return { messages: event.messages.map((message) => {
+			for (const a of attachments) {
+				if (a.opening && message.role === "user") {
+					const { text, original } = a.opening;
+					message = { ...message, content: typeof message.content === "string"
+						? (message.content === text ? original : message.content)
+						: message.content.map((b) => b.type === "text" && b.text === text ? { ...b, text: original } : b) };
+				} else if (a.result && message.role === "toolResult" && message.toolCallId === a.result.toolCallId) {
+					message = { ...message, content: a.result.content, details: a.result.details };
+				}
+			}
+			return message;
+		}) };
+	});
+	pi.on("agent_end", settle);
 }

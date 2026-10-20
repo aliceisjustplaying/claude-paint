@@ -276,7 +276,7 @@ mod tests {
             for material in 0..4 {
                 let mut canvas = Canvas::new_window(96, 1.25, [0.3, 0.5, 0.2], crop)
                     .with_engine(8)
-                    .with_size_mm(150.0);
+                    .with_size_mm(if material < 2 { 150.0 } else { 8.0 });
                 if material < 2 {
                     canvas = canvas.with_linen(crate::Linen::fine(3));
                     canvas.prime([0.6, 0.5, 0.4], 0.8, 50.0, 0.6, 0.7, 7);

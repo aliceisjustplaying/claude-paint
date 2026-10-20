@@ -639,7 +639,7 @@ def test_a_second_export_in_one_process_skips_unchanged_looks(home, monkeypatch)
     E.WRITTEN.clear()
     E.export(str(out))
     first = sorted(E.WRITTEN)
-    read = []
+    read, image_bytes = [], S.image_bytes
     monkeypatch.setattr(S, "image_bytes", lambda *a, **k: read.append(a) or None)
     with open(log, "a") as fh:
         fh.write(line({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "More sky."}]}}))
@@ -650,11 +650,7 @@ def test_a_second_export_in_one_process_skips_unchanged_looks(home, monkeypatch)
     assert (out / "data" / PAINTER / "img/0.png").is_file()
     assert json.loads((out / "data" / PAINTER / "events.json").read_text())["imgext"] == ["png"]
 
-    monkeypatch.undo()
-    monkeypatch.setenv("HOME", str(root))
-    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
-    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
-    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(S, "image_bytes", image_bytes)
     replaced = log.with_suffix(".new")
     replaced.write_text(start(str(studio)) + look("l1", png_of("red")))
     os.replace(replaced, log)

@@ -544,7 +544,18 @@ class PreparationTests(unittest.TestCase):
             self.prepare.main()
         self.assertEqual(list(self.dest.iterdir()), [])
         self.notes.write_text("Approved observations.\n")
-        self.test_export_registration_and_brief_copy()
+        with patch.object(Path, "rmdir", side_effect=PermissionError("cannot remove destination")) as remove:
+            self.test_export_registration_and_brief_copy()
+        remove.assert_not_called()
+
+    def test_nonempty_destination_is_preserved(self):
+        self.dest.mkdir()
+        existing = self.dest / "existing.md"
+        existing.write_text("Existing work.\n")
+        with patch.object(sys, "argv", self.args), patch.object(self.prepare.subprocess, "run", side_effect=self.export), patch.object(self.prepare.shutil, "which", return_value="/bin/uv"), self.assertRaises(FileExistsError):
+            self.prepare.main()
+        self.assertEqual(list(self.dest.iterdir()), [existing])
+        self.assertEqual(existing.read_text(), "Existing work.\n")
 
 
 @unittest.skipUnless(os.environ.get("EASEL_MCP_STUDIO"), "set EASEL_MCP_STUDIO to an exported painter studio")

@@ -929,6 +929,8 @@ def paint(name, n, d, rd):
     outcome = "finished" if not why_done.startswith("NOT FINISHED") else "crash_limit_reached"
     (rd / f"p{n}_outcome.json").write_text(json.dumps(
         {"status": outcome, "reason": why_done}, indent=2) + "\n")
+    if outcome != "finished":
+        return None
     (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} record(s): {why_done}\n")
     return sittings
 

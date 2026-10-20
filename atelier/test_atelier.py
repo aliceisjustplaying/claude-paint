@@ -106,7 +106,7 @@ def test_briefs_are_the_texts_as_section_5_renders_them(tmp_path, monkeypatch):
 
 def test_the_house_runner_is_r40s():
     source = (Path(__file__).with_name("house") / "r21_chains.py").read_bytes()
-    assert hashlib.sha256(source).hexdigest() == "7796d9650113d3e3d3d2bc3cd0e638240bf94948eed4d058b9a06db93da30459"
+    assert hashlib.sha256(source).hexdigest() == "109d0fcd5d8dbad35a52ab88da72993ec456331af07a9ade80bdaab5546c826d"
 
 
 def test_the_studios_come_from_studios_json():
@@ -342,6 +342,26 @@ def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
     assert R.paint(world, OPUS, 1) == 0
     assert seen[0][0] == "OPUS" and seen[0][3] == world.root / "works/claude-opus-5-5-001/run/OPUS"
     assert (world.home(OPUS) / "cards/001.json").exists()
+
+
+@pytest.mark.parametrize("finished", [False, True])
+def test_house_loop_marks_only_finished_paintings(world, monkeypatch, finished):
+    work = world.start(OPUS, prepare=True)
+    folder = Path(json.loads((work / "manifest.json").read_text())["folder"])
+    house = R.configure(OPUS, work)
+    monkeypatch.setattr(house, "close_easel", lambda studio: None)
+    lane = work / "run/OPUS"
+    final = lane / "p1_s1_final.txt"
+    final.write_text("synthetic final output\n")
+    sittings = ([{"sitting": 1, "status": "completed", "reviewed": True,
+                  "painting_before": 0, "painting_after": 0, "final_file": str(final)}]
+                if finished else [{"sitting": k, "status": "crashed", "error": "synthetic crash",
+                                   "final_file": str(final)} for k in range(1, 7)])
+    (lane / "p1_sittings.json").write_text(json.dumps(sittings))
+    result = house.paint("OPUS", 1, folder, lane)
+    assert (result is not None) == finished
+    assert json.loads((lane / "p1_outcome.json").read_text())["status"] == ("finished" if finished else "crash_limit_reached")
+    assert (lane / "p1.painted").exists() == finished
 
 
 def test_two_finishes_at_once_hang_the_painting_once(world, monkeypatch):

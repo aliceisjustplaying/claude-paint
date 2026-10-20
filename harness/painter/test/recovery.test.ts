@@ -1,10 +1,11 @@
 // node --test harness/painter/test/recovery.test.ts  (TMPDIR: a scratch directory; runs pi)
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { CARRIES_OVER, HEADER } from "../summary.ts";
+import painter from "../painter.ts";
 
 const HERE = join(import.meta.dirname, "..");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -60,6 +61,40 @@ test("a later sitting opens with the brief, journal, globals, clock and a fresh 
 test("a first sitting's message is left as it is", () => {
 	const { requests } = run({}, "Your brief is in BRIEF.md.");
 	assert.deepEqual(requests[0].filter((m) => m.role === "user").map((m) => [m.text, m.images]), [["Your brief is in BRIEF.md.", 0]]);
+});
+
+test("failed recovery and compaction attachments are reported and retried until an image is loaded", async () => {
+	const at = studio();
+	const easel = join(at.studio, "bin/easel");
+	writeFileSync(easel, readFileSync(easel, "utf8").replace("echo 'out/easel/painting/look-0007.png", "chmod 000 out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png"));
+	const cwd = process.cwd();
+	const handlers: Record<string, (...args: any[]) => any> = {};
+	try {
+		process.chdir(at.studio);
+		process.env.PAINTER_SITTING_RECOVERY = "1";
+		painter({ on: (name, handler) => { handlers[name] = handler; }, registerTool() {}, appendEntry() {} } as never);
+		const original = { type: "image", data: "original", mimeType: "image/png" };
+		const opening = await handlers.input({ text: "Back at the easel.", images: [original] }, {});
+		assert.match(opening.text, /Canvas image unavailable:/);
+		assert.deepEqual(opening.images, [original]);
+		const path = /The whole canvas as it was when this was written: (\S+\.png)/.exec(opening.text)![1];
+		const summary = { role: "compactionSummary", summary: opening.text, timestamp: 1 };
+		const event = { messages: [summary] };
+		const failed = await handlers.context(event, {});
+		assert.match(failed.messages[1].content[0].text, /Canvas image unavailable:/);
+		assert.equal(failed.messages[1].content.length, 1);
+		assert.deepEqual(event.messages, [summary]);
+		chmodSync(path, 0o600);
+		const retried = await handlers.context(event, {});
+		assert.equal(retried.messages[1].content[1].type, "image");
+		assert.doesNotMatch(retried.messages[1].content[0].text, /unavailable/);
+		chmodSync(path, 0o000);
+		const cached = await handlers.context(event, {});
+		assert.deepEqual(cached.messages[1].content, retried.messages[1].content);
+	} finally {
+		process.chdir(cwd);
+		delete process.env.PAINTER_SITTING_RECOVERY;
+	}
 });
 
 /** The first request after a compaction, and the index of the summary in it. */

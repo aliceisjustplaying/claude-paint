@@ -2214,6 +2214,77 @@ fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
     })
 }
 
+fn preflight_run(args: &[String], file: &Path, out: &Path, chunks: usize) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let checkpoint = flag(args, "--replay-checkpoint").map(PathBuf::from);
+    let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
+    let mut outputs = vec![("source", file.to_path_buf()), ("--out", out.to_path_buf()), ("replay progress", progress)];
+    if args.iter().any(|a| a == "--look") { outputs.push(("--look", out.with_extension("look.png"))); }
+    for option in ["--checkpoint-out", "--replay-checkpoint", "--state-digest", "--dump-surface"] {
+        if let Some(p) = flag(args, option) { outputs.push((option, PathBuf::from(p))); }
+    }
+    let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
+    let mut dirs: Vec<(&str, PathBuf)> = Vec::new();
+    for option in ["--frames-dir", "--dump-state"] {
+        let Some(p) = flag(args, option) else { continue };
+        let dir = PathBuf::from(p);
+        let resolved = resolve(&dir)?;
+        for (name, path) in &outputs {
+            let path = resolve(path)?;
+            if path.starts_with(&resolved) || resolved.starts_with(&path) {
+                return Err(format!("{name} must be outside {option}"));
+            }
+        }
+        for (other, path) in &dirs {
+            if resolved.starts_with(path) || path.starts_with(&resolved) {
+                return Err(format!("{option} must be separate from {other}"));
+            }
+        }
+        dirs.push((option, resolved.clone()));
+        let mut generated = if option == "--frames-dir" {
+            vec![dir.join("frames.tsv"), dir.join("frames.states")]
+        } else {
+            (1..=chunks).map(|n| dir.join(format!("chunk-{n:03}.state"))).chain([dir.join("final.ckpt")]).collect()
+        };
+        match std::fs::read_dir(&dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    let path = entry.map_err(|e| format!("{}: {e}", dir.display()))?.path();
+                    for (name, output) in &outputs {
+                        if same_file(output, &path)? {
+                            return Err(format!("{name} must not alias an output in {option}"));
+                        }
+                    }
+                    if option == "--frames-dir" && path.extension().is_some_and(|e| e == "png") && path.file_stem().and_then(|n| n.to_str()).is_some_and(|n| n.parse::<usize>().is_ok()) {
+                        generated.push(path);
+                    }
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{}: {e}", dir.display())),
+        }
+        if option == "--frames-dir" {
+            for path in &generated {
+                let target = resolve(path)?;
+                if target.parent() == Some(resolved.as_path()) && target.extension().is_some_and(|e| e == "png") && target.file_stem().and_then(|n| n.to_str()).is_some_and(|n| n.parse::<usize>().is_ok()) && target != resolved.join(path.file_name().unwrap()) {
+                    return Err(format!("{option} must differ from source, progress and outputs"));
+                }
+            }
+        }
+        outputs.extend(generated.into_iter().map(|p| (option, p)));
+    }
+    let mut paths = std::collections::BTreeSet::<PathBuf>::new();
+    let mut files = std::collections::BTreeSet::new();
+    for (name, path) in outputs {
+        let resolved = resolve(&path)?;
+        if resolved.ancestors().any(|p| paths.contains(p)) || paths.range(resolved.clone()..).next().is_some_and(|p| p.starts_with(&resolved)) || std::fs::metadata(&path).is_ok_and(|m| !files.insert((m.dev(), m.ino()))) {
+            return Err(format!("{name} must differ from source, progress and outputs"));
+        }
+        paths.insert(resolved);
+    }
+    Ok(())
+}
+
 fn run(args: &[String]) -> Result<(), String> {
     let file = args.first().filter(|a| !a.starts_with('-')).ok_or(RUN_USAGE)?;
     let mut i = 1;
@@ -2239,51 +2310,11 @@ fn run(args: &[String]) -> Result<(), String> {
         Some(w) => w.parse::<usize>().ok().filter(|w| (16..=LIVE_WIDTH * 4).contains(w)).ok_or_else(|| format!("--width {w}: want px, 16 to {}", LIVE_WIDTH * 4))?,
     };
     let out = flag(args, "--out").map(PathBuf::from).unwrap_or_else(|| root().join("out/lua").join(format!("{stem}.png")));
-    if let Some(p) = flag(args, "--checkpoint-out") {
-        let path = Path::new(&p);
-        let mut outputs = vec![out.clone()];
-        for flag_name in ["--state-digest", "--dump-surface"] {
-            if let Some(p) = flag(args, flag_name) {
-                outputs.push(PathBuf::from(p));
-            }
-        }
-        if args.iter().any(|a| a == "--look") {
-            outputs.push(out.with_extension("look.png"));
-        }
-        if same_file(path, Path::new(file))? {
-            return Err("--checkpoint-out must differ from the source and every output".into());
-        }
-        for output in outputs {
-            if same_file(path, &output)? {
-                return Err("--checkpoint-out must differ from the source and every output".into());
-            }
-        }
-        for flag_name in ["--dump-state", "--frames-dir"] {
-            if let Some(d) = flag(args, flag_name) {
-                let dir = Path::new(&d);
-                let resolve = |p: &Path| normalized_path(p).map_err(|e| format!("{}: {e}", p.display()));
-                if resolve(path)?.starts_with(resolve(dir)?) {
-                    return Err(format!("--checkpoint-out must be outside {flag_name}"));
-                }
-                match std::fs::read_dir(dir) {
-                    Ok(entries) => {
-                        for entry in entries {
-                            let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
-                            if same_file(path, &entry.path())? {
-                                return Err(format!("--checkpoint-out must not alias an output in {flag_name}"));
-                            }
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(format!("{}: {e}", dir.display())),
-                }
-            }
-        }
-    }
     let chunks = parse_program(&text);
     if chunks.is_empty() {
         return Err(format!("{file}: no chunks (each starts with a line \"{}\")", session::MARK));
     }
+    preflight_run(args, Path::new(file), &out, chunks.len())?;
     // the state store's budgets are a 2400 px painting's (as for a live session: resume_as)
     #[cfg(feature = "state-store")]
     if flag(args, "--state-store").is_some() && width > LIVE_WIDTH {
@@ -2335,7 +2366,7 @@ fn run(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("run: --frames-every and --frames-dir go together ({RUN_USAGE})")),
     };
     let mut s = Session::replay_with(width, tubes).and_then(|s| s.with_paper(session::logged_paper(&text))).map_err(|e| e.to_string())?;
-    let mut batch = replay_checkpoint::Batch::open(args, Path::new(file), &text, width, &mut s, &chunks, &out)?;
+    let mut batch = replay_checkpoint::Batch::open(args, &text, width, &mut s, &chunks, &out)?;
     if let Some((every, dir, fw)) = frames.clone() {
         frames::start(every, dir, fw, light, (batch.done > 0).then_some(batch.done))?;
     }

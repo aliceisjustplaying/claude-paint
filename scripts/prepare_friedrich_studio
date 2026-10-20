@@ -122,6 +122,17 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die
     strip = runpy.run_path(str(Path(__file__).with_name("strip_sources")))["strip"]
     notes = strip(studio_notes.read_text())
     repo = Path(__file__).resolve().parent.parent
+    copies = {name: house / name for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "brief_template.md")}
+    copies["run.py"] = repo / "harness/painter/run_friedrich.py"
+    if die_roll:
+        copies["die_roll.py"] = repo / "harness/painter/die_roll.py"
+    contents = {name: path.read_bytes() for name, path in copies.items()}
+    if die_roll:
+        entrypoint = contents["run.py"].decode()
+        hook = '    if R.paint("OPUS", 1, STUDIO, RUN / "OPUS") is None:\n'
+        if entrypoint.count(hook) != 1:
+            raise ValueError("prepared entrypoint differs: expected one paint call")
+        contents["run.py"] = entrypoint.replace(hook, '    from die_roll import choose\n    R.DIE_ROLL_OPENING = choose(R, MODEL, STUDIO, RUN)\n' + hook).encode()
     guide = studio / "notes/easel_guide.md"
     critic_guide = None
     if critic and guide.is_file():
@@ -131,23 +142,16 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die
         end = text.index("\n\n", start) + 1
         description = json.loads((repo / "harness/easel_mcp/critic-tools.json").read_text())[0]["description"]
         critic_guide = text[:end] + f"| `ask_critic` | {description} |\n" + text[end:]
+    revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
     runner.mkdir(parents=True)
-    for name in ("painting_chunks.py", "defaults_used.py", "log_copy.py", "copied_shapes.py", "brief_template.md"):
-        shutil.copy2(house / name, runner / name)
+    for name, data in contents.items():
+        (runner / name).write_bytes(data)
+        shutil.copystat(copies[name], runner / name)
     (runner / "r21_chains.py").write_text(source)
     (studio / "notes/studio_notes.md").write_text(notes)
     (runner / "studio_notes.md").write_text(notes)
     if die_roll:
         (runner / "brief_template.md").write_text(template)
-        shutil.copy2(repo / "harness/painter/die_roll.py", runner / "die_roll.py")
-    shutil.copy2(repo / "harness/painter/run_friedrich.py", runner / "run.py")
-    if die_roll:
-        entrypoint = (runner / "run.py").read_text()
-        hook = '    if R.paint("OPUS", 1, STUDIO, RUN / "OPUS") is None:\n'
-        if entrypoint.count(hook) != 1:
-            raise ValueError("prepared entrypoint differs: expected one paint call")
-        (runner / "run.py").write_text(entrypoint.replace(hook, '    from die_roll import choose\n    R.DIE_ROLL_OPENING = choose(R, MODEL, STUDIO, RUN)\n' + hook))
-    revision = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
     (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {}), **({"die_roll": True} if die_roll else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
     if critic_guide is not None:

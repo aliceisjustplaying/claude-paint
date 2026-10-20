@@ -1480,3 +1480,14 @@ def test_the_atelier_export_writes_atelier_json_and_web_images(home, monkeypatch
                              "started": None, "last": None, "look": None}
     assert [w["n"] for w in opus["walls"]] == [1, 2] and opus["walls"][1]["img"] == {}
     assert not (site / "data/claude-opus-5-5/2/look.jpg").exists()
+
+
+def test_featured_is_the_live_painting_else_the_newest_whatever_its_outcome():
+    import export_static as E
+    old = {"p": "old", "mtime": 100, "active": False, "outcome": {"status": "finished"}, "completed_at": 100}
+    paused = {"p": "paused", "mtime": 300, "active": False, "outcome": None, "completed_at": None}
+    capped = {"p": "capped", "mtime": 200, "active": False, "outcome": {"status": "cap_reached"}, "completed_at": None}
+    live = {"p": "live", "mtime": 50, "active": True, "outcome": None, "completed_at": None}
+    assert E.featured([old, paused, capped])["p"] == "paused"
+    assert E.featured([old, paused, capped, live])["p"] == "live"
+    assert E.featured([]) is None

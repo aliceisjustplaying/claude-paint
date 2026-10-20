@@ -182,6 +182,7 @@
   #pos { font:12px var(--mono); color:var(--dim); min-width:9ch; text-align:right }
   #zoom { position:fixed; inset:0; background:rgba(0,0,0,.94); display:none; align-items:center; justify-content:center; cursor:zoom-out; z-index:9 }
   #zoom img { max-width:98vw; max-height:98vh }
+  #zclose { position:absolute; top:12px; right:12px }
   @media (max-height:500px) { #codepane { top:8px; bottom:8px } }
   @media (max-height:500px) and (pointer:coarse) { #whole img { max-height:55dvh; object-fit:contain } }
 
@@ -256,6 +257,9 @@
     body.pinpic #viewpane :is(#view #cap2, #view #cap3, #pipcap) { order:2; font:600 10px/1.3 -apple-system,system-ui,sans-serif; color:var(--soft); text-align:left; white-space:normal; overflow-wrap:anywhere }
     body.pinpic #viewpane :is(#view #cap2, #view #cap3) b { display:inline; font-size:9.5px; margin-right:0 }
     body.pinpic #viewpane #pband { grid-column:1 / -1; grid-row:auto; margin:0 -4px }
+    body.pinpic #viewpane:has(#finished:not([hidden])) { grid-template-rows:34px auto repeat(3,auto) 1fr }
+    body.pinpic #viewpane:has(#finished:not([hidden])) #finished { position:static; grid-column:1; grid-row:2; justify-self:end; margin:3px 6px 0 0 }
+    body.pinpic #viewpane:has(#finished:not([hidden])) #view #whole { grid-row:3 / -1 }
   }
 </style></head>
 <body class="nocode">
@@ -271,11 +275,11 @@
   <section class="pane" id="viewpane">
     <div id="lighting" role="group" aria-label="Painting display"></div>
     <div id="view">
-      <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting"><div id="cropbox" hidden></div><p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p></div><figcaption id="cap"></figcaption></figure>
-      <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt=""><span id="reftag" hidden>Reference</span></div></figure>
-      <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette"></div></figure>
+      <figure class="pic" id="whole"><div class="box"><img id="img" alt="the painting" tabindex="0" role="button" aria-label="Open the painting at full size"><div id="cropbox" hidden></div><p id="nopic" hidden>No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.</p></div><figcaption id="cap"></figcaption></figure>
+      <figure class="pic" id="other" hidden><figcaption id="cap2"><b></b><span></span></figcaption><div class="box"><img id="img2" alt="" tabindex="0" role="button" aria-label="Open the picture being studied at full size"><span id="reftag" hidden>Reference</span></div></figure>
+      <figure class="pic" id="pal" hidden><figcaption id="cap3" title="The paints it has mixed, as it last looked at them: each pile thick, thin and very thin over the ground, and thin over a black and white card"><b>Palette</b><span></span></figcaption><div class="box"><img id="img3" alt="the palette" tabindex="0" role="button" aria-label="Open the palette chart at full size"></div></figure>
     </div>
-    <figure id="pip" hidden><figcaption id="pipcap"></figcaption><img id="pipimg" alt=""></figure>
+    <figure id="pip" hidden><figcaption id="pipcap"></figcaption><img id="pipimg" alt="" tabindex="0" role="button" aria-label="Open the other canvas at full size"></figure>
     <div id="pband" hidden aria-label="Palette"></div>
     <a id="finished" hidden>See the exported painting →</a>
   </section>
@@ -300,7 +304,7 @@
     <button id="pkclose" type="button" aria-label="close">✕</button></div>
   <div id="pklist"></div>
 </div>
-<div id="zoom"><img id="zimg" alt=""></div>
+<div id="zoom" role="dialog" aria-modal="true" aria-label="Enlarged picture"><img id="zimg" alt=""><button id="zclose" type="button" aria-label="Close the enlarged picture">✕</button></div>
 <div id="intro" hidden role="dialog" aria-label="About the studio">
   <b>You're watching an AI model paint.</b> It writes every brushstroke as code, and a simulation of bristles, wet paint and linen carries it out.
   The big picture is the painting as it last saw it whole; when it studies a detail up close, squints or checks the picture in grays, that view shows below it.
@@ -494,6 +498,10 @@ function displayPic(im, e, caption, label) {
   setPic(im, urls, u => { im.dataset.picture = e.img; im.dataset.light = u === url ? lightName : 'color'; im.dataset.zoom = u === url ? url : imgURL(e.img); describe(); });
 }
 const zoomURL = im => im.dataset.zoom || im.src;
+let zoomFrom = null;
+const zoomShown = () => $('zoom').style.display === 'flex';
+function openZoom(src, from) { zoomFrom = from; $('zimg').src = src; $('zoom').style.display = 'flex'; $('zclose').focus(); }
+function closeZoom() { if (!zoomShown()) return; $('zoom').style.display = 'none'; zoomFrom?.focus(); }
 function clearPic(im) { delete im.dataset.want; delete im.dataset.loaded; delete im.dataset.loadedWant; delete im.dataset.picture; delete im.dataset.light; delete im.dataset.zoom; im._picLoaded = null; im.removeAttribute('src'); }
 $('who').onclick = () => $('picker').hidden ? openPicker() : closePicker(true);
 $('pkclose').onclick = () => closePicker(true);
@@ -638,6 +646,7 @@ function thumb(e, i, to) {
   let t = im;  // (a reference picture: the thumbnail in a marked frame)
   if (e.ref) { t = document.createElement('span'); t.className = 'refthumb'; t.appendChild(im); const b = document.createElement('b'); b.textContent = 'REF'; t.appendChild(b); }
   t.dataset.i = i; t.title = hhmm(e.ts) + '  ' + (e.ref ? 'reference picture: ' : '') + fname(e.path);
+  t.tabIndex = 0; t.setAttribute('role', 'button'); t.setAttribute('aria-label', `${e.ref ? 'Reference look' : 'Look'} ${hhmm(e.ts)}, ${fname(e.path)}: show in the picture`);
   t.onclick = () => { live = false; stop(); show(i, true); }; to.appendChild(t);
 }
 function stripEnd() { const s = $('strip'); s.scrollLeft = s.scrollWidth; }
@@ -1124,7 +1133,7 @@ function paletteChips(im, eventIndex) {
     const next = rows[i + 1], y = Math.floor((row.top - 3 + (next ? next.top - 3 : source.height)) / 2);
     const chip = document.createElement('button'); chip.className = 'palette-chip';
     chip.title = 'Open palette chart'; chip.setAttribute('aria-label', `Palette pile ${i + 1}: open chart`);
-    chip.onclick = () => { $('zimg').src = im.src; $('zoom').style.display = 'flex'; };
+    chip.onclick = () => openZoom(im.src, chip);
     const swatch = document.createElement('canvas'); swatch.width = 40; swatch.height = 30;
     const sw = swatch.getContext('2d');
     sw.drawImage(source, 608, y, 1, 1, 0, 0, 40, 18);
@@ -1172,7 +1181,7 @@ function palette(k) {
       }
       const name = document.createElement('span'); name.className = 'pile-name'; name.textContent = pile.name;
       chip.append(swatch, name);
-      chip.onclick = () => { $('zimg').src = url; $('zoom').style.display = 'flex'; };
+      chip.onclick = () => openZoom(url, chip);
       $('pband').append(chip);
     }
     $('pband').hidden = false;
@@ -1359,7 +1368,7 @@ function pip(k, sc) {
   displayPic($('pipimg'), events[k], $('pipcap'), pictureCaption(k, !sc));
   $('pipimg').alt = sc ? 'the painting' : 'the scratch canvas';
 }
-$('pipimg').onclick = () => { if (pipI >= 0) { $('zimg').src = zoomURL($('pipimg')); $('zoom').style.display = 'flex'; } };
+$('pipimg').onclick = () => { if (pipI >= 0) openZoom(zoomURL($('pipimg')), $('pipimg')); };
 function show(i, stepping = false) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   const scroll = journalScroll();
@@ -1391,18 +1400,20 @@ $('golive').onclick = goLive;
 $('scrub').oninput = e => { stop(); live = +e.target.value >= events.length - 1; show(+e.target.value, true); };
 $('togglecode').onclick = () => { document.body.classList.toggle('nocode'); const shown = codeShown(); $('togglecode').setAttribute('aria-expanded', String(shown)); $('codepane').setAttribute('aria-hidden', String(!shown)); $('codepane').inert = !shown; codeAt(pos); };
 $('codeclose').onclick = () => { if (codeShown()) $('togglecode').click(); $('togglecode').focus(); };
-$('img').onclick = () => { $('zimg').src = zoomURL($('img')); $('zoom').style.display = 'flex'; };
-$('img2').onclick = () => { $('zimg').src = zoomURL($('img2')); $('zoom').style.display = 'flex'; };
-$('img3').onclick = () => { $('zimg').src = viewI3 >= 0 ? imgURL(viewI3) : $('img3').src; $('zoom').style.display = 'flex'; };
-$('zoom').onclick = () => { $('zoom').style.display = 'none'; };
+$('img').onclick = () => openZoom(zoomURL($('img')), $('img'));
+$('img2').onclick = () => openZoom(zoomURL($('img2')), $('img2'));
+$('img3').onclick = () => openZoom(viewI3 >= 0 ? imgURL(viewI3) : $('img3').src, $('img3'));
+$('zoom').onclick = closeZoom;
 document.onkeydown = e => {
   const t = e.target, k = e.key;
+  if (k === 'Tab' && zoomShown()) { e.preventDefault(); $('zclose').focus(); return; }
   if (t.closest && t.closest('#picker') || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
   if (t.tagName === 'BUTTON' && t.id !== 'play' && (k === ' ' || k === 'Enter')) return;  // the focused button's own action
+  if (t.getAttribute('role') === 'button' && (k === ' ' || k === 'Enter')) { e.preventDefault(); t.click(); return; }
   // (the right arrow reaching the end is at the end, as the scrub bar is: live again, or at rest)
   if (k === 'ArrowRight') { if (pos + 1 >= events.length - 1) goLive(); else { stop(); live = false; show(pos + 1, true); } } else if (k === 'ArrowLeft') { stop(); live = false; show(pos - 1, true); }
   else if (k === '[') $('prevlook').click(); else if (k === ']') $('nextlook').click(); else if (k === 'l') goLive(); else if (k === 'c') $('togglecode').click();
-  else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); $('zoom').style.display = 'none'; } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
+  else if (k === 'Escape') { if (codeShown()) $('codeclose').click(); closeZoom(); } else if (k === ' ') { e.preventDefault(); $('play').click(); } };
 $('all').checked = localStorage.getItem('studio.all') === '1';
 const initial = STATIC && window.STUDIO_INITIAL, query = new URLSearchParams(location.search);
 Q = query.get('p') ? 'p=' + encodeURIComponent(query.get('p')) : !query.get('s') && initial ? qOf(initial) : null;

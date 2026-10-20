@@ -802,7 +802,7 @@ function source(path, upto) {
   for (let k = s.at + 1; k <= upto; k++) { const e = events[k];
     if (paint) {
       if (e.kind !== 'paint' || !!e.scratch !== sc) continue;
-      if (sc && e.new_scratch) { text = ''; s.n = 0; touched = true; }  // a fresh scratch canvas: a new log
+      if (sc && scratchReset(e)) { text = ''; s.n = 0; touched = true; }  // a fresh scratch canvas: a new log
       if (!paintOK(e)) continue;
       const head = `--@ chunk ${++s.n}\n`; before = text; changed = [[text.length, text.length + head.length + e.code.length]]; text += head + e.code + '\n\n'; touched = true;
     } else {

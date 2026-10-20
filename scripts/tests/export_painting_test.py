@@ -235,6 +235,37 @@ class CheckpointTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pass --profile"):
             exporter.export(self.studio, self.easel, None, "test", self.out)
 
+    def test_dangling_output_symlinks_are_never_followed(self):
+        for filename in ("test-gallery.png", "test-plain.png", "test-timelapse.mp4"):
+            for late in (False, True):
+                with self.subTest(filename=filename, late=late):
+                    out = self.out / filename / str(late)
+                    out.mkdir(parents=True)
+                    outside = self.root / f"outside-{filename}-{late}"
+                    output = out / filename
+                    if not late:
+                        output.symlink_to(outside)
+
+                    def render(command, **kwargs):
+                        Path(command[3]).write_bytes(b"PNG fixture")
+                        return subprocess.CompletedProcess(command, 0)
+
+                    def encode(sequence, path, work):
+                        path.write_bytes(b"clip fixture")
+                        if late:
+                            output.symlink_to(outside)
+                        return {"verified": True}
+
+                    with patch.object(exporter.subprocess, "run", side_effect=render) as run, \
+                         patch.object(exporter, "encode_clip", side_effect=encode), \
+                         patch.object(exporter.shutil, "which", return_value="fixture"):
+                        with self.assertRaises((ValueError, FileExistsError)):
+                            exporter.export(self.studio, self.easel, "friedrich", "test", out)
+                    self.assertTrue(output.is_symlink())
+                    self.assertFalse(outside.exists())
+                    if not late:
+                        run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

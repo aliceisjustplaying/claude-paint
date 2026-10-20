@@ -89,3 +89,18 @@ fn wide_crops_and_named_mask_overlays_are_read_only_in_every_canvas_view() {
     assert_eq!(easel.ok(&["log"]), log);
     assert_eq!(easel.ok(&["status"]), status);
 }
+
+#[test]
+fn a_held_knife_reports_the_scale_of_its_default_passage() {
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("look-hold-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let easel = Easel(root);
+    easel.ok(&["open", "view-test"]);
+    easel.ok(&["do", "canvas{size=300,aspect=1.5,linen=15,ground={{pile={{'lead white',1}},um=50,apply='knife'}}}; p=pile{{'lead white',1}}"]);
+    let (implicit, implicit_image) = easel.image(&["look", "--hold", "p", "--at", "150,80"]);
+    let (explicit, explicit_image) = easel.image(&["look", "--hold", "p", "--at", "150,80", "--crop", "30,0,270,200"]);
+    assert_eq!(implicit_image.dimensions(), (576, 480));
+    assert_eq!(explicit_image.dimensions(), (576, 480));
+    assert!(explicit.contains("scale 2.4000 x 2.4000 px/unit"), "{explicit}");
+    assert!(implicit.contains("scale 2.4000 x 2.4000 px/unit"), "{implicit}");
+}

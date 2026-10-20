@@ -13,12 +13,14 @@ from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 RUNNERS = (REPO / "atelier/house/r21_chains.py",
-           REPO / "scripts/tests/fixtures/r41/r21_chains.py")
-SUPPORTED_RUNNERS = (*RUNNERS, REPO / "notes/round29/runner/r21_chains.py")
+           REPO / "scripts/tests/fixtures/r41/r21_chains.py",
+           REPO / "notes/round29/runner/r21_chains.py")
 
 
 class HouseCleanupTests(unittest.TestCase):
     def setUp(self):
+        self.ps = shutil.which("ps")
+        self.sleep = shutil.which("sleep")
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
@@ -59,7 +61,7 @@ class HouseCleanupTests(unittest.TestCase):
                                  [["ps", "-Ao", "pid=,command="], ["kill", "424242"]])
 
     def test_stop_leftovers_matches_only_the_studio_executable(self):
-        for path in SUPPORTED_RUNNERS:
+        for path in RUNNERS:
             for keep_server in (False, True):
                 for name in ("paint-studio-ab12", "paint studio-ab12"):
                     with self.subTest(runner=str(path.relative_to(REPO)), keep_server=keep_server, studio=name):
@@ -100,19 +102,20 @@ class HouseCleanupTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "uses Linux argv[0] process display")
     def test_stop_leftovers_terminates_only_the_matching_child(self):
-        sleep = shutil.which("sleep", path=os.defpath)
-        self.assertIsNotNone(sleep)
-        for path in SUPPORTED_RUNNERS:
+        self.assertIsNotNone(self.ps)
+        self.assertIsNotNone(self.sleep)
+        sleep_args = ["--coreutils-prog=sleep", "60"] if Path(self.sleep).resolve().name == "coreutils" else ["60"]
+        for path in RUNNERS:
             with self.subTest(runner=str(path.relative_to(REPO))):
                 studio = self.root / "paint-studio-ab12"
-                commands = ([str(studio / "bin/easel"), "60"],
-                            [str(self.root / "paint-studio-ab123/bin/easel"), "60"],
-                            [f"/usr/bin/printf {studio}/bin/easel", "60"])
+                commands = ([str(studio / "bin/easel"), *sleep_args],
+                            [str(self.root / "paint-studio-ab123/bin/easel"), *sleep_args],
+                            [f"/usr/bin/printf {studio}/bin/easel", *sleep_args])
                 children = []
                 try:
                     for command in commands:
-                        children.append(subprocess.Popen(command, executable=sleep))
-                    listing = subprocess.check_output(["/bin/ps", "-p", ",".join(str(p.pid) for p in children),
+                        children.append(subprocess.Popen(command, executable=self.sleep))
+                    listing = subprocess.check_output([self.ps, "-p", ",".join(str(p.pid) for p in children),
                                                        "-o", "pid=,command="], text=True)
                     for command in commands:
                         self.assertIn(command[0], listing)
@@ -120,7 +123,7 @@ class HouseCleanupTests(unittest.TestCase):
                     by_pid = {str(p.pid): p for p in children}
 
                     def run(command, **options):
-                        if command[0] in ("ps", "/bin/ps"):
+                        if command[0] == "ps":
                             return subprocess.CompletedProcess(command, 0, listing)
                         self.assertEqual(command[0], "kill")
                         self.assertIn(command[1], by_pid)

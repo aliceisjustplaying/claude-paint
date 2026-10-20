@@ -97,7 +97,9 @@ def corrected_runner(source, tools=TOOLS, reading=READING, die_roll=False):
     return result
 
 
-def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die_roll=False):
+def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die_roll=False, painter=None, critic_model=None):
+    if critic_model is not None and not critic:
+        raise ValueError("--critic-model requires --critic")
     if (studio / "bin/box").read_text().strip() != "friedrich":
         raise ValueError("expected an exported Friedrich studio")
     if (studio / "out").exists() or any((studio / "paintings/lua").iterdir()) or (studio / "notes/journal.md").read_text():
@@ -152,10 +154,18 @@ def prepare(studio, house, runner, studio_notes, run_dir=None, critic=False, die
     (runner / "studio_notes.md").write_text(notes)
     if die_roll:
         (runner / "brief_template.md").write_text(template)
-    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {}), **({"die_roll": True} if die_roll else {})}, indent=2) + "\n")
+    (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo), "source_revision": revision, "run": str(run_dir or runner / "run"), **({"critic": True} if critic else {}), **({"die_roll": True} if die_roll else {}), **({"painter": painter} if painter is not None else {}), **({"critic_model": critic_model} if critic_model is not None else {})}, indent=2) + "\n")
     (studio / "BRIEF.md").write_text(brief)
     if critic_guide is not None:
         guide.write_text(critic_guide)
+
+
+def model_spec(value):
+    provider, slash, rest = value.partition("/")
+    model, colon, thinking = rest.rpartition(":")
+    if not all((provider, slash, model, colon, thinking)):
+        raise argparse.ArgumentTypeError("expected PROVIDER/MODEL:THINKING")
+    return value
 
 
 def main():
@@ -166,9 +176,13 @@ def main():
     parser.add_argument("--studio-notes", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--critic", action="store_true", help="a second painter visits as a critic (harness/painter/visit.ts)")
+    parser.add_argument("--painter", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
+    parser.add_argument("--critic-model", type=model_spec, metavar="PROVIDER/MODEL:THINKING")
     parser.add_argument("--die-roll", action="store_true", help="write eight concepts in sitting 0, then roll among the six least common")
     args = parser.parse_args()
-    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic, args.die_roll)
+    if args.critic_model is not None and not args.critic:
+        parser.error("--critic-model requires --critic")
+    prepare(args.studio.resolve(), args.house.resolve(), args.runner_dir.resolve(), args.studio_notes.resolve(), args.run_dir.resolve() if args.run_dir else None, args.critic, args.die_roll, args.painter, args.critic_model)
 
 
 if __name__ == "__main__":

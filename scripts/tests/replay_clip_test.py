@@ -38,7 +38,7 @@ class OverlapTests(unittest.TestCase):
             "source-in-frames", "source-via-parent-symlink", "source-symlink-in-frames",
             "output-is-source", "output-symlink", "output-hardlink", "output-in-frames",
             "frames-is-output", "output-via-parent-symlink", "source-is-replay-log", "source-is-checkpoint",
-            "sheet-is-source", "sheet-in-frames",
+            "source-is-replay-progress", "sheet-is-source", "sheet-in-frames",
         )
         for case in cases:
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
@@ -79,6 +79,9 @@ class OverlapTests(unittest.TestCase):
                     source.write_text("scratch source\n")
                 elif case == "source-is-checkpoint":
                     source = Path(f"{frames}.replay.ckpt")
+                    source.write_text("scratch source\n")
+                elif case == "source-is-replay-progress":
+                    source = Path(f"{frames}.replay.ckpt").with_suffix(".replay-progress.json")
                     source.write_text("scratch source\n")
                 elif case == "sheet-is-source":
                     sheet = source

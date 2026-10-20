@@ -331,7 +331,11 @@ class Easel:
         try:
             code, out = await self.step(args, text, deadline)
         except asyncio.TimeoutError:
-            if args[0] != "do" or (self.studio / "bin/watercolor-studio").is_file():
+            if args[0] == "note":
+                raise ValueError("the easel didn't answer; the entry may have been added all the same, so read notes/journal.md before adding it again") from None
+            if args[0] != "do":
+                raise ValueError(f"the easel didn't answer; `{args[0]}` changes nothing, so it can be asked again") from None
+            if (self.studio / "bin/watercolor-studio").is_file():
                 raise ValueError("the easel didn't answer; `log` shows whether the chunk ran") from None
             # what landed: the chunk still running (its progress), in the log, or neither
             stopped = "`paint` stopped waiting for the easel's answer"
@@ -425,7 +429,7 @@ class Easel:
             if view.get("compare"):
                 compare = studio_path(self.studio, view["compare"])
                 if compare is None:
-                    raise ValueError("look: compare is the path of an earlier look in this studio")
+                    raise ValueError("look: compare is the path of an image in this studio")
                 view["compare"] = str(compare)
             if view.get("ref"):
                 if view.get("survey") or view.get("compare") or view.get("hold"):

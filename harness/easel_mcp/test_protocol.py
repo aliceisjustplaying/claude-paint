@@ -178,6 +178,16 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(str(raised.exception), "the easel is reopening the painting from its log and hasn't finished: rebuilding from the log (1 of 4 chunks). `status` shows how far it has got.")
         self.assertEqual([call.args[0] for call in step.await_args_list], [["status"], ["open"], ["status"]])
 
+        # a probe or a note that times out submits no chunk: its recovery doesn't point at the log
+        for args, text, said in (
+            (["probe", "--at", "1,1"], None, "the easel didn't answer; `probe` changes nothing, so it can be asked again"),
+            (["note", "-"], "an entry", "the easel didn't answer; the entry may have been added all the same, so read notes/journal.md before adding it again"),
+        ):
+            step = AsyncMock(side_effect=[(0, "3 chunks · 2400px · no canvas yet"), module.asyncio.TimeoutError()])
+            with self.subTest(said=said), patch.object(easel, "step", step), self.assertRaises(ValueError) as raised:
+                await easel.at(args, text)
+            self.assertEqual(str(raised.exception), said)
+
         log = self.studio / "paintings/lua/painting.lua"
         log.parent.mkdir(parents=True)
         running = "painting a chunk (at line 3 of 9): 40 strokes and touches so far, 2 min 30 s on the painting's clock (now day 2, 14:05), running for 12 min 3 s"
@@ -362,7 +372,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             ("paint", {"lua": "", "new_scratch": True}, "paint: new_scratch goes with scratch: true"),
             ("look", {"palette": True, "size": 0}, "look: palette takes no other option"),
             ("look", {"survey": True, "compare": "a.png"}, "look: survey and compare are two looks; ask for one"),
-            ("look", {"compare": "../outside.png"}, "look: compare is the path of an earlier look in this studio"),
+            ("look", {"compare": "../outside.png"}, "look: compare is the path of an image in this studio"),
             ("look", {"ref": "../outside.png"}, "look: ref is the path of a picture of the motif in this studio"),
             ("look", {"ref": "a.png", "survey": True}, "look: ref is a look of its own: no survey, compare or hold"),
         ):
@@ -380,7 +390,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             ("file://other-machine/tmp/a.png", f'File URL host must be "localhost" or empty on {sys.platform}'),
             ("file://localhost:80/tmp/a.png", "Invalid URL"),
             (f"file://localhost:{self.studio}/look.png", "Invalid URL"),
-            ("file://localhost", "look: compare is the path of an earlier look in this studio"),
+            ("file://localhost", "look: compare is the path of an image in this studio"),
             ("file:///tmp/a%2fb.png", "File URL path must not include encoded / characters"),
             ("file:///tmp/%zz.png", "URI malformed"),
             ("file:///tmp/%ff.png", "URI malformed"),

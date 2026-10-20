@@ -293,6 +293,18 @@ test("a tool's opening status keeps to the tool's time limit, and a busy easel i
 	}
 });
 
+test("a probe or a note that times out says how to recover, not to look in the painting's log", async () => {
+	const studio = stubStudio('[ "$1" = probe ] && sleep 30\n[ "$1" = note ] && sleep 30\necho ok');
+	const other = WAIT_MS.other;
+	WAIT_MS.other = 300;
+	try {
+		await assert.rejects(atEasel(studio, ["probe", "--at", "1,1"], undefined), /^Error: the easel didn't answer; `probe` changes nothing, so it can be asked again$/);
+		await assert.rejects(atEasel(studio, ["note", "-"], "an entry"), /^Error: the easel didn't answer; the entry may have been added all the same, so read notes\/journal\.md before adding it again$/);
+	} finally {
+		WAIT_MS.other = other;
+	}
+});
+
 test("an abort stops the tool's chain: nothing after it runs, and no listener is left behind", async () => {
 	const studio = stubStudio('[ "$1" = status ] && [ -f slow ] && { sleep 2; exit 1; }\necho ok');
 	const kept = new AbortController();

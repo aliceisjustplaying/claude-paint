@@ -523,18 +523,19 @@ async function loadSessions() {
   if (HOSTED) { await poll(); return; }
   allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-cache'} : {})).json();
   sessionsLoaded = true;
+  const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter && listed(s));  // (only painters the list shows)
+  const livest = ps.filter(s => isLive(s) && s.look != null).sort((a, b) => b.look - a.look)[0], cur = currentSession();
   if (Q === null) {
-    const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter && listed(s));  // (only painters the list shows)
     // The exported page opens its featured card's painter. The local viewer chooses the active painter
     // furthest along (a blank ground minutes in shows nothing yet), else the newest with a picture.
-    const first = (STATIC && ps.find(s => s.p === window.STUDIO_FEATURED)) || ps.filter(s => isLive(s) && s.look != null).sort((a, b) => b.look - a.look)[0] || ps.find(s => s.look != null) || ps[0] || allSessions[0];
+    const first = (STATIC && ps.find(s => s.p === window.STUDIO_FEATURED)) || livest || ps.find(s => s.look != null) || ps[0] || allSessions[0];
     let s = u.get('s');
     if (s && STATIC) {  // the public copy has painters only: an old link to one sitting opens its painter
       const folder = s.split('/').slice(-2)[0].replace(/^-+|-+$/g, '').split('-src-a-').pop();
       s = null; if (allSessions.some(x => x.p === folder) && !u.get('p')) u.set('p', folder);
     }
     Q = u.get('p') ? 'p=' + encodeURIComponent(u.get('p')) : s ? 's=' + encodeURIComponent(s) : first ? qOf(first) : null;
-  }
+  } else if (STREAM && !u.get('p') && !u.get('s') && !(cur && isLive(cur)) && livest) { reset(); Q = qOf(livest); live = true; glimpse(); poll(); }
   const previousLight = displayLight; sessionLighting(); if (previousLight !== displayLight && events.length) pictures();
   renderHeader(); if (otherK >= 0 && events[otherK] && events[otherK].ref) second(otherK);  // (the reference's label names the artist once the list has it)
   if ($('picker').hidden) renderPicker();  // don't rebuild the list under the visitor's focus

@@ -206,6 +206,19 @@ async function pollUpdate(v, i, replacement) {
       await v.page.close();
     }
     report.checks.push('canvas reset boundaries, stale whole-look ages, safe crop outlines and rewind in normal/stream and API/static views');
+    const implicitReset = [ev('start', { cwd:'/painter' }), ev('paint', { scratch:true, new_scratch:true, code:'local old_scratch=1', out:'ok' }, 1),
+      ev('paint', { scratch:true, err:true, code:'bad(', out:'error' }, 2),
+      ev('paint', { scratch:true, scratch_reset:true, code:'local fresh_scratch=2', out:'a fresh scratch canvas (the last one\'s log is paintings/lua/scratch-1.lua)\nok' }, 3),
+      ev('say', { text:'after the reset' }, 4)];
+    const implicit = await viewer(browser, implicitReset, { liveFile:false });
+    await seek(implicit.page, 4); await seek(implicit.page, 3);
+    const reset = await snapshot(implicit.page);
+    assert.equal(reset.file, 'scratch.lua');
+    assert(reset.code.join('\n').includes('--@ chunk 1\nlocal fresh_scratch = 2'), 'a scratch reset reported by the result starts a new log');
+    assert(!reset.code.join('\n').includes('old_scratch'), 'a scratch reset reported by the result drops the previous canvas');
+    await seek(implicit.page, 2);
+    assert((await snapshot(implicit.page)).code.join('\n').includes('--@ chunk 1\nlocal old_scratch = 1'), 'a failed scratch chunk without a reset keeps the earlier log');
+    report.checks.push('implicit scratch resets start a new reconstructed log, failed chunks without a reset keep it'); await implicit.page.close();
     for (const streamMode of [false, true]) {
       const v = await viewer(browser, [ev('start'), ev('paint', {code:'work{}', out:'ok'}, 1),
         ev('look', {text:''}, 2), ev('image', {img:0, look:''}, 3)], {streamMode, liveFile:false});

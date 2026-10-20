@@ -47,6 +47,9 @@ fn header(s: &Session, program: &str) -> String {
     kv("chunks", s.log.len().to_string());
     kv("box", st.tubes.name.to_string());
     kv("engine", st.tubes.engine.to_string());
+    if st.tubes.carried_paint {
+        kv("carried_paint", "1".to_string());
+    }
     if st.tubes.limbs_join_nearest {
         kv("limbs", "nearest".to_string());
     }
@@ -210,6 +213,7 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     tubes.knife_skim = canvas.knife_skim();
     tubes.blend_feather = canvas.blend_feather();
     tubes.brush_skim = canvas.brush_skim();
+    tubes.carried_paint = h.get("carried_paint") == Some(&"1");
     tubes.limbs_join_nearest = h.get("limbs") == Some(&"nearest");
     tubes.blend_at_masks = h.get("masks") == Some(&"blend-at");
     let width: usize = parse(&h, "width")?;

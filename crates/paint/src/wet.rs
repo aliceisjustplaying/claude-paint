@@ -25,7 +25,52 @@ use crate::color::{Rgb, luminance};
 use crate::pigment::{Pigment, hiding_of, scatter_for};
 
 pub const LAT: usize = mixbox::LATENT_SIZE;
-pub type Latent = [f32; LAT];
+#[derive(Clone, Default, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
+#[repr(C)]
+pub struct Latent {
+    pub color: [f32; LAT],
+    pub parts: Vec<(usize, f32)>,
+}
+
+impl std::fmt::Debug for Latent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.parts.is_empty() { self.color.fmt(f) } else { f.debug_tuple("Latent").field(&self.color).field(&self.parts).finish() }
+    }
+}
+
+impl std::ops::Deref for Latent {
+    type Target = [f32; LAT];
+    fn deref(&self) -> &Self::Target { &self.color }
+}
+
+impl std::ops::DerefMut for Latent {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.color }
+}
+
+impl Latent {
+    pub fn from_color(color: [f32; LAT]) -> Self { Self { color, parts: Vec::new() } }
+
+    pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {
+        for &(i, f) in &other.parts {
+            match self.parts.iter_mut().find(|p| p.0 == i) {
+                Some(p) => p.1 += f * weight,
+                None => self.parts.push((i, f * weight)),
+            }
+        }
+    }
+
+    pub(crate) fn scale_parts(&mut self, weight: f32) {
+        for p in &mut self.parts { p.1 *= weight; }
+    }
+
+    pub(crate) fn blend_parts(&mut self, other: &Self, weight: f32) {
+        if self.parts.is_empty() && other.parts.is_empty() { return; }
+        self.scale_parts(1.0 - weight);
+        self.add_parts(other, weight);
+        self.parts.retain(|p| p.1 > 0.0);
+    }
+}
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
 /// coat, stiffness, drying rate, solvent, oil, packed oil, drained floor,
 /// packed share, oil volume, wax].
@@ -68,8 +113,9 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// handed to the brush keeps the S it was mixed with, however opaque it is
 /// (hiding saturates near 1 and can't carry a large S). Name paints by
 /// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Paint {
+    pub parts: Vec<(usize, f32)>,
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
     /// Kubelka–Munk scattering per coat (flat across channels; absorption
@@ -122,11 +168,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -163,7 +209,7 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        mixbox::linear_float_rgb_to_latent(&self.color)
+        Latent { color: mixbox::linear_float_rgb_to_latent(&self.color), parts: self.parts.clone() }
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -218,7 +264,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![[0.0; LAT]; n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+        Wet { vol: vec![0.0; n], lat: vec![Latent::default(); n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is
@@ -272,6 +318,7 @@ pub fn mix_into(rv: &mut f32, rl: &mut Latent, rh: &mut Prop, v: f32, lat: &Late
     for k in 0..LAT {
         rl[k] += (lat[k] - rl[k]) * a;
     }
+    rl.blend_parts(lat, a);
     lerp_prop(rh, hide, a);
     *rv = t;
 }

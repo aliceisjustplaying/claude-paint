@@ -34,7 +34,7 @@ impl State {
             rng: s.rng.state(), hand: s.hand.clone(), board: s.board.clone(), out: s.out.clone(),
             brushes: s.live_brushes().iter().map(|b| b.borrow().clone()).collect(),
             knives: s.live_knives().iter().map(|b| b.borrow().clone()).collect(),
-            rags: s.live_rags().iter().map(|b| *b.borrow()).collect(),
+            rags: s.live_rags().iter().map(|b| b.borrow().clone()).collect(),
         }
     }
 

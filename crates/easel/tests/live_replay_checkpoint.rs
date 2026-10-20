@@ -133,7 +133,15 @@ impl Studio {
             .env_remove("EASEL_WIDTH").env_remove("EASEL_BOX").output().unwrap();
         assert!(output.status.success(), "batch: {}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         assert!(self.bytes("live.ckpt") == std::fs::read(self.root.join("whole.ckpt")).unwrap(), "live canvas differs from canonical batch replay");
-        assert_files(&files(&self.dir().join("hand-frames")), &files(&self.root.join("whole")));
+        let frames = |dir: &Path| files(dir).into_iter().filter(|(name, _)| name != "frames.states").collect::<Vec<_>>();
+        assert_files(&frames(&self.dir().join("hand-frames")), &frames(&self.root.join("whole")));
+        let states = |dir: &Path| std::fs::read_to_string(dir.join("frames.states")).unwrap().lines().map(|line| {
+            let mut state: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert!(state["identity"]["source"].is_array());
+            state["identity"]["source"] = serde_json::Value::Null;
+            state
+        }).collect::<Vec<_>>();
+        assert_eq!(states(&self.dir().join("hand-frames")), states(&self.root.join("whole")));
     }
 }
 
@@ -246,7 +254,7 @@ fn painter_profile_uses_the_same_binary_checkpoint_and_hand_frames() {
 
 #[test]
 fn invalid_checkpoint_falls_back_to_full_replay_and_matching_frames() {
-    for mode in ["corrupt", "identity"] {
+    for mode in ["corrupt", "identity", "missing-frame"] {
         let mut studio = Studio::new(mode, false);
         studio.start();
         studio.paint();
@@ -254,15 +262,17 @@ fn invalid_checkpoint_falls_back_to_full_replay_and_matching_frames() {
         studio.kill();
         if mode == "corrupt" {
             std::fs::write(studio.dir().join("replay.ckpt"), [0u8; 48]).unwrap();
+        } else if mode == "missing-frame" {
+            std::fs::remove_file(studio.dir().join("hand-frames/00001.png")).unwrap();
         } else {
             studio.identity = "changed";
         }
         studio.start();
         let log = String::from_utf8(studio.bytes("server.log")).unwrap();
         assert!(log.contains("replay checkpoint"), "missing fallback diagnostic: {log}");
-        let reason = if mode == "corrupt" { "unsupported format" } else { "differs" };
+        let reason = match mode { "corrupt" => "unsupported format", "missing-frame" => "00001.png", _ => "differs" };
         assert!(log.contains(reason), "missing {mode} fallback reason: {log}");
-        assert!(!log.contains("reconstructed 10 chunks"), "{log}");
+        if mode != "missing-frame" { assert!(!log.contains("reconstructed 10 chunks"), "{log}"); }
         let repaint: Vec<_> = log.lines().filter(|line| line.starts_with("resuming chunk ")).map(str::to_string).collect();
         assert_eq!(repaint, (1..=12).map(|n| format!("resuming chunk {n}/12")).collect::<Vec<_>>(), "{log}");
         studio.close();

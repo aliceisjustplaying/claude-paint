@@ -59,12 +59,17 @@ def home(tmp_path):
 def server(home, monkeypatch):
     monkeypatch.setattr(S, "SESSIONS", str(home[0] / ".pi" / "agent" / "sessions"))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), S.H)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    thread = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+    thread.start()
     fetch = lambda q: get(fetch.base + q)
     fetch.base = f"http://127.0.0.1:{srv.server_address[1]}"
-    yield fetch
-    srv.shutdown()
-    srv.server_close()
+    try:
+        yield fetch
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=1)
+        assert not thread.is_alive()
 
 
 def get(url):

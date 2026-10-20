@@ -140,8 +140,8 @@ impl Lead {
 pub(crate) struct Cell {
     /// Fraction of the pixel covered.
     pub(crate) a: f32,
-    /// Mean reflectance of the flakes (linear RGB; gray for graphite and
-    /// chalk).
+    /// Loose pastel reflectance with `optics`, otherwise the legacy mixed
+    /// reflectance (linear RGB).
     pub(crate) r: Rgb,
     /// How readily an eraser lifts it (coverage-weighted).
     pub(crate) lift: f32,
@@ -156,6 +156,91 @@ pub(crate) struct Cell {
     pub(crate) bound: f32,
     pub(crate) non_pastel: f32,
     pub(crate) non_pastel_floor: f32,
+    pub(crate) optics: Option<Optics>,
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Optics {
+    /// Fixed graphite/chalk, then removable graphite/chalk (both gray).
+    pub(crate) fixed: f32,
+    pub(crate) graphite: f32,
+    pub(crate) bound: Rgb,
+    /// The pixel before this drawing, retained to avoid repeated unmixing.
+    pub(crate) under: Rgb,
+}
+
+impl Cell {
+    pub(crate) fn restart(&mut self, film: f32, pixel: Rgb) {
+        *self = Cell { film, optics: self.optics.map(|_| Optics { under: pixel, ..Optics::default() }), ..Cell::default() };
+    }
+
+    pub(crate) fn repaint(&self, pixel: Rgb, before: (f32, Rgb)) -> Rgb {
+        let r = self.reflectance();
+        if let Some(optics) = self.optics {
+            return cover(optics.under, self.a, r);
+        }
+        cover(uncover(pixel, before.0, before.1), self.a, r)
+    }
+
+    pub(crate) fn reflectance(&self) -> Rgb {
+        let Some(optics) = self.optics else { return self.r };
+        let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
+        let b = 1.0 - (-self.bound / crate::pastel::PARTICLE_UM).exp();
+        let l = 1.0 - (-self.loose / crate::pastel::PARTICLE_UM).exp();
+        let base = (1.0 - b) * (1.0 - l);
+        let total = self.non_pastel * base + b * (1.0 - l) + l;
+        if total <= 0.0 { return [0.0; 3] }
+        [0, 1, 2].map(|k| ((optics.fixed * self.non_pastel_floor + optics.graphite * g) * base + optics.bound[k] * b * (1.0 - l) + self.r[k] * l) / total)
+    }
+
+    pub(crate) fn add_pastel(&mut self, q: f32, color: Rgb, volume: f32) {
+        let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
+        let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };
+        let added = if self.optics.is_some() { volume } else { q };
+        let w = old + added;
+        if w > 0.0 || self.optics.is_none() {
+            let w = if self.optics.is_some() { w } else { w.max(1e-6) };
+            self.r = [0, 1, 2].map(|k| ((old * self.r[k] + added * color[k]) / w).clamp(0.0, 1.0));
+        }
+        self.lift = (self.a * (1.0 - q) * self.lift + q * 0.55) / (self.a * (1.0 - q) + q).max(1e-6);
+        self.a = a1;
+    }
+
+    pub(crate) fn bind(&mut self, wet: f32) {
+        let Some(mut optics) = self.optics else { return };
+        let g = (self.non_pastel - self.non_pastel_floor).max(0.0);
+        let b = self.bound;
+        let l = self.loose;
+        let dark = self.r.map(|r| {
+            if wet == 0.0 { return r }
+            let r = r.clamp(1e-4, 0.9999);
+            let ks = (1.0 - r).powi(2) / (2.0 * r) / (1.0 - wet + wet / 5.0);
+            1.0 + ks - (ks * ks + 2.0 * ks).sqrt()
+        });
+        if self.non_pastel > 0.0 {
+            optics.fixed = (optics.fixed * self.non_pastel_floor + optics.graphite * g) / self.non_pastel;
+        }
+        for k in 0..3 {
+            if b + l > 0.0 {
+                optics.bound[k] = (optics.bound[k] * b + dark[k] * l) / (b + l);
+            }
+        }
+        self.optics = Some(optics);
+        self.floor = self.a;
+        self.non_pastel_floor = self.non_pastel;
+        self.bound += self.loose;
+        self.loose = 0.0;
+    }
+
+    pub(crate) fn free_bound(&mut self, floor: f32, freed: f32) {
+        if let Some(optics) = self.optics {
+            let l = self.loose;
+            if l + freed > 0.0 {
+                self.r = [0, 1, 2].map(|k| (self.r[k] * l + optics.bound[k] * freed) / (l + freed));
+            }
+        }
+        self.floor = floor;
+    }
 }
 
 /// The loose drawing on a canvas: what was laid where, so it can be lifted,
@@ -176,6 +261,7 @@ pub struct Drawing {
     /// finger has moved some): the cells are then serialized with their
     /// color and the pastel in the tooth (`to_f32s`).
     pub(crate) sticks: bool,
+    optics: bool,
 }
 
 /// How much of the point touches at pressure `p`: none at 0, rising
@@ -456,25 +542,29 @@ pub fn hatch_marks_graded(m: &Mask, angle: f32, spacing: f32, length: f32, press
 }
 
 impl Drawing {
-    fn new(n: usize, whole: usize) -> Self {
-        Drawing { cells: vec![Cell { film: -1.0, ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false }
+    fn new(n: usize, whole: usize, optics: bool) -> Self {
+        Drawing { cells: vec![Cell { film: -1.0, optics: optics.then_some(Optics::default()), ..Cell::default() }; n], guide: vec![0.0; whole], guide_floor: None, sticks: false, optics }
     }
 
     /// The serialized layout (the checkpoint's drawing flag): 1 graphite
-    /// and chalk only, 3 with pastel and the non-pastel coverage (`sticks`).
+    /// and chalk only, 3 with pastel and the non-pastel coverage (`sticks`),
+    /// 4 with separate retained and removable reflectances (`optics`).
     pub(crate) fn layout(&self) -> u64 {
-        if self.sticks { 3 } else { 1 }
+        if self.optics { 4 } else if self.sticks { 3 } else { 1 }
     }
 
     /// Serialized as f32s: the window's cells (a, r, lift, floor, film; with
     /// stick pastel, layout 3: a, r, g, b, lift, floor, film, loose, bound,
-    /// non_pastel and non_pastel_floor),
+    /// non_pastel and non_pastel_floor; layout 4 adds fixed and removable
+    /// graphite's gray means, bound pastel's RGB mean and the underlying RGB),
     /// the guide (whole canvas), then 0 or 1 and the guide's floor.
     pub(crate) fn to_f32s(&self) -> impl Iterator<Item = f32> + '_ {
-        let sticks = self.sticks;
+        let sticks = self.sticks || self.optics;
+        let optics = self.optics;
         let cells = self.cells.iter().flat_map(move |c| {
             let q = if sticks { [c.a, c.r[0], c.r[1], c.r[2], c.lift, c.floor, c.film, c.loose, c.bound, c.non_pastel, c.non_pastel_floor] } else { [c.a, c.r[0], c.lift, c.floor, c.film, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
-            q.into_iter().take(if sticks { 11 } else { 5 })
+            let o = c.optics.unwrap_or_default();
+            q.into_iter().take(if sticks { 11 } else { 5 }).chain([o.fixed, o.graphite, o.bound[0], o.bound[1], o.bound[2], o.under[0], o.under[1], o.under[2]].into_iter().take(if optics { 8 } else { 0 }))
         });
         let floor = std::iter::once(if self.guide_floor.is_some() { 1.0 } else { 0.0 }).chain(self.guide_floor.iter().flatten().copied());
         cells.chain(self.guide.iter().copied()).chain(floor)
@@ -482,13 +572,15 @@ impl Drawing {
 
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
     /// pixels, `whole` canvas pixels, `layout` the serialized layout (1, 2
-    /// or 3; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
+    /// through 4; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
     pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
         let sticks = layout >= 2;
-        let cells: Vec<Cell> = if layout == 3 {
-            get(n * 11)?.as_chunks::<11>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10] }).collect()
+        let cells: Vec<Cell> = if layout == 4 {
+            get(n * 19)?.as_chunks::<19>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], optics: Some(Optics { fixed: q[11], graphite: q[12], bound: [q[13], q[14], q[15]], under: [q[16], q[17], q[18]] }) }).collect()
+        } else if layout == 3 {
+            get(n * 11)?.as_chunks::<11>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: q[9], non_pastel_floor: q[10], ..Cell::default() }).collect()
         } else if sticks {
-            get(n * 9)?.as_chunks::<9>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: if q[7] == 0.0 && q[8] == 0.0 { q[0] } else if q[8] == 0.0 { q[5] } else { 0.0 }, non_pastel_floor: if q[8] == 0.0 { q[5] } else { 0.0 } }).collect()
+            get(n * 9)?.as_chunks::<9>().0.iter().map(|q| Cell { a: q[0], r: [q[1], q[2], q[3]], lift: q[4], floor: q[5], film: q[6], loose: q[7], bound: q[8], non_pastel: if q[7] == 0.0 && q[8] == 0.0 { q[0] } else if q[8] == 0.0 { q[5] } else { 0.0 }, non_pastel_floor: if q[8] == 0.0 { q[5] } else { 0.0 }, ..Cell::default() }).collect()
         } else {
             get(n * 5)?.as_chunks::<5>().0.iter().map(|q| Cell { a: q[0], r: [q[1]; 3], lift: q[2], floor: q[3], film: q[4], non_pastel: q[0], non_pastel_floor: q[3], ..Cell::default() }).collect()
         };
@@ -499,7 +591,8 @@ impl Drawing {
         let valid = (has_floor == 0.0 || has_floor == 1.0)
             && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
-        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks }))
+        let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
+        Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4 }))
     }
 }
 
@@ -553,7 +646,7 @@ impl Canvas {
 
     pub(crate) fn drawing_mut(&mut self) -> &mut Drawing {
         let (n, whole) = (self.px.len(), self.f.full_w * self.f.full_h);
-        self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n, whole)))
+        self.drawing.get_or_insert_with(|| Box::new(Drawing::new(n, whole, self.drawing_optics)))
     }
 
     /// Radius (px) over which the point rides on the tops of the ground.
@@ -644,7 +737,7 @@ impl Canvas {
                 let c = &mut d.cells[i];
                 if c.film < 0.0 || film[i] > c.film + 1e-4 {
                     // bare, or painted over since: a new drawing on top
-                    *c = Cell { film: film[i], ..Cell::default() };
+                    c.restart(film[i], px[i]);
                 }
                 let depth = depths[k] * depth_k;
                 let bite = lead.bite_um * p.powf(1.2) + 3.0;
@@ -658,12 +751,17 @@ impl Canvas {
                     continue;
                 }
                 let a1 = c.a + da;
-                let under = uncover(px[i], c.a, c.r);
-                c.r = c.r.map(|r| (c.a * r + da * lead.flake) / a1);
+                let before = (c.a, c.reflectance());
+                if let Some(optics) = c.optics.as_mut() {
+                    let g = c.non_pastel - c.non_pastel_floor;
+                    optics.graphite = (g * optics.graphite + da * lead.flake) / (g + da);
+                } else {
+                    c.r = c.r.map(|r| (c.a * r + da * lead.flake) / a1);
+                }
                 c.lift = (c.a * c.lift + da * lift) / a1;
                 c.a = a1;
                 c.non_pastel = (c.non_pastel + da).min(a1);
-                px[i] = cover(under, c.a, c.r);
+                px[i] = c.repaint(px[i], before);
             }
         }
         self.px = px;
@@ -720,14 +818,19 @@ impl Canvas {
             let reach = 1.0 - ((top - height[i]) / 10.0).clamp(0.0, 1.0);
             let take = (strength.clamp(0.0, 1.0) * mv.min(1.0) * c.lift * (0.55 + 0.4 * reach)).min(0.97);
             let a1 = (c.a * (1.0 - take)).max(c.floor.min(c.a));
-            let under = uncover(self.px[i], c.a, c.r);
+            let before = (c.a, c.reflectance());
             if c.loose > 0.0 && take > 0.0 {
                 let removable = c.a - c.floor;
                 c.loose *= if removable > 0.0 { (a1 - c.floor).max(0.0) / removable } else { 0.0 };
             }
+            if c.optics.is_some() {
+                let keep = if c.a > c.floor { (a1 - c.floor) / (c.a - c.floor) } else { 0.0 };
+                c.non_pastel = c.non_pastel_floor + (c.non_pastel - c.non_pastel_floor) * keep;
+            } else {
+                c.non_pastel = (c.non_pastel * (1.0 - take)).max(c.non_pastel_floor.min(c.non_pastel));
+            }
             c.a = a1;
-            c.non_pastel = (c.non_pastel * (1.0 - take)).max(c.non_pastel_floor.min(c.non_pastel));
-            self.px[i] = cover(under, c.a, c.r);
+            self.px[i] = c.repaint(self.px[i], before);
         }
     }
 
@@ -743,6 +846,13 @@ impl Canvas {
         let sheet = self.sheet.as_ref();
         for (i, c) in d.cells.iter_mut().enumerate() {
             if m.is_none_or(|m| m.data[f.whole_index(i)] > 0.5) && !sheet.is_some_and(|s| s.over[i]) {
+                if c.optics.is_some() {
+                    let before = (c.a, c.reflectance());
+                    c.bind(0.0);
+                    if self.film[i] <= c.film + 1e-4 && self.wet.vol[i] <= 1e-5 {
+                        self.px[i] = c.repaint(self.px[i], before);
+                    }
+                }
                 c.floor = c.a;
                 c.non_pastel_floor = c.non_pastel;
             }
@@ -799,7 +909,7 @@ impl Canvas {
         const PAPER: f32 = 0.82;
         match &self.drawing {
             None => vec![[PAPER; 3]; self.px.len()],
-            Some(d) => d.cells.iter().map(|c| cover([PAPER; 3], c.a, c.r)).collect(),
+            Some(d) => d.cells.iter().map(|c| cover([PAPER; 3], c.a, c.reflectance())).collect(),
         }
     }
 }
@@ -922,5 +1032,42 @@ mod tests {
         assert!(!d.sticks && d.layout() == 1);
         let n = c.pixels().len();
         assert_eq!(d.to_f32s().count(), n * 5 + c.frame().w * c.frame().h + 1);
+    }
+
+    #[test]
+    fn old_drawing_layouts_keep_their_original_reflectance() {
+        for (layout, data) in [
+            (1, vec![0.8, 0.1, 0.55, 0.4, 0.0, 0.0]),
+            (2, vec![0.8, 0.1, 0.2, 0.3, 0.55, 0.4, 0.0, 8.0, 4.0, 0.0]),
+            (3, vec![0.8, 0.1, 0.2, 0.3, 0.55, 0.4, 0.0, 8.0, 4.0, 0.2, 0.1, 0.0]),
+        ] {
+            let mut values = data.into_iter();
+            let d = Drawing::from_f32s::<()>(1, 0, layout, |n| Ok(values.by_ref().take(n).collect())).unwrap().unwrap();
+            assert!(values.next().is_none());
+            assert!(d.cells[0].optics.is_none());
+            assert_eq!(d.cells[0].reflectance(), if layout == 1 { [0.1; 3] } else { [0.1, 0.2, 0.3] });
+        }
+    }
+
+    #[test]
+    fn saturated_fixed_pastel_can_take_removable_color() {
+        let mut c = Cell { optics: Some(Optics::default()), ..Cell::default() };
+        c.add_pastel(1.0, [0.1; 3], 20.0);
+        c.loose = 20.0;
+        c.bind(0.0);
+        let original = c.reflectance();
+        c.add_pastel(0.9, [0.7, 0.06, 0.02], 8.0);
+        c.loose += 8.0;
+        assert_eq!(c.a, c.floor);
+        assert!((c.reflectance()[0] - original[0]).abs() > 0.1);
+        c.loose = 0.0;
+        assert_eq!(c.reflectance(), original);
+        c.add_pastel(0.9, [0.7, 0.06, 0.02], 8.0);
+        c.loose = 8.0;
+        c.bind(0.15);
+        c.free_bound(c.non_pastel_floor, c.bound);
+        c.loose += c.bound;
+        c.bound = 0.0;
+        assert!(c.r[0] > c.r[1]);
     }
 }

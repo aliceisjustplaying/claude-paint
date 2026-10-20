@@ -187,7 +187,7 @@ fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl Fn
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-struct Identity {
+pub(crate) struct Identity {
     build: [u8; 32],
     source: [u8; 32],
     width: usize,
@@ -315,7 +315,7 @@ impl Live {
         Self { trace: Trace { enabled: true, ..Trace::default() }, identity: IDENTITY.get_or_init(|| Identity::new("", 0)).clone(), done: 0, written: Instant::now() }
     }
 
-    fn identity(&self, source: &str, width: usize) -> Result<Identity, String> {
+    pub(crate) fn identity(&self, source: &str, width: usize) -> Result<Identity, String> {
         let mut identity = self.identity.clone()?;
         identity.source = Sha256::digest(source.as_bytes()).into();
         identity.width = width;
@@ -381,7 +381,7 @@ impl Live {
 pub struct Batch {
     checkpoint: Option<PathBuf>,
     progress: PathBuf,
-    identity: Identity,
+    identity: Option<Identity>,
     pub done: usize,
     total: usize,
     until: usize,
@@ -396,7 +396,7 @@ impl Drop for Batch {
 }
 
 impl Batch {
-    pub fn open(args: &[String], file: &Path, source: &str, width: usize, s: &mut Session, chunks: &[String], out: &Path) -> Result<Self, String> {
+    pub fn open(args: &[String], source: &str, width: usize, s: &mut Session, chunks: &[String], out: &Path) -> Result<Self, String> {
         let checkpoint = crate::flag(args, "--replay-checkpoint").map(PathBuf::from);
         let until = crate::flag(args, "--until-chunk").map(|n| n.parse::<usize>().map_err(|_| "--until-chunk needs a positive chunk number".to_string())).transpose()?.unwrap_or(chunks.len());
         if until == 0 || until > chunks.len() { return Err(format!("--until-chunk must be in 1..={}", chunks.len())); }
@@ -404,25 +404,11 @@ impl Batch {
         if minutes.is_some_and(|m| !m.is_finite() || m <= 0.0) { return Err("--for-minutes needs a positive finite duration".into()); }
         if checkpoint.is_none() && (until < chunks.len() || minutes.is_some()) { return Err("batch limits require --replay-checkpoint".into()); }
         let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
-        let mut outputs = vec![out.to_path_buf()];
-        if args.iter().any(|a| a == "--look") { outputs.push(out.with_extension("look.png")); }
-        for option in ["--checkpoint-out", "--state-digest", "--dump-surface"] {
-            if let Some(p) = crate::flag(args, option) { outputs.push(PathBuf::from(p)); }
-        }
-        if crate::same_file(file, &progress)? { return Err("replay progress must differ from source".into()); }
-        for p in &outputs {
-            if crate::same_file(p, &progress)? { return Err("replay progress must differ from outputs".into()); }
-        }
-        if let Some(p) = &checkpoint {
-            for other in [file, progress.as_path()].into_iter().chain(outputs.iter().map(|p| p.as_path())) {
-                if crate::same_file(p, &other)? { return Err("--replay-checkpoint must differ from source, progress and outputs".into()); }
-            }
-        }
-        let identity = Identity::new(source, width)?;
+        let identity = (checkpoint.is_some() || crate::flag(args, "--frames-every").is_some()).then(|| Identity::new(source, width)).transpose()?;
         let mut batch = Self { checkpoint, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
         if let Some(path) = batch.checkpoint.as_ref().filter(|p| p.exists()) {
             let (mut saved, canvas, elapsed_secs) = load(path)?;
-            if saved.identity != batch.identity { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
+            if Some(&saved.identity) != batch.identity.as_ref() { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
             if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
                 return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
             }
@@ -437,9 +423,14 @@ impl Batch {
         } else if batch.checkpoint.is_some() {
             TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, ..Trace::default() });
         }
-        batch.publish(if batch.done == batch.total { "complete" } else if batch.stopped() { "paused" } else { "running" }, batch.done.checked_add(1).filter(|n| *n <= batch.total && !batch.stopped()))?;
         Ok(batch)
     }
+
+    pub fn begin(&self) -> Result<(), String> {
+        self.publish(if self.done == self.total { "complete" } else if self.stopped() { "paused" } else { "running" }, self.done.checked_add(1).filter(|n| *n <= self.total && !self.stopped()))
+    }
+
+    pub(crate) fn identity(&self) -> &Identity { self.identity.as_ref().unwrap() }
 
     fn elapsed(&self) -> f64 { self.elapsed_before + self.started.elapsed().as_secs_f64() }
 
@@ -448,7 +439,7 @@ impl Batch {
     pub fn completed(&mut self, s: &Session, done: usize) -> Result<bool, String> {
         self.done = done;
         if let Some(path) = &self.checkpoint {
-            write_checkpoint(path, s, &self.identity, done, &self.digests, self.elapsed())?;
+            write_checkpoint(path, s, self.identity.as_ref().unwrap(), done, &self.digests, self.elapsed())?;
         }
         let stop = done >= self.until || self.minutes.is_some_and(|m| self.started.elapsed().as_secs_f64() >= m * 60.0);
         self.publish(if done == self.total { "complete" } else if stop { "paused" } else { "running" }, if done < self.total && !stop { Some(done + 1) } else { None })?;
@@ -587,16 +578,52 @@ print(counter,rand(),drying(300,300))
     }
 
     #[test]
+    fn batch_identity_is_only_built_for_checkpoints_or_frames() {
+        let dir = Temp::new();
+        let chunks = crate::session::parse_program(SOURCE);
+        for (args, expected) in [
+            (Vec::new(), false),
+            (args(&dir.0, chunks.len()), true),
+            (vec!["--frames-every".into(), "2".into(), "--frames-dir".into(), dir.0.join("frames").display().to_string()], true),
+        ] {
+            let batch = Batch::open(&args, SOURCE, 64, &mut session(), &chunks, &dir.0.join("out.png")).unwrap();
+            assert_eq!(batch.identity.is_some(), expected);
+        }
+    }
+
+    #[test]
+    fn checkpoint_resume_rejects_changed_build_width_and_environment() {
+        let chunks = crate::session::parse_program(SOURCE);
+        for change in 0..3 {
+            let dir = Temp::new();
+            let mut s = session();
+            let mut batch = Batch::open(&args(&dir.0, 1), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            let identity = batch.identity.as_mut().unwrap();
+            match change {
+                0 => identity.build[0] ^= 1,
+                1 => identity.width += 1,
+                _ => identity.environment.push((b"PAINT_TEST_IDENTITY".to_vec(), b"changed".to_vec())),
+            }
+            s.run(&chunks[0]).unwrap();
+            batch.completed(&s, 1).unwrap();
+            drop(batch);
+            let mut restored = session();
+            let result = Batch::open(&args(&dir.0, chunks.len()), SOURCE, 64, &mut restored, &chunks, &dir.0.join("out.png"));
+            assert!(result.err().unwrap().contains("differs; refusing resume"));
+            assert!(restored.log.is_empty());
+        }
+    }
+
+    #[test]
     fn checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock() {
         let dir = Temp::new();
-        let source = dir.0.join("painting.lua");
         let chunks = crate::session::parse_program(SOURCE);
         let mut plain = session();
         for chunk in &chunks { plain.run(chunk).unwrap(); }
         let mut final_session = None;
         for until in [1, 3, 4, 5, chunks.len()] {
             let mut s = session();
-            let mut batch = Batch::open(&args(&dir.0, until), &source, SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            let mut batch = Batch::open(&args(&dir.0, until), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
             for (i, chunk) in chunks.iter().enumerate().skip(batch.done) {
                 s.run(chunk).unwrap();
                 if batch.completed(&s, i + 1).unwrap() { break; }
@@ -614,7 +641,6 @@ print(counter,rand(),drying(300,300))
     #[test]
     fn pastel_checkpoints_reconstruct_stick_wear_and_dry_tools() {
         let dir = Temp::new();
-        let path = dir.0.join("pastel.lua");
         let mut plain = session().with_paper(true).unwrap();
         for chunk in [
             "canvas{size=200, aspect=1.25, seed=3, paper={grammage=200}}",
@@ -628,7 +654,7 @@ print(counter,rand(),drying(300,300))
         let chunks = crate::session::parse_program(&source);
         for until in [3, 5, chunks.len()] {
             let mut s = Session::replay_with(64, crate::session::box_for(Some(&source)).unwrap()).unwrap().with_paper(true).unwrap();
-            let mut batch = Batch::open(&args(&dir.0, until), &path, &source, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+            let mut batch = Batch::open(&args(&dir.0, until), &source, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
             for (i, chunk) in chunks.iter().enumerate().skip(batch.done) {
                 s.run(chunk).unwrap();
                 if batch.completed(&s, i + 1).unwrap() { break; }
@@ -646,13 +672,12 @@ print(counter,rand(),drying(300,300))
     #[test]
     fn corrupt_and_mismatched_checkpoints_are_refused() {
         let dir = Temp::new();
-        let source = dir.0.join("painting.lua");
         let chunks = crate::session::parse_program(SOURCE);
         let mut s = session();
-        let mut batch = Batch::open(&args(&dir.0, 2), &source, SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+        let mut batch = Batch::open(&args(&dir.0, 2), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
         for (i, chunk) in chunks.iter().take(2).enumerate() { s.run(chunk).unwrap(); batch.completed(&s, i + 1).unwrap(); }
         drop(batch);
-        let result = Batch::open(&args(&dir.0, chunks.len()), &source, &format!("{SOURCE}\n-- changed"), 64, &mut session(), &chunks, &dir.0.join("out.png"));
+        let result = Batch::open(&args(&dir.0, chunks.len()), &format!("{SOURCE}\n-- changed"), 64, &mut session(), &chunks, &dir.0.join("out.png"));
         assert!(result.err().unwrap().contains("differs; refusing resume"));
         let path = dir.0.join("replay.ckpt");
         let mut bytes = std::fs::read(&path).unwrap();
@@ -665,11 +690,12 @@ print(counter,rand(),drying(300,300))
     #[test]
     fn progress_is_published_at_every_chunk_and_batch_boundary() {
         let dir = Temp::new();
-        let source = dir.0.join("painting.lua");
         let chunks = crate::session::parse_program(SOURCE);
         let mut s = session();
-        let mut batch = Batch::open(&args(&dir.0, 2), &source, SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
+        let mut batch = Batch::open(&args(&dir.0, 2), SOURCE, 64, &mut s, &chunks, &dir.0.join("out.png")).unwrap();
         let progress = dir.0.join("replay.replay-progress.json");
+        assert!(!progress.exists());
+        batch.begin().unwrap();
         let read = || serde_json::from_slice::<serde_json::Value>(&std::fs::read(&progress).unwrap()).unwrap();
         assert_eq!(read()["chunks_done"], 0);
         for (i, chunk) in chunks.iter().take(2).enumerate() {

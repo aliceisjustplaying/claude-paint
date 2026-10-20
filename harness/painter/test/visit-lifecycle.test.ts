@@ -88,7 +88,7 @@ test("a visit is capped at twenty minutes even without a caller signal", async (
 	}
 });
 
-test("a critic is cleaned up after its painter is killed", async () => {
+for (const signal of ["SIGTERM", "SIGKILL"] as const) test(`a critic is cleaned up after its painter receives ${signal}`, async () => {
 	const f = fixture();
 	const parent = spawn(process.execPath, ["--input-type=module", "-e", `
 import { visit } from ${JSON.stringify(new URL("../visit.ts", import.meta.url).href)};
@@ -97,7 +97,7 @@ await visit(${JSON.stringify(f.dir)}, ${JSON.stringify(f.critic)}, "sitting", un
 	await until(() => existsSync(f.pid));
 	const pid = Number(readFileSync(f.pid, "utf8"));
 	try {
-		parent.kill("SIGKILL");
+		parent.kill(signal);
 		await until(() => !alive(pid));
 		assert.ok(existsSync(join(f.dir, "terminated")));
 	} finally {

@@ -423,7 +423,9 @@ def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
                 web[i] = done[2]
                 WRITTEN.update(done[3])
                 continue
+            EXPORTED.pop((out, p, i), None)
             im = S.image_bytes(st, i)
+            complete = bool(srcs and im)
             ext = EXT.get(im[0], "bin") if im else "bin"
             exts.append(ext)
             mine = []
@@ -431,11 +433,13 @@ def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
                 data = im[1]
                 mine.append(os.path.join(out, "data", p, "img", f"{i}.{ext}"))
                 changed = write(mine[-1], data)
-                for light in S.DISPLAY_LIGHTS:
+                for j, light in enumerate(S.DISPLAY_LIGHTS, 1):
                     lit = S.image_bytes(st, i, light=light)
                     if lit:
                         mine.append(os.path.join(out, "data", p, light, f"{i}.png"))
                         write(mine[-1], lit[1])
+                    elif srcs and srcs[j]:
+                        complete = False
                 if Image:
                     t, v = (os.path.join(out, "data", p, d, f"{i}.jpg") for d in ("t", "v"))
                     if changed or not (os.path.isfile(t) and os.path.isfile(v)):
@@ -444,12 +448,15 @@ def export(out, skip=(), only=None, live=False, atelier=None, elsewhere=()):
                         web[i] = 1
                     mine += [t, v]
                     WRITTEN.update((os.path.abspath(t), os.path.abspath(v)))
-            EXPORTED[(out, p, i)] = (srcs, ext, web[i], [os.path.abspath(f) for f in mine])
+            if complete:
+                EXPORTED[(out, p, i)] = (srcs, ext, web[i], [os.path.abspath(f) for f in mine])
         for i, job in jobs.items():
             web[i] = int(job.result())
             n_web += 1
-            srcs, ext, _, mine = EXPORTED[(out, p, i)]
-            EXPORTED[(out, p, i)] = (srcs, ext, web[i], mine)
+            done = EXPORTED.pop((out, p, i), None)
+            if done and web[i]:
+                srcs, ext, _, mine = done
+                EXPORTED[(out, p, i)] = (srcs, ext, web[i], mine)
         n_img += n
         # the newest whole look with a web copy (no crop, no mode), for a glimpse of the canvas elsewhere (the gallery's
         # index, the studio's picker)

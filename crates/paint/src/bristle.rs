@@ -374,6 +374,11 @@ pub struct Held {
     /// Painting on a canvas that drains (`Canvas::with_drain`): and the
     /// pigment's packing, `Prop`'s last five (`with_packing`).
     shows_packing: bool,
+    /// Dry pastel held in the bristles, mg (`Canvas::dust_pastel`, the
+    /// paper-and-pastel switch's `b:dust`); a wipe takes its share off.
+    /// Printed only when there is some, so a brush that never brushed pastel
+    /// prints (and digests) as it did before.
+    pub pastel_mg: f32,
 }
 
 /// A bristle's `Debug`, as `#[derive(Debug)]` printed it before the
@@ -415,7 +420,10 @@ impl std::fmt::Debug for Bristle {
 /// The text of a brush (`easel run --state-digest` hashes it, and the
 /// state dump keeps it): exactly what `#[derive(Debug)]` printed before the
 /// thinner, so a painting from an engine before 3 digests as it did; an
-/// engine-3 brush (`with_engine`) names each bristle's `solvent` too.
+/// engine-3 brush (`with_engine`) names each bristle's `solvent` too. The
+/// pastel a dry brush holds (`pastel_mg`) is named only when there is some:
+/// only `b:dust` gives a brush any, and only the paper-and-pastel switch
+/// brings `b:dust`, so a painting without the switch digests as it did.
 impl std::fmt::Debug for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         struct List<'a>(&'a [Bristle], bool, bool, bool);
@@ -424,7 +432,12 @@ impl std::fmt::Debug for Held {
                 f.debug_list().entries(self.0.iter().map(|b| BristleText(b, self.1, self.2, self.3))).finish()
             }
         }
-        f.debug_struct("Held").field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing)).finish()
+        let mut d = f.debug_struct("Held");
+        d.field("tool", &self.tool).field("bristles", &List(&self.bristles, self.shows_solvent, self.shows_oil, self.shows_packing));
+        if self.pastel_mg > 0.0 {
+            d.field("pastel_mg", &self.pastel_mg);
+        }
+        d.finish()
     }
 }
 
@@ -493,7 +506,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, pastel_mg: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -582,8 +595,10 @@ impl Held {
         }
     }
 
-    /// Wipe the brush on a rag: remove `frac` of the paint in it.
+    /// Wipe the brush on a rag: remove `frac` of the paint in it (and of the
+    /// dry pastel it holds).
     pub fn wipe(&mut self, frac: f32) {
+        self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);

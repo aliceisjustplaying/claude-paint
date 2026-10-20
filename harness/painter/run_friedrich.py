@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -16,7 +17,7 @@ CONFIG = json.loads((HERE / "run-config.json").read_text())
 STUDIO = Path(CONFIG["studio"])
 SOURCE = Path(CONFIG["source"])
 RUN = Path(CONFIG["run"])
-for name in "EASEL_ROOT EASEL_SESSION EASEL_BOX EASEL_WIDTH PAINTER_SITTING_RECOVERY PAINTER_MAX_IMAGES PAINTER_MAX_IMAGE_MB PAINTER_INPUT_TPM PAINTER_LIMIT_PROBE_S PAINTER_LIMIT_GIVE_UP_H PAINTER_COMPACT_RESERVE PAINTER_COMPACTION_NOTES PAINTER_OPEN_PASSAGES PAINTER_CRITIC".split():
+for name in "EASEL_ROOT EASEL_SESSION EASEL_BOX EASEL_WIDTH PAINTER_SITTING_RECOVERY PAINTER_MAX_IMAGES PAINTER_MAX_IMAGE_MB PAINTER_INPUT_TPM PAINTER_LIMIT_PROBE_S PAINTER_LIMIT_GIVE_UP_H PAINTER_COMPACT_RESERVE PAINTER_COMPACTION_NOTES PAINTER_OPEN_PASSAGES PAINTER_CRITIC PAINTER_INBOX_DIR PAINTER_INBOX_SITTING".split():
     os.environ.pop(name, None)
 sys.path.insert(0, str(HERE))
 spec = importlib.util.spec_from_file_location("house_runner", HERE / "r21_chains.py")
@@ -33,6 +34,19 @@ if CONFIG.get("critic"):
     MODEL["env"] = {**(MODEL["env"] or {}), "PAINTER_CRITIC": json.dumps({"args": (["-e", str(R.BLACK)] if MODEL["black"] else []) + MODEL["args"], "dir": str(RUN / "critic")})}
 R.LANES = {"OPUS": R.lane("friedrich", MODEL, record_kind="none", reference=False)}
 R.MY_LANES = ["OPUS"]
+launch = R.run
+
+
+def run(cmd, cwd, out, err, env=None):
+    sitting = re.fullmatch(r"p\d+_s(\d+)(?:_part\d+)?_final\.txt", Path(out).name)
+    if sitting:
+        run_dir = Path(out).parent.resolve()
+        (Path(cwd) / ".painter-run").write_text(str(run_dir) + "\n")
+        env = {**(env or {}), "PAINTER_INBOX_DIR": str(run_dir), "PAINTER_INBOX_SITTING": sitting[1]}
+    return launch(cmd, cwd, out, err, env=env)
+
+
+R.run = run
 assert subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "HEAD"]).decode().strip() == R.BRANCH, "prepared source revision changed"
 assert (STUDIO / "bin/box").read_text().strip() == "friedrich"
 assert R.brief("friedrich", STUDIO, reference=False).replace("~/src/a/" + STUDIO.name, str(STUDIO)) == (STUDIO / "BRIEF.md").read_text(), "prepared brief changed"

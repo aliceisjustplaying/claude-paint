@@ -145,7 +145,7 @@ def export(studio, easel, profile, name, destination, live=False):
     log = (studio / "paintings/lua/painting.lua").resolve(strict=True) if checkpoint else None
     names = [f"{name}-gallery.png", f"{name}-plain.png", f"{name}-timelapse.mp4"]
     for filename in names:
-        if (destination / filename).exists():
+        if os.path.lexists(destination / filename):
             raise ValueError(f"output already exists: {destination / filename}")
     env = dict(os.environ, EASEL_ROOT=str(studio), EASEL_SESSION="painting")
     env.pop("EASEL_BOX", None)
@@ -162,7 +162,8 @@ def export(studio, easel, profile, name, destination, live=False):
         info = encode_clip(clip_frames(process, gallery, plain, profile), clip, work)
         destination.mkdir(parents=True, exist_ok=True)
         for filename in names:
-            shutil.copyfile(work / filename, destination / filename)
+            with (work / filename).open("rb") as source, (destination / filename).open("xb") as output:
+                shutil.copyfileobj(source, output)
     return info
 
 

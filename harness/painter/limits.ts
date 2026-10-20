@@ -37,17 +37,21 @@ export interface LimitWait {
 
 export const LIMIT_WAIT: LimitWait = { probeMs: 30 * 60_000, giveUpMs: 24 * 3_600_000 };
 
+const MAX_TIMER_MS = 2_147_483_647;
+
 /** LIMIT_WAIT with PAINTER_LIMIT_PROBE_S and PAINTER_LIMIT_GIVE_UP_H from `env` where set. */
 export function limitWaitFromEnv(env: NodeJS.ProcessEnv = process.env): LimitWait {
 	const probe = env.PAINTER_LIMIT_PROBE_S, giveUp = env.PAINTER_LIMIT_GIVE_UP_H;
 	const w = { ...LIMIT_WAIT };
 	if (probe !== undefined) {
-		if (!(Number(probe) >= 0)) throw new Error(`PAINTER_LIMIT_PROBE_S=${probe}: want seconds`);
-		w.probeMs = Number(probe) * 1000;
+		const ms = Number(probe) * 1000;
+		if (!(ms >= 0 && ms <= MAX_TIMER_MS)) throw new Error(`PAINTER_LIMIT_PROBE_S=${probe}: want seconds, at most ${MAX_TIMER_MS / 1000}`);
+		w.probeMs = ms;
 	}
 	if (giveUp !== undefined) {
-		if (!(Number(giveUp) >= 0)) throw new Error(`PAINTER_LIMIT_GIVE_UP_H=${giveUp}: want hours`);
-		w.giveUpMs = Number(giveUp) * 3_600_000;
+		const ms = Number(giveUp) * 3_600_000;
+		if (!(ms >= 0 && Number.isFinite(ms))) throw new Error(`PAINTER_LIMIT_GIVE_UP_H=${giveUp}: want finite hours`);
+		w.giveUpMs = ms;
 	}
 	return w;
 }
@@ -59,5 +63,5 @@ export function limitWaitFromEnv(env: NodeJS.ProcessEnv = process.env): LimitWai
 export function limitWaitMs(text: string, since: number, now: number, w: LimitWait): number | undefined {
 	if (now - since >= w.giveUpMs) return undefined;
 	const reset = limitResetMs(text);
-	return reset !== undefined ? reset + 60_000 : w.probeMs;
+	return Math.min(reset !== undefined ? reset + 60_000 : w.probeMs, w.giveUpMs - (now - since));
 }

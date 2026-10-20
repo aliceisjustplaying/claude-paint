@@ -50,6 +50,13 @@ use crate::graphite::{cover, uncover};
 use crate::mask::Mask;
 use crate::pastel::PARTICLE_UM;
 
+fn coverage_after_pastel_removal(coverage: f32, before: f32, after: f32) -> f32 {
+    let clear = (-before / PARTICLE_UM).exp();
+    let other = ((coverage - (1.0 - clear)) / clear.max(1e-6)).clamp(0.0, coverage);
+    let kept = 1.0 - (-after / PARTICLE_UM).exp();
+    (other + (1.0 - other) * kept).clamp(0.0, coverage)
+}
+
 /// A sheet of paper laid on the picture.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sheet {
@@ -430,12 +437,10 @@ impl Canvas {
         if ex <= 1e-6 {
             return 0.0;
         }
-        let cov = |v: f32| 1.0 - (-v / PARTICLE_UM).exp();
         c.loose -= ex;
-        let a1 = (c.a * cov(keep) / cov(v).max(1e-6)).clamp(0.0, c.a);
+        let a1 = coverage_after_pastel_removal(c.a, v, keep).max(c.floor.min(c.a));
         let under = uncover(*px, c.a, c.r);
         c.a = a1;
-        c.floor = c.floor.min(a1);
         *px = cover(under, c.a, c.r);
         ex
     }
@@ -544,6 +549,7 @@ impl Canvas {
                         // cut fibers take what is bound to them too: freed,
                         // it comes off with the loose (its coverage with it)
                         let cut = (cl.bound - keep).max(0.0);
+                        cl.floor = coverage_after_pastel_removal(cl.floor, cl.bound, cl.bound - cut);
                         cl.bound -= cut;
                         cl.loose += cut;
                     }
@@ -1107,13 +1113,63 @@ impl Canvas {
 mod tests {
     use super::BRUSH_HOLDS_MG_MM3;
     use crate::canvas::{Canvas, Crop};
-    use crate::graphite::{Lead, hand_line};
+    use crate::graphite::{Lead, cover, hand_line};
     use crate::mask::Mask;
     use crate::paper::Paper;
-    use crate::pastel::{Pose, Stick, StrokePoint};
+    use crate::pastel::{PARTICLE_UM, Pose, Stick, StrokePoint};
 
     fn drawing_paper() -> Canvas {
         Canvas::new_window(600, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
+    }
+
+    #[test]
+    fn loose_removal_preserves_fixed_and_non_pastel_coverage() {
+        let cov = |v: f32| 1.0 - (-v / PARTICLE_UM).exp();
+        for (other, bound, fixed) in [(0.4, 0.0, false), (0.4, 0.0, true), (0.0, 4.0, true), (0.4, 4.0, true)] {
+            let floor = if fixed { other + (1.0 - other) * cov(bound) } else { 0.0 };
+            for keep in [bound + 4.0, bound] {
+                let mut cell = crate::graphite::Cell {
+                    a: other + (1.0 - other) * cov(bound + 8.0), r: [0.1; 3],
+                    lift: 0.55, floor, film: 0.0, loose: 8.0, bound,
+                };
+                let mut px = cover([0.55; 3], cell.a, cell.r);
+                let removed = Canvas::take_loose(&mut cell, &mut px, keep);
+                let expected = other + (1.0 - other) * cov(keep);
+                assert!((cell.a - expected).abs() < 1e-6, "{} != {expected}", cell.a);
+                assert!((removed - (bound + 8.0 - keep)).abs() < 1e-6);
+                assert!((cell.loose - (keep - bound)).abs() < 1e-6);
+                assert_eq!(cell.bound, bound);
+                assert_eq!(cell.floor, floor);
+                assert!(cell.a >= cell.floor);
+                for (actual, expected) in px.into_iter().zip(cover([0.55; 3], expected, cell.r)) {
+                    assert!((actual - expected).abs() < 1e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_fine_dry_brush_keeps_fixed_graphite_beneath_loose_pastel() {
+        let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
+        let line = hand_line(&[(100.0, 500.0), (900.0, 500.0)], &[0.6], false, true, 0.0, 5);
+        c.draw(&Lead::pencil("2B").unwrap(), &line, 0.0, 9);
+        c.fix_drawing(None);
+        let mut d = c.drawing.take().unwrap();
+        let floors: Vec<_> = d.cells.iter().map(|cell| cell.floor).collect();
+        let bed: Vec<_> = floors.iter().enumerate().filter(|(_, floor)| **floor > 0.0).map(|(i, _)| (i, 1.0, false)).collect();
+        assert!(!bed.is_empty());
+        let mut rng = crate::rng::Rng::new(7);
+        let px_um2 = (c.px_mm() * 1000.0).powi(2);
+        crate::pastel::lay_crumbs(&mut d, &c.film, &mut c.px, &bed, bed.len() as f32 * 8.0, [0.02; 3], &mut rng, 300.0, px_um2);
+        c.drawing = Some(d);
+        let mut held = 0.0;
+        let (removed, _) = c.dust_pastel(30.0, 2.0, &[(0.0, 500.0), (1000.0, 500.0)], &mut held, 1e9);
+        assert!(removed > 0.0);
+        for (cell, floor) in c.drawing.as_ref().unwrap().cells.iter().zip(floors) {
+            assert_eq!(cell.floor, floor);
+            assert!(cell.a >= floor);
+            assert_eq!(cell.bound, 0.0);
+        }
     }
 
     fn pose(force: f32, alt_deg: f32) -> Pose {

@@ -92,6 +92,28 @@ case $light in
 esac
 command -v ffmpeg >/dev/null || { echo "replay_clip: needs ffmpeg" >&2; exit 1; }
 dir=${dir:-$out.frames}
+uv run --no-project python - "$log" "$dir" "$out" "$sheet" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+source, frames, output, sheet = sys.argv[1:]
+paths = [source, frames, output, f"{frames}.log", f"{frames}.replay.ckpt"]
+if sheet:
+    paths.append(sheet)
+try:
+    for index, name in enumerate(paths):
+        path = Path(name)
+        variants = (path.absolute(), path.resolve())
+        for other_name in paths[:index]:
+            other = Path(other_name)
+            overlap = any(a == b or a in b.parents or b in a.parents
+                          for a in variants for b in (other.absolute(), other.resolve()))
+            if overlap or (path.exists() and other.exists() and os.path.samefile(path, other)):
+                sys.exit(f"replay_clip: paths overlap: {name} and {other_name}")
+except (OSError, RuntimeError) as error:
+    sys.exit(f"replay_clip: {error}")
+PY
 
 if [ "$reuse" = 0 ]; then
   [ -n "$easel" ] || easel=$("$(dirname "$0")/replay_easel" --no-build)

@@ -123,10 +123,14 @@ class InboxTests(unittest.TestCase):
         (studio / "bin").mkdir(parents=True)
         (studio / "bin/box").write_text("friedrich\n")
         (studio / "BRIEF.md").write_text("Brief.")
+        (studio / ".painter-run").write_text(str(self.run) + "\n")
         (runner / "run-config.json").write_text(json.dumps({"studio": str(studio), "source": str(repo),
             "source_revision": subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip(),
             "run": str(self.run / "records")}))
         (runner / "r21_chains.py").write_text('''import json
+import os
+from pathlib import Path
+from unittest.mock import patch
 TOOLS = "read"
 def model(*args, **kwargs): return {}
 def lane(*args, **kwargs): return {}
@@ -137,7 +141,19 @@ def run(cmd, cwd, out, err, env=None):
     return 0
 def paint(name, n, studio, rd):
     run(["pi"], studio, rd / "probe.txt", rd / "err", env={"KEEP": "yes"})
-    run(["pi"], studio, rd / "p1_s2_part3_final.txt", rd / "err", env={"KEEP": "yes"})
+    replaced = []
+    replace = os.replace
+    def publish(source, target):
+        assert target == studio / ".painter-run"
+        assert Path(source).parent == studio
+        assert target.read_text() == str(studio.parent) + "\\n"
+        assert Path(source).read_text() == str(rd) + "\\n"
+        replaced.append(target)
+        return replace(source, target)
+    with patch.object(os, "replace", publish):
+        run(["pi"], studio, rd / "p1_s2_part3_final.txt", rd / "err", env={"KEEP": "yes"})
+    assert replaced == [studio / ".painter-run"]
+    assert not list(studio.glob(".painter-run-*"))
     return True
 ''')
         subprocess.run(["uv", "run", "--no-project", "python", str(runner / "run.py")], check=True,
@@ -149,6 +165,23 @@ def paint(name, n, studio, rd):
         self.assertEqual((studio / ".painter-run").read_text(), str(inbox_dir) + "\n")
         subprocess.run([str(repo / "scripts/tell-painter"), str(studio), "Hello."], check=True, capture_output=True)
         self.assertEqual(json.loads((inbox_dir / inbox.FILENAME).read_text())[0]["text"], "Hello.")
+
+    def test_tell_painter_rejects_empty_pointer_without_writing_to_sender_cwd(self):
+        repo = Path(__file__).resolve().parents[3]
+        studio = self.run / "studio"
+        studio.mkdir()
+        sender = self.run / "sender"
+        sender.mkdir()
+        for text in ("", " \n\t"):
+            with self.subTest(pointer=text):
+                (studio / ".painter-run").write_text(text)
+                result = subprocess.run([str(repo / "scripts/tell-painter"), str(studio), "Hello."],
+                                        cwd=sender, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("FileNotFoundError", result.stderr)
+                self.assertNotIn("queued", result.stdout)
+                self.assertEqual(list(sender.iterdir()), [])
+                self.assertEqual(list(studio.iterdir()), [studio / ".painter-run"])
 
     def test_an_older_identical_opening_is_not_a_delivery_receipt(self):
         text = "Again."

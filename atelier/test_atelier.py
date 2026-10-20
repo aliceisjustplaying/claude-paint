@@ -301,6 +301,34 @@ def test_run_passes_the_run_directory_and_sitting_only_when_inbox_enabled(world,
     assert (folder / ".painter-run").exists() == enabled
 
 
+def test_run_keeps_old_pointer_readable_until_atomic_publication(world, monkeypatch):
+    work = world.start(OPUS, prepare=True)
+    house = A.house()
+    house.run = lambda *args, **kwargs: 0
+    monkeypatch.setattr(A, "house", lambda: house)
+    configured = R.configure(OPUS, work)
+    folder = Path(json.loads((work / "manifest.json").read_text())["folder"])
+    pointer = folder / ".painter-run"
+    pointer.write_text(str(work) + "\n")
+    rd = work / "run" / "OPUS"
+    replaced = []
+    replace = R.os.replace
+
+    def publish(source, target):
+        assert target == pointer
+        assert Path(source).parent == folder
+        assert pointer.read_text() == str(work) + "\n"
+        assert Path(source).read_text() == str(rd) + "\n"
+        replaced.append(target)
+        return replace(source, target)
+
+    monkeypatch.setattr(R.os, "replace", publish)
+    configured.run(["pi"], folder, rd / "p1_s2_final.txt", rd / "err.txt")
+    assert replaced == [pointer]
+    assert pointer.read_text() == str(rd) + "\n"
+    assert not list(folder.glob(".painter-run-*"))
+
+
 def test_run_finishes_once_the_house_loop_is_done(world, monkeypatch):
     world.start(OPUS, prepare=True)
     seen = []

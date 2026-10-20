@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 CONFIG = json.loads((HERE / "run-config.json").read_text())
@@ -41,7 +42,13 @@ def run(cmd, cwd, out, err, env=None):
     sitting = re.fullmatch(r"p\d+_s(\d+)(?:_part\d+)?_final\.txt", Path(out).name)
     if sitting:
         run_dir = Path(out).parent.resolve()
-        (Path(cwd) / ".painter-run").write_text(str(run_dir) + "\n")
+        fd, name = tempfile.mkstemp(prefix=".painter-run-", dir=cwd)
+        try:
+            with os.fdopen(fd, "w") as pointer:
+                pointer.write(str(run_dir) + "\n")
+            os.replace(name, Path(cwd) / ".painter-run")
+        finally:
+            Path(name).unlink(missing_ok=True)
         env = {**(env or {}), "PAINTER_INBOX_DIR": str(run_dir), "PAINTER_INBOX_SITTING": sitting[1]}
     return launch(cmd, cwd, out, err, env=env)
 

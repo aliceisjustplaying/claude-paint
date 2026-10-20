@@ -12,7 +12,10 @@ args = ap.parse_args()
 run = args.run_or_studio.expanduser().resolve(strict=True)
 pointer = run / ".painter-run"
 if pointer.exists():
-    run = Path(pointer.read_text().strip()).resolve(strict=True)
+    target = pointer.read_text().strip()
+    if not target:
+        raise FileNotFoundError(pointer)
+    run = Path(target).resolve(strict=True)
 inbox = runpy.run_path(str(Path(__file__).resolve().parents[1] / "harness/painter/inbox.py"))
 message = inbox["send"](run, args.text)
 print(f"{message['id']} queued at {message['timestamp']} in {run / inbox['FILENAME']}")

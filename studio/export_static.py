@@ -214,8 +214,8 @@ def card_page(page, painter, homepage=False, root="/studio/"):
                             f'<span id="badge" class="{"live" if active else ""}">{badge}</span>'.encode(), 1)
         if painter.get("og_image"):
             pic = painter["og_image"]
-            page = page.replace(b'<img id="img" alt="the painting">',
-                                f'<img id="img" alt="the painting" src="{esc(pic["url"].removeprefix(SITE).split("?", 1)[0])}" fetchpriority="high">'.encode(), 1)
+            page = page.replace(b'<img id="img"',
+                                f'<img id="img" src="{esc(pic["url"].removeprefix(SITE).split("?", 1)[0])}" fetchpriority="high"'.encode(), 1)
             if pic["width"] < pic["height"] * 1.15:
                 page = page.replace(b'<div id="view">', b'<div id="view" class="tall">', 1)
         else:

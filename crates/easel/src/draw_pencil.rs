@@ -891,8 +891,9 @@ mod tests {
     use crate::session::{Session, logged_paper, parse_program};
 
     const W: usize = 160;
-    const CANVAS: &str = r#"canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=40, apply="brush"}}}"#;
-    const PAPER: &str = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, tone={{"lead white", 4}, {"raw umber", 0.3}}}}"#;
+    const CANVAS: &str = r#"canvas{size=128, aspect=1.5, linen=15, seed=2, ground={{pile={{"lead white", 3}, {"yellow ochre", 1}}, um=40, apply="brush"}}}"#;
+    const PAPER: &str = r#"canvas{size=64, aspect=1.25, seed=3, paper={grammage=200, tone={{"lead white", 4}, {"raw umber", 0.3}}}}"#;
+    const RESAMPLING_PAPER: &str = r#"canvas{size=200, aspect=1.25, seed=3, paper={grammage=200, tone={{"lead white", 4}, {"raw umber", 0.3}}}}"#;
 
     fn run(s: &mut Session, src: &str) -> String {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
@@ -1063,7 +1064,7 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
     #[test]
     fn pastel_paths_are_bounded_before_native_resampling() {
         let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
-        run(&mut s, PAPER);
+        run(&mut s, RESAMPLING_PAPER);
         run(&mut s, r#"p = pastel(pile{{"vermilion", 1}})
             p:stroke({{100, 100}, {300, 100}})"#);
         for call in ["p:stroke(path)", "p:side(path)", "smudge(path, {pad=0.5})"] {
@@ -1090,7 +1091,7 @@ work(everywhere(), {hand="body", pile=pile{{"lead white", 1}}, coverage=3, fill=
     #[test]
     fn inherited_pastel_paths_are_bounded_before_native_marks() {
         let mut s = Session::new(W).unwrap().with_paper(true).unwrap();
-        run(&mut s, PAPER);
+        run(&mut s, RESAMPLING_PAPER);
         run(&mut s, r#"p = pastel(pile{{"vermilion", 1}})"#);
         for (call, length) in [
             ("p:line(path)", 25_000),

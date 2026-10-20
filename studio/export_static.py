@@ -304,15 +304,17 @@ EXPORTED = {}  # (out, painter, image) -> (its sources, ext, web copies made, fi
 
 def image_sources(st, i):
     """What image i of a stream is made of: its look and display companions, each with the file's state when it
-    is a picture on disk (a look inside a session never changes). A later export in the same process skips an
-    image whose sources match the last one's. None if a file can't be read."""
+    is a picture on disk, or the session's parse generation for a look inside it (appends leave a look alone; a
+    replaced session is parsed again). A later export in the same process skips an image whose sources match the
+    last one's. None if a file can't be read."""
     for f, _, ni in st["parts"]:
         if i < ni:
             c = S._cache[f]
             srcs = [c["images"][i] if i < len(c["images"]) else None]
             srcs += [c["lights"].get(light, {}).get(i) for light in S.DISPLAY_LIGHTS]
             try:
-                return tuple(src and (src, None if src[1] is not None else os.stat(src[0]).st_mtime_ns) for src in srcs)
+                return tuple(src and (src, c.get("generation", 0) if src[1] is not None else os.stat(src[0]).st_mtime_ns)
+                             for src in srcs)
             except OSError:
                 return None
         i -= ni

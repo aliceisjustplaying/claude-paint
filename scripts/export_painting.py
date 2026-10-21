@@ -15,7 +15,9 @@ The clip uses the existing 1000px-wide framing, 15 Gallery-final frames,
 495 process frames and 90 final frames (Gallery for Friedrich, plain otherwise).
 PNG exports keep the canvas's full resolution. Closed studios render live.ckpt
 (or live.ckpt.zst or live.ckpt.gz), validated against paintings/lua/painting.lua,
-using a render-checkpoint-capable --easel. --live uses client-only save instead, including
+using a render-checkpoint-capable --easel. A painter's easel (bin/studio beside it)
+hides render-checkpoint, so it renders from a copy outside its bin/, which runs as the
+developer's. --live uses client-only save instead, including
 after a studio reopens and its previous checkpoint becomes stale. Without a
 checkpoint, save connects to the running studio.
 No finishing is applied. A failed render or connection never starts a replay.
@@ -152,6 +154,9 @@ def export(studio, easel, profile, name, destination, live=False):
     env.pop("EASEL_BOX", None)
     with tempfile.TemporaryDirectory(prefix="export-", dir=session) as temporary:
         work = Path(temporary)
+        if checkpoint and (easel.parent / "studio").is_file():
+            shutil.copy2(easel, work / "easel")
+            easel = work / "easel"
         gallery, plain, clip = [work / filename for filename in names]
         if checkpoint and checkpoint.suffix == ".gz":
             uncompressed = work / "live.ckpt"

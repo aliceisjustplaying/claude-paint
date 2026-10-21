@@ -12,7 +12,7 @@
         cc = (import nixpkgs-glibc { inherit system; }).stdenv.cc;
       in {
         default = pkgs.mkShell ({
-          packages = [ pkgs.cargo pkgs.rustc pkgs.python3 pkgs.uv pkgs.perl pkgs.nodejs_24 pkgs.ffmpeg ] ++ nixpkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.procps ];
+          packages = [ pkgs.cargo pkgs.rustc pkgs.python3 pkgs.uv pkgs.perl pkgs.nodejs_24 pkgs.ffmpeg (pkgs.callPackage ./nix/kache.nix { }) ] ++ nixpkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.procps ];
           UV_PYTHON_DOWNLOADS = "never";
         } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "${cc}/bin/cc";

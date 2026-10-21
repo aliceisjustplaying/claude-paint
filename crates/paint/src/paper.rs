@@ -189,6 +189,22 @@ fn poisson(rng: &mut Rng, m: f32) -> u32 {
     }
 }
 
+#[inline]
+fn fiber_misses_window(cx: f32, cy: f32, len: f32, (x0, y0, w, h): (usize, usize, usize, usize), px_mm: f32) -> bool {
+    if !px_mm.is_finite() || px_mm <= 0.0 {
+        return false;
+    }
+    let radius = 0.5 * len.abs();
+    let fy0 = (cy - radius) / px_mm - 0.5 - y0 as f32;
+    let fy1 = (cy + radius) / px_mm - 0.5 - y0 as f32;
+    if fy1 < -1.0 || fy0 >= h as f32 {
+        return true;
+    }
+    let fx0 = (cx - radius) / px_mm - 0.5 - x0 as f32;
+    let fx1 = (cx + radius) / px_mm - 0.5 - x0 as f32;
+    fx1 < -1.0 || fx0.floor() as i64 >= w as i64
+}
+
 /// Lay the sheet over the window `(x0, y0, w, h)` of a canvas whose pixels
 /// are `px_mm` mm.
 pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> Sheet {
@@ -214,6 +230,9 @@ pub fn lay(p: &Paper, x0: usize, y0: usize, w: usize, h: usize, px_mm: f32) -> S
             let (cx0, cx1) = ((bx0 / CELL_MM).floor() as i64, (bx1 / CELL_MM).floor() as i64);
             let (cy0, cy1) = ((by0 / CELL_MM).floor() as i64, (by1 / CELL_MM).floor() as i64);
             let mut lay_fiber = |cx: f32, cy: f32, ang: f32, len: f32| {
+                if fiber_misses_window(cx, cy, len, (x0, y0 + b0, w, rows), px_mm) {
+                    return;
+                }
                 // the fiber's mass laid along it, half a pixel at a time
                 let steps = ((len / (0.5 * px_mm)).ceil() as usize).max(1);
                 let (dx, dy) = (ang.cos() * len, ang.sin() * len);
@@ -397,6 +416,48 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn fiber_bounds_reject_only_empty_cropped_bands() {
+        let mut rejected = 0;
+        for (x0, y0, w, h) in [(0, 0, 17, 48), (7, 47, 11, 48), (20, 48, 13, 1), (31, 49, 1, 47), (16_777_215, 16_777_216, 5, 48)] {
+            for px_mm in [0.1, 0.125, 0.25, 1.0] {
+                assert!(!fiber_misses_window((x0 as f32 + 0.5) * px_mm, (y0 as f32 + 0.5) * px_mm, 2.0, (x0, y0, w, h), px_mm));
+                let xs = [(-1.0f32).next_down(), -1.0, (-1.0f32).next_up(), 0.0, w as f32 - 1.0, w as f32, (w as f32).next_up()];
+                let ys = [(-1.0f32).next_down(), -1.0, (-1.0f32).next_up(), 0.0, h as f32 - 1.0, h as f32, (h as f32).next_up()];
+                for x in xs {
+                    for y in ys {
+                        let (cx, cy) = ((x0 as f32 + x + 0.5) * px_mm, (y0 as f32 + y + 0.5) * px_mm);
+                        for len in [0.0, 0.001, 0.125, 2.0, 8.0] {
+                            if !fiber_misses_window(cx, cy, len, (x0, y0, w, h), px_mm) {
+                                continue;
+                            }
+                            rejected += 1;
+                            let steps = ((len / (0.5 * px_mm)).ceil() as usize).max(1);
+                            for ang in [0.0, std::f32::consts::FRAC_PI_6, std::f32::consts::FRAC_PI_4, std::f32::consts::FRAC_PI_2, 3.0 * std::f32::consts::FRAC_PI_4, std::f32::consts::PI] {
+                                let (dx, dy) = (ang.cos() * len, ang.sin() * len);
+                                for s in 0..steps {
+                                    let t = (s as f32 + 0.5) / steps as f32 - 0.5;
+                                    let (xm, ym) = (cx + dx * t, cy + dy * t);
+                                    let (ix, iy) = ((xm / px_mm - 0.5 - x0 as f32).floor() as i64, (ym / px_mm - 0.5 - y0 as f32).floor() as i64);
+                                    for oy in 0..=1 {
+                                        for ox in 0..=1 {
+                                            let (xx, yy) = (ix + ox, iy + oy);
+                                            assert!(xx < 0 || xx >= w as i64 || yy < 0 || yy >= h as i64, "rejected fiber touches {xx},{yy} in {x0},{y0},{w},{h} at {px_mm} mm: center {cx},{cy}, length {len}, angle {ang}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(rejected > 0);
+        for px_mm in [0.0, -0.25, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            assert!(!fiber_misses_window(-10.0, -10.0, 2.0, (0, 0, 17, 48), px_mm));
+        }
+    }
 
     fn stats(v: &[f32]) -> (f64, f64) {
         let n = v.len() as f64;

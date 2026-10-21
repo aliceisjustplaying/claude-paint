@@ -518,6 +518,7 @@ impl Session {
             self.rebuild()?;
         }
         let trace = (!self.replay).then(crate::replay_checkpoint::mark);
+        crate::replay_checkpoint::hold_tools(&self.st);
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
@@ -592,6 +593,7 @@ impl Session {
         // masks and brushes hold memory Lua can't see: collect between chunks, without the
         // snapshot, as a replay does, and within the chunk's time
         drop(snap);
+        crate::replay_checkpoint::chunk_end();
         self.deadline.set(deadline);
         let _ = self.lua.gc_collect();
         self.deadline.set(None);

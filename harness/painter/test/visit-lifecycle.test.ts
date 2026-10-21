@@ -40,6 +40,22 @@ function alive(pid: number): boolean {
 	}
 }
 
+test("a visit runs its supervisor with Node when the extension host is pi", async () => {
+	const f = fixture();
+	const host = join(f.dir, "extension-host");
+	writeFileSync(host, "#!/bin/sh\necho 'pi is not a JavaScript runtime' >&2\nexit 64\n", { mode: 0o755 });
+	writeFileSync(f.pi, "#!/bin/sh\necho critique\n", { mode: 0o755 });
+	const execPath = process.execPath;
+	try {
+		process.execPath = host;
+		const notes = await visit(f.dir, f.critic, "sitting", undefined, f.pi);
+		assert.match(notes, /critique/);
+		assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), notes);
+	} finally {
+		process.execPath = execPath;
+	}
+});
+
 test("aborting a visit escalates past an ignored SIGTERM and preserves the previous notes", async () => {
 	const f = fixture();
 	const descendantFile = join(f.dir, "descendant");
@@ -64,6 +80,7 @@ setInterval(() => {}, 1000);
 		await rejected;
 		assert.ok(existsSync(join(f.dir, "terminated")));
 		assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "previous notes");
+		assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /asked: failed: Operation aborted/);
 	} finally {
 		try { process.kill(-pid, "SIGKILL"); } catch {}
 	}
@@ -83,6 +100,7 @@ test("a visit is capped at twenty minutes even without a caller signal", async (
 		await until(() => !alive(pid));
 		await rejected;
 		assert.ok(!existsSync(join(f.dir, "notes/critic.md")));
+		assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /sitting: failed: critic timed out/);
 	} finally {
 		try { process.kill(-pid, "SIGKILL"); } catch {}
 	}

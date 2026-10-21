@@ -212,21 +212,28 @@ pub(crate) fn box_blur_into(src: &[f32], w: usize, h: usize, r: usize, out: &mut
     // vertical: running sums per column, processed in column blocks
     columns.resize_with(w.div_ceil(64), Vec::new);
     columns.par_iter_mut().enumerate().for_each(|(bi, res)| {
-            let x0 = bi * 64;
-            let nc = (w - x0).min(64);
-            res.resize(nc * h, 0.0);
+        let x0 = bi * 64;
+        let nc = (w - x0).min(64);
+        res.resize(nc * h, 0.0);
+        let mut sums = [0.0f32; 64];
+        for k in 0..=2 * r {
+            let start = k.saturating_sub(r).min(h - 1) * w + x0;
+            let row = &tmp[start..start + nc];
             for ci in 0..nc {
-                let x = x0 + ci;
-                let mut acc = 0.0f32;
-                for k in 0..=2 * r {
-                    acc += tmp[k.saturating_sub(r).min(h - 1) * w + x];
-                }
-                for y in 0..h {
-                    res[y * nc + ci] = acc / n;
-                    acc += tmp[(y + r + 1).min(h - 1) * w + x] - tmp[y.saturating_sub(r) * w + x];
-                }
+                sums[ci] += row[ci];
             }
-        });
+        }
+        for (y, row) in res.chunks_exact_mut(nc).enumerate() {
+            let top = y.saturating_sub(r) * w + x0;
+            let bottom = (y + r + 1).min(h - 1) * w + x0;
+            let top = &tmp[top..top + nc];
+            let bottom = &tmp[bottom..bottom + nc];
+            for ci in 0..nc {
+                row[ci] = sums[ci] / n;
+                sums[ci] += bottom[ci] - top[ci];
+            }
+        }
+    });
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for (bi, block) in columns.iter().enumerate() {
             let x0 = bi * 64;
@@ -632,6 +639,82 @@ fn linen_um(xm: f32, ym: f32, l: &Linen) -> f32 {
     // fiber fuzz
     let grit = vnoise(x0 * 3.1, y0 * 3.1, seed + 19) - 0.5;
     l.crown_um * (a.max(b) + 0.06 * grit)
+}
+
+#[cfg(test)]
+mod box_blur_tests {
+    use super::*;
+
+    fn reference(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+        if r == 0 {
+            return src.to_vec();
+        }
+        let n = (2 * r + 1) as f32;
+        let mut tmp = vec![0.0; w * h];
+        for (y, row) in tmp.chunks_exact_mut(w).enumerate() {
+            let s = &src[y * w..(y + 1) * w];
+            let mut acc = 0.0f32;
+            for k in 0..=2 * r {
+                acc += s[k.saturating_sub(r).min(w - 1)];
+            }
+            for (x, o) in row.iter_mut().enumerate() {
+                *o = acc / n;
+                acc += s[(x + r + 1).min(w - 1)] - s[x.saturating_sub(r)];
+            }
+        }
+        let mut out = vec![0.0; w * h];
+        for x in 0..w {
+            let mut acc = 0.0f32;
+            for k in 0..=2 * r {
+                acc += tmp[k.saturating_sub(r).min(h - 1) * w + x];
+            }
+            for y in 0..h {
+                out[y * w + x] = acc / n;
+                acc += tmp[(y + r + 1).min(h - 1) * w + x] - tmp[y.saturating_sub(r) * w + x];
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn row_major_columns_preserve_reference_bits() {
+        let values = [0.0, -0.0, f32::from_bits(1), -f32::from_bits(1), f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE, 1.0, -1.0, f32::from_bits(0x3f800001), 1e20, -1e20];
+        for threads in [1, 4] {
+            rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(|| {
+                let mut actual = vec![f32::NAN; 10000];
+                let mut check = |src: &[f32], w, h, r| {
+                    let expected = reference(src, w, h, r);
+                    box_blur_into(src, w, h, r, &mut actual);
+                    assert_eq!(actual.len(), expected.len());
+                    for (i, (&a, &b)) in actual.iter().zip(&expected).enumerate() {
+                        assert_eq!(a.to_bits(), b.to_bits(), "{w}x{h} r={r}, pixel {i}, threads={threads}");
+                    }
+                };
+                for w in [129, 1, 2, 63, 64, 65, 127] {
+                    for h in [1, 2, 5, 65] {
+                        for pattern in 0..3 {
+                            let src: Vec<f32> = (0..w * h).map(|i| match pattern {
+                                0 => -0.0,
+                                1 => values[i % values.len()],
+                                _ => f32::from_bits(((i as u32).wrapping_mul(1664525).wrapping_add(1013904223) & 0x807fffff) | 0x3f000000),
+                            }).collect();
+                            for r in [0, 1, 3, w.max(h) + 1] {
+                                check(&src, w, h, r);
+                            }
+                        }
+                    }
+                }
+                for paper in [false, true] {
+                    let c = Canvas::new(65, 1.3, crate::hex("#a8966f")).with_size_mm(13.0);
+                    let c = if paper { c.with_paper(crate::paper::Paper::drawing(7)) } else { c.with_linen(Linen::fine(7)) };
+                    for r in [0, 1, 3, 67] {
+                        check(&c.height, c.f.w, c.f.h, r);
+                    }
+                }
+            });
+        }
+    }
 }
 
 #[cfg(test)]

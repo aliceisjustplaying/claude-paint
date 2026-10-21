@@ -120,8 +120,15 @@ fn one_binary_serves_two_boxes_and_the_default_with_developer_commands_out_of_he
 
 #[test]
 fn painter_studio_finishes_its_closed_save() {
-    let studio = Studio::new("finish", "painter friedrich\n");
+    let studio = Studio::new("finish", "painter none\n");
     studio.ok(&["open"]);
+    for chunk in [
+        "canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{\"lead white\",6},{\"raw umber\",1}}, um=50, apply=\"roller\"}}}",
+        "p=pile{{\"lead white\",6},{\"cobalt blue\",1}}; b=brush(\"filbert\",8); b:load(p,0.9)",
+        "b:stroke({{100,100},{800,130}}, {pressure=0.8})",
+    ] {
+        studio.ok(&["do", chunk]);
+    }
     let error = studio.refuses(&["do", "varnish()"]);
     assert!(error.contains("global 'varnish'"), "{error}");
     studio.ok(&["close"]);

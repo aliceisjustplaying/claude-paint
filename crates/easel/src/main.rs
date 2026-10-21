@@ -181,20 +181,20 @@ fn main() -> ExitCode {
     let r = match cmd.as_str() {
         "open" => open(&rest),
         "serve" => serve(&rest),
-        "run" if !studio::painter() => run(&rest),
-        "render-checkpoint" if !studio::painter() => render_checkpoint(&rest),
+        "run" => run(&rest),
+        "render-checkpoint" => render_checkpoint(&rest),
         #[cfg(feature = "state-store")]
-        "render-state" if !studio::painter() => render_state(&rest),
+        "render-state" => render_state(&rest),
         #[cfg(feature = "render-snapshot")]
-        "snapshot-state" if !studio::painter() => optical::export(&rest),
+        "snapshot-state" => optical::export(&rest),
         #[cfg(feature = "render-snapshot")]
-        "render-snapshot" if !studio::painter() => optical::render(&rest),
+        "render-snapshot" => optical::render(&rest),
         #[cfg(feature = "render-snapshot")]
-        "snapshot-companions" if !studio::painter() => optical::companions(&rest),
-        "finish" if !studio::painter() => finish_cmd(&rest),
+        "snapshot-companions" => optical::companions(&rest),
+        "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
         "tubes" => tubes(&rest),
-        "hash-probe" if !studio::painter() => {
+        "hash-probe" => {
             println!("{}", session::hash_probe());
             Ok(())
         }
@@ -202,10 +202,7 @@ fn main() -> ExitCode {
             print_usage();
             Ok(())
         }
-        "do" | "look" | "probe" | "log" | "status" | "globals" | "save" | "frames" | "close" => client(&cmd, &rest, name),
-        // replaying the log to compare it with the live canvas is the runner's, after the
-        // painter's session (scripts/check_painting); the painter build has no `check`
-        "check" if !studio::painter() => client(&cmd, &rest, name),
+        "do" | "look" | "probe" | "log" | "status" | "globals" | "save" | "frames" | "close" | "check" => client(&cmd, &rest, name),
         o => Err(format!("easel: no command {o:?}\n\n{}", usage())),
     };
     match r {
@@ -808,7 +805,7 @@ fn serve(args: &[String]) -> Result<(), String> {
             eprintln!("{cmd} skipped: the client went away before it ran");
             continue;
         }
-        if cmd == "check" && !studio::painter() {
+        if cmd == "check" {
             if let Some(j) = checking.take() {
                 j.stop();
             }

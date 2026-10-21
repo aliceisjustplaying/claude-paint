@@ -49,10 +49,6 @@ elif command == "save":
     image = studio / "out/easel/painting/painting.png"
     image.parent.mkdir(parents=True)
     image.write_bytes(b"fixture image")
-elif command == "run":
-    sys.exit(1)
-elif command == "check":
-    sys.exit('no command "check"')
 elif command not in ("open", "do", "look", "close", "help"):
     sys.exit("unexpected fixture easel command")
 '''

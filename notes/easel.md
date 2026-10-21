@@ -42,8 +42,10 @@ environment override. Its complete contents are one of:
   same behavior.
 
 Painter mode keeps one painting in the directory above `bin`, restricts
-the command and Lua surfaces and ignores developer root, session and box
-overrides. Replay and finishing remain available in developer mode.
+the Lua surface, leaves developer commands out of its help and ignores
+developer root, session and box overrides. The developer commands (replay,
+check, finishing, checkpoint renders) still run, for the scripts: a painter
+reaches the easel only through its harness tools, which run fixed commands.
 In painter mode `bin/box` is profile metadata consumed by scripts, not
 runtime authority. Developer mode retains its existing `bin/box` and
 `EASEL_BOX` configuration.

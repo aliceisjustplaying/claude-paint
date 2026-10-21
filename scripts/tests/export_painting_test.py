@@ -200,6 +200,36 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 2)
                 self.assertEqual((out / "test-gallery.png").read_bytes(), b"full resolution PNG fixture")
 
+    def test_a_painters_easel_renders_the_checkpoint_from_a_developer_copy(self):
+        easel = self.studio / "bin/easel"
+        easel.parent.mkdir()
+        easel.write_bytes(b"studio easel")
+        easel.chmod(0o755)
+        (self.studio / "bin/studio").write_text("painter friedrich\n")
+        used = []
+
+        def render(command, **kwargs):
+            copy = Path(command[0])
+            self.assertEqual(command[1], "render-checkpoint")
+            self.assertNotEqual(copy.parent, easel.parent)
+            self.assertFalse((copy.parent / "studio").exists())
+            self.assertEqual(copy.read_bytes(), b"studio easel")
+            self.assertTrue(os.access(copy, os.X_OK))
+            used.append(copy)
+            Path(command[3]).write_bytes(b"PNG fixture")
+            return subprocess.CompletedProcess(command, 0)
+
+        def encode(sequence, path, work):
+            path.write_bytes(b"clip fixture")
+            return {"verified": True}
+
+        with patch.object(exporter.subprocess, "run", side_effect=render), \
+             patch.object(exporter, "encode_clip", side_effect=encode), \
+             patch.object(exporter.shutil, "which", return_value="fixture"):
+            self.assertEqual(exporter.export(self.studio, None, "friedrich", "test", self.out), {"verified": True})
+        self.assertEqual(len(used), 2)
+        self.assertFalse(used[0].exists())
+
     def test_explicit_live_export_ignores_a_stale_checkpoint_without_opening(self):
         def save(command, **kwargs):
             self.assertEqual(command[:2], [str(self.easel), "save"])

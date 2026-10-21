@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const MAGIC: &[u8; 8] = b"EASLRP01";
@@ -82,6 +83,9 @@ struct Trace {
     events: Vec<Vec<u8>>,
     at: usize,
     failure: Option<String>,
+    brushes: Vec<Rc<RefCell<paint::Held>>>,
+    knives: Vec<Rc<RefCell<paint::Knife>>>,
+    rags: Vec<Rc<RefCell<paint::rag::Rag>>>,
 }
 
 thread_local! {
@@ -107,6 +111,26 @@ pub fn check() -> mlua::Result<()> {
         Some(e) => Err(mlua::Error::runtime(e.clone())),
         None => Ok(()),
     })
+}
+
+pub fn chunk_end() {
+    TRACE.with(|t| {
+        let mut t = t.borrow_mut();
+        t.brushes.clear();
+        t.knives.clear();
+        t.rags.clear();
+    });
+}
+
+pub fn hold_tools(st: &S) {
+    TRACE.with(|t| {
+        let mut t = t.borrow_mut();
+        if !t.enabled { return; }
+        let mut s = st.borrow_mut();
+        t.brushes = s.live_brushes();
+        t.knives = s.live_knives();
+        t.rags = s.live_rags();
+    });
 }
 
 pub struct Mark {
@@ -783,6 +807,31 @@ print(counter,rand(),drying(300,300))
         resumed.written -= Duration::from_secs(900);
         resumed.completed(&path, &restored, &source, 64).unwrap();
         assert_eq!(load(&path).unwrap().0.done, chunks.len());
+    }
+
+    #[test]
+    fn live_checkpoint_reconstructs_temporary_tools_across_gc_schedules() {
+        let dir = Temp::new();
+        let path = dir.0.join("replay.ckpt");
+        let mut s = session();
+        s.lua.gc_stop();
+        let mut live = Live::new();
+        for chunk in [
+            r#"canvas{size=100, aspect=1, linen=15, seed=3, ground={{pile={{"lead white",1}},um=20,apply="knife"}}}"#,
+            "for i=1,100 do local r=rag{width=7}; r:dip(1); r:wipe({{100,100},{101,101}}) end",
+        ] { live.with(|| s.run(chunk)).unwrap(); }
+        live.written -= Duration::from_secs(900);
+        let source = s.program("live");
+        live.completed(&path, &s, &source, 64).unwrap();
+        let mut restored = session();
+        restored.lua.gc_set_mode(mlua::state::GcMode::Incremental(mlua::state::GcIncParams::default().pause(100).step_multiplier(1000).step_size(1)));
+        restored.lua.gc_restart();
+        let mut resumed = Live::new();
+        let chunks = crate::session::parse_program(&source);
+        assert_eq!(resumed.resume(&path, &source, 64, &mut restored, &chunks, "live", &|_, _| {}).unwrap(), 2);
+        assert_eq!(canvas(&restored), canvas(&s));
+        assert!(s.st.borrow_mut().live_rags().is_empty());
+        assert!(restored.st.borrow_mut().live_rags().is_empty());
     }
 
     #[test]

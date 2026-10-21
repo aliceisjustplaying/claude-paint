@@ -2334,6 +2334,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
             let held = Rc::new(RefCell::new(Held::new(tool, seed).with_engine(engine).with_packing(drain)));
             st1.borrow_mut().brushes.push(Rc::downgrade(&held));
+            crate::replay_checkpoint::hold_tools(&st1);
             let b = Brush { held, st: st1.clone() };
             // with the paper-and-pastel switch, a brush with `b:dust` too
             // (`install_paper` registers it); without it, a brush as it was
@@ -2359,6 +2360,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let k = Rc::new(RefCell::new(paint::Knife::new(width).with_packing(st1.borrow().tubes.drain)));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
+            crate::replay_checkpoint::hold_tools(&st1);
             Ok(KnifeU { k, st: st1.clone() })
         })?)?;
     }

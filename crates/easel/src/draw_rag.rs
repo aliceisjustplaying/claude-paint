@@ -228,6 +228,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let sd = seed(&st1, lua, o.as_ref())?;
         let rag = Rc::new(RefCell::new(Rag::new(width, sd)));
         st1.borrow_mut().rags.push(Rc::downgrade(&rag));
+        crate::replay_checkpoint::hold_tools(&st1);
         time::verb(&st1, Verb::Marks, |s| {
             s.canvas.as_mut().ok_or_else(no_canvas)?.tally_mut().secs += pace::FRESH;
             Ok(())

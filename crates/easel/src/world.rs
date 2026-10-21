@@ -272,7 +272,7 @@ impl UserData for WorldU {
     }
     fn add_methods<M_: UserDataMethods<Self>>(m: &mut M_) {
         // an old log's w:sky{}, w:clouds{}, w:ranges{} (legacy.rs; nil otherwise)
-        if !crate::studio::painter() {
+        if !crate::studio::painter_lua() {
             m.add_meta_function(MetaMethod::Index, |lua, (_, k): (Value, Value)| match k {
                 Value::String(k) => crate::legacy::world_method(lua, &k.to_str()?),
                 _ => Ok(Value::Nil),

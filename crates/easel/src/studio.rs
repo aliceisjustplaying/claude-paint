@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 enum Profile {
     Developer,
@@ -35,6 +36,19 @@ pub fn load() -> Result<(), String> {
 
 pub fn painter() -> bool {
     matches!(PROFILE.get(), Some(Profile::Painter { .. }))
+}
+
+static SERVING: AtomicBool = AtomicBool::new(false);
+
+/// This process is a session's server (`easel serve`), where a painter's Lua runs.
+pub fn serving() {
+    SERVING.store(true, Ordering::Relaxed);
+}
+
+/// A painter's live session: its Lua gets no finishing verbs and none of old logs' forms. A painter studio's other
+/// commands (run, finish, render-checkpoint, ...) are the scripts' and replay with everything.
+pub fn painter_lua() -> bool {
+    painter() && SERVING.load(Ordering::Relaxed)
 }
 
 pub fn root() -> Option<&'static Path> {

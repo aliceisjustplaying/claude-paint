@@ -730,6 +730,7 @@ fn scratch_name(name: &str) -> String {
 
 
 fn serve(args: &[String]) -> Result<(), String> {
+    studio::serving();
     let name = args.first().ok_or("serve <name>")?.clone();
     valid_name(&name)?;
     if studio::painter() && name != PAINTING {

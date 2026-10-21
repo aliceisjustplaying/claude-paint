@@ -678,6 +678,9 @@ impl Canvas {
         }
         for _ in 0..40 {
             let m = 0.5 * (lo + hi);
+            if m == lo || m == hi {
+                break;
+            }
             if load(m) < sp.pose.force {
                 lo = m;
             } else {
@@ -1402,6 +1405,83 @@ mod tests {
 
     fn pose(force: f32, alt_deg: f32) -> Pose {
         Pose { force, alt: alt_deg.to_radians(), az: 45f32.to_radians(), roll: 0.0 }
+    }
+
+    #[test]
+    fn stagnant_midpoints_preserve_forty_step_results() {
+        let solve = |mut lo: f32, mut hi: f32, force: f32, stop: bool| {
+            let mut calls = 0;
+            for _ in 0..40 {
+                let m = 0.5 * (lo + hi);
+                if stop && (m == lo || m == hi) {
+                    break;
+                }
+                calls += 1;
+                if m < force {
+                    lo = m;
+                } else {
+                    hi = m;
+                }
+            }
+            ((0.5 * (lo + hi)).to_bits(), calls)
+        };
+        let tiny = f32::from_bits(1);
+        for (lo, hi) in [
+            (0.0, 50.0), (-0.0, 0.0), (-0.0, -0.0), (tiny, 2.0 * tiny), (-tiny, tiny),
+            (1.0, f32::from_bits(1.0f32.to_bits() + 1)),
+            (-f32::from_bits(1.0f32.to_bits() + 1), -1.0),
+            (f32::MAX, f32::MAX), (-f32::MAX, -f32::MAX), (0.5 * f32::MAX, f32::MAX),
+            (f32::NEG_INFINITY, -1.0), (1.0, f32::INFINITY),
+            (f32::NEG_INFINITY, f32::INFINITY), (f32::NAN, 1.0), (1.0, f32::NAN),
+        ] {
+            for force in [f32::NEG_INFINITY, -1.0, -0.0, 0.0, tiny, 1.0, f32::MAX, f32::INFINITY, f32::NAN] {
+                let original = solve(lo, hi, force, false);
+                let stopped = solve(lo, hi, force, true);
+                assert_eq!(stopped.0, original.0, "bounds {lo:?}, {hi:?}, force {force:?}");
+                if lo.is_nan() || hi.is_nan() || (lo == f32::NEG_INFINITY && hi == f32::INFINITY) {
+                    assert_eq!(stopped.1, 40);
+                }
+            }
+        }
+        assert_eq!(solve(1.0, f32::from_bits(1.0f32.to_bits() + 1), 1.0, true).1, 0);
+    }
+
+    #[test]
+    fn seated_sticks_match_the_original_forty_step_search() {
+        let mut c = Canvas::new_window(24, 1.0, [0.55; 3], None).with_size_mm(40.0).with_paper(Paper::drawing(4));
+        for height in [0.0, 1000.0] {
+            c.height.fill(height);
+            for stick in [Stick::round([0.02; 3], 0.8, 12.0), Stick::square([0.02; 3], 0.0, 6.35)] {
+                for alt in [0.0, 60.0, 90.0] {
+                    for force in [-0.0, f32::from_bits(1), 0.01, 3.0, f32::MAX, f32::NAN] {
+                        let sp = StrokePoint { x: 500.0, y: 500.0, pose: pose(force, alt), speed: 50.0 };
+                        let s = c.seat_stick(&stick, &sp).unwrap();
+                        let load = |delta: f32| {
+                            let mut p = 0.0;
+                            for (j, &(_, b)) in s.under.iter().enumerate() {
+                                let (hs, mu, k) = s.surf[j];
+                                p += seat(hs - b * 1000.0 + delta, mu, k, stick.hardness).0;
+                            }
+                            p * (c.px_mm() * c.px_mm())
+                        };
+                        let first = s.under.iter().zip(&s.surf).map(|(&(_, b), &(hs, _, _))| b * 1000.0 - hs).fold(f32::MAX, f32::min);
+                        let (mut lo, mut hi) = (first, first + 50.0);
+                        while load(hi) < force && hi - first < 5000.0 {
+                            hi = first + 2.0 * (hi - first);
+                        }
+                        for _ in 0..40 {
+                            let m = 0.5 * (lo + hi);
+                            if load(m) < force {
+                                lo = m;
+                            } else {
+                                hi = m;
+                            }
+                        }
+                        assert_eq!(s.delta.to_bits(), (0.5 * (lo + hi)).to_bits(), "height {height}, altitude {alt}, force {force:?}");
+                    }
+                }
+            }
+        }
     }
 
     fn line(c: &mut Canvas, st: &mut Stick, y: f32, force: f32, alt: f32) -> Laid {

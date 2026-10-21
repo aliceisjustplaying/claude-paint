@@ -1935,7 +1935,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             lua.create_function(move |lua, o: Option<Table>| {
                 let o = o.ok_or_else(|| mlua::Error::runtime(CANVAS_HELP))?;
                 // an old log's canvas: a named style and palette (legacy.rs)
-                if !crate::studio::painter() && crate::legacy::asks(&o)? {
+                if !crate::studio::painter_lua() && crate::legacy::asks(&o)? {
                     return crate::legacy::canvas(lua, &st, o);
                 }
                 let raw_ok = draw_soak::has_raw(st.borrow().tubes.engine);
@@ -2406,7 +2406,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
 
-    if !crate::studio::painter() {
+    if !crate::studio::painter_lua() {
         crate::finish::install(lua, st.clone())?;
     }
 

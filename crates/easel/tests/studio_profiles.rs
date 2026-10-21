@@ -119,6 +119,20 @@ fn one_binary_serves_two_boxes_and_the_default_with_developer_commands_out_of_he
 }
 
 #[test]
+fn painter_studio_finishes_its_closed_save() {
+    let studio = Studio::new("finish", "painter friedrich\n");
+    studio.ok(&["open"]);
+    let error = studio.refuses(&["do", "varnish()"]);
+    assert!(error.contains("global 'varnish'"), "{error}");
+    studio.ok(&["close"]);
+    let save = studio.root.join("out/easel/painting/live.ckpt");
+    assert!(save.is_file());
+    let out = studio.root.join("out/finished.png");
+    studio.ok(&["finish", save.to_str().unwrap(), out.to_str().unwrap()]);
+    assert!(out.is_file());
+}
+
+#[test]
 fn painter_server_runs_check() {
     let studio = Studio::new("socket-with-a-studio-path-long-enough-to-require-a-short-unix-socket", "painter none\n");
     studio.ok(&["open"]);

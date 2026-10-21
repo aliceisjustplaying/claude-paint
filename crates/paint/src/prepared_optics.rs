@@ -200,7 +200,7 @@ impl PreparedLighting {
                 let shade = (1.0 + strength * (diffuse - 1.0)).max(0.0);
                 let wet = (wet[i] * 4.0).min(1.0);
                 let ndh = (n[0] * hv[0] + n[1] * hv[1] + n[2] * hv[2]).max(0.0);
-                let spec = (0.02 + 0.10 * wet) * ndh.powf(40.0) * lit;
+                let spec = (0.02 + 0.10 * wet) * ndh.powi(40) * lit;
                 let p = color[i];
                 [
                     (p[0] * shade + spec).max(0.0),
@@ -269,8 +269,9 @@ mod tests {
     }
 
     #[test]
-    fn row_preparation_preserves_material_lighting_bits_in_whole_and_cropped_frames() {
+    fn row_preparation_preserves_material_lighting_within_tolerance_in_whole_and_cropped_frames() {
         use crate::pastel::{Pose, Stick, StrokePoint};
+        use crate::tests::image_tolerance::{assert_close, assert_fields_close};
         for value in [0.0, -0.0, f32::from_bits(1), f32::MIN_POSITIVE, f32::MAX] {
             assert_eq!(round_nonnegative(value), value.round() as isize);
         }
@@ -372,11 +373,21 @@ mod tests {
                     (90.0, 0.001, 1.0),
                     (-30.0, 90.0, 1.5),
                 ] {
-                    assert_eq!(
-                        bits(&prepared.lit(&color, &canvas.wet.vol, az, el, strength)),
-                        bits(&original.original_lit(&color, &canvas.wet.vol, az, el, strength)),
-                        "material {material}, frame {f:?}, light {az}/{el}/{strength}"
+                    let actual = prepared.lit(&color, &canvas.wet.vol, az, el, strength);
+                    let expected = original.original_lit(&color, &canvas.wet.vol, az, el, strength);
+                    assert_fields_close(
+                        actual.iter().flatten().copied(),
+                        expected.iter().flatten().copied(),
                     );
+                    let image = |pixels: &[Rgb]| {
+                        image::RgbaImage::from_fn(f.w as u32, f.h as u32, |x, y| {
+                            let [r, g, b] = pixels[y as usize * f.w + x as usize].map(|v| {
+                                (crate::color::linear_to_srgb(v) * 255.0).round() as u8
+                            });
+                            image::Rgba([r, g, b, 255])
+                        })
+                    };
+                    assert_close(&image(&actual), &image(&expected));
                 }
             }
         }

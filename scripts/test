@@ -126,7 +126,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   canvas::tests::a_liquid_film_levels_the_weave_under_it_from_engine_4 \
   surface::liquid_film_tests::absent_switch_keeps_the_old_surface_and_lighting_through_checkpoints \
   prepared_optics::tests::row_normals_match_original_bits_at_borders_and_extreme_slopes \
-  prepared_optics::tests::row_preparation_preserves_material_lighting_bits_in_whole_and_cropped_frames \
+  prepared_optics::tests::row_preparation_preserves_material_lighting_within_tolerance_in_whole_and_cropped_frames \
   tests::image_tolerance::tests::two_levels_pass_in_every_channel_and_three_fail \
   tests::image_tolerance::tests::numeric_fields_accept_rounding_and_reject_regressions_and_nonfinite_values \
   drying::tests::checkpoint_mid_drying_resumes_exactly noise::tests::worley_finds_the_true_nearest_features \

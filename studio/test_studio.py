@@ -456,6 +456,8 @@ def test_export_cards_follow_execution_completion_and_fallback(home, monkeypatch
     other_log.parent.mkdir()
     log.write_text(start(str(studio)) + look("l1", png_of("red")) + say('**Barn & "Sky" <west>**\n\nA barn.'))
     other_log.write_text(start(str(studio)) + look("l1", png_of("blue")))
+    earlier = other_log.stat().st_mtime - 60
+    os.utime(log, (earlier, earlier))  # the finished painter is the newest once nothing is live
     run = tmp_path / "tmp" / "gallery-fixture" / "r24" / "run"
     for lane in ("LIVE", "DONE"):
         (run / lane).mkdir(parents=True)

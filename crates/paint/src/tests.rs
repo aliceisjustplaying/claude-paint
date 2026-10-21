@@ -49,13 +49,14 @@ fn a_stroke_reaches_its_end() {
     let rigger = Tool { point: 1.0, stiffness: 0.45, ..Tool::rigger(1.0) };
     let pointed = Tool { point: 1.0, stiffness: 0.5, ..Tool::round_sable(1.6) };
     for tool in [rigger, pointed, Tool::round_sable(3.0), Tool::filbert(6.0)] {
-        let mut c = Canvas::new(2400, 4.0, hex("#c8b89a")).with_linen(crate::surface::Linen::fine(3)).with_engine(crate::REACH_END);
+        let crop = crate::canvas::Crop { units: [400.0, 0.0, 600.0, 250.0], margin: 0.0 };
+        let mut c = Canvas::new_window(2400, 4.0, hex("#c8b89a"), Some(crop)).with_linen(crate::surface::Linen::fine(3)).with_engine(crate::REACH_END);
         let mut h = Held::new(tool.clone(), 5);
         h.load(Paint::body(hex("#302820")), 0.6);
         let (x, y0, y1) = (500.0f32, 200.0f32, 80.0f32);
         c.drag(&mut h, &Gesture::new(vec![(x, y0), (x, (y0 + y1) * 0.5), (x, y1)]).pressure(0.8, 0.7).ramps(0.02, 0.0), None);
         let (w, s) = (c.f.w, c.f.scale);
-        let band = ((x - 4.0) * s) as usize..((x + 4.0) * s) as usize;
+        let band = ((x - 4.0) * s) as usize - c.f.x0..((x + 4.0) * s) as usize - c.f.x0;
         let at = |y: usize| band.clone().map(|x| c.wet.vol[y * w + x]).fold(0.0f32, f32::max);
         let body = at(((y0 + y1) * 0.5 * s) as usize);
         let top = (0..c.f.h).find(|&y| at(y) > 0.05 * body).unwrap();
@@ -121,11 +122,16 @@ fn in_pool<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
     rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(f)
 }
 
+fn four_thread_fixture() -> &'static image::RgbaImage {
+    static IMAGE: std::sync::OnceLock<image::RgbaImage> = std::sync::OnceLock::new();
+    IMAGE.get_or_init(|| in_pool(4, || rendered(fixture(), "four-threads")))
+}
+
 #[test]
 fn fixture_is_deterministic_across_thread_counts() {
     let a = in_pool(1, || rendered(fixture(), "one-thread"));
-    let b = in_pool(4, || rendered(fixture(), "four-threads"));
-    image_tolerance::assert_close(&a, &b);
+    let b = four_thread_fixture();
+    image_tolerance::assert_close(&a, b);
 }
 
 #[test]
@@ -138,9 +144,9 @@ fn fixture_matches_golden() {
         std::fs::write(platform_path, format!("{platform}\n")).unwrap();
         return;
     }
-    let got = rendered(fixture(), "golden");
+    let got = four_thread_fixture();
     let want = image::open(path).expect("no golden: run with UPDATE_GOLDEN=1").to_rgba8();
-    image_tolerance::assert_close(&got, &want);
+    image_tolerance::assert_close(got, &want);
 }
 
 /// The drain switch: an absorbent ground drains a film to its drained

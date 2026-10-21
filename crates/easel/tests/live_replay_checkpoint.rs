@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 const CHUNKS: [&str; 12] = [
@@ -122,7 +123,7 @@ impl Studio {
         for chunk in CHUNKS { self.ok(&["do", chunk]); }
     }
 
-    fn batch(&self) {
+    fn render_batch(&self) -> Batch {
         let output = Command::new(env!("CARGO_BIN_EXE_easel"))
             .args(["run", self.log().to_str().unwrap(), "--frames-every", "60",
                 "--frames-dir", self.root.join("whole").to_str().unwrap(), "--frame-width", "1000",
@@ -132,16 +133,34 @@ impl Studio {
             .env("PAINT_LIVE_CHECKPOINT_TEST_IDENTITY", self.identity)
             .env_remove("EASEL_WIDTH").env_remove("EASEL_BOX").output().unwrap();
         assert!(output.status.success(), "batch: {}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-        assert!(self.bytes("live.ckpt") == std::fs::read(self.root.join("whole.ckpt")).unwrap(), "live canvas differs from canonical batch replay");
-        let frames = |dir: &Path| files(dir).into_iter().filter(|(name, _)| name != "frames.states").collect::<Vec<_>>();
-        assert_files(&frames(&self.dir().join("hand-frames")), &frames(&self.root.join("whole")));
-        let states = |dir: &Path| std::fs::read_to_string(dir.join("frames.states")).unwrap().lines().map(|line| {
+        Batch {
+            source: std::fs::read(self.log()).unwrap(),
+            canvas: std::fs::read(self.root.join("whole.ckpt")).unwrap(),
+            frames: files(&self.root.join("whole")),
+        }
+    }
+
+    fn batch(&self) {
+        static ORIGINAL: OnceLock<Batch> = OnceLock::new();
+        let changed;
+        let batch = if self.identity == "original" {
+            ORIGINAL.get_or_init(|| self.render_batch())
+        } else {
+            changed = self.render_batch();
+            &changed
+        };
+        assert_eq!(std::fs::read(self.log()).unwrap(), batch.source);
+        assert!(self.bytes("live.ckpt") == batch.canvas, "live canvas differs from canonical batch replay");
+        let live = files(&self.dir().join("hand-frames"));
+        let frames = |files: &[(String, Vec<u8>)]| files.iter().filter(|(name, _)| name != "frames.states").cloned().collect::<Vec<_>>();
+        assert_files(&frames(&live), &frames(&batch.frames));
+        let states = |files: &[(String, Vec<u8>)]| std::str::from_utf8(&files.iter().find(|(name, _)| name == "frames.states").unwrap().1).unwrap().lines().map(|line| {
             let mut state: serde_json::Value = serde_json::from_str(line).unwrap();
             assert!(state["identity"]["source"].is_array());
             state["identity"]["source"] = serde_json::Value::Null;
             state
         }).collect::<Vec<_>>();
-        assert_eq!(states(&self.dir().join("hand-frames")), states(&self.root.join("whole")));
+        assert_eq!(states(&live), states(&batch.frames));
     }
 }
 
@@ -152,6 +171,61 @@ impl Drop for Studio {
             let _ = child.wait();
         }
     }
+}
+
+struct Batch {
+    source: Vec<u8>,
+    canvas: Vec<u8>,
+    frames: Vec<(String, Vec<u8>)>,
+}
+
+struct Fixture {
+    source: Vec<u8>,
+    pending: Vec<(String, Vec<u8>)>,
+    canvas: Vec<u8>,
+    completed: Vec<(String, Vec<u8>)>,
+}
+
+impl Fixture {
+    fn copy_into(&self, studio: &Studio) {
+        std::fs::create_dir_all(studio.log().parent().unwrap()).unwrap();
+        std::fs::write(studio.log(), &self.source).unwrap();
+        for (name, bytes) in &self.pending {
+            let path = studio.dir().join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        assert_eq!(std::fs::read(studio.log()).unwrap(), self.source);
+        assert_files(&setup_files(studio), &self.pending);
+    }
+}
+
+fn setup_files(studio: &Studio) -> Vec<(String, Vec<u8>)> {
+    let mut setup = vec![
+        ("replay.ckpt".into(), studio.bytes("replay.ckpt")),
+        ("committed.lua".into(), studio.bytes("committed.lua")),
+    ];
+    for dir in ["frames", "hand-frames"] {
+        setup.extend(files(&studio.dir().join(dir)).into_iter().map(|(name, bytes)| (format!("{dir}/{name}"), bytes)));
+    }
+    setup
+}
+
+fn fixture() -> &'static Fixture {
+    static FIXTURE: OnceLock<Fixture> = OnceLock::new();
+    FIXTURE.get_or_init(|| {
+        let mut whole = Studio::new("uninterrupted", false);
+        whole.start();
+        whole.paint();
+        let source = std::fs::read(whole.log()).unwrap();
+        let pending = setup_files(&whole);
+        whole.close();
+        Fixture {
+            source, pending,
+            canvas: whole.bytes("live.ckpt"),
+            completed: files(&whole.dir().join("hand-frames")),
+        }
+    })
 }
 
 fn files(dir: &Path) -> Vec<(String, Vec<u8>)> {
@@ -209,6 +283,9 @@ fn resume_matches_uninterrupted(tag: &str, painter: bool) {
     assert!(resumed.bytes("replay.ckpt") == checkpoint, "checkpoint changed before another ten commits");
     let jpegs = files(&resumed.dir().join("frames"));
     let source = std::fs::read(resumed.log()).unwrap();
+    let whole = fixture();
+    assert_eq!(source, whole.source);
+    assert_files(&setup_files(&resumed), &whole.pending);
     let before = String::from_utf8(resumed.bytes("hand-frames/frames.tsv")).unwrap();
     assert!(before.lines().any(|line| line.ends_with("\ttick")), "no 60-second tick: {before}");
     assert!(!before.lines().any(|line| line.ends_with("\tfinal")), "{before}");
@@ -232,13 +309,9 @@ fn resume_matches_uninterrupted(tag: &str, painter: bool) {
     assert!(provenance.lines().any(|line| line == "replayed 12"), "{provenance}");
     assert_files(&files(&resumed.dir().join("hand-frames")), &completed);
 
-    let mut whole = Studio::new(&format!("{tag}-uninterrupted"), painter);
-    whole.start();
-    whole.paint();
-    whole.close();
-    assert_eq!(std::fs::read(whole.log()).unwrap(), source);
-    assert!(resumed.bytes("live.ckpt") == whole.bytes("live.ckpt"), "resumed canvas differs from uninterrupted live session");
-    assert_files(&completed, &files(&whole.dir().join("hand-frames")));
+    assert_eq!(whole.source, source);
+    assert!(resumed.bytes("live.ckpt") == whole.canvas, "resumed canvas differs from uninterrupted live session");
+    assert_files(&completed, &whole.completed);
     resumed.batch();
 }
 
@@ -256,10 +329,8 @@ fn painter_profile_uses_the_same_binary_checkpoint_and_hand_frames() {
 fn invalid_checkpoint_falls_back_to_full_replay_and_matching_frames() {
     for mode in ["corrupt", "identity", "missing-frame"] {
         let mut studio = Studio::new(mode, false);
-        studio.start();
-        studio.paint();
+        fixture().copy_into(&studio);
         assert!(!studio.bytes("replay.ckpt").is_empty());
-        studio.kill();
         if mode == "corrupt" {
             std::fs::write(studio.dir().join("replay.ckpt"), [0u8; 48]).unwrap();
         } else if mode == "missing-frame" {
@@ -278,6 +349,25 @@ fn invalid_checkpoint_falls_back_to_full_replay_and_matching_frames() {
         studio.close();
         studio.batch();
     }
+}
+
+#[test]
+fn cached_fixture_copies_are_byte_identical_and_mutation_isolated() {
+    let fixture = fixture();
+    let first = Studio::new("fixture-first", false);
+    let second = Studio::new("fixture-second", false);
+    fixture.copy_into(&first);
+    fixture.copy_into(&second);
+    std::fs::write(first.log(), b"changed source").unwrap();
+    for (name, _) in &fixture.pending {
+        std::fs::write(first.dir().join(name), b"changed bytes").unwrap();
+    }
+    std::fs::remove_file(first.dir().join("hand-frames/00001.png")).unwrap();
+    assert_eq!(std::fs::read(second.log()).unwrap(), fixture.source);
+    assert_files(&setup_files(&second), &fixture.pending);
+    fixture.copy_into(&first);
+    assert_eq!(std::fs::read(first.log()).unwrap(), std::fs::read(second.log()).unwrap());
+    assert_files(&setup_files(&first), &setup_files(&second));
 }
 
 #[test]

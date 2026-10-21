@@ -7,6 +7,7 @@ use std::{
     process::{Command, Output},
     time::{Duration, Instant},
 };
+mod support;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("signals-{}", std::process::id()))
@@ -36,6 +37,44 @@ impl Drop for Closing {
 const CANVAS: &str = r#"canvas{size=300, aspect=4, seed=5, linen=15, ground={{pile={{"lead white", 5}, {"yellow ochre", 1}}, um=80, apply="knife"}}}"#;
 const SIXTEEN: &str = r#"p = {} for i = 1, 16 do p[i] = pile{{"lead white", i}, {"vermilion", 1}, name="mix" .. i} end"#;
 const SEVENTEENTH: &str = r#"q = pile{{"lead white", 1}, {"smalt", 1}}"#;
+
+#[test]
+fn open_drains_progress_written_between_reading_the_log_and_readiness() {
+    use std::{io::{Read, Write}, os::unix::net::UnixListener};
+
+    let s = "ready-tail";
+    let dir = root().join("out/easel").join(s);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lock = std::fs::File::create(dir.join("lock")).unwrap();
+    lock.try_lock().unwrap();
+    let sock = support::sock_of(&dir);
+    let listener = UnixListener::bind(&sock).unwrap();
+    let log = dir.join("server.log");
+    let prefix = "reconstructed 1 chunks\nresuming chunk 2/2\nresumed chunk 2/";
+    let tail = "2 0.01s\nwarning: replay checkpoint: unavailable; replaying the full log\nwarning: chunk committed, replay checkpoint/frames not saved: unavailable\nresumed 2 chunks from painting.lua\n";
+    std::fs::write(&log, prefix).unwrap();
+    let server = std::thread::spawn(move || {
+        for ready in [false, true] {
+            let (mut conn, _) = listener.accept().unwrap();
+            conn.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            let mut request = [0; 9];
+            conn.read_exact(&mut request).unwrap();
+            assert_eq!(&request, b"7\nstatus\n");
+            if ready {
+                std::fs::OpenOptions::new().append(true).open(&log).unwrap().write_all(tail.as_bytes()).unwrap();
+                conn.write_all(b"ok\n2 chunks\n").unwrap();
+            } else {
+                conn.write_all(b"ok\nrebuilding from the log (1 of 2 chunks)\n").unwrap();
+            }
+        }
+    });
+    let output = cmd(&["open", s]);
+    server.join().unwrap();
+    std::fs::remove_file(sock).unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), format!("reconstructed 1 chunks\nresuming chunk 2/2\nresumed chunk 2/2 0.01s\nwarning: chunk committed, replay checkpoint/frames not saved: unavailable\nresumed 2 chunks from painting.lua\neasel {s:?} open: 2 chunks\n"));
+    assert_eq!(String::from_utf8(output.stderr).unwrap(), "warning: replay checkpoint: unavailable; replaying the full log\n");
+}
 
 #[test]
 fn a_full_palette_refuses_a_new_pile_and_names_the_piles_on_it() {

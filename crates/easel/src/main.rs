@@ -609,25 +609,14 @@ fn open(args: &[String]) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(100));
         let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
-        // started again by another open since we last read it
-        if log.len() < shown {
-            shown = 0;
-        }
-        if let Some(end) = log[shown..].rfind('\n').map(|i| shown + i + 1) {
-            for line in log[shown..end].lines() {
-                if line.starts_with("warning: replay checkpoint") {
-                    eprintln!("{line}");
-                } else if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("reconstructed ") || line.starts_with("warning") {
-                    println!("{line}");
-                }
-            }
-            std::io::stdout().flush().map_err(|e| e.to_string())?;
-            shown = end;
+        if show_startup_progress(&log, &mut shown)? {
             last_progress = Instant::now();
         }
         if let Ok((true, st)) = request(&name, "status", &[], &[])
             && !replaying(&st)
         {
+            let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
+            show_startup_progress(&log, &mut shown)?;
             set_current(&name)?;
             print!("easel {name:?} open: {st}");
             return Ok(());
@@ -643,6 +632,23 @@ fn open(args: &[String]) -> Result<(), String> {
             return Err(format!("session made no replay progress for {} minutes; see {}", stall.as_secs() / 60, dir.join("server.log").display()));
         }
     }
+}
+
+fn show_startup_progress(log: &str, shown: &mut usize) -> Result<bool, String> {
+    if log.len() < *shown {
+        *shown = 0;
+    }
+    let Some(end) = log[*shown..].rfind('\n').map(|i| *shown + i + 1) else { return Ok(false) };
+    for line in log[*shown..end].lines() {
+        if line.starts_with("warning: replay checkpoint") {
+            eprintln!("{line}");
+        } else if line.starts_with("resuming ") || line.starts_with("resumed ") || line.starts_with("reconstructed ") || line.starts_with("warning") {
+            println!("{line}");
+        }
+    }
+    std::io::stdout().flush().map_err(|e| e.to_string())?;
+    *shown = end;
+    Ok(true)
 }
 
 /// Whether a `status` answer is a replay's progress (`replay_status`): the server is reopening

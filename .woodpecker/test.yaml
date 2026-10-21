@@ -18,6 +18,9 @@ clone:
 steps:
   test:
     image: bash
+    environment:
+      RUSTC_WRAPPER: kache
+      KACHE_CACHE_DIR: /var/cache/woodpecker-agent/kache
     commands:
       - nix print-dev-env --no-write-lock-file .#default > .ci-env
       - source .ci-env

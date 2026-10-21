@@ -59,7 +59,7 @@ impl Drop for Studio {
 }
 
 #[test]
-fn one_binary_serves_two_boxes_and_the_default_without_developer_commands() {
+fn one_binary_serves_two_boxes_and_the_default_with_developer_commands_out_of_help() {
     for name in ["friedrich", "hopper", "none"] {
         let studio = Studio::new(name, &format!("painter {name}\n"));
         let own = if name == "none" { paint::palette::DEFAULT_BOX } else { name };
@@ -72,10 +72,12 @@ fn one_binary_serves_two_boxes_and_the_default_without_developer_commands() {
         for other in paint::Palette::box_names().into_iter().filter(|b| *b != own && *b != "every") {
             assert!(!help.contains(other), "{name}: {help}");
         }
+        studio.ok(&["hash-probe"]);
+        for command in ["run", "finish", "render-checkpoint"] {
+            let error = studio.refuses(&[command]);
+            assert!(!error.contains("no command"), "{command}: {error}");
+        }
         for args in [
-            vec!["run", "absent.lua"], vec!["check"], vec!["finish", "--print-chunk"],
-            vec!["hash-probe"], vec!["render-checkpoint"], vec!["render-state"],
-            vec!["snapshot-state"], vec!["render-snapshot"], vec!["snapshot-companions"],
             vec!["open", "other"], vec!["serve", "other"], vec!["-s", "other", "status"],
             vec!["status", "--session=other"], vec!["--box", "every", "tubes"],
         ] {
@@ -112,12 +114,33 @@ fn one_binary_serves_two_boxes_and_the_default_without_developer_commands() {
         }
         let error = studio.refuses(&["open"]);
         assert!(error.contains("the log wasn't painted from this studio's box") && !error.contains("sargent"), "{error}");
-        println!("{name}: same binary, only {own}, painter commands only");
+        println!("{name}: same binary, only {own}, developer commands out of help");
     }
 }
 
 #[test]
-fn painter_server_refuses_check_even_without_the_client() {
+fn painter_studio_finishes_its_closed_save() {
+    let studio = Studio::new("finish", "painter none\n");
+    studio.ok(&["open"]);
+    for chunk in [
+        "canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{\"lead white\",6},{\"raw umber\",1}}, um=50, apply=\"roller\"}}}",
+        "p=pile{{\"lead white\",6},{\"cobalt blue\",1}}; b=brush(\"filbert\",8); b:load(p,0.9)",
+        "b:stroke({{100,100},{800,130}}, {pressure=0.8})",
+    ] {
+        studio.ok(&["do", chunk]);
+    }
+    let error = studio.refuses(&["do", "varnish()"]);
+    assert!(error.contains("global 'varnish'"), "{error}");
+    studio.ok(&["close"]);
+    let save = studio.root.join("out/easel/painting/live.ckpt");
+    assert!(save.is_file());
+    let out = studio.root.join("out/finished.png");
+    studio.ok(&["finish", save.to_str().unwrap(), out.to_str().unwrap()]);
+    assert!(out.is_file());
+}
+
+#[test]
+fn painter_server_runs_check() {
     let studio = Studio::new("socket-with-a-studio-path-long-enough-to-require-a-short-unix-socket", "painter none\n");
     studio.ok(&["open"]);
     let socket = support::sock_of(&studio.root.join("out/easel/painting"));
@@ -125,7 +148,7 @@ fn painter_server_refuses_check_even_without_the_client() {
     connection.write_all(b"6\ncheck\n").unwrap();
     let mut reply = String::new();
     connection.read_to_string(&mut reply).unwrap();
-    assert!(reply.starts_with("err\nunknown command"), "{reply}");
+    assert!(!reply.starts_with("err\nunknown command"), "{reply}");
 }
 
 #[test]

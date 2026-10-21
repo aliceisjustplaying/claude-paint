@@ -279,16 +279,11 @@ logged=$(sed -n '/^--@ chunk/q; s/^--@ box //p' "$probe/paintings/lua/painting.l
 # bin/width paints at 2400 whatever STUDIO_WIDTH says
 logged_width=$(sed -n '/^--@ chunk/q; s/^--@ width //p' "$probe/paintings/lua/painting.lua")
 [ "${logged_width:-2400}" = "${width:-2400}" ] || { echo "the probe painted at ${logged_width:-2400} px, not the ${width:-2400} px STUDIO_WIDTH asks for: the easel built from $branch doesn't read bin/width" >&2; exit 1; }
-if "$E" run "$probe/paintings/lua/painting.lua" >/dev/null 2>&1; then
-  echo "the exported easel has a run command" >&2
-  exit 1
-fi
-# replaying the log against the canvas is the runner's (scripts/check_painting)
-# (outputs captured first: under pipefail, `"$E" check | grep` fails with the command it tests)
-check_reply=$("$E" check 2>&1 || true)
+# developer commands (run, check, finish, render-checkpoint) work in the studio for the scripts, but its help leaves them out
+# (output captured first: under pipefail, `"$E" help | grep` fails with the command it tests)
 help_text=$("$E" help 2>&1 || true)
-if [[ $check_reply != *'no command "check"'* || $help_text == *'easel check'* ]]; then
-  echo "the exported easel has a check command" >&2
+if [[ $help_text == *'easel check'* || $help_text == *'easel run'* ]]; then
+  echo "the exported easel's help lists developer commands" >&2
   exit 1
 fi
 

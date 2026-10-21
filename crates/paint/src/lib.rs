@@ -44,7 +44,7 @@ pub mod outline;
 pub mod surface;
 pub mod thinner;
 
-pub use canvas::{Canvas, Crop, Frame, set_crop};
+pub use canvas::{Canvas, Crop, Frame, LookVersion, set_crop};
 pub use crack::Cracks;
 pub use color::{Mix, Rgb, gradient, hex, shift};
 pub use bristle::{Gesture, Held, Kind, Knife, Orient, Part, Spatter, Tool, Touch};

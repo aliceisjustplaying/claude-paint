@@ -29,6 +29,7 @@ pub struct Recorder {
     width: u32,
     /// The light frames are seen in (azimuth, elevation), or None: color only.
     light: Option<(f32, f32)>,
+    look_version: paint::LookVersion,
     /// `tally().secs` when hand time started (the ground is not hand time).
     base: Option<f64>,
     /// Hand time (s) of the next frame due.
@@ -60,6 +61,10 @@ pub enum Kind {
 /// Start recording on this thread: a frame every `every` seconds of hand
 /// time into `dir`, `width` px wide.
 pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>) -> Result<(), String> {
+    start_version(every, dir, width, light, paint::LookVersion::Legacy)
+}
+
+pub fn start_version(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, look_version: paint::LookVersion) -> Result<(), String> {
     if !(every.is_finite() && every > 0.0) {
         return Err(format!("--frames-every {every}: want seconds > 0"));
     }
@@ -68,8 +73,8 @@ pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>) ->
     }
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut index = std::fs::File::create(dir.join("frames.tsv")).map_err(|e| e.to_string())?;
-    writeln!(index, "file\thand_secs\tticks\tchunks_done\tkind").map_err(|e| e.to_string())?;
-    let rec = Recorder { every, dir, width, light, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None };
+    writeln!(index, "file\thand_secs\tticks\tchunks_done\tkind\tlook_version").map_err(|e| e.to_string())?;
+    let rec = Recorder { every, dir, width, light, look_version, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None };
     REC.with(|r| *r.borrow_mut() = Some(rec));
     paint::tally::hand_hook::set(Some(Box::new(|c: &Canvas| observe(c, c.tally().clocked))));
     Ok(())
@@ -144,7 +149,7 @@ impl Recorder {
     fn try_write(&mut self, c: &Canvas, ticks: usize, kind: Kind) -> Result<(), String> {
         let f = c.window();
         let px = match self.light {
-            Some((az, el)) => c.seen_lit(az, el, 1.0),
+            Some((az, el)) => c.seen_lit_version(az, el, 1.0, self.look_version),
             None => c.seen(),
         };
         let buf: Vec<u8> = px.iter().flat_map(|p| p.map(|v| (linear_to_srgb(v) * 255.0).round().clamp(0.0, 255.0) as u8)).collect();
@@ -162,7 +167,7 @@ impl Recorder {
             Kind::Final => "final",
         };
         if let Some(ix) = self.index.as_mut() {
-            writeln!(ix, "{name}\t{:.1}\t{ticks}\t{}\t{kind}", self.hand, self.chunk).map_err(|e| e.to_string())?;
+            writeln!(ix, "{name}\t{:.1}\t{ticks}\t{}\t{kind}\t{}", self.hand, self.chunk, self.look_version.number()).map_err(|e| e.to_string())?;
         }
         Ok(())
     }

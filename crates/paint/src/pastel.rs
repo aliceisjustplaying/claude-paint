@@ -1731,6 +1731,11 @@ mod tests {
     /// loose stick pastel touching at y = 400: red above, blue below, from
     /// x = 150 to 850.
     fn bands() -> Canvas {
+        static BANDS: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+        BANDS.get_or_init(fresh_bands).clone()
+    }
+
+    fn fresh_bands() -> Canvas {
         let mut c = Canvas::new_window(300, 1.0, [0.55; 3], None).with_size_mm(75.0).with_paper(Paper::drawing(4));
         let mut red = Stick::round([0.6, 0.04, 0.03], 0.8, 12.0);
         let mut blue = Stick::round([0.03, 0.05, 0.6], 0.8, 12.0);
@@ -1741,6 +1746,29 @@ mod tests {
             }
         }
         c
+    }
+
+    #[test]
+    fn reused_bands_match_fresh_pastel_and_mutate_independently() {
+        let state = |c: &Canvas| {
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let expected = state(&fresh_bands());
+        let mut changed = bands();
+        let untouched = bands();
+        assert_eq!(state(&changed), expected);
+        assert_eq!(state(&untouched), expected);
+        changed.fix_pastel(None, 0.15);
+        assert_ne!(changed.pixels(), untouched.pixels());
+        assert_ne!(tooth(&changed), tooth(&untouched));
+        changed.height[0] += 1.0;
+        changed.micro[0] += 1.0;
+        changed.wet.vol[0] = 1.0;
+        assert_ne!(state(&changed), expected);
+        assert_eq!(state(&untouched), expected);
+        assert_eq!(state(&bands()), expected);
     }
 
     fn rect_mask(c: &Canvas, x0: f32, y0: f32, x1: f32, y1: f32) -> crate::Mask {

@@ -133,7 +133,7 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	let timedOut = false;
 	const { code, out, err } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
-		const p = spawn(process.execPath, [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
+		const p = spawn("node", [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
 			{ cwd: studio, stdio: ["pipe", "pipe", "pipe"], detached: true });
 		const kill = () => p.stdin.end();
 		const timeout = setTimeout(() => {
@@ -152,12 +152,16 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 		p.stderr.on("data", (d) => (err += d));
 		p.on("error", (e) => (cleanup(), fail(e)));
 		p.on("close", (code) => (cleanup(), done({ code, out, err })));
+	}).catch((error) => {
+		if (!signal?.aborted) appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: failed: ${error.message}\n`);
+		throw error;
 	});
-	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: exit ${code}, ${out.trim().length} characters\n${err}`);
-	if (signal?.aborted) throw new Error("Operation aborted");
-	if (timedOut) throw new Error("critic timed out after 20 minutes and was stopped");
 	const reply = (code === 0 ? sessionReply(sessions) : undefined) ?? out.trim();
-	if (code !== 0 || !reply) throw new Error(`the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}`);
+	const failure = signal?.aborted ? "Operation aborted"
+		: timedOut ? "critic timed out after 20 minutes and was stopped"
+		: code !== 0 || !reply ? `the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}` : undefined;
+	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: ${failure ? `failed: ${failure}` : `exit ${code}`}, ${out.trim().length} characters\n${err}`);
+	if (failure) throw new Error(failure);
 	const notes = `${HEADER[occasion]}\n\n${reply}\n`;
 	writeFileSync(join(studio, CRITIQUE), notes);
 	writeFileSync(join(critic.dir, `${started}-${occasion}.md`), notes);

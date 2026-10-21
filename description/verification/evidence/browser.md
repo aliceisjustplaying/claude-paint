@@ -15,7 +15,7 @@ URL: [private preview](http://<tailscale-host>:18765/?p=paint-studio-decafe). HT
 | Replay | REPLAY, Pause control and earlier look displayed | pass |
 | Pause then LIVE | Returned to latest view | pass |
 
-[Replay screenshot](studio-replay.png) records the replay/code state. The fixture's code text is abbreviated for display and is not a runnable painting log; [probe.lua](probe.lua) is the actual successful log.
+[Replay screenshot](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/studio-replay.png) records the replay/code state. The fixture's code text is abbreviated for display and is not a runnable painting log; [probe.lua](probe.lua) is the actual successful log.
 
 Not covered: real provider streaming, multiple painters or sittings, palette/crop image classification, zoom, mobile layout, static export, public mode, stream layout, network outage or late-arriving records.
 

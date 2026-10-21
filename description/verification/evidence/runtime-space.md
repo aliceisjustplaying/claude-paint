@@ -690,7 +690,7 @@ closed; the session is in <isolated-root>/paintings/lua/space.lua
 
 ## Image inspection and limits
 
-The [combined result](space-combined.png) was visually inspected: the protected foreground rectangle retains its earlier sparse marks and bare portions while broad paint surrounds it. Earlier [explicit](space-explicit.png), [implicit](space-implicit.png) and [behind](space-behind.png) states are retained. Decoded pixel comparisons establish zero changed pixels beyond named visible rectangles and zero changed pixels within the protected foreground for behind/combined operations.
+The [combined result](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/space-combined.png) was visually inspected: the protected foreground rectangle retains its earlier sparse marks and bare portions while broad paint surrounds it. Earlier [explicit](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/space-explicit.png), [implicit](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/space-implicit.png) and [behind](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/space-behind.png) states are retained. Decoded pixel comparisons establish zero changed pixels beyond named visible rectangles and zero changed pixels within the protected foreground for behind/combined operations.
 
 The first water fixture supplied an invalid scalar ripple and failed; its dependent placement therefore failed too. Corrected water input uses a four-element ripple table and the later successful sections supply the evidence. Those initial fixture failures are not application defects.
 

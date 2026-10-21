@@ -5,7 +5,7 @@
 - **Launched October 4, 2026 at 22:56 BST.** `round-24` pins `d8a995b`.
   `INNS1` is `paint-studio-ea8319`, running `claude-fable-5-1` with high
   thinking through pi-black. The canvas is initialized on engine 3.
-  OBS is streaming the matching studio; [launch preview](readiness/obs-live.png).
+  OBS is streaming the matching studio; [launch preview](r2://stillwet-paintings/claude-paint-history/notes/round24/readiness/obs-live.png).
   Website publication is active at
   <https://stillwet.art/studio/?p=paint-studio-ea8319>; the public session
   list and event export include the new painter. Runner process was
@@ -24,7 +24,7 @@
   against the 50% minimum ([log](readiness/card-recheck.log)).
 - The connected 2400px paint/thinner/rag/carryover/refold/wait sequence
   passed, including close/reopen and exact live-versus-replay canvas and
-  checkpoint bytes ([log](readiness/sequence.log), [image](readiness/sequence.png)).
+  checkpoint bytes ([log](readiness/sequence.log), [image](r2://stillwet-paintings/claude-paint-history/notes/round24/readiness/sequence.png)).
 - Full checks completed with two known differences: the unchanged rag
   hollow-lift assertion measures 89.934% against >90%, and the historical
   engine-3 rag baseline differs after the rag changes. These are recorded

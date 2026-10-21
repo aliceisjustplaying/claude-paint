@@ -37,7 +37,7 @@ the film's solvent with the paint (`Rag::solvent_mm3`).
 Each row shows the same starting patch, then one and two wipes with the
 same face. Top: dry cloth. Bottom: cloth dipped in spirits.
 
-![First and second dry and damp wipes](release_wipes.jpg)
+![First and second dry and damp wipes](r2://stillwet-paintings/claude-paint-history/notes/rag/release_wipes.jpg)
 
 ## Release checks
 

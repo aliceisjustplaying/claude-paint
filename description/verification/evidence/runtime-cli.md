@@ -48,7 +48,7 @@ The ordinary, value, mirror, grid, palette and crop requests returned valid eigh
 | Value plus normal | Identical to value alone |
 | Grid | Visible lines/labels; image differs from ordinary view |
 
-The [grid image](runtime-look-grid.png) and [palette](runtime-look-palette.png) were visually inspected. Grid labels follow canvas coordinates. The palette contains the red-earth global pile and labeled thick, 12 µm, 4 µm and striped-card panels. [Ordinary image](runtime-look-plain.png), [value image](runtime-look-value.png).
+The [grid image](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/runtime-look-grid.png) and [palette](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/runtime-look-palette.png) were visually inspected. Grid labels follow canvas coordinates. The palette contains the red-earth global pile and labeled thick, 12 µm, 4 µm and striped-card panels. [Ordinary image](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/runtime-look-plain.png), [value image](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/runtime-look-value.png).
 
 Palette combined with size, crop, mode or grid was rejected. Unknown options/modes, malformed crops, excessive crops and a subpixel grid were rejected. Successful and rejected looks left painting-log bytes unchanged; viewing also left the saved painting PNG unchanged. Removing an earlier generated look did not replace a surviving later look. Denying writes to the output directory made plain look report Permission denied; restoring permission and saving confirmed unchanged painting pixels.
 

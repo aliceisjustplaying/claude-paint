@@ -50,7 +50,7 @@ r_frame_rate=24/1 nb_frames=96
 duration=4.000000
 ```
 
-The JPEG contact sheet was visually inspected: twelve views in a four-column, three-row arrangement, showing blank ground followed by the stroke. [Encoded clip](runtime-delivery.mp4).
+The JPEG contact sheet was visually inspected: twelve views in a four-column, three-row arrangement, showing blank ground followed by the stroke. [Encoded clip](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/runtime-delivery.mp4).
 
 Re-encoding with `--reuse` and a nonexistent input Lua path succeeded from the existing frames directory. An impossible 1000-second duration/max-hold combination was rejected before encoding. The frame manifest contained chunk, tick and final entries; duplicate hand times were collapsed to two moments for encoding. A one-chunk setup+stroke control had only a single final hand-time moment and correctly could not fill the requested four-second clip. Dynamic pacing and drying-wait time exclusion were not exercised.
 

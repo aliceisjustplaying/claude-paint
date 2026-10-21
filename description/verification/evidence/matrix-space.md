@@ -1528,7 +1528,7 @@ For `depth clip combined`, decoded PNG differences at2400px: logical clip400,90,
 {"changed": 18785, "outside_clip": 0, "inside_foreground": 0}
 ```
 
-[Result](matrix-depth.png). Independent fall/across/edge recipes use the same blank canvas, pigment, seed and mask: [fall](matrix-field-fall.png), [across](matrix-field-across.png), [edge](matrix-field-edge.png). The images were inspected for stroke orientation.
+[Result](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/matrix-depth.png). Independent fall/across/edge recipes use the same blank canvas, pigment, seed and mask: [fall](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/matrix-field-fall.png), [across](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/matrix-field-across.png), [edge](r2://stillwet-paintings/claude-paint-history/description/verification/evidence/matrix-field-edge.png). The images were inspected for stroke orientation.
 
 ## Independent direction fields
 

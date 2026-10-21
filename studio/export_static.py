@@ -148,8 +148,7 @@ def featured(sessions):
     active = [s for s in sessions if s.get("active")]
     if active:
         return max(active, key=lambda s: s["mtime"])
-    completed = [s for s in sessions if s.get("completed_at") is not None]
-    return max(completed, key=lambda s: s["completed_at"]) if completed else None
+    return max(sessions, key=lambda s: s["mtime"], default=None)
 
 
 def card_page(page, painter, homepage=False, root="/studio/"):

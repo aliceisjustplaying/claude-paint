@@ -1,8 +1,9 @@
 # Independent-mixer baseline provenance
 
-This package records the current color candidate, not visual acceptance.
-The candidate's four color guards still fail; its exact source and mixer
-table hashes identify the capture without treating it as finished.
+This package records the preceding provisional color candidate, not visual
+acceptance of the current table trial. The recorded candidate failed four
+color guards. Its source and table hashes identify these captures; a new
+candidate needs a fresh mixer-field capture before it can pass this gate.
 
 ## Producing build
 
@@ -24,8 +25,13 @@ used `MemoryMax=6G`, `CPUQuota=400%`, `nice -n 10`,
 `RAYON_NUM_THREADS=4`. CPU quota is not CPU affinity. No live painting's
 studio or OBS was changed.
 
-The generating script and `crates/paint/src/mixer/primaries.json` record
-the independently authored basis, concentration power and table hashes.
+At the producing commit, the generating script and
+`crates/paint/src/mixer/primaries.json` record the independently authored
+basis and concentration power. These captures use forward table SHA-256
+`91bcd923e8f45ba5bfa7f51eb2a8bed2ada0d621c99ee17f0308799c16756338`
+and inverse table SHA-256
+`d0a6d8d90c13046c1d4607b468ac18c94e1ce79b7c9777bf672d62da6f6ebbc7`.
+They are not relabeled with a later checkout's table hashes.
 
 ## Frozen physics and current mixer fields
 

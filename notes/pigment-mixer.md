@@ -18,8 +18,14 @@ linear RGB. The color-matching matrix comes from the existing MIT
 `spectral.rs` port, credited in `THIRD_PARTY_NOTICES.md`.
 
 The primary reflectance curves and scattering functions are independently
-authored, not measured pigment data. Blue and magenta use broad smooth
-bands, yellow a two-step rising edge and white a nearly flat reflector.
+authored, not measured pigment data, and are closed-form curves written
+out in the generator: blue is a Gaussian band centered at 450 nm with a
+narrower long-wavelength side, yellow a single sigmoid edge at 489 nm,
+magenta a violet step plus a red edge, and white a smooth warm ramp near
+the catalog's lead white (#efe9dc). The white curve was fitted to 1.004
+times that catalog RGB, not to old-engine output. Lead white still carries
+an additive residual through the interpolated inverse; neither it nor
+its tints are assumed residual-free.
 The blue and magenta are dark, weakly scattering pigments, so dark tube
 colors can be represented mostly by pigment rather than large negative
 RGB corrections. Scattering is wavelength-independent for every primary;
@@ -28,9 +34,14 @@ These are the mixer's virtual primaries, not the palette's separate tube
 hiding, tinting-strength or scattering parameters. Those rendering
 properties are unchanged.
 
-The generator fits the primary reflectances to keep sampled mixtures in
-the display gamut. It solves a constrained RGB least-squares inverse to
-find four nonnegative concentrations summing to one. An additive RGB
+The generator does not bend the primary curves to fit the display gamut
+(that bending made the earlier curves spiky and pulled light blue tints
+toward violet). The forward table is the KM mixture clipped to the sRGB
+cube. The inverse solves a constrained least-squares fit of that clipped
+output, four nonnegative concentrations summing to one, plus 0.05 times
+the raw RGB fit error. This regularizer can trade clipped fit error for
+raw fit error; it is not a lexicographic tie-break or a guarantee of a
+unique or smooth inverse. An additive RGB
 residual stores the difference between the requested RGB and the decoded
 pigment mixture. Thus the latent remains seven floats: four concentrations
 and three residual channels. Weighted averages operate directly on those
@@ -55,9 +66,15 @@ the surrogate fit is a claim of measured physical pigment accuracy.
 tables and `crates/paint/src/mixer/primaries.json`. The script pins its
 NumPy/SciPy build dependencies; neither is an engine runtime dependency.
 One BLAS thread fixes the optimizer's reduction order for reproduction.
-The JSON records the generated K/S arrays, wavelength grid and table
-SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
+The JSON records the reflectance and K/S arrays, wavelength grid, the
+clipped share of the forward grid and table SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
 are inputs to this generator.
+
+This round was checked against the unchanged independent mixer guards,
+actual table/runtime diagnostics and the main-vs-new sheet by eye. The
+tested power and blue-width sweeps show local tradeoffs, not a proof that
+brighter greens or stronger pale blue tints are impossible. Passing the
+guards does not close those remaining visual differences.
 
 The implementation is project MIT code. The method's paper is cited, not
 redistributed. The public patent-record search found no matching pigment

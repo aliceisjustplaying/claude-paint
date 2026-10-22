@@ -1112,11 +1112,11 @@ print(counter,rand(),drying(300,300))
             Identity::new(SOURCE, 64).unwrap();
             return;
         }
-        let status = std::process::Command::new(std::env::current_exe().unwrap())
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored"])
             .env("REPLAY_TEST_NON_UTF8", std::ffi::OsString::from_vec(vec![0xff]))
-            .status().unwrap();
-        assert!(status.success());
+            .output().unwrap();
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     }
 
     #[test]

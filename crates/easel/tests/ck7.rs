@@ -1,6 +1,5 @@
-//! Synthetic fixtures generated at runtime from a sixteen-by-sixteen procedural
-//! canvas and literal RGB colors. The current writer's payload is repackaged
-//! as an obsolete v7 layout to test rejection, not historical rendering.
+//! Historical checkpoint layouts written independently of the current writer,
+//! with seven latent floats per pixel, to test import and obsolete-paint refusal.
 
 use std::path::Path;
 use std::process::Command;
@@ -8,25 +7,11 @@ use std::process::Command;
 #[path = "support/engine9_plumbing.rs"]
 mod engine9_plumbing;
 
+#[path = "support/historical_checkpoint.rs"]
+mod historical_checkpoint;
+
 fn synthetic_v7() -> Vec<u8> {
-    let mut canvas = paint::Canvas::new_window(16, 1.0, [0.3; 3], None).with_engine(1);
-    let mut knife = paint::Knife::new(200.0);
-    knife.load(paint::Paint::body([0.2, 0.4, 0.7]), 0.5);
-    canvas.knife(&mut knife, &[(300.0, 500.0), (700.0, 500.0)], (0.5, 0.5), Some(0.0), true, 0.0);
-    assert!(canvas.wet_total() > 0.0);
-    let mut current = Vec::new();
-    canvas.write_state(&mut current, "engine=1\n").unwrap();
-    assert_eq!(&current[..8], b"PAINTC19");
-    let header_len = u64::from_le_bytes(current[8..16].try_into().unwrap()) as usize;
-    let envelope = 16 + header_len;
-    assert_eq!(u64::from_le_bytes(current[envelope..envelope + 8].try_into().unwrap()), paint::mixer::identity());
-    assert_eq!(u64::from_le_bytes(current[envelope + 8..envelope + 16].try_into().unwrap()), 8);
-    assert_eq!(u64::from_le_bytes(current[envelope + 16..envelope + 24].try_into().unwrap()), 0);
-    assert_eq!(u64::from_le_bytes(current[current.len() - 8..].try_into().unwrap()), 1);
-    let mut obsolete = current[..envelope].to_vec();
-    obsolete[..8].copy_from_slice(b"PAINTCK7");
-    obsolete.extend_from_slice(&current[envelope + 24..current.len() - 8]);
-    obsolete
+    historical_checkpoint::fixture(7, true)
 }
 
 #[test]

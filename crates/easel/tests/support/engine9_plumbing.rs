@@ -76,30 +76,28 @@ fn own_mixer_checkpoint_roundtrips_occupied_latents_and_pigment_parts() {
     assert_eq!(restored.seen(), c.seen());
 }
 
-fn untagged(bytes: Vec<u8>) -> Vec<u8> {
-    let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
-    let envelope = 16 + header_len;
-    let base = u64::from_le_bytes(bytes[envelope + 8..envelope + 16].try_into().unwrap());
-    let pigments = u64::from_le_bytes(bytes[envelope + 16..envelope + 24].try_into().unwrap());
-    let mut old = bytes[..envelope].to_vec();
-    if pigments == 1 {
-        old[..8].copy_from_slice(b"PAINTC18");
-        old.extend_from_slice(&base.to_le_bytes());
-    } else {
-        old[..8].copy_from_slice(format!("PAINTC{base:02}").as_bytes());
-    }
-    old.extend_from_slice(&bytes[envelope + 24..]);
-    old
-}
-
 #[test]
 fn obsolete_checkpoints_are_refused_only_when_occupied() {
-    let old = untagged(save(&painted(5)));
-    let error = Canvas::read_state(&mut Cursor::new(old.as_slice())).err().unwrap();
-    assert!(error.to_string().contains("obsolete pigment representation"));
-    let empty = Canvas::new_window(2, 1.0, [0.3; 3], None).with_engine(5);
-    let (restored, _) = Canvas::read_state(&mut Cursor::new(untagged(save(&empty)).as_slice())).unwrap();
-    assert_eq!(&save(&restored)[..8], b"PAINTC19");
+    for version in 7..=18 {
+        let old = super::historical_checkpoint::fixture(version, true);
+        let error = Canvas::read_state(&mut Cursor::new(old.as_slice())).err().unwrap();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData, "version {version}: {error}");
+        assert!(error.to_string().contains("wet paint in an obsolete pigment representation"), "version {version}: {error}");
+        let old = super::historical_checkpoint::fixture(version, false);
+        let (restored, _) = Canvas::read_state(&mut Cursor::new(old.as_slice())).unwrap_or_else(|e| panic!("version {version}: {e}"));
+        assert_eq!(restored.pixels(), &[[0.2, 0.4, 0.6], [0.8, 0.6, 0.4]]);
+        assert_eq!(floats(&restored, "height"), [1.0, 2.0]);
+        assert_eq!(floats(&restored, "film"), [3.0, 4.0]);
+        assert_eq!(floats(&restored, "wet.vol"), [0.0, 0.0]);
+        assert_eq!(floats(&restored, "wet.cover"), [0.25, 0.75]);
+        assert_eq!(floats(&restored, "clock.cure"), [0.1, 0.1]);
+        assert!(floats(&restored, "wet.lat").iter().all(|&v| v == 0.0));
+        assert!(!restored.state_fields().iter().any(|f| f.name.starts_with("wet.parts.")));
+        let current = save(&restored);
+        assert_eq!(&current[..8], b"PAINTC19");
+        let (again, _) = Canvas::read_state(&mut Cursor::new(current.as_slice())).unwrap();
+        assert_eq!(save(&again), current);
+    }
 }
 
 #[test]

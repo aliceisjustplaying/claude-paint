@@ -24,6 +24,7 @@
 //! parts follow (0 or 1). This identity is independent of the engine number.
 //! Older files containing wet paint are refused because their latent vectors
 //! cannot be decoded by this mixer. Empty older files can still be read.
+//! Versions 7–18 store seven latent floats per pixel, not the current width.
 //!
 //! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
@@ -129,6 +130,7 @@ const MAGIC16: &[u8; 8] = b"PAINTC16";
 const MAGIC17: &[u8; 8] = b"PAINTC17";
 const MAGIC18: &[u8; 8] = b"PAINTC18";
 const MAGIC19: &[u8; 8] = b"PAINTC19";
+const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
 /// Marks the paper's section ("PAPR"), and its version.
@@ -658,8 +660,10 @@ impl Canvas {
         c.film = get_all(r, n)?;
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
-        let lat = get_all(r, n * LAT)?;
-        wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
+        let lat = get_all(r, n * if own_mixer { LAT } else { HISTORICAL_LAT })?;
+        if own_mixer {
+            wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
+        }
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')
         let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
@@ -872,9 +876,7 @@ impl Canvas {
             if c.wet.vol.iter().any(|&v| v > 0.0) {
                 return Err(bad("checkpoint contains wet paint in an obsolete pigment representation; reopen it with the original engine build and export the painting, or replay its log with this build"));
             }
-            for lat in &mut c.wet.lat {
-                lat.color = [0.0; LAT];
-            }
+            c.wet.lat.fill(crate::wet::Latent::default());
         }
         Ok((c, header))
     }

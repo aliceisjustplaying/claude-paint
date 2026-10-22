@@ -1622,6 +1622,36 @@ mod tests {
     }
 
     #[test]
+    fn numeric_option_errors_read_the_option_once() {
+        let mut s = Session::new(32).unwrap();
+        let out = s.run(r#"
+            n = 0
+            local ok, e = pcall(palette, setmetatable({}, {
+                __index = function()
+                    n = n + 1
+                    error("option unavailable")
+                end
+            }))
+            assert(not ok and tostring(e):find("option unavailable", 1, true))
+            print(n)
+        "#).unwrap().out;
+        assert_eq!(out, "1\n");
+        let out = s.run(r#"
+            n = 0
+            local ok, e = pcall(palette, setmetatable({}, {
+                __index = function()
+                    n = n + 1
+                    return true
+                end
+            }))
+            assert(not ok and tostring(e):find("dirty: want a number, got boolean", 1, true))
+            print(n)
+            palette{dirty="0.5"}
+        "#).unwrap().out;
+        assert_eq!(out, "1\n");
+    }
+
+    #[test]
     fn accepted_chunks_count_executed_mark_effects_not_lua_names() {
         let mut s = Session::new(64).unwrap().with_paper(true).unwrap();
         for (src, effects) in [

@@ -16,7 +16,7 @@
 //! a grid in canvas units first (`FIELD_STEP`, over the mask's bounding box)
 //! and read back bilinearly. Mask functions are evaluated at every pixel.
 
-use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value, Variadic};
+use mlua::{Function, Lua, MetaMethod, ObjectLike, Result, Table, UserData, UserDataMethods, Value, Variadic};
 use paint::palette::Mixture;
 use paint::{Apply, Canvas, Fbm, Frame, Gesture, Ground, Handling, Held, Linen, Mask, Order, Orient, Palette, Rgb, Rng, Shape, Stipple, Style, Tool, Touch};
 use crate::time::{self, Verb};
@@ -276,10 +276,9 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
 // ---------------------------------------------------------------- tables
 
 pub(crate) fn num(t: &Table, k: &str) -> Result<Option<f32>> {
-    t.get::<Option<f32>>(k).map_err(|_| match t.get::<Value>(k) {
-        Ok(v) => mlua::Error::runtime(format!("{k}: want a number, got {}", v.type_name())),
-        Err(e) => e,
-    })
+    let v = t.get::<Value>(k)?;
+    let kind = v.type_name();
+    t.weak_lua().upgrade().unpack(v).map_err(|_| mlua::Error::runtime(format!("{k}: want a number, got {kind}")))
 }
 
 /// A pair from {a, b} or a single number (both the same).

@@ -162,6 +162,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \
   session::tests::shape_and_number_errors_name_the_function_argument_and_line \
+  session::tests::numeric_option_errors_read_the_option_once \
   session::tests::rag_preparation_keeps_hand_time_without_mark_effects \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \

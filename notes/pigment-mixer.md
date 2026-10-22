@@ -73,12 +73,16 @@ and lead white/ultramarine from the full catalog, each in 10% steps. Tube
 mixtures use the actual palette path and retain its tinting strengths.
 RGB columns are linear, with per-mix Euclidean OKLab differences.
 
-The original is clean main `d94eafd6`; the new model is `a6e03e2`, with
+The original is clean main `d94eafd6`; the new model is `18584b1`, with
 forward/inverse table hashes recorded in `primaries.json`. Mean ΔE is
-0.02153, median 0.01677, p95 0.06018 and maximum 0.12679. The largest
-difference is the direct saturated red/blue ramp. White/black remains
-somewhat lighter and cooler than the original; blue tints retain their
-chroma instead of turning gray.
+0.02251, median 0.01786, p95 0.06267 and maximum 0.12127. The largest
+difference is the direct saturated red/blue ramp. Blue tints retain their
+chroma instead of turning gray. White/black middle tints have much less
+color cast but remain lighter and slightly cooler than the original.
+At 50% black their OKLab chroma is 0.00580 versus the original's 0.00459;
+at 70% it is 0.00691 versus 0.00363. Lightness remains different: 50% black
+is L=0.642 versus 0.587 and 80% is L=0.478 versus 0.381. Similar chroma
+does not mean identical hue or lightness.
 These are measured differences, not a claim of visual acceptance or
 physical calibration. The comparison data is not a generator input.
 

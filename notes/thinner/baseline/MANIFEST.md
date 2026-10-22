@@ -9,8 +9,8 @@ code were not changed by the capture.
 
 | Item | Value |
 |---|---|
-| Source | `d3c9d5940e0d9a7caba0f057461611e9abd53c57` |
-| Easel SHA-256 | `b811186de2267f5d0fd5b3f20799da9adb2d4095d05f1f58c29fe6ab4ddd7395` |
+| Source | `18584b181a1e22e4212b9f0a55b69b5ab4bd8cb8` |
+| Easel SHA-256 | `c41710b22e83700c9dc8d37a7d9a4307130bf56132a9ca36fc05e44e2474b047` |
 | Cargo.lock SHA-256 | `8511bd710df7e47ca3f1c8754de74c89dc5f5d74ce0c2e7d1fa3359eddf44cb8` |
 | rustc | `1.99.0 (b940084d7 2026-09-28)`, LLVM 23.1.1 |
 | cargo | `1.99.0 (5f94df478 2026-08-27)` |

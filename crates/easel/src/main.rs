@@ -15,6 +15,7 @@
 //! executable's (`<studio>/bin/easel`) and holds one painting, `PAINTING`.
 
 mod api;
+mod pass_feedback;
 mod ground_cache;
 mod board;
 mod check;

@@ -803,12 +803,37 @@ def save_sittings(rd, n, sittings):
     tmp.replace(f)
 
 
+def write_outcome(rd, n, outcome):
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=rd, prefix=f".p{n}_outcome.", suffix=".tmp", delete=False) as f:
+            pending = Path(f.name)
+            json.dump(outcome, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(pending, rd / f"p{n}_outcome.json")
+        directory = os.open(rd, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+
+
 def close_easel(d):
-    """End the painter's easel session cleanly if one is still up (the log stays), then stop leftovers."""
-    if (d / "bin/easel").exists():
-        subprocess.run(["timeout", "60", str(d / "bin/easel"), "close"], cwd=d,
-                       stdin=subprocess.DEVNULL, capture_output=True)
+    """Return the close error, leaving a failed session alive for finalization retry."""
+    try:
+        result = subprocess.run([str(d / "bin/easel"), "close"], cwd=d,
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"easel close failed: {error}"
+    if result.returncode:
+        return f"easel close exited {result.returncode}: {result.stderr.strip() or result.stdout.strip()}"
     stop_leftovers(d)
+    return None
 
 
 def open_easel(d, tag):
@@ -924,14 +949,23 @@ def paint(name, n, d, rd):
                 log(f"{tag}: sitting {k} crashed ({gist(why)}); crash {crashes} of at most {MAX_CRASHES}, "
                     f"not a judgment: another sitting in {wait:.0f} s")
                 time.sleep(wait)
-    close_easel(d)
+    outcome_path = rd / f"p{n}_outcome.json"
+    previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
+    painter_finished = not why_done.startswith("NOT FINISHED")
+    finished_at = (previous.get("finished_at") or time.time()) if painter_finished else None
+    outcome = dict(status="finalization_failed" if painter_finished else "crash_limit_reached",
+                   reason=why_done, error="final save pending", finished_at=finished_at)
+    if painter_finished:
+        write_outcome(rd, n, outcome)
+    error = close_easel(d)
+    outcome.update(status=("finalization_failed" if error else "finished") if painter_finished else "crash_limit_reached", error=error)
+    write_outcome(rd, n, outcome)
+    if error:
+        log(f"{tag}: FINALIZATION FAILED: {error}; the easel was not stopped")
     shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
-    outcome = "finished" if not why_done.startswith("NOT FINISHED") else "crash_limit_reached"
-    (rd / f"p{n}_outcome.json").write_text(json.dumps(
-        {"status": outcome, "reason": why_done}, indent=2) + "\n")
-    if outcome != "finished":
+    if outcome["status"] != "finished":
         return None
-    (rd / f"p{n}.painted").write_text(f"{time.strftime('%F %T')} {len(sittings)} record(s): {why_done}\n")
+    (rd / f"p{n}.painted").write_text(f"{finished_at} {len(sittings)} record(s): {why_done}\n")
     return sittings
 
 

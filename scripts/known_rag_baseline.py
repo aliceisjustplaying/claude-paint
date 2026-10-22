@@ -51,8 +51,11 @@ def diagnose(directory, limits):
             for name in ignored_fields:
                 if name not in actual or reference[name][:2] != actual[name][:2] or len(reference[name][2]) != len(actual[name][2]):
                     problems.append("%s: %s missing or dtype/shape changed" % (chunk, name))
-                elif any(not math.isfinite(v[0]) for v in struct.iter_unpack("<" + sc.DT[actual[name][0]][0], actual[name][2])):
-                    problems.append("%s: %s has nonfinite values" % (chunk, name))
+                else:
+                    dtype, _, raw = actual[name]
+                    code, size = sc.DT[dtype]
+                    if not all(map(math.isfinite, struct.unpack("<%d%s" % (len(raw) // size, code), raw))):
+                        problems.append("%s: %s has nonfinite values" % (chunk, name))
             for name in ("brushes.debug", "rags.debug"):
                 if name not in actual or actual[name][0] != "utf8":
                     continue

@@ -94,6 +94,8 @@ rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
 rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
+check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
+check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
@@ -189,7 +191,6 @@ check painter-inbox-hooks 'node --test --test-reporter=tap harness/painter/test/
 check painter-limit-abort 'node --test --test-reporter=tap harness/painter/test/limit-abort.test.ts' '^# pass [1-9]'
 check painter-concepts 'node --test --test-name-pattern="file size limit" --test-reporter=tap harness/painter/test/concepts.test.ts' '^# pass [1-9]'
 check reference-library 'uv run --no-project --script scripts/tests/reference_library.py -v' "$unittest"
-check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check box-notes 'uv run --no-project python -m unittest scripts/tests/box_notes_test.py -v' "$unittest"
 check replay-batch 'uv run --no-project python -m unittest scripts/tests/replay_batch_test.py -v' "$unittest"
 check cargo-test-executables 'uv run --no-project python -m unittest scripts/tests/cargo_test_executables_test.py -v' "$unittest"
@@ -197,7 +198,6 @@ check replay-clip 'uv run --no-project python -m unittest scripts/tests/replay_c
 check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
 check replay-pace 'uv run --script scripts/tests/replay_pace_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
-check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'
 rust save-confined easel 'test save_confined test'
 rust ck7 easel 'test ck7 test'

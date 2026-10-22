@@ -118,20 +118,21 @@ def main():
         zero = struct.pack("<%df" % npx, *([0.0] * npx))
         some = struct.pack("<%df" % npx, *([0.0] * (npx - 1) + [0.5]))
         shape = [s for nm, _, s, _ in fields if nm == "wet.vol"][0]
-        case("an added zero field", fields + [("wet.solvent", "f32", shape, zero)], 0)
-        case("an added zero field, --added-zero", fields + [("wet.solvent", "f32", shape, zero)], 0, "--added-zero")
-        case("an added nonzero field", fields + [("wet.solvent", "f32", shape, some)], 0)
-        case("an added nonzero field, --added-zero", fields + [("wet.solvent", "f32", shape, some)], 1, "--added-zero", expect_text="wet.solvent: added field has 1 nonzero")
-        # Debug text: a later Bristle with a solvent field
+        case("an added zero field", fields + [("test.added", "f32", shape, zero)], 0)
+        case("an added zero field, --added-zero", fields + [("test.added", "f32", shape, zero)], 0, "--added-zero")
+        case("an added nonzero field", fields + [("test.added", "f32", shape, some)], 0)
+        case("an added nonzero field, --added-zero", fields + [("test.added", "f32", shape, some)], 1, "--added-zero", expect_text="test.added: added field has 1 nonzero")
+        # Debug text: a later Bristle with an additional field
         b0 = [r for nm, _, _, r in fields if nm == "brushes.debug"][0].decode()
         cure = b0[b0.index("cure: "):b0.index(" }", b0.index("cure: "))]
-        with_solvent = text_edit(fields, "brushes.debug", cure + " }", cure + ", solvent: 0.0 }", count=-1)
-        case("bristles gain solvent 0.0", with_solvent, 0)
-        case("bristles gain solvent 0.0, --added-zero", with_solvent, 0, "--added-zero")
-        case("a bristle gains solvent 0.25, --added-zero",
-             text_edit(fields, "brushes.debug", cure + " }", cure + ", solvent: 0.25 }"), 1, "--added-zero", expect_text="solvent is not zero")
+        with_added = text_edit(fields, "brushes.debug", cure + " }", cure + ", added_value: 0.0 }", count=-1)
+        case("bristles gain an added zero value", with_added, 0)
+        case("bristles gain an added zero value, --added-zero", with_added, 0, "--added-zero")
+        case("a bristle gains an added nonzero value, --added-zero",
+             text_edit(fields, "brushes.debug", cure + " }", cure + ", added_value: 0.25 }"), 1, "--added-zero", expect_text="added_value is not zero")
         vol0 = b0[b0.index("vol: "):b0.index(",", b0.index("vol: "))]
-        case("a bristle's load within its limit", text_edit(fields, "brushes.debug", vol0 + ",", vol0 + "1,"), 0)
+        within = float(vol0.split(": ", 1)[1]) + 0.5 * ABS_LIMITS["brushes.debug:brushes[].bristles[].vol"]
+        case("a bristle's load within its limit", text_edit(fields, "brushes.debug", vol0 + ",", "vol: %r," % within), 0)
         over = float(vol0.split(": ", 1)[1]) + 2 * ABS_LIMITS["brushes.debug:brushes[].bristles[].vol"]
         case("a bristle's load beyond its limit", text_edit(fields, "brushes.debug", vol0 + ",", "vol: %r," % over), 1, expect_text="brushes[0].bristles[0].vol")
         r0 = [r for nm, _, _, r in fields if nm == "rags.debug"][0].decode()

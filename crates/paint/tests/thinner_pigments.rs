@@ -1,12 +1,11 @@
-//! Thinner check 13 (a) (notes/thinner/ACCEPTANCE.md): the pigments stay as
-//! they were. Uses only the API af49348 already had, so it runs on unchanged
-//! code too.
+//! Thinner check 13 (a): frozen non-mixer pigment fields and box ordering,
+//! with explicitly authorized accepted-mixer color and strength captures.
 //!
 //!   cargo test -p paint --release --test thinner_pigments
 //!
-//! `tests/thinner/tubes_af49348.txt` is `tube_table()` as unchanged af49348
-//! prints it. `tubes_current.txt` separately freezes the expanded catalog and
-//! current box engine labels.
+//! `tests/thinner/tubes_af49348.txt` retains the historical catalog layout and
+//! non-mixer fields; its color/strength values were refreshed after round-5
+//! acceptance. `tubes_current.txt` freezes the expanded current table.
 
 use paint::Palette;
 
@@ -28,16 +27,16 @@ fn tube_table() -> String {
     s
 }
 
-/// Prints `tube_table()` (to make the af49348 file; not a check).
+/// Prints the current tube table for an explicitly authorized capture.
 #[test]
-#[ignore = "prints the tube table; run on af49348 to make tests/thinner/tubes_af49348.txt"]
+#[ignore = "prints the current tube table for authorized capture updates"]
 fn print_tube_table() {
     let out = std::env::var("TUBE_TABLE_OUT").expect("TUBE_TABLE_OUT: the file to write");
     std::fs::write(&out, tube_table()).unwrap_or_else(|e| panic!("{out}: {e}"));
 }
 
-/// Check 13 (a): historical pigment fields and legacy box tube ordering remain
-/// exact. New catalog tubes, new boxes, current engine labels and the
+/// Check 13 (a): frozen non-mixer fields and legacy box tube ordering remain
+/// exact, alongside the accepted color/strength capture. New tubes, boxes, engine labels and the
 /// pigments' packing fields (oil absorption, density, drain) are allowed, but
 /// the expanded current table has its own exact reviewed snapshot.
 #[test]

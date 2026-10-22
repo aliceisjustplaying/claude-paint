@@ -2,8 +2,8 @@
 # Check the baseline package itself (no build needed, about 2 s):
 # 1. every file's SHA-256 against SHA256SUMS (and no file missing from it);
 # 2. state_compare.py's own checks (test_state_compare.py);
-# 3. every stored dump rebuilds the PAINTCK8 checkpoint whose FNV-1a is the
-#    canvas= digest af49348's unchanged easel wrote for that chunk (ref/digest).
+# 3. every stored dump rebuilds the PAINTC19 checkpoint whose FNV-1a is the
+#    recorded canvas= digest for that chunk (ref/digest).
 #
 #   notes/thinner/baseline/tools/verify_package.sh
 set -euo pipefail
@@ -21,4 +21,4 @@ for d in state/*/; do
     n=$((n + 1))
   done
 done
-echo "verify_package: hashes ok; state_compare checks pass; $n dumps rebuild af49348's checkpoints"
+echo "verify_package: hashes ok; state_compare checks pass; $n dumps rebuild recorded checkpoints"

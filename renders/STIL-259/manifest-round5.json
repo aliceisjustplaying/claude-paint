@@ -1,0 +1,143 @@
+{
+  "round": 5,
+  "implementation_commit": "ec2a760646454d5579dac5823b4648ec00d585d8",
+  "file_count_including_manifest": 32,
+  "files": {
+    "README-round5.md": {
+      "sha256": "e8533b5c64c88733dddb5c492b92b418cbb643073bcbd1c02be588d86da5b29f",
+      "bytes": 5054
+    },
+    "ci-summary-round5.txt": {
+      "sha256": "cdf6fa97f8d1df9b545a8a7b14f53130a8324fd617c4c8ef720bce0fe08a022d",
+      "bytes": 2806
+    },
+    "ck7-tests-round5.log": {
+      "sha256": "105fbf26dd21dc33fb40176f5026411b2c57af290b68f4ea3a2b8708561c3d69",
+      "bytes": 1137
+    },
+    "f0dc5e-main-vs-new-round5.png": {
+      "sha256": "258d723a0bd64be678362ca08d2586543f137f5af1c7f8e25537db925a01c5d5",
+      "bytes": 724265,
+      "dimensions": [
+        664,
+        1050
+      ]
+    },
+    "final-inputs-round5.sha256": {
+      "sha256": "3c3fc671685b32babfbe73e4aed598381419f15c077b2301092c59536c0dcb31",
+      "bytes": 760
+    },
+    "gallery-provenance-round5.json": {
+      "sha256": "1a9c709116525e75a4e85bb5ba3b0b8a5be81c522d5902b5ddda70f09c01cb93",
+      "bytes": 2705
+    },
+    "guards-round5.md": {
+      "sha256": "d6fca5594602bf36db5586a1e95d094c670c3837b43feff207f2dc13c985363d",
+      "bytes": 14101
+    },
+    "guards-vs-round4-round5.md": {
+      "sha256": "9a2d556b697836981b27a44a54a4b6b7d951dbfd267da944249a097aeb146bd4",
+      "bytes": 25091
+    },
+    "iteration-ledger-round5.md": {
+      "sha256": "21519a56f474a8278354199bc6c8ac765d47a308378a38fe8d330b49380f33c9",
+      "bytes": 4744
+    },
+    "iteration-metrics-round5.json": {
+      "sha256": "3a91406e5c04c1eba10ebe1ee2d7f625c930dbca9550afe9ec8c9ba951ebfdc3",
+      "bytes": 64834
+    },
+    "iteration-source-models-round5.json.gz": {
+      "sha256": "453e1607073ebc926643c5bd3578f63bd12ac9f36fec78aea2189d31d9811322",
+      "bytes": 166736
+    },
+    "main-reference-pin-round5.txt": {
+      "sha256": "53e50ff669521a4e052bbf3412b9a2e5d2f2424f7cb601843c9c34a450897e96",
+      "bytes": 533
+    },
+    "mixes-new-round5.csv": {
+      "sha256": "8021b5501bca035b350ecf759802e37b03445f263fe4ab0ea3539a3dae5389be",
+      "bytes": 62902
+    },
+    "old-logs-round5.log": {
+      "sha256": "a73d8525cad6d63ee4691e8fb78791a1b796045a3dcff78fc2b1545cdab4458b",
+      "bytes": 2394
+    },
+    "paint-tests-round5.log": {
+      "sha256": "a0256cf7d3a3cf998de9836607a6dc60bc8d331b23d97d8c36c6377a08b718b8",
+      "bytes": 12405
+    },
+    "provenance-round5.json": {
+      "sha256": "a214455e1a11967dae2311f4eb5a63f39c01dc228c0c4eb80ffa27b1bf61f4b1",
+      "bytes": 5594
+    },
+    "real-paint-sheet-round5.png": {
+      "sha256": "8dca8d6a862eda2db404a07effbcc3ac5df4571b70fcf4051f2bdeea42a84490",
+      "bytes": 182648,
+      "dimensions": [
+        1000,
+        1864
+      ]
+    },
+    "recipes-new-round5.tsv": {
+      "sha256": "8c8ef60e3c4731ce23b122fd4c626004694cece7194c5b8f9c5612223ea35b50",
+      "bytes": 870
+    },
+    "reconstruction-tests-round5.log": {
+      "sha256": "bb7c51cd63cc3d173573e683635a3c49595498e80647197e98ce4ba966ab6305",
+      "bytes": 102
+    },
+    "remaining-errors-round5.json": {
+      "sha256": "e291a8a26c498079186a8e525f8fb9fd07fbc28e4044972f1fffaf454e5af4b6",
+      "bytes": 2670
+    },
+    "remaining-errors-round5.md": {
+      "sha256": "9b775b47f82900e29952023feaff8bd8a3b42babf078131cad547fe9ec60e132",
+      "bytes": 2593
+    },
+    "replay-tests-round5.log": {
+      "sha256": "417c36155e25274df3d1060a18753bded8383f9f3c18a08c0ade52d2a28f4ba7",
+      "bytes": 2379
+    },
+    "round4-control-round5.json": {
+      "sha256": "f092e6fc170f2aa167a66d1e1156cf0cc6469df933d3c5caa155c638d03699f1",
+      "bytes": 15551
+    },
+    "score-round5.json": {
+      "sha256": "77597d219d6d0e69b26f0227c9931e647b4db60b199bfb40604fd06de0c7bf6b",
+      "bytes": 28844
+    },
+    "score-round5.md": {
+      "sha256": "9af98daa3128b098f81744992f347d536992f81ab1e5366bdce2455c113901d3",
+      "bytes": 7061
+    },
+    "smoothness-round5.txt": {
+      "sha256": "17af4d8b00d269dd73a5a33fc7cf49fa26d31398b821c937fc3969beb4574ab5",
+      "bytes": 204
+    },
+    "strength-comparison-round5.csv": {
+      "sha256": "3a4c38de9a9b7020fd7480b14b6cde46776e780ccdcfe24c12265afed73bab8d",
+      "bytes": 2305
+    },
+    "strength-comparison-round5.md": {
+      "sha256": "5f1b360c6afa9838f4560dc192229188c0ca1733e3cda026786e2fe79bf40200",
+      "bytes": 4855
+    },
+    "swatches-main-vs-new-round5.png": {
+      "sha256": "8951515f529c360e732ed45b6157ecbfa10f23a1bcd7fecf498473853ec41641",
+      "bytes": 67964,
+      "dimensions": [
+        1000,
+        1595
+      ]
+    },
+    "tables-after-round5.sha256": {
+      "sha256": "2d3df135d62e36bd80fbf60f31d1d3e958ed145949a7d8b828168239de1d29cd",
+      "bytes": 513
+    },
+    "verification-round5.md": {
+      "sha256": "6bd5d384969e1761456b3702db9638a470de11c299c759d6c67ce08ab316c0b1",
+      "bytes": 4331
+    }
+  }
+}

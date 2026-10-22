@@ -1,0 +1,25 @@
+{
+  "candidate_code_commit": "5fa01c3219de3503c71ab2a7bc3f103cd2a2489d",
+  "main_code_commit": "95dba3ff937a96d2fad23dda578ab6efe4a7b4c8",
+  "candidate_binary_sha256": "e6b689a0a09c5ce6e67a75eeb48b00eb81519b450abfdcd08bc653ffcf2d3dcd",
+  "main_binary_sha256": "8653129caf7f1fce64596e0c247be5c9010532a753ff20ce4010693cd20a2acb",
+  "original_log_sha256": "78c30fa4e6a036f28565c718bad1356491970d99f2aaec4c19050f2dd6096307",
+  "candidate_log_sha256": "0dd737da63a5f390fabbab8d5e86a339ae71d3abfce56913781ff688f9b893c7",
+  "only_candidate_engine_header_changed": true,
+  "candidate_image_sha256": "d1bb7244ff9f1a6964a2cf58ab2cbe077581575f3c3ee51e167d2ec01beb0985",
+  "main_image_sha256": "3b65f557c3727bb9d4a7e88bf5e42f6712c30e7d3140ac9b85039d612d5fdf68",
+  "candidate_replay_completed_chunks": 108,
+  "main_replay_completed_chunks": 108,
+  "main_resumed_checkpoint_chunks": 29,
+  "candidate_wall_seconds": 500.62,
+  "main_resume_wall_seconds": 323.87,
+  "timing_caveat": "Candidate is a fresh full replay, main resumes 29 chunks, both save checkpoints and overlap on this cloud machine. Not a speed comparison.",
+  "current_main_vs_historical_reference": {
+    "changed_pixels": 0,
+    "maximum_rgb_delta_255": 0
+  },
+  "candidate_table_sha256": {
+    "inverse.bin": "b6d86e4c8c9f9fc0ee430f5c2e9c6546da632b8fc858e509de3c0a2d7d770eed",
+    "measured.bin": "3e28c159b573bf48109a1d4c47a20253fec7e5d893ef9603a0e046d69b06f5ea"
+  }
+}

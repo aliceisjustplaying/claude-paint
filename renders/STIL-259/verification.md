@@ -1,0 +1,19 @@
+# Round 4 verification
+
+Code: `5fa01c3219de3503c71ab2a7bc3f103cd2a2489d` on the existing pigment-mixer branch. No guard threshold, recipe, old-log golden or thinner capture changed.
+
+`cargo test --locked -p paint --lib`: 105 passed, 5 failed, 8 ignored. The failures are the raw RGB green guard, palette lightness guard, middle-gray warmth guard, existing knife-skim guard and the recorded scene image. The original seven mixer guards are 4 pass / 3 fail, compared with round 3's 3 pass / 4 fail. Three new preservation tests pass: measured pile/paint/knife handoffs, mixed measured/RGB linear latents and occupied measured-pigment wet/checkpoint persistence. Full output is in `paint-tests.log`.
+
+The unchanged knife-skim case has wet luminance 0.41321006 versus dried 0.8425079, below its required 0.85 ratio. The recorded paint scene differs by at most 186/255 against its unchanged 2/255 tolerance. These remain failures, not accepted baselines.
+
+`cargo test --locked -p easel --test ck7`: all 9 pass, including the 6 engine-9 plumbing cases. The cache test now computes its exact expected latent using the measured route for measured tubes, retaining its assertions. `cargo test --locked -p easel --bin easel replay_checkpoint::`: all 20 pass. `uv run --no-project .venv/bin/python scripts/tests/baseline_checkpoint_test.py`: all 4 pass. Logs are adjacent.
+
+`scripts/tests/old_logs.sh target/release/easel`: all 12 logs replay, 10 exceed the unchanged image tolerance. Maximum RGB deltas, in case order: engine1_tiny 216, ck7 223, studio_6399ad 102, studio_db6324 212, easel3_free 24, easel3_green 12, easel3_near 12, easel4_free 16, easel4_green 1, easel4_near 1, r19 220 and legacy_tiny 43 (all /255). The two easel4 green/near cases pass. No recording mode was used. See `old-logs.log`.
+
+The same smoothness probe has 300 endpoint / 193 interior anomaly ramps out of 3,000, versus round 3's reproduced 186 / 172 and main's 0 / 0. Each ramp has 400 equal steps; a ramp counts if its largest relevant step exceeds 10 times its own median step. The source probe samples linear RGB endpoints, despite the earlier report calling them sRGB. Endpoint steps are 0, 1, 398 and 399, interior steps 2–397. The worst interior ratio is 44.3, at step 397. This is a diagnostic, not a threshold change or a concentration law. See `smoothness.txt`.
+
+The raw-RGB 1% guard passes, with maximum distance 0.126266 (cobalt blue). It does not test measured palette latents. In the separate actual-palette probe, Prussian blue at 1% in measured lead white moves 0.409105 OKLab, exceeding the existing guard's 0.33 bound. The difference is explicitly reported rather than hidden by the raw-RGB test. See `strength-comparison.csv` and `guards-vs-round3.md`.
+
+The generator was run twice with pinned NumPy/SciPy and one BLAS thread. All four coefficient, inverse and provenance files reproduce byte-for-byte (`tables-after.sha256`). The inverse and the five primary K/S arrays are unchanged from round 3; new nonprimary coefficient fits use only pure films and the fixed fit sample, never a fixed test mixture. The runtime pigment order matches the generated order. The round-3 split function and its three output groups are unchanged.
+
+[CI pipeline 769](https://ci.mosphere.at/repos/7/pipeline/769/2), code head `5fa01c3`, failed in 108 seconds on `old-logs`, `paint-lib`, `easel-bin`, `thinner-check2` and `thinner-pigments`. The last test compares all tube colors and scalar strengths with frozen historical values. Measured masstones and unit scalar strengths intentionally differ. The measured masstones also change optical scattering derived from the catalog hiding input; thinner captures therefore have changed scattering as well as color and latent width. Nothing was re-recorded or relaxed. Other gate labels passed. This is not a green gate or a visual acceptance claim.

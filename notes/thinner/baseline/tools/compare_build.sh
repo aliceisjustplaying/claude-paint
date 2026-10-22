@@ -40,17 +40,18 @@ for d in "$here"/state/*/; do
     image_failed=1
   fi
   cat "$work/$s.image-report"
-  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
+  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
     known_rag=1
   elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     failed=1
   fi
   cmp -s <(sed 's/ secs=[^ ]*//' "$here/ref/digest/$s.txt") <(sed 's/ secs=[^ ]*//' "$work/digest/$s.txt") && dg=same || dg=different
   cmp -s "$here/ref/out/$s.txt" "$work/out/$s.txt" && out=same || out=DIFFERENT
-  echo "  png $png as af49348's; printed output $out; state digests $dg"
+  echo "  png $png as recorded baseline; printed output $out; state digests $dg"
   scenes=$((scenes + 1))
 done
-[ "$failed" = 0 ] || { echo "compare_build: DIFFERENT from the af49348 baseline" >&2; exit 1; }
+[ "$scenes" = 6 ] || { echo "compare_build: expected all six scenes" >&2; exit 1; }
+[ "$failed" = 0 ] || { echo "compare_build: DIFFERENT from the recorded baseline" >&2; exit 1; }
 if [ "$known_rag" = 1 ]; then
   [ "$scenes" = 6 ] || { echo "compare_build: known rag diagnosis requires all six scenes" >&2; exit 1; }
   echo 'KNOWN_FAILURE: rag-historical-baseline-main'

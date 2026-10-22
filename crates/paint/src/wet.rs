@@ -1,7 +1,7 @@
 //! Wet paint sitting on top of the dry picture.
 //!
 //! Every pixel holds a volume of wet paint (thickness, in "layer units": 1.0
-//! is one normal coat), its pigment mixture as a Mixbox latent vector of the
+//! is one normal coat), its pigment mixture as a latent vector of the
 //! masstone (mixing is linear in latent space, weighted by volume) and its
 //! Kubelka–Munk scattering per coat (mixed linearly by volume, as K and S mix
 //! in the two-constant KM model; absorption follows from masstone and S).
@@ -24,7 +24,7 @@ use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};
 use crate::pigment::{Pigment, hiding_of, scatter_for};
 
-pub const LAT: usize = mixbox::LATENT_SIZE;
+pub const LAT: usize = crate::mixer::LATENT_SIZE;
 #[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
@@ -115,6 +115,7 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
 #[derive(Clone, Debug)]
 pub struct Paint {
+    pub pigment_latent: Option<[f32; LAT]>,
     pub parts: Vec<(usize, f32)>,
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
@@ -168,11 +169,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -209,7 +210,7 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: mixbox::linear_float_rgb_to_latent(&self.color), parts: self.parts.clone() }
+        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone() }
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -374,7 +375,7 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
+        let c = crate::mixer::decode(&self.wet.lat[i]);
         over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0))
     }
 

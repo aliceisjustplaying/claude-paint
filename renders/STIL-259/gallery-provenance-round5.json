@@ -1,0 +1,50 @@
+{
+  "title": "Last Light on the Tarn",
+  "painter": "Claude Opus 5.5",
+  "round": "unknown",
+  "studio": "https://stillwet.art/studio/?p=paint-studio-f0dc5e",
+  "mode": "gallery",
+  "candidate_source_commit": "ec2a760646454d5579dac5823b4648ec00d585d8",
+  "source_tree_clean_at_freeze": true,
+  "command": [
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/easel-frozen",
+    "run",
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/f0dc5e-engine9.lua",
+    "--width",
+    "640",
+    "--gallery",
+    "--out",
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/painting-new.png",
+    "--replay-checkpoint",
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/gallery-replay.ckpt",
+    "--checkpoint-out",
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/gallery-final.ckpt"
+  ],
+  "input_and_output_sha256": {
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/easel-frozen": "f3cb7c9efb87525fed183263644f6140b48a6a44be6c118e9dc4dfa2849d59b9",
+    "/home/user/.capy/work/STIL-259-evidence/inputs/f0dc5e-original.lua": "78c30fa4e6a036f28565c718bad1356491970d99f2aaec4c19050f2dd6096307",
+    "/home/user/.capy/work/STIL-259-evidence/outputs/round5-gallery/f0dc5e-engine9.lua": "0dd737da63a5f390fabbab8d5e86a339ae71d3abfce56913781ff688f9b893c7",
+    "/workspace/claude-paint/crates/paint/src/mixer/inverse.bin": "9c5688169627e3b07b5593ee5dd644fdebe672e3d5305ce1384e0244d6ae217e",
+    "/workspace/claude-paint/crates/paint/src/mixer/measured.bin": "5be1924f293ee0fcf0517b5575f3b6275c5ef36b046543edfc11341664e95e15",
+    "/workspace/claude-paint/crates/paint/src/mixer/reference.bin": "f9920b80d2b2df1e9286a75d3ab5868d4177883cb23b2ca58339d0a974554211",
+    "/workspace/claude-paint/crates/paint/src/mixer/measured.json": "f7fb735a088e6a105c5c61867715d1b999bd7366a37ad979a8ead4e0ae2a1715",
+    "/workspace/claude-paint/crates/paint/src/mixer/primaries.json": "d16863f801f22a78bc46ea328646b7f1aa979f8315118269e9d4949fcba6d2c5",
+    "output/painting-new.png": "42b9256ff44965e971c0f42462eee8c88965bf60e61d4ba16331375ea5244510"
+  },
+  "original_header_only_change": true,
+  "completed_chunks": 108,
+  "candidate_dimensions": [
+    640,
+    479
+  ],
+  "pair_dimensions": [
+    664,
+    1050
+  ],
+  "candidate_elapsed_seconds": 594.5,
+  "candidate_differs_from_round4": true,
+  "main_reference_commit": "95dba3ff937a96d2fad23dda578ab6efe4a7b4c8",
+  "main_reference": "Reused round-4 current-main render; same commit still current; pixels checked against the pane",
+  "main_pane_pixels_verified": true,
+  "checkpoint_reuse": "No compatible round-5 checkpoint existed; old identities cannot supply this render"
+}

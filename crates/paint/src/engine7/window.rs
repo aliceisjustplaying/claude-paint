@@ -22,13 +22,13 @@ pub const CAPACITY: usize = 1024;
 /// Layout of a packed paint sum (`Acc::a`, and the pickup's): volume,
 /// then volume times each of the latent color, the properties and the
 /// cure, then the cover and the solvent (µm) the paint brings.
-pub(crate) const PACK: usize = 21;
 pub(crate) const VOL: usize = 0;
 pub(crate) const LAT0: usize = 1;
-pub(crate) const HIDE0: usize = 8;
-pub(crate) const CURE: usize = 18;
-pub(crate) const COVER: usize = 19;
-pub(crate) const SOLV: usize = 20;
+pub(crate) const HIDE0: usize = LAT0 + crate::wet::LAT;
+pub(crate) const CURE: usize = HIDE0 + 10;
+pub(crate) const COVER: usize = CURE + 1;
+pub(crate) const SOLV: usize = COVER + 1;
+pub(crate) const PACK: usize = SOLV + 1;
 
 /// A pixel the capsule touches: its buffer index, its whole-canvas position
 /// and how fluid its paint is (its weight is the same entry of `weights`).

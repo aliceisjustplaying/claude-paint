@@ -24,7 +24,7 @@ pub fn hex(s: &str) -> Rgb {
 /// How two colors combine.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mix {
-    /// Physical pigment mixing via Mixbox (blue + yellow = green).
+    /// Physical pigment mixing (blue + yellow = green).
     Pigment,
     /// Perceptual interpolation in OKLab.
     Light,
@@ -41,7 +41,7 @@ pub fn mix(a: Rgb, b: Rgb, t: f32, mode: Mix) -> Rgb {
         return b;
     }
     match mode {
-        Mix::Pigment => mixbox::lerp_linear_float(&a, &b, t),
+        Mix::Pigment => crate::mixer::lerp(&a, &b, t),
         Mix::Linear => lerp3(a, b, t),
         Mix::Light => from_oklab(lerp3(to_oklab(a), to_oklab(b), t)),
     }

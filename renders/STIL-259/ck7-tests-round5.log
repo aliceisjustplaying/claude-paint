@@ -1,0 +1,18 @@
+   Compiling paint v0.1.0 (/workspace/claude-paint/crates/paint)
+   Compiling easel v0.1.0 (/workspace/claude-paint/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 20s
+     Running tests/ck7.rs (target/debug/deps/ck7-842cc511ae91b806)
+
+running 9 tests
+test engine9_plumbing::engine9_keeps_engine8_switches_and_engine5_stays_the_low_level_default ... ok
+test engine9_plumbing::obsolete_checkpoints_are_refused_only_when_occupied ... ok
+test engine9_plumbing::unknown_checkpoint_mixer_identity_is_refused ... ok
+test engine9_plumbing::public_palette_engine_changes_and_clones_keep_the_universal_cache ... ok
+test engine9_plumbing::engine_switches_keep_the_universal_pigment_representation ... ok
+test engine9_plumbing::own_mixer_checkpoint_roundtrips_occupied_latents_and_pigment_parts ... ok
+test synthetic_v7_rejects_truncation_trailing_engine_words_and_wrong_editions ... ok
+test occupied_synthetic_v7_layout_is_explicitly_refused ... ok
+test synthetic_v7_cli_refuses_raw_and_compressed_checkpoints ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

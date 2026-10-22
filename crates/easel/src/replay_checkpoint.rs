@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-const MAGIC: &[u8; 8] = b"EASLRP01";
+const MAGIC: &[u8; 8] = b"EASLRP03";
 
 #[derive(Serialize, Deserialize)]
 struct State {
@@ -362,6 +362,7 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
         f.write_all(MAGIC).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
         {
             let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
+            writer.write_all(&paint::mixer::identity().to_le_bytes()).map_err(|e| e.to_string())?;
             TRACE.with(|t| {
                 #[derive(Serialize)]
                 struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Events, state: &'a State, digests: &'a Option<Vec<String>> }
@@ -612,12 +613,18 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         let mut magic = [0; 8];
         let mut digest = [0; 32];
         f.read_exact(&mut magic).and_then(|_| f.read_exact(&mut digest)).map_err(|e| e.to_string())?;
+        if matches!(&magic, b"EASLRP01" | b"EASLRP02") { return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into()); }
         if &magic != MAGIC { return Err("not a resumable replay checkpoint (unsupported format)".into()); }
         if hash_reader(&mut f)? != digest { return Err("checkpoint checksum mismatch".into()); }
         f.seek(SeekFrom::Start(40)).map_err(|e| e.to_string())?;
         let mut elapsed = [0; 8];
         f.read_exact(&mut elapsed).map_err(|e| e.to_string())?;
         let mut reader = zstd::stream::read::Decoder::new(f).map_err(|e| e.to_string())?;
+        let mut mixer = [0; 8];
+        reader.read_exact(&mut mixer).map_err(|e| e.to_string())?;
+        if u64::from_le_bytes(mixer) != paint::mixer::identity() {
+            return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into());
+        }
         let saved = read_saved(&mut reader, 4 << 30)?;
         let has_canvas: bool = bincode::deserialize_from(&mut reader).map_err(|e| e.to_string())?;
         let (canvas, header) = if has_canvas {
@@ -1105,10 +1112,45 @@ print(counter,rand(),drying(300,300))
             Identity::new(SOURCE, 64).unwrap();
             return;
         }
-        let status = std::process::Command::new(std::env::current_exe().unwrap())
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored"])
             .env("REPLAY_TEST_NON_UTF8", std::ffi::OsString::from_vec(vec![0xff]))
-            .status().unwrap();
-        assert!(status.success());
+            .output().unwrap();
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    fn obsolete_tool_snapshot_representation_is_refused_explicitly() {
+        let dir = Temp::new();
+        let path = dir.0.join("obsolete.ck");
+        for magic in [b"EASLRP01", b"EASLRP02"] {
+            let mut bytes = magic.to_vec();
+            bytes.extend_from_slice(&[0; 32]);
+            std::fs::write(&path, bytes).unwrap();
+            assert!(load(&path).err().unwrap().contains("obsolete pigment representation"));
+        }
+    }
+
+    #[test]
+    fn a_changed_mixer_refuses_canvas_free_tool_snapshots() {
+        let dir = Temp::new();
+        let path = dir.0.join("tools.ck");
+        let source = "b = brush{kind='round',width=2}";
+        let mut s = Session::new(64).unwrap();
+        s.run(source).unwrap();
+        let identity = Identity::new(source, 64).unwrap();
+        write_checkpoint(&path, &s, &identity, 1, &None, 0.0).unwrap();
+        let (saved, canvas, _) = load(&path).unwrap();
+        assert!(canvas.is_none());
+        assert_eq!(saved.state.brushes.len(), 1);
+        let bytes = std::fs::read(&path).unwrap();
+        let mut payload = zstd::stream::decode_all(&bytes[48..]).unwrap();
+        payload[..8].copy_from_slice(&(paint::mixer::identity() ^ 1).to_le_bytes());
+        let mut changed = bytes[..48].to_vec();
+        changed.extend(zstd::stream::encode_all(payload.as_slice(), 1).unwrap());
+        let digest = Sha256::digest(&changed[40..]);
+        changed[8..40].copy_from_slice(&digest);
+        std::fs::write(&path, changed).unwrap();
+        assert!(load(&path).err().unwrap().contains("obsolete pigment representation"));
     }
 }

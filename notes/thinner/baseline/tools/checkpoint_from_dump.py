@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Rebuild a canvas's PAINTCK8 checkpoint bytes (empty header) from a state dump.
+"""Rebuild an engine-3 PAINTC19/base-9 checkpoint from a state dump.
 
     checkpoint_from_dump.py chunk-NNN.state[.xz] [--digest DIGEST_FILE]
 
 Prints the FNV-1a-64 of the rebuilt bytes. That is the `canvas=` value
 `easel run --state-digest` writes (main.rs `state_digest_line`: FNV-1a of
 `Canvas::write_state(.., "")`), so when the two agree, the dump holds every
-value the checkpoint holds, bit for bit, in af49348's layout (paint's
-checkpoint.rs, version 8). With --digest, checks the digest file's line for
+value the checkpoint holds, bit for bit, including the mixer identity and
+solvent section. With --digest, checks the digest file's line for
 the dump's chunk and exits 1 on a mismatch.
 
-This checks the baseline itself; a later format (PAINTCK9) has another
-layout, and its dumps are compared with state_compare.py instead.
+This supports the baseline's engine-3 scenes without drawings or carried
+tube parts. Other layouts are refused rather than partially reconstructed.
 """
 
 import argparse
@@ -22,7 +22,7 @@ import sys
 
 sys.dont_write_bytecode = True  # no __pycache__ in the package
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from state_compare import load  # noqa: E402
+from state_compare import FormatError, load  # noqa: E402
 
 
 def fnv1a(b):
@@ -44,7 +44,13 @@ def rebuild(fields):
 
     u64 = lambda v: struct.pack("<Q", v)
     f32 = lambda v: struct.pack("<f", v)
-    out = [b"PAINTCK8", u64(0)]
+    if vals("engine") != (3,) or raw("drawing") or any(n.startswith("wet.parts.") for n in fields):
+        raise ValueError("only engine-3 baseline scenes without drawings or tube parts are supported")
+    if fields["wet.solvent"][:2] != ("f32", fields["wet.vol"][1]):
+        raise ValueError("wet.solvent must be f32 with the wet.vol shape")
+    if fields.get("mixer.identity", ())[:2] != ("u64", (1,)) or len(raw("mixer.identity")) != 8:
+        raise ValueError("mixer.identity must be one u64 from the producing build")
+    out = [b"PAINTC19", u64(0), raw("mixer.identity"), u64(9), u64(0)]
     out += [u64(v) for v in vals("frame")]
     out += [raw("scale"), raw("mm_per_unit")]
     linen = vals("linen")
@@ -71,7 +77,7 @@ def rebuild(fields):
     out += [u64(0)] if len(d) == 0 else [u64(1), d]
     hs = vals("hand_slice")
     out += [u64(0)] if hs[0] == 0.0 else [u64(1), f32(hs[1])]
-    out += [raw("tally"), u64(vals("engine")[0])]
+    out += [raw("tally"), u64(vals("engine")[0]), raw("wet.solvent")]
     return b"".join(out)
 
 
@@ -80,11 +86,12 @@ def main():
     ap.add_argument("dump")
     ap.add_argument("--digest")
     a = ap.parse_args()
-    head, fields = load(a.dump)
-    if "frame" not in fields:
-        print("%s: no canvas in this dump" % a.dump)
-        return 0
-    h = "%016x" % fnv1a(rebuild(fields))
+    try:
+        head, fields = load(a.dump)
+        h = "%016x" % fnv1a(rebuild(fields))
+    except (OSError, ValueError, KeyError, struct.error, FormatError) as error:
+        print("%s: invalid baseline dump: %s" % (a.dump, error), file=sys.stderr)
+        return 2
     print("chunk %d canvas=%s" % (head["chunk"], h))
     if a.digest:
         lines = open(a.digest).read().splitlines()

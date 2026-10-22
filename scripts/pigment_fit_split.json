@@ -1,0 +1,24 @@
+{
+  "round": 5,
+  "revision": 3,
+  "declared_before_additional_fits": true,
+  "reason": "Cochineal-only extender calibration did not transfer consistently to cobalt. Use all available chromatic extender mixtures, including previously selection-touched 16E, to constrain their K and S. No independent extender test remains; report all old test rows with the fitted ones marked. Replace inconsistent Prussian pure 13A with near-pure 13F, keeping 13C and 13G as tests. No lead-white/chrome test sample moves to fit.",
+  "additional_fit_samples": {
+    "BariumSulphate": ["16D", "16E", "16F"],
+    "CalciumCarbonate": ["17D", "17F"],
+    "PrussianBlue": ["13F"]
+  },
+  "pure_samples_reported_apart": ["13A"],
+  "moved_from_round3_test": ["13F", "16D", "16F", "17D", "17F"],
+  "moved_from_selection_touched": ["16E"],
+  "round3_test_set": [
+    "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
+    "13C", "13F", "13G", "14C", "16D", "16F", "17D", "17F"
+  ],
+  "test_set": [
+    "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
+    "13C", "13G", "14C"
+  ],
+  "prior_selection_exposure": ["08E"],
+  "reporting": "Report the complete old 17-sample test and revised 12-sample test. Mark 13F, 16D, 16F, 17D and 17F as fitted, not held out. Also mark 16E as fitted rather than merely selection-touched. Report unused pure 13A apart. The original eleven fit samples remain fitted and the other four selection-touched samples remain reported separately."
+}

@@ -1,0 +1,461 @@
+[
+  {
+    "scene": "body",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "body",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "c002bb173d28938ad1d343789e380293a4ba7bb55f59531c49d27b56af881392",
+    "capture_sha256": "9ae88a26c58e198864e5586c929c82cb0953c3b8454612171f40b12116bfb819"
+  },
+  {
+    "scene": "overlap",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "overlap",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "43b1cd2db182e07f2d02764e2d3a38f3aeff3cfef0eebeec329a94381ce6f700",
+    "capture_sha256": "f31bd905dae63019e8da5d151b1e9e681681188c39cc19c1d68903138853be9b"
+  },
+  {
+    "scene": "overlap",
+    "chunk": "chunk-003",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "859cac85f492ec67a6c22b6dd70234f90247d601b2a7d1910bbd01a83918325b",
+    "capture_sha256": "4a1a56d555d1c75f036fe3c9e63f7fb57db814e54cefe40914b0f59f1817bf03"
+  },
+  {
+    "scene": "pickup",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "pickup",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "0c2906b7208acbd37aa8a5af14a34e6106d60583b6e8c1fbfd5b4edc1869301b",
+    "capture_sha256": "81e91ddb5da852c04313475b2ca4f2fa3498bf3b78fbaa05052d4ba16e994654"
+  },
+  {
+    "scene": "pickup",
+    "chunk": "chunk-003",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "098f2370e14ffdef2266259b4ed6e04b41b52ee93421d3a283a71870dd19288c",
+    "capture_sha256": "504a4965f6896e7297a28cb6b841998d76ac8ba2a95f3f07ea2b1815773ab1cc"
+  },
+  {
+    "scene": "pickup",
+    "chunk": "chunk-004",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "70c8aa6b309af45fbe32071f16ae007918faa402e59929ba367e9a3454096495",
+    "capture_sha256": "b39adad6216af318db2c608e2bc43fc12b4b23afa7e471464827215468d0b035"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "a20b79463d39bc58aa7c7d941858e802c488afb6060cbfb81cd35b80633807f3",
+    "capture_sha256": "b04a15aa64793b372c35e2deeb8929cee4229696cbd9aadcc384fabb6b74401c"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-003",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "e24b0912534b60e7c22bec8aa335b2324000e57796b7eee96d76d4ad3efdda41",
+    "capture_sha256": "ff8cae81a6edcd3697bd314c2c1093e5790b3381b9d356c3c1d88c7207fba074"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-004",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "07e584c023eefb28cb27e2610f98f86ea9cad90838a26ecee169d6fef98b320d",
+    "capture_sha256": "70478261fdbbd128688085a4239c2949837d692de21ec28060b5e16624eafaf2"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-005",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "adfb52bc4043572991900f481c1559ced41cbc0c2d3e5c469f3cbf1e076b42c7",
+    "capture_sha256": "ed95fdd4271cc0e8c1d0f985d207855c83a7d492e13b5f7945ab3581b8ca5cdb"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-006",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "dd4ae47a359f22a757e63aa72acbe23892917c569c49211217bdb23368f5b206",
+    "capture_sha256": "47a6e1378b1e83a3893f87c389c4d5312e0c0f8a557ce8e4838618ec805b0764"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-007",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "c31cd62a2d9c19a2df9d0f85693865856c42c32d68105ede2c6f1e7d2eb669a0",
+    "capture_sha256": "4f77d228d2894527fb05bfbaa6b44936501409160f1247b88cb30a66e3526c1d"
+  },
+  {
+    "scene": "rag",
+    "chunk": "chunk-008",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "029cf1047e2bd37a889b3bba1552fd7cb73e14f595fe6cd174ae105ee0fe36f2",
+    "capture_sha256": "dae38894e07d1ae96041214caada053ece5ff345828338c2da9936ecc6801f39"
+  },
+  {
+    "scene": "stroke",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "stroke",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "b6f5a1a9165fb2871c70e18831c6d92b4921ba6f074c8c93fac89db8c2d62f85",
+    "capture_sha256": "7b8e436d2555ac5f4e53a6d541c4aa83d5b106a8b53d531f2a24420fc1f1fac5"
+  },
+  {
+    "scene": "stroke",
+    "chunk": "chunk-003",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "fe1e090a2385996d18859d21a205926b262ad6fac2a9fe97ea794dd41dbc80c9",
+    "capture_sha256": "81bbc6628576e30892fff89971d8df1df428d71815ce513aad9139b6231d0014"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-001",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "621b559f08fc4c0918f72e6b03d4a2332dfcbfe6a40a00a942e474c5a40dbaa3",
+    "capture_sha256": "eacceebbff82b10fd6297e7eca00485b97b49ae46b7fb991125b3171cdecbc76"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-002",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "b017fab8c532cd73989226dfb02c1b66171dbe887eb132ff418a7092364d85ab",
+    "capture_sha256": "8513b048fffe9d46a3da0df124e00dfbdac9c733712b7f58d6197bb2aac1863d"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-003",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "96effcca9e659de5a419f1455a71a500a5d1dee2f576537653de686fb59d6fb2",
+    "capture_sha256": "71a1ec0b51e8c365589522af8c9bab31e43999516debab4d59353633ab62cb7e"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-004",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "2493e8ce5686860d3797f6817b532b6070bb0b61d89c63d62c4097782793a7a8",
+    "capture_sha256": "a8c2e9ef8fe83dbdb1646c1637d9be8048b902f69c8642889887a55f90267144"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-005",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "410900ab19e0da660139b611e7a04f3516a78bec24f1096b72c2b927a0883d90",
+    "capture_sha256": "5bf6be8b4d3ccffb7c83b1d28c94ecfc3b5ed2f47d32e02c48238cc4ef2ab7ec"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-006",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "6d537b7302b43f1713ed850dcb1525a19f8e8ce78b10242a2aa88182e186650c",
+    "capture_sha256": "81d13f1b8dfe452a87b29e0471e55a16bf08aeb4e4dae3636bdb33cc26c6da38"
+  },
+  {
+    "scene": "wait",
+    "chunk": "chunk-007",
+    "refreshed": [
+      "color",
+      "wet.lat",
+      "studio.piles",
+      "mixer.identity",
+      "wet.hide:scattering",
+      "brushes.debug:latents/scattering",
+      "studio.debug:piles"
+    ],
+    "all_other_fields_exact": true,
+    "stiffness_and_drying_exact": true,
+    "reference_sha256": "e09cfebdecf5075d96e5b743aa73ccf59a97b1643c549db2652a4db281a12882",
+    "capture_sha256": "3e58528bbd60847c8f7cc39b4e297df6b60b77b2ec06a6d600dbb9f176009065"
+  }
+]

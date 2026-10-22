@@ -45,14 +45,19 @@ def diagnose(directory, limits):
         _, actual = sc.load(files[chunk])
         ignored_fields, ignored_values = set(), {}
         if number >= 4:
+            latent_size = reference["wet.lat"][1][-1]
+            latent = r"lat\[(?:%s)\]" % "|".join(map(str, range(latent_size)))
             ignored_fields = {"wet.vol", "wet.lat", "wet.hide", "clock.cure", "clock.lev", "clock.seen", "clock.th"}
             if number == 8:
                 ignored_fields.add("wet.floor")
             for name in ignored_fields:
                 if name not in actual or reference[name][:2] != actual[name][:2] or len(reference[name][2]) != len(actual[name][2]):
                     problems.append("%s: %s missing or dtype/shape changed" % (chunk, name))
-                elif any(not math.isfinite(v[0]) for v in struct.iter_unpack("<" + sc.DT[actual[name][0]][0], actual[name][2])):
-                    problems.append("%s: %s has nonfinite values" % (chunk, name))
+                else:
+                    dtype, _, raw = actual[name]
+                    code, size = sc.DT[dtype]
+                    if not all(map(math.isfinite, struct.unpack("<%d%s" % (len(raw) // size, code), raw))):
+                        problems.append("%s: %s has nonfinite values" % (chunk, name))
             for name in ("brushes.debug", "rags.debug"):
                 if name not in actual or actual[name][0] != "utf8":
                     continue
@@ -60,10 +65,10 @@ def diagnose(directory, limits):
                 skipped = set()
                 for key, value in values.items():
                     allowed = bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.(load|soaked)", key))
-                    allowed |= bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(mm3|lat\[[0-6]\]|hide\[[0-4]\]|cure|at_min|at_secs)", key))
-                    allowed |= bool(number == 8 and name == "brushes.debug" and re.fullmatch(r"brushes\[0\]\.bristles\[\d+\]\.(vol|lat\[[0-6]\]|hide\[[0-4]\]|cure)", key))
+                    allowed |= bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(mm3|%s|hide\[[0-4]\]|cure|at_min|at_secs)" % latent, key))
+                    allowed |= bool(number == 8 and name == "brushes.debug" and re.fullmatch(r"brushes\[0\]\.bristles\[\d+\]\.(vol|%s|hide\[[0-4]\]|cure)" % latent, key))
                     if name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(lat|hide)\.len", key):
-                        if value != ("num", "7" if key.endswith("lat.len") else "5"):
+                        if value != ("num", str(latent_size) if key.endswith("lat.len") else "5"):
                             problems.append("%s: %s shape changed" % (chunk, key))
                     if allowed:
                         if value[0] != "num" or re.fullmatch(r"-?\d+", value[1]) or not math.isfinite(sc.num(value[1])):
@@ -103,7 +108,7 @@ def diagnose(directory, limits):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("directory", type=Path)
-    ap.add_argument("--image-report", type=Path, help="also check compare_images.py's rag diagnostic")
+    ap.add_argument("--image-report", type=Path, help="require the current-mixer rag image comparison to pass")
     args = ap.parse_args()
     host = (sys.platform, platform.machine())
     if host not in (("linux", "x86_64"), ("darwin", "arm64")):
@@ -113,9 +118,8 @@ def main():
         problems = diagnose(args.directory, sc.LINUX_LIMITS if host[0] == "linux" else {})
         if args.image_report:
             report = args.image_report.read_text().strip()
-            match = re.fullmatch(r"image comparison: FAIL: (?:(?:(?:tolerance|cross-platform) \([^()\n]+\)|byte-exact(?: comparison \([^()\n]+\))?); )?(\d+)/8192 pixels changed; max RGB delta (\d+)/255(?:; max alpha delta 0/255)?(?:; allowed \d+ pixels, max \d+/255)?", report)
-            if not match or int(match[1]) != 707 or int(match[2]) != 109:
-                problems.append("rag PNG does not match the known image diagnostic: " + report)
+            if not re.fullmatch(r"image comparison: PASS: [^\n]+", report):
+                problems.append("rag PNG does not match the current-mixer image baseline: " + report)
     except (OSError, ValueError, KeyError, TypeError, struct.error, sc.FormatError) as error:
         print("known_rag_baseline: invalid input: %s" % error, file=sys.stderr)
         return 2

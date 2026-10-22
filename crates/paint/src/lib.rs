@@ -13,6 +13,7 @@ pub mod crack;
 pub mod dry;
 pub mod drying;
 pub mod mask;
+pub mod mixer;
 pub mod noise;
 pub mod path;
 pub mod edge;
@@ -73,10 +74,11 @@ pub use rng::Rng;
 pub use shape::Shape;
 
 /// The default engine version for low-level canvases and palettes. The easel
-/// selects engine 8 for new paintings and records it in the log. A painting replays
+/// selects engine 9 for new paintings and records it in the log. A painting replays
 /// with the version it was painted with (its log's `--@ engine` line; a log
 /// without one is version 1), so a fix that changes what paint does never
-/// changes a past painting. Exception: engine-5 solvent waits were
+/// changes a past painting. Exceptions: all engines now use this crate's
+/// pigment mixer, and engine-5 solvent waits were
 /// accelerated in October 2026, accepting replay drift for existing logs
 /// (notes/thinner/ACCEPTANCE.md, check 17):
 /// - 1: every painting before the version was recorded.
@@ -103,6 +105,7 @@ pub use shape::Shape;
 ///   reimplements for speed. A log asks for it with `--@ engine 7`.
 /// - 8: engine 7, and a stroke's mark reaches the end of its path
 ///   (`REACH_END`, `bristle::drag_on`).
+/// - 9: engine 8 with the crate's pigment mixer as the new painting default.
 ///
 /// A switch rides on engine 5 and 7 without a number of its own (an easel
 /// log's head names it; a log without it replays as it was painted):
@@ -121,10 +124,13 @@ pub const ENGINE: u32 = 5;
 /// a few pixels before it.
 pub const REACH_END: u32 = 8;
 
+/// Engine 9: engine 8's behavior with the crate's universal pigment mixer.
+pub const PIGMENT_MIXER: u32 = 9;
+
 /// The engine versions a log, checkpoint or snapshot may name: `ENGINE` and
-/// those before it, engine 7 (`engine7`) and engine 8 (`REACH_END`). There
-/// is no engine 6.
-pub const SUPPORTED_ENGINES: [u32; 7] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END];
+/// those before it, engine 7 (`engine7`), engine 8 (`REACH_END`) and engine 9
+/// (`PIGMENT_MIXER`). There is no engine 6.
+pub const SUPPORTED_ENGINES: [u32; 8] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END, PIGMENT_MIXER];
 
 /// Whether engine version `v` is one this crate paints with.
 pub fn supported_engine(v: u32) -> bool {

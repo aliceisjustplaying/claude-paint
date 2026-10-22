@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Thinner check 2 (notes/thinner/ACCEPTANCE.md): no thinner, or thinner 0,
-# leaves engine 3's paint state within numeric tolerance of af49348 on the
-# before-change scenes (notes/thinner/baseline/).
+# matches the recorded engine-3 paint state within numeric tolerance on the
+# six scenes (notes/thinner/baseline/).
 #
 #   scripts/thinner_check2 <release easel with --dump-state>
 #
@@ -42,8 +42,8 @@ set +e
 "$base/tools/compare_build.sh" "$easel" --added-zero "${state_flags[@]}" | tee "$work/compare_build.txt"
 cb=${PIPESTATUS[0]}
 set -e
-n=$(grep -c "png same as af49348's" "$work/compare_build.txt" || true)
-if [ "$cb" = 4 ] && [ "$n" = 5 ] && grep -qx 'KNOWN_FAILURE: rag-historical-baseline-main' "$work/compare_build.txt"; then
+n=$(grep -c "png same as recorded baseline" "$work/compare_build.txt" || true)
+if [ "$cb" = 4 ] && [ "$n" = 6 ] && grep -qx 'KNOWN_FAILURE: rag-historical-baseline-main' "$work/compare_build.txt"; then
   known_rag=1
 elif [ "$cb" != 0 ] || [ "$n" != 6 ]; then
   echo "check 2: compare_build.sh failed (exit $cb; $n of 6 PNGs meet the image criteria)"
@@ -79,7 +79,7 @@ for lua in "$base"/scenes/*.lua; do
     image_failed=1
   fi
   cat "$work/$s.image-report"
-  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
+  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
     known_rag=1
   elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     fail=1

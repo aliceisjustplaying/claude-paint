@@ -18,11 +18,17 @@
 //!
 //! The reader also accepts version 7 (`PAINTCK7`), the engine-1 layout before
 //! edition numbers: it ends after the hand-time ledger, without an engine word.
-//! New engine-1 writes remain version 8; no historical bytes are rewritten on read.
-//! The format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
+//! Engine-1 writes retain base layout 8 inside the current envelope.
+//! New writes use version 19 (`PAINTC19`): after the header, three u64 words
+//! identify the pigment mixer, the base layout below and whether tube
+//! parts follow (0 or 1). This identity is independent of the engine number.
+//! Older files containing wet paint are refused because their latent vectors
+//! cannot be decoded by this mixer. Empty older files can still be read.
+//! Versions 7–18 store seven latent floats per pixel, not the current width.
+//!
+//! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
-//! (below); files of any other version are refused (re-run to checkpoint
-//! again). Version 9 is version 8's bytes after the magic, then the
+//! (below). Version 9 is version 8's bytes after the magic, then the
 //! thinner's section: the solvent in the open film, one f32 (µm) per buffer
 //! pixel, row major, as the file's last 4 × pixels bytes (`crate::thinner`;
 //! that it comes last is part of version 9; version 10 adds its section
@@ -32,8 +38,8 @@
 //! (`PAINTC11`) is engine 4's and later: version 9 with two more properties
 //! (solvent and oil) to each pixel of wet paint and, after the engine version and before
 //! the solvent (still last), the surface's gloss and the ground's remaining
-//! absorbency, one f32 each per pixel. An older engine's canvas is written
-//! as it always was. Version 12 combines version 11 with the raw canvas's
+//! absorbency, one f32 each per pixel. An older engine retains its base
+//! layout inside the current envelope. Version 12 combines version 11 with the raw canvas's
 //! soak section after the solvent. After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and
@@ -123,6 +129,8 @@ const MAGIC14: &[u8; 8] = b"PAINTC14";
 const MAGIC16: &[u8; 8] = b"PAINTC16";
 const MAGIC17: &[u8; 8] = b"PAINTC17";
 const MAGIC18: &[u8; 8] = b"PAINTC18";
+const MAGIC19: &[u8; 8] = b"PAINTC19";
+const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
 /// Marks the paper's section ("PAPR"), and its version.
@@ -379,6 +387,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC16 => 16,
         m if m == MAGIC17 => 17,
         m if m == MAGIC18 => 18,
+        m if m == MAGIC19 => 19,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -432,22 +441,12 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        let magic = match version {
-            14 => MAGIC14,
-            16 => MAGIC16,
-            17 => MAGIC17,
-            15 => MAGIC15,
-            13 => MAGIC13,
-            12 => MAGIC12,
-            11 => MAGIC11,
-            10 => MAGIC10,
-            9 => MAGIC9,
-            _ => MAGIC,
-        };
-        w.write_all(if pigments { MAGIC18 } else { magic })?;
+        w.write_all(MAGIC19)?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
-        if pigments { put_u64(w, version)?; }
+        put_u64(w, crate::mixer::identity())?;
+        put_u64(w, version)?;
+        put_u64(w, u64::from(pigments))?;
         let f = self.f;
         for v in [f.w, f.h, f.x0, f.y0, f.full_w, f.full_h, self.keep.0, self.keep.1, self.keep.2, self.keep.3] {
             put_u64(w, v as u64)?;
@@ -580,10 +579,21 @@ impl Canvas {
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
-        let pigments = version == 18;
-        let version = if pigments {
+        let own_mixer = version == 19;
+        if own_mixer && get_u64(r)? != crate::mixer::identity() {
+            return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
+        }
+        let mut pigments = version == 18;
+        let version = if pigments || own_mixer {
             let version = get_u64(r)?;
             if !(8..=17).contains(&version) { return Err(bad("checkpoint base format is invalid")); }
+            if own_mixer {
+                pigments = match get_u64(r)? {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(bad("checkpoint pigment flag is invalid")),
+                };
+            }
             version as u32
         } else { version };
         let mut u = [0usize; 10];
@@ -650,8 +660,10 @@ impl Canvas {
         c.film = get_all(r, n)?;
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
-        let lat = get_all(r, n * LAT)?;
-        wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
+        let lat = get_all(r, n * if own_mixer { LAT } else { HISTORICAL_LAT })?;
+        if own_mixer {
+            wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
+        }
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')
         let (p, f, q) = (crate::wet::PACKED_OIL, crate::wet::DRAINED_FLOOR, crate::wet::OIL_VOLUME);
@@ -726,7 +738,7 @@ impl Canvas {
             c.sealed_drawing_guide = word & SEALED_DRAWING_GUIDE != 0;
             c.drawing_optics = word & DRAWING_OPTICS != 0;
             match u32::try_from(word & !(DRAWING_OPTICS | SEALED_DRAWING_GUIDE | LIQUID_FILM_LEVELS | QUARTER_TILES | ADAPTIVE_SWEEP | GLAZE_FILM | RAG_LIFT | KNIFE_SKIM | BLEND_FEATHER | BRUSH_SKIM)) {
-                Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END)) => v,
+                Ok(v) if crate::supported_engine(v) && (!c.liquid_film_levels || v >= 4) && (!(c.quarter_tiles || c.adaptive_sweep) || v == 5) && (!(c.glaze_film || c.rag_lift || c.knife_skim || c.blend_feather || c.brush_skim) || matches!(v, crate::engine7::ENGINE | crate::REACH_END | crate::PIGMENT_MIXER)) => v,
                 _ => return Err(bad("checkpoint engine version is invalid")),
             }
         };
@@ -860,6 +872,12 @@ impl Canvas {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
+        if !own_mixer {
+            if c.wet.vol.iter().any(|&v| v > 0.0) {
+                return Err(bad("checkpoint contains wet paint in an obsolete pigment representation; reopen it with the original engine build and export the painting, or replay its log with this build"));
+            }
+            c.wet.lat.fill(crate::wet::Latent::default());
+        }
         Ok((c, header))
     }
 }
@@ -875,6 +893,32 @@ mod tests {
 
     fn load(b: Vec<u8>) -> io::Result<Canvas> {
         Canvas::read_state(&mut Cursor::new(b)).map(|(c, _)| c)
+    }
+
+    fn base_format(b: &[u8]) -> u64 {
+        assert_eq!(&b[..8], MAGIC19);
+        let header = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
+        assert_eq!(u64::from_le_bytes(b[16 + header..24 + header].try_into().unwrap()), crate::mixer::identity());
+        u64::from_le_bytes(b[24 + header..32 + header].try_into().unwrap())
+    }
+
+    fn set_base_format(b: &mut [u8], version: u64) {
+        base_format(b);
+        let header = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
+        set(b, 24 + header, version);
+    }
+
+    #[test]
+    fn a_different_mixer_identity_is_refused_before_reading_latents() {
+        let c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        let mut bytes = Vec::new();
+        c.write_state(&mut bytes, "").unwrap();
+        assert!(load(bytes.clone()).is_ok());
+        for identity in [1, crate::mixer::identity() ^ 1] {
+            set(&mut bytes, 16, identity);
+            let error = load(bytes.clone()).err().unwrap();
+            assert!(error.to_string().contains("obsolete pigment representation"));
+        }
     }
 
     /// A canvas with the drain switch is written as version 14: version 11's
@@ -896,8 +940,8 @@ mod tests {
             b
         };
         let (off, on) = (canvas(false), canvas(true));
-        assert_eq!((&off[..8], &on[..8]), (&b"PAINTC11"[..], &b"PAINTC14"[..]));
-        assert!(on[8..off.len()] == off[8..], "version 11's bytes, then the drain section");
+        assert_eq!((base_format(&off), base_format(&on)), (11, 14));
+        assert!(on[40..off.len()] == off[40..], "version 11's payload, then the drain section");
         let n = 4;
         assert_eq!(on.len(), off.len() + 24 + n * 5 * 4);
         let d = load(on.clone()).unwrap();
@@ -931,7 +975,7 @@ mod tests {
         c.wet.hide[0] = [0.7, 0.6, 1.2, 0.4, 0.5, 0.45, 0.3, 0.25, 0.6, 0.2];
         let mut bytes = Vec::new();
         c.write_state(&mut bytes, "").unwrap();
-        assert_eq!(&bytes[..8], b"PAINTC16");
+        assert_eq!(base_format(&bytes), 16);
         let d = load(bytes.clone()).unwrap();
         assert!(d.drain && d.paper == c.paper && d.micro == c.micro && d.wet.hide == c.wet.hide);
         let mut again = Vec::new();
@@ -957,7 +1001,7 @@ mod tests {
                 c.sheet_catch(&[(0, 2.0)], [0.7, 0.2, 0.1]);
                 let mut bytes = Vec::new();
                 c.write_state(&mut bytes, "").unwrap();
-                assert_eq!(&bytes[..8], if drain { MAGIC17 } else { MAGIC15 });
+                assert_eq!(base_format(&bytes), if drain { 17 } else { 15 });
                 let r = load(bytes.clone()).unwrap();
                 assert_eq!(r.drain, drain);
                 assert_eq!(r.is_raw(), c.is_raw());
@@ -998,7 +1042,7 @@ mod tests {
         let mut c = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0).with_paper(p);
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
-        assert_eq!(&b[..8], b"PAINTC13");
+        assert_eq!(base_format(&b), 13);
         let mut d = load(b.clone()).unwrap();
         assert!(d.paper == c.paper && d.micro == c.micro && d.height == c.height && d.absorb == c.absorb && d.gloss == c.gloss && d.absorb_any);
         let mut again = Vec::new();
@@ -1011,7 +1055,7 @@ mod tests {
         assert!(d.pixels() == c.pixels() && d.height == c.height && d.absorb == c.absorb);
         let mut linen = Vec::new();
         c.clone().with_linen(Linen::fine(1)).write_state(&mut linen, "").unwrap();
-        assert_eq!(&linen[..8], b"PAINTC11");
+        assert_eq!(base_format(&linen), 11);
         let mut cut = b.clone();
         cut.pop();
         assert_eq!(load(cut).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
@@ -1029,9 +1073,9 @@ mod tests {
         nan[last..].copy_from_slice(&f32::NAN.to_le_bytes());
         rejected(nan, "a NaN pore");
         let mut no_section = b[..section].to_vec();
-        no_section[..8].copy_from_slice(b"PAINTC11");
+        set_base_format(&mut no_section, 11);
         assert!(load(no_section.clone()).is_ok());
-        no_section[..8].copy_from_slice(b"PAINTC13");
+        set_base_format(&mut no_section, 13);
         assert_eq!(load(no_section).err().unwrap().kind(), io::ErrorKind::UnexpectedEof);
         let e = c.clone().with_engine(3).write_state(&mut Vec::new(), "").unwrap_err();
         assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
@@ -1079,7 +1123,7 @@ mod tests {
         let c = Canvas::new_window(60, 1.5, [0.5; 3], None).with_engine(5).with_size_mm(120.0).with_paper(crate::paper::Paper::drawing(2)).with_quarter_tiles(true).with_adaptive_sweep(true);
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
-        assert_eq!(&b[..8], MAGIC13);
+        assert_eq!(base_format(&b), 13);
         let r = load(b.clone()).unwrap();
         assert!(r.quarter_tiles() && r.adaptive_sweep() && r.paper == c.paper);
         let mut again = Vec::new();
@@ -1091,7 +1135,7 @@ mod tests {
         c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
         let mut b = Vec::new();
         c.write_state(&mut b, "").unwrap();
-        assert_eq!(&b[..8], MAGIC15);
+        assert_eq!(base_format(&b), 15);
         let r = load(b.clone()).unwrap();
         assert!(r.quarter_tiles() && r.adaptive_sweep() && r.sheet == c.sheet);
         let mut again = Vec::new();
@@ -1113,7 +1157,7 @@ mod tests {
             b
         };
         let bare = bytes(&c);
-        assert_eq!(&bare[..8], b"PAINTC13");
+        assert_eq!(base_format(&bare), 13);
         assert!(load(bare.clone()).unwrap().sheet.is_none());
         let m = crate::mask::Mask::from_fn(c.frame(), |x, _| if x < 500.0 { 1.0 } else { 0.0 });
         c.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
@@ -1122,7 +1166,7 @@ mod tests {
         c.stick_stroke(&mut st, &[StrokePoint { x: 100.0, y: 300.0, pose, speed: 60.0 }, StrokePoint { x: 900.0, y: 300.0, pose, speed: 60.0 }]);
         assert!(c.sheet.as_ref().unwrap().a.iter().any(|&a| a > 0.0), "the stroke caught on the sheet");
         let b = bytes(&c);
-        assert_eq!(&b[..8], b"PAINTC15");
+        assert_eq!(base_format(&b), 15);
         let r = load(b.clone()).unwrap();
         assert!(r.sheet.is_some() && r.sheet == c.sheet && r.paper == c.paper && r.micro == c.micro && r.pixels() == c.pixels());
         assert!(bytes(&r) == b, "rewritten as it was read");
@@ -1130,7 +1174,7 @@ mod tests {
         let mut linen = Canvas::new_window(240, 1.5, [0.5; 3], None).with_size_mm(120.0);
         linen.lay_sheet(&m, 100.0, 5.0, [0.8, 0.78, 0.7]).unwrap();
         let lb = bytes(&linen);
-        assert_eq!(&lb[..8], b"PAINTC15");
+        assert_eq!(base_format(&lb), 15);
         assert!(load(lb).unwrap().sheet == linen.sheet);
         let n = c.f.w * c.f.h;
         // (the section: mark, version, five numbers, the mask, its coverage and colors)
@@ -1143,6 +1187,6 @@ mod tests {
         half[at..at + 4].copy_from_slice(&0.5f32.to_le_bytes());
         rejected(half, "a mask of 0.5");
         assert!(c.lift_sheet());
-        assert_eq!(&bytes(&c)[..8], b"PAINTC13");
+        assert_eq!(base_format(&bytes(&c)), 13);
     }
 }

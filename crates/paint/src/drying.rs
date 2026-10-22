@@ -918,7 +918,7 @@ impl Canvas {
                     }
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
-                    let c = mixbox::latent_to_linear_float_rgb(&lat[i]);
+                    let c = crate::mixer::decode(&lat[i]);
                     px[x] = crate::wet::over_share(Pigment::masstone(c, hide[i][0]), px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um));
                     ff[x] += ti;
                     vv[x] = 0.0;

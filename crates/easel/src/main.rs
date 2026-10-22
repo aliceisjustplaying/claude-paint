@@ -1341,6 +1341,7 @@ impl Server {
             .and_then(|done| { self.start_hand_frames(Some(done))?; Ok(done) });
         let done = match resumed {
             Ok(done) => done,
+            Err(e) if e.contains("obsolete pigment representation") => return Err(e),
             Err(e) => {
                 eprintln!("warning: replay checkpoint: {e}; replaying the full log");
                 let limit = self.s.chunk_limit;

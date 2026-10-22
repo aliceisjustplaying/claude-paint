@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The engine against the small before-change results (notes/thinner/baseline):
-# every state field af49348 had, after every chunk of the six scenes, within
+# The engine against the recorded results (notes/thinner/baseline):
+# every recorded state field, after every chunk of the six scenes, within
 # numeric float limits on every platform;
 # fields a newer engine adds zero (--added-zero); and every
 # scene's PNG under the image tolerance policy. (The thinner's check 2: "no
-# thinner" leaves engine 3 as it was.)
+# thinner" matches the recorded engine-3 state.)
 #
 #   scripts/tests/baseline_state.sh [<release easel>]   (default $CARGO_TARGET_DIR or target, /release/easel)
 set -euo pipefail
@@ -33,7 +33,7 @@ for dir in "$baseline"/state/*/; do
     image_failed=1
   fi
   cat "$work/$name.image-report"
-  if [ "$name" = rag ] && [ "$state_failed" = 1 ]; then
+  if [ "$name" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ]; then
     if uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$name" --image-report "$work/$name.image-report"; then
       known_rag=1
     else
@@ -44,7 +44,7 @@ for dir in "$baseline"/state/*/; do
   fi
   scenes=$((scenes + 1))
 done
-[ "$scenes" -gt 0 ] || { echo "baseline_state: no scenes" >&2; exit 1; }
+[ "$scenes" = 6 ] || { echo "baseline_state: expected all six scenes" >&2; exit 1; }
 [ "$failed" = 0 ] || { echo "baseline_state: FAILED (a different or unrelated regression)" >&2; exit 1; }
 if [ "$known_rag" = 1 ]; then
   [ "$scenes" = 6 ] || { echo "baseline_state: known rag diagnosis requires all six scenes" >&2; exit 1; }

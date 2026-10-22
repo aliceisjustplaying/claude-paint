@@ -21,12 +21,14 @@ by default. Other floats allow an absolute error of 1e-7. Relative tolerance
 is zero, so errors cannot grow with magnitude. Integers, structure and
 added-zero checks stay exact. --linux-tolerance is a compatibility alias
 for the default policy. Each float field reports its limit and observed error.
+Solvent fields remain exact when they are already present in the reference.
 
 Exit 0: equal on every baseline field; 1: a difference; 2: a usage or
 format error. Only Python's standard library.
 """
 
 import argparse
+from functools import lru_cache
 import gzip
 import json
 import lzma
@@ -49,6 +51,7 @@ ABS_LIMITS = {
     "wet.lat": 1.6e-7,
     "wet.hide": 5e-7,
     "wet.floor": 8e-6,
+    "wet.solvent": 0.0,
     "clock.cure": 4e-7,
     "clock.lev": 7e-5,
     "clock.seen": 8e-6,
@@ -63,6 +66,9 @@ ABS_LIMITS = {
     "brushes.debug:brushes[].bristles[].lat[]": 1.1e-7,
     "brushes.debug:brushes[].bristles[].hide[]": 3.1e-7,
     "brushes.debug:brushes[].bristles[].cure": 6.1e-12,
+    "brushes.debug:brushes[].bristles[].solvent": 0.0,
+    "rags.debug:rags[].solvent_mm3": 0.0,
+    "rags.debug:rags[].mobile.solv_mm3": 0.0,
 }
 
 LINUX_LIMITS = ABS_LIMITS
@@ -112,10 +118,10 @@ TOKEN = re.compile(r"""
 def tokens(text):
     pos, out = 0, []
     while pos < len(text):
-        if text[pos:].strip() == "":
-            break
         m = TOKEN.match(text, pos)
         if not m or m.end() == pos:
+            if text[pos:].strip() == "":
+                break
             raise FormatError("can't read Debug text at %r" % text[pos:pos + 40])
         kind = m.lastgroup
         out.append((kind, m.group(kind)))
@@ -201,6 +207,7 @@ def flatten(node, path, out):
         out[path] = node
 
 
+@lru_cache(maxsize=32)
 def debug_values(name, text):
     """Named values from a text field."""
     out = {}
@@ -260,10 +267,10 @@ def compare_numeric(name, a, b, problems, limits=None, observed=None):
     code, size = DT[da]
     n = len(ra) // size
     va = struct.unpack("<%d%s" % (n, code), ra)
-    vb = struct.unpack("<%d%s" % (n, code), rb)
-    if floating and ra == rb and all(math.isfinite(v) for v in va):
+    if floating and ra == rb and all(map(math.isfinite, va)):
         observed.setdefault(name, 0.0)
         return
+    vb = struct.unpack("<%d%s" % (n, code), rb)
     failed = []
     worst, at = 0.0, 0
     for i in range(n):

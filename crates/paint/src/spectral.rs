@@ -147,7 +147,7 @@ pub fn mix_js(colors: &[(Rgb, f32, f32)]) -> Rgb {
 
 /// Single-constant spectral KM mixing with plain weights: K/S averaged per
 /// wavelength with weight `w` (e.g. volume × tinting strength, the weights
-/// the palette gives Mixbox). Returns the mixture's masstone.
+/// the palette uses). Returns the mixture's masstone.
 pub fn mix_ks(colors: &[(Rgb, f32)]) -> Rgb {
     let tot: f32 = colors.iter().map(|p| p.1).sum();
     let sp: Vec<(Spectrum, f32)> = colors.iter().map(|&(c, w)| (from_rgb(c), w)).collect();

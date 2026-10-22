@@ -1,5 +1,6 @@
 # name	log (relative to this directory)	width	what it guards (the test it replaces)
 engine1_tiny	engine1_tiny.lua	160	logs with no engine line replay as engine 1 (replaces session::tests::logs_without_an_engine_line_replay_as_before)
+ck7	ck7.lua	128	the former ck7 checkpoint fixture's engine-1 log remains replayable
 studio_6399ad	studio_6399ad.first3.lua	128	engine 1: the first 3 chunks of studio 6399ad (same test)
 studio_db6324	studio_db6324.first3.lua	128	engine 1: the first 3 chunks of studio db6324 (same test)
 easel3_free	easel3_free.first3.lua	128	legacy easel3 verbs (replaces legacy::tests::easel3_free_replays)

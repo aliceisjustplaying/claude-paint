@@ -1,10 +1,9 @@
 //! Engine 7's paint laying: engine 5's `Surf::add` (paint mixed by volume
 //! into a pixel's latent color, properties and cure) with everything that
 //! depends only on the paint being laid worked out once per source instead
-//! of once per pixel, and the 7 latent channels and 10 properties blended
-//! as overlapping 4-lane rows (`[0..4]` and `[3..7]`; `[0..4]`, `[3..7]`
-//! and `[6..10]`). Every lane runs engine 5's arithmetic in engine 5's
-//! order, so a pixel ends bit for bit where engine 5 leaves it.
+//! of once per pixel, and the latent channels blended over their full
+//! layout. The 10 properties use overlapping 4-lane rows. Every lane runs engine 5's arithmetic in
+//! engine 5's order, so a pixel ends bit for bit where engine 5 leaves it.
 
 use crate::bristle::{Surf, fluid_of, ground_draw, ground_drain, restore_buried, skim_top};
 use crate::drying::Px;
@@ -35,7 +34,6 @@ pub(crate) struct Film {
 #[derive(Clone)]
 pub(crate) struct Paint7 {
     parts: Latent,
-    lat: [[f32; 4]; 2],
     hide: [[f32; 4]; 3],
     /// Share of the laid volume left once the solvent is gone.
     keep: f32,
@@ -54,8 +52,7 @@ impl Paint7 {
         };
         let hide = if drain { fluid_of(hide) } else { hide };
         Paint7 {
-            parts: Latent { parts: lat.parts.clone(), ..Latent::default() },
-            lat: [[lat[0], lat[1], lat[2], lat[3]], [lat[3], lat[4], lat[5], lat[6]]],
+            parts: lat.clone(),
             hide: [[hide[0], hide[1], hide[2], hide[3]], [hide[3], hide[4], hide[5], hide[6]], [hide[6], hide[7], hide[8], hide[9]]],
             keep,
             cure,
@@ -115,13 +112,13 @@ impl Film {
             let vol = &mut *self.vol.add(i);
             let t = *vol + v;
             let a = v / t;
-            // every row is read before any is written: the shared lanes
-            // (latent 3, properties 3 and 6) blend once from the old value
-            // and are written twice with the same result
-            let l = self.lat.add(i).cast::<f32>();
-            let (l0, l1) = (l.cast::<[f32; 4]>().read_unaligned(), l.add(3).cast::<[f32; 4]>().read_unaligned());
-            l.cast::<[f32; 4]>().write_unaligned(lerp4(l0, p.lat[0], a));
-            l.add(3).cast::<[f32; 4]>().write_unaligned(lerp4(l1, p.lat[1], a));
+            // every row is read before any is written: the shared property
+            // lanes (3 and 6) blend once from the old value and are written
+            // twice with the same result
+            let l = &mut (*self.lat.add(i)).color;
+            for k in 0..crate::wet::LAT {
+                l[k] += (p.parts[k] - l[k]) * a;
+            }
             (*self.lat.add(i)).blend_parts(&p.parts, a);
             let h = self.hide.add(i).cast::<f32>();
             let (h0, h1, h2) = (h.cast::<[f32; 4]>().read_unaligned(), h.add(3).cast::<[f32; 4]>().read_unaligned(), h.add(6).cast::<[f32; 4]>().read_unaligned());

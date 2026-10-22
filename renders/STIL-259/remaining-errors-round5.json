@@ -1,0 +1,92 @@
+{
+  "08F": {
+    "group": "Old round-3 test (includes 5 samples now fitted)",
+    "error_fixed": 0.03671429778157784,
+    "delta_oklab": [
+      -0.033622716661237395,
+      0.008507437792722006,
+      -0.012044753551463228
+    ],
+    "error_actual_backing": 0.036718055376922853,
+    "fixed_vs_actual_backing": 1.4037675877364024e-05,
+    "fit_rms_black_white": null
+  },
+  "13G": {
+    "group": "Old round-3 test (includes 5 samples now fitted)",
+    "error_fixed": 0.04149923901461683,
+    "delta_oklab": [
+      -0.04019183270835147,
+      -0.006281551062597923,
+      -0.008206432756329596
+    ],
+    "error_actual_backing": 0.04149924961822286,
+    "fixed_vs_actual_backing": 9.017799646075399e-08,
+    "fit_rms_black_white": null
+  },
+  "16F": {
+    "group": "Added fit samples (not held out)",
+    "error_fixed": 0.04567580126963464,
+    "delta_oklab": [
+      -0.040804739646666255,
+      0.009838826522885313,
+      -0.01801248280064438
+    ],
+    "error_actual_backing": 0.04590976223473718,
+    "fixed_vs_actual_backing": 0.00027191112990331337,
+    "fit_rms_black_white": [
+      0.03053461280192151,
+      0.037640520445573616
+    ]
+  },
+  "16E": {
+    "group": "Added fit samples (not held out)",
+    "error_fixed": 0.04259098188415459,
+    "delta_oklab": [
+      0.03853989267137681,
+      -0.01236826456146678,
+      0.013254978026111752
+    ],
+    "error_actual_backing": 0.04254164632028156,
+    "fixed_vs_actual_backing": 5.529633073695932e-05,
+    "fit_rms_black_white": [
+      0.017654607605970422,
+      0.03756287355929847
+    ]
+  },
+  "01C": {
+    "group": "Selection-touched (read while choosing the primaries)",
+    "error_fixed": 0.0655099544724509,
+    "delta_oklab": [
+      0.048015867650672006,
+      -0.03350810902880913,
+      -0.02938089886387374
+    ],
+    "error_actual_backing": 0.06573440547531732,
+    "fixed_vs_actual_backing": 0.0008072664850051548,
+    "fit_rms_black_white": null
+  },
+  "11C": {
+    "group": "Selection-touched (read while choosing the primaries)",
+    "error_fixed": 0.030286590859757892,
+    "delta_oklab": [
+      -0.02055262192460361,
+      -0.0013078463701753362,
+      0.022207135245292053
+    ],
+    "error_actual_backing": 0.030286528939060253,
+    "fixed_vs_actual_backing": 6.314798705488403e-08,
+    "fit_rms_black_white": null
+  },
+  "13A": {
+    "group": "Unused pure Prussian 13A (reported apart)",
+    "error_fixed": 0.05224076981016439,
+    "delta_oklab": [
+      -0.04657973377486353,
+      -0.02159989491078377,
+      -0.009636958631462439
+    ],
+    "error_actual_backing": 0.052240768800233865,
+    "fixed_vs_actual_backing": 1.0255503961412876e-09,
+    "fit_rms_black_white": null
+  }
+}

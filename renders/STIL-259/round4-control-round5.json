@@ -1,0 +1,707 @@
+{
+  "method": "Both frozen runtimes scored with raw-fraction normalization; no new calibration",
+  "round4_source": "5fa01c3219de3503c71ab2a7bc3f103cd2a2489d",
+  "groups": {
+    "old_17": {
+      "n": 17,
+      "round4": {
+        "median": 0.027413427190233926,
+        "mean": 0.06181352913742139,
+        "worst": 0.24043069605744838
+      },
+      "round5": {
+        "median": 0.022719860658853605,
+        "mean": 0.021635324277201277,
+        "worst": 0.04567580126963464
+      }
+    },
+    "common_revised_12": {
+      "n": 12,
+      "round4": {
+        "median": 0.022956124044734176,
+        "mean": 0.02522963718321189,
+        "worst": 0.05024700652802715
+      },
+      "round5": {
+        "median": 0.023190243237571732,
+        "mean": 0.02321189392463116,
+        "worst": 0.04149923901461683
+      }
+    },
+    "all_33": {
+      "n": 33,
+      "round4": {
+        "median": 0.02094908973371961,
+        "mean": 0.04135490116215059,
+        "worst": 0.24043069605744838
+      },
+      "round5": {
+        "median": 0.02096840562144584,
+        "mean": 0.019070955607492796,
+        "worst": 0.0655099544724509
+      }
+    }
+  },
+  "round4_rows": {
+    "03C": {
+      "sample": "03C",
+      "paint": "Eosin2PbWax",
+      "white": "ZincWhite",
+      "share": 0.503,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.9692245783413425,
+        0.26202797574444736,
+        0.2803006295649347
+      ],
+      "new": [
+        0.9330615,
+        0.29114437,
+        0.3141457
+      ],
+      "main": null,
+      "error_new": 0.0161010404595116,
+      "error_main": null
+    },
+    "04C": {
+      "sample": "04C",
+      "paint": "Cochineal",
+      "white": "ZincWhite",
+      "share": 0.506,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.10668016814437026,
+        6.258492124968393e-05,
+        0.016534294210410246
+      ],
+      "new": [
+        0.12370158,
+        0.003551081,
+        0.020885024
+      ],
+      "main": null,
+      "error_new": 0.02355742491495102,
+      "error_main": null
+    },
+    "04F": {
+      "sample": "04F",
+      "paint": "Cochineal",
+      "white": "ZincWhite",
+      "share": 0.008,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.7265815527918688,
+        0.3083206159040336,
+        0.4636063916418694
+      ],
+      "new": [
+        0.6995031,
+        0.34839156,
+        0.47524703
+      ],
+      "main": null,
+      "error_new": 0.02094908973371961,
+      "error_main": null
+    },
+    "06C": {
+      "sample": "06C",
+      "paint": "Vermillion",
+      "white": "ZincWhite",
+      "share": 0.5,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.5342202571204185,
+        0.07444923323379328,
+        0.07571863370555285
+      ],
+      "new": [
+        0.5252038,
+        0.07337361,
+        0.075893074
+      ],
+      "main": null,
+      "error_new": 0.0032732656920391352,
+      "error_main": null
+    },
+    "08D": {
+      "sample": "08D",
+      "paint": "Cochineal",
+      "white": "LeadWhite",
+      "share": 0.10400000000000002,
+      "raw_fraction_sum": 0.9999999999999999,
+      "measured": [
+        0.32564610340807043,
+        0.032596911080335494,
+        0.09633040323668106
+      ],
+      "new": [
+        0.3248454,
+        0.043665837,
+        0.08752943
+      ],
+      "main": null,
+      "error_new": 0.019547315325647543,
+      "error_main": null
+    },
+    "08E": {
+      "sample": "08E",
+      "paint": "ViridianGreen",
+      "white": "LeadWhite",
+      "share": 0.091,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.053674910048193934,
+        0.3620720598103798,
+        0.31994648546443755
+      ],
+      "new": [
+        0.081166446,
+        0.40181774,
+        0.35437632
+      ],
+      "main": null,
+      "error_new": 0.027413427190233926,
+      "error_main": null
+    },
+    "08F": {
+      "sample": "08F",
+      "paint": "CobaltBlue",
+      "white": "LeadWhite",
+      "share": 0.1036889332003988,
+      "raw_fraction_sum": 1.0030000000000001,
+      "measured": [
+        0.05100079937299208,
+        0.2413473096683996,
+        0.6657409933722721
+      ],
+      "new": [
+        0.035827268,
+        0.21598683,
+        0.6845381
+      ],
+      "main": null,
+      "error_new": 0.022354823174517334,
+      "error_main": null
+    },
+    "08G": {
+      "sample": "08G",
+      "paint": "ChromeYellow",
+      "white": "LeadWhite",
+      "share": 0.091,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.8764608009657772,
+        0.42651925227271964,
+        0.0
+      ],
+      "new": [
+        0.9714438,
+        0.4833926,
+        0.0015931061
+      ],
+      "main": null,
+      "error_new": 0.031771906955955456,
+      "error_main": null
+    },
+    "10C": {
+      "sample": "10C",
+      "paint": "EmeraldGreen",
+      "white": "ZincWhite",
+      "share": 0.5,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.04751751690174229,
+        0.5008266233108015,
+        0.25338783550249533
+      ],
+      "new": [
+        0.048337385,
+        0.5398736,
+        0.29619214
+      ],
+      "main": null,
+      "error_new": 0.01991796639109439,
+      "error_main": null
+    },
+    "13C": {
+      "sample": "13C",
+      "paint": "PrussianBlue",
+      "white": "ZincWhite",
+      "share": 0.507,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.006515034346579821,
+        0.04869137344652461
+      ],
+      "new": [
+        0.010292286,
+        0.006433895,
+        0.044071723
+      ],
+      "main": null,
+      "error_new": 0.04188363002513484,
+      "error_main": null
+    },
+    "13F": {
+      "sample": "13F",
+      "paint": "PrussianBlue",
+      "white": "ZincWhite",
+      "share": 0.99,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0028904996271599272,
+        0.0,
+        0.0012094958890218523
+      ],
+      "new": [
+        0.012164958,
+        0.0,
+        0.002204317
+      ],
+      "main": null,
+      "error_new": 0.058932501672541625,
+      "error_main": null
+    },
+    "13G": {
+      "sample": "13G",
+      "paint": "PrussianBlue",
+      "white": "ZincWhite",
+      "share": 0.011000000000000001,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.07959778377272601,
+        0.3194281951784701,
+        0.6033265531189499
+      ],
+      "new": [
+        0.012241164,
+        0.2687724,
+        0.5529756
+      ],
+      "main": null,
+      "error_new": 0.05024700652802715,
+      "error_main": null
+    },
+    "14C": {
+      "sample": "14C",
+      "paint": "ChromeYellow",
+      "white": "ZincWhite",
+      "share": 0.489,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.8505754533984855,
+        0.36668306921014937,
+        0.0
+      ],
+      "new": [
+        0.78568596,
+        0.32612357,
+        0.0
+      ],
+      "main": null,
+      "error_new": 0.02573874980771068,
+      "error_main": null
+    },
+    "16D": {
+      "sample": "16D",
+      "paint": "Cochineal",
+      "white": "BariumSulphate",
+      "share": 0.1005,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.2785411705554964,
+        0.0,
+        0.004385279179534199
+      ],
+      "new": [
+        0.07729503,
+        0.0,
+        0.005418198
+      ],
+      "main": null,
+      "error_new": 0.1541069369357485,
+      "error_main": null
+    },
+    "16F": {
+      "sample": "16F",
+      "paint": "CobaltBlue",
+      "white": "BariumSulphate",
+      "share": 0.09949999999999999,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.14396552684121927,
+        0.5250812503223201
+      ],
+      "new": [
+        0.0,
+        0.047344446,
+        0.27306923
+      ],
+      "main": null,
+      "error_new": 0.1406686867876953,
+      "error_main": null
+    },
+    "17D": {
+      "sample": "17D",
+      "paint": "Cochineal",
+      "white": "CalciumCarbonate",
+      "share": 0.1014,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.378897114843202,
+        0.0,
+        0.0
+      ],
+      "new": [
+        0.050329205,
+        0.0,
+        0.00081295875
+      ],
+      "main": null,
+      "error_new": 0.24043069605744838,
+      "error_main": null
+    },
+    "17F": {
+      "sample": "17F",
+      "paint": "CobaltBlue",
+      "white": "CalciumCarbonate",
+      "share": 0.1008,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.10681315084844781,
+        0.4795073905366896
+      ],
+      "new": [
+        0.0,
+        0.02916881,
+        0.19591667
+      ],
+      "main": null,
+      "error_new": 0.15393552768418728,
+      "error_main": null
+    },
+    "01B": {
+      "sample": "01B",
+      "paint": "Eosin1Wax",
+      "white": "ZincWhite",
+      "share": 0.1,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.923490041649671,
+        0.6352487932963913,
+        0.6479025507377468
+      ],
+      "new": [
+        0.9486577,
+        0.5772432,
+        0.59295046
+      ],
+      "main": null,
+      "error_new": 0.02088543402038872,
+      "error_main": null
+    },
+    "03B": {
+      "sample": "03B",
+      "paint": "Eosin2PbWax",
+      "white": "ZincWhite",
+      "share": 0.111,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.9076627394030823,
+        0.5813947538537688,
+        0.6143812953438331
+      ],
+      "new": [
+        0.94198495,
+        0.56243414,
+        0.5977847
+      ],
+      "main": null,
+      "error_new": 0.008550378797163381,
+      "error_main": null
+    },
+    "04B": {
+      "sample": "04B",
+      "paint": "Cochineal",
+      "white": "ZincWhite",
+      "share": 0.09900000000000002,
+      "raw_fraction_sum": 0.9999999999999999,
+      "measured": [
+        0.3597427041564159,
+        0.059076380065454924,
+        0.1341211962052026
+      ],
+      "new": [
+        0.36228237,
+        0.061190143,
+        0.13636157
+      ],
+      "main": null,
+      "error_new": 0.0029311837362090147,
+      "error_main": null
+    },
+    "05B": {
+      "sample": "05B",
+      "paint": "Minium",
+      "white": "ZincWhite",
+      "share": 0.09200000000000001,
+      "raw_fraction_sum": 0.9999999999999999,
+      "measured": [
+        0.9897509774692531,
+        0.4222525860018189,
+        0.360497177378851
+      ],
+      "new": [
+        0.95211625,
+        0.41811427,
+        0.36173198
+      ],
+      "main": null,
+      "error_new": 0.007382652598334962,
+      "error_main": null
+    },
+    "06B": {
+      "sample": "06B",
+      "paint": "Vermillion",
+      "white": "ZincWhite",
+      "share": 0.1,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.7402396027067827,
+        0.2601733809620983,
+        0.28098191182429716
+      ],
+      "new": [
+        0.7165451,
+        0.2587593,
+        0.27953604
+      ],
+      "main": null,
+      "error_new": 0.005607627038331861,
+      "error_main": null
+    },
+    "08C": {
+      "sample": "08C",
+      "paint": "BoneBlack",
+      "white": "LeadWhite",
+      "share": 0.102,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.11769579995247167,
+        0.12628058123702302,
+        0.1396861040398166
+      ],
+      "new": [
+        0.1364695,
+        0.14520293,
+        0.15585944
+      ],
+      "main": null,
+      "error_new": 0.02374816431637612,
+      "error_main": null
+    },
+    "09B": {
+      "sample": "09B",
+      "paint": "ViridianGreen",
+      "white": "ZincWhite",
+      "share": 0.11599999999999999,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.07382764628652307,
+        0.4039034309222912,
+        0.38947926475755407
+      ],
+      "new": [
+        0.07441903,
+        0.40298802,
+        0.3893897
+      ],
+      "main": null,
+      "error_new": 0.0005174004351018149,
+      "error_main": null
+    },
+    "10B": {
+      "sample": "10B",
+      "paint": "EmeraldGreen",
+      "white": "ZincWhite",
+      "share": 0.10400000000000002,
+      "raw_fraction_sum": 0.9999999999999999,
+      "measured": [
+        0.3778765279416543,
+        0.7686560990213329,
+        0.5697992651637682
+      ],
+      "new": [
+        0.36494878,
+        0.75031984,
+        0.5672197
+      ],
+      "main": null,
+      "error_new": 0.007415473621574649,
+      "error_main": null
+    },
+    "11B": {
+      "sample": "11B",
+      "paint": "UltramarineBlue",
+      "white": "ZincWhite",
+      "share": 0.107,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.10844541305804642,
+        0.23263228719949422,
+        0.6378700771176217
+      ],
+      "new": [
+        0.10818608,
+        0.23264997,
+        0.63586813
+      ],
+      "main": null,
+      "error_new": 0.00047567437886846214,
+      "error_main": null
+    },
+    "13B": {
+      "sample": "13B",
+      "paint": "PrussianBlue",
+      "white": "ZincWhite",
+      "share": 0.063,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.08421720109758492,
+        0.29279073216917567
+      ],
+      "new": [
+        0.0,
+        0.08366705,
+        0.29196766
+      ],
+      "main": null,
+      "error_new": 0.0007898016714501322,
+      "error_main": null
+    },
+    "14B": {
+      "sample": "14B",
+      "paint": "ChromeYellow",
+      "white": "ZincWhite",
+      "share": 0.08800000000000001,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.9652872198129036,
+        0.5089431227220964,
+        0.038757406701757764
+      ],
+      "new": [
+        0.9465644,
+        0.5081042,
+        0.038961153
+      ],
+      "main": null,
+      "error_new": 0.003449455628108011,
+      "error_main": null
+    },
+    "01C": {
+      "sample": "01C",
+      "paint": "Eosin1Wax",
+      "white": "ZincWhite",
+      "share": 0.5,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.9795168212721898,
+        0.1738783322760907,
+        0.1577563395357912
+      ],
+      "new": [
+        0.9537486,
+        0.30074337,
+        0.29228097
+      ],
+      "main": null,
+      "error_new": 0.07168210605647049,
+      "error_main": null
+    },
+    "05C": {
+      "sample": "05C",
+      "paint": "Minium",
+      "white": "ZincWhite",
+      "share": 0.508,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.9443867429060838,
+        0.16485775013320003,
+        0.07754923183613875
+      ],
+      "new": [
+        0.88721144,
+        0.16706583,
+        0.08635303
+      ],
+      "main": null,
+      "error_new": 0.01233204450407943,
+      "error_main": null
+    },
+    "09C": {
+      "sample": "09C",
+      "paint": "ViridianGreen",
+      "white": "ZincWhite",
+      "share": 0.49700000000000005,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.16218617958460702,
+        0.1400685628852227
+      ],
+      "new": [
+        0.0,
+        0.16099277,
+        0.14498691
+      ],
+      "main": null,
+      "error_new": 0.003409558071572416,
+      "error_main": null
+    },
+    "11C": {
+      "sample": "11C",
+      "paint": "UltramarineBlue",
+      "white": "ZincWhite",
+      "share": 0.51,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.014567068056455393,
+        0.04566675765876583,
+        0.4539238526998869
+      ],
+      "new": [
+        0.012570332,
+        0.044176977,
+        0.3550169
+      ],
+      "main": null,
+      "error_new": 0.031089513334172873,
+      "error_main": null
+    },
+    "16E": {
+      "sample": "16E",
+      "paint": "ViridianGreen",
+      "white": "BariumSulphate",
+      "share": 0.083,
+      "raw_fraction_sum": 1.0,
+      "measured": [
+        0.0,
+        0.19396451687993804,
+        0.10929247329762609
+      ],
+      "new": [
+        0.0,
+        0.093031175,
+        0.06928751
+      ],
+      "main": null,
+      "error_new": 0.11361527480660331,
+      "error_main": null
+    }
+  }
+}

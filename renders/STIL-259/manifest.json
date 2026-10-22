@@ -1,0 +1,106 @@
+{
+  "README.md": {
+    "bytes": 6248,
+    "sha256": "d6f7e130554e02f33759299647087800ab5b7d1436802125042b6cb0b5233b7c"
+  },
+  "ck7-tests.log": {
+    "bytes": 2638,
+    "sha256": "fad321d13d8eaa1ac89095439c63d5d4a1e02dee493b4dce185fdaa8aefdb964"
+  },
+  "f0dc5e-main-vs-new.png": {
+    "bytes": 721990,
+    "sha256": "85ea9d3685bb39c991bd861eae889981ceed5da47b648d726204656f4a87cc6f"
+  },
+  "final-inputs.sha256": {
+    "bytes": 965,
+    "sha256": "ca2889e3180602ec88b449a63994d507dbd0c52962400d4cb44b9964916b70ca"
+  },
+  "gallery-provenance.json": {
+    "bytes": 1423,
+    "sha256": "df81cb54f28a4778ed59cd4ed7f369040a722fb5bc87c52a27fc1ec05580de0e"
+  },
+  "guards-round3.md": {
+    "bytes": 14096,
+    "sha256": "fc1054660b14f157801ae1aaab50e52ce7def12db652df26a0e0090b86476cff"
+  },
+  "guards-round4.md": {
+    "bytes": 14078,
+    "sha256": "191c84b4c1d0e93ea8485a2d803ee540cb0f9cf0b66150f4e765603cf5908c72"
+  },
+  "guards-vs-round3.md": {
+    "bytes": 25023,
+    "sha256": "4ea795b6278d4e1b6d36ce4ab6603a9b1603e2ecaafd0d073eae24a4c113d64b"
+  },
+  "main-reference-pin.txt": {
+    "bytes": 419,
+    "sha256": "779b1df47840b7b38d1f63c65d4b3999730e84879f8d7dc0dd3310f2cb1b084b"
+  },
+  "main-strengths.json": {
+    "bytes": 3246,
+    "sha256": "6e55325419e72b2364c0cd8db83c72df5ddb8bc19d20c945390893c5d4b27422"
+  },
+  "mixes-new.csv": {
+    "bytes": 62830,
+    "sha256": "8d165a1b7b69f6951621da3c6d61c12aa5e2249ae40cbf1391a514b70640c50e"
+  },
+  "old-logs.log": {
+    "bytes": 2394,
+    "sha256": "18476cce41090ef00db78bbb58e1cf2c63eb881fc649728e4e80216dd42909e5"
+  },
+  "paint-tests.log": {
+    "bytes": 12292,
+    "sha256": "93314a189ddfa9b4f0f1674dcb29df1ed9347acd0c5df6feb162c61d28735942"
+  },
+  "provenance.json": {
+    "bytes": 814,
+    "sha256": "47f48eeaa92b92606205c747881b8dda0becb52771276353a7b3341d0d25d17e"
+  },
+  "real-paint-sheet.png": {
+    "bytes": 173453,
+    "sha256": "5a540229b2bb487deadf742eb32375819a10eed5a444e34c77a41db4bf6f2e0e"
+  },
+  "recipes-new.tsv": {
+    "bytes": 873,
+    "sha256": "60b681b61f373b37b544e5306e91df94e4abf609384c64f47795ee557fbadd71"
+  },
+  "reconstruction-tests.log": {
+    "bytes": 102,
+    "sha256": "10cf1433a0d90c36af45d781ed1a45f6e5424a52880a950a712ec13459d5b621"
+  },
+  "replay-tests.log": {
+    "bytes": 2443,
+    "sha256": "0e18fdfceeda97de95c5ec776f499692d3eb0cfb341684aaf7c2c63e33cd4f66"
+  },
+  "round3-control.json": {
+    "bytes": 1345,
+    "sha256": "4a1b4b87b923f30c47813f0f9a3fb37daa0043f823893e5acbbaed56f08970c6"
+  },
+  "score.md": {
+    "bytes": 4329,
+    "sha256": "842e4bc12e348fb3c75f67137982ecb3c2b866cac900c02fdd5e6f9231f4ce7c"
+  },
+  "smoothness.txt": {
+    "bytes": 636,
+    "sha256": "2ad21d665e5314145c124332bcb721991fb1d86ededd3578611968a2d63526c0"
+  },
+  "strength-comparison.csv": {
+    "bytes": 2204,
+    "sha256": "9bc9576b39e4bbcd9014a3e1c8fd0d5adba2e6e9283a8548d6f3a03b44b28560"
+  },
+  "strength-comparison.md": {
+    "bytes": 1616,
+    "sha256": "710e73584421ecd38168cd80bb88a88091c7c62a49bcfcc1b003a042320b67d3"
+  },
+  "swatches-main-vs-new.png": {
+    "bytes": 67964,
+    "sha256": "8f781508a4b68da54ef2119b37b4a99f0298a287679f4840704742c08fbf8dd6"
+  },
+  "tables-after.sha256": {
+    "bytes": 410,
+    "sha256": "6d30d833a89a737e34a2470c6118d702282999cf9d11180073cf1fa9cb85984d"
+  },
+  "verification.md": {
+    "bytes": 3866,
+    "sha256": "1422e3d1ae723bc68f94ef773b05cd3c0245e104aaab069008f7bb3e34d775b8"
+  }
+}

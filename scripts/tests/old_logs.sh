@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Old logs replay as they did: tiny cases in crates/easel/tests/old_logs/cases.tsv (a
+# Old logs match their recorded current-mixer results: tiny cases in crates/easel/tests/old_logs/cases.tsv (a
 # synthetic engine-1 log, the first chunks of two engine-1 studio logs and of the six
 # legacy easel3/easel4 logs, a synthetic log of the legacy verbs past those chunks, the
 # round 19 log at 320 px), replayed by a release easel at
 # a small width. Each decoded PNG must meet the image tolerance against
 # its golden; legacy_tiny also checks a same-binary repeat. State digests are diagnostic. References came
-# from af49348's release easel (crates/easel/tests/old_logs/golden/README.md).
+# from the generator recorded in crates/easel/tests/old_logs/golden/README.md.
 # These replace the tests that replayed
 # whole paintings (notes/speed/SKIPPED.md); no whole painting is replayed here.
 #
 #   scripts/tests/old_logs.sh [<release easel>]          (default $CARGO_TARGET_DIR or target, /release/easel)
-#   scripts/tests/old_logs.sh <easel> --record <dir>     write goldens (af49348 only)
+#   scripts/tests/old_logs.sh <easel> --record <dir>     write explicitly authorized goldens
 #
 # About 5 s (four cases at a time). A heavy job: run it inside scripts/lockrun.
 set -euo pipefail
@@ -72,4 +72,4 @@ while IFS=$'\t' read -r name log width; do
   fi
 done <"$work/list"
 [ $failed = 0 ] || { echo "old_logs: FAILED" >&2; exit 1; }
-if [ -n "$record" ]; then echo "old_logs: all $n cases recorded in $record"; else echo "old_logs: all $n cases replay as af49348 did"; fi
+if [ -n "$record" ]; then echo "old_logs: all $n cases recorded in $record"; else echo "old_logs: all $n cases match recorded baselines"; fi

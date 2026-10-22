@@ -28,13 +28,13 @@ def text(value):
     return "utf8", (len(raw),), raw
 
 
-def dump(path, fields):
+def dump(path, fields, chunk=1):
     data = b""
     meta = []
     for name, (dtype, shape, raw) in fields.items():
         meta.append(dict(name=name, dtype=dtype, shape=shape, offset=len(data), nbytes=len(raw)))
         data += raw
-    header = json.dumps(dict(fields=meta)).encode()
+    header = json.dumps(dict(format="CPSTATE1", chunk=chunk, fields=meta)).encode()
     path.write_bytes(b"CPSTATE1" + struct.pack("<Q", len(header)) + header + data)
 
 
@@ -125,6 +125,28 @@ class StateToleranceTests(unittest.TestCase):
                 invalid = "Held { pickup: %s }" % value
                 self.assertTrue(self.compare_debug(a, invalid)[0])
                 self.assertTrue(self.compare_debug(invalid, invalid)[0])
+
+    def test_recorded_zero_solvent_rejects_any_nonzero_value(self):
+        self.assertFalse(self.compare("wet.solvent", numeric("f32", 0.0), numeric("f32", -0.0))[0])
+        self.assertTrue(self.compare("wet.solvent", numeric("f32", 0.0), numeric("f32", 1e-15))[0])
+        for name, original in [
+            ("brushes.debug", "Held { bristles: [Bristle { solvent: 0.0 }] }"),
+            ("rags.debug", "Rag { solvent_mm3: 0.0 }"),
+            ("rags.debug", "Rag { mobile: Mobile { solv_mm3: 0.0 } }"),
+        ]:
+            with self.subTest(field=original):
+                problems = []
+                sc.compare_text(name, text(original), text(original.replace("0.0", "1e-15")), problems, [], True)
+                self.assertTrue(problems)
+
+    def test_cli_checks_solvent_already_present_in_the_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.state", Path(tmp) / "b.state"
+            dump(a, {"wet.solvent": numeric("f32", 0.0)})
+            dump(b, {"wet.solvent": numeric("f32", 1e-15)})
+            result = subprocess.run([sys.executable, str(TOOL), str(a), str(b), "--added-zero"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("wet.solvent: maximum allowed |diff| 0", result.stdout)
 
     def test_debug_parser_remains_lossless(self):
         for invalid in ("Held { pickup: 0.0 } trailing", "Held { pickup: ??? }", "Held { pickup: 0.0"):

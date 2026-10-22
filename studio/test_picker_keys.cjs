@@ -41,6 +41,18 @@ const server = http.createServer((req, res) => {
     await page.evaluate(() => {
       allSessions = ['a', 'b'].map(p => ({ p, folder:p, painter:true, mtime:0, title:p }));
     });
+    await page.click('#who');
+    const label = await page.locator('#allwrap').boundingBox();
+    for (const checked of [true, false]) {
+      await page.locator('#pklist button').first().focus();
+      await page.mouse.move(label.x + label.width - 4, label.y + label.height / 2);
+      await page.mouse.down();
+      assert.equal(await page.locator('#picker').isVisible(), true, 'pressing the label text keeps the picker open');
+      await page.mouse.up();
+      assert.equal(await page.locator('#all').isChecked(), checked, 'clicking the label text toggles all sessions');
+      assert.equal(await page.locator('#who').getAttribute('aria-expanded'), 'true');
+    }
+    await page.keyboard.press('Escape');
     for (const exit of ['Tab', 'blur']) {
       await page.click('#who');
       await page.keyboard.press('Tab');

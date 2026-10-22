@@ -518,7 +518,12 @@ $('picker').onkeydown = e => {
   else if (e.key === 'Home') { e.preventDefault(); bs[0].focus(); } else if (e.key === 'End') { e.preventDefault(); bs[bs.length - 1].focus(); }
 };
 document.addEventListener('pointerdown', e => { if (!$('picker').hidden && !e.target.closest('#picker, #who')) closePicker(false); });
-$('picker').addEventListener('focusout', e => { if (!e.relatedTarget?.closest('#picker, #who')) closePicker(false); });
+let pickerMouseDown = false;
+$('picker').addEventListener('mousedown', () => { pickerMouseDown = true; setTimeout(() => { pickerMouseDown = false; }, 0); });
+$('picker').addEventListener('focusout', e => {
+  if (!e.relatedTarget && pickerMouseDown) return;
+  if (!e.relatedTarget?.closest('#picker, #who')) closePicker(false);
+});
 async function loadSessions() {
   if (HOSTED) { await poll(); return; }
   allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-cache'} : {})).json();

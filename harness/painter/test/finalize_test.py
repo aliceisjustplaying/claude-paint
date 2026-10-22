@@ -95,6 +95,17 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         F.write_json(self.root / "alias/run-config.json", self.config)
         self.assertEqual(len(list(self.worker.jobs())), 1)
 
+    async def test_relative_state_produces_absolute_recovery_paths(self):
+        self.finish("finalization_failed")
+        worker = F.Worker([self.root], Path("state"), [])
+        work = next(worker.jobs())[-1]
+        self.assertTrue(work.is_absolute())
+        self.assertEqual(work.parent, Path.cwd() / "state")
+
+    async def test_multiple_obs_assignments_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "at most one OBS assignment"):
+            F.Worker([self.root], self.root / "state", [STREAM, {**STREAM, "endpoint": "ws://other"}])
+
 
 class FakeOBS:
     def __init__(self, painting="abc123", scene="Stillwet", extra=False):
@@ -210,6 +221,38 @@ class FrameTests(unittest.TestCase):
                 self.assertIn(work / "recovery.replay.ckpt", args)
                 self.assertEqual(checkpoint.read_bytes(), b"latest saved data")
                 self.assertEqual((work / "recovery.replay.ckpt").read_bytes(), checkpoint.read_bytes())
+
+    def test_interrupted_checkpoint_copy_retries_without_replacing_batch_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            saved = work / "studio/out/easel/painting"
+            saved.mkdir(parents=True)
+            (saved / "replay.ckpt").write_bytes(b"latest saved data")
+            checkpoint = work / "recovery.replay.ckpt"
+            result = subprocess.CompletedProcess([], 1, "", "no painting open")
+            config = {"studio": str(work / "studio")}
+            outcome = {"status": "finalization_failed"}
+
+            def interrupted_copy(source, destination):
+                Path(destination).write_bytes(b"partial")
+                raise OSError("disk full")
+
+            def interrupted_batch(*args, **kwargs):
+                self.assertEqual(checkpoint.read_bytes(), b"latest saved data")
+                checkpoint.write_bytes(b"batch progress")
+                raise RuntimeError("batch interrupted")
+
+            with patch.object(F.subprocess, "run", return_value=result), patch.object(F, "command") as batch:
+                with patch.object(F.shutil, "copyfile", side_effect=interrupted_copy), self.assertRaisesRegex(OSError, "disk full"):
+                    F.recover(config, outcome, work)
+                self.assertFalse(checkpoint.exists())
+                batch.assert_not_called()
+                with patch.object(F, "command", side_effect=interrupted_batch), self.assertRaisesRegex(RuntimeError, "batch interrupted"):
+                    F.recover(config, outcome, work)
+                with patch.object(F.shutil, "copyfile") as copy:
+                    F.recover(config, outcome, work)
+                copy.assert_not_called()
+                self.assertEqual(checkpoint.read_bytes(), b"batch progress")
 
     def test_bare_ground_is_cut_and_non_friedrich_final_is_unchanged(self):
         from PIL import Image

@@ -69,7 +69,9 @@ def recover(config, outcome, work):
         raise RuntimeError(f"final save still failing: {result.stderr[-2000:]}")
     checkpoint = work / "recovery.replay.ckpt"
     if not checkpoint.exists():
-        shutil.copyfile(saved / "replay.ckpt", checkpoint)
+        pending = checkpoint.with_suffix(".pending")
+        shutil.copyfile(saved / "replay.ckpt", pending)
+        pending.replace(checkpoint)
     output = work / "recovered.ckpt"
     command([studio / "bin/easel", "run", saved / "committed.lua", "--replay-checkpoint", checkpoint,
              "--require-replay-checkpoint", "--checkpoint-out", output, "--out", work / "recovered.png"],
@@ -232,7 +234,9 @@ async def stop_stream(stream, studio):
 
 class Worker:
     def __init__(self, roots, state, streams):
-        self.roots, self.state, self.streams = roots, state, streams
+        if len(streams) > 1:
+            raise ValueError("at most one OBS assignment is supported")
+        self.roots, self.state, self.streams = roots, state.resolve(), streams
 
     def jobs(self):
         seen = set()
@@ -286,15 +290,11 @@ class Worker:
             if time.time() < status["finished_at"] + 900:
                 return
             studio = Path(config["studio"]).name
-            for stream in self.streams:
-                if not await stop_stream(stream, studio):
-                    continue
-                status["stopped_stream"] = stream["endpoint"]
-                break
-            else:
+            if not self.streams or not await stop_stream(self.streams[0], studio):
                 status["phase"] = "stream_not_assigned"
                 write_json(status_path, status)
                 return
+            status["stopped_stream"] = self.streams[0]["endpoint"]
             status.update(phase="done", done=True)
         except Exception as error:
             status.update(phase="failed", error=str(error), retry_at=time.time() + 60)

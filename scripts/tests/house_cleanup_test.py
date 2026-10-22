@@ -119,6 +119,32 @@ class HouseCleanupTests(unittest.TestCase):
         self.assertEqual(recovered["finished_at"], outcome["finished_at"])
         self.assertTrue((rd / "p1.painted").exists())
 
+    def test_round29_finished_rerun_preserves_verified_outcome_without_close(self):
+        runner = self.runner(RUNNERS[-1])
+        rd = self.root / "run/OPUS"
+        rd.mkdir(parents=True)
+        final = rd / "sitting-final.txt"
+        final.write_text("A finished painting")
+        sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
+                         painting_before=1, painting_after=1, final_file=str(final))]
+        runner.save_sittings(rd, 1, sittings)
+        outcome_path = rd / "p1_outcome.json"
+        outcome = dict(status="finished", reason=runner.next_step(sittings)[1],
+                       error=None, finished_at=1792656000.0)
+        runner.write_outcome(rd, 1, outcome)
+        (rd / "p1.painted").write_text("verified finish\n")
+        with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+             patch.object(runner, "log"), \
+             patch.object(runner, "close_easel", return_value="no painting open") as close, \
+             patch.object(runner, "open_easel") as opened, \
+             patch.object(runner, "run") as painter:
+            self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+        close.assert_not_called()
+        opened.assert_not_called()
+        painter.assert_not_called()
+        self.assertEqual(json.loads(outcome_path.read_text()), outcome)
+        self.assertEqual((rd / "p1.painted").read_text(), "verified finish\n")
+
     def test_round29_interrupted_close_leaves_a_durable_finalization_trigger(self):
         runner = self.runner(RUNNERS[-1])
         rd = self.root / "run/OPUS"

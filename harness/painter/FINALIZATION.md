@@ -36,7 +36,8 @@ timestamp (the outcome file's mtime for older finished runs), not worker startup
 The stream is considered only after a verified video exists. A failed render or
 save keeps the stream running until it succeeds.
 
-`--streams` is a JSON array of assignments. Each entry names an OBS websocket
+`--streams` is a JSON array with at most one assignment, matching the host's
+single OBS instance. Multiple assignments are rejected. The entry names an OBS websocket
 endpoint, its password file, program scene, browser input and painting URL template:
 
 ```json

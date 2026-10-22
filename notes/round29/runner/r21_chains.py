@@ -855,6 +855,10 @@ def paint(name, n, d, rd):
     m = LANES[name]["model"]
     tag = f"{name}{n}"
     sittings = load_sittings(rd, n)
+    outcome_path = rd / f"p{n}_outcome.json"
+    previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
+    if previous.get("status") == "finished":
+        return sittings
     for s in sittings:
         if s.get("status") == "running":      # the runner stopped during this sitting
             t0 = time.mktime(time.strptime(s["start"], "%Y-%m-%d %H:%M:%S")) - 5
@@ -949,8 +953,6 @@ def paint(name, n, d, rd):
                 log(f"{tag}: sitting {k} crashed ({gist(why)}); crash {crashes} of at most {MAX_CRASHES}, "
                     f"not a judgment: another sitting in {wait:.0f} s")
                 time.sleep(wait)
-    outcome_path = rd / f"p{n}_outcome.json"
-    previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
     painter_finished = not why_done.startswith("NOT FINISHED")
     finished_at = (previous.get("finished_at") or time.time()) if painter_finished else None
     outcome = dict(status="finalization_failed" if painter_finished else "crash_limit_reached",

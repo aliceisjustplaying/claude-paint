@@ -209,6 +209,7 @@ fn minutes_seconds(secs: f64) -> String {
 
 pub struct Chunk {
     pub src: String,
+    pub mark_effects: u64,
 }
 
 /// Everything a failed chunk could have changed, taken before it runs.
@@ -523,6 +524,7 @@ impl Session {
         let n = (self.chunks_before + self.log.len()) as u64 + 1;
         self.prelude.as_ref().unwrap().0.call::<()>(()).map_err(|e| e.to_string())?;
         self.st.borrow_mut().begin(n);
+        let had_canvas = self.st.borrow().canvas.is_some();
         self.st.borrow_mut().live = !self.replay;
         if !self.replay {
             PROGRESS.begin(src.lines().count(), &self.st.borrow());
@@ -603,7 +605,9 @@ impl Session {
             msg.push_str(&e);
             return Err(msg);
         }
-        self.log.push(Chunk { src });
+        let st = self.st.borrow();
+        let mark_effects = st.mark_effects + u64::from(!had_canvas && st.canvas.is_some());
+        self.log.push(Chunk { src, mark_effects });
         Ok(Ran { out, secs })
     }
 
@@ -1517,6 +1521,33 @@ mod image_tolerance;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepted_chunks_count_executed_mark_effects_not_lua_names() {
+        let mut s = Session::new(64).unwrap().with_paper(true).unwrap();
+        for (src, effects) in [
+            ("canvas{size=200,aspect=1.25,paper={grammage=200}}", 1),
+            (r#"q=pile{{"vermilion",1}}; b=brush("round",4); b:load(q,0.9); p=pastel(q)"#, 0),
+            ("jobs={function() b:touch(400,300) end}; alias=b.touch", 0),
+            (r#"b["touch"](b,400,300,{pressure=0.6})"#, 1),
+            ("jobs[1]()", 1),
+            ("alias(b,400,300); jobs[1]()", 2),
+            ("p:side({{100,400},{900,400}})", 1),
+            ("smudge({{100,400},{900,400}})", 1),
+            ("erase(rect(300,300,100,100))", 1),
+            ("fix()", 1),
+            ("print(wait(60)); print(drying(400,300)); print(tubes()); b:reload(q,0.3)", 0),
+            ("pcall(function() b:touch() end)", 0),
+        ] {
+            s.run(src).unwrap();
+            assert_eq!(s.log.last().unwrap().mark_effects, effects, "{src}");
+        }
+        let before: Vec<_> = s.log.iter().map(|c| c.mark_effects).collect();
+        assert!(s.run("jobs[1](); error('rollback')").is_err());
+        assert_eq!(s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(), before);
+        s.run("print('jobs[1]()')").unwrap();
+        assert_eq!(s.log.last().unwrap().mark_effects, 0);
+    }
 
     fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {
         assert_eq!(actual.engine(), expected.engine());

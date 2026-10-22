@@ -76,8 +76,13 @@ pub fn verb_dry<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) 
 
 /// Run a verb `f` on the studio under the hand clock's rules for its kind.
 pub fn verb<R: EffectValue>(st: &S, kind: Verb, f: impl FnOnce(&mut Studio) -> mlua::Result<R>) -> mlua::Result<R> {
+    let marks = matches!(kind, Verb::Marks | Verb::Pass);
     let tag = match kind { Verb::Marks => "marks", Verb::Pass => "pass", Verb::Query => "query", Verb::Wait => "wait" };
-    crate::replay_checkpoint::effect(st, tag, || verb_inner(st, kind, f))
+    let result = crate::replay_checkpoint::effect(st, tag, || verb_inner(st, kind, f));
+    if marks && result.is_ok() {
+        st.borrow_mut().mark_effects += 1;
+    }
+    result
 }
 
 pub trait EffectValue: serde::Serialize + serde::de::DeserializeOwned {}

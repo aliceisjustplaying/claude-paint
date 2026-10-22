@@ -117,6 +117,7 @@ rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
+check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
@@ -140,6 +141,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask \
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
   check::tests::surface_uses_absolute_and_relative_tolerance \

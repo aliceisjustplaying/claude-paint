@@ -45,7 +45,7 @@ def main():
         .008 + .04 * np.exp(-((nm - 430) / 40)**2) + .25 * sigmoid((nm - 600) / 16),
         np.full(38, .93),
     ])
-    scatter = np.array([.1, .8, .1, 3.25])[:, None] * np.ones((4, 38))
+    scatter = np.array([.1, .8, .1, 3.125])[:, None] * np.ones((4, 38))
     absorption = scatter * (1 - reflectance)**2 / (2 * reflectance)
     boundary = np.array([
         (i, j, k, 16 - i - j - k)

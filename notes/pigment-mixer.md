@@ -65,32 +65,44 @@ mixing patent by either author or Secret Weapons; that is a search result,
 not a patent-clearance opinion. The PR's evidence records the queries,
 license audit, mixing comparison and painting replay.
 
-## Measured comparison
+## Validation and visual comparison
 
-`notes/pigment-mixer-comparison.csv` records 1,045 old/new mixtures across
-95 ramps: all 91 pairs in the 14-tube default box, three direct RGB pairs
-and lead white/ultramarine from the full catalog, each in 10% steps. Tube
-mixtures use the actual palette path and retain its tinting strengths.
-RGB columns are linear, with per-mix Euclidean OKLab differences.
+`notes/pigment-mixer-comparison.csv` contains only the independent mixer's
+linear RGB results for 1,045 mixtures across 95 ramps: all 91 pairs in the
+14-tube default box, three direct RGB pairs and lead white/ultramarine
+from the full catalog, each in 10% steps. Tube mixtures use the actual
+palette path and retain its tinting strengths. Old-engine samples and
+their comparison columns are retained outside the repository as review
+evidence, not as generator, fit or test inputs.
 
-The original is clean main `d94eafd6`; the new model is `18584b1`, with
-forward/inverse table hashes recorded in `primaries.json`. Mean ΔE is
-0.02251, median 0.01786, p95 0.06267 and maximum 0.12127. The largest
-difference is the direct saturated red/blue ramp. Blue tints retain their
-chroma instead of turning gray. White/black middle tints have much less
-color cast but remain lighter and slightly cooler than the original.
-At 50% black their OKLab chroma is 0.00580 versus the original's 0.00459;
-at 70% it is 0.00691 versus 0.00363. Lightness remains different: 50% black
-is L=0.642 versus 0.587 and 80% is L=0.478 versus 0.381. Similar chroma
-does not mean identical hue or lightness.
-These are measured differences, not a claim of visual acceptance or
-physical calibration. The comparison data is not a generator input.
+The independent mixer tests constrain hue, neutral grays, trace sensitivity,
+blue chroma, lightness and round trips without pinning any old-engine
+output. Passing them does not establish visual acceptance. The same eight
+ramps and ten recipe probes are rendered side by side with main, along
+with the gallery pair for *Last Light on the Tarn* (Claude Opus 5.5,
+round unknown), [studio f0dc5e](https://stillwet.art/studio/?p=paint-studio-f0dc5e).
+Those images are judged by eye only; no old-engine numeric output enters
+the color-basis fit.
 
-Both full-log gallery replays of *Last Light on the Tarn* (Claude Opus 5.5,
-round unknown), [studio f0dc5e](https://stillwet.art/studio/?p=paint-studio-f0dc5e),
-completed all 108 chunks at width 640. The only log change was engine 8 to
-9. Chart and painting images are
-attached to the PR, alongside the same-machine four-core gate results.
+## Earlier constant edits
+
+The superseded basis was hand-edited during the implementation review.
+Its recorded checks were:
+
+| Revision | What was checked |
+|---|---|
+| `8190bef` | White-tint brightness and the teal cast in the original tint chart; the white-scattering increase and flatter blue scattering addressed those defects. |
+| `68bd70b` | Dark-pigment coverage, blue-tint chroma and the unchanged blend-reach/glaze tests; the earlier decoder could not reach bone black's dark end. |
+| `a6e03e2` | Blue-tint chroma and the unchanged reach/glaze checks. The later full gate still exposed the white-over-dark knife-skim failure. |
+| `7a03bc4` | Middle-gray chroma, blue tints, knife skim and glaze. The unchanged blend-reach test remained red. |
+| `18584b1` | The unchanged knife-skim, blend-reach and glaze tests, followed by the full gate. |
+
+Old-engine charts and numeric comparisons were also present during those
+reviews, and an old-engine green output was incorrectly used as a test
+target. That target and the sampled comparison columns have been removed.
+The earlier sequence is not evidence that the superseded choices were
+made without seeing those comparisons. The generator itself reads only
+the synthetic basis and the credited CIE conversion matrix.
 
 ## Checkpoints and compatibility
 
@@ -108,10 +120,13 @@ latent as a new one is not.
 
 The mixer-dependent expected images and state captures are re-recorded
 with explicit authorization for this change. All existing state and image
-tolerances remain. The thinner's old rag exception is retired: every state
-or image mismatch now fails, and existing zero-solvent fields must remain
-exactly zero. The package still reconstructs every saved canvas checkpoint
-from its state dump and checks its FNV digest.
+tolerances remain. Nonmixer state expectations retain main's values and
+the thinner's known rag physics mismatch remains explicitly diagnosed,
+not accepted as a new baseline pass. Only mixer-dependent colors, latents
+and piles are refreshed. Every image must meet its existing tolerance,
+including rag, and existing zero-solvent fields remain exactly zero.
+The package reconstructs every saved canvas checkpoint from its state
+dump and checks its FNV digest.
 
 `UPDATE_GOLDEN=1` enables the existing scene recorder, the seeded numerical
 plough recorder and the engine-2 drying-sheet recorder. The old-log recorder

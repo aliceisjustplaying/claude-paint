@@ -8,7 +8,8 @@ and tolerance code were not changed by the capture.
 ## STIL-219 physics restoration
 
 The stored expectations now combine main `d94eafd60` physics with this
-capture's `color`, `wet.lat`, bristle `lat` arrays and `studio.piles`.
+capture's `color`, `wet.lat`, bristle `lat` arrays and piles (both
+`studio.piles` and the redundant `studio.debug` pile colors).
 Every other pre-existing field is restored from main, including rag
 loads, wet volumes, hiding, floors, drying clocks and bristle volumes.
 Zero solvent fields remain compatible with the current checkpoint layout.

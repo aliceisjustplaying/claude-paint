@@ -16,6 +16,7 @@ from scipy.optimize import minimize
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "crates/paint/src/mixer"
 SIZE = 33
+POWER = 1.55
 
 
 def spectral_array(name):
@@ -36,16 +37,22 @@ def warp(x):
     return x**2 / (x**2 + (1 - x)**2)
 
 
+def effective(c):
+    c = np.maximum(c, 0) ** POWER
+    return c / c.sum(axis=-1, keepdims=True)
+
+
 def main():
     matrix = spectral_array("XYZ_RGB") @ spectral_array("CMF")
     nm = np.arange(380, 751, 10)
+    blue_band = np.where(nm < 470, np.exp(-((nm - 470) / 45)**2), np.exp(-((nm - 470) / 50)**2))
     reflectance = np.array([
-        .008 + .06 * np.exp(-((nm - 440) / 80)**2),
-        .003 + .55 * sigmoid((nm - 481) / 6) + .15 * sigmoid((nm - 500) / 10),
-        .008 + .04 * np.exp(-((nm - 430) / 40)**2) + .25 * sigmoid((nm - 600) / 16),
-        np.full(38, .93),
+        .015 + .16 * blue_band,
+        .2 / 15 + .88 * sigmoid((nm - 505) / 6),
+        .007 + .36 * sigmoid((462 - nm) / 6) + .7 * sigmoid((nm - 615) / 14),
+        np.full(38, .95),
     ])
-    scatter = np.array([.1, .8, .1, 3.125])[:, None] * np.ones((4, 38))
+    scatter = np.array([.12, .2, .12, 1.0])[:, None] * np.ones((4, 38))
     absorption = scatter * (1 - reflectance)**2 / (2 * reflectance)
     boundary = np.array([
         (i, j, k, 16 - i - j - k)
@@ -83,6 +90,7 @@ def main():
     absorption = scatter * (1 - reflectance)**2 / (2 * reflectance)
 
     def mix(c):
+        c = effective(c)
         return km((c @ absorption) / (c @ scatter)) @ matrix.T
 
     def unmix(rgb):
@@ -113,12 +121,15 @@ def main():
     (OUT / "forward.bin").write_bytes(forward.astype("<f4").tobytes())
     linear = np.where(grid <= .04045, grid / 12.92, ((grid + .055) / 1.055)**2.4)
     inverse = np.array([unmix(rgb) for rgb in linear])
+    inverse = inverse ** (1 / POWER)
+    inverse /= inverse.sum(axis=1, keepdims=True)
     quantized = np.floor(inverse[:, :3] * 65535).astype("<u2")
     (OUT / "inverse.bin").write_bytes(quantized.tobytes())
     provenance = {
-        "method": "Synthetic blue, yellow, magenta and white; independent KM concentrations plus linear RGB residual",
+        "method": "Synthetic blue, yellow, magenta and white; power-adjusted independent KM concentrations plus linear RGB residual",
         "source": "scripts/build_pigment_tables.py; only the MIT spectral.rs D65/CIE matrix is reused",
         "size": SIZE,
+        "concentration_power": POWER,
         "wavelengths_nm": nm.tolist(),
         "absorption": absorption.tolist(),
         "scattering": scatter.tolist(),

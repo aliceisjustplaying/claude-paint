@@ -8,6 +8,26 @@ use crate::color::{Rgb, linear_to_srgb};
 
 pub const LATENT_SIZE: usize = 7;
 const SIZE: usize = 33;
+const FORWARD_AXIS: [f32; SIZE] = {
+    let mut axis = [0.0; SIZE];
+    let mut i = 0;
+    while i < SIZE {
+        let a = i as f32;
+        let b = (SIZE - 1 - i) as f32;
+        axis[i] = a * a / (a * a + b * b);
+        i += 1;
+    }
+    axis
+};
+const FORWARD_SCALE: [f32; SIZE - 1] = {
+    let mut scale = [0.0; SIZE - 1];
+    let mut i = 0;
+    while i < SIZE - 1 {
+        scale[i] = 1.0 / (FORWARD_AXIS[i + 1] - FORWARD_AXIS[i]);
+        i += 1;
+    }
+    scale
+};
 const INVERSE: &[u8; SIZE * SIZE * SIZE * 6] = include_bytes!("mixer/inverse.bin");
 const FORWARD: &[u8; SIZE * SIZE * SIZE * 12] = include_bytes!("mixer/forward.bin");
 
@@ -49,7 +69,13 @@ fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
 fn lookup(at: [f32; 3], forward: bool) -> Rgb {
     let p = at.map(|v| v.clamp(0.0, 1.0) * (SIZE - 1) as f32);
     let lo = p.map(|v| (v as usize).min(SIZE - 2));
-    let t: [f32; 3] = std::array::from_fn(|k| p[k] - lo[k] as f32);
+    let t: [f32; 3] = std::array::from_fn(|k| {
+        if !forward { return p[k] - lo[k] as f32; }
+        let a = at[k].clamp(0.0, 1.0);
+        let b = 1.0 - a;
+        let concentration = a * a / (a * a + b * b);
+        ((concentration - FORWARD_AXIS[lo[k]]) * FORWARD_SCALE[lo[k]]).clamp(0.0, 1.0)
+    });
     let mut out = [0.0; 3];
     for i in 0..2 {
         for j in 0..2 {

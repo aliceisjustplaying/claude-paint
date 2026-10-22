@@ -77,10 +77,15 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		"Start with the whole canvas, then take only the few views that answer what you noticed there: a detail crop, the value, squint, " +
 			"mirror, relief or gallery view, the palette. Don't look again at a view you've already seen. " + read,
 		list,
-		"Then tell the painter what you would fix and why, as one painter talking to another: the one to five things that matter most to the " +
-			"picture. For each, say what you see, what it does to the picture and what you would do about it. Go with what you see rather than " +
-			"weighing every alternative, and leave the rest for a later visit. Write your notes once, as you would say them. Say which passage, " +
-			"if any, you would take up first, whether or not it is on the painter's list. Your last message is what the painter gets. " + gets +
+		"Then tell the painter, as one painter talking to another, whether the picture is finished. Open your notes with one line that reads " +
+			"`Verdict: finished` or `Verdict: not finished`. The picture is finished when you see no change that would make it clearly better as a " +
+			"whole, rather than different, and that is worth the risk to what already holds. A fault you can name isn't enough on its own. The " +
+			"painting ends when the painter ends a sitting without marks, so each point you give keeps it at the easel for at least another sitting. " +
+			"If it is finished, say what holds and stop there. If it isn't, give the one to five things that matter most to the picture. For each, " +
+			"say what you see, what it does to the picture and what you would do about it. You see the painting and the journal, not the painter's " +
+			"code, masks or mixtures, so give your method as one way to try. Go with what you see rather than weighing every alternative, and leave " +
+			"the rest for a later visit. Write your notes once, as you would say them. Say which passage, if any, you would take up first, whether " +
+			"or not it is on the painter's list. Your last message is what the painter gets. " + gets +
 			" The painter decides what to do with it. Once you've written your notes, your visit is over.",
 	].join("\n\n");
 }
@@ -188,7 +193,11 @@ export function passagesToTakeUp(studio: string, critic: boolean): string {
 		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Any passages your last handoff left open are in your journal, quoted below under "Your journal".`);
 	const path = join(studio, CRITIQUE);
 	if (critic && existsSync(path)) {
-		parts.push(`The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. You decide what to take from them.\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);
+		parts.push("## The critic's last visit", `The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. They are its view of the ` +
+			"picture, not your list. Weigh each point against what you see, take up the ones that would make the picture better, and say in your " +
+			"journal which you leave and why. It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the " +
+			"passage's real scale. When it says the picture is finished and you agree, end this sitting without marks." +
+			`\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);
 	}
 	return parts.join("\n\n");
 }

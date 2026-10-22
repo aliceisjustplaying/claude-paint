@@ -16,14 +16,14 @@
     "runner/studio_notes.md": "dacf36547c7774a0a170806363b5d412991fbc0d6260b2c00b1d3a80a816c23f"
   },
   "with_critic": {
-    "studio/BRIEF.md": "e5e9e0fa261b0558fd983d903e8b0bb3e83a5c58de03fb084b603abcdd54c5a5",
+    "studio/BRIEF.md": "73b0104e1942b40a594a8f27ccad1ff8697ffbb5117f751879c43453d6e3502e",
     "studio/bin/box": "3d86f9da0ece02876db7be03bb82165d008f9d278d52a2bc410e3006d67ec31f",
     "studio/notes/reference-library.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
     "studio/notes/journal.md": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "studio/notes/studio_notes.md": "dacf36547c7774a0a170806363b5d412991fbc0d6260b2c00b1d3a80a816c23f",
     "runner/defaults_used.py": "dacf36547c7774a0a170806363b5d412991fbc0d6260b2c00b1d3a80a816c23f",
     "runner/brief_template.md": "27144bf8a9748a440b6c6e6658abdfd5a0126d2021868b981ea936764216dd0b",
-    "runner/r21_chains.py": "30ee88531dc754919018cecdd6e2838de71dac6cd48b52c8826fdda867072a5e",
+    "runner/r21_chains.py": "17d43e48fafbeb052b58ff174d40a4b7225d5ffda2d3df6912b18472b8683ad0",
     "runner/log_copy.py": "dacf36547c7774a0a170806363b5d412991fbc0d6260b2c00b1d3a80a816c23f",
     "runner/copied_shapes.py": "dacf36547c7774a0a170806363b5d412991fbc0d6260b2c00b1d3a80a816c23f",
     "runner/run-config.json": "1165c8bf759b13e27e4c2382101809179613475011e4831593e0f540e9b36d11",

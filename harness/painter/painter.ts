@@ -213,7 +213,7 @@ export default function painter(pi: ExtensionAPI) {
 				label: "ask_critic",
 				description:
 					"Ask the critic to visit the studio now. The critic looks at the painting and reads your journal and your note, " +
-					`then writes back what it would fix and why. Its notes are this tool's reply, and are saved as ${CRITIQUE}. ` +
+					`then writes back whether it thinks the picture is finished and, if not, what it would fix and why. Its notes are this tool's reply, and are saved as ${CRITIQUE}. ` +
 					`note: what you'd like the critic to know or look at; it stays in ${TO_CRITIC} for later visits until you leave another.`,
 				parameters: Type.Object({ note: Type.Optional(Type.String()) }),
 				async execute(_id, p, signal) {

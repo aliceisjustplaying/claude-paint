@@ -609,9 +609,12 @@ fn open(args: &[String]) -> Result<(), String> {
         if show_startup_progress(&log, &mut shown)? {
             last_progress = Instant::now();
         }
-        if let Ok((true, st)) = request(&name, "status", &[], &[])
+        if let Ok((ok, st)) = request(&name, "status", &[], &[])
             && !replaying(&st)
         {
+            if !ok {
+                return Err(st);
+            }
             let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
             show_startup_progress(&log, &mut shown)?;
             set_current(&name)?;

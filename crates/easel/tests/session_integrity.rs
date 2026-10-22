@@ -46,6 +46,36 @@ fn edited_or_truncated_logs_cannot_reopen() {
     ok(&["-s", "reopen", "close"]);
 }
 
+#[test]
+fn open_waits_for_previous_lock_holder_despite_stale_fatal() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    let name = "stale-fatal";
+    let _reaper = Reaper(name);
+    let dir = root().join("out/easel").join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lock = std::fs::File::create(dir.join("lock")).unwrap();
+    lock.lock().unwrap();
+    std::fs::write(dir.join("server.log"), "resuming previous server\neasel: fatal: previous server failed\n").unwrap();
+    let mut opener = Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["open", name])
+        .env_remove("EASEL_WIDTH")
+        .env("EASEL_ROOT", root())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut progress = String::new();
+    BufReader::new(opener.stdout.as_mut().unwrap()).read_line(&mut progress).unwrap();
+    drop(lock);
+    let output = opener.wait_with_output().unwrap();
+    assert_eq!(progress, "resuming previous server\n");
+    assert!(output.status.success(), "open: {output:?}");
+    assert!(ok(&["-s", name, "status"]).starts_with("0 chunks"));
+    ok(&["-s", name, "close"]);
+}
+
 // A corrupt/obsolete chunk must never leave a partially resumed server running.
 #[test]
 fn replay_failure_is_fatal() {

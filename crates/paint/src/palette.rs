@@ -1,6 +1,6 @@
 //! Palettes: a few tube paints, and mixing on the palette.
 //!
-//! `Palette::pile` mixes explicitly supplied tube proportions in Mixbox
+//! `Palette::pile` mixes explicitly supplied tube proportions in pigment
 //! latent space, weighted by each tube's tinting strength. The painter
 //! chooses the proportions.
 //!
@@ -548,7 +548,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
         // (tinting strength 3, below the sourced "very high", because
-        // Mixbox's latent already carries some of a dark pigment's strength)
+        // the latent already carries some of a dark pigment's strength)
         tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 3.0, drier::PRUSSIAN_BLUE).engine3(drier::engine3::PRUSSIAN_BLUE),
         // green earth translucent, weak, short of body [AP1 p.146; FIELD
         // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
@@ -641,7 +641,7 @@ fn pick(names: &[&str]) -> Vec<Tube> {
 pub struct Mixture {
     /// (tube index, fraction by volume), fractions sum to 1.
     pub parts: Vec<(usize, f32)>,
-    /// Masstone of the mixture (Mixbox mix of the tubes' masstones, weighted
+    /// Masstone of the mixture (pigment mix of the tubes' masstones, weighted
     /// by volume × tinting strength).
     pub color: Rgb,
     /// Hiding of one coat of the unthinned mixture (derived from `scatter`).
@@ -808,7 +808,7 @@ pub struct Palette {
     /// Engine 7: a brush's paint laid on wet paint stays on top of it
     /// (`Canvas::with_brush_skim`): new paintings.
     pub brush_skim: bool,
-    lat: Vec<[f32; mixbox::LATENT_SIZE]>,
+    lat: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
     /// Each tube's packed oil, drained floor and oil share by volume, in
@@ -835,7 +835,7 @@ impl std::fmt::Debug for Palette {
 
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
-        let lat = tubes.iter().map(|t| mixbox::linear_float_rgb_to_latent(&t.color)).collect();
+        let lat = tubes.iter().map(|t| crate::mixer::encode(&t.color)).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, lat, scat, pack, stock: name }
@@ -960,11 +960,11 @@ impl Palette {
 
     /// Masstone, scattering per coat and stiffness of a mixture.
     fn eval(&self, parts: &[(usize, f32)]) -> (Rgb, f32, f32) {
-        let mut lat = [0.0f32; mixbox::LATENT_SIZE];
+        let mut lat = [0.0f32; crate::mixer::LATENT_SIZE];
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
             let w = f * self.tubes[i].strength;
-            for k in 0..mixbox::LATENT_SIZE {
+            for k in 0..crate::mixer::LATENT_SIZE {
                 lat[k] += self.lat[i][k] * w;
             }
             wsum += w;
@@ -974,7 +974,7 @@ impl Palette {
         for v in lat.iter_mut() {
             *v /= wsum.max(1e-9);
         }
-        (mixbox::latent_to_linear_float_rgb(&lat), sct, stf)
+        (crate::mixer::decode(&lat), sct, stf)
     }
 
     /// The pile mixed from these parts (tube index, fraction by volume;

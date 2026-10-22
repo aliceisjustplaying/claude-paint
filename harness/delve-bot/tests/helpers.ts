@@ -6,7 +6,7 @@ import { loadConfig } from "../src/config.ts";
 import { paintingBlob } from "../src/painter.ts";
 import type { Painter } from "../src/painter.ts";
 
-// a JPEG of archive/collection/gallery/r01-coast/finished.png, standing in for a finished painting
+// Original procedural JPEG from scripts/generate_demo_fixtures.py, standing in for a finished painting.
 export const PAINTING = readFileSync(new URL("./fixtures/painting.jpg", import.meta.url));
 export const DECLINED = ["real person", "Alice", "Taylor Swift", "nude", "Nazi", "disembowel"];
 export const CHECK_FAILS = "check fails";

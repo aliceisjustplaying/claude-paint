@@ -1303,7 +1303,7 @@ mod tests {
                 if i % 240 < 120 {
                     c.wet.vol[i] = 0.8;
                     c.wet.hide[i] = [0.8, 0.6, 1.0, 0.0, 1.0, 0.7, 0.4, 0.0, OIL_VOLUME, 0.0];
-                    *c.wet.lat[i] = mixbox::linear_float_rgb_to_latent(&[0.3, 0.2, 0.1]);
+                    *c.wet.lat[i] = crate::mixer::encode(&[0.3, 0.2, 0.1]);
                     // (painted on before: its ground's pores are full)
                     c.absorb[i] = 0.0;
                 }

@@ -1,7 +1,7 @@
 //! Wet paint sitting on top of the dry picture.
 //!
 //! Every pixel holds a volume of wet paint (thickness, in "layer units": 1.0
-//! is one normal coat), its pigment mixture as a Mixbox latent vector of the
+//! is one normal coat), its pigment mixture as a latent vector of the
 //! masstone (mixing is linear in latent space, weighted by volume) and its
 //! Kubelka–Munk scattering per coat (mixed linearly by volume, as K and S mix
 //! in the two-constant KM model; absorption follows from masstone and S).
@@ -24,7 +24,7 @@ use crate::canvas::Canvas;
 use crate::color::{Rgb, luminance};
 use crate::pigment::{Pigment, hiding_of, scatter_for};
 
-pub const LAT: usize = mixbox::LATENT_SIZE;
+pub const LAT: usize = crate::mixer::LATENT_SIZE;
 #[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
@@ -209,7 +209,7 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: mixbox::linear_float_rgb_to_latent(&self.color), parts: self.parts.clone() }
+        Latent { color: crate::mixer::encode(&self.color), parts: self.parts.clone() }
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -374,7 +374,7 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        let c = mixbox::latent_to_linear_float_rgb(&self.wet.lat[i]);
+        let c = crate::mixer::decode(&self.wet.lat[i]);
         over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0))
     }
 

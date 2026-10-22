@@ -243,7 +243,7 @@ fn drained_deposition_keeps_its_pigment_when_wet_and_baked() {
         assert!(c.wet.vol[0] < 1.6);
         c.wet.cover.fill(1.0);
         c.wet.dirty = Some((0, 0, c.f.w, c.f.h));
-        let color = mixbox::latent_to_linear_float_rgb(&lat);
+        let color = crate::mixer::decode(&lat);
         let expected = crate::pigment::Pigment::masstone(color, mass).over([0.8; 3], 1.0);
         let wet = c.look_px(0);
         c.dry();

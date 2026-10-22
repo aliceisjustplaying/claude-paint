@@ -41,21 +41,45 @@ Source: https://github.com/JohnnyMorganz/StyLua/tree/v2.5.2.
 License: MPL-2.0, included in `studio/vendor/stylua/LICENSE.md`.
 These assets load locally only when the code view is opened.
 
-## Mixbox
+## Independent pigment mixer
 
-The paint engine (`crates/paint`) mixes pigments with Mixbox 2.0.0, used
-unmodified as the Rust crate `mixbox` (https://crates.io/crates/mixbox),
-https://github.com/scrtwpns/mixbox, https://scrtwpns.com/mixbox. It
-implements Šárka Sochorová and Ondřej Jamriška, "Practical Pigment Mixing
-for Digital Painting", ACM Transactions on Graphics 40(6):234 (SIGGRAPH
-Asia 2021), https://doi.org/10.1145/3478513.3480549.
+`crates/paint/src/mixer.rs` implements the pigment-concentration and RGB
+residual method from Šárka Sochorová and Ondřej Jamriška, "Practical
+Pigment Mixing for Digital Painting", ACM Transactions on Graphics
+40(6):234 (2021), https://doi.org/10.1145/3478513.3480549.
 
-```
-Copyright (c) 2022, Secret Weapons. All rights reserved.
-Mixbox is provided under the CC BY-NC 4.0 license for non-commercial use only.
-If you want to obtain commercial license, please contact: mixbox@scrtwpns.com
-```
+The implementation, synthetic primary pigments, K/S coefficients and
+generated tables are original project work under the root MIT license.
+They were not copied from the authors' library, lookup tables or fitted
+coefficients. The table generator uses the D65/CIE color conversion data
+from the MIT spectral.js port credited above. Scientific attribution is
+not a redistribution of the paper or a claim of patent clearance.
 
-License: Creative Commons Attribution-NonCommercial 4.0 International,
-https://creativecommons.org/licenses/by-nc/4.0/. This project uses it
-non-commercially.
+## Other dependency and asset licenses
+
+Rust dependencies declare MIT, Apache-2.0, BSD, ISC, Zlib, 0BSD or equivalent
+commercial-use terms, sometimes as alternatives. Choose a permissive
+alternative where the license expression offers one. The full resolved
+inventory and source receipts accompany the engine-9 license audit.
+
+The Python MCP stack can include certifi's Mozilla CA bundle (MPL-2.0).
+Pillow wheels carry MIT-CMU and their bundled native-library notices;
+FreeType offers its FTL alternative. Preserve the distributions' complete
+notices when bundling them. Unpinned external painter packages and global
+extensions are not a verified deployed dependency inventory.
+
+FFmpeg and libx264 are external executables used by capture/export scripts,
+not libraries linked into the Rust engine. Their own GPL/LGPL obligations
+apply if distributing those tools. Invoking them does not add a
+noncommercial condition to the engine.
+
+The watercolor experiment separately credits its MIT Watercolor Lab port
+and OFL-1.1 Figtree fonts in `experiments/watercolor/THIRD_PARTY_NOTICES.md`
+and `experiments/watercolor/lab-app/ASSETS.md`. Those font files retain their
+OFL notice. DejaVu Sans used by experimental sheet scripts is external;
+its Bitstream Vera/DejaVu notices apply if bundling that font.
+
+Technical image fixtures are project renders. Reference-library quotations,
+museum links and research catalogs have source-specific rights, not a
+blanket grant from this repository's code license. A source citation or an
+`open_access_image` flag alone is not permission to redistribute an image.

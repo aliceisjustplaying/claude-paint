@@ -44,7 +44,7 @@ pub const CARRIED_PAINT_MARK: &str = "--@ palette-carried-paint";
 /// A log's head line: its `glaze` and `scumble` passes lay a thin film,
 /// their coverage the share of the mask it reaches
 /// (`paint::Canvas::with_glaze_film`). Every new painting has it; it
-/// requires engine 7 or 8.
+/// requires engine 7, 8 or 9.
 pub const GLAZE_FILM_MARK: &str = "--@ glaze-film";
 pub const LIQUID_FILM_LEVELS_MARK: &str = "--@ liquid-film-levels";
 pub const SEALED_DRAWING_GUIDE_MARK: &str = "--@ sealed-drawing-guide";
@@ -1253,7 +1253,7 @@ pub fn logged_engine(text: &str) -> Result<u32, String> {
         if let Some(rest) = l.strip_prefix(ENGINE_MARK) {
             let v = rest.strip_prefix(' ').and_then(|v| v.trim().parse::<u32>().ok()).filter(|&v| paint::supported_engine(v));
             let Some(v) = v else {
-                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END));
+                return Err(format!("the log's line {l:?} names no engine this easel has ({ENGINE_MARK} <1 to {}, {}, {} or {}>)", paint::ENGINE, paint::engine7::ENGINE, paint::REACH_END, paint::PIGMENT_MIXER));
             };
             if found.is_some() {
                 return Err(format!("the log names its engine twice ({ENGINE_MARK} lines)"));
@@ -1369,7 +1369,7 @@ fn box_list() -> String {
 /// configured box (`configured_box`), else the default. An existing one takes
 /// the box its log names (none: the default), whatever easel replays it; if a
 /// box is configured too, it must be the same one. The box carries the
-/// engine version the painting is painted with: a new one engine 8,
+/// engine version the painting is painted with: a new one engine 9,
 /// an existing one its log's (`logged_engine`). New paintings' `body_of`
 /// joins limbs to the nearest limb; an existing one's as its log says
 /// (`LIMBS_MARK`), and likewise for the blender's feather
@@ -1381,7 +1381,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
         let mut b = find_box(configured.as_ref().map_or(Palette::fallback_box(), |c| c.0.as_str()))?;
-        b.engine = paint::REACH_END;
+        b.engine = paint::PIGMENT_MIXER;
         b.knife_skim = true;
         b.limbs_join_nearest = true;
         b.reload_finite = true;
@@ -1408,12 +1408,12 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     let head = |mark: &str| text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == mark);
     let (knife_skim, blend_feather, brush_skim) = (head(KNIFE_SKIM_MARK), head(BLEND_FEATHER_MARK), head(BRUSH_SKIM_MARK));
-    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
-        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7 or 8"));
+    if knife_skim && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::PIGMENT_MIXER) {
+        return Err(format!("the log's knife skim switch ({KNIFE_SKIM_MARK}) requires engine 7, 8 or 9"));
     }
     for (on, mark) in [(blend_feather, BLEND_FEATHER_MARK), (brush_skim, BRUSH_SKIM_MARK)] {
-        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END) {
-            return Err(format!("the log's switch {mark:?} requires engine 7 or 8"));
+        if on && !matches!(engine, paint::engine7::ENGINE | paint::REACH_END | paint::PIGMENT_MIXER) {
+            return Err(format!("the log's switch {mark:?} requires engine 7, 8 or 9"));
         }
     }
     let drain = logged_drain(text);
@@ -1450,7 +1450,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Err(format!("the log's liquid film leveling switch ({LIQUID_FILM_LEVELS_MARK}) requires engine 4 or later"));
     }
     if b.glaze_film && !paint::engine7::active(engine) {
-        return Err(format!("the log's glaze film switch ({GLAZE_FILM_MARK}) requires engine 7 or 8"));
+        return Err(format!("the log's glaze film switch ({GLAZE_FILM_MARK}) requires engine 7, 8 or 9"));
     }
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
@@ -1458,7 +1458,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     b.brush_skim = brush_skim;
     b.rag_lift = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == RAG_LIFT_MARK);
     if b.rag_lift && !paint::engine7::active(engine) {
-        return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7 or 8"));
+        return Err(format!("the log's rag lift switch ({RAG_LIFT_MARK}) requires engine 7, 8 or 9"));
     }
     b.drain = drain;
     Ok(b)
@@ -1517,6 +1517,13 @@ mod image_tolerance;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn checkpoint_base_format(bytes: &[u8]) -> u64 {
+        assert_eq!(&bytes[..8], b"PAINTC19");
+        let header = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+        assert_eq!(u64::from_le_bytes(bytes[16 + header..24 + header].try_into().unwrap()), 1);
+        u64::from_le_bytes(bytes[24 + header..32 + header].try_into().unwrap())
+    }
 
     fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {
         assert_eq!(actual.engine(), expected.engine());
@@ -1597,7 +1604,7 @@ mod tests {
             }
             let bytes = state(&live);
             let original = live.canvas().unwrap().clone();
-            assert_eq!(&bytes[..8], if drain { b"PAINTC14" } else { b"PAINTC11" });
+            assert_eq!(checkpoint_base_format(&bytes), if drain { 14 } else { 11 });
             assert_canvas_close(&replay.canvas().unwrap(), &original);
             assert_eq!(replay.program("drain"), log);
             let brushes = live.st.borrow_mut().live_brushes();
@@ -1686,7 +1693,7 @@ mod tests {
         assert!(restored.blend_feather() && restored.brush_skim());
         for engine in [paint::engine7::ENGINE, paint::REACH_END] {
             for (feather, skim) in [(false, false), (false, true), (true, false), (true, true)] {
-                let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                let mut log = text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}"));
                 for (on, mark) in [(feather, BLEND_FEATHER_MARK), (skim, BRUSH_SKIM_MARK)] {
                     if !on {
                         log = log.replace(&format!("{mark}\n"), "");
@@ -1707,7 +1714,7 @@ mod tests {
                 assert!(restored.knife_skim());
             }
         }
-        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
 
     /// A new painting's knife skims (`paint::Canvas::with_knife_skim`) and
@@ -1722,17 +1729,17 @@ mod tests {
         assert!(live.canvas().unwrap().knife_skim());
         let text = live.program("p");
         assert!(text.contains(&format!("\n{KNIFE_SKIM_MARK}\n")), "{text}");
-        assert!(text.contains("--@ engine 8\n"), "{text}");
+        assert!(text.contains(&format!("{ENGINE_MARK} {}\n", paint::PIGMENT_MIXER)), "{text}");
         let mut saved = Vec::new();
         live.canvas().unwrap().write_state(&mut saved, "").unwrap();
         let restored = Canvas::read_state(&mut &saved[..]).unwrap().0;
         assert!(restored.knife_skim());
-        assert_eq!(restored.engine(), paint::REACH_END);
+        assert_eq!(restored.engine(), paint::PIGMENT_MIXER);
         for (log, skims) in [
             (text.clone(), true),
             (text.replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
-            (text.replace("--@ engine 8", "--@ engine 7"), true),
-            (text.replace("--@ engine 8", "--@ engine 7").replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
+            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7"), true),
+            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7").replace(&format!("{KNIFE_SKIM_MARK}\n"), ""), false),
         ] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {
@@ -1746,7 +1753,7 @@ mod tests {
             assert_eq!(restored.engine(), logged_engine(&log).unwrap());
             assert_eq!(restored.knife_skim(), skims);
         }
-        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
 
     /// A new painting's rag keeps what it lifts and stays inside a mask
@@ -1767,7 +1774,7 @@ mod tests {
         for engine in [paint::engine7::ENGINE, paint::REACH_END] {
             for lifts in [false, true] {
                 for other_flags in [false, true] {
-                    let mut log = text.replace("--@ engine 8", &format!("--@ engine {engine}"));
+                    let mut log = text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), &format!("--@ engine {engine}"));
                     for (on, mark) in [(lifts, RAG_LIFT_MARK), (other_flags, KNIFE_SKIM_MARK), (other_flags, BLEND_FEATHER_MARK), (other_flags, BRUSH_SKIM_MARK)] {
                         if !on {
                             log = log.replace(&format!("{mark}\n"), "");
@@ -1788,7 +1795,7 @@ mod tests {
                 }
             }
         }
-        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
 
     /// Replay `tests/<name>.lua` at 320 px with the box and engine its log
@@ -1887,8 +1894,8 @@ mod tests {
         for (log, film) in [
             (text.clone(), true),
             (text.replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
-            (text.replace("--@ engine 8", "--@ engine 7"), true),
-            (text.replace("--@ engine 8", "--@ engine 7").replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
+            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7"), true),
+            (text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 7").replace(&format!("{GLAZE_FILM_MARK}\n"), ""), false),
         ] {
             let mut replay = Session::replay_with(240, box_for(Some(&log)).unwrap()).unwrap();
             for chunk in parse_program(&log) {
@@ -1903,7 +1910,7 @@ mod tests {
             assert_eq!(restored.glaze_film(), film);
             assert!(restored.knife_skim() && restored.blend_feather() && restored.brush_skim());
         }
-        assert!(box_for(Some(&text.replace("--@ engine 8", "--@ engine 5"))).is_err());
+        assert!(box_for(Some(&text.replace(&format!("{ENGINE_MARK} {}", paint::PIGMENT_MIXER), "--@ engine 5"))).is_err());
     }
 
     /// A new painting 400 px wide (1000 × 800 units): a pale ground with
@@ -2006,7 +2013,7 @@ mod tests {
         };
         let bytes = state(&live);
         let original = live.canvas().unwrap().clone();
-        assert_eq!(&bytes[..8], b"PAINTC13");
+        assert_eq!(checkpoint_base_format(&bytes), 13);
         assert_canvas_close(&replay.canvas().unwrap(), &original);
         assert!(replay.st.borrow().paper);
         assert_eq!(replay.program("paper"), log);
@@ -2037,7 +2044,7 @@ mod tests {
             };
             assert!(restored.st.borrow().paper);
             assert_eq!(saved(&restored), saved(&live));
-            assert_eq!(&saved(&live)[..8] == b"PAINTC13", setup == sheet);
+            assert_eq!(checkpoint_base_format(&saved(&live)) == 13, setup == sheet);
             restored.run("wait(1)").unwrap();
             live.run("wait(1)").unwrap();
             assert_canvas_close(&restored.canvas().unwrap(), &live.canvas().unwrap());

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-const MAGIC: &[u8; 8] = b"EASLRP01";
+const MAGIC: &[u8; 8] = b"EASLRP02";
 
 #[derive(Serialize, Deserialize)]
 struct State {
@@ -500,6 +500,7 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         let mut magic = [0; 8];
         let mut digest = [0; 32];
         f.read_exact(&mut magic).and_then(|_| f.read_exact(&mut digest)).map_err(|e| e.to_string())?;
+        if &magic == b"EASLRP01" { return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into()); }
         if &magic != MAGIC { return Err("not a resumable replay checkpoint (unsupported format)".into()); }
         if hash_reader(&mut f)? != digest { return Err("checkpoint checksum mismatch".into()); }
         f.seek(SeekFrom::Start(40)).map_err(|e| e.to_string())?;
@@ -939,5 +940,15 @@ print(counter,rand(),drying(300,300))
             .env("REPLAY_TEST_NON_UTF8", std::ffi::OsString::from_vec(vec![0xff]))
             .status().unwrap();
         assert!(status.success());
+    }
+
+    #[test]
+    fn obsolete_tool_snapshot_representation_is_refused_explicitly() {
+        let dir = Temp::new();
+        let path = dir.0.join("obsolete.ck");
+        let mut bytes = b"EASLRP01".to_vec();
+        bytes.extend_from_slice(&[0; 32]);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(load(&path).err().unwrap().contains("obsolete pigment representation"));
     }
 }

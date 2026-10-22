@@ -2,7 +2,7 @@
 //!
 //! A `Tool` is a physical brush (round sable, hog flat, filbert, fan, rigger,
 //! badger blender). `Held` is that brush in the hand: every bristle has its
-//! own little reservoir of paint (volume + Mixbox pigment mix + KM scattering).
+//! own little reservoir of paint (volume + pigment mix + KM scattering).
 //!
 //! As the handle moves along a `Gesture`:
 //! - bristles splay with pressure and their tips trail behind the motion,
@@ -2611,7 +2611,7 @@ mod kernel_traps {
     /// Trap A, the kernel: an empty filbert that doesn't pick up (so it only
     /// ploughs, sharing each pixel's paint bilinearly among four
     /// destinations) dragged through films at the threshold leaves approximately
-    /// the wet volume and cure recorded from main (4ec3169). A plough that
+    /// the wet volume and cure recorded from this seeded construction. A plough that
     /// hoisted the source's cure out of its destination loop fails this.
     #[test]
     fn ploughing_films_at_the_threshold_leaves_the_recorded_cure() {
@@ -2627,7 +2627,15 @@ mod kernel_traps {
         let zeroed = (0..n).filter(|&i| before[i] > 0.0 && c.wet.clock.px[i].cure == 0.0).count();
         // the strokes did plough thin films under the threshold
         assert!(zeroed > 1000, "{zeroed} films ploughed bare");
-        let expected = image::open(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/plough_volume_cure.png")).unwrap().to_rgb16();
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/plough_volume_cure.png");
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            let reference = image::ImageBuffer::<image::Rgb<u16>, Vec<u16>>::from_fn(c.f.w as u32, c.f.h as u32, |x, y| {
+                let i = y as usize * c.f.w + x as usize;
+                image::Rgb([(c.wet.vol[i] / 0.01 * 65535.0).round() as u16, (c.wet.clock.px[i].cure / 0.1 * 65535.0).round() as u16, 0])
+            });
+            reference.save(path).unwrap();
+        }
+        let expected = image::open(path).unwrap().to_rgb16();
         assert_eq!(expected.dimensions(), (c.f.w as u32, c.f.h as u32));
         for (i, pixel) in expected.pixels().enumerate() {
             for (channel, (value, scale)) in [(c.wet.vol[i], 0.01), (c.wet.clock.px[i].cure, 0.1)].into_iter().enumerate() {
@@ -2856,7 +2864,7 @@ impl Knife {
         if self.vol <= 1e-9 {
             return None;
         }
-        let color = mixbox::latent_to_linear_float_rgb(&self.lat);
+        let color = crate::mixer::decode(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
         Some(Paint { solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }

@@ -12,7 +12,6 @@ replay-effects = ["dep:serde"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
-mixbox = "2"
 noise = "0.9"
 rayon = "1"
 serde = { version = "1", features = ["derive"], optional = true }

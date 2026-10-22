@@ -444,7 +444,7 @@ impl Canvas {
         w.write_all(MAGIC19)?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
-        put_u64(w, crate::mixer::identity())?;
+        put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
         let f = self.f;
@@ -580,7 +580,8 @@ impl Canvas {
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
         let own_mixer = version == 19;
-        if own_mixer && get_u64(r)? != crate::mixer::identity() {
+        let identity = if own_mixer { get_u64(r)? } else { 0 };
+        if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::film_identity() {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
         let mut pigments = version == 18;
@@ -744,6 +745,9 @@ impl Canvas {
         };
         if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
             return Err(bad("checkpoint drawing optics do not match its layout"));
+        }
+        if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() } {
+            return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
         if version >= 11 {
             if c.engine < 4 {

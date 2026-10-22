@@ -27,8 +27,8 @@ pub struct Tube {
     /// opaque): contrast ratio, see `pigment::hiding_of`.
     ///
     /// An estimated input for the older RGB-channel layer model, not a
-    /// measurement of the rendered film. Engine 9's films instead use the
-    /// latent's spectral K and S at their physical thickness.
+    /// measurement of the rendered film. Engine 9 with the glaze-film
+    /// switch instead uses spectral K and S at the film's physical thickness.
     pub hiding: f32,
     /// Stiffness straight from the tube (0 fluid .. 1 stiff).
     pub stiff: f32,
@@ -981,7 +981,7 @@ impl Palette {
         for v in lat.iter_mut() {
             *v /= wsum.max(1e-9);
         }
-        if self.engine >= crate::PIGMENT_MIXER {
+        if self.engine >= crate::PIGMENT_MIXER && self.glaze_film {
             sct = crate::mixer::scattering(&lat);
         }
         (lat, sct, stf)

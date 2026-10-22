@@ -65,12 +65,21 @@ pub fn identity() -> u64 {
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/finite100um/reference07A/constant-weights/additive-linear-rgb/v5/film25um/spectral-dry");
+        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/finite100um/reference07A/constant-weights/additive-linear-rgb/v5");
         hash.update(MEASURED);
         hash.update(REFERENCE);
         hash.update(INVERSE);
         u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
     })
+}
+
+/// Checkpoint identity for spectral film optics and their physical wet S.
+pub fn film_identity() -> u64 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(identity().to_le_bytes());
+    hash.update(b"film25um/spectral-dry/transmitted-residual/v1");
+    u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 
 pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
@@ -211,6 +220,7 @@ mod tests {
     fn films_keep_measured_coefficients_thickness_and_medium() {
         let mut palette = crate::Palette::new("film study", crate::palette::catalog());
         palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
         for name in ["Prussian blue", "ultramarine blue", "lead white", "yellow ochre"] {
             let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
             let pile = palette.pile(vec![(i, 1.0)]);
@@ -267,11 +277,12 @@ mod tests {
     fn wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage() {
         let mut palette = crate::Palette::new("film study", crate::palette::catalog());
         palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
         for name in ["Prussian blue", "lead white", "yellow ochre"] {
             let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
             let paint = palette.pile(vec![(i, 1.0)]).paint(0.8);
             for cover in [0.2, 1.0] {
-                let mut canvas = crate::Canvas::new(4, 1.0, [0.8; 3]).with_engine(crate::PIGMENT_MIXER);
+                let mut canvas = crate::Canvas::new(4, 1.0, [0.8; 3]).with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
                 canvas.wet.vol.fill(0.15);
                 canvas.wet.lat.fill(paint.latent());
                 canvas.wet.hide.fill(paint.prop());
@@ -281,6 +292,12 @@ mod tests {
                 let expected = expected.map(|v| 0.8 + cover * (v - 0.8));
                 let wet = canvas.look_px(0);
                 assert!((0..3).all(|k| (wet[k] - expected[k]).abs() < 2e-6), "{name}: {wet:?} != {expected:?}");
+                let mut state = Vec::new();
+                canvas.write_state(&mut state, "").unwrap();
+                let (restored, _) = crate::Canvas::read_state(&mut &state[..]).unwrap();
+                assert_eq!(restored.look_px(0), wet);
+                state[16..24].copy_from_slice(&identity().to_le_bytes());
+                assert!(crate::Canvas::read_state(&mut &state[..]).is_err());
                 canvas.dry();
                 assert!((0..3).all(|k| (canvas.px[0][k] - expected[k]).abs() < 2e-6), "{name}: {:?} != {expected:?}", canvas.px[0]);
             }

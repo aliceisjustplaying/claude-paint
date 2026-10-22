@@ -347,8 +347,8 @@ pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rg
     [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
 }
 
-pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, engine: u32) -> Rgb {
-    if engine < crate::PIGMENT_MIXER {
+pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, spectral: bool) -> Rgb {
+    if !spectral {
         return over_share(Pigment::masstone(crate::mixer::decode(lat), scatter), under, coats, cover);
     }
     if cover.is_nan() || cover <= 0.0 {
@@ -391,7 +391,7 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0), self.engine)
+        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0), self.spectral_films())
     }
 
     /// The visible colors, pixel by pixel over the window: the dry

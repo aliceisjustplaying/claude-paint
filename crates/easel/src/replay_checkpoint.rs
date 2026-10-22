@@ -362,7 +362,7 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
         f.write_all(MAGIC).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
         {
             let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
-            writer.write_all(&paint::mixer::identity().to_le_bytes()).map_err(|e| e.to_string())?;
+            writer.write_all(&paint::mixer::film_identity().to_le_bytes()).map_err(|e| e.to_string())?;
             TRACE.with(|t| {
                 #[derive(Serialize)]
                 struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Events, state: &'a State, digests: &'a Option<Vec<String>> }
@@ -622,7 +622,7 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         let mut reader = zstd::stream::read::Decoder::new(f).map_err(|e| e.to_string())?;
         let mut mixer = [0; 8];
         reader.read_exact(&mut mixer).map_err(|e| e.to_string())?;
-        if u64::from_le_bytes(mixer) != paint::mixer::identity() {
+        if u64::from_le_bytes(mixer) != paint::mixer::film_identity() {
             return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into());
         }
         let saved = read_saved(&mut reader, 4 << 30)?;

@@ -412,6 +412,10 @@ impl Canvas {
         self.glaze_film
     }
 
+    pub(crate) fn spectral_films(&self) -> bool {
+        self.engine >= crate::PIGMENT_MIXER && self.glaze_film
+    }
+
     pub fn with_liquid_film_levels(mut self, enabled: bool) -> Self {
         self.liquid_film_levels = enabled && self.engine >= 4;
         self

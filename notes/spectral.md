@@ -6,6 +6,12 @@ so it stays an optional module (`paint::spectral`) with a study sheet. The
 engine's mixing (Mixbox) and layering (KM per RGB channel) are unchanged.
 The golden was not re-recorded, and checkpoints and replay are untouched.
 
+**Superseded for mixing.** Engine 9 (#244) replaced Mixbox with an
+independent two-constant KM mixer from measured paint spectra
+(`notes/pigment-mixer.md`). Layering is still KM per RGB channel. The
+comparisons below are of Mixbox and this note's synthetic spectra, not of
+the current mixer.
+
 Why, in three numbers (OKLab ΔE; a just-noticeable difference is about 0.02):
 - **Spectral KM vs KM per RGB channel, same concentration model:** at most
   0.040 in mixing (Prussian blue + chrome yellow), 0.003–0.023 elsewhere, and

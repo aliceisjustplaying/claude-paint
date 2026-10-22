@@ -138,9 +138,11 @@ start without supplying a reference image.
 These are limitations, **not feature requests**. The feature freeze stands.
 
 1. **Color fidelity: highest for a faithful technical reconstruction, moderate
-   for a style study.** Pigment colors/strengths are estimates; mixing uses
-   Mixbox latent colors and the layered optics use RGB scattering/absorption
-   (`palette.rs`), not measured full spectral data from Seurat's paints. The eye's
+   for a style study.** Fifteen catalog tubes mix from measured spectra of
+   modern reconstructions of historical paints and the rest from estimated
+   colors and strengths (`notes/pigment-mixer.md`); the layered optics use
+   RGB scattering/absorption (`palette.rs`). None of it is spectral data
+   from Seurat's paints. The eye's
    simultaneous-contrast response is not a separate engine color operation.
    Juxtaposition is possible today, but exact historical optical relationships
    cannot be certified. Choose piles by viewing trials; do not compensate with

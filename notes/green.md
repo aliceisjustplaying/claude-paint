@@ -42,6 +42,10 @@ approximations (sources in the doc comments):
 | tube | masstone | hiding | stiff | strength | basis |
 |---|---|---|---|---|---|
 | Prussian blue | #172440 | 0.35 | 0.45 | 3.0 | transparent, very strong [AP3 pp.196–197]; strength tempered (A) |
+
+Since engine 9, Prussian blue mixes from measured spectra with weight 1.0
+and a near-black masstone (`notes/pigment-mixer.md`); it is still by far
+the strongest tinter.
 | green earth | #3a4843 | 0.2 | 0.35 | 0.3 | translucent, weak, little body [AP1 p.146; FIELD p.129]; Munsell 7.5G/2.9/1.5 converted |
 | Rinmann's green | #5f8f76 | 0.35 | 0.5 | 0.4 | semi-transparent, weak (A for the numbers) |
 | copper green | #3f7f6a | 0.25 | 0.4 | 1.0 | "poor hiding power in oil" [AP2 p.132]; numbers A |

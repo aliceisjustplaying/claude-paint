@@ -156,7 +156,7 @@ window (`sample` clamps to it).
   magic, a key=value header (name, stage, width, seed, crop and margin, the
   `Keep` state, a timestamp and three source hashes), then the canvas.
   The canvas part is the frame, crop window, color, relief, film, linen,
-  size, the wet layer (volume, Mixbox latents, hiding and stiffness, dirty
+  size, the wet layer (volume, pigment latents, hiding and stiffness, dirty
   box) and the stroke counter. Per-pixel stroke ids and film floors are not
   saved, because every later stroke has a new id and never reads them. The
   brushes' contact surface is rebuilt from the relief. Sizes: 43 MB at
@@ -217,7 +217,7 @@ the property "mix is a pure function of its input".
 
 Profile (macOS `sample`; moonrise at 1000px, and the 3200px ground stage):
 `bristle::drag_on`/`exchange` is about 85% of busy CPU. The rest is dry and
-settle, the Mixbox conversion and crack rastering. Rayon workers are idle
+settle, the Mixbox conversion (engine 9 has its own decoder instead) and crack rastering. Rayon workers are idle
 most of the time. Phases hold only 1–6 tiles (long strokes make big tiles),
 the badger passes over the sky run 1–3 tiles at a time (the sky stage takes
 as long on 1 thread as on 10), and the single drags (clouds, wisps, 100+

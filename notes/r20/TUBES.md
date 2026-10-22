@@ -10,6 +10,12 @@ copies only the guide, the physics note and the studio's own materials
 note, so no studio gets this file.
 
 All numbers are estimates in the style of `palette.rs`, not measurements.
+Since engine 9, the tubes with a measured counterpart (`mixer::tube_pigment`;
+here zinc white, lemon chrome, red lead, the vermilion grades, ultramarine
+blue, viridian and emerald green) mix from measured spectra with a
+calibrated weight instead of the masstone and strength below
+(`notes/pigment-mixer.md`). The three vermilion grades share one measured
+paint.
 "Sourced" means the proposal quotes a source for that number or for its
 direction (for example "less than chrome yellow"). "Estimate" means the
 proposal gives no source.

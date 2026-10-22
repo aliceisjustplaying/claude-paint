@@ -24,21 +24,21 @@ The Inness report distinguishes witness evidence, object-specific analysis, assu
 
 The Friedrich exporter selects the default tube box; the original opening asks for one original landscape with its place, subject and composition invented. The composition note directs materials questions to the existing Friedrich materials report. The current engine version is 5. [R1; R2 lines 260–282; R3; R9]
 
-The four property columns below are **estimates copied from the current implementation**, not measured historical recipes. Hiding is the input controlling how much one modeled coat conceals its ground; it is calibrated through a gray surrogate, so it is not an independently measured rendered contrast ratio. Stiffness runs from fluid to stiff. Strength weights color mixing. Drying is relative to the model's average, not days. Engine 5 uses the engine-3 tube drying values where provided. [R2 lines 21–53,83–122,495–513; R10]
+The four property columns below are **estimates copied from the current implementation**, not measured historical recipes. Hiding is the input controlling how much one modeled coat conceals its ground; it is calibrated through a gray surrogate, so it is not an independently measured rendered contrast ratio. Stiffness runs from fluid to stiff. Strength weights color mixing; since engine 9, for the six tubes with measured spectra (lead white, vermilion, bone black, cobalt blue, chrome yellow and Prussian blue) it is a calibrated weight, and their colors come from those spectra (`notes/pigment-mixer.md`). Drying is relative to the model's average, not days. Engine 5 uses the engine-3 tube drying values where provided. [R2 lines 21–53,83–122,495–513; R10]
 
 | Current tube | Hiding / stiffness / strength / drying | Historical fit and limit |
 |---|---|---|
-| Lead white | 0.82 / 0.80 / 1.00 / 2.00 | Analytically documented in paint and grounds. [CATS p.127; MAD p.103] |
+| Lead white | 0.82 / 0.80 / 0.65 / 2.00 | Analytically documented in paint and grounds. [CATS p.127; MAD p.103] |
 | Smalt | 0.30 / 0.55 / 0.45 / 1.60 | Documented cobalt glass; low hiding suits transparent passages. [NG pp.55–56] |
 | Pale smalt | 0.35 / 0.55 / 0.35 / 1.60 | A chosen representation of historically observed varying grades, not a measured particular grade. [NG p.56; R2 lines 86–89] |
 | Yellow ochre | 0.80 / 0.70 / 0.80 / 0.80 | Documented yellow earth family. [MAD p.102] |
 | Red earth | 0.85 / 0.70 / 0.90 / 1.00 | Proxy for documented red iron-oxide earths. [MAD p.102; R2 line 92] |
-| Vermilion | 0.90 / 0.75 / 1.00 / 0.40 | Documented cinnabar, often small details. [MAD p.102] |
+| Vermilion | 0.90 / 0.75 / 0.99 / 0.40 | Documented cinnabar, often small details. [MAD p.102] |
 | Raw umber | 0.80 / 0.65 / 0.90 / 2.40 | Umber is reported in the Winter Landscape ground; that does not establish one universal brown tube for his whole career. [NG p.55] |
-| Bone black | 0.90 / 0.70 / 1.10 / 0.90 | Analytically documented. [MAD p.103] |
-| Cobalt blue | 0.55 / 0.60 / 0.80 / 2.20 | Later-period evidence supports it; not interchangeable with early smalt's optical handling. [ALF pp.346–349; NG p.56] |
-| Chrome yellow | 0.90 / 0.70 / 1.00 / 1.80 | Identified by inference from elemental data in 1817 and 1818/24 works; those findings do not make it an early universal yellow. [ALF pp.344–349] |
-| Prussian blue | 0.35 / 0.45 / 3.00 / 2.40 | Possible in the earlier Winter Landscape mixture; stronger later evidence in Dresden and the 1818/24 painting. [NG p.56; MAD p.103; ALF p.346] |
+| Bone black | 0.90 / 0.70 / 1.00 / 0.90 | Analytically documented. [MAD p.103] |
+| Cobalt blue | 0.55 / 0.60 / 1.00 / 2.20 | Later-period evidence supports it; not interchangeable with early smalt's optical handling. [ALF pp.346–349; NG p.56] |
+| Chrome yellow | 0.90 / 0.70 / 0.84 / 1.80 | Identified by inference from elemental data in 1817 and 1818/24 works; those findings do not make it an early universal yellow. [ALF pp.344–349] |
+| Prussian blue | 0.35 / 0.45 / 1.00 / 2.40 | Possible in the earlier Winter Landscape mixture; stronger later evidence in Dresden and the 1818/24 painting. [NG p.56; MAD p.103; ALF p.346] |
 | Green earth | 0.20 / 0.35 / 0.30 / 0.80 | Documented green family; exact modeled grade and numbers are estimates. [MAD p.103; R2 lines 110–114] |
 | Rinmann's green | 0.35 / 0.50 / 0.40 / 1.40 | Cobalt-zinc green identified in individual works; optional use, not a requirement of every Friedrich palette. [MAD p.103] |
 | Copper green | 0.25 / 0.40 / 1.00 / 1.60 | Here specifically verdigris. General copper-green evidence and a possible degraded copper-arsenic green do not uniquely identify verdigris. [R2 lines 119–122; MAD p.103] |
@@ -54,7 +54,7 @@ The four property columns below are **estimates copied from the current implemen
 
 ## Paint behavior, ground and tools
 
-**Opacity and mixing — suitable direction, uncalibrated magnitude.** Weak, low-hiding smalt and green earth versus stronger Prussian blue are purposeful model choices. The engine mixes tube colors in strength-weighted Mixbox space and derives absorption/scattering from chosen color and hiding. It does not establish physical spectra, glass-particle sizes or exact historical tinting strength. Pale smalt having slightly more input hiding than ordinary smalt is a grade estimate, not evidence of a historical contradiction or a reason to retune it. [R2 lines 6–9,21–46,83–122,500–513; R11 lines 1–18,30–51; NG p.56]
+**Opacity and mixing — suitable direction, uncalibrated magnitude.** Weak, low-hiding smalt and green earth versus stronger Prussian blue are purposeful model choices. Since engine 9 the engine mixes by two-constant Kubelka–Munk: Prussian blue and the five other measured tubes use spectra of modern reconstructed paints, while smalt, green earth and the other tubes enter as estimated colors with scalar strengths; Prussian blue stays by far the strongest tinter. Layering derives absorption/scattering from the mixed color and hiding. None of this establishes Friedrich's paint spectra, glass-particle sizes or exact historical tinting strength. Pale smalt having slightly more input hiding than ordinary smalt is a grade estimate, not evidence of a historical contradiction or a reason to retune it. [R2 lines 6–9,21–46,83–122,500–513; R11 lines 1–18,30–51; NG p.56]
 
 **Drying — estimates, not Friedrich timing evidence.** Current rates are literature-informed estimates; cobalt blue and Prussian blue have engine-3 overrides, while smalt keeps 1.6. Engine 5 inherits these choices. Walnut oil is available and modeled at 0.8 of the linseed rate, consistent with representing a slower oil; walnut was identified in both paint and ground of Winter Landscape. This single-object result does not establish every Friedrich painting's binder. The code's reference stroke timings and thickness response do not validate real historical drying at every thickness. No drying-rate correction was established by this documentary review. [R10 lines 41–61,97–115,177–197; R2 lines 495–497,568–569; R12 lines 1793–1800; NG p.55]
 

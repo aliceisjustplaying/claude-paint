@@ -40,6 +40,24 @@ impl Drop for Studio {
 }
 
 #[test]
+fn misspelled_frame_switches_are_refused_without_disabling_capture() {
+    let studio = Studio::new("switches");
+    studio.ok(&["frames", "on"]);
+    studio.ok(&["do", CANVAS]);
+    for (i, typo) in ["of", "onn"].into_iter().enumerate() {
+        let reply = studio.cmd(&["frames", typo]);
+        assert!(!reply.status.success(), "frames {typo} should fail: {}", String::from_utf8_lossy(&reply.stdout));
+        assert!(String::from_utf8_lossy(&reply.stderr).contains("frames on|off"));
+        studio.ok(&["do", "x=1"]);
+        assert!(studio.frames().join(format!("{:06}.jpg", i + 2)).exists());
+    }
+    studio.ok(&["frames", "off"]);
+    studio.ok(&["do", "x=2"]);
+    assert!(!studio.frames().join("000004.jpg").exists());
+    assert!(studio.ok(&["frames"]).starts_with("frames on "));
+}
+
+#[test]
 fn committed_frames_are_numbered_atomic_and_not_replayed() {
     let studio = Studio::new("commits");
     studio.ok(&["do", CANVAS]);

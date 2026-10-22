@@ -2056,7 +2056,11 @@ impl Server {
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
-                self.frames = matches!(args.first().map(|s| s.as_str()), Some("on") | None);
+                self.frames = match args.first().map(|s| s.as_str()) {
+                    Some("on") | None => true,
+                    Some("off") => false,
+                    _ => return Err("frames on|off".into()),
+                };
                 Ok(format!("frames {} ({})\n", if self.frames { "on" } else { "off" }, session_dir(&self.name).join("frames").display()))
             }
             "close" => {

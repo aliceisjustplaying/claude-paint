@@ -1,3 +1,4 @@
+use sha2::Digest;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::OnceLock;
@@ -32,6 +33,7 @@ struct Studio {
     child: Option<Child>,
     identity: &'static str,
     state_store: bool,
+    name: &'static str,
 }
 
 impl Studio {
@@ -50,14 +52,14 @@ impl Studio {
         } else {
             PathBuf::from(env!("CARGO_BIN_EXE_easel"))
         };
-        Self { root, binary, child: None, identity: "original", state_store: false }
+        Self { root, binary, child: None, identity: "original", state_store: false, name: "painting" }
     }
 
     fn command(&self) -> Command {
         let mut command = Command::new(&self.binary);
         command.current_dir("/")
             .env("EASEL_ROOT", &self.root)
-            .env("EASEL_SESSION", "painting")
+            .env("EASEL_SESSION", self.name)
             .env("RAYON_NUM_THREADS", "2")
             .env("PAINT_LIVE_CHECKPOINT_TEST_IDENTITY", self.identity)
             .env_remove("EASEL_WIDTH")
@@ -79,15 +81,15 @@ impl Studio {
         String::from_utf8(output.stdout).unwrap()
     }
 
-    fn dir(&self) -> PathBuf { self.root.join("out/easel/painting") }
-    fn log(&self) -> PathBuf { self.root.join("paintings/lua/painting.lua") }
+    fn dir(&self) -> PathBuf { self.root.join("out/easel").join(self.name) }
+    fn log(&self) -> PathBuf { self.root.join("paintings/lua").join(format!("{}.lua", self.name)) }
     fn bytes(&self, name: &str) -> Vec<u8> { std::fs::read(self.dir().join(name)).unwrap() }
 
     fn start(&mut self) {
         assert!(self.child.is_none());
         std::fs::create_dir_all(self.dir()).unwrap();
         let log = std::fs::File::create(self.dir().join("server.log")).unwrap();
-        self.child = Some(self.command().args(["serve", "painting"])
+        self.child = Some(self.command().args(["serve", self.name])
             .stdin(Stdio::null()).stdout(log.try_clone().unwrap()).stderr(log)
             .spawn().unwrap());
         let chunks = std::fs::read_to_string(self.log()).map(|source| source.lines().filter(|line| line.starts_with("--@ chunk ")).count()).unwrap_or(0);
@@ -394,6 +396,7 @@ fn an_unreplaceable_checkpoint_does_not_abort_full_replay_or_close() {
 fn failed_finalization_keeps_the_live_session_for_retry() {
     for blocked in ["live.ckpt", "live.png", "hand-frames/00002.png"] {
         let mut studio = Studio::new(&format!("close-{}", blocked.replace('/', "-")), false);
+        studio.name = "sketch";
         studio.start();
         studio.ok(&["do", CHUNKS[0]]);
         let source = std::fs::read(studio.log()).unwrap();
@@ -416,8 +419,38 @@ fn failed_finalization_keeps_the_live_session_for_retry() {
 }
 
 #[test]
+fn failed_accepted_chunk_frames_close_without_reexecuting_the_chunk() {
+    let mut studio = Studio::new("close-accepted-frame", false);
+    studio.name = "sketch";
+    studio.start();
+    studio.ok(&["do", CHUNKS[0]]);
+    let path = studio.dir().join("hand-frames/00002.png");
+    std::fs::create_dir(&path).unwrap();
+    studio.ok(&["do", "assert(counter == nil); counter = 9"]);
+    let source = std::fs::read(studio.log()).unwrap();
+    let result = studio.cmd(&["close"]);
+    assert!(!result.status.success());
+    assert!(studio.ok(&["status"]).starts_with("2 chunks"));
+    std::fs::remove_dir(path).unwrap();
+    let globals = studio.ok(&["globals"]);
+    assert!(globals.contains("2\tcounter\tnumber 9"), "{globals}");
+    studio.close();
+    assert_eq!(std::fs::read(studio.log()).unwrap(), source);
+    assert_eq!(studio.bytes("committed.lua"), source);
+    assert!(String::from_utf8(studio.bytes("live.txt")).unwrap().starts_with("chunks 2\nreplayed 0\n"));
+    let states = String::from_utf8(studio.bytes("hand-frames/frames.states")).unwrap();
+    let state: serde_json::Value = serde_json::from_str(states.lines().last().unwrap()).unwrap();
+    assert_eq!(state["chunk"], 2);
+    assert_eq!(state["identity"]["source"], serde_json::json!(sha2::Sha256::digest(&source).to_vec()));
+    let index = String::from_utf8(studio.bytes("hand-frames/frames.tsv")).unwrap();
+    assert_eq!(index.lines().filter(|line| line.ends_with("\tfinal")).count(), 1, "{index}");
+    assert!(index.contains("\t2\tchunk"), "{index}");
+}
+
+#[test]
 fn strict_batch_recovers_a_live_checkpoint_and_tail_without_full_replay() {
     let mut studio = Studio::new("strict-live-recovery", false);
+    studio.name = "sketch";
     studio.start();
     studio.ok(&["do", CHUNKS[0]]);
     for n in 1..=9 { studio.ok(&["do", &format!("counter = {n}")]); }

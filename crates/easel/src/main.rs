@@ -2056,7 +2056,11 @@ impl Server {
                 let live = self.save_live()?;
                 if let Some(pool) = &self.display { pool.flush()?; }
                 if self.hand_frames.as_ref().is_some_and(|r| r.err.is_some()) {
-                    self.start_hand_frames(Some(self.s.log.len()))?;
+                    frames::retry(&mut self.hand_frames)?;
+                    if self.hand_frames.as_ref().is_some_and(|r| r.chunk != self.s.log.len()) {
+                        let identity = self.replay.identity(&self.s.program(&self.name), self.s.st.borrow().width)?;
+                        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), self.s.log.len(), &identity))?;
+                    }
                 }
                 frames::with(&mut self.hand_frames, || {
                     if let Some(c) = self.s.canvas() { frames::finish(&c); }

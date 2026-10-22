@@ -162,7 +162,8 @@ def render(config, outcome, work):
     output = work / "painting.partial.mp4"
     command([REPO / "scripts/replay_clip", saved / "committed.lua", output,
              "--reuse", "--frames-dir", frames, "--pace", "dynamic", "--length", "20",
-             "--fps", "30", "--final-first", "0.5", "--open-hold", "0", "--light", "gallery"])
+             "--fps", "30", "--final-first", "0.5", "--open-hold", "0", "--max-hold", "16.5",
+             "--light", "gallery"])
     probe = verify_video(output)
     output.replace(work / "painting.mp4")
     write_json(work / "video.json", probe)
@@ -190,23 +191,19 @@ class OBS:
 
 async def stop_assigned(obs, stream, studio):
     scene = stream["scene"]
-    if (await obs.request("GetCurrentProgramScene"))["currentProgramSceneName"] != scene:
-        return False
-    items = (await obs.request("GetSceneItemList", {"sceneName": scene}))["sceneItems"]
-    visible = [item for item in items if item["sceneItemEnabled"]]
-    if len(visible) != 1 or visible[0]["sourceName"] != stream["input"]:
-        return False
-    settings = await obs.request("GetInputSettings", {"inputName": stream["input"]})
     expected = stream["url_template"].replace("{painting}", studio.removeprefix("paint-studio-"))
-    if settings.get("inputKind") != "browser_source" or settings["inputSettings"].get("url") != expected:
-        return False
-    status = await obs.request("GetStreamStatus")
-    if not status["outputActive"]:
-        return True
-    if (await obs.request("GetCurrentProgramScene"))["currentProgramSceneName"] != scene:
-        return False
-    if (await obs.request("GetInputSettings", {"inputName": stream["input"]}))["inputSettings"].get("url") != expected:
-        return False
+    for check in range(2):
+        if (await obs.request("GetCurrentProgramScene"))["currentProgramSceneName"] != scene:
+            return False
+        items = (await obs.request("GetSceneItemList", {"sceneName": scene}))["sceneItems"]
+        visible = [item for item in items if item["sceneItemEnabled"]]
+        if len(visible) != 1 or visible[0]["sourceName"] != stream["input"]:
+            return False
+        settings = await obs.request("GetInputSettings", {"inputName": stream["input"]})
+        if settings.get("inputKind") != "browser_source" or settings["inputSettings"].get("url") != expected:
+            return False
+        if check == 0 and not (await obs.request("GetStreamStatus"))["outputActive"]:
+            return True
     await obs.request("StopStream")
     if (await obs.request("GetStreamStatus"))["outputActive"]:
         raise RuntimeError("OBS has not completed the stream stop")

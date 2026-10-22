@@ -112,6 +112,7 @@ class FakeOBS:
         self.painting, self.scene, self.extra = painting, scene, extra
         self.calls = []
         self.active = True
+        self.input_kind = "browser_source"
 
     async def request(self, kind, data=None):
         self.calls.append(kind)
@@ -126,7 +127,7 @@ class FakeOBS:
                 items.append({"sourceName": "another painter", "sceneItemEnabled": True})
             return {"sceneItems": items}
         if kind == "GetInputSettings":
-            return {"inputKind": "browser_source", "inputSettings": {
+            return {"inputKind": self.input_kind, "inputSettings": {
                 "url": STREAM["url_template"].replace("{painting}", self.painting)}}
         if kind == "GetStreamStatus":
             return {"outputActive": self.active}
@@ -159,6 +160,30 @@ class OBSTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await F.stop_assigned(obs, STREAM, "paint-studio-abc123"))
         self.assertNotIn("StopStream", obs.calls)
 
+    async def test_ownership_changes_during_check_do_not_stop(self):
+        for field, value in (("extra", True), ("input_kind", "image_source"),
+                             ("scene", "Other")):
+            with self.subTest(field=field):
+                obs = FakeOBS()
+                original = obs.request
+
+                async def reassign(kind, data=None):
+                    reply = await original(kind, data)
+                    if kind == "GetStreamStatus":
+                        setattr(obs, field, value)
+                    return reply
+
+                obs.request = reassign
+                self.assertFalse(await F.stop_assigned(obs, STREAM, "paint-studio-abc123"))
+                self.assertNotIn("StopStream", obs.calls)
+                self.assertTrue(obs.active)
+
+    async def test_a_non_browser_input_does_not_stop(self):
+        obs = FakeOBS()
+        obs.input_kind = "image_source"
+        self.assertFalse(await F.stop_assigned(obs, STREAM, "paint-studio-abc123"))
+        self.assertNotIn("StopStream", obs.calls)
+
     async def test_real_websocket_auth_and_stop_against_fake_obs(self):
         import websockets
 
@@ -187,6 +212,53 @@ class OBSTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FrameTests(unittest.TestCase):
+    def test_sparse_saved_recording_renders_the_full_clip_without_replay(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp:
+            studio = Path(temp) / "studio"
+            saved = studio / "out/easel/painting"
+            source = saved / "hand-frames"
+            source.mkdir(parents=True)
+            (saved / "frames").mkdir()
+            text = "".join(f"--@ chunk {chunk}\npaint()\n" for chunk in range(1, 7))
+            (saved / "committed.lua").write_text(text)
+            (saved / "live.txt").write_text("chunks 6\n")
+            (saved / "frames/index.tsv").write_text(
+                "chunk\thand_s\tpainted\n" + "".join(
+                    f"{chunk}\t{(chunk - 1) * 60}\t{int(chunk > 1)}\n" for chunk in range(1, 7)))
+            (source / "frames.tsv").write_text(
+                "file\thand_secs\tticks\tchunks_done\tkind\n" + "".join(
+                    f"{chunk}.png\t{(chunk - 1) * 60}\t0\t{chunk}\t{'final' if chunk == 6 else 'chunk'}\n"
+                    for chunk in range(1, 7)))
+            state = {"light": [115.0, 55.0], "identity": {"source": list(hashlib.sha256(text.encode()).digest())}}
+            (source / "frames.states").write_text(json.dumps(state) + "\n")
+            for chunk, color in enumerate(("white", "blue", "green", "yellow", "cyan", "red"), 1):
+                Image.new("RGB", (32, 24), color).save(source / f"{chunk}.png")
+            (saved / "live.png").write_bytes((source / "6.png").read_bytes())
+            before = {path.relative_to(saved): path.read_bytes() for path in saved.rglob("*") if path.is_file()}
+            work = Path(temp) / "work"
+
+            F.render({"studio": str(studio)}, {"status": "finished"}, work)
+
+            video = work / "painting.mp4"
+            self.assertEqual(F.read_json(work / "video.json"), F.verify_video(video))
+            self.assertFalse((work / "painting.partial.mp4").exists())
+            decoded = subprocess.run(
+                ["ffmpeg", "-v", "error", "-threads", "1", "-i", str(video), "-filter_threads", "1",
+                 "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-threads", "1", "-"],
+                capture_output=True, check=True).stdout
+            pixels = [decoded[index:index + 3] for index in range(0, len(decoded), 3)]
+            self.assertEqual(len(pixels), 600)
+            final = pixels[-1]
+            self.assertGreater(final[0], 240)
+            self.assertLess(max(final[1:]), 10)
+            self.assertEqual(pixels[:15], [final] * 15)
+            self.assertEqual(pixels[510:], [final] * 90)
+            self.assertTrue(all(pixel != final and min(pixel) < 240 for pixel in pixels[15:510]))
+            self.assertEqual(before, {path.relative_to(saved): path.read_bytes()
+                                      for path in saved.rglob("*") if path.is_file()})
+
     def test_failed_live_save_is_retried_without_opening_a_painter(self):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)

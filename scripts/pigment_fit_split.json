@@ -1,20 +1,23 @@
 {
   "round": 5,
+  "revision": 2,
   "declared_before_additional_fits": true,
-  "reason": "Add one cochineal mixture for each extender to constrain its behavior in mixtures. Keep the corresponding cobalt mixtures as tests of transfer to another paint. No Prussian or lead-white/chrome test sample moves to fit.",
+  "reason": "Add one cochineal mixture for each extender, keeping its cobalt mixture as a transfer test. Replace the inconsistent Prussian pure-film anchor 13A with the 99% Prussian mixture 13F: its 650 nm reflectance is 0.0437 versus pure 13A's 0.0564, although both are opaque. Keep 13C and 13G as Prussian tests. No lead-white/chrome test sample moves to fit.",
   "additional_fit_samples": {
     "BariumSulphate": ["16D"],
-    "CalciumCarbonate": ["17D"]
+    "CalciumCarbonate": ["17D"],
+    "PrussianBlue": ["13F"]
   },
-  "moved_from_round3_test": ["16D", "17D"],
+  "pure_samples_reported_apart": ["13A"],
+  "moved_from_round3_test": ["13F", "16D", "17D"],
   "round3_test_set": [
     "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
     "13C", "13F", "13G", "14C", "16D", "16F", "17D", "17F"
   ],
   "test_set": [
     "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
-    "13C", "13F", "13G", "14C", "16F", "17F"
+    "13C", "13G", "14C", "16F", "17F"
   ],
   "prior_selection_exposure": ["08E"],
-  "reporting": "Report both the complete old 17-sample test and the revised 15-sample test. Mark 16D and 17D as fitted, not held out. The original eleven fit samples and five selection-touched samples retain their labels."
+  "reporting": "Report both the complete old 17-sample test and the revised 14-sample test. Mark 13F, 16D and 17D as fitted, not held out. Report unused pure 13A apart. The original eleven fit samples and five selection-touched samples retain their labels."
 }

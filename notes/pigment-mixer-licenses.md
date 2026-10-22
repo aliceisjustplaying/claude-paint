@@ -5,8 +5,9 @@ the two MIT workspace packages, and no noncommercial dependency. Mixbox 2.0.0
 (CC-BY-NC-4.0) and its sole additional dependency are removed from both Cargo
 locks and the paint manifest. No optional or legacy mixer remains.
 
-The independent implementation, synthetic primary spectra and generated
-tables are project MIT. The paper supplies the mathematical method, not code,
+The independent implementation, the K/S derivation and the generated
+tables are project MIT; the measured paint data they derive from is CC0
+(Revigo, below). The paper supplies the mathematical method, not code,
 coefficients or tables. No restricted implementation or data was inspected,
 copied or fitted against. Old/new outputs are comparison evidence only, not
 generator inputs. The existing spectral.js D65/CIE conversion data remains
@@ -22,7 +23,8 @@ The paper is linked, not redistributed.
 | Component | License | Where | Action |
 |---|---|---|---|
 | Removed Mixbox 2.0.0 | CC-BY-NC-4.0 | Initial root Cargo resolution and old third-party notice | Completely removed, with no optional feature, copied source, LUT, coefficients or port. Historical wet checkpoints are refused rather than reinterpreted. |
-| Independent mixer, primary spectra and 33³ tables | Project MIT | `crates/paint/src/mixer.rs`, `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | Independently authored synthetic curves and K/S fit; reproduce using the pinned generator. No measured-dataset or paper-image import. |
+| Independent mixer, derived K/S and 33³ tables | Project MIT | `crates/paint/src/mixer.rs`, `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | K/S derived from the CC0 Revigo measurements below; reproduce using the pinned generator. No paper-image import. |
+| Revigo paint reflectance data | CC0 1.0 | `scripts/pigment_data/revigo`; upstream `fligt/revigo-spectra` at `f09ed72` | Vendored unchanged with its CC0 text and a provenance README; cite Geldof et al. 2018 (doi:10.1186/s40494-018-0181-6, CC BY 4.0) in publications. |
 | spectral.js 3.0 Rust port and D65/CIE tables | MIT | `crates/paint/src/spectral.rs`; upstream `rvanwijnen/spectral.js` at `bb2b05c9d1e65ae824d47e3b1cc17ea32c8ee68f` | Preserve Ronald van Wijnen’s full MIT notice in `THIRD_PARTY_NOTICES.md`. No separate FORS database imported. |
 | Root Rust dependency closure | Commercial-use MIT/Apache/BSD/Zlib/Unicode or permissive alternatives | Root and paint Cargo locks; 85-package final Cargo metadata | Exact expressions and actions appear below and in the JSON inventory. Choose the permissive alternative where available; keep notices. |
 | NumPy 2.4.2 and SciPy 1.17.1 | BSD-family and bundled-library terms | Generator PEP 723 pins and installed wheel licenses | Build-only; no Python library is linked into the engine or embedded in generated tables. If distributing the tool environment, preserve full wheel notices including GCC runtime’s GPL exception and libquadmath’s LGPL terms. |

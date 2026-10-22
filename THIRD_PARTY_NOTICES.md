@@ -48,12 +48,29 @@ residual method from Šárka Sochorová and Ondřej Jamriška, "Practical
 Pigment Mixing for Digital Painting", ACM Transactions on Graphics
 40(6):234 (2021), https://doi.org/10.1145/3478513.3480549.
 
-The implementation, synthetic primary pigments, K/S coefficients and
-generated tables are original project work under the root MIT license.
-They were not copied from the authors' library, lookup tables or fitted
-coefficients. The table generator uses the D65/CIE color conversion data
-from the MIT spectral.js port credited above. Scientific attribution is
-not a redistribution of the paper or a claim of patent clearance.
+The implementation, the derived K/S coefficients and the generated tables
+are original project work under the root MIT license. They were not
+copied from the authors' library, lookup tables or fitted coefficients.
+The table generator uses the D65/CIE color conversion data from the MIT
+spectral.js port credited above and the measured paint reflectance data
+credited below. Scientific attribution is not a redistribution of the
+paper or a claim of patent clearance.
+
+## Revigo paint reflectance data
+
+`scripts/pigment_data/revigo` holds, unchanged, the two data files of
+https://github.com/fligt/revigo-spectra (commit f09ed72): reflectance
+spectra of the oil paints reconstructed for the Revigo project by the
+Cultural Heritage Agency of the Netherlands (RCE), from which
+`scripts/build_pigment_tables.py` derives the mixer's primaries. The
+repository dedicates its data and code to the public domain under CC0 1.0
+Universal (https://creativecommons.org/publicdomain/zero/1.0/; the full
+text is in `scripts/pigment_data/revigo/LICENSE`) and asks that
+publications cite Geldof, Proaño Gaibor, Ligterink, Hendriks and Kirchner,
+"Reconstructing Van Gogh's palette to determine the optical
+characteristics of his paints", Heritage Science 6:17 (2018),
+https://doi.org/10.1186/s40494-018-0181-6 (CC BY 4.0), which describes
+the measurements. The article is cited, not redistributed.
 
 ## Other dependency and asset licenses
 

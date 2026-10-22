@@ -1,7 +1,9 @@
 //! Independent pigment mixing from Sochorová and Jamriška (2021), equations
 //! 1–14: four primary concentrations and an additive linear RGB residual.
-//! The synthetic primaries, their K/S data and both tables are original. Only
-//! the MIT spectral.js D65/CIE conversion from `spectral.rs` is reused.
+//! The primaries' K/S data are derived from measured reflectance of real oil
+//! paints (CC0 Revigo data, `scripts/pigment_data/revigo`); both tables are
+//! original. Only the MIT spectral.js D65/CIE conversion from `spectral.rs` is
+//! reused.
 //! Regenerate with `uv run --script scripts/build_pigment_tables.py`.
 
 use crate::color::{Rgb, linear_to_srgb};
@@ -36,7 +38,7 @@ pub fn identity() -> u64 {
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent7/km-power/additive-linear-rgb/sqrt-stick/concentration-trilinear/v1");
+        hash.update(b"Stillwet mixer/latent7/km-linear/additive-linear-rgb/sqrt-stick/concentration-trilinear/v2");
         hash.update(FORWARD);
         hash.update(INVERSE);
         u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
@@ -218,6 +220,13 @@ mod tests {
         }
     }
 
+    // A 1% trace may tint white as much as the strongest real tinter in the
+    // measured data does, and no more. Revigo sample 13G, 1.1% Prussian blue
+    // in zinc white, sits 0.302 from the pure zinc white (07A) in OKLab, both
+    // measured over the white field and shown specular-excluded
+    // (scripts/pigment_data/revigo, Geldof et al. 2018). The bound is that
+    // value plus a margin. With the current tables the strongest 1% trace is
+    // bone black at 0.122, then ultramarine blue 0.112 and Prussian blue 0.074.
     #[test]
     fn catalog_traces_do_not_overpower_white() {
         let palette = crate::Palette::new("trace study", crate::palette::catalog());
@@ -226,7 +235,7 @@ mod tests {
         for tube in &palette.tubes {
             let tint = to_oklab(lerp(&white, &tube.color, 0.01));
             let delta = (0..3).map(|k| (tint[k] - start[k]).powi(2)).sum::<f32>().sqrt();
-            assert!(delta <= 0.01, "1% {} overpowered white: {delta}", tube.name);
+            assert!(delta <= 0.33, "1% {} overpowered white: {delta}", tube.name);
         }
     }
 }

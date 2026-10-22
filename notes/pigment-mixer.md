@@ -10,33 +10,43 @@ The implementation follows Sochorová and Jamriška, *Practical Pigment Mixing
 for Digital Painting* (2021), equations 1–14:
 https://doi.org/10.1145/3478513.3480549.
 
-Four synthetic primary pigments contribute absorption K and scattering S
-at 38 wavelengths, 380–750 nm. For concentrations c, the mixture uses
-K = ΣcᵢKᵢ and S = ΣcᵢSᵢ, then the infinite-thickness Kubelka–Munk
-reflectance 1 / (1 + K/S + √((K/S)(K/S + 2))). D65/CIE integration gives
-linear RGB. The color-matching matrix comes from the existing MIT
-`spectral.rs` port, credited in `THIRD_PARTY_NOTICES.md`.
+Four real oil paints are the primaries: Prussian blue, chrome yellow
+lemon, eosin lake (geranium lake) and zinc white, from the Revigo
+project's reconstruction of Van Gogh's palette (Geldof, Proaño Gaibor,
+Ligterink, Hendriks and Kirchner 2018, https://doi.org/10.1186/s40494-018-0181-6).
+Their reflectance measurements are published under CC0 at
+https://github.com/fligt/revigo-spectra and vendored unchanged in
+`scripts/pigment_data/revigo` (credited in `THIRD_PARTY_NOTICES.md`).
+Each paint was drawn down 100 µm thick over the black and the white field
+of an opacity chart, pure and mixed by weight with zinc white and bone
+black, and measured 400–700 nm with specular included. The generator
+solves, per wavelength, the non-hiding Kubelka–Munk film equation with the
+source's Saunderson constants (k₁ 0.04, k₂ 0.49) for each paint's
+absorption K and scattering S, zinc white and bone black first from their
+own series, then each chromatic from its pure film, tints and tones. That
+is the paper's own method; the fit residuals per sample are recorded in
+`primaries.json`. The data's 400–700 nm grid is extended to the
+conversion's 380–750 nm by holding the end values.
 
-The primary reflectance curves and scattering functions are independently
-authored, not measured pigment data, and are closed-form curves written
-out in the generator: blue is a Gaussian band centered at 450 nm with a
-narrower long-wavelength side, yellow a single sigmoid edge at 489 nm,
-magenta a violet step plus a red edge, and white a smooth warm ramp near
-the catalog's lead white (#efe9dc). The white curve was fitted to 1.004
-times that catalog RGB, not to old-engine output. Lead white still carries
-an additive residual through the interpolated inverse; neither it nor
-its tints are assumed residual-free.
-The blue and magenta are dark, weakly scattering pigments, so dark tube
-colors can be represented mostly by pigment rather than large negative
-RGB corrections. Scattering is wavelength-independent for every primary;
-white scatters more strongly than the chromatics.
-These are the mixer's virtual primaries, not the palette's separate tube
+For concentrations c, the mixture uses K = ΣcᵢKᵢ and S = ΣcᵢSᵢ (plain
+linear two-constant KM on weight shares; there is no concentration law),
+then the infinite-thickness reflectance 1 / (1 + K/S + √((K/S)(K/S + 2)))
+shown specular-excluded through the same Saunderson constants, the matte
+paint colour the catalog's masstones describe. D65/CIE integration gives
+linear RGB; the color-matching matrix comes from the existing MIT
+`spectral.rs` port. Both K and S are wavelength-dependent as measured:
+the lake and Prussian blue scatter almost nothing, chrome yellow and zinc
+white scatter strongly, and Prussian blue's absorption is about eighty times
+the lake's at 550 nm, so a trace of it tints white strongly, as the
+measured 1.1 % tint does. Zinc white is the white because the source used
+it as the base of every tint and its series fits best (lead white's three
+samples are inconsistent under the 100 µm assumption, fit rms 0.05 over
+black). These are the mixer's primaries, not the palette's separate tube
 hiding, tinting-strength or scattering parameters. Those rendering
 properties are unchanged.
 
-The generator does not bend the primary curves to fit the display gamut
-(that bending made the earlier curves spiky and pulled light blue tints
-toward violet). The forward table is the KM mixture clipped to the sRGB
+Nothing in the basis is fitted to a look or to the display gamut. The
+forward table is the KM mixture clipped to the sRGB
 cube. The inverse solves a constrained least-squares fit of that clipped
 output, four nonnegative concentrations summing to one, plus 0.05 times
 the raw RGB fit error. This regularizer can trade clipped fit error for
@@ -56,7 +66,7 @@ a color error in an encode/decode round trip.
 
 Mixing already encoded latents is linear. Decoding to RGB and encoding
 again can change the recipe and later mixing behavior, especially for
-colors outside the virtual pigments' gamut. The existing palette/load and
+colors outside the primaries' gamut. The existing palette/load and
 drying paths retain that approximation. Neither the coarse inverse nor
 the surrogate fit is a claim of measured physical pigment accuracy.
 
@@ -66,15 +76,16 @@ the surrogate fit is a claim of measured physical pigment accuracy.
 tables and `crates/paint/src/mixer/primaries.json`. The script pins its
 NumPy/SciPy build dependencies; neither is an engine runtime dependency.
 One BLAS thread fixes the optimizer's reduction order for reproduction.
-The JSON records the reflectance and K/S arrays, wavelength grid, the
-clipped share of the forward grid and table SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
+The JSON records the derived reflectance and K/S arrays, the samples each
+fit used and their residuals, the wavelength grid, the near-white node
+count, the clipped share of the forward grid and table SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
 are inputs to this generator.
 
-This round was checked against the unchanged independent mixer guards,
-actual table/runtime diagnostics and the main-vs-new sheet by eye. The
-tested power and blue-width sweeps show local tradeoffs, not a proof that
-brighter greens or stronger pale blue tints are impossible. Passing the
-guards does not close those remaining visual differences.
+This round was checked against the independent mixer guards (the trace
+guard's bound now follows the measured strongest tinter), actual
+table/runtime diagnostics, a held-out comparison against measured paint
+mixtures and the main-vs-new sheet by eye. Passing the guards does not
+close remaining visual differences.
 
 The implementation is project MIT code. The method's paper is cited, not
 redistributed. The public patent-record search found no matching pigment

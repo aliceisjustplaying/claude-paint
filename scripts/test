@@ -158,6 +158,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask \
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  pass_feedback::tests::selection_notices_only_change_feedback \
+  pass_feedback::tests::pile_shares_keep_the_given_parts_and_paint \
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \

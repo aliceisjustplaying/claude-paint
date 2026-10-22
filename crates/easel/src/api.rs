@@ -34,6 +34,8 @@ mod draw_soak;
 pub const FIELD_STEP: f32 = 2.0;
 
 pub struct Studio {
+    #[cfg(test)]
+    pub(crate) pass_feedback_disabled: bool,
     pub width: usize,
     /// The paper-and-pastel switch (session.rs `PAPER_MARK`): `canvas{paper=}`.
     pub paper: bool,
@@ -79,7 +81,11 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
+        Studio {
+            #[cfg(test)]
+            pass_feedback_disabled: false,
+            width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false
+        }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
@@ -903,10 +909,11 @@ impl PileU {
             None => self.clone(),
         }
     }
-    /// What `print(p)` shows: `pile(lead white 6, smalt 1; medium 0.2)`,
+    /// What `print(p)` shows: `pile(lead white 6 (86%), smalt 1 (14%); medium 0.2)`,
     /// and `, thinner 0.3` after the medium when the pile is thinned.
     pub fn recipe(&self) -> String {
-        let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {}", fmt_num(*k))).collect();
+        let total = self.parts.iter().map(|(_, k)| *k as f64).sum::<f64>();
+        let parts: Vec<String> = self.parts.iter().map(|(n, k)| format!("{n} {} ({:.0}%)", fmt_num(*k), 100.0 * *k as f64 / total)).collect();
         let mut tail = if self.medium < 0.0 { format!("blotted {}", fmt_num(-self.medium)) } else { format!("medium {}", fmt_num(self.medium)) };
         if let Some(t) = self.thinner.filter(|&t| t > 0.0) {
             tail += &format!(", thinner {}", fmt_num(t));
@@ -1645,9 +1652,14 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         sources.extend(second_pile);
         h.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), sources, h.mix_jitter));
     }
+    let (options, feedback_clip) = feedback_options(&o)?;
     // (dipping into the piles on the palette)
     time::verb(st, Verb::Pass, |s| {
-        s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
+        let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+        let before = c.tally();
+        c.work_with(&mut s.hand.piles, &mask, &h, seed);
+        let made = c.tally().since(&before);
+        crate::pass_feedback::pass(s, &region, &mask, feedback_clip.as_deref(), &options, if preset == Some("blend") { "blend" } else { "work" }, made.strokes + made.touches);
         if h.dip_with.is_some() {
             s.board = board.lock().unwrap().clone();
         }
@@ -1728,6 +1740,21 @@ impl FromLuaValue for f32 {
     }
 }
 
+fn feedback_options(o: &Table) -> Result<(String, Option<Rc<Mask>>)> {
+    let mut names = Vec::new();
+    let mut clip = None;
+    for key in ["visible", "behind", "at", "clip"] {
+        let v = o.raw_get::<Value>(key)?;
+        if !v.is_nil() && (key != "clip" || matches!(v, Value::UserData(_))) {
+            names.push(format!("{key}="));
+            if key == "clip" {
+                clip = Some(mask_of(&v)?);
+            }
+        }
+    }
+    Ok((names.join("/"), clip))
+}
+
 /// `clip=` on a pass: true, false, or a mask the strokes are clipped to,
 /// soft edges and all (the deposit is scaled by the mask's value), combined
 /// with any limit from `behind=`/`at=`.
@@ -1760,6 +1787,7 @@ const STIPPLE_KEYS: &[&str] = &[
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     check_keys(&o, &crate::legacy::stipple_keys(st, STIPPLE_KEYS), "stipple")?;
+    let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
@@ -1824,8 +1852,13 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
             sp.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), vec![pile], sp.mix_jitter));
         }
     }
+    let (options, feedback_clip) = feedback_options(&o)?;
     time::verb(st, Verb::Pass, |s| {
-        s.canvas.as_mut().ok_or_else(no_canvas)?.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+        let before = c.tally();
+        c.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        let made = c.tally().since(&before);
+        crate::pass_feedback::pass(s, &region, &mask, feedback_clip.as_deref(), &options, "stipple", made.strokes + made.touches);
         if sp.dip_with.is_some() {
             s.board = board.lock().unwrap().clone();
         }

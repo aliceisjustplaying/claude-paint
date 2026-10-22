@@ -142,6 +142,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \
+  session::tests::rag_preparation_keeps_hand_time_without_mark_effects \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
   check::tests::surface_uses_absolute_and_relative_tolerance \

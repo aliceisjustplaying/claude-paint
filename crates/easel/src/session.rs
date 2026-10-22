@@ -1523,6 +1523,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rag_preparation_keeps_hand_time_without_mark_effects() {
+        let mut s = Session::new(32).unwrap();
+        s.run(r#"canvas{size=200,aspect=1.25,linen=15,raw="linen"}"#).unwrap();
+        for (src, secs) in [
+            ("r=rag()", paint::rag::pace::FRESH),
+            ("r:dip()", paint::rag::pace::DIP),
+            ("r:refold()", paint::rag::pace::REFOLD),
+        ] {
+            let before = s.canvas().unwrap().clock();
+            let tally = s.canvas().unwrap().tally().secs;
+            s.run(src).unwrap();
+            assert_eq!(s.log.last().unwrap().mark_effects, 0, "{src}");
+            assert_eq!(s.canvas().unwrap().tally().secs - tally, secs, "{src}");
+            assert!((s.canvas().unwrap().clock() - before - secs / 60.0).abs() < 1e-7, "{src}");
+        }
+        s.run("r:blot(400,300); r:wipe({{100,300},{900,300}})").unwrap();
+        assert_eq!(s.log.last().unwrap().mark_effects, 2);
+    }
+
+    #[test]
     fn accepted_chunks_count_executed_mark_effects_not_lua_names() {
         let mut s = Session::new(64).unwrap().with_paper(true).unwrap();
         for (src, effects) in [

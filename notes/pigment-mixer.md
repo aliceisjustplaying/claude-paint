@@ -57,6 +57,24 @@ the built tables on the test half, which no choice ever read, with main's
 mixer on the same inputs for reference, and reports the selection half
 separately.
 
+The palette's tinting strengths are the one free parameter calibrated to
+the measurements. `scripts/pigment_strength_fit.py` fixes its own split
+first: the fit set is each measured paint's zinc-white tint nearest 10 %
+(the usual tinting-strength ratio) and, for lead white, its 10 % bone
+black tone; the test set is every other measured two-paint mixture (the
+50 % and 1 % tints, every lead-white and extender mixture), minus the
+primaries' own ladders and the mixtures the primary selection read. For
+each paint the strength is the weight factor that makes the tube's latent,
+averaged with the white's as `Palette::pile` does, land nearest the
+measured fit tint; the same fit with the catalog tube's own masstone in
+place of the measured one gives the fifteen catalog tubes with a measured
+counterpart their strengths (`scripts/pigment_strengths.json`). A
+strength scales how much of a tube's recipe enters a mix; it cannot change
+the recipe, so a tube whose masstone RGB encodes as black (cochineal,
+Prussian blue) tints in the recipe's hue, not the paint's, whatever its
+strength. `scripts/pigment_mixer_score.py` reports the test, fit and
+selection-touched sets apart.
+
 Nothing in the basis is fitted to a look or to the display gamut. The
 forward table is the KM mixture clipped to the sRGB
 cube. The inverse solves a constrained least-squares fit of that clipped

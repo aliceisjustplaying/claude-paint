@@ -18,7 +18,7 @@
 //!
 //! The reader also accepts version 7 (`PAINTCK7`), the engine-1 layout before
 //! edition numbers: it ends after the hand-time ledger, without an engine word.
-//! New engine-1 writes remain version 8; no historical bytes are rewritten on read.
+//! Engine-1 writes retain base layout 8 inside the current envelope.
 //! New writes use version 19 (`PAINTC19`): after the header, three u64 words
 //! identify the pigment mixer (1), the base layout below and whether tube
 //! parts follow (0 or 1). This identity is independent of the engine number.
@@ -27,8 +27,7 @@
 //!
 //! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
-//! (below); files of any other version are refused (re-run to checkpoint
-//! again). Version 9 is version 8's bytes after the magic, then the
+//! (below). Version 9 is version 8's bytes after the magic, then the
 //! thinner's section: the solvent in the open film, one f32 (µm) per buffer
 //! pixel, row major, as the file's last 4 × pixels bytes (`crate::thinner`;
 //! that it comes last is part of version 9; version 10 adds its section
@@ -38,8 +37,8 @@
 //! (`PAINTC11`) is engine 4's and later: version 9 with two more properties
 //! (solvent and oil) to each pixel of wet paint and, after the engine version and before
 //! the solvent (still last), the surface's gloss and the ground's remaining
-//! absorbency, one f32 each per pixel. An older engine's canvas is written
-//! as it always was. Version 12 combines version 11 with the raw canvas's
+//! absorbency, one f32 each per pixel. An older engine retains its base
+//! layout inside the current envelope. Version 12 combines version 11 with the raw canvas's
 //! soak section after the solvent. After the header the
 //! writer stores, in order: the frame and crop window, the scale and mm per
 //! unit, the linen (if any), the surface generation, the stroke counter and

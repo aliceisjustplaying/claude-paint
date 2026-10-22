@@ -4,32 +4,35 @@
 Audited October 22, 2026. This record covers [materials](keegan_materials.md),
 [process](keegan_process.md) and the completed [31-work catalog](keegan_paintings.md),
 including its three also-viewed works. It does not approve painter instructions,
-a tube box, engine changes or a deployment. Only this review file was changed.
-Findings below are open for the integrating researcher to reconcile; the drafts
-have not been corrected by this audit.
+a tube box, engine changes or a deployment. Only this review file was changed by
+the auditor. The integrating researcher corrected the three drafts separately.
+All 27 findings are now **resolved**, following an independent comparison of the
+original drafts at `5face88` with the corrected drafts at `cbfd47c`. The original
+findings are preserved below, followed by a verified disposition for every finding.
 
-The documentary workflow is well supported. The main problems are overbroad
+The documentary workflow is well supported. The original problems were overbroad
 negative claims, dates promoted beyond what their sources establish, two incorrect
-visual descriptions and several evidence/citation qualifications. None establishes
-Keegan's actual pigments or his working method in 2026.
+visual descriptions and several evidence and citation qualifications. The verified
+corrections address those problems without establishing Keegan's actual pigments
+or his working method in 2026.
 
 ## Audit method and limits
 
 I independently requested every web source cited in the three drafts, rather than
 treating the researchers' saved extracts as verification. For the legacy pages I
-read the complete article/caption text from fresh HTML, including all of Interview
+read the complete article or caption text from fresh HTML, including all of Interview
 2. For Tar Valon I read the page, its information page and the full `action=raw`
 wikitext. For the modern painting portfolio I read all 18 `data-title` and
 `data-description` HTML attributes: 17 say oil on canvas and one says oil on panel.
-Visible-text-only extraction is insufficient for that page.
+Extracting only the visible text is not enough for that page.
 
-Some direct HTTP requests failed or returned an interstitial. A separate readable
-fetch opened the actual cited record's text in those cases; the ledger distinguishes
-those routes. A 200 status alone was not counted as reading: BCIN's direct response
-was a CrowdSec check, not the abstract. Katlan 1994 initially arrived gzip-compressed;
-I decompressed it before reading. The large Rigney finding aid and Black Gate
-article were checked in their relevant sections, not represented here as full-text
-readings of everything they contain. No search snippet is the sole evidence for a
+Some direct HTTP requests failed or returned an interstitial. In those cases a separate
+readable fetch opened the cited record's text. The ledger records which route was
+used. A 200 status alone was not counted as reading: BCIN's direct response
+was a CrowdSec check, not the abstract. Katlan 1994 initially arrived gzip-compressed.
+I decompressed it before reading. Only the relevant sections of the large Rigney
+finding aid and the Black Gate article were checked. They are not presented here as
+full readings of everything they contain. No search snippet is the sole evidence for a
 pass below.
 
 I opened and visually inspected every artwork for which these drafts make their
@@ -49,7 +52,7 @@ labels and catalog date/size conventions were compared with
 [Courbet catalog](courbet_paintings.md). Their historical sources were not themselves
 the subject of this audit. The preliminary parent-review concerns were also checked.
 
-## Findings
+## Original findings
 
 ### Materials
 
@@ -306,6 +309,54 @@ mapping, with usable links, including [Run, You Coward!](http://www.keeganprints
 Modern paintings can cite their named CK-PAINT caption/image. Keep all conclusions
 under this key labeled inferred.
 
+## Verified dispositions
+
+Rechecked October 22, 2026 against the complete three-file correction diff
+`5face88..cbfd47c` and the current file text, using the primary-source and image
+evidence recorded above. The working tree had no additional draft edits. All 27
+findings were checked individually; no remaining mismatch with their requested
+corrections was found. Source titles and quotation spellings were not changed by
+this reconciliation. Resolution means the documentation now matches the available
+evidence, not that an explicitly unknown historical fact has become known.
+
+| Finding | Status | Correction independently verified |
+|---|---|---|
+| F01 | **Resolved** | Materials §4 limits the unspecified-oil statement to oil-work captions; gouache and watercolor remain separately documented. |
+| F02 | **Resolved** | Materials Summary now specifies all 18 works in the modern site's Paintings portfolio, not every work on the site. |
+| F03 | **Resolved** | Materials §2 separates the underpainting caption from the monochrome oil-sketch offer and explicitly leaves the underpainting's binder, pigment and color unknown. |
+| F04 | **Resolved** | Materials §7 now describes documented reproduction, attributes the scan note to its sale page and says archival inks/paper do not identify the printing technology or establish all production methods. The dated 2001 virtual-art statement remains separate. |
+| F05 | **Resolved** | Materials §8 replaces the blanket post-2013 unknown with unknown current methods/creation dates, mentions the 2022 collector listing and 2026 announcement and links to process §6 without treating either as a painting date. |
+| F06 | **Resolved** | Materials §1 labels the Desert of Souls painting date unknown and distinguishes the studio's 2010 cover-list year from February 2011 publication. |
+| F07 | **Resolved** | Materials §7 identifies Head of Zeus as commissioner, dates the report April 9, 2013 and explicitly says the commission date is not stated. Its support table also labels April 2013 as a report. |
+| F08 | **Resolved** | The materials §1 modern-portfolio row adds KP-OTHER and KP-UNPUB for the five older dates, marks those values ©2002/©2004 and retains CK-PAINT for medium/size. |
+| F09 | **Resolved** | Materials §4 now limits acrylic absence to the work captions read for the note, while preserving the documented commission option. |
+| F10 | **Resolved** | Materials §1 limits Fenris's absence to the legacy galleries/lists read and separately attributes the September 15, 2004 update date to the old home page. |
+| F11 | **Resolved** | Process Identity/Home and the catalog opening now attribute Atlanta to studio biographies. Process Home explicitly leaves 2026 residence unverified and separately attributes Heather's approval quotation to the undated artist interview. |
+| F12 | **Resolved** | Process Bottom line 7 now describes continuing public visibility, not dates of new paintings; §6 explicitly labels 2021–22 as collector upload dates, not creation dates. |
+| F13 | **Resolved** | Process §3 separates Gideon's Wall from The Valley of Shadows and explicitly gives the latter's 2003 studio date versus 2004 ISFDB date as a disagreement. |
+| F14 | **Resolved** | Process Sources COFC now specifies Oversize Paper Folder 10 and box 64/folder 6, preserves 2001/undated versus 2003 and says the first description does not name its illustrator and the papers were not seen. |
+| F15 | **Resolved** | Process §5.3 now reports Keegan's account of newly available translations prompting his research and explicitly declines to present it as verified decipherment chronology. |
+| F16 | **Resolved** | Process §7 now describes a pale swirling storm, without identifying sand or snow; the remaining handling description stays labeled inferred. |
+| F17 | **Resolved** | Process Bottom line 1 now says college degree, without asserting its subject. |
+| F18 | **Resolved** | Catalog entry 12 now describes a bare-chested, red-haired woman in denim cutoffs; the incorrect red top is removed. |
+| F19 | **Resolved** | Catalog entry 15 now says a party of riders rather than four, matching the inspected image without inventing identities. |
+| F20 | **Resolved** | Catalog Synthesis → Subjects labels the biography quotation Studio evidence and starts a separate Artist attribution for the Interview 2 statements. |
+| F21 | **Resolved** | Catalog table row 9 and entry 9 both disclose the 1995/1996 publication-year conflict and the entry identifies which sources give each date. |
+| F22 | **Resolved** | The catalog opening globally defines unpublished as the legacy gallery's classification, not verified 2026 status. The Exile's Return row uses that scoped wording; entry 28 adds The Trophy's later ISFDB 2005 interior-art listing and explicitly says the printed publication was not inspected. A locally defined ISFDB source key was added. |
+| F23 | **Resolved** | All three notes now distinguish older copyright-year captions from independently unestablished completion dates. Materials §1/§7 and the catalog opening explicitly identify Rising Storm's April 2013 report rather than a verified commission/completion date; process §3 also disclaims independently established completion dates and separates publication/upload dates. The catalog preserves the separate inferred Fenris signature date. |
+| F24 | **Resolved** | Catalog Synthesis → Light and palette removes Flim (entry 5) from the blue-night examples; its cream/sepia description remains intact. |
+| F25 | **Resolved** | Materials EASEL/CODE and catalog EASEL now contain usable relative guide/code links. Their targets exist; material source sections/functions and checked revision are retained. |
+| F26 | **Resolved** | Materials VIS now maps all eight modern-portfolio color-table images by title to CK-PAINT, links the three remaining table images individually and supplies the exact And Stay Down detail-page URL. All visual conclusions remain inferred. |
+| F27 | **Resolved** | Process §3 now reports the sketch advance-payment exception, the oil-sketch rows' payment-upon-approval wording and the limitation that these are old-site rather than verified current terms. |
+
+A later wording pass renamed the process note's Bottom line section to Summary. F12
+and F17 refer to that section; its numbered items are unchanged. Two humor
+attributions were also clarified so unsigned site text is not read as artist
+testimony. Catalog Synthesis → Subjects now says the site captions and interview
+name humor, instead of "his own captions." Process §4 Humor now labels the
+*...And Stay Down!* caption studio and the two interview statements artist. Quotes
+and source keys are unchanged.
+
 ## Passes, grouped by topic
 
 - **Interviews and quotation substance.** The complete 2001 three-part interview
@@ -319,22 +370,23 @@ under this key labeled inferred.
   wiki was created June 29, 2010 and last edited July 12, 2010; neither is the
   interview date. A circa-2001–02 interview date remains explicitly inferred.
   Ellipses in the substantive quotations were checked against the omitted text;
-  they do not reverse the speaker's meaning. ASCII/smart quotation marks, nested
-  quotation marks and ordinary excerpt capitalization/punctuation are editorial
-  normalization, not independent historical evidence. Original spellings such as
-  “crutial,” “goauche” and “John Sergeant” are not silently repaired into new quotations.
+  they do not reverse the speaker's meaning. ASCII or smart quotation marks,
+  nested quotation marks and ordinary changes to excerpt capitalization and
+  punctuation are editorial normalization, not independent historical evidence.
+  Original spellings such as “crutial,” “goauche” and “John Sergeant” are not
+  silently repaired into new quotations.
 - **Object records and supports.** The legacy medium/size lines support academy
-  board for The Axe and Mists of Doom, Masonite for Flam/Flim/Stitchin' and the
+  board for The Axe and Mists of Doom, Masonite for Flam, Flim, Stitchin' and the
   experienced Flim, panel for Headless Horseman, gouache on paper for the specified
-  cards, watercolor on illustration board for Mae/Ely Parker and graphite/ink for
+  cards, watercolor on illustration board for Mae and Ely Parker and graphite or ink for
   the named drawings. Modern hidden captions support all 18 titles, sizes and media,
   including Fenris on panel. Opposite size orders are real; the catalog correctly
   labels height/width decisions made from images as inference. Print image sizes
   were not substituted for painting sizes. Katlan supports Masonite as hardboard
   and the distinction/confusion between academy and canvas boards; it does not
   identify Keegan's particular 1995 product.
-- **Career and bibliography.** The sources support the 1994 start/DragonCon story,
-  the named clients and most title/date groupings subject to F13/F21/F23, the
+- **Career and bibliography.** The sources support the 1994 start and DragonCon story,
+  the named clients and most title/date groupings subject to F13, F21 and F23, the
   eight Baen titles, nine Spellfire titles and 21 Doomtown card titles plus a poster.
   Catalog card expansions/rarities agree with the card list. The 1998 and 2001
   Chesley nominations are nominations, not wins; the 2000 Best in Show and 1998
@@ -350,9 +402,10 @@ under this key labeled inferred.
   a 2022 creation date. Collector map media are Pen and Ink, and the Lost Lands
   listing says Paint - Oil, Commission and “18x24, oils.” A support is not given.
   The modern site's newest visible news is April 14, 2013; the sitemap's latest
-  listed last-modified date is July 16, 2017 for Contact, not proof of later painting
-  technique or proof the whole site has never changed since then.
-- **Visual inference.** Apart from F16/F18/F19/F24, the described dominant colors,
+  listed last-modified date is July 16, 2017, for the Contact page. That date proves
+  neither later painting technique nor that the whole site has been unchanged since
+  then.
+- **Visual inference.** Apart from F16, F18, F19 and F24, the described dominant colors,
   main subjects, light effects, focal finish and soft/hard edges are reasonable
   readings of the inspected reproductions, not laboratory findings. Fenris's
   signature does appear to say 2004, as the catalog cautiously reports; the file's
@@ -362,24 +415,26 @@ under this key labeled inferred.
   a passage is a glaze, scumble or dry brush application.
 - **Unknowns and negative evidence.** No artist/studio source read supplies a
   pigment, brand, white, oil binder, solvent, drier, varnish recipe, canvas fiber,
-  preparation recipe or brush type/size. A brush and rag themselves are explicitly
+  preparation recipe or brush type or size. A brush and rag themselves are explicitly
   documented. No technical examination was found in the sources read; that is not
   a claim that none exists anywhere. No source read establishes his drawing,
   layering or digital-production method in 2026. His stated 2001 dislike of virtual
   art is not lifetime or current-practice evidence.
 - **Engine and scope.** At repository revision `d94eafd60bc39323af7d9d2aab6588e7852eda1e`,
   [palette.rs](../../crates/paint/src/palette.rs) has 54 catalog tubes, a 14-tube default,
-  a 16-tube Friedrich box and no Keegan box. Default/Friedrich exclude cadmium,
-  ultramarine and viridian; the full catalog/every box includes them. Lead and zinc
-  are its only named whites; titanium/phthalocyanine/dioxazine/Hansa tubes are absent.
+  a 16-tube Friedrich box and no Keegan box. The default and Friedrich boxes
+  exclude cadmium, ultramarine and viridian; the full catalog and the every box
+  include them. Lead and zinc are its only named whites; titanium, phthalocyanine,
+  dioxazine and Hansa tubes are absent.
   The candidate hue table uses existing catalog names and is explicitly untested,
   not a historical palette or an authorized box selection. The cited
-  [guide](../easel_guide.md) supports linseed/walnut/poppy, 50–5000 mm canvas width,
-  linen/raw cotton/paper, layered ground, the two distinct solvent options, open-paint
-  rag lifting, pencil grades, chalk, broad/detail/glaze/scumble/blend/lose and a
-  same-size scratch canvas with a separate clock. It describes no actual rigid
-  panel or water-media/ink/marker painting system. These are documentation/code
-  checks, not fresh paint experiments or measurements of Keegan's materials.
+  [guide](../easel_guide.md) supports linseed, walnut and poppy oils; 50–5000 mm
+  canvas width; linen, raw cotton and paper; layered ground; the two distinct
+  solvent options; open-paint rag lifting; pencil grades; chalk; broad, detail,
+  glaze, scumble, blend and lose; and a same-size scratch canvas with a separate
+  clock. It describes no actual rigid panel and no water-media, ink or marker
+  painting system. These are documentation and code checks, not fresh paint
+  experiments or measurements of Keegan's materials.
 - **Key consistency and layout.** Shared keys with the same spelling have stable
   source meanings in these notes. Local aliases such as KP-VEN/KP-VENG and
   KP-COMM/KP-COM are not factual errors because each is locally defined; harmonizing
@@ -507,9 +562,12 @@ image URLs only, not permission to store them in the repository or Drive.
 
 ## Reconciliation boundary
 
-All 27 findings above remain open in this record. No source establishes a Keegan
-pigment inventory, so no historical tube selection or engine-property retuning
-follows from this audit. No painting or collector upload date was experimentally
-measured. The remaining visual access limitation is explicit: *In the Lost Lands*
-has not been inspected by eye. The drafts' corrections and review dispositions
-belong to the integrating researcher.
+All 27 original findings are resolved against the corrected drafts at `cbfd47c`.
+Their individual verified dispositions are recorded above. No remaining mismatch
+with those corrections was found. This closes the documentation findings, not the
+historical unknowns or access limitations. No source establishes a Keegan pigment
+inventory, so no historical tube selection or engine-property retuning follows
+from this audit. No painting or collector upload date was experimentally measured.
+*In the Lost Lands* remains uninspected by eye. The source-access ledger retains
+its failures, alternate text access and partial-reading limits; none was upgraded
+to a full reading during reconciliation.

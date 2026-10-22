@@ -20,36 +20,36 @@ Four kinds of evidence are kept apart in this note, ranked as listed.
   treated as the studio's, one step below his own words.
 - **Secondary.** Other people writing about him.
 - **Inferred.** My own reading of web reproductions [VIS]. These are
-  visual judgments from small scanned JPEGs whose color is not calibrated,
-  never material identifications.
+  visual judgments from small scanned JPEGs with uncalibrated color. They
+  never identify a material.
 
 Engine mappings at the end are a fifth kind: **proposed approximations**,
 not evidence about Keegan.
 
 ## Summary
 
-Keegan paints in oil, mostly on canvas; his earliest captioned pieces
-(1995) are on "academy board," some 1998–99 card paintings are on
-Masonite or panel, and one undated piece on his 2013 site is on panel
-[KP-AXE; KP-MISTS; KP-DT; CK-PAINT]. For card art and small works he also used gouache on
-paper and watercolor on illustration board; his commission menu adds
-acrylic, ink, ink wash, graphite, charcoal and marker [KP-DT; KP-P4S;
-KP-COM]. He calls oil his preferred medium: "it's freer, more forgiving and
+Keegan paints in oil, mostly on canvas. His earliest captioned pieces
+(1995) are on "academy board" [KP-AXE; KP-MISTS]. Some 1998–99 card
+paintings are on Masonite or panel [KP-DT]. One undated piece on his 2013
+site is on panel [CK-PAINT]. For card art and small works he also used
+gouache on paper and watercolor on illustration board [KP-DT; KP-P4S]. His
+commission menu adds acrylic, ink, ink wash, graphite, charcoal and marker
+[KP-COM]. He calls oil his preferred medium: "it's freer, more forgiving and
 controllable" [KP-INT2]. No source read names a pigment, brand, white,
 medium, solvent, varnish or ground. His color decisions are documented as
-a working method (a color study first, an unevenly finished painting, mood
-set by light) rather than as a list of tubes [KP-INT2; TV; KP-VENG]. In
+a working method rather than as a list of tubes: a color study first, an
+unevenly finished painting and mood set by light [KP-INT2; TV; KP-VENG]. In
 2001 he said he had "no real interest or desire to create art in a virtual
-world," and all 18 works in the modern site's Paintings portfolio are
-captioned oil [KP-INT3;
-CK-PAINT]. No source shows digital painting entering his work.
+world" [KP-INT3]. All 18 works in the modern site's Paintings portfolio are
+captioned oil [CK-PAINT]. No source shows digital painting entering his work.
 
 ## 1. Supports
 
-Medium and support as captioned by the artist or studio. Sizes are inches;
-the two sites list the same paintings in opposite orders (*Held by Honor*
-is "32 x 42" on the old site and "42 x 32" on the new one), so the order is
-not a reliable height-by-width [KP-HBH; CK-PAINT].
+Medium and support are given as the artist or studio captions them. Sizes
+are in inches. The two sites give the sizes of the same paintings in
+opposite orders, so the order is not a reliable height-by-width. *Held by
+Honor* is "32 x 42" on the old site and "42 x 32" on the new one [KP-HBH;
+CK-PAINT].
 
 Unless stated otherwise, older work dates reproduce the studio's copyright
 years. Completion dates were not independently established.
@@ -75,9 +75,9 @@ years. Completion dates were not independently established.
 - **Scale over time.** Studio and artist captions run from 14 x 18 to 32 x
   42 and 40 x 30 [KP-JANE; KP-HBH; CK-PAINT]. A commission price list
   quotes oil paintings at 16 x 20 and 18 x 24 [KP-COM]. *Fenris* is the
-  only panel on the 2013 site; its date is not given there, and it does not
+  only panel on the 2013 site. Its date is not given there. It does not
   appear in the legacy galleries and lists read for this note. The old
-  home page says last updated September 15, 2004 [CK-PAINT; KP-UNPUB;
+  home page says it was last updated September 15, 2004 [CK-PAINT; KP-UNPUB;
   KP-HOME].
 
 ## 2. Grounds and underpainting
@@ -109,25 +109,25 @@ years. Completion dates were not independently established.
   be." Some mornings "I wipe off the last night's work and go at it again"
   [KP-INT2]. The material of the block-in (thinned paint or not) is
   **unknown**. That a night's work could still be wiped off the next
-  morning suggests the block-in was still open; this is **inferred**, and a
+  morning suggests the block-in was still open. This is **inferred**; a
   solvent-dampened rag would also explain it.
 - **Prior studies on other materials.** Sketches, photographed models and
   a color study come before the canvas [KP-INT2]. Black-and-white work for
-  sale and commission is in graphite on paper, pencil, brush and ink, pen
-  and ink and ink wash [KP-DR4S; KP-COM].
+  sale and commission uses these media: graphite on paper; pencil; brush
+  and ink; pen and ink; ink wash [KP-DR4S; KP-COM].
 
 ## 4. Paints and pigments
 
 - **Oil paint, unspecified.** The oil-work captions identify oil without
-  naming its binder, brand or pigment
-  [KP-DT; CK-PAINT]. No brand, grade (artist or student), pigment, white or
-  black is named in any source read. The palette is **unknown** at the
-  pigment level.
-- **Gouache.** "goauche on paper" (his site's spelling) for the Doomtown
-  cards [KP-CARDS] *Shotgun Wedding*, *Three Seconds to Oblivion*, *Heartburn* and
-  *Run, You Coward!*, the last 18 x 20 [KP-DG; KP-DT]. Three 9 x 12
-  gouaches on paper were offered in 2002 [KP-P4S; KP-NEW].
-- **Watercolor.** *Mae Parker* and *Ely Parker* (Doomtown, 1999), on
+  naming its binder, brand or pigment [KP-DT; CK-PAINT]. No brand, grade
+  (artist or student), pigment, white or black is named in any source read.
+  The palette is **unknown** at the pigment level.
+- **Gouache.** The Doomtown cards [KP-CARDS] *Shotgun Wedding*,
+  *Three Seconds to Oblivion*, *Heartburn* and *Run, You Coward!* are
+  captioned "goauche on paper" (his site's spelling). *Run, You Coward!* is
+  18 x 20 [KP-DG; KP-DT]. Three 9 x 12 gouaches on paper were offered in
+  2002 [KP-P4S; KP-NEW].
+- **Watercolor.** *Mae Parker* and *Ely Parker* (Doomtown, 1999) are on
   illustration board, 14 x 15 and 12 x 15 [KP-DT].
 - **Acrylic.** Listed once, as a commission option ("Acrylic painting --
   12" x 16"") [KP-COM]. None of the work captions read for this note
@@ -139,8 +139,8 @@ years. Completion dates were not independently established.
 
 No source read mentions an oil medium, alkyd medium, solvent, drier,
 retouch varnish or final varnish. All are **unknown**. One drying fact is
-first-person: he took "the barely dry painting" *Held by Honor*, painted
-from life over "two weeks," to the World Fantasy Convention [KP-HBH].
+first-person. He painted *Held by Honor* from life over "two weeks" and
+took "the barely dry painting" to the World Fantasy Convention [KP-HBH].
 
 ## 6. Palette and color habits
 
@@ -167,9 +167,9 @@ from life over "two weeks," to the World Fantasy Convention [KP-HBH].
   a case of 'when it's finished, you know it'" [KP-ASD]. In 2001 he
   described his direction as "a more painterly approach... as I gain
   greater control of the paint" [KP-INT3].
-- **Training.** He studied at the National Academy of Design and the Art
-  Students League in New York after college, where he says he learned
-  "what I do now" [KP-INT1]. No teacher's palette is named.
+- **Training.** After college he studied at the National Academy of Design
+  and the Art Students League in New York. He says he learned "what I do
+  now" there [KP-INT1]. No teacher's palette is named.
 - **Influences he names.** Frazetta ("go for feeling") and Sargent, spelled
   "John S. Sergeant" ("the highest art has ever been") [TV]. A friend
   compared his work to Roy Krenkel "with a dash of Frazetta" (secondary)
@@ -207,23 +207,23 @@ of even detail [KP-INT2], but the agreement is my reading.
   no real interest or desire to create art in a virtual world" [KP-INT3].
 - **Undated interview.** "DO NOT USE POSER! If you use Poser, and other
   existing digital imagery pieced together, it's not your art" [TV]. The
-  page was created in 2010 [TV-INFO]; the interview discusses the
-  Starscape covers of 2001–02 and so likely dates from around then
+  page was created in 2010 [TV-INFO]. The interview discusses the
+  Starscape covers of 2001–02, so it likely dates from around then
   (**inferred**).
 - **Through 2013.** His published-works list runs from 1995 to 2013
   [CK-ABOUT]. The 2002 computer-game box art (*Highland Charge*, for
   Data Becker's *Highland Warriors*) is captioned oil on canvas, 40 x 30
-  [KP-OTHER; CK-PAINT]. *Rising Storm*, commissioned by Head of Zeus and
-  reported on April 9, 2013, is "30 x 22 oil on canvas" [CK-NEWS]. The
-  commission date is not stated.
+  [KP-OTHER; CK-PAINT]. Head of Zeus commissioned *Rising Storm*. The
+  report of April 9, 2013 gives it as "30 x 22 oil on canvas" [CK-NEWS].
+  The commission date is not stated.
 - **Documented reproduction.** A sale-page scan note says "this scan
   is from a copy, the dark bands at the bottom are not present on the
-  original"; some prints are "printed with archival inks and paper"
-  [KP-DR4S; KP-PRINTS]. This does not establish all his production methods
+  original" [KP-DR4S]. Some prints are "printed with archival inks and
+  paper" [KP-PRINTS]. This does not establish all his production methods
   or identify the printing technology.
-- **After 2013.** The 2013 site's news stops in April 2013 [CK-NEWS]; no
+- **After 2013.** The 2013 site's news stops in April 2013 [CK-NEWS]. No
   later statement about his methods was found. Whether he has worked
-  digitally since then is **unknown**; no source found suggests he has.
+  digitally since then is **unknown**. No source found suggests he has.
 
 ## 8. Unknowns
 
@@ -233,11 +233,10 @@ color; every pigment, including his whites and blacks; brand and grade;
 oil, medium, solvent and drier; varnish; brushes and knives; paper and
 board brands for water media; his current methods and whether any works
 documented later were made after 2013. A collector listed an oil commission
-in 2022 and JordanCon announced a 2027 appearance in 2026; neither dates a
+in 2022. JordanCon announced a 2027 appearance in 2026. Neither dates a
 painting or documents current technique (see [process](keegan_process.md),
-§6). The Spectrum annuals
-that reproduced his work (Spectrum 5, 6 and 8) were not read [KP-ABOUT;
-KP-BAEN1].
+§6). The Spectrum annuals that reproduced his work (Spectrum 5, 6 and 8)
+were not read [KP-ABOUT; KP-BAEN1].
 
 ## Sources
 
@@ -342,7 +341,7 @@ nothing below is a historical match. What is documented maps as follows.
   [CODE]. His white is unknown.
 - **Absent from the catalog:** titanium white, phthalocyanine blue and
   green, dioxazine violet and arylide (Hansa) yellows [CODE]. Whether
-  Keegan used any of them is unknown; they are named because a modern
+  Keegan used any of them is unknown. They are named because a modern
   painter's palette could include them.
 
 **Proposed approximations, not artist evidence.** For the hue families
@@ -363,13 +362,13 @@ inferred in §6, these catalog tubes are the nearest candidates [CODE].
 ## At this easel
 
 - **Support.** Supported: plain-weave linen with ground layers mixed from
-  the tubes, or raw cotton duck; widths of 50 to 5000 mm cover his 14 x 18
+  the tubes, or raw cotton duck. Widths of 50 to 5000 mm cover his 14 x 18
   to 42 x 32 in canvases [EASEL]. Limit: there is no rigid panel, hardboard
-  or academy board; a knife-leveled ground on linen is the nearest
+  or academy board. A knife-leveled ground on linen is the nearest
   stand-in (proposed). His ground color is unknown, so any ground chosen
   here is an assumption [EASEL].
 - **Underpainting and block-in.** Supported: a monochrome pile thinned with
-  `turps=` lays a lean, quick lay-in; `thinner=` keeps solvent in the
+  `turps=` gives a lean, quick lay-in. `thinner=` keeps solvent in the
   film for a while [EASEL]. Which he used, if either, is unknown.
 - **Brush in one hand, rag in the other.** Supported: the rag wipes, blots
   and, dipped in spirits, lifts wet paint nearly to the ground [EASEL].

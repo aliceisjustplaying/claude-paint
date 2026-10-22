@@ -18,11 +18,12 @@ documented habit maps onto the current easel; it is not evidence about
 Keegan.
 
 **Identity.** The subject is the fantasy and science-fiction illustrator
-whose studio biographies place him in Atlanta, trained at the National Academy of Design and the Art
-Students League, whose sites are keeganprints.com and charleskeegan.com
-[CK-ABOUT; KP-ABOUT]. Only sources that name this illustrator are used.
+whose sites are keeganprints.com and charleskeegan.com. His studio
+biographies place him in Atlanta and say he trained at the National
+Academy of Design and the Art Students League [CK-ABOUT; KP-ABOUT]. Only
+sources that name this illustrator are used.
 
-## Bottom line
+## Summary
 
 1. **Career.** He sold drawings as a child, took a college degree that
    taught him little, then trained in New York at the National Academy of
@@ -62,8 +63,7 @@ Students League, whose sites are keeganprints.com and charleskeegan.com
    CK-MAP]. Collector posts from 2021–22 and JordanCon's August 2026
    announcement of him as Artist Guest of Honor for April 2027 document
    continuing public visibility, not dates of new paintings [CAF-LOST;
-   CAF-GOT; JC27]. No source
-   describes how he works in 2026.
+   CAF-GOT; JC27]. No source describes how he works in 2026.
 
 ## 1. Life and training
 
@@ -99,8 +99,8 @@ Students League, whose sites are keeganprints.com and charleskeegan.com
   live steel in the Discovery Channel's *Deadly Duels: Duels of Chivalry*
   with the edged-weapons expert Hank Reinhardt [CK-ABOUT] (studio).
   Reinhardt, a friend, wrote in 1999 that Keegan first came to Museum
-  Replicas to draw catalog illustrations and later sparred with him with
-  sword and dagger, sword and shield and knife [KP-APP] (third party,
+  Replicas to draw catalog illustrations. Later the two sparred with sword
+  and dagger, with sword and shield and with knife [KP-APP] (third party,
   tongue-in-cheek).
 - **Home.** The studio biographies describe him as living in Atlanta with
   Heather; his 2026 residence was not independently verified [CK-ABOUT;
@@ -136,7 +136,7 @@ established. Publication dates and collector upload dates are separate.
 
 **First cover and dates.** His own site dates his start as an illustrator
 to 1994 and lists *Conan and the Mists of Doom* (Tor) under 1995
-[CK-ABOUT]; his caption dates the book to 1996 and the painting to ©1995
+[CK-ABOUT]. His caption dates the book to 1996 and the painting to ©1995
 [KP-MISTS]. The publication year is 1995 or 1996 by his own sources.
 (Studio and artist; conflicting.)
 
@@ -159,9 +159,9 @@ list [KP-BOOK] and ISFDB [ISFDB]:
 | 2011 | Thomas Dunne / St. Martin's | Howard Andrew Jones, *The Desert of Souls* |
 | 2013 | Head of Zeus | UK *Desert of Souls* (same painting) and *The Bones of the Old Ones* |
 
-The site dates *The Desert of Souls* 2010 [CK-ABOUT]; ISFDB and his own
+The site dates *The Desert of Souls* 2010 [CK-ABOUT]. ISFDB and his own
 blog give February 2011 for publication [ISFDB-DOS; BLOG]. The 2010 date
-may be the painting's year, which is an inference.
+may be the painting's year; that is an inference.
 
 **Wheel of Time.** The print site reports two Starscape covers due January
 2002, then "Cover paintings and 24 interior illustrations" for *The Hunt
@@ -185,9 +185,9 @@ Ice* on its cover [KP-NEWS; BG26]; *Realms of Fantasy* (August 2006) used
 
 **Games.** He painted 21 card titles for the *Deadlands: Doomtown* card
 game (1998–99) plus a poster. He also did nine *Spellfire* cards (TSR, 1996
-copyright) [KP-CCG; KP-DTL]. His site credits *Doomtown* to AEG; the card pages carry
-Pinnacle Entertainment Group and Five Rings Publishing Group copyright lines
-[KP-ABOUT; KP-CCG]. Other game work: the cover of Imagine Role Playing's
+copyright) [KP-CCG; KP-DTL]. His site credits *Doomtown* to AEG. The card pages
+carry Pinnacle Entertainment Group and Five Rings Publishing Group copyright
+lines [KP-ABOUT; KP-CCG]. Other game work: the cover of Imagine Role Playing's
 *Aspects of the Wild* (2000), graphite interiors for Larry Elmore's
 *Sovereign Stone* (*Codex Mysterium*) and the box cover of Data Becker's
 computer game *Highland Warriors* [KP-BCG; KP-D4S; KP-NEWS]. (Studio.)
@@ -214,17 +214,18 @@ that he is Artist Guest of Honor for JordanCon 2027 (Atlanta, April 16–18,
 2027) [JC27]. (Third party.)
 
 **Private commissions and originals.** His print site (last updated 2004)
-set general terms of no money up front, with an explicit sketch exception:
+set a general term of no money up front, with an explicit sketch exception:
 "In the case of sketches, payment is made first." The oil-sketch rows
-instead say "payment due upon approval." These are old-site terms, not
-verified current terms. It also says no contracts, he keeps copyright and he
-"tends to avoid trademarked characters" [KP-COMM]. Its price list runs from
+instead say "payment due upon approval." The site also says there are no
+contracts, he keeps copyright and he "tends to avoid trademarked
+characters" [KP-COMM]. These are old-site terms, not verified current
+terms. The site's price list runs from
 pencil, marker and ink sketches through gouache and oil sketches
 (monochrome and color), drawings in pencil, charcoal and ink, oil studies
 ("a more complete concept than a sketch yet not as finished as a
 painting"), watercolor, gouache and acrylic [KP-COMM] (studio). A collector
-posted *In the Lost Lands*, "18x24, oils", in 2022 as the latest in his own
-George R. R. Martin commission series [CAF-LOST] (third party; the
+posted *In the Lost Lands* ("18x24, oils") in 2022 as the latest in the
+collector's own George R. R. Martin commission series [CAF-LOST] (third party; the
 painting's date is not given).
 
 **The quiet years.** In 2013 the new site said he had reemerged "Almost ten
@@ -259,11 +260,12 @@ own art these days" [TV]. Published covers still appeared in 2005–06 and
   westerns for *Doomtown*, Civil War subjects and the American frontier
   [KP-WILD; KP-DRAG; KP-JAG; KP-JANE; KP-DOOM; KP-INT2]. In 2001 his
   interests had turned to "the study of the American frontier"
-  [KP-INT3]; in the undated TarValon.net interview his free-time subject was "the early American
-  frontier", scouts and "penniless folks who risked all" [TV]. (Artist.)
-- **Humor.** *Shotgun Wedding* is his "most humorous work" [KP-INT2];
-  *...And Stay Down!* has "furious action with a sense of humor"
-  [KP-ASD]. He does not "really do odd" [TV]. (Artist.)
+  [KP-INT3]. In the undated TarValon.net interview his free-time subject
+  was "the early American frontier", scouts and "penniless folks who risked
+  all" [TV]. (Artist.)
+- **Humor.** *Shotgun Wedding* is his "most humorous work" [KP-INT2]
+  (artist). *...And Stay Down!* has "furious action with a sense of humor"
+  [KP-ASD] (studio). He does not "really do odd" [TV] (artist).
 - **Traditional media.** His "biggest personal challenge" (2001) was "to
   maintain a traditional approach to art in the face of computer created
   art"; he has "no real interest or desire to create art in a virtual
@@ -273,10 +275,10 @@ own art these days" [TV]. Published covers still appeared in 2005–06 and
 ## 5. Workflow, idea to finish
 
 The two fullest accounts are the June 30, 2001 ConSortium interview
-[KP-INT2] and the undated TarValon.net interview, which mentions *From the
-Two Rivers* (published January 2002) and was copied to the wiki on June 29,
-2010 [TV; TV-INFO]. Both are his words. He stresses that the steps vary
-from painting to painting [KP-INT2; TV].
+[KP-INT2] and the undated TarValon.net interview [TV]. The TarValon.net
+interview mentions *From the Two Rivers* (published January 2002) and was
+copied to the wiki on June 29, 2010 [TV; TV-INFO]. Both are his words. He
+stresses that the steps vary from painting to painting [KP-INT2; TV].
 
 ### 5.1 Idea and sketches
 
@@ -355,7 +357,7 @@ from painting to painting [KP-INT2; TV].
   and plunge in"; the second way is "rarely used for commissioned pieces"
   [TV].
 - Small gouache paintings (9 × 12 in.) were sold under "Paintings and Color
-  Studies" [KP-P4S]; whether those are color studies is not stated.
+  Studies" [KP-P4S]. Whether those are color studies is not stated.
 - **Unknown:** study medium for oil paintings, study size and whether he
   squares up or measures from it.
 
@@ -432,9 +434,10 @@ from painting to painting [KP-INT2; TV].
   Heather would not let him touch afterward [TV; KP-VEN; KP-JANE;
   KP-LAIR]. *Held by Honor* went to the 2000 World Fantasy Convention
   "barely dry" [KP-HBH].
-- Music almost always: often slower music while "arranging things" at the
-  start, though "I often listen to driving rhythms when starting"; the
-  choice is set to the picture's mood; no radio [TV].
+- He almost always has music on. He often plays slower music while
+  "arranging things" at the start, though he also says "I often listen to
+  driving rhythms when starting." He sets the choice to the picture's mood
+  and does not use the radio [TV].
 - Ink takes as much or more preliminary work than a painting because it is
   "pretty unforgiving" [KP-INT2]. (All artist.)
 
@@ -473,10 +476,9 @@ captions (to 2004) and the undated TarValon.net interview. The 2013 site
 says his goal is "paintings which can be viewed as fine art and never
 merely as a product of the industry" [CK-HOME]. That fits the 2001 aim of
 a more painterly approach, but it says nothing about method. No later
-source describes his drawing, reference, underpainting or layering,
-and none says whether he now uses digital tools. How he works in 2026 is
-unknown; the JordanCon appearance in April 2027 is the next likely public
-source.
+source describes his drawing, reference, underpainting or layering. None
+says whether he now uses digital tools. How he works in 2026 is unknown.
+The JordanCon appearance in April 2027 is the next likely public source.
 
 ## 7. What the images suggest (inferred)
 
@@ -504,9 +506,9 @@ confirm color. Each is a visual inference only.
   rock is the most textured.
 - ***Teenage Angst*** (1997, underpainting) [KP-UNPUB]. See section 5.7.
 - ***Rising Storm*** (2013, oil on canvas, 30 × 22) [CK-PAINT; CK-NEWS]. Two
-  armed figures in a pale swirling storm before a ruined temple. Inferred: most of the
-  surface is broad, soft, diagonal sweeps of gray and ochre; the figures and
-  a pile of skulls are the only crisp passages. It reads looser than the
+  armed figures in a pale swirling storm before a ruined temple. Inferred:
+  most of the surface is broad, soft, diagonal sweeps of gray and ochre. The
+  figures and a pile of skulls are the only crisp passages. It reads looser than the
   covers of around 2000, which would fit his stated aim, but he has not
   said so.
 
@@ -549,8 +551,8 @@ the color, medium and dryness of his underpaintings; how he draws on the
 canvas before the block-in; how many layers follow the block-in and whether
 they are glazes, scumbles or opaque paint; drying times between stages;
 studio light; how he uses photos while painting; the names of his New York
-teachers; his college; and any account of his practice later than those sources,
-including whether he works digitally now. Two sources might add facts but
+teachers; his college; and any account of his practice later than those
+sources, including whether he works digitally now. Two sources might add facts but
 were not read: the Rigney papers' 2001 correspondence and 2003 photocopies
 [COFC] and the printed pages of the *Spectrum* annuals.
 

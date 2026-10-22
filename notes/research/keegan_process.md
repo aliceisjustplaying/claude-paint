@@ -18,13 +18,13 @@ documented habit maps onto the current easel; it is not evidence about
 Keegan.
 
 **Identity.** The subject is the fantasy and science-fiction illustrator
-based in Atlanta, trained at the National Academy of Design and the Art
+whose studio biographies place him in Atlanta, trained at the National Academy of Design and the Art
 Students League, whose sites are keeganprints.com and charleskeegan.com
 [CK-ABOUT; KP-ABOUT]. Only sources that name this illustrator are used.
 
 ## Bottom line
 
-1. **Career.** He sold drawings as a child, took a college art degree that
+1. **Career.** He sold drawings as a child, took a college degree that
    taught him little, then trained in New York at the National Academy of
    Design and the Art Students League [KP-INT1; TV]. He began as an
    illustrator in 1994. Tom Doherty of Tor saw his paintings at Dragon*Con
@@ -60,8 +60,9 @@ Students League, whose sites are keeganprints.com and charleskeegan.com
 7. **Current practice is undocumented.** His own site's newest news is from
    April 2013 and its sitemap's newest change is July 2017 [CK-NEWS;
    CK-MAP]. Collector posts from 2021–22 and JordanCon's August 2026
-   announcement of him as Artist Guest of Honor for April 2027 show he is
-   still known and active in fandom [CAF-LOST; CAF-GOT; JC27]. No source
+   announcement of him as Artist Guest of Honor for April 2027 document
+   continuing public visibility, not dates of new paintings [CAF-LOST;
+   CAF-GOT; JC27]. No source
    describes how he works in 2026.
 
 ## 1. Life and training
@@ -101,9 +102,10 @@ Students League, whose sites are keeganprints.com and charleskeegan.com
   Replicas to draw catalog illustrations and later sparred with him with
   sword and dagger, sword and shield and knife [KP-APP] (third party,
   tongue-in-cheek).
-- **Home.** He lives in Atlanta with Heather [CK-ABOUT]. Heather
-  approves his work: "Nothing goes out without her approval" [TV].
-  (Artist.)
+- **Home.** The studio biographies describe him as living in Atlanta with
+  Heather; his 2026 residence was not independently verified [CK-ABOUT;
+  KP-ABOUT]. In the undated interview, he says Heather approves his work:
+  "Nothing goes out without her approval" [TV] (artist).
 
 ## 2. Influences
 
@@ -128,6 +130,10 @@ Students League, whose sites are keeganprints.com and charleskeegan.com
 
 ## 3. Career, clients and published work
 
+Unless stated otherwise, older painting dates reproduce the studio's
+copyright-year captions. Completion dates were not independently
+established. Publication dates and collector upload dates are separate.
+
 **First cover and dates.** His own site dates his start as an illustrator
 to 1994 and lists *Conan and the Mists of Doom* (Tor) under 1995
 [CK-ABOUT]; his caption dates the book to 1996 and the painting to ©1995
@@ -146,7 +152,8 @@ list [KP-BOOK] and ISFDB [ISFDB]:
 | 2000–02 | Meisha Merlin | Hilgartner and Selina Rosen novels; interior art for the limited *A Game of Thrones* |
 | 2001–02 | Tor | Poul Anderson's *Mother of Kings* and *Conan the Rebel*; Judith Tarr's *Tides of Darkness*; Laurie Marks's *Fire Logic* (using *Held by Honor*) |
 | 2001–03 (site); published 2002 and 2004 [ISFDB] | Tor/Starscape | four young-adult volumes of Robert Jordan's *Wheel of Time*, with interior art for the two halves of *The Great Hunt* |
-| 2003 | Riptide, Cove | *Gideon's Wall*; *The Valley of Shadows* |
+| 2003 | Riptide | *Gideon's Wall* |
+| 2003 (studio); 2004 (ISFDB) | Cove | *The Valley of Shadows*; the sources disagree [CK-ABOUT; ISFDB] |
 | 2005 | Five Star | Michael A. Stackpole's *Perchance to Dream and Other Stories* [ISFDB] |
 | 2006 | Heyne | three German Conan collections |
 | 2011 | Thomas Dunne / St. Martin's | Howard Andrew Jones, *The Desert of Souls* |
@@ -207,7 +214,10 @@ that he is Artist Guest of Honor for JordanCon 2027 (Atlanta, April 16–18,
 2027) [JC27]. (Third party.)
 
 **Private commissions and originals.** His print site (last updated 2004)
-set terms: no money up front, no contracts, he keeps copyright and he
+set general terms of no money up front, with an explicit sketch exception:
+"In the case of sketches, payment is made first." The oil-sketch rows
+instead say "payment due upon approval." These are old-site terms, not
+verified current terms. It also says no contracts, he keeps copyright and he
 "tends to avoid trademarked characters" [KP-COMM]. Its price list runs from
 pencil, marker and ink sketches through gouache and oil sketches
 (monochrome and color), drawings in pencil, charcoal and ink, oil studies
@@ -328,8 +338,9 @@ from painting to painting [KP-INT2; TV].
 - For a "Civil War trilogy" he bought "$300. worth of books" and had help
   from reenactors [KP-INT2]. Matching this to the Greenwood titles is an
   inference.
-- *Jaguar Moon* followed reading on Mayan myth and culture after the
-  glyphs were translated in the early 1990s [KP-JAG].
+- For *Jaguar Moon*, he says newly available translations of Mayan glyphs
+  prompted his research [KP-JAG]. This reports his account, not a verified
+  chronology of decipherment.
 - He faults illustrators who paint a flintlock without its flint or hold a
   sword "as though they were some sort of stick" [KP-INT2]. (All artist.)
 
@@ -454,7 +465,7 @@ read.
 | 2005–06, 2011 | Covers for Five Star, Heyne, *Realms of Fantasy* and Thomas Dunne | third party [ISFDB] |
 | 2012–13 | Blog, then charleskeegan.com: "reemerged"; *Rising Storm* (30 × 22, oil on canvas) for Head of Zeus | studio [BLOG; CK-NEWS] |
 | July 16, 2017 | Newest page change in the site's sitemap (contact page) | site metadata [CK-MAP] |
-| 2021–22 | Collector posts: pen-and-ink *Game of Thrones* maps; *In the Lost Lands* oil commission | third party [CAF-GOT; CAF-LOST] |
+| 2021–22 (upload dates) | Collector posts: pen-and-ink *Game of Thrones* maps; *In the Lost Lands* oil commission; not creation dates | third party [CAF-GOT; CAF-LOST] |
 | August 16, 2026 | Named Artist Guest of Honor for JordanCon 2027 | third party [JC27] |
 
 The process statements come from the 2001 interview, the print-site
@@ -493,7 +504,7 @@ confirm color. Each is a visual inference only.
   rock is the most textured.
 - ***Teenage Angst*** (1997, underpainting) [KP-UNPUB]. See section 5.7.
 - ***Rising Storm*** (2013, oil on canvas, 30 × 22) [CK-PAINT; CK-NEWS]. Two
-  armed figures in a sandstorm before a ruined temple. Inferred: most of the
+  armed figures in a pale swirling storm before a ruined temple. Inferred: most of the
   surface is broad, soft, diagonal sweeps of gray and ochre; the figures and
   a pile of skulls are the only crisp passages. It reads looser than the
   covers of around 2000, which would fit his stated aim, but he has not
@@ -636,7 +647,9 @@ Third parties:
 - **[SEVEN-FTTR]** Seven Spokes, "From the Two Rivers (Volume 1, Part 1),"
   credits. Read directly. http://sevenspokes.com/books/v01a-fttr.html
 - **[COFC]** College of Charleston, "Inventory of the James Oliver Rigney,
-  Jr., Papers," oversize folders 9–10. Finding aid read; the papers were
+  Jr., Papers," Oversize Paper Folder 10 (2001, undated; first two
+  Starscape volumes, illustrator not named in that description) and box 64,
+  folder 6 (Keegan's *Great Hunt* interiors, 2003). Finding aid read; the papers were
   not seen. https://archives.library.cofc.edu/findingaids/mss0197.html
 - **[BG26]** S. E. Lindberg, "Dark Muse News: Unearthing Black Gate, and
   the Cave of Wonders – Interviewing John O'Neill," *Black Gate*, 2026

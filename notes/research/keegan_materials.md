@@ -40,7 +40,8 @@ medium, solvent, varnish or ground. His color decisions are documented as
 a working method (a color study first, an unevenly finished painting, mood
 set by light) rather than as a list of tubes [KP-INT2; TV; KP-VENG]. In
 2001 he said he had "no real interest or desire to create art in a virtual
-world," and every work captioned on his 2013 site is oil [KP-INT3;
+world," and all 18 works in the modern site's Paintings portfolio are
+captioned oil [KP-INT3;
 CK-PAINT]. No source shows digital painting entering his work.
 
 ## 1. Supports
@@ -50,11 +51,14 @@ the two sites list the same paintings in opposite orders (*Held by Honor*
 is "32 x 42" on the old site and "42 x 32" on the new one), so the order is
 not a reliable height-by-width [KP-HBH; CK-PAINT].
 
+Unless stated otherwise, older work dates reproduce the studio's copyright
+years. Completion dates were not independently established.
+
 | Support | Works and dates | Sizes | Source |
 |---|---|---|---|
 | Oil on academy board | *The Axe* (1995); *Mists of Doom* (1995, his first published cover) | 15 x 30; 20 x 30 | [KP-AXE; KP-MISTS] |
 | Oil on canvas | *Dragon*, *Jane's Peril*, *To the Lair*, *Jaguar Moon*, *Wildcat*, *Vengeance in Ice* (all 1997); *Butcher's Bill* and *...And Stay Down!* (1998); *Chains of Freedom* and *Held by Honor* (2000); most Doomtown oils (1998–99) | 14 x 18 to 32 x 42 | [KP-DRAGON; KP-JANE; KP-LAIR; KP-JAG; KP-WILD; KP-VENG; KP-BUTCH; KP-ASD; KP-CHAINS; KP-HBH; KP-DT] |
-| Oil on canvas (2013 site) | 17 of the 18 paintings shown, including *Highland Charge* and *The Sack of Venarium* (2002), *The Exile's Return*, *The Trophy* and *Spellbound* (2004), *Desert of Souls* (cover, 2010–11) and *Rising Storm* (2013) | 18 x 14 to 42 x 32 | [CK-PAINT; CK-NEWS; CK-BLOG] |
+| Oil on canvas (modern Paintings portfolio) | 17 of the 18 paintings shown, including *Highland Charge* and *The Sack of Venarium* (©2002), *The Exile's Return*, *The Trophy* and *Spellbound* (©2004), *Desert of Souls* (painting date unknown; studio lists the cover under 2010, published February 2011) and *Rising Storm* (reported April 2013) | 18 x 14 to 42 x 32 | [CK-PAINT; CK-NEWS; CK-BLOG; CK-ABOUT; KP-OTHER; KP-UNPUB] |
 | Oil on Masonite | Doomtown: *Flam*, *Stitchin'*, *Flim*; *Flim (Experienced)* | 14 x 18; 18 x 24 | [KP-DT] |
 | Oil on panel | *Headless Horseman* (Doomtown, 1999); *Fenris* (undated) | 20 x 24; 20 x 16 | [KP-DT; KP-DG; CK-PAINT] |
 
@@ -72,7 +76,8 @@ not a reliable height-by-width [KP-HBH; CK-PAINT].
   42 and 40 x 30 [KP-JANE; KP-HBH; CK-PAINT]. A commission price list
   quotes oil paintings at 16 x 20 and 18 x 24 [KP-COM]. *Fenris* is the
   only panel on the 2013 site; its date is not given there, and it does not
-  appear on the legacy site last updated September 15, 2004 [CK-PAINT;
+  appear in the legacy galleries and lists read for this note. The old
+  home page says last updated September 15, 2004 [CK-PAINT; KP-UNPUB;
   KP-HOME].
 
 ## 2. Grounds and underpainting
@@ -85,8 +90,9 @@ not a reliable height-by-width [KP-HBH; CK-PAINT].
   Angst* (1997) reads "This is an underpainting - a work in progress"; it
   was nominated for a Chesley Award "for best unpublished monochrome work"
   [KP-UNPUB]. His commission menu offers an "Oil sketch (monochrome)" next
-  to an "Oil sketch (color)" [KP-COM]. So monochrome oil underpainting is
-  documented as one of his modes; its pigment and color are **unknown**.
+  to an "Oil sketch (color)" [KP-COM]. These are separate facts: an oil
+  sketch is not necessarily an underpainting. The underpainting's binder,
+  pigment and color are **unknown**.
 - **Inferred.** The reproductions read show no ground left visibly bare;
   the paint appears to cover the support [VIS].
 
@@ -112,7 +118,8 @@ not a reliable height-by-width [KP-HBH; CK-PAINT].
 
 ## 4. Paints and pigments
 
-- **Oil paint, unspecified.** Every painting caption names "oil" only
+- **Oil paint, unspecified.** The oil-work captions identify oil without
+  naming its binder, brand or pigment
   [KP-DT; CK-PAINT]. No brand, grade (artist or student), pigment, white or
   black is named in any source read. The palette is **unknown** at the
   pigment level.
@@ -123,7 +130,8 @@ not a reliable height-by-width [KP-HBH; CK-PAINT].
 - **Watercolor.** *Mae Parker* and *Ely Parker* (Doomtown, 1999), on
   illustration board, 14 x 15 and 12 x 15 [KP-DT].
 - **Acrylic.** Listed once, as a commission option ("Acrylic painting --
-  12" x 16"") [KP-COM]. No acrylic work is captioned on either site.
+  12" x 16"") [KP-COM]. None of the work captions read for this note
+  identifies an acrylic painting.
 - **Other water media offered.** "Watercolor over Ink" and "Ink and
   Goauche" [KP-COM].
 
@@ -205,12 +213,14 @@ of even detail [KP-INT2], but the agreement is my reading.
 - **Through 2013.** His published-works list runs from 1995 to 2013
   [CK-ABOUT]. The 2002 computer-game box art (*Highland Charge*, for
   Data Becker's *Highland Warriors*) is captioned oil on canvas, 40 x 30
-  [KP-OTHER; CK-PAINT]. *Rising Storm*, commissioned in 2013, is "30 x 22
-  oil on canvas" [CK-NEWS].
-- **Digital as reproduction only.** His web images are scans ("this scan
+  [KP-OTHER; CK-PAINT]. *Rising Storm*, commissioned by Head of Zeus and
+  reported on April 9, 2013, is "30 x 22 oil on canvas" [CK-NEWS]. The
+  commission date is not stated.
+- **Documented reproduction.** A sale-page scan note says "this scan
   is from a copy, the dark bands at the bottom are not present on the
-  original") and his prints are "printed with archival inks and paper"
-  [KP-DR4S; KP-PRINTS].
+  original"; some prints are "printed with archival inks and paper"
+  [KP-DR4S; KP-PRINTS]. This does not establish all his production methods
+  or identify the printing technology.
 - **After 2013.** The 2013 site's news stops in April 2013 [CK-NEWS]; no
   later statement about his methods was found. Whether he has worked
   digitally since then is **unknown**; no source found suggests he has.
@@ -221,7 +231,11 @@ Named so no one invents them: canvas fiber, weave and preparation; what
 "academy board" meant; panel preparation; ground color; underpainting
 color; every pigment, including his whites and blacks; brand and grade;
 oil, medium, solvent and drier; varnish; brushes and knives; paper and
-board brands for water media; any work after 2013. The Spectrum annuals
+board brands for water media; his current methods and whether any works
+documented later were made after 2013. A collector listed an oil commission
+in 2022 and JordanCon announced a 2027 appearance in 2026; neither dates a
+painting or documents current technique (see [process](keegan_process.md),
+§6). The Spectrum annuals
 that reproduced his work (Spectrum 5, 6 and 8) were not read [KP-ABOUT;
 KP-BAEN1].
 
@@ -296,12 +310,18 @@ keys are his sites' third-person text and data.
   Abstract and opening section read.
   https://cool.culturalheritage.org/jaic/articles/jaic33-03-005.html
 - **[VIS]** My viewing, on October 22, 2026, of the reproductions linked
-  from [CK-PAINT] and the legacy gallery and detail pages. Inferred only;
-  no image was saved to the repository or Drive.
-- **[EASEL]** `notes/easel_guide.md`, sections "The canvas," "Tubes and
+  from [CK-PAINT]: the named images for *Vengeance in Ice*, *Rising Storm*,
+  *Held by Honor*, *The Exile's Return*, *...And Stay Down!*, *Jaguar Moon*,
+  *Desert of Souls* and *Fenris*. The other table images are
+  [Shotgun Wedding](http://www.keeganprints.com/images/shotgunwedding2.jpg),
+  [Run, You Coward!](http://www.keeganprints.com/images/Run_You_Coward.jpg)
+  and [Mae Parker](http://www.keeganprints.com/images/Mae_Parker.jpg).
+  The *...And Stay Down!* [detail page](http://www.keeganprints.com/And_Stay_DownDetail.htm)
+  was also viewed. Inferred only; no image was saved to the repository or Drive.
+- **[EASEL]** [The easel guide](../easel_guide.md), sections "The canvas," "Tubes and
   piles," "Thinner," "Covering an area," "Drawing: pencil, chalk, pastel and
   eraser" and "The rag."
-- **[CODE]** `crates/paint/src/palette.rs`: `catalog()`, `TUBE_BOX`,
+- **[CODE]** [Catalog implementation](../../crates/paint/src/palette.rs): `catalog()`, `TUBE_BOX`,
   `BOXES` and `period_of` (checked at commit d94eafd).
 
 ## The tubes here

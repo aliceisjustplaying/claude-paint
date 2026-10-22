@@ -589,9 +589,9 @@ fn read_saved(reader: &mut impl Read, limit: u64) -> Result<Saved, String> {
     let identity = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
     let done = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
     let count: usize = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
-    let mut events = Vec::new();
+    let mut events = Events::default();
     for _ in 0..count {
-        events.push(options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?);
+        events.push(options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?)?;
     }
     let state = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
     let digests = options.deserialize_from(reader).map_err(|e| e.to_string())?;
@@ -711,10 +711,11 @@ print(counter,rand(),drying(300,300))
         let mut saved = Saved {
             identity: Identity { build: [1; 32], source: [2; 32], width: 64, environment: Vec::new() },
             done: 20,
-            events: vec![vec![7; 8 << 10]; 20],
+            events: Events::default(),
             state: State::capture(&session().st),
             digests: Some(vec!["kept".into()]),
         };
+        for _ in 0..20 { saved.events.push(vec![7; 8 << 10]).unwrap(); }
         let mut bytes = encode(&saved).unwrap();
         assert!(bytes.len() > limit as usize);
         bytes.push(0);
@@ -722,12 +723,13 @@ print(counter,rand(),drying(300,300))
         let restored = read_saved(&mut reader, limit).unwrap();
         assert_eq!(restored.identity, saved.identity);
         assert_eq!(restored.done, saved.done);
-        assert_eq!(restored.events, saved.events);
+        assert_eq!(encode(&restored.events).unwrap(), encode(&saved.events).unwrap());
         assert_eq!(encode(&restored.state).unwrap(), encode(&saved.state).unwrap());
         assert_eq!(restored.digests, saved.digests);
         assert_eq!(reader, [0]);
 
-        saved.events = vec![vec![0; limit as usize]];
+        saved.events = Events::default();
+        saved.events.push(vec![0; limit as usize]).unwrap();
         assert!(read_saved(&mut encode(&saved).unwrap().as_slice(), limit).err().unwrap().contains("size limit"));
     }
 

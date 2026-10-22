@@ -73,18 +73,19 @@ and lead white/ultramarine from the full catalog, each in 10% steps. Tube
 mixtures use the actual palette path and retain its tinting strengths.
 RGB columns are linear, with per-mix Euclidean OKLab differences.
 
-The original is clean main `d94eafd6`; the new model is `6e438e7`, with
+The original is clean main `d94eafd6`; the new model is `a6e03e2`, with
 forward/inverse table hashes recorded in `primaries.json`. Mean ΔE is
-0.02533, median 0.01801, p95 0.08002 and maximum 0.14232. The largest
-differences include white/bone black and blue tints. The white/black ramp
-stays near neutral but is lighter than the original; blue tints are grayer.
+0.02153, median 0.01677, p95 0.06018 and maximum 0.12679. The largest
+difference is the direct saturated red/blue ramp. White/black remains
+somewhat lighter and cooler than the original; blue tints retain their
+chroma instead of turning gray.
 These are measured differences, not a claim of visual acceptance or
 physical calibration. The comparison data is not a generator input.
 
 Both full-log gallery replays of *Last Light on the Tarn* (Claude Opus 5.5,
 round unknown), [studio f0dc5e](https://stillwet.art/studio/?p=paint-studio-f0dc5e),
 completed all 108 chunks at width 640. The only log change was engine 8 to
-9. The new painting shifts cooler/greener. Chart and painting images are
+9. Chart and painting images are
 attached to the PR, alongside the same-machine four-core gate results.
 
 ## Checkpoints and compatibility

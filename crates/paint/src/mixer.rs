@@ -147,4 +147,16 @@ mod tests {
             assert!(b < 0.0 && chroma > minimum_chroma, "lead white/{name} tint lost its blue chroma: {chroma}");
         }
     }
+
+    #[test]
+    fn white_and_black_keep_middle_tints_neutral() {
+        let palette = crate::Palette::tube_box();
+        let index = |name| palette.tubes.iter().position(|tube| tube.name == name).unwrap();
+        for fraction in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] {
+            let color = palette.pile(vec![(index("lead white"), 1.0 - fraction), (index("bone black"), fraction)]).color;
+            let [_, a, b] = to_oklab(color);
+            let chroma = (a * a + b * b).sqrt();
+            assert!(chroma < 0.01, "black/white {fraction} middle tint has a color cast: {chroma}");
+        }
+    }
 }

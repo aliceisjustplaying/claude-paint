@@ -4,6 +4,9 @@
 # ///
 """Calibrate tinting strengths to the measured Revigo paint mixtures, through the engine's own tables.
 
+The default mode preserves the historical RGB calibration described below. With --measured, this script only
+exports the generator's finite-film constants and committed round-5 split; it does not perform another fit.
+
 The split, fixed before any fit (written here, reproduced by `split_for_strengths`):
   fit set:  for every measured paint that is not one of the mixer's primaries, the zinc-white tint whose paint share is
             nearest 10 % (the usual tinting-strength ratio); for lead white, the 10.2 % bone black tone 08C, with the
@@ -33,6 +36,7 @@ from pathlib import Path
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import numpy as np
+from scipy.optimize import minimize_scalar
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_pigment_tables as gen
@@ -48,6 +52,54 @@ COUNTERPARTS = {
     "chrome yellow": "ChromeYellow", "lemon chrome": "ChromeYellowOtero",
     "viridian": "ViridianGreen", "emerald green": "EmeraldGreen", "red lead": "Minium", "carmine lake": "Cochineal",
 }
+
+
+def measured_split(samples, spectra, primaries, fit_data):
+    pure, pairs, fit, old_test, selected = split_for_strengths(samples, spectra, primaries, fit_data)
+    declared = json.loads((ROOT / "scripts/pigment_fit_split.json").read_text())
+    assert declared["round3_test_set"] == old_test
+    moved = set(declared["moved_from_round3_test"])
+    assert moved <= set(old_test)
+    assert declared["test_set"] == [sid for sid in old_test if sid not in moved]
+    added = set(sum(declared["additional_fit_samples"].values(), []))
+    moved_selected = set(declared.get("moved_from_selection_touched", []))
+    assert moved_selected <= set(selected)
+    assert added == moved | moved_selected
+    assert not added & set(declared["test_set"])
+    selected = [sid for sid in selected if sid not in moved_selected]
+    return pure, pairs, fit, old_test, selected, declared
+
+
+def measured_weights(coefficients, samples, spectra, used):
+    strengths = {name: 1.0 for name in coefficients}
+    residuals = {}
+    order = ["BoneBlack", "CobaltBlue", "Eosin", "ChromeYellowOtero"]
+    order += sorted(set(coefficients) - set(gen.PRIMARIES) - {"BariumSulphate", "CalciumCarbonate"})
+    order += ["BariumSulphate", "CalciumCarbonate"]
+    for name in order:
+        ids = used[name]
+        backs = {sid: np.array([gen.inside(spectra[sid + field]) for field in ("_b", "_w")]) for sid in ids}
+        observed = {sid: np.array([spectra[sid + field] for field in ("_ob", "_ow")]) for sid in ids}
+
+        def objective(log_strength):
+            residuals = []
+            for sid in ids:
+                names, fractions = samples[sid]
+                weights = np.array([c * (np.exp(log_strength) if n == name else strengths[n]) for n, c in zip(names, fractions) if c > 0])
+                present = [n for n, c in zip(names, fractions) if c > 0]
+                weights /= weights.sum()
+                k = sum(c * coefficients[n][0] for n, c in zip(present, weights))
+                s = sum(c * coefficients[n][1] for n, c in zip(present, weights))
+                residuals.extend((gen.saunderson(gen.film(k, s, backs[sid]), True) - observed[sid]).ravel())
+            return float(np.mean(np.square(residuals)))
+
+        grid = np.linspace(np.log(.01), np.log(316), 451)
+        i = min(range(len(grid)), key=lambda j: objective(grid[j]))
+        result = minimize_scalar(objective, bounds=(grid[max(i - 1, 0)], grid[min(i + 1, len(grid) - 1)]),
+                                 method="bounded", options={"xatol": 1e-10})
+        strengths[name] = float(np.exp(result.x))
+        residuals[name] = float(np.sqrt(result.fun))
+    return strengths, residuals
 
 
 def split_for_strengths(samples, spectra, primaries, fit_data):
@@ -127,23 +179,29 @@ def main():
     pure, pairs, fit, test, selected = split_for_strengths(samples, spectra, primaries, fit_data)
     colour = lambda n: measured_colour(spectra, pure[n], matrix) if n != "BoneBlack" else np.zeros(3)
     print("fit set:", " ".join(f"{p}={sid}" for p, sid in sorted(fit.items())))
-    print("test set:", " ".join(test))
-    print("selection-touched, reported apart:", " ".join(selected))
+    print("old round-3 test set:" if args.measured else "test set:", " ".join(test))
     if args.measured:
         measured = json.loads((ROOT / "crates/paint/src/mixer/measured.json").read_text())
-        assert measured["test_set"] == test
-        assert not set(test) & set(sum(measured["samples_used"].values(), []))
+        assert measured["old_test_set"] == test
+        assert not set(measured["test_set"]) & set(sum(measured["samples_used"].values(), []))
+        print("revised round-5 test:", " ".join(measured["test_set"]))
+        print("added fit samples:", " ".join(sorted(sum(measured["additional_fit_samples"].values(), []))))
+        print("selection-touched, reported apart:", " ".join(measured["selection_touched"]))
         Path(args.out).write_text(json.dumps({
             "encoding": "measured-ks",
-            "calibration": "K and S from primary ladders, pure films and the fixed round-3 fit set only; no additional scalar fit",
+            "calibration": "Finite 100 um film over the fixed 07A white field; K/S and constant linear weights from the committed round-5 fit split",
             "fit_set": {p: fit[p] for p in sorted(fit)},
-            "test_set": test,
-            "selection_touched": selected,
-            "paint_strengths": {p: 1.0 for p in measured["order"]},
-            "tube_strengths": {tube: {"paint": paint, "strength": 1.0} for tube, paint in COUNTERPARTS.items()},
+            "old_test_set": test,
+            "test_set": measured["test_set"],
+            "additional_fit_samples": measured["additional_fit_samples"],
+            "pure_samples_reported_apart": measured["pure_samples_reported_apart"],
+            "selection_touched": measured["selection_touched"],
+            "paint_strengths": measured["linear_weights"],
+            "tube_strengths": {tube: {"paint": paint, "strength": measured["linear_weights"][paint]} for tube, paint in COUNTERPARTS.items()},
         }, indent=2) + "\n")
         print("wrote", args.out)
         return
+    print("selection-touched, reported apart:", " ".join(selected))
     strengths = {p: 1.0 for p in primaries}
     errors = {}
     for paint, sid in sorted(fit.items()):

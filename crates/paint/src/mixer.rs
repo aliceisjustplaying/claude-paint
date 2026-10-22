@@ -13,7 +13,9 @@ const PRIMARIES: usize = 5;
 const PIGMENTS: usize = LATENT_SIZE - 3;
 const INVERSE_SIZE: usize = 33;
 const INVERSE: &[u8; INVERSE_SIZE * INVERSE_SIZE * INVERSE_SIZE * 2 * (PRIMARIES - 1)] = include_bytes!("mixer/inverse.bin");
-const MEASURED: &[u8; PIGMENTS * 2 * crate::spectral::N * 4] = include_bytes!("mixer/measured.bin");
+const COEFFICIENT_BYTES: usize = PIGMENTS * 2 * crate::spectral::N * 4;
+const MEASURED: &[u8; COEFFICIENT_BYTES + PIGMENTS * 4] = include_bytes!("mixer/measured.bin");
+const REFERENCE: &[u8; crate::spectral::N * 4] = include_bytes!("mixer/reference.bin");
 const NAMES: [&str; PIGMENTS] = [
     "CobaltBlue", "ChromeYellowOtero", "Eosin", "BoneBlack", "ZincWhite",
     "BariumSulphate", "CalciumCarbonate", "ChromeYellow", "Cochineal", "EmeraldGreen",
@@ -28,8 +30,8 @@ pub fn measured(name: &str) -> Option<[f32; LATENT_SIZE]> {
     Some(lat)
 }
 
-pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
-    measured(match name {
+fn tube_pigment(name: &str) -> Option<&'static str> {
+    Some(match name {
         "lead white" => "LeadWhite",
         "zinc white" => "ZincWhite",
         "bone black" => "BoneBlack",
@@ -47,13 +49,25 @@ pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
     })
 }
 
+pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    measured(tube_pigment(name)?)
+}
+
+pub fn tube_strength(name: &str) -> Option<f32> {
+    let name = tube_pigment(name)?;
+    let p = NAMES.iter().position(|&n| n == name)?;
+    let offset = COEFFICIENT_BYTES + p * 4;
+    Some(f32::from_le_bytes(MEASURED[offset..offset + 4].try_into().unwrap()))
+}
+
 pub fn identity() -> u64 {
     use sha2::{Digest, Sha256};
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/saunderson/additive-linear-rgb/v4");
+        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/finite100um/reference07A/constant-weights/additive-linear-rgb/v5");
         hash.update(MEASURED);
+        hash.update(REFERENCE);
         hash.update(INVERSE);
         u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
     })
@@ -93,8 +107,9 @@ fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
     }))));
     let mut absorption = [0.0; crate::spectral::N];
     let mut scattering = [0.0; crate::spectral::N];
+    let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>().max(1e-12);
     for p in 0..PIGMENTS {
-        let c = lat[p].max(0.0);
+        let c = lat[p].max(0.0) / total;
         if c == 0.0 { continue; }
         for w in 0..crate::spectral::N {
             absorption[w] += c * coefficients[p][0][w];
@@ -102,10 +117,25 @@ fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
         }
     }
     let reflectance = std::array::from_fn(|w| {
-        let r = crate::spectral::km(absorption[w] / scattering[w].max(1e-12));
+        let rg = f32::from_le_bytes(REFERENCE[w * 4..w * 4 + 4].try_into().unwrap());
+        let r = film(absorption[w], scattering[w], rg);
         (1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)
     });
     crate::spectral::to_rgb(&reflectance).map(|v| v.clamp(0.0, 1.0))
+}
+
+fn film(k: f32, s: f32, rg: f32) -> f32 {
+    let tau2 = k * (k + 2.0 * s);
+    let tau = tau2.sqrt();
+    if tau < 1e-3 {
+        let u = 1.0 - tau2 / 3.0;
+        return (rg + (s * (1.0 - rg) - rg * k) * u) / (1.0 + (k + s * (1.0 - rg)) * u);
+    }
+    let r = s / (k + s + tau);
+    let e = (-2.0 * tau).exp();
+    let a = 1.0 - rg * r;
+    let b = r - rg;
+    (r * a - b * e) / (a - r * b * e)
 }
 
 /// Concentrations of the first four primaries at an sRGB point, trilinear
@@ -137,6 +167,16 @@ mod tests {
     use crate::color::{hex, to_oklab};
 
     #[test]
+    fn finite_film_keeps_backing_and_absorber_limits() {
+        for rg in [0.0, 0.2, 0.9, 1.0] {
+            assert_eq!(film(0.0, 0.0, rg), rg);
+            assert!((film(0.3, 0.0, rg) - rg * (-0.6f32).exp()).abs() < 2e-6);
+            assert!((film(0.0, 0.5, rg) - (rg + 0.5 * (1.0 - rg)) / (1.0 + 0.5 * (1.0 - rg))).abs() < 2e-6);
+            assert!((film(20.0, 40.0, rg) - crate::spectral::km(0.5)).abs() < 2e-6);
+        }
+    }
+
+    #[test]
     fn measured_tubes_keep_their_pigment_through_piles_and_brush_loads() {
         let palette = crate::Palette::new("measured study", crate::palette::catalog());
         let index = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
@@ -147,8 +187,9 @@ mod tests {
             let a = tube("zinc white").unwrap();
             let b = tube(name).unwrap();
             assert_eq!(palette.tubes[pigment].color, decode(&b));
-            assert_eq!(palette.tubes[pigment].strength, 1.0);
-            let expected = std::array::from_fn(|k| 0.9 * a[k] + 0.1 * b[k]);
+            let (wa, wb) = (0.9 * palette.tubes[white].strength, 0.1 * palette.tubes[pigment].strength);
+            assert_eq!(palette.tubes[pigment].strength, tube_strength(name).unwrap());
+            let expected = std::array::from_fn(|k| (wa * a[k] + wb * b[k]) / (wa + wb));
             let pile = palette.pile(vec![(white, 0.9), (pigment, 0.1)]);
             assert_eq!(pile.pigment_latent, expected);
             assert_eq!(pile.color, decode(&expected));
@@ -172,7 +213,8 @@ mod tests {
         let b = tube("vermilion").unwrap();
         assert_eq!(palette.tubes[rgb].strength, 0.8);
         let pile = palette.pile(vec![(rgb, 0.5), (measured, 0.5)]);
-        let expected: [f32; LATENT_SIZE] = std::array::from_fn(|k| (0.8 * a[k] + b[k]) / 1.8);
+        let weight = palette.tubes[measured].strength;
+        let expected: [f32; LATENT_SIZE] = std::array::from_fn(|k| (0.8 * a[k] + weight * b[k]) / (0.8 + weight));
         assert!((0..LATENT_SIZE).all(|k| (pile.pigment_latent[k] - expected[k]).abs() < 1e-6));
         assert_eq!(pile.paint(0.0).latent().color, pile.pigment_latent);
         let nested = decode(&std::array::from_fn(|k| 0.25 * a[k] + 0.75 * b[k]));

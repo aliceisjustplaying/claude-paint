@@ -61,6 +61,7 @@ pub struct Tube {
 fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
     let (oa, density, drain) = pigment_oil(name);
     let color = crate::mixer::tube(name).map_or_else(|| hex(color), |lat| crate::mixer::decode(&lat));
+    let strength = crate::mixer::tube_strength(name).unwrap_or(strength);
     Tube { name, pigment, color, hiding, stiff, strength, drying, drying_3: drying, oa, density, drain }
 }
 

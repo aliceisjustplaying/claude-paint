@@ -5,6 +5,9 @@
 use std::path::Path;
 use std::process::Command;
 
+#[path = "support/engine9_plumbing.rs"]
+mod engine9_plumbing;
+
 fn synthetic_v7() -> Vec<u8> {
     let mut canvas = paint::Canvas::new_window(16, 1.0, [0.3; 3], None).with_engine(1);
     let mut knife = paint::Knife::new(200.0);

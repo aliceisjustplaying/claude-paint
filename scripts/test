@@ -48,7 +48,7 @@ reap() {
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --test engine9_plumbing --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
+launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -200,8 +200,16 @@ check replay-pace 'uv run --script scripts/tests/replay_pace_test.py -v' "$unitt
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
 rust checkpoint-paths easel 'test checkpoint_paths test'
 rust save-confined easel 'test save_confined test'
-rust ck7 easel 'test ck7 test'
-rust pigment-state paint 'test engine9_plumbing test'
+rust ck7 easel 'test ck7 test' synthetic_v7_cli_refuses_raw_and_compressed_checkpoints \
+  occupied_synthetic_v7_layout_is_explicitly_refused \
+  synthetic_v7_rejects_truncation_trailing_engine_words_and_wrong_editions
+rust pigment-state easel 'test ck7 test' \
+  engine9_plumbing::engine9_keeps_engine8_switches_and_engine5_stays_the_low_level_default \
+  engine9_plumbing::public_palette_engine_changes_and_clones_keep_the_universal_cache \
+  engine9_plumbing::own_mixer_checkpoint_roundtrips_occupied_latents_and_pigment_parts \
+  engine9_plumbing::obsolete_checkpoints_are_refused_only_when_occupied \
+  engine9_plumbing::engine_switches_keep_the_universal_pigment_representation \
+  engine9_plumbing::unknown_checkpoint_mixer_identity_is_refused
 rust thinner-physics paint 'test thinner_physics test' c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent \
   c09_the_solvent_evaporates_and_the_film_loses_its_volume
 rust thinner-pigments paint 'test thinner_pigments test' c13_every_pigment_value_is_af49348s

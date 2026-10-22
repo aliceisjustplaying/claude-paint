@@ -40,7 +40,7 @@ fn engine9_keeps_engine8_switches_and_engine5_stays_the_low_level_default() {
         .with_engine(PIGMENT_MIXER);
     assert!(c.knife_skim() && c.blend_feather() && c.brush_skim());
     assert!(!c.quarter_tiles() && !c.adaptive_sweep());
-    let (restored, _) = Canvas::read_state(&mut Cursor::new(save(&c))).unwrap();
+    let (restored, _) = Canvas::read_state(&mut Cursor::new(save(&c).as_slice())).unwrap();
     assert!(restored.knife_skim() && restored.blend_feather() && restored.brush_skim());
 }
 
@@ -70,7 +70,7 @@ fn own_mixer_checkpoint_roundtrips_occupied_latents_and_pigment_parts() {
     let c = painted(PIGMENT_MIXER);
     let bytes = save(&c);
     assert_eq!(&bytes[..8], b"PAINTC19");
-    let (restored, header) = Canvas::read_state(&mut Cursor::new(&bytes)).unwrap();
+    let (restored, header) = Canvas::read_state(&mut Cursor::new(bytes.as_slice())).unwrap();
     assert_eq!(header, "engine9 plumbing");
     assert_eq!(save(&restored), bytes);
     assert_eq!(restored.seen(), c.seen());
@@ -95,10 +95,10 @@ fn untagged(bytes: Vec<u8>) -> Vec<u8> {
 #[test]
 fn obsolete_checkpoints_are_refused_only_when_occupied() {
     let old = untagged(save(&painted(5)));
-    let error = Canvas::read_state(&mut Cursor::new(old)).err().unwrap();
+    let error = Canvas::read_state(&mut Cursor::new(old.as_slice())).err().unwrap();
     assert!(error.to_string().contains("obsolete pigment representation"));
     let empty = Canvas::new_window(2, 1.0, [0.3; 3], None).with_engine(5);
-    let (restored, _) = Canvas::read_state(&mut Cursor::new(untagged(save(&empty)))).unwrap();
+    let (restored, _) = Canvas::read_state(&mut Cursor::new(untagged(save(&empty)).as_slice())).unwrap();
     assert_eq!(&save(&restored)[..8], b"PAINTC19");
 }
 
@@ -119,5 +119,5 @@ fn unknown_checkpoint_mixer_identity_is_refused() {
     let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let identity = 16 + header_len;
     bytes[identity..identity + 8].copy_from_slice(&2u64.to_le_bytes());
-    assert!(Canvas::read_state(&mut Cursor::new(bytes)).err().unwrap().to_string().contains("obsolete pigment representation"));
+    assert!(Canvas::read_state(&mut Cursor::new(bytes.as_slice())).err().unwrap().to_string().contains("obsolete pigment representation"));
 }

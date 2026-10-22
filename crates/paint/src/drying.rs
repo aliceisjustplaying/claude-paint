@@ -33,7 +33,6 @@
 //! `wait`; a painting that never waits doesn't allocate it.
 
 use crate::canvas::Canvas;
-use crate::pigment::Pigment;
 use crate::surface::{COAT_UM, SET_TIME};
 use crate::{smoothstep, surface::vnoise};
 use rayon::prelude::*;
@@ -893,6 +892,7 @@ impl Canvas {
             cv
         };
         let px_um = self.px_mm() * 1000.0;
+        let engine = self.engine;
         let wet = &mut self.wet;
         let (lat, hide) = (&wet.lat, &wet.hide);
         let add = &add;
@@ -918,8 +918,7 @@ impl Canvas {
                     }
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
-                    let c = crate::mixer::decode(&lat[i]);
-                    px[x] = crate::wet::over_share(Pigment::masstone(c, hide[i][0]), px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um));
+                    px[x] = crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um), engine);
                     ff[x] += ti;
                     vv[x] = 0.0;
                     cv[x] = 1.0;

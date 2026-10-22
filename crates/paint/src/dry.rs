@@ -131,6 +131,28 @@ pub fn dry_color(parts: &[(Rgb, f32, f32, f32)], s_oil_white: f32) -> Rgb {
     out
 }
 
+/// Dry color retaining measured absorption and wavelength-dependent
+/// scattering. The air/oil rule is the same as `dry_color`.
+pub fn spectral_color(parts: &[(crate::spectral::SpectralPigment, f32, f32)], white: &crate::spectral::Spectrum) -> Rgb {
+    let total = parts.iter().map(|p| p.2).sum::<f32>().max(1e-9);
+    let (sigma_white, r_white) = mie_air(2.0);
+    let reflectance = std::array::from_fn(|w| {
+        let (mut k, mut s) = (0.0, 0.0);
+        for (pigment, n, c) in parts {
+            let s_dry = if *n < 0.0 {
+                -n * pigment.s[w]
+            } else {
+                let (sigma, ratio) = mie_air(*n);
+                if *n >= 1.9 { ratio * pigment.s[w] } else { r_white * white[w] * sigma / sigma_white }
+            };
+            k += c / total * pigment.k[w];
+            s += c / total * s_dry;
+        }
+        crate::spectral::km(k / s.max(1e-9))
+    });
+    crate::spectral::to_rgb(&reflectance)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

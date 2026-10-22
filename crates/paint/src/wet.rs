@@ -3,8 +3,9 @@
 //! Every pixel holds a volume of wet paint (thickness, in "layer units": 1.0
 //! is one normal coat), its pigment mixture as a latent vector of the
 //! masstone (mixing is linear in latent space, weighted by volume) and its
-//! Kubelka–Munk scattering per coat (mixed linearly by volume, as K and S mix
-//! in the two-constant KM model; absorption follows from masstone and S).
+//! Kubelka–Munk scattering per coat. Engine 9 retains the latent's measured
+//! spectral K and S; the carried mean scattering records dilution and
+//! drainage. Older engines derive RGB absorption from masstone and S.
 //! Brushes exchange paint with this layer. It ages as the painting's clock
 //! runs (`Canvas::wait`, see `drying`); `Canvas::dry` waits until it is
 //! touch-dry, baking it into the dry picture with Kubelka–Munk.
@@ -119,8 +120,8 @@ pub struct Paint {
     pub parts: Vec<(usize, f32)>,
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
-    /// Kubelka–Munk scattering per coat (flat across channels; absorption
-    /// follows from it and the masstone). See `pigment::scatter_for`.
+    /// Kubelka–Munk scattering per coat: the spectral mean for engine 9's
+    /// piles, flat across RGB channels for older paints.
     pub scatter: f32,
     /// Stiffness: 0 = fluid, rich in medium (a glaze), 1 = stiff tube paint.
     /// Sets how the paint levels as it dries (see `surface::settle`). How
@@ -222,6 +223,9 @@ impl Paint {
     }
     /// What `coats` of this paint look like laid over `under`.
     pub fn over(&self, under: Rgb, coats: f32) -> Rgb {
+        if let Some(lat) = &self.pigment_latent {
+            return crate::mixer::over(lat, self.scatter, under, coats);
+        }
         self.pigment().over(under, coats)
     }
 }
@@ -343,6 +347,18 @@ pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rg
     [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
 }
 
+pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, engine: u32) -> Rgb {
+    if engine < crate::PIGMENT_MIXER {
+        return over_share(Pigment::masstone(crate::mixer::decode(lat), scatter), under, coats, cover);
+    }
+    if cover.is_nan() || cover <= 0.0 {
+        return under;
+    }
+    let cover = cover.min(1.0);
+    let over = crate::mixer::over(lat, scatter, under, (coats / cover).min(1e4));
+    std::array::from_fn(|k| under[k] + (over[k] - under[k]) * cover)
+}
+
 /// Paste stands at most this tall for its width (a bead of oil paint: stroke
 /// ridges of 0.1-0.3 mm on strokes 1-2 mm wide are 0.1-0.3; 0.5 is stiff
 /// impasto).
@@ -375,8 +391,7 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        let c = crate::mixer::decode(&self.wet.lat[i]);
-        over_share(Pigment::masstone(c, self.wet.hide[i][0]), self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0))
+        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0), self.engine)
     }
 
     /// The visible colors, pixel by pixel over the window: the dry

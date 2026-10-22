@@ -65,7 +65,7 @@ pub fn identity() -> u64 {
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/finite100um/reference07A/constant-weights/additive-linear-rgb/v5");
+        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/finite100um/reference07A/constant-weights/additive-linear-rgb/v5/film25um/spectral-dry");
         hash.update(MEASURED);
         hash.update(REFERENCE);
         hash.update(INVERSE);
@@ -100,6 +100,17 @@ pub fn lerp(a: &Rgb, b: &Rgb, t: f32) -> Rgb {
 }
 
 fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
+    let pigment = pigment(lat);
+    let reflectance = std::array::from_fn(|w| {
+        let rg = f32::from_le_bytes(REFERENCE[w * 4..w * 4 + 4].try_into().unwrap());
+        let r = film(pigment.k[w], pigment.s[w], rg);
+        outside(r)
+    });
+    crate::spectral::to_rgb(&reflectance).map(|v| v.clamp(0.0, 1.0))
+}
+
+/// The latent's two-constant coefficients, per 100 µm of tube paint.
+pub fn pigment(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
     static COEFFICIENTS: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; PIGMENTS]> = std::sync::OnceLock::new();
     let coefficients = COEFFICIENTS.get_or_init(|| std::array::from_fn(|p| std::array::from_fn(|ks| std::array::from_fn(|w| {
         let offset = ((p * 2 + ks) * crate::spectral::N + w) * 4;
@@ -116,12 +127,42 @@ fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
             scattering[w] += c * coefficients[p][1][w];
         }
     }
+    crate::spectral::SpectralPigment { k: absorption, s: scattering }
+}
+
+fn outside(r: f32) -> f32 {
+    (1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)
+}
+
+fn inside(r: f32) -> f32 {
+    r / ((1.0 - 0.04) * (1.0 - 0.49) + 0.49 * r)
+}
+
+/// Mean scattering per engine coat (25 µm), carried with the wet paint.
+pub fn scattering(lat: &[f32; LATENT_SIZE]) -> f32 {
+    pigment(lat).s.iter().sum::<f32>() / crate::spectral::N as f32 * crate::COAT_UM / 100.0
+}
+
+/// A latent film over the existing specular-excluded reflectance. The
+/// carried scattering scales both K and S as medium or drainage changes
+/// pigment per volume. RGB reconstruction residuals fade with transmission.
+pub fn over(lat: &[f32; LATENT_SIZE], scatter: f32, under: Rgb, coats: f32) -> Rgb {
+    if coats <= 0.0 || scatter <= 0.0 {
+        return under;
+    }
+    let p = pigment(lat);
+    let mean_s = p.s.iter().sum::<f32>() / crate::spectral::N as f32;
+    let x = coats * scatter / mean_s.max(1e-12);
+    let sub = crate::spectral::from_rgb(under).map(inside);
+    let mut transmission = [0.0; crate::spectral::N];
     let reflectance = std::array::from_fn(|w| {
-        let rg = f32::from_le_bytes(REFERENCE[w * 4..w * 4 + 4].try_into().unwrap());
-        let r = film(absorption[w], scattering[w], rg);
-        (1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)
+        let (r, t) = crate::pigment::layer1(p.k[w], p.s[w], x);
+        transmission[w] = t * t;
+        outside(r + t * t * sub[w] / (1.0 - r * sub[w]).max(1e-6))
     });
-    crate::spectral::to_rgb(&reflectance).map(|v| v.clamp(0.0, 1.0))
+    let rgb = crate::spectral::to_rgb(&reflectance);
+    let transmitted = crate::spectral::to_rgb(&transmission);
+    std::array::from_fn(|k| (rgb[k] + lat[PIGMENTS + k] * (1.0 - transmitted[k]).clamp(0.0, 1.0)).clamp(0.0, 1.0))
 }
 
 fn film(k: f32, s: f32, rg: f32) -> f32 {
@@ -165,6 +206,100 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
 mod tests {
     use super::*;
     use crate::color::{hex, to_oklab};
+
+    #[test]
+    fn films_keep_measured_coefficients_thickness_and_medium() {
+        let mut palette = crate::Palette::new("film study", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        for name in ["Prussian blue", "ultramarine blue", "lead white", "yellow ochre"] {
+            let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let pile = palette.pile(vec![(i, 1.0)]);
+            let lat = &pile.pigment_latent;
+            let p = pigment(lat);
+            for medium in [0.0, 0.8] {
+                let paint = pile.paint(medium);
+                for under in [[0.0; 3], [0.8; 3]] {
+                    let sub = crate::spectral::from_rgb(under).map(inside);
+                    let expected = crate::spectral::to_rgb(&std::array::from_fn(|w| outside(film(p.k[w] * (1.0 - medium), p.s[w] * (1.0 - medium), sub[w]))));
+                    let actual = paint.over(under, 100.0 / crate::COAT_UM);
+                    if tube(name).is_some() {
+                        assert!((0..3).all(|k| (actual[k] - expected[k]).abs() < 2e-6), "{name}: {actual:?} != {expected:?}");
+                    }
+                    assert_eq!(paint.over(under, 0.0), under);
+                    let diluted = paint.over(under, 1.0);
+                    let thinner = pile.paint(0.0).over(under, 1.0 - medium);
+                    assert!((0..3).all(|k| (diluted[k] - thinner[k]).abs() < 2e-6));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn measured_films_report_errors_over_both_revigo_fields() {
+        let spectra: Vec<(&str, Vec<f32>)> = include_str!("../../../scripts/pigment_data/revigo/revigo-aggregated-palette-spectral-data.txt")
+            .lines().skip(1).map(|line| {
+                let mut fields = line.split('\t');
+                (fields.next().unwrap(), fields.map(|v| v.parse::<f32>().unwrap() / 100.0).collect())
+            }).collect();
+        let spectrum = |id: &str| &spectra.iter().find(|p| p.0 == id).unwrap().1;
+        for (name, id) in [("Eosin1Wax", "01A"), ("Eosin", "02A"), ("Eosin2PbWax", "03A"), ("Cochineal", "04A"), ("Minium", "05A"), ("Vermillion", "06A"), ("ZincWhite", "07A"), ("LeadWhite", "08A"), ("ViridianGreen", "09A"), ("EmeraldGreen", "10A"), ("UltramarineBlue", "11A"), ("CobaltBlue", "12A"), ("PrussianBlue", "13A"), ("ChromeYellow", "14A"), ("ChromeYellowOtero", "15A"), ("BariumSulphate", "16A"), ("CalciumCarbonate", "17A")] {
+            let p = pigment(&measured(name).unwrap());
+            let mut errors = [0.0; 2];
+            for (field, (bare, painted)) in [("_b", "_ob"), ("_w", "_ow")].into_iter().enumerate() {
+                let bare = spectrum(&format!("{id}{bare}"));
+                let painted = spectrum(&format!("{id}{painted}"));
+                let mut sum = 0.0;
+                for w in 0..31 {
+                    let sub = inside(bare[w] - 0.04);
+                    let expected = outside(film(p.k[w + 2], p.s[w + 2], sub)) + 0.04;
+                    let (r, t) = crate::pigment::layer1(p.k[w + 2], p.s[w + 2], 1.0);
+                    let actual = outside(r + t * t * sub / (1.0 - r * sub)) + 0.04;
+                    assert!((actual - expected).abs() < 2e-6, "{name} {field} {w}: {actual} != {expected}");
+                    sum += (actual - painted[w]).powi(2);
+                }
+                errors[field] = (sum / 31.0).sqrt();
+            }
+            eprintln!("100um {name}: black RMSE {:.6}, white RMSE {:.6}", errors[0], errors[1]);
+        }
+    }
+
+    #[test]
+    fn wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage() {
+        let mut palette = crate::Palette::new("film study", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        for name in ["Prussian blue", "lead white", "yellow ochre"] {
+            let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let paint = palette.pile(vec![(i, 1.0)]).paint(0.8);
+            for cover in [0.2, 1.0] {
+                let mut canvas = crate::Canvas::new(4, 1.0, [0.8; 3]).with_engine(crate::PIGMENT_MIXER);
+                canvas.wet.vol.fill(0.15);
+                canvas.wet.lat.fill(paint.latent());
+                canvas.wet.hide.fill(paint.prop());
+                canvas.wet.cover.fill(cover);
+                canvas.wet.dirty = Some((0, 0, canvas.f.w, canvas.f.h));
+                let expected = paint.over([0.8; 3], 0.15 / cover);
+                let expected = expected.map(|v| 0.8 + cover * (v - 0.8));
+                let wet = canvas.look_px(0);
+                assert!((0..3).all(|k| (wet[k] - expected[k]).abs() < 2e-6), "{name}: {wet:?} != {expected:?}");
+                canvas.dry();
+                assert!((0..3).all(|k| (canvas.px[0][k] - expected[k]).abs() < 2e-6), "{name}: {:?} != {expected:?}", canvas.px[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn measured_dry_colors_do_not_reconstruct_absorption_from_rgb() {
+        let mut palette = crate::Palette::new("pastel study", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        for name in ["Prussian blue", "ultramarine blue", "lead white", "bone black"] {
+            let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let parts = [(i, 1.0)];
+            let dry = palette.dry_color(&parts);
+            palette.tubes[i].color = [0.5; 3];
+            assert_eq!(palette.dry_color(&parts), dry);
+            assert!(dry.iter().all(|v| v.is_finite() && *v >= 0.0));
+        }
+    }
 
     #[test]
     fn finite_film_keeps_backing_and_absorber_limits() {

@@ -99,7 +99,9 @@ def main():
         rows = []
         for sid in ids:
             if sid in pairs:
-                paint, white, share = pairs[sid]
+                paint, white, _ = pairs[sid]
+                names, fractions = samples[sid]
+                share = dict(zip(names, fractions))[paint] / fractions.sum()
             else:
                 paint, white, share = next(n for n, c in zip(*samples[sid]) if c > 0), "ZincWhite", 1.0
             rows.append((sid, paint, white, share))
@@ -129,6 +131,7 @@ def main():
             lines.append(line)
             swatches.append((f"{sid} {white} + {paint} {100 * share:.1f} %", target, pn, pr, dn, dr))
             group_records.append({"sample": sid, "paint": paint, "white": white, "share": share,
+                                  "raw_fraction_sum": float(samples[sid][1].sum()),
                                   "measured": target.tolist(), "new": pn.tolist(),
                                   "main": pr.tolist() if pr is not None else None, "error_new": dn, "error_main": dr})
         text = f"{len(rows)} mixtures. New mixer: median {np.median(errors):.3f}, mean {np.mean(errors):.3f}, worst {max(errors):.3f} ({rows[int(np.argmax(errors))][0]})."

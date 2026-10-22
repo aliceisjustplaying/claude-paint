@@ -1,0 +1,27 @@
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 17120/17120 pixels changed; max RGB delta 206/255; max alpha delta 0/255
+old_logs: engine1_tiny exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 13056/13056 pixels changed; max RGB delta 202/255; max alpha delta 0/255
+old_logs: ck7 exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 13056/13056 pixels changed; max RGB delta 110/255; max alpha delta 0/255
+old_logs: studio_6399ad exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 12032/12032 pixels changed; max RGB delta 212/255; max alpha delta 0/255
+old_logs: studio_db6324 exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 7139/11648 pixels changed; max RGB delta 22/255; max alpha delta 0/255
+old_logs: easel3_free exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 6541/11648 pixels changed; max RGB delta 10/255; max alpha delta 0/255
+old_logs: easel3_green exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 8705/12544 pixels changed; max RGB delta 11/255; max alpha delta 0/255
+old_logs: easel3_near exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 7140/11264 pixels changed; max RGB delta 15/255; max alpha delta 0/255
+old_logs: easel4_free exceeds image tolerance
+image comparison: PASS: tolerance (linux-x86_64 -> linux-x86_64); 755/11648 pixels changed; max RGB delta 1/255; max alpha delta 0/255
+old_logs: easel4_green ok (easel4_green.first3.lua at 128 px)
+old_logs: easel4_green cross-build digests differ (image is within tolerance)
+image comparison: PASS: tolerance (linux-x86_64 -> linux-x86_64); 793/12544 pixels changed; max RGB delta 1/255; max alpha delta 0/255
+old_logs: easel4_near ok (easel4_near.first3.lua at 128 px)
+old_logs: easel4_near cross-build digests differ (image is within tolerance)
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 25600/25600 pixels changed; max RGB delta 220/255; max alpha delta 0/255
+old_logs: r19 exceeds image tolerance
+image comparison: FAIL: tolerance (linux-x86_64 -> linux-x86_64); 3703/11648 pixels changed; max RGB delta 49/255; max alpha delta 0/255
+old_logs: legacy_tiny exceeds image tolerance
+old_logs: FAILED

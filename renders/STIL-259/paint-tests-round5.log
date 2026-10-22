@@ -1,0 +1,163 @@
+   Compiling paint v0.1.0 (/workspace/claude-paint/crates/paint)
+    Finished `test` profile [optimized + debuginfo] target(s) in 6.89s
+     Running unittests src/lib.rs (target/debug/deps/paint-6b3565306c64314c)
+
+running 119 tests
+test bristle::skim_packing_tests::skimming_keeps_the_packed_paint_buried_under_it ... ok
+test bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint ... FAILED
+test checkpoint::tests::a_different_mixer_identity_is_refused_before_reading_latents ... ok
+test bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure ... ok
+test checkpoint::tests::a_sheet_of_paper_keeps_the_recorded_settings_in_its_engine_word ... ok
+test checkpoint::tests::a_laid_sheet_survives_a_checkpoint ... ok
+test checkpoint::tests::drained_masking_sheets_keep_each_support ... ok
+test checkpoint::tests::a_sheet_of_paper_survives_a_checkpoint ... ok
+test checkpoint::tests::paper_and_stick_pastel_survive_a_checkpoint ... ok
+test checkpoint::tests::the_drain_switch_has_its_own_format ... ok
+test dry::tests::dry_pigments_are_paler_by_their_index ... ok
+test canvas::review_lighting_tests::review_overhead_and_grazing_lights_are_exact ... ok
+test drying::tests::a_scraped_nan_film_can_wait_without_a_thickness_buffer ... ok
+test drying::tests::checkpoint_mid_drying_resumes_exactly ... ok
+test graphite::tests::graded_hatching_follows_the_weight ... ok
+test graphite::tests::graphite_drawing_keeps_its_layout ... ok
+test graphite::tests::old_drawing_layouts_keep_their_original_reflectance ... ok
+test graphite::tests::pastel_legacy_cells_are_still_readable ... ok
+test graphite::tests::saturated_fixed_pastel_can_take_removable_color ... ok
+test graphite::tests::sealed_guides_survive_erasing_in_whole_and_windowed_canvases ... ok
+test engine7::exchange::tests::the_drain_switch_drains_as_in_engine_5 ... ok
+test canvas::tests::a_liquid_film_levels_the_weave_under_it_from_engine_4 has been running for over 60 seconds
+test checkpoint::tests::drained_paper_keeps_both_sections has been running for over 60 seconds
+test handling::wet_edges::a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops has been running for over 60 seconds
+test handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint has been running for over 60 seconds
+test canvas::tests::a_liquid_film_levels_the_weave_under_it_from_engine_4 ... ok
+test checkpoint::tests::drained_paper_keeps_both_sections ... ok
+test mixer::tests::blue_and_yellow_make_green_including_the_palette_case ... FAILED
+test mixer::tests::catalog_traces_do_not_overpower_white ... ok
+test mixer::tests::finite_film_keeps_backing_and_absorber_limits ... ok
+test mixer::tests::measured_pigment_survives_wet_exchange_and_checkpoints ... ok
+test mixer::tests::measured_tubes_keep_their_pigment_through_piles_and_brush_loads ... ok
+test mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral ... FAILED
+test mixer::tests::palette_violet_and_ultramarine_tints_keep_their_hue ... ok
+test mixer::tests::rgb_only_tubes_and_mixed_recipes_keep_linear_latents ... ok
+test mixer::tests::round_trips_colors_and_keeps_linear_latents ... ok
+test mixer::tests::white_and_black_keep_middle_tints_neutral ... ok
+test mixer::tests::white_tints_keep_their_blue_chroma ... ok
+test noise::tests::worley_finds_the_true_nearest_features ... ok
+test palette::tests::a_piles_packing_is_its_tubes_by_their_oil ... ok
+test palette::tests::a_renamed_palette_keeps_its_box_s_packing ... ok
+test palette::tests::blotting_stops_at_the_drained_floor_with_the_drain_switch ... ok
+test palette::tests::seurat_s_tubes_are_french_and_cezanne_s_their_period_s ... ok
+test palette::tests::the_every_box_grinds_each_tube_as_its_research_has_it ... ok
+test palette::tests::tubes_hold_their_periods_oil ... ok
+test paper::measure::print_roughness ... ignored
+test paper::tests::fiber_bounds_reject_only_empty_cropped_bands ... ok
+test handling::wet_edges::a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops ... ok
+test paper::tests::flocs_and_felt_roughen_the_sheet ... ok
+test paper::tests::pores_vary_with_the_sheet ... ok
+test paper::tests::the_gamma_draw_has_its_mean_and_spread ... ok
+test paper::tests::the_fibers_make_the_grammage ... ok
+test paper::tests::the_sheet_is_laid_in_millimeters ... ok
+test pastel::tests::a_stroke_lays_in_proportion_to_its_force ... ok
+test pastel::tests::a_soft_edged_mask_moves_less_at_its_edge ... ok
+test pastel::tests::an_area_smudge_conserves_the_pastel_with_what_the_finger_carries ... ok
+test pastel::tests::an_area_smudge_leaves_fixed_pastel ... ok
+test pastel::tests::an_area_smudge_refuses_bad_values ... ok
+test pastel::tests::an_area_smudge_carries_each_color_into_the_other_inside_the_mask ... ok
+test pastel::tests::crumbs_spread_a_stroke_beyond_its_contact ... ok
+test pastel::tests::erasing_loose_pastel_preserves_bound_pigment_and_releases_the_tooth ... ok
+test pastel::tests::finite_extreme_angles_finish_a_stroke ... ok
+test pastel::tests::crumbs_on_wet_paint_are_lost ... ok
+test pastel::tests::reused_bands_match_fresh_pastel_and_mutate_independently ... ok
+test handling::wet_edges::a_blend_still_works_a_thin_wet_film_on_dry_paint ... ok
+test pastel::tests::smudge_lightens_its_source_and_makes_erasable_deposits ... ok
+test pastel::tests::stagnant_midpoints_preserve_forty_step_results ... ok
+test pastel::tests::seated_sticks_match_the_original_forty_step_search ... ok
+test pastel::tests::the_eraser_lifts_loose_pastel_over_fixed_coverage ... ok
+test pastel::tests::the_finger_contact_levels_off_past_2_n ... ok
+test pastel::tests::the_eraser_lifts_loose_pastel ... ok
+test pastel::tests::the_finger_moves_loose_pastel ... ok
+test pastel::tests::the_stick_wears_to_a_facet ... ok
+test prepared_optics::tests::row_normals_match_original_bits_at_borders_and_extreme_slopes ... ok
+test pastel::tests::the_tooth_fills_and_fixative_gives_it_back ... ok
+test rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask ... ok
+test rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along ... ok
+test rag::tests::a_drained_rag_smear_conserves_integrated_scattering ... ok
+test rag::tests::an_absorbent_ground_drains_a_rag_smear_with_the_drain_switch ... ok
+test sheet::tests::a_blow_accounts_for_every_crumb ... ignored, slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_blow_accounts_for_every_crumb
+test sheet::tests::a_dry_brush_lifts_what_its_tips_reach ... ignored, slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_dry_brush_lifts_what_its_tips_reach
+test prepared_optics::tests::row_preparation_preserves_material_lighting_within_tolerance_in_whole_and_cropped_frames ... ok
+test pastel::tests::reused_sheets_match_fresh_paper_and_mutate_independently ... ok
+test sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper ... ignored, slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper
+test sheet::tests::a_lifted_crumb_hops_centimeters_in_the_wind ... ok
+test sheet::tests::a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth ... ignored, slow (about 4 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth
+test sheet::tests::a_scalpel_cuts_a_knife_does_not ... ignored, slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_scalpel_cuts_a_knife_does_not
+test sheet::tests::a_sheet_keeps_fixative_off_the_drawing_guide ... ok
+test sheet::tests::a_fine_dry_brush_keeps_fixed_graphite_beneath_loose_pastel ... ok
+test sheet::tests::a_sheet_protects_the_drawing_guide_from_erasing ... ok
+test sheet::tests::a_tap_sheds_crumbs_not_the_tooth ... ignored, slow (about 3 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_tap_sheds_crumbs_not_the_tooth
+test sheet::tests::a_dry_brush_smears_a_speckled_passage ... ok
+test sheet::tests::blown_crumbs_settle_in_a_ring ... ignored, slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::blown_crumbs_settle_in_a_ring
+test sheet::tests::blown_fines_settle_by_their_size ... ok
+test sheet::tests::an_edge_dents_paper_less_than_a_bed_of_springs ... ok
+test sheet::tests::a_sheet_keeps_what_it_covers_clean ... ok
+test sheet::tests::bound_pastel_keeps_its_color_after_checkpoint_and_loose_removal ... ok
+test sheet::tests::loose_removal_preserves_fixed_and_non_pastel_coverage ... ok
+test sheet::tests::removable_chalk_and_pastel_leave_fixed_graphite_color_unchanged ... ok
+test sheet::tests::erasing_colored_pastel_recovers_original_graphite_after_checkpoint ... ok
+test sheet::tests::removing_all_smudged_pastel_leaves_no_phantom_coverage ... ok
+test sheet::tests::the_hold_shows_where_a_stroke_lays ... ok
+test sheet::tests::loose_pastel_tools_do_not_recolor_retained_graphite ... ok
+test handling::wet_edges::a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend has been running for over 60 seconds
+test surface::box_blur_tests::row_major_columns_preserve_reference_bits ... ok
+test tests::a_packed_film_follows_the_relief ... ok
+test sheet::tests::reused_drawing_paper_matches_fresh_paper_and_mutates_independently ... ok
+test tests::an_absorbent_ground_drains_a_film_from_the_ground_up ... ok
+test tests::a_stroke_reaches_its_end ... ok
+test tests::baking_leaves_packed_paint_where_it_packed ... ok
+test tests::an_absorbent_ground_drains_paint_as_its_pigment_packs ... ok
+test tests::drained_deposition_keeps_its_pigment_when_wet_and_baked ... ok
+test tests::dry_is_idempotent_and_clears_wet ... ok
+test tests::drag_conserves_paint ... ok
+test handling::wet_edges::a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend ... ok
+test tests::ground_drain_conserves_integrated_scattering ... ok
+test tests::image_tolerance::tests::numeric_fields_accept_rounding_and_reject_regressions_and_nonfinite_values ... ok
+test tests::image_tolerance::tests::two_levels_pass_in_every_channel_and_three_fail ... ok
+test thinner::tests::drained_flow_conserves_integrated_scattering ... ok
+test thinner::tests::paint_the_flow_brings_onto_absorbent_ground_drains_there ... ok
+test thinner::tests::the_sparse_flow_set_moves_only_the_liquid_above_packed_paint ... ok
+test surface::liquid_film_tests::absent_switch_keeps_the_old_surface_and_lighting_through_checkpoints ... ok
+test tests::fixture_matches_golden ... FAILED
+test tests::fixture_is_deterministic_across_thread_counts ... ok
+
+failures:
+
+---- bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint stdout ----
+
+thread 'bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint' (128859) panicked at crates/paint/src/bristle.rs:3210:9:
+on wet 0.43678316, on dried 0.8425079
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- mixer::tests::blue_and_yellow_make_green_including_the_palette_case stdout ----
+
+thread 'mixer::tests::blue_and_yellow_make_green_including_the_palette_case' (133786) panicked at crates/paint/src/mixer.rs:274:9:
+Prussian/chrome yellow is not a chromatic green: hue 142.76172, chroma 0.054210383
+
+---- mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral stdout ----
+
+thread 'mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral' (133791) panicked at crates/paint/src/mixer.rs:288:13:
+lead white/raw umber tint is too dark: 0.6288614
+
+---- tests::fixture_matches_golden stdout ----
+
+thread 'tests::fixture_matches_golden' (135410) panicked at crates/paint/src/../tests/support/image_tolerance.rs:6:5:
+maximum RGBA channel difference 172/255 exceeds 2/255
+
+
+failures:
+    bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint
+    mixer::tests::blue_and_yellow_make_green_including_the_palette_case
+    mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral
+    tests::fixture_matches_golden
+
+test result: FAILED. 107 passed; 4 failed; 8 ignored; 0 measured; 0 filtered out; finished in 160.28s
+
+error: test failed, to rerun pass `-p paint --lib`

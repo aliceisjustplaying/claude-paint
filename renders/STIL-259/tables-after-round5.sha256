@@ -1,0 +1,5 @@
+9c5688169627e3b07b5593ee5dd644fdebe672e3d5305ce1384e0244d6ae217e  crates/paint/src/mixer/inverse.bin
+f9920b80d2b2df1e9286a75d3ab5868d4177883cb23b2ca58339d0a974554211  crates/paint/src/mixer/reference.bin
+5be1924f293ee0fcf0517b5575f3b6275c5ef36b046543edfc11341664e95e15  crates/paint/src/mixer/measured.bin
+d16863f801f22a78bc46ea328646b7f1aa979f8315118269e9d4949fcba6d2c5  crates/paint/src/mixer/primaries.json
+f7fb735a088e6a105c5c61867715d1b999bd7366a37ad979a8ead4e0ae2a1715  crates/paint/src/mixer/measured.json

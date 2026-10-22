@@ -1,0 +1,21 @@
+# Round 5 verification
+
+The decoder, generator and tables are committed at ec2a760646454d5579dac5823b4648ec00d585d8. The final scoring-only correction normalizes raw sample fractions for both engines: 08F sums to 100.3% in the unchanged source file. All other old-test rows already sum to 100%. This changes the 08F error by about 0.0003, not any coefficient or runtime binary. No raw measurement, original guard, golden, capture or recipe changes.
+
+The current generator was rerun into an isolated output directory after its final cleanup. All five outputs are byte-identical: inverse.bin, reference.bin, measured.bin, primaries.json and measured.json. NumPy 2.4.2 and SciPy 1.17.1 use one BLAS thread. The audit verifies the runtime pigment order, packed coefficients/constants, reference substrate, primary arrays, fit/test separation, unchanged raw data and byte-identical original guard bodies. The generated model differs from the retained selected experiment by at most 1.09e-8 in error; final Rust old-test errors differ by at most 6.31e-8. See provenance-round5.json and tables-after-round5.sha256.
+
+`cargo test --locked -p paint --lib`: 107 passed, 4 failed, 8 ignored. The failures are the combined green guard (Prussian/chrome C 0.054210 below 0.06), palette-lightness guard (raw umber L 0.628861 below 0.72), existing knife skim (wet 0.43678316 vs dried 0.8425079, below its 0.85 ratio) and recorded scene (maximum 172/255 vs 2/255). The seven original mixer guards are 5 pass / 2 fail, versus 4 / 3 in round 4. Middle-gray chroma and warmth now pass. The new finite-film limit test and measured-pigment transport tests pass. Logs and the full side-by-side guard table are adjacent.
+
+All 9 ck7/plumbing tests, 20 replay-checkpoint tests and 4 Python reconstruction tests pass. No preservation assertion or behavioral threshold was relaxed.
+
+All 12 old logs replay. Ten exceed unchanged image goldens; easel4_green and easel4_near pass at maximum 1/255. Maximum RGB deltas in case order are 206, 202, 110, 212, 22, 10, 11, 15, 1, 1, 220 and 49 (/255). The command exits 1 and its full output is in old-logs-round5.log.
+
+The unchanged smooth2 probe reports 189 endpoint / 139 interior anomaly ramps out of 3,000, compared with round 4’s 300 / 193, round 3’s 186 / 172 and main’s 0 / 0. Endpoints are linear RGB; each ramp has 400 steps and counts when its largest relevant step is >10 times its own median (floor 1e-6). Endpoint steps are 0, 1, 398 and 399, interior 2–397. The worst interior ratio is 42.8 at step 397. This is a diagnostic, not an altered acceptance threshold.
+
+The raw-RGB 1% trace maximum is 0.135834, which passes 0.33. Actual measured Prussian at 1% in lead white is 0.385599, down from 0.409105 but still above that bound. The actual-palette and raw-RGB routes are reported separately. All 39 RGB-only scalar strengths are unchanged.
+
+[CI pipeline 774](https://ci.mosphere.at/repos/7/pipeline/774/2), head ec2a760, fails the same five labels as round 4: old-logs, paint-lib, easel-bin, thinner-check2 and thinner-pigments. The gate reports 106 seconds. The review workflow succeeds. Easel-bin includes the existing engine-2 image failure and glaze failure: contrast kept 0.6693895, L* change spread 1.3225123 and warm shift 13.547056. Round 4 also failed that glaze case (contrast 0.6467851, warm shift 13.2931795), although its earlier report summarized easel-bin too narrowly as recorded-image failures. No glaze recipe or threshold is changed.
+
+Measured masstones and stock weights change the palette output and optical scattering derived from catalog hiding. Frozen thinner captures and historical tube-value oracles therefore differ. This remains a red gate, not a visual acceptance or a baseline-approval claim. CI summaries are in ci-summary-round5.txt.
+
+The review bot reports no new actionable finding in the incremental round-5 source diff, but three older P2 findings remain open: frozen mixer-dependent captures, the historical checkpoint reader's seven-versus-21-channel width and the known-rag classifier's seven-channel assumptions. These were independently inspected and remain outside this round's source-fitting scope. The disposition is recorded at https://github.com/aliceisjustplaying/claude-paint/pull/244#issuecomment-6350447974. This is not a clean overall review.

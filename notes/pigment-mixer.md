@@ -108,6 +108,8 @@ strength script's `--measured` mode writes those generated constants, not
 a second fit through an old binary. Both old and revised scores are
 reported. The real-paint sheet shows revised test, added fit, original fit,
 selection-touched and unused pure-film groups separately.
+Scoring normalizes the raw recipe fractions for both engines: 08F sums
+to 100.3% in the unchanged source specifications. No measurement is edited.
 
 `notes/pigment-mixer-comparison.csv` contains only the current independent
 mixer's 1,045 results over the original 95 ramps. Main's outputs remain

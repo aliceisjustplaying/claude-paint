@@ -1,0 +1,34 @@
+   Compiling easel v0.1.0 (/workspace/claude-paint/crates/easel)
+    Finished `test` profile [optimized + debuginfo] target(s) in 49.17s
+     Running unittests src/main.rs (target/debug/deps/easel-9735a61326036a62)
+
+running 20 tests
+test replay_checkpoint::tests::checkpoint_budget_is_per_record_not_per_history ... ok
+test replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots ... ok
+test replay_checkpoint::tests::batch_identity_is_only_built_for_checkpoints_or_frames ... ok
+test replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused ... ok
+test replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files ... ok
+test replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory ... ok
+test replay_checkpoint::tests::live_checkpoint_cadence_and_failed_writes_preserve_last_success ... ok
+test replay_checkpoint::tests::live_checkpoint_uses_its_startup_identity ... ok
+test replay_checkpoint::tests::live_checkpoint_reconstructs_temporary_tools_across_gc_schedules ... ok
+test replay_checkpoint::tests::live_resume_rejects_missing_and_changed_prefix_before_reconstruction ... ok
+test replay_checkpoint::tests::live_scope_restores_both_traces_on_unwind ... ok
+test replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly ... ok
+test replay_checkpoint::tests::live_resume_accepts_appended_chunks_and_keeps_recording ... ok
+test replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock ... ok
+test replay_checkpoint::tests::trace_failure_cannot_be_hidden_by_lua_pcall ... ok
+test replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure ... ok
+
+running 1 test
+test replay_checkpoint::tests::checkpoint_resume_rejects_changed_build_width_and_environment ... ok
+test replay_checkpoint::tests::progress_is_published_at_every_chunk_and_batch_boundary ... ok
+test replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.48s
+
+test replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored ... ok
+test replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 67 filtered out; finished in 17.40s
+

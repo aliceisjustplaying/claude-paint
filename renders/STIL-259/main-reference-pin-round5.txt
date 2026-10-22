@@ -1,0 +1,6 @@
+Verified 2026-10-22T20:21:31Z
+95dba3ff937a96d2fad23dda578ab6efe4a7b4c8	refs/heads/main
+95dba3ff937a96d2fad23dda578ab6efe4a7b4c8
+4288c144ee04e0721687b6c8733d42aac93b128de28b7f752f8aa7d24bb898bb  /home/user/.capy/work/STIL-259-evidence/bin/main/mixpairs
+8653129caf7f1fce64596e0c247be5c9010532a753ff20ce4010693cd20a2acb  /home/user/.capy/work/STIL-259-evidence/bin/easel-main
+3b65f557c3727bb9d4a7e88bf5e42f6712c30e7d3140ac9b85039d612d5fdf68  /home/user/.capy/work/STIL-259-evidence/outputs/main-gallery-replay/painting-main-current.png

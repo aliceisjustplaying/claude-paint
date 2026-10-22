@@ -1,0 +1,1 @@
+smooth2: endpoint jumps >10x median in 189 of 3000 ramps; interior jumps >10x median in 139; worst interior ratio 42.8 a [0.1345818, 0.23208097, 0.013856521] b [0.317823, 0.49728507, 0.73724705] step 397

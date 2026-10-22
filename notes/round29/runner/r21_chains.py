@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-from painting_chunks import count_painting_chunks
+from painting_chunks import count_painting_effects
 from defaults_used import defaults_used
 from log_copy import copy_logs
 from copied_shapes import copied_shapes
@@ -503,15 +503,20 @@ def count_chunks(d):
 
 
 def count_painting(d):
-    """Chunks of the log that put marks on the canvas (see painting_chunks.py)."""
-    f = d / "paintings/lua/painting.lua"
-    return count_painting_chunks(f.read_text(errors="replace")) if f.exists() else 0
+    """Accepted mark-making effects, or None when the engine evidence is unavailable."""
+    return count_painting_effects(d)
 
 
 def added_painting(s):
-    """Whether a sitting added painting chunks (chunk counts for records without painting counts)."""
-    before, after = (("painting_before", "painting_after") if s.get("painting_after") is not None
-                     else ("chunks_before", "chunks_after"))
+    """Whether a sitting painted; unavailable engine evidence falls back to accepted chunks."""
+    if ("effects_before" in s or "effects_after" in s
+            or (s.get("chunks_before") is not None and s.get("chunks_after") is not None)):
+        before, after = (("effects_before", "effects_after")
+                         if s.get("effects_before") is not None and s.get("effects_after") is not None
+                         else ("chunks_before", "chunks_after"))
+    else:
+        before, after = (("painting_before", "painting_after") if s.get("painting_after") is not None
+                         else ("chunks_before", "chunks_after"))
     return s.get(after) is not None and s.get(before) is not None and s[after] > s[before]
 
 
@@ -519,16 +524,16 @@ def next_step(sittings, max_crashes=MAX_CRASHES):
     """What the painter does next: ("new", k) a fresh sitting numbered k, ("continue", k) the
     session of sitting k, cut off by a usage limit, carries on, or (None, why) the painter is done.
 
-    sittings: the records so far, in order ({'sitting', 'painting_before', 'painting_after',
+    sittings: the records so far, in order ({'sitting', 'effects_before', 'effects_after',
     'chunks_before', 'chunks_after', 'status', 'worked'}); a continued sitting's later parts
-    repeat its number and carry its painting_before, so a record's counts cover the whole sitting.
+    repeat its number and carry its effects_before, so a record's counts cover the whole sitting.
     The painter finishes after a sitting it ended itself (status 'completed') that added no painting
-    chunks and reviewed whole and detail views. There is no sitting-count cap.
+    effects and reviewed whole and detail views. There is no sitting-count cap.
     Sittings cut off by a usage limit ('limited') or the runner stopping ('interrupted') count for
     nothing; if the painter had worked in one (a reply that wasn't an error: 'worked'), its session
     carries on (a limited one once the limit lifts); otherwise a fresh sitting follows. After
     max_crashes crashes the painter stops (not finished).
-    A record without painting counts (from an older runner) is judged by its chunk counts.
+    Older records keep their original painting or chunk counts.
     """
     if not sittings:
         return ("new", 1)
@@ -835,7 +840,7 @@ def paint(name, n, d, rd):
             t0 = time.mktime(time.strptime(s["start"], "%Y-%m-%d %H:%M:%S")) - 5
             files = s.get("sessions") or sorted((f for f in session_dir(d).glob("*.jsonl") if f.stat().st_mtime >= t0),
                                                 key=lambda f: f.stat().st_mtime)[-1:]
-            s.update(status="interrupted", chunks_after=count_chunks(d), painting_after=count_painting(d),
+            s.update(status="interrupted", chunks_after=count_chunks(d), effects_after=count_painting(d),
                      end=time.strftime("%F %T"), sessions=[str(f) for f in files], worked=session_worked(files))
             log(f"{tag}: sitting {s['sitting']} was interrupted (the runner stopped); "
                 + ("it carries on in its session" if s["worked"] else "it will be taken again"))
@@ -875,15 +880,15 @@ def paint(name, n, d, rd):
             # the same sitting carries on in its session: its counts start where the sitting started
             part = cont.get("part", 1) + 1
             msg, session = CONTINUE_MESSAGE, cont["sessions"][-1]
-            first = dict(chunks_before=cont["chunks_before"], painting_before=cont["painting_before"])
+            first = dict(chunks_before=cont["chunks_before"], effects_before=cont.get("effects_before"))
         else:
             part, session = 1, None
             msg = PAINTER_MSG if before == 0 else return_message(sittings)
-            first = dict(chunks_before=before, painting_before=painting_before)
+            first = dict(chunks_before=before, effects_before=painting_before)
         stem = f"p{n}_s{k}" + (f"_part{part}" if part > 1 else "")
         known = set(session_dir(d).glob("*.jsonl"))
         rec = dict(sitting=k, part=part, status="running", start=time.strftime("%F %T"), end=None,
-                   chunks_after=None, painting_after=None, **first,
+                   chunks_after=None, effects_after=None, **first,
                    message=msg, sessions=[], exit=None, final_file=str(rd / f"{stem}_final.txt"), final=None)
         sittings.append(rec)
         save_sittings(rd, n, sittings)
@@ -904,13 +909,13 @@ def paint(name, n, d, rd):
         # the painter's reply: from the session (authoritative) when the sitting ended cleanly, else stdout
         final_reply = (session_reply(new) if not (crashed or limited) else None) or stdout_reply
         rec.update(status="limited" if limited else "crashed" if crashed else "completed", end=time.strftime("%F %T"),
-                   chunks_after=count_chunks(d), painting_after=count_painting(d), exit=rc,
+                   chunks_after=count_chunks(d), effects_after=count_painting(d), exit=rc,
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
                    worked=session_worked(new), reviewed=session_reviewed(new), final=final_reply)
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "
-            f"(painting {rec['painting_before']} -> {rec['painting_after']}), {len(new)} session file(s)")
+            f"(effects {rec['effects_before']} -> {rec['effects_after']}), {len(new)} session file(s)")
         if not crashed and not added_painting(rec) and not rec["reviewed"]:
             log(f"{tag}: completion not established: missing successful whole-canvas or detail review")
         if limited:

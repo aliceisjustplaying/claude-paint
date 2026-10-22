@@ -792,6 +792,7 @@ print(counter,rand(),drying(300,300))
         assert_eq!(encode(&State::capture(&s.st)).unwrap(), encode(&State::capture(&plain.st)).unwrap());
         assert_eq!(s.lua.globals().get::<usize>("counter").unwrap(), 5);
         assert_eq!(s.log.len(), chunks.len());
+        assert_eq!(s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(), plain.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>());
     }
 
     #[test]
@@ -821,6 +822,7 @@ print(counter,rand(),drying(300,300))
                 assert_eq!(encode(&State::capture(&s.st)).unwrap(), encode(&State::capture(&plain.st)).unwrap());
                 assert_eq!(s.held_stick("p").unwrap(), plain.held_stick("p").unwrap());
                 assert_eq!(s.program("pastel"), source);
+                assert_eq!(s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(), plain.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>());
             }
         }
     }

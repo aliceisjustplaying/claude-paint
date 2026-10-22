@@ -1366,6 +1366,7 @@ impl Server {
         if self.s.program(&self.name) != text {
             return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
         }
+        if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
         println!("resumed {} chunks from {}", self.s.log.len(), log_path(&self.name).display());
         Ok(())
     }
@@ -1394,6 +1395,7 @@ impl Server {
                 self.record_frame();
                 if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
             }
+            if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
             return Ok(String::new());
         }
         let previous = self.written.as_deref().unwrap_or("");
@@ -1419,7 +1421,21 @@ impl Server {
             self.record_frame();
             if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
         }
+        if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
         Ok(String::new())
+    }
+
+    fn save_painting_effects(&self) -> Result<(), String> {
+        use sha2::{Digest, Sha256};
+        let source = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
+        let evidence = serde_json::json!({
+            "source_sha256": format!("{:x}", Sha256::digest(source.as_bytes())),
+            "mark_effects": self.s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(),
+        });
+        let bytes = serde_json::to_vec(&evidence).map_err(|e| e.to_string())?;
+        replay_checkpoint::atomic(&session_dir(&self.name).join("painting-effects.json"), |f| {
+            f.write_all(&bytes).map_err(|e| e.to_string())
+        })
     }
 
     fn start_hand_frames(&mut self, done: Option<usize>) -> Result<(), String> {

@@ -186,7 +186,7 @@ impl UserData for RagU {
             if !a.is_finite() {
                 return err("dip: amount is 0..1");
             }
-            time::verb(&u.st, Verb::Marks, |s| {
+            time::unmarked_verb(&u.st, Verb::Marks, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                 let now = c.now_min();
                 u.rag.borrow_mut().dip(a, now, c.tally_mut());
@@ -195,7 +195,7 @@ impl UserData for RagU {
         });
         // r:refold(): a cleaner face of the cloth outward
         m.add_method("refold", |_, u, ()| {
-            time::verb(&u.st, Verb::Marks, |s| {
+            time::unmarked_verb(&u.st, Verb::Marks, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                 u.rag.borrow_mut().refold(c.tally_mut());
                 Ok(())
@@ -229,7 +229,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let rag = Rc::new(RefCell::new(Rag::new(width, sd)));
         st1.borrow_mut().rags.push(Rc::downgrade(&rag));
         crate::replay_checkpoint::hold_tools(&st1);
-        time::verb(&st1, Verb::Marks, |s| {
+        time::unmarked_verb(&st1, Verb::Marks, |s| {
             s.canvas.as_mut().ok_or_else(no_canvas)?.tally_mut().secs += pace::FRESH;
             Ok(())
         })?;

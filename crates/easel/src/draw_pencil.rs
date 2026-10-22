@@ -502,6 +502,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut s = st1.borrow_mut();
             let c = s.canvas.as_mut().ok_or_else(|| mlua::Error::runtime("no canvas yet: call canvas{} first"))?;
             c.erase(&m, strength);
+            s.mark_effects += 1;
             Ok(())
         })?)?;
     }
@@ -529,6 +530,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if c.drawing_optics() {
                 c.fix_drawing(m.as_deref());
             }
+            s.mark_effects += 1;
             Ok(())
         })?)?;
     }

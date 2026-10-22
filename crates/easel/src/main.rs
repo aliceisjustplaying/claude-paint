@@ -1367,6 +1367,7 @@ impl Server {
         if self.s.program(&self.name) != text {
             return Err("session integrity: noncanonical or incomplete log; refusing replay".into());
         }
+        if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
         println!("resumed {} chunks from {}", self.s.log.len(), log_path(&self.name).display());
         Ok(())
     }
@@ -1395,6 +1396,7 @@ impl Server {
                 self.record_frame();
                 if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
             }
+            if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
             return Ok(String::new());
         }
         let previous = self.written.as_deref().unwrap_or("");
@@ -1420,7 +1422,21 @@ impl Server {
             self.record_frame();
             if let Err(e) = self.record_replay() { eprintln!("warning: chunk committed, replay checkpoint/frames not saved: {e}"); }
         }
+        if let Err(e) = self.save_painting_effects() { eprintln!("warning: painting effects: {e}"); }
         Ok(String::new())
+    }
+
+    fn save_painting_effects(&self) -> Result<(), String> {
+        use sha2::{Digest, Sha256};
+        let source = self.written.as_deref().ok_or("session integrity: uninitialized log")?;
+        let evidence = serde_json::json!({
+            "source_sha256": format!("{:x}", Sha256::digest(source.as_bytes())),
+            "mark_effects": self.s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(),
+        });
+        let bytes = serde_json::to_vec(&evidence).map_err(|e| e.to_string())?;
+        replay_checkpoint::atomic(&session_dir(&self.name).join("painting-effects.json"), |f| {
+            f.write_all(&bytes).map_err(|e| e.to_string())
+        })
     }
 
     fn start_hand_frames(&mut self, done: Option<usize>) -> Result<(), String> {
@@ -1475,10 +1491,9 @@ impl Server {
         };
         deliver(&c, &png)?;
         drop(c);
-        // a save that can't be written leaves none (finish_painting then replays the log)
         if let Err(e) = save::write(&self.s, &self.s.program(&self.name), &ckpt) {
             let _ = std::fs::remove_file(&ckpt);
-            eprintln!("the save file couldn't be written: {e}");
+            return Err(format!("the save file couldn't be written: {e}"));
         }
         std::fs::write(&txt, format!("chunks {}\nreplayed {}\nbuild {:016x}\nplatform {}-{}\n", self.s.log.len(), self.replayed, self.build, std::env::consts::OS, std::env::consts::ARCH)).map_err(|e| format!("{}: {e}", txt.display()))?;
         Ok(format!("the live canvas is in {}\n", png.display()))
@@ -2066,14 +2081,21 @@ impl Server {
             }
             "close" => {
                 let note = self.save_log()?;
+                let live = self.save_live()?;
+                if let Some(pool) = &self.display { pool.flush()?; }
+                if self.hand_frames.as_ref().is_some_and(|r| r.err.is_some()) {
+                    frames::retry(&mut self.hand_frames)?;
+                    if self.hand_frames.as_ref().is_some_and(|r| r.chunk != self.s.log.len()) {
+                        let identity = self.replay.identity(&self.s.program(&self.name), self.s.st.borrow().width)?;
+                        frames::with(&mut self.hand_frames, || frames::chunk_end(self.s.canvas().as_deref(), self.s.log.len(), &identity))?;
+                    }
+                }
                 frames::with(&mut self.hand_frames, || {
                     if let Some(c) = self.s.canvas() { frames::finish(&c); }
                 });
                 if let Some(e) = self.hand_frames.as_ref().and_then(|r| r.err.as_ref()) {
-                    eprintln!("warning: final hand-time frame not saved: {e}");
+                    return Err(format!("final hand-time frame not saved: {e}"));
                 }
-                let live = self.save_live().unwrap_or_else(|e| format!("the live canvas couldn't be saved: {e}\n"));
-                if let Some(pool) = &self.display { pool.flush()?; }
                 Ok(format!("{note}{live}closed; the session is in {}\n", log_path(&self.name).display()))
             }
             o => Err(format!("unknown command {o:?}")),
@@ -2191,7 +2213,7 @@ fn deliver_lit(c: &Canvas, out: &Path, light: Option<(f32, f32)>) -> Result<(), 
     image::save_buffer(out, &buf, f.w as u32, f.h as u32, image::ColorType::Rgb8).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--replay-checkpoint replay.ckpt [--until-chunk N] [--for-minutes M]] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
+const RUN_USAGE: &str = "run <file.lua> [--out path.png] [--light az,el | --gallery] [--look] [--checkpoint-out path.ckpt] [--state-digest digests.txt] [--replay-checkpoint replay.ckpt [--require-replay-checkpoint] [--until-chunk N] [--for-minutes M]] [--frames-every <s> --frames-dir <dir> [--frame-width 1000]] [--width <px>] (replays at the width it was painted at, 2400px or the width its head names, a sketch 600px, unless --width: a smaller preview for development, not the painting)";
 
 fn normalized_path(path: &Path) -> std::io::Result<PathBuf> {
     let absolute = std::path::absolute(path)?;
@@ -2236,6 +2258,9 @@ fn same_file(a: &Path, b: &Path) -> Result<bool, String> {
 fn preflight_run(args: &[String], file: &Path, out: &Path, chunks: usize) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt;
     let checkpoint = flag(args, "--replay-checkpoint").map(PathBuf::from);
+    if args.iter().any(|a| a == "--require-replay-checkpoint") && checkpoint.is_none() {
+        return Err("--require-replay-checkpoint requires --replay-checkpoint".into());
+    }
     let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
     let mut outputs = vec![("source", file.to_path_buf()), ("--out", out.to_path_buf()), ("replay progress", progress)];
     if args.iter().any(|a| a == "--look") { outputs.push(("--look", out.with_extension("look.png"))); }
@@ -2312,7 +2337,7 @@ fn run(args: &[String]) -> Result<(), String> {
             #[cfg(feature = "state-store")]
             "--state-store" | "--state-budget-mib" if i + 1 < args.len() => i += 2,
             "--out" | "--dump-surface" | "--dump-state" | "--checkpoint-out" | "--frames-every" | "--frames-dir" | "--frame-width" | "--state-digest" | "--width" | "--light" | "--replay-checkpoint" | "--until-chunk" | "--for-minutes" if i + 1 < args.len() => i += 2,
-            "--look" | "--gallery" => i += 1,
+            "--look" | "--gallery" | "--require-replay-checkpoint" => i += 1,
             o => return Err(format!("run: unknown argument {o:?} ({RUN_USAGE})")),
         }
     }

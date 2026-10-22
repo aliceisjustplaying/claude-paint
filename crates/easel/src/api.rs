@@ -50,6 +50,7 @@ pub struct Studio {
     pub chunk: u64,
     /// Engine calls made in this chunk, for automatic seeds.
     pub calls: u64,
+    pub mark_effects: u64,
     /// Painting time in minutes since `canvas{}` (hand time and waits).
     pub clock: f64,
     pub clock0: f64,
@@ -78,12 +79,13 @@ pub struct Studio {
 
 impl Studio {
     pub fn new(width: usize, tubes: Palette) -> Self {
-        Studio { width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
+        Studio { width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false }
     }
     /// Start chunk `n`: its randomness depends only on the seed and `n`.
     pub fn begin(&mut self, n: u64) {
         self.chunk = n;
         self.calls = 0;
+        self.mark_effects = 0;
         self.rng = Rng::new(mixseed(self.seed, n, 0xC0FFEE));
         self.out.clear();
         self.field_secs = 0.0;

@@ -120,7 +120,9 @@ rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
+check studio-pictures 'node --test --test-reporter=tap studio/test_pictures.cjs' '^# pass [1-9][0-9]*$'
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
+check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral \
@@ -153,6 +155,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
+  session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \
+  session::tests::rag_preparation_keeps_hand_time_without_mark_effects \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
   check::tests::surface_uses_absolute_and_relative_tolerance \
@@ -187,6 +191,7 @@ check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_crit
 check agy-critic-prepare 'uv run --no-project --script harness/easel_mcp/test_critic_prepare.py -v' "$unittest"
 check die-roll 'uv run --no-project python -m unittest discover -s harness/painter/test -p test_die_roll.py -v' "$unittest"
 check friedrich-models 'uv run --no-project python harness/painter/test/friedrich_models_test.py -v' "$unittest"
+check painter-finalize 'uv run --no-project --with pillow --with websockets python harness/painter/test/finalize_test.py -v' "$unittest"
 check atelier "cd atelier && $pytest -rs ." "$passed"
 check painter-inbox 'uv run --no-project python harness/painter/test/inbox_test.py -v' "$unittest"
 check painter-inbox-hooks 'node --test --test-reporter=tap harness/painter/test/inbox-hooks.test.ts' '^# pass [1-9]'

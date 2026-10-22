@@ -1,4 +1,4 @@
-"""Which chunks of a painting's log put marks on the canvas.
+"""Engine evidence for live runners and source classification for frozen older runners.
 
 The sitting stop rule used to count `--@ chunk` lines, so a sitting whose chunks only asked
 questions (`print(wait(60))`, `print(drying(400, 300))`, `print(table.concat(tubes(), ", "))`)
@@ -15,6 +15,8 @@ for the chunks after it. It errs toward "paints": a chunk that only defines a he
 verb counts, as does one that mentions a verb it doesn't call. A chunk that queries, mixes,
 loads, waits or defines masks and nothing else doesn't.
 """
+import hashlib
+import json
 import re
 
 VERBS = {"canvas", "work", "blend", "stipple", "lose", "erase", "fix",
@@ -85,3 +87,21 @@ def classify(source: str) -> list[tuple[int, bool]]:
 
 def count_painting_chunks(source: str) -> int:
     return sum(1 for _, paints in classify(source) if paints)
+
+
+def count_painting_effects(studio):
+    source = studio / "paintings/lua/painting.lua"
+    if not source.exists():
+        return 0
+    try:
+        evidence = json.loads((studio / "out/easel/painting/painting-effects.json").read_bytes())
+        effects = evidence["mark_effects"]
+        text = source.read_bytes()
+        if (evidence["source_sha256"] != hashlib.sha256(text).hexdigest()
+                or not isinstance(effects, list)
+                or len(effects) != sum(line.startswith(b"--@ chunk ") for line in text.splitlines())
+                or any(type(n) is not int or n < 0 for n in effects)):
+            return None
+        return sum(effects)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None

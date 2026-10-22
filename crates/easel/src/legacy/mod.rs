@@ -506,6 +506,7 @@ fn install(lua: &Lua, st: &S) -> Result<()> {
             c.glaze(&pig, m.as_deref(), th);
             Ok(())
         })?;
+        st1.borrow_mut().mark_effects += 1;
         Ok(st1.borrow().clock)
     })?)?;
     // dry(): wait until all the paint is touch-dry

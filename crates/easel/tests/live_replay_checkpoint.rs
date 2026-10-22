@@ -1,3 +1,4 @@
+use sha2::Digest;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::OnceLock;
@@ -32,6 +33,7 @@ struct Studio {
     child: Option<Child>,
     identity: &'static str,
     state_store: bool,
+    name: &'static str,
 }
 
 impl Studio {
@@ -50,14 +52,14 @@ impl Studio {
         } else {
             PathBuf::from(env!("CARGO_BIN_EXE_easel"))
         };
-        Self { root, binary, child: None, identity: "original", state_store: false }
+        Self { root, binary, child: None, identity: "original", state_store: false, name: "painting" }
     }
 
     fn command(&self) -> Command {
         let mut command = Command::new(&self.binary);
         command.current_dir("/")
             .env("EASEL_ROOT", &self.root)
-            .env("EASEL_SESSION", "painting")
+            .env("EASEL_SESSION", self.name)
             .env("RAYON_NUM_THREADS", "2")
             .env("PAINT_LIVE_CHECKPOINT_TEST_IDENTITY", self.identity)
             .env_remove("EASEL_WIDTH")
@@ -79,15 +81,15 @@ impl Studio {
         String::from_utf8(output.stdout).unwrap()
     }
 
-    fn dir(&self) -> PathBuf { self.root.join("out/easel/painting") }
-    fn log(&self) -> PathBuf { self.root.join("paintings/lua/painting.lua") }
+    fn dir(&self) -> PathBuf { self.root.join("out/easel").join(self.name) }
+    fn log(&self) -> PathBuf { self.root.join("paintings/lua").join(format!("{}.lua", self.name)) }
     fn bytes(&self, name: &str) -> Vec<u8> { std::fs::read(self.dir().join(name)).unwrap() }
 
     fn start(&mut self) {
         assert!(self.child.is_none());
         std::fs::create_dir_all(self.dir()).unwrap();
         let log = std::fs::File::create(self.dir().join("server.log")).unwrap();
-        self.child = Some(self.command().args(["serve", "painting"])
+        self.child = Some(self.command().args(["serve", self.name])
             .stdin(Stdio::null()).stdout(log.try_clone().unwrap()).stderr(log)
             .spawn().unwrap());
         let chunks = std::fs::read_to_string(self.log()).map(|source| source.lines().filter(|line| line.starts_with("--@ chunk ")).count()).unwrap_or(0);
@@ -424,6 +426,127 @@ fn an_unreplaceable_checkpoint_does_not_abort_full_replay_or_close() {
     assert_eq!(studio.bytes("replay.ckpt/kept"), b"not a checkpoint");
 }
 
+#[test]
+fn failed_finalization_keeps_the_live_session_for_retry() {
+    for blocked in ["live.ckpt", "live.png", "hand-frames/00002.png"] {
+        let mut studio = Studio::new(&format!("close-{}", blocked.replace('/', "-")), false);
+        studio.name = "sketch";
+        studio.start();
+        studio.ok(&["do", CHUNKS[0]]);
+        let source = std::fs::read(studio.log()).unwrap();
+        let path = studio.dir().join(blocked);
+        std::fs::create_dir(&path).unwrap();
+        let result = studio.cmd(&["close"]);
+        assert!(!result.status.success(), "close succeeded despite blocked {blocked}");
+        let error = String::from_utf8_lossy(&result.stderr);
+        if blocked.starts_with("hand-frames/") { assert!(error.contains("final hand-time frame not saved"), "{error}"); }
+        assert!(studio.child.as_mut().unwrap().try_wait().unwrap().is_none());
+        assert!(studio.ok(&["status"]).starts_with("1 chunks"));
+        assert_eq!(std::fs::read(studio.log()).unwrap(), source);
+        std::fs::remove_dir(path).unwrap();
+        studio.close();
+        assert!(!studio.bytes("live.ckpt").is_empty());
+        assert!(!studio.bytes("live.png").is_empty());
+        let index = String::from_utf8(studio.bytes("hand-frames/frames.tsv")).unwrap();
+        assert_eq!(index.lines().filter(|line| line.ends_with("\tfinal")).count(), 1, "{index}");
+    }
+}
+
+#[test]
+fn failed_accepted_chunk_frames_close_without_reexecuting_the_chunk() {
+    let mut studio = Studio::new("close-accepted-frame", false);
+    studio.name = "sketch";
+    studio.start();
+    studio.ok(&["do", CHUNKS[0]]);
+    let path = studio.dir().join("hand-frames/00002.png");
+    std::fs::create_dir(&path).unwrap();
+    studio.ok(&["do", "assert(counter == nil); counter = 9"]);
+    let source = std::fs::read(studio.log()).unwrap();
+    let result = studio.cmd(&["close"]);
+    assert!(!result.status.success());
+    assert!(studio.ok(&["status"]).starts_with("2 chunks"));
+    std::fs::remove_dir(path).unwrap();
+    let globals = studio.ok(&["globals"]);
+    assert!(globals.contains("2\tcounter\tnumber 9"), "{globals}");
+    studio.close();
+    assert_eq!(std::fs::read(studio.log()).unwrap(), source);
+    assert_eq!(studio.bytes("committed.lua"), source);
+    assert!(String::from_utf8(studio.bytes("live.txt")).unwrap().starts_with("chunks 2\nreplayed 0\n"));
+    let states = String::from_utf8(studio.bytes("hand-frames/frames.states")).unwrap();
+    let state: serde_json::Value = serde_json::from_str(states.lines().last().unwrap()).unwrap();
+    assert_eq!(state["chunk"], 2);
+    assert_eq!(state["identity"]["source"], serde_json::json!(sha2::Sha256::digest(&source).to_vec()));
+    let index = String::from_utf8(studio.bytes("hand-frames/frames.tsv")).unwrap();
+    assert_eq!(index.lines().filter(|line| line.ends_with("\tfinal")).count(), 1, "{index}");
+    assert!(index.contains("\t2\tchunk"), "{index}");
+}
+
+#[test]
+fn strict_batch_recovers_a_live_checkpoint_and_tail_without_full_replay() {
+    let mut studio = Studio::new("strict-live-recovery", false);
+    studio.name = "sketch";
+    studio.start();
+    studio.ok(&["do", CHUNKS[0]]);
+    for n in 1..=9 { studio.ok(&["do", &format!("counter = {n}")]); }
+    let checkpoint = studio.root.join("recovery.ckpt");
+    let original = studio.bytes("replay.ckpt");
+    studio.ok(&["do", "assert(counter == 9); counter = 10"]);
+    studio.ok(&["do", "assert(counter == 10); counter = 11"]);
+    studio.ok(&["save", "expected.png"]);
+    studio.kill();
+    let source = studio.root.join("recovery.lua");
+    let committed = studio.bytes("committed.lua");
+    std::fs::write(&source, &committed).unwrap();
+    let out = studio.root.join("recovered.png");
+    let final_checkpoint = studio.root.join("recovered.ckpt");
+    let args = ["run", source.to_str().unwrap(), "--require-replay-checkpoint", "--replay-checkpoint",
+        checkpoint.to_str().unwrap(), "--out", out.to_str().unwrap(), "--checkpoint-out", final_checkpoint.to_str().unwrap()];
+    let missing_option = studio.cmd(&["run", source.to_str().unwrap(), "--require-replay-checkpoint", "--out", out.to_str().unwrap()]);
+    assert!(!missing_option.status.success());
+    assert!(String::from_utf8_lossy(&missing_option.stderr).contains("requires --replay-checkpoint"));
+    let missing = studio.cmd(&args);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("refusing resume"));
+    assert!(!checkpoint.exists());
+    assert!(!out.exists());
+    std::fs::write(&checkpoint, b"corrupt checkpoint").unwrap();
+    let corrupt = studio.cmd(&args);
+    assert!(!corrupt.status.success());
+    assert!(String::from_utf8_lossy(&corrupt.stderr).contains("refusing resume"));
+    assert_eq!(std::fs::read(&checkpoint).unwrap(), b"corrupt checkpoint");
+    assert!(!out.exists());
+    std::fs::write(&checkpoint, &original).unwrap();
+    std::fs::write(&source, String::from_utf8(committed.clone()).unwrap().replace("seed=3", "seed=4")).unwrap();
+    let wrong_prefix = studio.cmd(&args);
+    assert!(!wrong_prefix.status.success());
+    assert!(String::from_utf8_lossy(&wrong_prefix.stderr).contains("differs; refusing resume"));
+    assert_eq!(std::fs::read(&checkpoint).unwrap(), original);
+    assert!(!out.exists());
+    std::fs::write(&source, &committed).unwrap();
+    let wrong_environment = studio.command().args(args).env("PAINT_LIVE_CHECKPOINT_TEST_IDENTITY", "changed").output().unwrap();
+    assert!(!wrong_environment.status.success());
+    assert!(String::from_utf8_lossy(&wrong_environment.stderr).contains("differs; refusing resume"));
+    assert_eq!(std::fs::read(&checkpoint).unwrap(), original);
+    let mut first_batch = args.to_vec();
+    first_batch.extend(["--until-chunk", "11"]);
+    let first = studio.cmd(&first_batch);
+    assert!(first.status.success(), "{}", String::from_utf8_lossy(&first.stderr));
+    let report = String::from_utf8_lossy(&first.stderr);
+    assert!(report.contains("reconstructed 10 chunks"), "{report}");
+    assert!(report.contains("  chunk  11  "), "{report}");
+    assert!(!report.contains("  chunk   1  "), "{report}");
+    assert!(!out.exists());
+    let completed = studio.cmd(&args);
+    assert!(completed.status.success(), "{}", String::from_utf8_lossy(&completed.stderr));
+    let report = String::from_utf8_lossy(&completed.stderr);
+    assert!(report.contains("reconstructed 11 chunks"), "{report}");
+    assert!(!report.contains("  chunk   1  "), "{report}");
+    assert_eq!(std::fs::read(&out).unwrap(), std::fs::read(studio.root.join("expected.png")).unwrap());
+    assert!(!std::fs::read(final_checkpoint).unwrap().is_empty());
+    assert_eq!(studio.bytes("replay.ckpt"), original);
+    assert_eq!(studio.bytes("committed.lua"), committed);
+}
+
 fn stale_rebuild_after_executable_replacement(state_store: bool) {
     use std::os::unix::fs::MetadataExt;
 
@@ -436,7 +559,7 @@ fn stale_rebuild_after_executable_replacement(state_store: bool) {
     let revision = state_store.then(|| studio.bytes("state/CURRENT"));
     let old_inode = std::fs::metadata(&studio.binary).unwrap().ino();
     let replacement = studio.binary.with_extension("replacement");
-    std::fs::copy(env!("CARGO_BIN_EXE_easel"), &replacement).unwrap();
+    assert!(Command::new("cp").arg(env!("CARGO_BIN_EXE_easel")).arg(&replacement).status().unwrap().success());
     std::fs::rename(replacement, &studio.binary).unwrap();
     assert_ne!(std::fs::metadata(&studio.binary).unwrap().ino(), old_inode);
     let failed = studio.cmd(&["do", "for i=1,1000 do t['x' .. i] = i end; for i=1,1000 do t['x' .. i] = nil end; error('force stale rebuild')"]);

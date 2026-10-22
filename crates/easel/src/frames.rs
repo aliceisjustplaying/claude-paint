@@ -57,6 +57,7 @@ pub struct Recorder {
     pub ticks: usize,
     pub chunk: usize,
     index: Option<std::fs::File>,
+    saved: Option<(usize, crate::replay_checkpoint::Identity)>,
     pub err: Option<String>,
 }
 
@@ -97,7 +98,7 @@ pub fn start(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, re
             let mut index = std::fs::File::create(dir.join("frames.tsv")).map_err(|e| e.to_string())?;
             writeln!(index, "file\thand_secs\tticks\tchunks_done\tkind").map_err(|e| e.to_string())?;
             std::fs::File::create(dir.join("frames.states")).map_err(|e| e.to_string())?;
-            Recorder { every, dir, width, light, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), err: None }
+            Recorder { every, dir, width, light, base: None, next: every, hand: 0.0, written: 0, ticks: 0, chunk: 0, index: Some(index), saved: None, err: None }
         }
         Some((done, identity)) => resumed(every, dir, width, light, done, &identity)?,
     };
@@ -152,7 +153,20 @@ fn resumed(every: f64, dir: PathBuf, width: u32, light: Option<(f32, f32)>, done
     let lines: Vec<String> = std::fs::read_to_string(&states).map_err(|e| e.to_string())?.lines().take_while(|l| serde_json::from_str::<Saved>(l).is_ok_and(|x| x.chunk <= done)).map(|l| l.to_string() + "\n").collect();
     replace(&states, &lines.concat())?;
     let index = std::fs::OpenOptions::new().append(true).open(&tsv).map_err(|e| e.to_string())?;
-    Ok(Recorder { every, dir, width, light, base: s.base, next: s.next, hand: s.hand, written: s.written, ticks: s.ticks, chunk: s.chunk, index: Some(index), err: None })
+    Ok(Recorder { every, dir, width, light, base: s.base, next: s.next, hand: s.hand, written: s.written, ticks: s.ticks, chunk: s.chunk, index: Some(index), saved: Some((done, identity.clone())), err: None })
+}
+
+pub fn retry(recorder: &mut Option<Recorder>) -> Result<(), String> {
+    let Some(rec) = recorder.as_ref() else { return Ok(()) };
+    let (base, next, hand, ticks) = (rec.base, rec.next, rec.hand, rec.ticks);
+    start(rec.every, rec.dir.clone(), rec.width, rec.light, rec.saved.clone())?;
+    let mut restored = stop().unwrap();
+    restored.base = base;
+    restored.next = next;
+    restored.hand = hand;
+    restored.ticks = ticks;
+    *recorder = Some(restored);
+    Ok(())
 }
 
 /// Stop recording; the recorder as it ended (None if none was running).
@@ -223,7 +237,12 @@ pub fn chunk_end(c: Option<&Canvas>, n: usize, identity: &crate::replay_checkpoi
         if let Some(e) = rec.err.clone() {
             return Err(format!("frames: {e}"));
         }
-        rec.save_state(identity).map_err(|e| format!("frames: {e}"))
+        if let Err(e) = rec.save_state(identity) {
+            rec.err = Some(e.clone());
+            return Err(format!("frames: {e}"));
+        }
+        rec.saved = Some((n, identity.clone()));
+        Ok(())
     })
 }
 

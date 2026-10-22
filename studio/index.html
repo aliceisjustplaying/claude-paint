@@ -1083,14 +1083,15 @@ const plain = s => s.replace(/^\s*(#{1,6}\s+|[-*+•]\s+|\d{1,3}[.)]\s+|>\s*)/, 
 
 // ---- looks: the whole painting, and what the painter is studying
 // an image is a whole look if the look that made it asked for no crop, no mode, no light, and not the palette, a survey or a comparison (studio.py's is_whole)
-const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:^|, )ref |(?:palette|survey|scratch) (?!False)/.test(e.look.replace(/mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)/g, ''));
+const isWhole = e => e.look !== undefined && !/crop|mode|light|compare|hold|(?:^|, )(?:ref|mask) |(?:palette|survey|scratch) (?!False)/.test(e.look.replace(/mode (?:normal|color)(?:\s*,\s*(?:normal|color))*(?=, [a-z]+ |$)/g, ''));
 // the scratch canvas beside the painting: a look at it, or a chunk painted on it
 const isScratch = e => e.kind === 'paint' ? !!e.scratch : /scratch (?!False)/.test(e.look || e.text || '');
 const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').replace(/^, /, '');
 const isWholeScratch = e => e.look !== undefined && isScratch(e) && isWhole({ look: unscratched(e.look) });
 const scratchReset = e => e.kind === 'paint' && e.scratch && (e.new_scratch || e.scratch_reset || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out || ''));
 const scratchBoundary = e => scratchReset(e) || e.kind === 'paint' && e.scratch && e.err;
-const wholePicture = e => !hasLooks ? e.whole !== false : isScratch(e) ? isWholeScratch(e) : isWhole(e);
+const wholePicture = e => e.look === undefined ? e.whole === true || !hasLooks && e.whole !== false : isScratch(e) ? isWholeScratch(e) : isWhole(e);
+const isMask = e => /(?:^|, )mask /.test(e.look || '');
 // whether the painter is at the scratch canvas at event i: its newest chunk or look was there
 function scratchingAt(i) {
   for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k];
@@ -1275,9 +1276,9 @@ function picturesAt(i, rest, sc = false) {
     if (e.kind === 'image' && e.display_pending && displayLight !== 'color') continue;
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
+      if (!e.ref && !isMask(e)) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
-  return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
+  return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref || isMask(events[cur])) ? cur : -1];
 }
 function snapshotAge(k, sc) {
   const e = events[k];
@@ -1359,12 +1360,12 @@ function pictures() {
   const boundary = atLiveEnd && scratchingAt(pos) ? events.slice(0, pos + 1).findLast(scratchBoundary) : null;
   const pendingScratch = boundary && scratchReset(boundary) && !boundary.err && picturesAt(pos, true, true)[0] < 0;
   let sc = scratchingAt(pos) && (!rested || pendingScratch);
-  let [w, o] = picturesAt(pos, rested, sc), previousScratch = false, awaitingScratch = false;
+  let [w, o] = picturesAt(pos, rested && !pendingScratch, sc), previousScratch = false, awaitingScratch = false;
   if (sc && pendingScratch) {
     for (let k = pos; k >= 0; k--) { const e = events[k];
-      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e) && (!e.display_pending || displayLight === 'color')) { w = k; o = -1; previousScratch = true; break; }
+      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e) && !isMask(e) && (!e.display_pending || displayLight === 'color')) { w = k; previousScratch = true; break; }
     }
-    if (!previousScratch) { [w, o] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
+    if (!previousScratch) { [w] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
   }
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img;

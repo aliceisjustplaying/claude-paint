@@ -19,6 +19,8 @@ const fixtures = {
   normal:whole,
   scratch:[...whole.slice(0, 4), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
     e('look', { text:'scratch True' }), e('image', { img:2, look:'scratch True', gallery:true, relief:true }), e('think', { text:'Trying a mark on the scratch canvas.' })],
+  scratchMask:[...whole.slice(0, 4), e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
+    e('look', { text:'scratch True, mask sky' }), e('image', { img:2, look:'scratch True, mask sky' })],
   fallback:[...whole.slice(0, 3), e('image', { img:0, look:'' })],
   falsePalette:[...whole.slice(0, 2), e('look', { text:'palette False' }), e('image', { img:0, look:'palette False' })],
   broken:[...whole.slice(0, 3), e('image', { img:3, look:'', gallery:true, relief:true })],
@@ -159,6 +161,18 @@ async function ready(page, which, light) {
         assert.equal(await page.evaluate(() => STATIC), staticMode);
         assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
       }
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'look', text:'mask sky' },
+          { ts:new Date().toISOString(), kind:'image', img:4, look:'mask sky' });
+        live = false; show(events.length - 1);
+      });
+      assert.equal(await page.evaluate(() => picturesAt(pos, false)[0]), 3, 'a mask look keeps the whole painting');
+      for (const light of ['color', 'gallery', 'relief']) {
+        await selectLight(light); await ready(page, 'img', light); await ready(page, 'img2', 'color');
+        assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
+        assert.equal(await page.locator('#img2').getAttribute('data-picture'), '4', 'the mask stays in the study view');
+      }
+      await selectLight('color');
       await page.goto(url('scratch')); await ready(page, 'img', false);
       await selectLight('gallery'); await ready(page, 'img', true); await ready(page, 'pipimg', true);
       assert.match(await page.locator('#cap').textContent(), /Scratch canvas.*Gallery light/);
@@ -321,6 +335,30 @@ async function ready(page, which, light) {
       await page.locator('#img').click(); await ready(page, 'zimg', true); await page.locator('#zoom').click();
       await selectLight('color'); await ready(page, 'img', false); holdLit = false; await release();
       assert.doesNotMatch(await page.locator('#cap').textContent(), /Color/);
+      await page.goto(url('scratchMask'));
+      for (const prior of ['painting', 'scratch', 'empty']) for (const rest of [false, true]) {
+        const sequence = prior === 'empty' ? fixtures.scratchMask.slice(4) : [...fixtures.scratchMask];
+        if (prior === 'scratch') sequence.splice(4, 0,
+          e('paint', { scratch:true, new_scratch:true, code:'canvas{}', out:'ok' }),
+          e('look', { text:'scratch True' }), e('image', { img:4, look:'scratch True', gallery:true, relief:true }),
+          e('look', { text:'scratch True, mask sky' }), e('image', { img:5, look:'scratch True, mask sky' }));
+        await page.evaluate(({ sequence, rest }) => {
+          events = sequence.map(e => ({ ...e, ts:new Date(Date.now() - (rest ? 600000 : 0)).toISOString() }));
+          hasLooks = true; live = true; displayLight = 'color'; show(events.length - 1);
+        }, { sequence, rest });
+        assert.equal(await page.locator('#other').isVisible(), true, `${prior}, rest=${rest}: mask study`);
+        await ready(page, 'img2', 'color');
+        assert.equal(await page.locator('#img2').getAttribute('data-picture'), '2');
+        if (prior === 'empty') {
+          assert.equal(await page.locator('#img').getAttribute('src'), null);
+          assert.equal(await page.locator('#nopic').isVisible(), true);
+        } else {
+          await page.waitForFunction(picture => document.getElementById('img').dataset.picture === picture, prior === 'scratch' ? '4' : '0');
+          await ready(page, 'img', 'color');
+          assert.equal(await page.locator('#img').getAttribute('data-picture'), prior === 'scratch' ? '4' : '0');
+          assert.match(await page.locator('#cap').textContent(), prior === 'scratch' ? /^PREVIOUS scratch snapshot/ : /^The painting/);
+        }
+      }
       await context.close();
     }
     assert.deepEqual(errors, []);

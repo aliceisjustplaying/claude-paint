@@ -134,7 +134,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         time::verb(&st1, Verb::Query, |s| {
             s.canvas.as_mut().ok_or_else(no_canvas)?.crack(&k);
             Ok(())
-        })
+        }).inspect(|_| st1.borrow_mut().mark_effects += 1)
     })?)?;
     let st1 = st.clone();
     g.set("relief", lua.create_function(move |_, (strength, gloss): (Option<f32>, Option<f32>)| {
@@ -143,7 +143,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         time::verb(&st1, Verb::Query, |s| {
             s.canvas.as_mut().ok_or_else(no_canvas)?.relief(strength.unwrap_or(sty.relief.0), gloss.unwrap_or(sty.relief.1));
             Ok(())
-        })
+        }).inspect(|_| st1.borrow_mut().mark_effects += 1)
     })?)?;
     Ok(())
 }

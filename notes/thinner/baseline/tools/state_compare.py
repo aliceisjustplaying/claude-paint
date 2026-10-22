@@ -21,6 +21,7 @@ by default. Other floats allow an absolute error of 1e-7. Relative tolerance
 is zero, so errors cannot grow with magnitude. Integers, structure and
 added-zero checks stay exact. --linux-tolerance is a compatibility alias
 for the default policy. Each float field reports its limit and observed error.
+Solvent fields remain exact when they are already present in the reference.
 
 Exit 0: equal on every baseline field; 1: a difference; 2: a usage or
 format error. Only Python's standard library.
@@ -49,6 +50,7 @@ ABS_LIMITS = {
     "wet.lat": 1.6e-7,
     "wet.hide": 5e-7,
     "wet.floor": 8e-6,
+    "wet.solvent": 0.0,
     "clock.cure": 4e-7,
     "clock.lev": 7e-5,
     "clock.seen": 8e-6,
@@ -63,6 +65,9 @@ ABS_LIMITS = {
     "brushes.debug:brushes[].bristles[].lat[]": 1.1e-7,
     "brushes.debug:brushes[].bristles[].hide[]": 3.1e-7,
     "brushes.debug:brushes[].bristles[].cure": 6.1e-12,
+    "brushes.debug:brushes[].bristles[].solvent": 0.0,
+    "rags.debug:rags[].solvent_mm3": 0.0,
+    "rags.debug:rags[].mobile.solv_mm3": 0.0,
 }
 
 LINUX_LIMITS = ABS_LIMITS

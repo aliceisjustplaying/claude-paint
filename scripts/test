@@ -2,9 +2,8 @@
 # The claude-paint gate: one test-profile build of the workspace, then the
 # retained checks (notes/speed/SKIPPED.md), at most four at a time. A check
 # passes only if it exits 0 and prints what proves its tests ran: every named
-# Rust test's ok line, or a count of at least one. The registered rag
-# baseline mismatch (exit 4 with KNOWN_FAILURE: rag-historical-baseline-main)
-# is reported as known. Exit 0 if nothing else failed, 1 otherwise.
+# Rust test's ok line, or a count of at least one. Every state and image
+# mismatch fails the gate. Exit 0 if nothing failed, 1 otherwise.
 #
 #   scripts/test          (CARGO_TARGET_DIR is honored; a failed run keeps its logs)
 set -uo pipefail
@@ -48,7 +47,7 @@ reap() {
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
+launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --test engine9_plumbing --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -118,6 +117,7 @@ check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* ca
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
+  mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
@@ -140,6 +140,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   rag::rag_lift::a_wipe_lifts_a_wet_passage_and_lays_none_of_it_further_along rag::rag_lift::a_mask_wipe_lifts_nothing_outside_its_mask \
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
+  replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
   check::tests::surface_uses_absolute_and_relative_tolerance \
@@ -188,10 +189,11 @@ check replay-clip 'uv run --no-project python -m unittest scripts/tests/replay_c
 check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
 check replay-pace 'uv run --script scripts/tests/replay_pace_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
-check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/check_painting_test.py" "$passed"
+check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py" "$passed"
 rust checkpoint-paths easel 'test checkpoint_paths test'
 rust save-confined easel 'test save_confined test'
 rust ck7 easel 'test ck7 test'
+rust pigment-state paint 'test engine9_plumbing test'
 rust thinner-physics paint 'test thinner_physics test' c04_a_stroke_and_a_wipe_account_for_all_paint_and_solvent \
   c09_the_solvent_evaporates_and_the_film_loses_its_volume
 rust thinner-pigments paint 'test thinner_pigments test' c13_every_pigment_value_is_af49348s
@@ -204,14 +206,9 @@ for i in "${!names[@]}"; do
 done
 while [ "${#name_of[@]}" -gt 0 ]; do reap; done
 
-failed=() known=()
+failed=()
 for i in "${!names[@]}"; do
   name=${names[$i]} log=$work/${names[$i]}.log rc=$(cat "$work/${names[$i]}.rc") missing=
-  if [ "$rc" = 4 ] && grep -qx 'KNOWN_FAILURE: rag-historical-baseline-main' "$log"; then
-    known+=("$name")
-    echo "gate: $name: known failure, the registered rag baseline mismatch ($(cat "$work/$name.secs") s)"
-    continue
-  fi
   while IFS= read -r want; do
     [ -z "$want" ] || grep -qE -- "$want" "$log" || missing+="; no line matching $want"
   done <<<"${wants[$i]}"
@@ -229,4 +226,4 @@ if [ ${#failed[@]} -gt 0 ]; then
   exit 1
 fi
 rm -rf "$work"
-echo "gate: passed in $secs s, ${#names[@]} checks${known[0]:+; known failure only: ${known[*]}}"
+echo "gate: passed in $secs s, ${#names[@]} checks"

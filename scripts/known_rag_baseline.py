@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Diagnose main's pre-existing rag/reference mismatch, never a baseline pass.
 
+Historical diagnostic only; no active baseline gate calls this helper.
+
 known_rag_baseline.py <rag dump directory> [--image-report FILE]
 Exit 0: known diagnostic scalars and no unrelated state failures.
 Exit 1: different failure; 2: invalid input. No known-failure marker is emitted.

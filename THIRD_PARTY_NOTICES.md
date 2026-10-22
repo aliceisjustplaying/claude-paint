@@ -60,7 +60,14 @@ not a redistribution of the paper or a claim of patent clearance.
 Rust dependencies declare MIT, Apache-2.0, BSD, ISC, Zlib, 0BSD or equivalent
 commercial-use terms, sometimes as alternatives. Choose a permissive
 alternative where the license expression offers one. The full resolved
-inventory and source receipts accompany the engine-9 license audit.
+inventory is in `notes/pigment-mixer-dependencies.json`, with license and
+asset actions in `notes/pigment-mixer-licenses.md`.
+
+The table generator uses pinned NumPy and SciPy as build tools, not engine
+runtime dependencies. Their Linux wheels include BSD OpenBLAS/LAPACK,
+the GCC runtime under its GPL runtime exception and LGPL libquadmath.
+Preserve the complete wheel notices if distributing that tool environment;
+the generated numerical tables do not contain those libraries.
 
 The Python MCP stack can include certifi's Mozilla CA bundle (MPL-2.0).
 Pillow wheels carry MIT-CMU and their bundled native-library notices;

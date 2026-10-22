@@ -177,8 +177,10 @@ line, the paper draws the full share.) A pile takes either medium or blot.
 - `mix{{p1, <share>}, {p2, <share>}, ..., name=}` knifes heaps together into a
   new heap, as they are now.
 - `palette{scrape={p1, p2, ...}}` scrapes those piles off the board. A pile
-  scraped off is knifed fresh the next time it is used, if the palette has
-  room for it.
+  whose variable is gone goes by the name `palette()` lists it under:
+  `palette{scrape={"sky", "pile 7"}}` scrapes every heap listed as "sky" and
+  the one listed as "pile 7". A pile scraped off is knifed fresh the next
+  time it is used, if the palette has room for it.
 - `palette{set_out={"<tube>", ...}}` sets out only those tubes, a limited
   palette: a pile of any other is an error.
 - `palette{dirty=<0..1>}` keeps the board as dirty as painters do. A brush

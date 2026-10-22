@@ -59,6 +59,7 @@ checks stay enabled; only debug symbols are omitted.
   a_glaze_tints_the_drawing_under_it_and_keeps_it_legible, a_scumble_at_half_coverage_leaves_gaps}`,
   `session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it`,
   `api::draw_rag::tests::a_wipe_on_a_full_face_says_so`,
+  `session::tests::shape_and_number_errors_name_the_function_argument_and_line`,
   `session::tests::a_gesture_keeps_its_width_to_its_last_point`,
   `session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it`,
   `session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them`,
@@ -80,7 +81,8 @@ checks stay enabled; only debug symbols are omitted.
   (`baseline_state_compare_test.py`, `known_rag_baseline_test.py`).
 - The Python suites production code depends on: the round 24 runner
   (`notes/round24/runner`), `studio/test_studio.py` and the easel MCP tests
-  (`harness/easel_mcp/test_protocol.py`, `test_remote.py`).
+  (`harness/easel_mcp/test_protocol.py`, `test_remote.py`) and the painter's easel
+  tools (`harness/painter/test/easel-tools.test.ts`).
 
 **The known failure.** The thinner baseline's rag scene differs from
 af49348's (`scripts/known_rag_baseline.py` holds its signature).

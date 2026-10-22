@@ -49,7 +49,7 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     }
     let load = num(&o, "load")?.unwrap_or(0.2).clamp(0.01, 1.0);
     let (p0, p1) = pair(&o, "pressure")?.unwrap_or((0.35, 0.02));
-    let every = o.get::<Option<f32>>("every")?.unwrap_or(1.2).max(0.2);
+    let every = num(&o, "every")?.unwrap_or(1.2).max(0.2);
     let fixed_angle = num(&o, "angle")?;
     let pile = crate::api::pile_now(st, &o.get::<Value>("pile")?, "lose", 0.5)?;
     let tubes = st.borrow().tubes.clone();

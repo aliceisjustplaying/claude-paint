@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+import painting_chunks
 import r21_chains as runner
 
 
@@ -91,3 +92,9 @@ def test_completed_legacy_sitting_uses_chunk_bounds_before_old_painting_counts()
     assert runner.next_step([sitting]) == ("new", 3)
     assert runner.next_step([dict(sitting, effects_before=None, effects_after=None)]) == ("new", 3)
     assert runner.next_step([dict(sitting, chunks_after=2)])[0] is None
+
+
+@pytest.mark.parametrize("mark", ["smudge({{1,2},{3,4}})", "blow(500, 400)", "tap()",
+                                  "b:dust({{1,2},{3,4}})", "p:side({{1,2},{3,4}})"])
+def test_the_source_classifier_counts_pastel_marks(mark):
+    assert painting_chunks.classify(f"--@ chunk 1\nb = brush('round', 4)\n--@ chunk 2\n{mark}\n") == [(1, False), (2, True)]

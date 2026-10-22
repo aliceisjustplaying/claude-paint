@@ -68,6 +68,10 @@ pub const BRUSH_SKIM_MARK: &str = "--@ brush-skim";
 /// inside its mask (`paint::Canvas::with_rag_lift`). Every new painting has
 /// it.
 pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
+/// Marks a painting whose `pastel(p)` takes its color from the pile's heap as it is
+/// now, added to and dirtied (draw_pencil.rs): every new painting. A log without it
+/// replays its sticks in the colors of the piles as first knifed.
+pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -673,6 +677,9 @@ impl Session {
         if self.st.borrow().tubes.full_palette_refuses {
             let _ = writeln!(s, "{FULL_PALETTE_MARK}");
         }
+        if self.st.borrow().tubes.pastel_current_heap {
+            let _ = writeln!(s, "{PASTEL_HEAP_MARK}");
+        }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
         }
@@ -1189,16 +1196,56 @@ fn panic_text(p: &Box<dyn std::any::Any + Send>) -> String {
     p.downcast_ref::<String>().cloned().or(p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default()
 }
 
-/// Lua errors carry a traceback; the painter needs the first lines.
+/// Lua errors carry a traceback; the painter needs the first lines. A shape or number error
+/// from one of the easel's functions says neither which function nor where the chunk called
+/// it (`located`): both go in front of it.
 fn clean_error(e: &str) -> String {
-    let mut out = Vec::new();
-    for l in e.lines() {
-        if l.trim_start().starts_with("stack traceback") {
-            break;
-        }
-        out.push(l);
+    let mut lines = e.lines();
+    let out: Vec<&str> = lines.by_ref().take_while(|l| !l.trim_start().starts_with("stack traceback")).collect();
+    let msg = out.join("\n");
+    unaddressed(&located(&msg, lines.map(str::trim)).unwrap_or(msg))
+}
+
+/// `msg` with the easel function that raised it and the chunk line that called it in front
+/// (`below at line 3: the curve: ...`), when it is a shape or number error that names
+/// neither: a Lua value converted to the wrong type, or a point list, curve or number the
+/// easel refused. `frames` are the traceback's, innermost first. A method's arguments are
+/// counted as the painter wrote them, without the object before the colon. None for any
+/// other error.
+fn located<'a>(msg: &str, mut frames: impl Iterator<Item = &'a str>) -> Option<String> {
+    let (kind, name) = frames.next()?.strip_prefix("[C]: in ")?.split_once(' ')?;
+    let name = name.strip_prefix('\'')?.strip_suffix('\'')?;
+    let line = frames.find_map(|f| f.strip_prefix("[string \"chunk ")?.split_once("\"]:")?.1.split_once(':').map(|l| l.0.to_string()));
+    let at = match line {
+        Some(l) => format!("{name} at line {l}"),
+        None => name.to_string(),
+    };
+    let msg = msg.strip_prefix("runtime error: ").unwrap_or(msg);
+    let converted = |m: &str| -> Option<String> {
+        let (from, to) = m.strip_prefix("error converting Lua ")?.split_once(" to ")?;
+        let to = to.split(' ').next()?;
+        let want = match to {
+            "f32" | "f64" => "a number",
+            "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize" | "isize" => "a whole number",
+            "table" | "Table" => "a table",
+            "String" | "string" | "BorrowedStr" => "text",
+            "bool" | "boolean" => "true or false",
+            "function" | "Function" => "a function",
+            o => o,
+        };
+        Some(format!("want {want}, got {from}"))
+    };
+    if let Some(rest) = msg.strip_prefix("bad argument #") {
+        let n: usize = rest[..rest.find(|c: char| !c.is_ascii_digit())?].parse().ok()?;
+        let n = if kind == "method" && n > 1 { n - 1 } else { n };
+        let cause = rest.split_once(": ")?.1;
+        return Some(format!("{at}: argument {n}: {}", converted(cause).unwrap_or_else(|| cause.to_string())));
     }
-    unaddressed(&out.join("\n"))
+    if let Some(c) = converted(msg) {
+        return Some(format!("{at}: {c}"));
+    }
+    let number = msg.split_once(": ").map_or(msg, |m| if m.0.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') { m.1 } else { msg });
+    (msg.starts_with("points: ") || msg.starts_with("the curve: ") || number.starts_with("want a number, got ")).then(|| format!("{at}: {msg}"))
 }
 
 /// `<name>: 0x<8+ hex digits>` (Lua's text for an object without __tostring, which Lua
@@ -1379,8 +1426,9 @@ fn box_list() -> String {
 /// (`LIMBS_MARK`), and likewise for the blender's feather
 /// (`BLEND_FEATHER_MARK`), the brush's skim (`BRUSH_SKIM_MARK`) and
 /// blends and glazes at masks (`BLEND_MARK`).
-/// New paintings' full palette refuses a new heap; an existing one's as its
-/// log says (`FULL_PALETTE_MARK`).
+/// New paintings' full palette refuses a new heap, and their pastels take the color of
+/// their pile's heap as it is now; an existing one's as its log says
+/// (`FULL_PALETTE_MARK`, `PASTEL_HEAP_MARK`).
 pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     let configured = configured_box()?;
     let Some(text) = log else {
@@ -1395,6 +1443,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.sealed_drawing_guide = true;
         b.drawing_optics = true;
         b.full_palette_refuses = true;
+        b.pastel_current_heap = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1457,6 +1506,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         return Err(format!("the log's glaze film switch ({GLAZE_FILM_MARK}) requires engine 7, 8 or 9"));
     }
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
+    b.pastel_current_heap = head(PASTEL_HEAP_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;
@@ -1547,6 +1597,28 @@ mod tests {
         }
         s.run("r:blot(400,300); r:wipe({{100,300},{900,300}})").unwrap();
         assert_eq!(s.log.last().unwrap().mark_effects, 2);
+    }
+
+    /// A shape or number error says which of the easel's functions refused what and the
+    /// chunk line that called it, a method's arguments counted after its colon; any other
+    /// error is as Lua and the easel wrote it.
+    #[test]
+    fn shape_and_number_errors_name_the_function_argument_and_line() {
+        let mut s = Session::new(64).unwrap();
+        s.run(r#"canvas{size=200, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+        for (src, said) in [
+            ("m = below(1405)", "below at line 1: the curve: want points {{x, y}, ...} or {x1, y1, x2, y2, ...}, or a function(x) giving y; got integer"),
+            ("local x = 1\nm = poly({{1, 2}, {3, 'x'}, {5, 6}})", "poly at line 2: points: point 2: want {x, y}, two numbers"),
+            ("m = poly({1, 2, 3, {}, 5, 6})", "poly at line 1: points: entry 4: want a number"),
+            ("m = rect(1, 2, 3, 4):grow(true)", "grow at line 1: argument 1: want a number, got boolean"),
+            ("local function f() return rect(1, nil, 2, 2) end\nf()", "rect at line 1: argument 2: want a number, got nil"),
+            ("p = pile{{'lead white', 1}} work(rect(1, 2, 30, 40), {pile=p, coverage=function() end})", "work at line 1: coverage: want a number, got function"),
+            ("m = ribbon({{1, 2}, {3, 4}}, true)", "runtime error: ribbon: widths: want one width or a table of one per point, got boolean"),
+            ("work(rect(1, 2, 3, 4), {pile=1})", "runtime error: work: want a pile (made with pile{...}), got integer"),
+            ("x = nil + 1", r#"runtime error: [string "chunk 2"]:1: attempt to perform arithmetic on a nil value"#),
+        ] {
+            assert_eq!(s.run(src).unwrap_err(), said, "{src}");
+        }
     }
 
     #[test]

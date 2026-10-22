@@ -333,7 +333,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.content[1].type, "image")
         self.assertEqual(reply.content[1].mimeType, "image/png")
         self.assertEqual(base64.b64decode(reply.content[1].data), base64.b64decode(PNG))
-        caption = reply.content[0].text
+        label, caption = reply.content[0].text.split("\n", 1)
+        self.assertEqual(label, "[painting]")
         self.assertRegex(caption, r"out/easel/painting/[0-9a-f-]+\.png \(1x1\)")
         path = self.studio / caption.split(" (", 1)[0]
         self.assertTrue(path.is_file())
@@ -356,6 +357,13 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.content[1].type, "image")
         calls = [json.loads(line) for line in (self.studio / "calls.jsonl").read_text().splitlines()]
         self.assertEqual(calls[-1]["args"], ["look", "--crop", "0,100,1000,200", "--mask", "shape,soft", "--size", "300"])
+
+    @connected
+    async def test_painting_replies_name_their_canvas(self):
+        reply = await self.session.call_tool("paint", {"lua": "print('hello')"})
+        self.assertEqual(reply.content[0].text, "[painting]\nday 1, 00:00\nok")
+        reply = await self.session.call_tool("status", {})
+        self.assertEqual(reply.content[0].text, "[painting]\ntest canvas")
 
     @connected
     async def test_easel_errors_without_wrapper(self):
@@ -410,7 +418,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         (self.studio / "log-output.txt").write_text(text)
         reply = await self.session.call_tool("log", {})
         self.assertFalse(reply.isError)
-        expected = "(the first 411 characters are left out; read paintings/lua/painting.lua for all of it)\n('😀')\n" + "print('😀')\n" * 4166 + "x"
+        expected = "[painting]\n(the first 411 characters are left out; read paintings/lua/painting.lua for all of it)\n('😀')\n" + "print('😀')\n" * 4166 + "x"
         self.assertEqual(reply.content[0].text, expected)
 
     @connected
@@ -418,7 +426,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         (self.studio / "log-output.txt").write_text("😀" * 25_000 + "x")
         reply = await self.session.call_tool("log", {})
         self.assertFalse(reply.isError)
-        self.assertTrue(reply.content[0].text.startswith("(the first 1 characters are left out; read paintings/lua/painting.lua for all of it)\n�😀"))
+        self.assertTrue(reply.content[0].text.startswith("[painting]\n(the first 1 characters are left out; read paintings/lua/painting.lua for all of it)\n�😀"))
 
     @connected
     async def test_note_revision_status_and_log(self):
@@ -437,7 +445,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_probe_point_area_and_errors(self):
         reply = await self.session.call_tool("probe", {"at": "1,2"})
         self.assertFalse(reply.isError)
-        self.assertEqual(reply.content[0].text, "at 1,2\ncolor 10,20,30 · value 18\nin gallery light 11,21,31 · value 19\ndrying: dry")
+        self.assertEqual(reply.content[0].text, "[painting]\nat 1,2\ncolor 10,20,30 · value 18\nin gallery light 11,21,31 · value 19\ndrying: dry")
         reply = await self.session.call_tool("probe", {"crop": "0,0,50,40", "scratch": True})
         self.assertTrue(reply.content[0].text.startswith("[scratch canvas]\nat 1,2\n"))
         reply = await self.session.call_tool("probe", {"at": "9,9"})
@@ -457,14 +465,14 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         reply = await self.session.call_tool("log", {"find": "Sky"})
         self.assertFalse(reply.isError)
         self.assertEqual(reply.content[0].text, "\n".join([
-            '2 lines of paintings/lua/painting.lua hold "Sky"',
+            "[painting]", '2 lines of paintings/lua/painting.lua hold "Sky"',
             "2- canvas{}", "3- --@ chunk", "4: sky = pile{{'lead white', 4}}", "5- a = 1", "6- b = 2",
             "--", "8- c = 3", "9- d = 4", "10: mix{{SKY, 1}}",
         ]))
         reply = await self.session.call_tool("log", {"find": "canvas", "scratch": True})
         self.assertEqual(reply.content[0].text, '[scratch canvas]\n1 line of paintings/lua/scratch.lua holds "canvas"\n1- --@ chunk\n2: canvas{}\n3- --@ chunk\n4- sky = pile{{\'lead white\', 4}}')
         reply = await self.session.call_tool("log", {"find": "mask"})
-        self.assertEqual(reply.content[0].text, 'no line of paintings/lua/painting.lua holds "mask"')
+        self.assertEqual(reply.content[0].text, '[painting]\nno line of paintings/lua/painting.lua holds "mask"')
 
     @connected
     async def test_open_failure_does_not_retry(self):
@@ -477,6 +485,13 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PreparationTests(unittest.TestCase):
+    def test_painting_chunks_count_pastel_marks(self):
+        loader = SourceFileLoader("painting_chunks", str(SERVER.with_name("painting_chunks.py")))
+        chunks = module_from_spec(spec_from_loader(loader.name, loader))
+        loader.exec_module(chunks)
+        for mark in ("smudge({{1, 2}, {3, 4}})", "blow(500, 400)", "tap()", "b:dust({{1, 2}, {3, 4}})", "p:side({{1, 2}, {3, 4}})"):
+            self.assertEqual(chunks.classify(f"--@ chunk 1\nb = brush('round', 4)\n--@ chunk 2\n{mark}\n"), [(1, False), (2, True)], mark)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="emcp-prep-")
         self.addCleanup(self.temp.cleanup)

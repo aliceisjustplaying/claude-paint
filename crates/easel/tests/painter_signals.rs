@@ -161,7 +161,7 @@ fn a_full_palette_refuses_a_new_pile_and_names_the_piles_on_it() {
     for i in 1..=16 {
         assert!(e.contains(&format!("\"mix{i}\" (")), "mix{i} is named: {e}");
     }
-    assert!(e.contains("palette{scrape={p1, p2}}") && e.contains("the chunk failed and changed nothing"), "{e}");
+    assert!(e.contains(r#"palette{scrape={p1, "mix1"}} scrapes off the pile p1 and the one listed as "mix1"."#) && e.contains("the chunk failed and changed nothing"), "{e}");
     assert_eq!(std::fs::read(&log).unwrap(), before, "the refused chunk isn't in the log");
     // nothing was scraped off: every pile is still on the palette
     let board = ok(&with(&["do", "print(palette())"]));
@@ -173,6 +173,12 @@ fn a_full_palette_refuses_a_new_pile_and_names_the_piles_on_it() {
     ok(&with(&["do", r#"b = brush("filbert", 8) b:load(p[1], 0.9)"#]));
     let e = fails(&with(&["do", "b:load(p[2], 0.9)"]));
     assert!(e.contains("b:load: that pile was scraped off, and knifing it again needs room: the palette is full"), "{e}");
+    assert!(e.contains(r#""pile 17" (lead white 0.50 + smalt 0.50)"#), "an unnamed pile is listed by the name scrape takes: {e}");
+    // a pile whose variable is gone is scraped by the name the palette lists it under
+    let r = ok(&with(&["do", r#"p[3] = nil q = nil palette{scrape={"mix3", "pile 17"}} print(palette())"#]));
+    assert!(r.contains("14 heap(s)") && !r.contains("mix3:") && !r.contains("pile 17:"), "{r}");
+    let e = fails(&with(&["do", r#"palette{scrape={"mix33"}}"#]));
+    assert!(e.contains(r#"palette: scrape: no pile on the palette is listed as "mix33" (on it now: "mix4", "mix5","#), "{e}");
     // the log replays as painted
     let r = ok(&with(&["check"]));
     assert!(r.contains("replay matches the live canvas within tolerance"), "{r}");

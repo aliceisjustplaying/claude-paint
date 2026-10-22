@@ -29,7 +29,8 @@ const scratch = Type.Optional(
 	}),
 );
 const on = (p: { scratch?: boolean }) => (p.scratch ? ["--scratch"] : []);
-const tag = (p: { scratch?: boolean }, t: string) => (p.scratch ? `[scratch canvas]\n${t}` : t);
+const label = (scratch?: boolean) => (scratch ? "[scratch canvas]" : "[painting]");
+const tag = (p: { scratch?: boolean }, t: string) => `${label(p.scratch)}\n${t}`;
 
 export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
 	const read = createReadToolDefinition(studio);
@@ -247,7 +248,7 @@ export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimi
 				}
 				let paths: string[];
 				({ said, paths } = renameLooks(studio, said));
-				if (onScratch) said = `[scratch canvas]\n${said}`;
+				said = `${label(onScratch)}\n${said}`;
 				if (paths.length === 0) throw new Error(said);
 				// (a survey names several looks: each is read, in order)
 				const reads = [];

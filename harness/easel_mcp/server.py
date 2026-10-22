@@ -411,7 +411,7 @@ class Easel:
             return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
         scratch = params.get("scratch", False)
         on = ["--scratch"] if scratch else []
-        tag = "[scratch canvas]\n" if scratch else ""
+        tag = "[scratch canvas]\n" if scratch else "[painting]\n"
         if name == "paint":
             if params.get("new_scratch") and not scratch:
                 raise ValueError("paint: new_scratch goes with scratch: true")

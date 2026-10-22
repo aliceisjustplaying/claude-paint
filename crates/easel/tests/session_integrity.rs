@@ -18,6 +18,16 @@ fn ok(args: &[&str]) -> String {
     assert!(o.status.success(), "{args:?}: {}", String::from_utf8_lossy(&o.stderr));
     String::from_utf8(o.stdout).unwrap()
 }
+fn status_with_timeout(name: &str) -> std::io::Result<String> {
+    use std::{io::{Read, Write}, os::unix::net::UnixStream, time::Duration};
+    let mut conn = UnixStream::connect(sock_of(&root().join("out/easel").join(name)))?;
+    conn.set_read_timeout(Some(Duration::from_secs(1)))?;
+    conn.set_write_timeout(Some(Duration::from_secs(1)))?;
+    conn.write_all(b"7\nstatus\n")?;
+    let mut reply = String::new();
+    conn.read_to_string(&mut reply)?;
+    Ok(reply)
+}
 #[test]
 fn live_resolution_is_fixed() {
     let o = cmd(&["open", "s", "--width", "80"]);
@@ -372,16 +382,95 @@ fn serve_waits_for_a_closing_servers_lock() {
     drop(lock);
     loop {
         assert!(server.0.try_wait().unwrap().is_none(), "serve exited at startup");
-        if cmd(&["-s", name, "status"]).status.success() {
+        if let Ok(reply) = status_with_timeout(name)
+            && reply.starts_with("ok\n1 chunks")
+        {
             break;
         }
         assert!(Instant::now() < deadline, "serve never started after the lock was released");
         std::thread::sleep(Duration::from_millis(1));
     }
-    assert!(ok(&["-s", name, "status"]).starts_with("1 chunks"));
+    assert!(status_with_timeout(name).unwrap().starts_with("ok\n1 chunks"));
     ok(&["-s", name, "do", "assert(x == 1)"]);
     ok(&["-s", name, "close"]);
     assert!(server.0.wait().unwrap().success());
+}
+
+#[test]
+fn serve_refuses_a_stopped_owner() {
+    serve_refuses_unresponsive_owner("stopped-owner", true);
+}
+
+#[test]
+fn serve_refuses_an_owner_reading_an_incomplete_request() {
+    serve_refuses_unresponsive_owner("incomplete-owner", false);
+}
+
+fn serve_refuses_unresponsive_owner(name: &str, stopped: bool) {
+    use std::{
+        io::{Read, Write},
+        os::unix::{fs::MetadataExt, net::UnixStream},
+        process::{Child, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Server(Child);
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let spawn = || Server(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["serve", name])
+        .env_remove("EASEL_WIDTH").env("EASEL_ROOT", root())
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())
+        .spawn().unwrap());
+    let mut owner = spawn();
+    let sock = sock_of(&root().join("out/easel").join(name));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Ok(reply) = status_with_timeout(name)
+            && reply.starts_with("ok\n0 chunks")
+        {
+            break;
+        }
+        assert!(owner.0.try_wait().unwrap().is_none(), "{name}: owner exited at startup");
+        assert!(Instant::now() < deadline, "{name}: owner never started");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let ino = std::fs::metadata(&sock).unwrap().ino();
+    let incomplete = if stopped {
+        assert!(Command::new("kill").args(["-STOP", &owner.0.id().to_string()]).status().unwrap().success());
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let state = Command::new("ps").args(["-o", "stat=", "-p", &owner.0.id().to_string()]).output().unwrap();
+            if String::from_utf8_lossy(&state.stdout).contains('T') {
+                break;
+            }
+            assert!(Instant::now() < deadline, "{name}: owner did not stop");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        None
+    } else {
+        let mut conn = UnixStream::connect(&sock).unwrap();
+        conn.set_write_timeout(Some(Duration::from_secs(1))).unwrap();
+        conn.write_all(b"7\nsta").unwrap();
+        Some(conn)
+    };
+    let mut contender = spawn();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let status = loop {
+        if let Some(status) = contender.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "{name}: second serve blocked on its owner");
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let mut error = String::new();
+    contender.0.stderr.as_mut().unwrap().read_to_string(&mut error).unwrap();
+    assert!(!status.success() && error.contains("another easel serves"), "{name}: {status}: {error}");
+    assert_eq!(std::fs::metadata(&sock).unwrap().ino(), ino, "{name}: second serve replaced the socket");
+    drop(incomplete);
 }
 
 // A second server for a session that has one is refused before it touches anything, and

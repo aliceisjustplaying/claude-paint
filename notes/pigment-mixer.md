@@ -108,6 +108,9 @@ weight share. Main is scored only as a reference, from measured masstone
 RGBs and its own round-3 fit-set-calibrated strengths. Test, fit and
 selection-touched scores are labeled separately. The fit score is not an
 independent test. Guard thresholds and existing goldens are unchanged.
+`notes/pigment-mixer-comparison.csv` contains the current independent mixer's
+1,045 results across the original 95 ramps. Main's reference outputs stay
+separate in the round's evidence and never enter generation.
 
 ## Earlier constant edits
 
@@ -136,8 +139,7 @@ identity before interpreting current latents. The first eight SHA-256 bytes
 of the exact decoder schema tag, measured coefficient bytes and inverse
 table identify this representation. Round-3 occupied checkpoints and tool
 snapshots are incompatible and explicitly refused; old Lua logs remain
-supported. Empty obsolete canvas wet layers can still be imported with
-their old latents cleared.
+supported.
 
 State dumps retain their producing `mixer.identity`, so reconstruction
 never relabels historical dumps with current tables. The new representation

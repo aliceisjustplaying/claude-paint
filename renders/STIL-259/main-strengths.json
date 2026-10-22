@@ -1,0 +1,165 @@
+{
+  "mixpairs": "mixpairs",
+  "fit_set": {
+    "ChromeYellow": "14B",
+    "Cochineal": "04B",
+    "EmeraldGreen": "10B",
+    "Eosin1Wax": "01B",
+    "Eosin2PbWax": "03B",
+    "LeadWhite": "08C",
+    "Minium": "05B",
+    "PrussianBlue": "13B",
+    "UltramarineBlue": "11B",
+    "Vermillion": "06B",
+    "ViridianGreen": "09B"
+  },
+  "test_set": [
+    "03C",
+    "04C",
+    "04F",
+    "06C",
+    "08D",
+    "08E",
+    "08F",
+    "08G",
+    "10C",
+    "13C",
+    "13F",
+    "13G",
+    "14C",
+    "16D",
+    "16F",
+    "17D",
+    "17F"
+  ],
+  "selection_touched": [
+    "01C",
+    "05C",
+    "09C",
+    "11C",
+    "16E"
+  ],
+  "paint_strengths": {
+    "BoneBlack": 1.0,
+    "ChromeYellow": 10.1086,
+    "ChromeYellowOtero": 1.0,
+    "CobaltBlue": 1.0,
+    "Cochineal": 11.7196,
+    "EmeraldGreen": 2.7366,
+    "Eosin": 1.0,
+    "Eosin1Wax": 0.9651,
+    "Eosin2PbWax": 1.2711,
+    "LeadWhite": 0.0838,
+    "Minium": 3.94,
+    "PrussianBlue": 30.2632,
+    "UltramarineBlue": 6.2272,
+    "Vermillion": 5.3581,
+    "ViridianGreen": 6.6239,
+    "ZincWhite": 1.0
+  },
+  "fit_residuals": {
+    "ChromeYellow": 0.0342,
+    "Cochineal": 0.0429,
+    "EmeraldGreen": 0.019,
+    "Eosin1Wax": 0.0383,
+    "Eosin2PbWax": 0.0403,
+    "LeadWhite": 0.008,
+    "Minium": 0.047,
+    "PrussianBlue": 0.1399,
+    "UltramarineBlue": 0.0254,
+    "Vermillion": 0.0179,
+    "ViridianGreen": 0.0239
+  },
+  "tube_strengths": {
+    "lead white": {
+      "strength": 0.09,
+      "was": 1.0,
+      "sample": "08C",
+      "fit_residual": 0.0138
+    },
+    "zinc white": {
+      "strength": 1.0,
+      "was": 1.0,
+      "sample": null,
+      "fit_residual": 0.0
+    },
+    "bone black": {
+      "strength": 12.44,
+      "was": 1.1,
+      "sample": "07D",
+      "fit_residual": 0.0175
+    },
+    "cobalt blue": {
+      "strength": 18.91,
+      "was": 0.8,
+      "sample": "12B",
+      "fit_residual": 0.0328
+    },
+    "ultramarine blue": {
+      "strength": 9.24,
+      "was": 1.1,
+      "sample": "11B",
+      "fit_residual": 0.0106
+    },
+    "Prussian blue": {
+      "strength": 60.13,
+      "was": 3.0,
+      "sample": "13B",
+      "fit_residual": 0.0527
+    },
+    "vermilion": {
+      "strength": 7.15,
+      "was": 1.0,
+      "sample": "06B",
+      "fit_residual": 0.0175
+    },
+    "orange vermilion": {
+      "strength": 10.07,
+      "was": 1.0,
+      "sample": "06B",
+      "fit_residual": 0.0605
+    },
+    "Chinese vermilion": {
+      "strength": 4.94,
+      "was": 1.0,
+      "sample": "06B",
+      "fit_residual": 0.0328
+    },
+    "chrome yellow": {
+      "strength": 42.37,
+      "was": 1.0,
+      "sample": "14B",
+      "fit_residual": 0.0287
+    },
+    "lemon chrome": {
+      "strength": 37.02,
+      "was": 0.8,
+      "sample": "15C",
+      "fit_residual": 0.0149
+    },
+    "viridian": {
+      "strength": 8.97,
+      "was": 0.9,
+      "sample": "09B",
+      "fit_residual": 0.0382
+    },
+    "emerald green": {
+      "strength": 3.15,
+      "was": 0.6,
+      "sample": "10B",
+      "fit_residual": 0.0313
+    },
+    "red lead": {
+      "strength": 4.65,
+      "was": 0.8,
+      "sample": "05B",
+      "fit_residual": 0.0415
+    },
+    "carmine lake": {
+      "strength": 27.82,
+      "was": 1.2,
+      "sample": "04B",
+      "fit_residual": 0.0429
+    }
+  }
+}

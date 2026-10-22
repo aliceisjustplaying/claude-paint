@@ -1,0 +1,5 @@
+95dba3ff937a96d2fad23dda578ab6efe4a7b4c8
+95dba3ff937a96d2fad23dda578ab6efe4a7b4c8	refs/heads/main
+8aba2a75810b5016665dcf7d7e5a1fa9eb731bd5c913db0e0e2cc1cf918e3494  main-reference/crates/paint/src/color.rs
+5e01d715084637b08edc32de43054ee84a1f1e70a022588ead820a32e385e4d7  main-reference/crates/paint/src/palette.rs
+aa8962a2a36c84c7228654d5ed06dadb0a8857e7720e1a5220227146232e5f1f  main-reference/crates/paint/Cargo.toml

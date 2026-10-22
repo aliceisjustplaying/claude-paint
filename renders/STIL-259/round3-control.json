@@ -1,0 +1,19 @@
+{
+  "round3_swatches_pixels_identical": true,
+  "round3_swatches_size": [
+    1000,
+    1595
+  ],
+  "round3_smoothness": "smooth2: endpoint jumps >10x median in 186 of 3000 ramps; interior jumps >10x median in 172; worst interior ratio 65.7 a [0.41768003, 0.3465959, 0.018980652] b [0.39865795, 0.46337017, 0.78375787] step 397",
+  "main_smoothness": "smooth2: endpoint jumps >10x median in 0 of 3000 ramps; interior jumps >10x median in 0; worst interior ratio 5.4 a [0.24275766, 0.17349672, 0.53717285] b [0.42562136, 0.35460922, 0.009259348] step 2",
+  "main_csv_byte_identical": true,
+  "main_recipes_byte_identical": true,
+  "original_log_sha256": "78c30fa4e6a036f28565c718bad1356491970d99f2aaec4c19050f2dd6096307",
+  "derived_engine9_log_sha256": "0dd737da63a5f390fabbab8d5e86a339ae71d3abfce56913781ff688f9b893c7",
+  "derived_engine9_only_header_changed": true,
+  "score_summaries": [
+    "17 mixtures. New mixer: median 0.065, mean 0.082, worst 0.156 (13G). Main: median 0.117, mean 0.136, worst 0.397 (17F). New closer on 11 of 17.",
+    "11 mixtures. New mixer: median 0.036, mean 0.048, worst 0.165 (13B). Main: median 0.034, mean 0.040, worst 0.140 (13B). New closer on 3 of 11.",
+    "5 mixtures. New mixer: median 0.056, mean 0.082, worst 0.212 (16E). Main: median 0.085, mean 0.103, worst 0.213 (16E). New closer on 4 of 5."
+  ]
+}

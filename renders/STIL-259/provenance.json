@@ -1,0 +1,14 @@
+{
+  "code_commit": "5fa01c3219de3503c71ab2a7bc3f103cd2a2489d",
+  "main_score_reference": "95dba3ff937a96d2fad23dda578ab6efe4a7b4c8",
+  "main_gallery_reference": "Current main 95dba3f, rebuilt and resumed from its saved 29-chunk checkpoint",
+  "mixer_identity_u64_le": "0x8226618b63cf5ff4",
+  "unchanged_round3_split": true,
+  "prior_exposure": "08E was read in round 2 primary selection and remains in the fixed round-3 test",
+  "primary_fit_data_unchanged": true,
+  "additional_ks_fit_data": "Pure film and the fixed round-3 fit sample only; extenders pure only",
+  "generator_reproduces_all_four_outputs_byte_for_byte": true,
+  "actual_palette_prussian_1_percent_delta": 0.409105,
+  "raw_rgb_trace_guard_bound": 0.33,
+  "palette_trace_warning": "The unchanged guard operates on RGB, not measured tube recipes"
+}

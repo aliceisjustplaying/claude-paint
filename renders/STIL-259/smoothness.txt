@@ -1,0 +1,3 @@
+Round 3: smooth2: endpoint jumps >10x median in 186 of 3000 ramps; interior jumps >10x median in 172; worst interior ratio 65.7 a [0.41768003, 0.3465959, 0.018980652] b [0.39865795, 0.46337017, 0.78375787] step 397
+Round 4: smooth2: endpoint jumps >10x median in 300 of 3000 ramps; interior jumps >10x median in 193; worst interior ratio 44.3 a [0.41768003, 0.3465959, 0.018980652] b [0.39865795, 0.46337017, 0.78375787] step 397
+Main: smooth2: endpoint jumps >10x median in 0 of 3000 ramps; interior jumps >10x median in 0; worst interior ratio 5.4 a [0.24275766, 0.17349672, 0.53717285] b [0.42562136, 0.35460922, 0.009259348] step 2

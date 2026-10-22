@@ -1,7 +1,11 @@
 # Current-mixer regression baseline
 
-These six small engine-3 logs were explicitly re-recorded for STIL-212
-with the independent pigment mixer at `d9b1d7d`. The engine headers and
+These six small engine-3 logs were re-recorded for STIL-212
+with the independent pigment mixer. STIL-219 retained only the mixer
+fields from that capture: color, wet.lat, bristle latents and studio piles.
+All other existing state values come from main `d94eafd60`, including
+the rag physics that the original capture inadvertently replaced.
+The engine headers and
 scene inputs are unchanged. They select the older handling behavior, not
 the retired pigment implementation. These are current-mixer expectations,
 not a claim that the old library's output is preserved. `MANIFEST.md`
@@ -13,7 +17,7 @@ records the producing build and commands.
 |---|---|
 | `scenes/*.lua` | Six unchanged engine-3/inness logs, replayed at width 128 (128×64 pixels) |
 | `ref/png/` | Current-mixer rendered images and the producing platform |
-| `ref/digest/` | Per-chunk canvas, tool and studio state digests |
+| `ref/digest/` | Reconstructed canvas digests for the mixed-source expectations; tool and studio digests from the capture |
 | `ref/out/` | Printed output from each scene |
 | `ref/times.tsv` | Wall seconds per scene, measured with state dumping enabled |
 | `state/<scene>/chunk-NNN.state.xz` | All 27 CPSTATE1 state dumps, compressed with `xz -9e -T1` |
@@ -59,15 +63,21 @@ to be zero. Rendered images retain the maximum decoded RGBA channel
 error of 2/255 documented in `notes/workflow.md`. Re-recording changes
 the expected data, not these comparisons.
 
-All six scenes must pass. There is no rag exception or exit-4 allowance.
-The old historical rag mismatch is superseded by this explicitly
-authorized current-mixer capture, not forgiven by the checker.
+All six scenes are checked. Main's known rag physics mismatch remains a
+known failure: only its measured scalar signature with no unrelated
+state failure receives exit 4 and `KNOWN_FAILURE: rag-historical-baseline-main`.
+Its PNG must pass against the current-mixer image capture. The historical
+707-pixel image-failure signature is not allowed against this new image.
+Other image failures and state regressions still fail with exit 1.
 
-The capture checks that PNG bytes, printed output and digests with
+The original capture checks that PNG bytes, printed output and digests with
 `secs=` removed match across dumping, no dumping and a one-thread
 dumping replay. The one-thread dumps also pass the unchanged state
-comparison against the four-thread dumps. `secs=` is diagnostic wall
-time and is not an equality criterion.
+comparison against the four-thread dumps. `proof/` keeps those original
+capture digests, not a claim that the mixed-source expectations replay.
+Only the canvas hashes in `ref/digest/` and dump headers are recomputed
+from the expectations. Tool and studio hashes remain capture diagnostics.
+`secs=` is diagnostic wall time and is not an equality criterion.
 
 From the repository root, using the producing test-profile easel:
 

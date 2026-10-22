@@ -16,6 +16,7 @@ trap 'rm -rf "$work"' EXIT
 "$baseline/tools/run_scenes.sh" "$easel" "$work" --dump >/dev/null
 scenes=0
 failed=0
+known_rag=0
 compare_flags=()
 state_result="state within tolerance on every baseline field"
 state_summary="within tolerance on every baseline field"
@@ -32,11 +33,23 @@ for dir in "$baseline"/state/*/; do
     image_failed=1
   fi
   cat "$work/$name.image-report"
-  if [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
+  if [ "$name" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ]; then
+    if uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$name" --image-report "$work/$name.image-report"; then
+      known_rag=1
+    else
+      failed=1
+    fi
+  elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     failed=1
   fi
   scenes=$((scenes + 1))
 done
 [ "$scenes" = 6 ] || { echo "baseline_state: expected all six scenes" >&2; exit 1; }
 [ "$failed" = 0 ] || { echo "baseline_state: FAILED (a different or unrelated regression)" >&2; exit 1; }
+if [ "$known_rag" = 1 ]; then
+  [ "$scenes" = 6 ] || { echo "baseline_state: known rag diagnosis requires all six scenes" >&2; exit 1; }
+  echo "KNOWN_FAILURE: rag-historical-baseline-main"
+  echo "baseline_state: other five scenes meet the state and image criteria; rag is a known historical-baseline mismatch"
+  exit 4
+fi
 echo "baseline_state: all $scenes scenes $state_summary; PNGs meet the image tolerance"

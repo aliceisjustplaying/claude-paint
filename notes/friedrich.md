@@ -5,7 +5,7 @@ method. Studies of known works (Monk by the Sea, Two Men) are exercises only,
 worked from written descriptions, never images.
 
 Working method (no reference images): light ground → brown umber underpainting
-for values → body-color sky (Mixbox pigment gradient) → thin KM glazes → very
+for values → body-color sky (pigment-mixed gradient) → thin KM glazes → very
 soft horizontal strokes → figures last → warm varnish + canvas weave.
 
 ## Monk by the Sea study (`paintings/src/bin/friedrich_monk.rs`)

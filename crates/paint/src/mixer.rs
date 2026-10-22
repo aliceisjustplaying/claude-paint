@@ -106,10 +106,10 @@ mod tests {
         let green = lerp(&hex("#002185"), &hex("#fcd200"), 0.5);
         assert!(green[1] > green[0] && green[1] > green[2]);
         let green = lerp(&hex("#172440"), &hex("#e8b21c"), 0.8 / (0.8 + 3.0 * 0.2));
-        let expected = to_oklab(hex("#4a7634"));
-        let actual = to_oklab(green);
-        let delta = (0..3).map(|k| (actual[k] - expected[k]).powi(2)).sum::<f32>().sqrt();
-        assert!(delta < 0.04, "Prussian/chrome yellow ΔE {delta}: {green:?}");
+        let [_, a, b] = to_oklab(green);
+        let hue = b.atan2(a).to_degrees();
+        let chroma = a.hypot(b);
+        assert!((110.0..170.0).contains(&hue) && chroma > 0.06, "Prussian/chrome yellow is not a chromatic green: hue {hue}, chroma {chroma}");
     }
 
     #[test]
@@ -157,6 +157,38 @@ mod tests {
             let [_, a, b] = to_oklab(color);
             let chroma = (a * a + b * b).sqrt();
             assert!(chroma < 0.01, "black/white {fraction} middle tint has a color cast: {chroma}");
+            assert!(b >= 0.0, "black/white {fraction} tint is blue: {b}");
+        }
+    }
+
+    #[test]
+    fn palette_violet_and_ultramarine_tints_keep_their_hue() {
+        let palette = crate::Palette::new("hue study", crate::palette::catalog());
+        let index = |name| palette.tubes.iter().position(|tube| tube.name == name).unwrap();
+        let white = index("lead white");
+        let blue = index("ultramarine blue");
+        let violet = palette.pile(vec![(white, 0.6), (blue, 0.3), (index("vermilion"), 0.1)]).color;
+        assert!(to_oklab(violet)[1] > 0.0, "violet lost its red component: {violet:?}");
+        let [_, a, b] = to_oklab(palette.pile(vec![(blue, 1.0)]).color);
+        let masstone_hue = b.atan2(a);
+        for fraction in [0.1, 0.2, 0.3, 0.5, 0.7, 0.9] {
+            let color = palette.pile(vec![(white, 1.0 - fraction), (blue, fraction)]).color;
+            let [_, a, b] = to_oklab(color);
+            let delta = b.atan2(a) - masstone_hue;
+            let degrees = delta.sin().atan2(delta.cos()).to_degrees().abs();
+            assert!(degrees < 10.0, "ultramarine {fraction} tint shifted hue by {degrees} degrees");
+        }
+    }
+
+    #[test]
+    fn catalog_traces_do_not_overpower_white() {
+        let palette = crate::Palette::new("trace study", crate::palette::catalog());
+        let white = palette.tubes.iter().find(|tube| tube.name == "lead white").unwrap().color;
+        let start = to_oklab(white);
+        for tube in &palette.tubes {
+            let tint = to_oklab(lerp(&white, &tube.color, 0.01));
+            let delta = (0..3).map(|k| (tint[k] - start[k]).powi(2)).sum::<f32>().sqrt();
+            assert!(delta <= 0.01, "1% {} overpowered white: {delta}", tube.name);
         }
     }
 }

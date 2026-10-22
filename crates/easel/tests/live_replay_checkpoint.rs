@@ -179,6 +179,24 @@ struct Batch {
     frames: Vec<(String, Vec<u8>)>,
 }
 
+#[test]
+fn live_open_refuses_obsolete_pigment_checkpoints_without_replaying() {
+    let mut studio = Studio::new("obsolete-pigment", false);
+    studio.start();
+    studio.ok(&["do", "x = 1"]);
+    studio.close();
+    let mut obsolete = b"EASLRP01".to_vec();
+    obsolete.extend([0; 32]);
+    std::fs::write(studio.dir().join("replay.ckpt"), obsolete).unwrap();
+    let output = studio.cmd(&["open", "painting"]);
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("obsolete pigment representation"), "{error}");
+    let log = String::from_utf8(studio.bytes("server.log")).unwrap();
+    assert!(!log.contains("resuming chunk"), "{log}");
+    assert!(!log.contains("replaying the full log"), "{log}");
+}
+
 struct Fixture {
     source: Vec<u8>,
     pending: Vec<(String, Vec<u8>)>,

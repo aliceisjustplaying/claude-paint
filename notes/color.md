@@ -22,8 +22,8 @@ hand (`aim()` in `paintings/fresh/fresh_coast.rs`).
   (`pigment::scatter_for`). S is flat across channels; absorption is
   `K = S·(1−R∞)²/(2R∞)` per channel, so it carries the hue
   (`Pigment::masstone`).
-- **Mixing is two-constant KM with Mixbox for hue.** The masstone mixes in
-  Mixbox latent space: in the wet layer by volume, on the palette by volume ×
+- **Mixing is two-constant KM with the pigment mixer for hue.** The masstone
+  mixes in latent space: in the wet layer by volume, on the palette by volume ×
   tinting strength (as before). S mixes linearly by volume (true KM). K follows
   from the mixed masstone and S. Before, hiding was mixed linearly and K/S was
   rebuilt from an over-white color. That under-weighted white: in real paint a
@@ -238,7 +238,7 @@ closure what is under the stroke. See `notes/strokes.md` and `notes/fixes_paint.
   pile the painter modifies: a `Handling` hook that aims only the proportions
   of a fixed recipe.
 - Mixing is inconsistent between palette and wet layer. The palette weights
-  Mixbox by tinting strength; the wet layer (brush ↔ canvas) weights by
+  mixer latents by tinting strength; the wet layer (brush ↔ canvas) weights by
   volume. A strength per wet pixel would make them agree.
 - `Aim::Laid`'s thickness estimate is a constant per brush kind (see above).
   The glaze tool lays about half of the filbert figure; glazes mix by

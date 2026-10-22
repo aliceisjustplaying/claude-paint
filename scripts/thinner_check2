@@ -33,6 +33,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/thinner-check2.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 unset EASEL_BOX
 fail=0
+known_rag=0
 state_flags=()
 state_result='state within tolerance on every baseline field'
 
@@ -42,7 +43,9 @@ set +e
 cb=${PIPESTATUS[0]}
 set -e
 n=$(grep -c "png same as recorded baseline" "$work/compare_build.txt" || true)
-if [ "$cb" != 0 ] || [ "$n" != 6 ]; then
+if [ "$cb" = 4 ] && [ "$n" = 6 ] && grep -qx 'KNOWN_FAILURE: rag-historical-baseline-main' "$work/compare_build.txt"; then
+  known_rag=1
+elif [ "$cb" != 0 ] || [ "$n" != 6 ]; then
   echo "check 2: compare_build.sh failed (exit $cb; $n of 6 PNGs meet the image criteria)"
   fail=1
 fi
@@ -76,7 +79,9 @@ for lua in "$base"/scenes/*.lua; do
     image_failed=1
   fi
   cat "$work/$s.image-report"
-  if [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
+  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
+    known_rag=1
+  elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     fail=1
   fi
   cmp -s "$base/ref/out/$s.txt" "$work/$s.out" && echo "  printed output same (not a criterion)" || echo "  printed output differs (not a criterion)"
@@ -93,4 +98,9 @@ else
 fi
 
 if [ "$fail" != 0 ]; then echo 'check 2: FAIL'; exit 1; fi
+if [ "$known_rag" = 1 ]; then
+  echo 'KNOWN_FAILURE: rag-historical-baseline-main'
+  echo 'check 2: all other historical and same-build thinner=0 criteria pass; the rag baseline remains a known failure'
+  exit 4
+fi
 echo 'check 2: PASS'

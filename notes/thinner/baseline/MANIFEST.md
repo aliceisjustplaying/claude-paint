@@ -2,8 +2,29 @@
 
 Recorded on 2026-10-22 on the approved cloud verification machine. These
 active expectations were explicitly authorized for the independent mixer.
-They are not historical Mixbox/af49348 results. Scene inputs and tolerance
-code were not changed by the capture.
+The mixer fields are not historical Mixbox/af49348 results. Scene inputs
+and tolerance code were not changed by the capture.
+
+## STIL-219 physics restoration
+
+The stored expectations now combine main `d94eafd60` physics with this
+capture's `color`, `wet.lat`, bristle `lat` arrays and `studio.piles`.
+Every other pre-existing field is restored from main, including rag
+loads, wet volumes, hiding, floors, drying clocks and bristle volumes.
+Zero solvent fields remain compatible with the current checkpoint layout.
+These are field-transplanted expectations, not the output of a new replay.
+
+The `canvas=` hashes in `ref/digest/` and state headers are reconstructed
+from these expectations with `tools/checkpoint_from_dump.py`. The original
+capture's tool/studio digests, PNGs, printed output, times and `proof/`
+files remain unchanged as capture evidence. In particular, the proof
+digests no longer describe the transplanted state. All 27 stored dumps
+still reconstruct their `ref/digest/` canvas hashes.
+
+Main's known rag physics mismatch is still diagnosed, not re-recorded as
+passing. Its scalar signature and unrelated-state checks are unchanged.
+Only the PNG criterion differs from main: the current-mixer rag PNG must
+pass, rather than matching the obsolete 707-pixel historical image failure.
 
 ## Producing build
 

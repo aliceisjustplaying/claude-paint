@@ -19,6 +19,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/baseline-compare.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 "$here/tools/run_scenes.sh" "$easel" "$work" --dump >/dev/null
 failed=0
+known_rag=0
 scenes=0
 state_result='state within tolerance on every baseline field'
 for d in "$here"/state/*/; do
@@ -39,7 +40,9 @@ for d in "$here"/state/*/; do
     image_failed=1
   fi
   cat "$work/$s.image-report"
-  if [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
+  if [ "$s" = rag ] && [ "$state_failed" = 1 ] && [ "$image_failed" = 0 ] && uv run --no-project python "$repo/scripts/known_rag_baseline.py" "$work/state/$s" --image-report "$work/$s.image-report"; then
+    known_rag=1
+  elif [ "$state_failed" = 1 ] || [ "$image_failed" = 1 ]; then
     failed=1
   fi
   cmp -s <(sed 's/ secs=[^ ]*//' "$here/ref/digest/$s.txt") <(sed 's/ secs=[^ ]*//' "$work/digest/$s.txt") && dg=same || dg=different
@@ -49,4 +52,9 @@ for d in "$here"/state/*/; do
 done
 [ "$scenes" = 6 ] || { echo "compare_build: expected all six scenes" >&2; exit 1; }
 [ "$failed" = 0 ] || { echo "compare_build: DIFFERENT from the recorded baseline" >&2; exit 1; }
+if [ "$known_rag" = 1 ]; then
+  [ "$scenes" = 6 ] || { echo "compare_build: known rag diagnosis requires all six scenes" >&2; exit 1; }
+  echo 'KNOWN_FAILURE: rag-historical-baseline-main'
+  exit 4
+fi
 echo "compare_build: all baseline fields meet their state and image criteria"

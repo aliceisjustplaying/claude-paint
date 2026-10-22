@@ -118,6 +118,7 @@ check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
+  mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \

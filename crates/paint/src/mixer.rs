@@ -111,4 +111,25 @@ mod tests {
         let delta = (0..3).map(|k| (actual[k] - expected[k]).powi(2)).sum::<f32>().sqrt();
         assert!(delta < 0.04, "Prussian/chrome yellow ΔE {delta}: {green:?}");
     }
+
+    #[test]
+    fn palette_tints_stay_light_and_grays_stay_near_neutral() {
+        let palette = crate::Palette::tube_box();
+        let index = |name| palette.tubes.iter().position(|tube| tube.name == name).unwrap();
+        for (name, fraction, minimum_lightness) in [
+            ("raw umber", 0.3, 0.72),
+            ("green earth", 0.3, 0.78),
+            ("smalt", 0.1, 0.84),
+        ] {
+            let color = palette.pile(vec![(index("lead white"), 1.0 - fraction), (index(name), fraction)]).color;
+            let lightness = to_oklab(color)[0];
+            assert!(lightness > minimum_lightness, "lead white/{name} tint is too dark: {lightness}");
+        }
+        for fraction in [0.2, 0.5, 0.8] {
+            let color = palette.pile(vec![(index("lead white"), 1.0 - fraction), (index("bone black"), fraction)]).color;
+            let [_, a, b] = to_oklab(color);
+            let chroma = (a * a + b * b).sqrt();
+            assert!(chroma < 0.025, "black/white {fraction} tint has a color cast: {chroma}");
+        }
+    }
 }

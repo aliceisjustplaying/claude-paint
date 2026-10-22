@@ -740,6 +740,7 @@ function kindOf(e) {
 // ---- right now
 function status() {
   if (!events.length) return;
+  $('pos').textContent = `${pos + 1}/${events.length}`;
   const last = events[events.length - 1], age = (Date.now() - Date.parse(last.ts)) / 1000, atLive = live && pos === events.length - 1;
   const b = $('badge'), active = !stopped();  // (as the picture: at work until its closing words are two minutes old, or half an hour quiet)
   if (atLive && disconnected) { b.className = ''; b.textContent = 'DISCONNECTED'; b.title = "Can't reach this painter's data; the painter last acted " + ago(age) + '.'; }
@@ -1390,7 +1391,6 @@ function show(i, stepping = false) {
   if (!events.length) return; pos = Math.max(0, Math.min(i, events.length - 1)); $('scrub').value = pos;
   const scroll = journalScroll();
   pictures(); codeAt(pos, stepping); journal(pos, scroll); status();
-  $('pos').textContent = `${pos + 1}/${events.length}`;
 }
 function looks() { const r = []; events.forEach((e, k) => e.kind === 'image' && r.push(k)); return r; }
 // replay steps through the painting: each whole look in turn (before the look tool, each picture), with the thinking that led to it

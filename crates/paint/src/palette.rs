@@ -643,6 +643,7 @@ fn pick(names: &[&str]) -> Vec<Tube> {
 #[derive(Clone, Debug)]
 pub struct Mixture {
     pub pigment_latent: [f32; crate::mixer::LATENT_SIZE],
+    pub spectral_films: bool,
     /// (tube index, fraction by volume), fractions sum to 1.
     pub parts: Vec<(usize, f32)>,
     /// Masstone of the mixture (pigment mix of the tubes' masstones, weighted
@@ -1009,7 +1010,7 @@ impl Palette {
         let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
-        Mixture { pigment_latent, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
+        Mixture { pigment_latent, spectral_films: self.engine >= crate::PIGMENT_MIXER && self.glaze_film, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
     }
 
     /// How the parts (tube index, fraction by volume) look dry, out of oil
@@ -1091,7 +1092,7 @@ impl Mixture {
         // that share of it out (blot 0.5 leaves half)
         // (packed and drained oil stay the pigment's: medium and blotting
         // change only how much more or less the paint holds)
-        Paint { pigment_latent: Some(self.pigment_latent), parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
+        Paint { pigment_latent: Some(self.pigment_latent), spectral_films: self.spectral_films, parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying

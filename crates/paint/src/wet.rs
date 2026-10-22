@@ -117,6 +117,7 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 #[derive(Clone, Debug)]
 pub struct Paint {
     pub pigment_latent: Option<[f32; LAT]>,
+    pub spectral_films: bool,
     pub parts: Vec<(usize, f32)>,
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
@@ -170,11 +171,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -223,8 +224,8 @@ impl Paint {
     }
     /// What `coats` of this paint look like laid over `under`.
     pub fn over(&self, under: Rgb, coats: f32) -> Rgb {
-        if let Some(lat) = &self.pigment_latent {
-            return crate::mixer::over(lat, self.scatter, under, coats);
+        if self.spectral_films {
+            return crate::mixer::over(&self.latent(), self.scatter, under, coats);
         }
         self.pigment().over(under, coats)
     }

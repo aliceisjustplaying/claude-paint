@@ -245,6 +245,46 @@ mod tests {
     }
 
     #[test]
+    fn palette_previews_follow_canvas_film_optics() {
+        for (engine, glaze_film, spectral) in [(8, false, false), (8, true, false), (9, false, false), (9, true, true)] {
+            let mut palette = crate::Palette::new("preview study", crate::palette::catalog());
+            palette.engine = engine;
+            palette.glaze_film = glaze_film;
+            let i = palette.tubes.iter().position(|t| t.name == "Prussian blue").unwrap();
+            let pile = palette.pile(vec![(i, 1.0)]);
+            for medium in [0.0, 0.8] {
+                let paint = pile.laid(medium);
+                assert_eq!(paint.pigment_latent, Some(pile.pigment_latent));
+                assert_eq!(paint.latent().color, pile.pigment_latent);
+                let mut optics_difference = 0.0f32;
+                for under in [[0.01; 3], [0.85; 3]] {
+                    for coats in [0.16, 0.48, 8.0] {
+                        let mut canvas = crate::Canvas::new(4, 1.0, under).with_engine(engine).with_glaze_film(glaze_film);
+                        assert_eq!(canvas.spectral_films(), spectral);
+                        canvas.wet.vol.fill(coats);
+                        canvas.wet.lat.fill(paint.latent());
+                        canvas.wet.hide.fill(paint.prop());
+                        canvas.wet.dirty = Some((0, 0, canvas.f.w, canvas.f.h));
+                        let rgb = paint.pigment().over(under, coats);
+                        let measured = over(&pile.pigment_latent, paint.scatter, under, coats);
+                        for k in 0..3 {
+                            optics_difference = optics_difference.max((measured[k] - rgb[k]).abs());
+                        }
+                        let expected = if spectral { measured } else { rgb };
+                        let preview = paint.over(under, coats);
+                        assert!((0..3).all(|k| (preview[k] - expected[k]).abs() < 2e-6), "engine {engine}, glaze_film {glaze_film}: {preview:?} != {expected:?}");
+                        let wet = canvas.look_px(0);
+                        assert!((0..3).all(|k| (preview[k] - wet[k]).abs() < 2e-6));
+                        canvas.dry();
+                        assert!((0..3).all(|k| (preview[k] - canvas.px[0][k]).abs() < 2e-6));
+                    }
+                }
+                assert!(optics_difference > 2e-6, "engine {engine}, glaze_film {glaze_film}, medium {medium}: the optics paths must differ beyond the comparison tolerance");
+            }
+        }
+    }
+
+    #[test]
     fn measured_films_report_errors_over_both_revigo_fields() {
         let spectra: Vec<(&str, Vec<f32>)> = include_str!("../../../scripts/pigment_data/revigo/revigo-aggregated-palette-spectral-data.txt")
             .lines().skip(1).map(|line| {

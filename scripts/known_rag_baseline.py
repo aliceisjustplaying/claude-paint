@@ -45,6 +45,8 @@ def diagnose(directory, limits):
         _, actual = sc.load(files[chunk])
         ignored_fields, ignored_values = set(), {}
         if number >= 4:
+            latent_size = reference["wet.lat"][1][-1]
+            latent = r"lat\[(?:%s)\]" % "|".join(map(str, range(latent_size)))
             ignored_fields = {"wet.vol", "wet.lat", "wet.hide", "clock.cure", "clock.lev", "clock.seen", "clock.th"}
             if number == 8:
                 ignored_fields.add("wet.floor")
@@ -63,10 +65,10 @@ def diagnose(directory, limits):
                 skipped = set()
                 for key, value in values.items():
                     allowed = bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.(load|soaked)", key))
-                    allowed |= bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(mm3|lat\[[0-6]\]|hide\[[0-4]\]|cure|at_min|at_secs)", key))
-                    allowed |= bool(number == 8 and name == "brushes.debug" and re.fullmatch(r"brushes\[0\]\.bristles\[\d+\]\.(vol|lat\[[0-6]\]|hide\[[0-4]\]|cure)", key))
+                    allowed |= bool(name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(mm3|%s|hide\[[0-4]\]|cure|at_min|at_secs)" % latent, key))
+                    allowed |= bool(number == 8 and name == "brushes.debug" and re.fullmatch(r"brushes\[0\]\.bristles\[\d+\]\.(vol|%s|hide\[[0-4]\]|cure)" % latent, key))
                     if name == "rags.debug" and re.fullmatch(r"rags\[[01]\]\.mobile\.(lat|hide)\.len", key):
-                        if value != ("num", "7" if key.endswith("lat.len") else "5"):
+                        if value != ("num", str(latent_size) if key.endswith("lat.len") else "5"):
                             problems.append("%s: %s shape changed" % (chunk, key))
                     if allowed:
                         if value[0] != "num" or re.fullmatch(r"-?\d+", value[1]) or not math.isfinite(sc.num(value[1])):

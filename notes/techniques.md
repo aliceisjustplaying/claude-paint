@@ -53,9 +53,11 @@ does; this says how to use them. What you paint is yours to choose.
    [The knife](#the-knife) and [The rag](#the-rag) for handling and limits.
 5. **Test a doubtful change.** Use the scratch procedure in
    [Plan before you paint](#plan-before-you-paint), matching the underpaint
-   and its drying state. Change one condition, compare the results and
-   carry the handling that worked over to the painting. Leave the passage
-   alone if another pass has no clear benefit.
+   and its drying state. To learn what one condition does, change only
+   that one. To get a better passage, change as many as you like; the
+   result then shows what worked together, not which change caused it, so
+   record it that way. Carry the handling that worked over to the painting.
+   Leave the passage alone if another pass has no clear benefit.
 
 ## Ground
 
@@ -82,8 +84,11 @@ does; this says how to use them. What you paint is yours to choose.
 
 - **Step back after every campaign** and ask whether the whole picture still
   does what you meant it to, as well as whether the last thing you fixed is
-  fixed. Then `survey` it at full detail: what you can't see in a whole view
-  is still on the canvas.
+  fixed. A fix can remove the defect and lose what it sat in: stripes gone
+  but the fork flattened, a passage quieted but the figure buried, a pale
+  cover laid but a near trunk cut. Check the overlap, taper or light the
+  passage was for. Then `survey` it at full detail: what you can't see in a
+  whole view is still on the canvas.
 - **Values.** Check `mode: "value,squint"`: do the large lights, middles
   and darks give the effect you want? Light reads against darks; a high-key
   picture can keep a narrow range on purpose.
@@ -248,9 +253,15 @@ does; this says how to use them. What you paint is yours to choose.
 - **Protect what is there now.** Paint fine marks after the passages behind
   them where you can. In every later pass over that area, subtract each of
   them from the mask (`m - protected`), and subtract again after `grow` or
-  `blur`, which spread the mask back over them.
+  `blur`, which spread the mask back over them. When you change a protected
+  shape (take off a spur, move a trunk), rebuild its mask before the next
+  pass: the old mask still protects what you removed. Strokes you place one
+  at a time (`b:gesture`, `b:touch`) don't follow the pass's mask; give them
+  `clip=` the same mask.
 - **Check a mask before painting through it**: `print(m:at(x, y))` at a few
-  points inside the target and just outside it, past each end of a band.
+  points inside the target, just outside it, past each end of a band and on
+  the nearest shape the pass must leave alone. `print(m:area())` near 0
+  means the pass will paint nothing.
 - **Masks from earlier chunks**: a `local` mask is gone in the next chunk.
   Keep what later chunks need as globals: paths, recipes, protection masks.
   Before redrawing something by eye, look for its saved path. Keep big

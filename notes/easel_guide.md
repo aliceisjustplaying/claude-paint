@@ -132,7 +132,11 @@ print(table.concat(tubes(), ", "))   -- the names in the box
 ```
 
 A pile is parts by volume of named tubes, plus `medium`: the share of oil
-medium mixed in (0, as from the tube, to 0.95). Medium makes the paint more
+medium mixed in (0, as from the tube, to 0.95). Only the parts'
+proportions count: `{{"<tube A>", 4}, {"<tube B>", 1}}` and
+`{{"<tube A>", 0.4}, {"<tube B>", 0.1}}` knife the same paint. To thin it,
+raise `medium`, `turps` or `thinner`; to lay less of it, lower the `load`.
+Medium makes the paint more
 transparent and more fluid, and slower to dry. It is added oil only. What a pile looks like is
 what its pigments make together, thick or thin, over what is already on
 the canvas; you find out by painting with it and looking. A pile mixed by
@@ -360,7 +364,7 @@ change:
 | `hatch` | round 2.6 | 5–12 units, nearly straight, side by side, clumped |
 | `glaze` | soft filbert 26 | 120–300 units, light pressure; a thin film (below) |
 | `scumble` | filbert 9 | 10–20 units, worked back and forth; a thin, broken veil (below) |
-| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40% |
+| `blend` | badger 40 | a clean blender, crossing passes top to bottom, inside the mask. It is wiped clean as it goes, so it lifts paint as well as moving it: one pass takes up about 15% of a thin wet film, three passes about 40%: paint taken off, not a set change in value; what the value does depends on what the lift uncovers |
 
 | option | meaning |
 |---|---|
@@ -814,7 +818,9 @@ Every successful paint reply reports the current painting time, before
   `"open"` (workable: it blends and lifts), `"setting"` (stiff, barely
   blends), `"tacky"` (set; it grabs the brush) or `"dry"` (touch-dry).
   It reads the top film at that point: where no wet paint lies there (a
-  gap between strokes, a wiped spot), it reads the layer beneath.
+  gap between strokes, a wiped spot), it reads the layer beneath. It only
+  reports: a pass later in the same chunk runs whatever it returns, unless
+  your code tests the answer (`if drying(x, y) ~= "open" then ... end`).
 
 Each film dries at its own pace, set by its pigments, its thickness and
 its oil. It is open for the first 30% of its time to touch-dry, setting
@@ -950,3 +956,8 @@ stamped with the painting's time, such as `day 2, 09:40`. To revise what
 is already there, call `note` with `replaces`, the exact passage to
 change, and `text`, what takes its place. Writing a note doesn't advance
 painting time.
+
+The journal comes back to you as written, in later sittings and after a
+condensed conversation, so a lesson in it is only as good as what
+supports it. Keep what you saw apart from why you think it happened. When
+later evidence contradicts an entry, revise it; earlier versions are kept.

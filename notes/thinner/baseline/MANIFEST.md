@@ -1,67 +1,52 @@
-# MANIFEST: STIL-212 current-mixer baseline
+# Independent-mixer baseline provenance
 
-Recorded on 2026-10-22 on the approved cloud verification machine. These
-active expectations were explicitly authorized for the independent mixer.
-The mixer fields are not historical Mixbox/af49348 results. Scene inputs
-and tolerance code were not changed by the capture.
-
-## STIL-219 physics restoration
-
-The stored expectations now combine main `d94eafd60` physics with this
-capture's `color`, `wet.lat`, bristle `lat` arrays and piles (both
-`studio.piles` and the redundant `studio.debug` pile colors).
-Every other pre-existing field is restored from main, including rag
-loads, wet volumes, hiding, floors, drying clocks and bristle volumes.
-Zero solvent fields remain compatible with the current checkpoint layout.
-These are field-transplanted expectations, not the output of a new replay.
-
-The `canvas=` hashes in `ref/digest/` and state headers are reconstructed
-from these expectations with `tools/checkpoint_from_dump.py`. The original
-capture's tool/studio digests, PNGs, printed output, times and `proof/`
-files remain unchanged as capture evidence. In particular, the proof
-digests no longer describe the transplanted state. All 27 stored dumps
-still reconstruct their `ref/digest/` canvas hashes.
-
-Main's known rag physics mismatch is still diagnosed, not re-recorded as
-passing. Its scalar signature and unrelated-state checks are unchanged.
-Only the PNG criterion differs from main: the current-mixer rag PNG must
-pass, rather than matching the obsolete 707-pixel historical image failure.
+This package records the current color candidate, not visual acceptance.
+The candidate's four color guards still fail; its exact source and mixer
+table hashes identify the capture without treating it as finished.
 
 ## Producing build
 
-| Item | Value |
-|---|---|
-| Source | `18584b181a1e22e4212b9f0a55b69b5ab4bd8cb8` |
-| Easel SHA-256 | `c41710b22e83700c9dc8d37a7d9a4307130bf56132a9ca36fc05e44e2474b047` |
-| Cargo.lock SHA-256 | `8511bd710df7e47ca3f1c8754de74c89dc5f5d74ce0c2e7d1fa3359eddf44cb8` |
-| rustc | `1.99.0 (b940084d7 2026-09-28)`, LLVM 23.1.1 |
-| cargo | `1.99.0 (5f94df478 2026-08-27)` |
-| Host/platform | `x86_64-unknown-linux-gnu`, `linux-x86_64`, Ubuntu 24.04 |
-| CPU | AMD EPYC, 16 logical CPUs available, affinity restricted to IDs 0–3 |
-| Profile | Workspace `test`: opt-level 2, codegen-units 256, incremental, debug assertions and overflow checks enabled; `profile.test.debug=0` |
-| Features | Workspace defaults |
-| Threads | `CARGO_BUILD_JOBS=4`, `RUST_TEST_THREADS=4`, `RAYON_NUM_THREADS=4`; only the explicit one-thread proof overrides Rayon to 1 |
-| Other tools | Python 3.12.3 via uv 0.13.4, GNU bash 5.2.21, xz 5.4.5 |
-| Canvas checkpoint | PAINTC19 envelope, base edition 9, mixer identity 1 |
+Recorded on 2026-10-22 from source
+`116943558560499a8950e0cb99eb91b477d3ae09` on Linux x86_64.
+The test-profile easel was built with `profile.test.debug=0`.
+Its SHA-256 is
+`7f5c05849e74d3236e5caa22ab052430b27e5481d32f11a881406bbea21bfa6d`.
 
-The working checkout was clean when the producing build started. All
-commands below inherited `taskset -c 0,1,2,3` and the three thread/job
-variables above. The same settings were used for the main benchmark.
+The Nix development shell supplied the toolchain. The isolated sakaki job
+used `MemoryMax=6G`, `CPUQuota=400%`, `nice -n 10`,
+`CARGO_BUILD_JOBS=4`, `RUST_TEST_THREADS=4` and
+`RAYON_NUM_THREADS=4`. CPU quota is not CPU affinity. No live painting's
+studio or OBS was changed.
 
-```sh
-cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel \
-  --test smoke --test look --test session_integrity --test live_frames \
-  --test live_replay_checkpoint --test replay_frames_resume --test painter_signals \
-  --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 \
-  --test thinner_physics --test thinner_pigments --test engine9_plumbing \
-  --message-format=json-render-diagnostics
-```
+The generating script and `crates/paint/src/mixer/primaries.json` record
+the independently authored basis, concentration power and table hashes.
+
+## Frozen physics and current mixer fields
+
+All 27 stored dumps combine main `d94eafd60` physics with this capture's
+`color`, `wet.lat`, bristle `lat` arrays and piles (both
+`studio.piles` and the redundant `studio.debug` pile colors).
+Every other pre-existing value is retained exactly from main, including
+rag loads, wet volumes, hiding, floors, drying clocks and bristle volumes.
+The field audit checks both halves exactly, not only within tolerance.
+New solvent fields are zero.
+
+These are field-transplanted expectations, not untouched replay dumps.
+The `canvas=` hashes in state headers and `ref/digest/` are reconstructed
+from the stored expectations with `tools/checkpoint_from_dump.py`.
+The tool/studio digests, PNGs, printed output, times and `proof/` files
+come from the fresh replay. Proof canvas digests therefore describe
+actual replay state, not the transplanted rag expectation.
+
+Main's known rag physics mismatch is still diagnosed, not accepted as a
+baseline pass. Its existing scalar signature and unrelated-state checks
+remain. The current-mixer rag PNG must pass its image comparison instead
+of reproducing an obsolete image-failure signature.
 
 ## Record commands
 
-`EASEL` below is the absolute path to `target/debug/easel` from that build.
-`CAPTURE` is a scratch directory outside the package. No release-profile
-or separately rebuilt executable supplied these expectations.
+`EASEL` names the absolute path of that build's `target/debug/easel`;
+`CAPTURE` is scratch outside this package.
 
 ```sh
 notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/dump" --dump
@@ -69,36 +54,30 @@ notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/nodump"
 RAYON_NUM_THREADS=1 notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/t1" --dump
 ```
 
-Each run uses the unchanged six `scenes/*.lua` inputs at width 128.
-The dump run supplies `ref/png`, `ref/digest`, `ref/out` and
-`ref/times.tsv`. Each `dump/state/<scene>/chunk-NNN.state` supplies its
-existing `state/<scene>/chunk-NNN.state.xz` through `xz -9e -T1 -c`.
-The three runs supply `proof/digest_{dump,nodump,t1}` and
-`proof/times_{dump,nodump,t1}.tsv`. `ref/png/platform.txt` is the measured
-output of `uv run --script scripts/compare_images.py --print-platform`.
+All runs use the unchanged six scene logs at width 128. Each scene's PNG
+is byte-identical across these three runs; the four-thread and one-thread
+state dumps pass the existing state comparer. The dump run supplies
+`ref/png/`, `ref/out/` and `ref/times.tsv`. The three runs supply
+`proof/digest_{dump,nodump,t1}/` and the corresponding times.
 
-Before copying, each scene's PNG bytes and printed output were compared
-with `cmp` across all three runs. Digest lines were compared with
-`cmp` after `sed 's/ secs=[^ ]*//'`. Four-thread and one-thread dumps
-were compared using the unchanged `state_compare.py --quiet --added-zero`.
-Package verification reconstructs all 27 canvas checkpoints and checks
-their FNV-1a against `ref/digest` without an exception.
+After capture, only the mixer fields listed above are transplanted into
+main's state expectations. The package reconstructs all 27 canvas
+checkpoint digests. `ref/png/platform.txt` is the measured output of
+`scripts/compare_images.py --print-platform`.
 
-## Other active fixtures recorded with the same build
+## Other mixer-dependent references
 
-The producing Rust test executables were selected from Cargo's artifact
-stream. From their crate directories, with `UPDATE_GOLDEN=1`, the exact
-test names were:
+The exact existing recorder tests ran with `UPDATE_GOLDEN=1`:
 
 ```text
 tests::fixture_matches_golden
-bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure
 session::tests::engine_2_logs_replay_as_before
 ```
 
-The first two record `crates/paint/tests/golden_scene.png` (and platform)
-and `plough_volume_cure.png`. The session test records all three
-`crates/easel/tests/engine2/drying_sheet_{normal,gallery,relief}.png` views.
+They record the paint scene and its platform and the three engine-2
+drying-sheet views. The numerical plough reference was not re-recorded;
+its unchanged test passes.
+
 The same build also supplied:
 
 ```sh
@@ -107,17 +86,16 @@ scripts/tests/old_logs.sh "$EASEL" --record crates/easel/tests/old_logs/golden
 uv run --script scripts/compare_images.py --print-platform > crates/easel/tests/r19_default_box.platform
 ```
 
-The separate r19 image uses its default width 2400. The old-log recorder
-uses each unchanged case's width from `cases.tsv`, including r19 at 320.
+The old-log set has 12 cases, including the original ck7 Lua log at
+128 px. Its PNG and text digest are newly recorded. The separate r19
+image uses its unchanged default width 2400; the old-log r19 case stays
+at width 320. No scene input, recipe, numeric assertion or image/state
+tolerance was changed by recording.
 
-## Historical files and checksums
+## Inventory
 
-`old_files/` is retained unchanged: its PAINTCK8 save/header and original
-logs remain historical compatibility inputs. They are not the producer
-or expected state of the active regression baseline.
-
-`SHA256SUMS` is refreshed after recording and documentation updates with
-all package files except itself. `tools/verify_package.sh` checks this
-complete inventory, the state comparer's tests and all 27 reconstructed
-checkpoint digests. Raw execution logs and intermediate uncompressed
-captures remain in the verification scratch, outside this package.
+`SHA256SUMS` contains every intended package file except itself, with no
+interpreter cache or temporary output. `tools/verify_package.sh` checks
+the inventory, comparer self-tests and all reconstructed checkpoints.
+`old_files/` remains unchanged historical compatibility input, not an
+active expectation or a way to forgive a new mismatch.

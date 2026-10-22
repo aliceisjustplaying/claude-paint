@@ -1,0 +1,4 @@
+png_sha256 bf40420a6b2186d981ffb2735790736ae68b9fc05208344cb46575c3051e718f
+chunk 1 canvas=af48a031bb9ff411 brushes=cbf29ce484222325 nbrushes=0 studio=37a1b17fe2a673fe
+chunk 2 canvas=9efbad74120e69ae brushes=cbf29ce484222325 nbrushes=0 studio=e74442676d27bbcc
+chunk 3 canvas=a491d1a7f9e3be81 brushes=cbf29ce484222325 nbrushes=0 studio=098e35325001098a

@@ -1,8 +1,8 @@
 # Current-mixer regression baseline
 
-These six small engine-3 logs were re-recorded for STIL-212
-with the independent pigment mixer. STIL-219 retained only the mixer
-fields from that capture: color, wet.lat, bristle latents and studio piles.
+These six small engine-3 logs were captured for STIL-219's current
+independent-mixer candidate. Only the mixer fields come from that
+capture: color, wet.lat, bristle latents and studio piles.
 All other existing state values come from main `d94eafd60`, including
 the rag physics that the original capture inadvertently replaced.
 The engine headers and

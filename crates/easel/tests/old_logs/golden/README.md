@@ -1,15 +1,16 @@
 # Current-mixer references for old logs
 
-The 11 unchanged cases in `../cases.tsv` were explicitly re-recorded for
-STIL-212 with the independent pigment mixer. Their older engine headers
+The 12 cases in `../cases.tsv` were explicitly recorded for STIL-219's
+current independent-mixer candidate, including the original ck7 Lua log
+at 128 px. The other inputs and all widths are unchanged. Older engine headers
 retain the corresponding handling behavior, not the retired pigment
 implementation. These are current-mixer expectations, not af49348 or
 historical-library output.
 
-Producing source: `d3c9d5940e0d9a7caba0f057461611e9abd53c57`.
+Producing source: `116943558560499a8950e0cb99eb91b477d3ae09`.
 The workspace test-profile easel was built with `profile.test.debug=0`,
-Rust 1.99.0, CPU affinity 0–3 and four build/test/Rayon threads. Its SHA-256
-is `b811186de2267f5d0fd5b3f20799da9adb2d4095d05f1f58c29fe6ab4ddd7395`.
+four build/test/Rayon workers, CPU quota 400%, memory cap 6 GiB and nice 10.
+Its SHA-256 is `7f5c05849e74d3236e5caa22ab052430b27e5481d32f11a881406bbea21bfa6d`.
 Full build provenance is in `notes/thinner/baseline/MANIFEST.md`.
 
 Recorded on 2026-10-22 with:

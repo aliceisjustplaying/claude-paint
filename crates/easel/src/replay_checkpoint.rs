@@ -512,6 +512,8 @@ impl Drop for Batch {
 impl Batch {
     pub fn open(args: &[String], source: &str, width: usize, s: &mut Session, chunks: &[String], out: &Path) -> Result<Self, String> {
         let checkpoint = crate::flag(args, "--replay-checkpoint").map(PathBuf::from);
+        let required = args.iter().any(|a| a == "--require-replay-checkpoint");
+        if required && checkpoint.is_none() { return Err("--require-replay-checkpoint requires --replay-checkpoint".into()); }
         let until = crate::flag(args, "--until-chunk").map(|n| n.parse::<usize>().map_err(|_| "--until-chunk needs a positive chunk number".to_string())).transpose()?.unwrap_or(chunks.len());
         if until == 0 || until > chunks.len() { return Err(format!("--until-chunk must be in 1..={}", chunks.len())); }
         let minutes = crate::flag(args, "--for-minutes").map(|v| v.parse::<f64>().map_err(|_| "--for-minutes needs a positive duration".to_string())).transpose()?;
@@ -520,14 +522,20 @@ impl Batch {
         let progress = checkpoint.as_deref().unwrap_or(out).with_extension("replay-progress.json");
         let identity = (checkpoint.is_some() || crate::flag(args, "--frames-every").is_some()).then(|| Identity::new(source, width)).transpose()?;
         let mut batch = Self { checkpoint, progress, identity, done: 0, total: chunks.len(), until, minutes, elapsed_before: 0.0, started: Instant::now(), digests: crate::flag(args, "--state-digest").map(|_| Vec::new()) };
-        if let Some(path) = batch.checkpoint.as_ref().filter(|p| p.exists()) {
+        if let Some(path) = batch.checkpoint.as_ref().filter(|p| required || p.exists()) {
             let (mut saved, canvas, elapsed_secs) = load(path)?;
-            if Some(&saved.identity) != batch.identity.as_ref() { return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into()); }
-            if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
-                return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
-            }
             if saved.done == 0 || saved.done > chunks.len() || saved.done > until || !elapsed_secs.is_finite() || elapsed_secs < 0.0 {
                 return Err("replay checkpoint: invalid chunk cursor or elapsed time".into());
+            }
+            if Some(&saved.identity) != batch.identity.as_ref() {
+                let mut prefix = batch.identity.as_ref().unwrap().clone();
+                prefix.source = Sha256::digest(source_prefix(source, saved.done)?.as_bytes()).into();
+                if !required || saved.identity != prefix {
+                    return Err("replay checkpoint: source, executable, width or engine environment differs; refusing resume".into());
+                }
+            }
+            if saved.digests.is_some() != batch.digests.is_some() || saved.digests.as_ref().is_some_and(|d| d.len() != saved.done) {
+                return Err("replay checkpoint: --state-digest must be kept consistently across batches".into());
             }
             reconstruct(s, chunks, &mut saved, canvas, &|_, _| {})?;
             batch.done = saved.done;

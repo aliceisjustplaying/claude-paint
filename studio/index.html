@@ -1354,12 +1354,12 @@ function pictures() {
   const boundary = atLiveEnd && scratchingAt(pos) ? events.slice(0, pos + 1).findLast(scratchBoundary) : null;
   const pendingScratch = boundary && scratchReset(boundary) && !boundary.err && picturesAt(pos, true, true)[0] < 0;
   let sc = scratchingAt(pos) && (!rested || pendingScratch);
-  let [w, o] = picturesAt(pos, rested, sc), previousScratch = false, awaitingScratch = false;
+  let [w, o] = picturesAt(pos, rested && !pendingScratch, sc), previousScratch = false, awaitingScratch = false;
   if (sc && pendingScratch) {
     for (let k = pos; k >= 0; k--) { const e = events[k];
-      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e) && (!e.display_pending || displayLight === 'color')) { w = k; o = -1; previousScratch = true; break; }
+      if (e.kind === 'image' && isScratch(e) && !e.ref && !isPalette(e) && !isMask(e) && (!e.display_pending || displayLight === 'color')) { w = k; previousScratch = true; break; }
     }
-    if (!previousScratch) { [w, o] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
+    if (!previousScratch) { [w] = picturesAt(pos, true, false); sc = false; awaitingScratch = true; }
   }
   pip(picturesAt(pos, true, !sc)[0], sc);
   if (w >= 0) { const img = events[w]; viewI = img.img;

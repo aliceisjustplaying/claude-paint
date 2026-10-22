@@ -22,10 +22,13 @@ hand (`aim()` in `paintings/fresh/fresh_coast.rs`).
   (`pigment::scatter_for`). S is flat across channels; absorption is
   `K = S·(1−R∞)²/(2R∞)` per channel, so it carries the hue
   (`Pigment::masstone`).
-- **Mixing is two-constant KM with the pigment mixer for hue.** The masstone
-  mixes in latent space: in the wet layer by volume, on the palette by volume ×
-  tinting strength (as before). S mixes linearly by volume (true KM). K follows
-  from the mixed masstone and S. Before, hiding was mixed linearly and K/S was
+- **Mixing is two-constant KM.** The masstone mixes in latent space: in the
+  wet layer by volume, on the palette by volume × tinting strength. Since
+  engine 9 the latent holds pigment concentrations, decoded by measured
+  spectral K and S (`notes/pigment-mixer.md`); fifteen tubes are measured
+  paints and the rest enter as catalog RGB. The scattering below is a
+  separate per-coat value for layering: S mixes linearly by volume, and K
+  follows from the mixed masstone and S. Before, hiding was mixed linearly and K/S was
   rebuilt from an over-white color. That under-weighted white: in real paint a
   little white makes a glaze turbid fast because its S is large, and linear
   S-mixing captures that. The wet layer's `Prop[0]` is now S, not hiding.
@@ -168,6 +171,10 @@ Relative colors: `Handling::color_over` and `Stipple::color_over` hand the
 closure what is under the stroke. See `notes/strokes.md` and `notes/fixes_paint.md`.
 
 ## Tests (crates/paint)
+
+The numbers in this section and the next were measured with the Mixbox
+mixer, before engine 9.
+
 - `palette::canvas_tests::matched_marks_disappear` (a): dabs aimed at the
   field under them, over a brushed sky. Worst mean ΔE of the mark region
   before vs after is 0.0037 (body, 0.15 medium), 0.0027 (semi, 0.55) and

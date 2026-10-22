@@ -7,6 +7,11 @@ with runtime selection documented in [easel.md](easel.md#studio-selection).
 The per-box compilation and painter-build finishing exclusions below
 describe the studied revision, not the current export process.
 
+Mixer update: engine 9 (#244) replaced Mixbox. The wet latent is now 21
+floats of pigment concentrations and residual, decoded by measured K/S
+(`notes/pigment-mixer.md`). The Mixbox latent, its 7 floats and the memory
+figures built on them below describe the studied revision.
+
 **Caveat on every timing.** All timings were taken on a loaded machine: `uptime` said `load average: 35.02` on 12 cores (`sysctl hw.ncpu` → 12). Three check/finish replays and two live painters were running.
 
 ---

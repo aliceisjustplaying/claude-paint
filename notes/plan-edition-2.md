@@ -361,7 +361,9 @@ engine work and is what a grant reviewer asks about first.
 - **D5** Memory budget per canvas on this machine.
 - **D6** Color model for edition 2: keep Mixbox for mixing and add pigment
   identity beside it (recommended), or move to per-pigment Kubelka–Munk
-  (`spectral.rs` exists and is unused).
+  (`spectral.rs` exists and is unused). Decided since: engine 9 (#244)
+  mixes by two-constant KM from measured spectra, with no Mixbox
+  (`notes/pigment-mixer.md`).
 - **D7** The "done" protocol for the bench: sittings cap, declaration, no
   nudging. (Today's practice, written down.)
 - **D8** Tools per studio under the box rule (recommended), or every tool

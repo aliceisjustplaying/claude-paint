@@ -16,7 +16,7 @@
 //! a grid in canvas units first (`FIELD_STEP`, over the mask's bounding box)
 //! and read back bilinearly. Mask functions are evaluated at every pixel.
 
-use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value, Variadic};
+use mlua::{Function, Lua, MetaMethod, ObjectLike, Result, Table, UserData, UserDataMethods, Value, Variadic};
 use paint::palette::Mixture;
 use paint::{Apply, Canvas, Fbm, Frame, Gesture, Ground, Handling, Held, Linen, Mask, Order, Orient, Palette, Rgb, Rng, Shape, Stipple, Style, Tool, Touch};
 use crate::time::{self, Verb};
@@ -276,7 +276,9 @@ fn angle_field(st: &S, v: &Value, b: (f32, f32, f32, f32)) -> Result<FieldBox<f3
 // ---------------------------------------------------------------- tables
 
 pub(crate) fn num(t: &Table, k: &str) -> Result<Option<f32>> {
-    t.get::<Option<f32>>(k)
+    let v = t.get::<Value>(k)?;
+    let kind = v.type_name();
+    t.weak_lua().upgrade().unpack(v).map_err(|_| mlua::Error::runtime(format!("{k}: want a number, got {kind}")))
 }
 
 /// A pair from {a, b} or a single number (both the same).
@@ -292,17 +294,18 @@ pub(crate) fn pair(t: &Table, k: &str) -> Result<Option<(f32, f32)>> {
 
 /// Points from {{x, y}, ...} or {x1, y1, x2, y2, ...}.
 pub(crate) fn points(v: &Value) -> Result<Vec<(f32, f32)>> {
-    let Value::Table(t) = v else { return err("points: want {{x, y}, ...} or {x1, y1, x2, y2, ...}") };
+    let Value::Table(t) = v else { return err(format!("points: want {{{{x, y}}, ...}} or {{x1, y1, x2, y2, ...}}, got {}", v.type_name())) };
     let mut out = Vec::new();
     match t.get::<Value>(1)? {
         Value::Table(_) => {
-            for p in t.sequence_values::<Table>() {
-                let p = p?;
-                out.push((p.get(1)?, p.get(2)?));
+            for (i, p) in t.sequence_values::<Value>().enumerate() {
+                let shape = || mlua::Error::runtime(format!("points: point {}: want {{x, y}}, two numbers", i + 1));
+                let Value::Table(p) = p? else { return Err(shape()) };
+                out.push((p.get(1).map_err(|_| shape())?, p.get(2).map_err(|_| shape())?));
             }
         }
         _ => {
-            let v: Vec<f32> = t.sequence_values::<f32>().collect::<Result<_>>()?;
+            let v: Vec<f32> = t.sequence_values::<f32>().enumerate().map(|(i, x)| x.map_err(|_| mlua::Error::runtime(format!("points: entry {}: want a number", i + 1)))).collect::<Result<_>>()?;
             if !v.len().is_multiple_of(2) {
                 return err("points: a flat list needs an even count (x1, y1, x2, y2, ...)");
             }
@@ -358,7 +361,7 @@ pub(crate) fn tool_of(v: &Value) -> Result<Tool> {
         }
         Value::Table(t) => {
             let kind: String = t.get::<Option<String>>("kind")?.or(t.get::<Option<String>>(1)?).unwrap_or_else(|| "round".into());
-            let w: f32 = t.get::<Option<f32>>("width")?.or(t.get::<Option<f32>>(2)?).ok_or_else(|| mlua::Error::runtime("tool: needs a width"))?;
+            let w: f32 = num(&t, "width")?.or(t.get::<Option<f32>>(2)?).ok_or_else(|| mlua::Error::runtime("tool: needs a width"))?;
             let mut tool = tool_named(&kind, w)?;
             macro_rules! over {
                 ($($f:ident),*) => {$( if let Some(v) = num(t, stringify!($f))? { tool.$f = v; } )*};
@@ -1245,7 +1248,8 @@ pub(crate) fn curve_of(v: &Value, w: f32) -> Result<Vec<(f32, f32)>> {
                 Ok((x, f.call::<f32>(x)?))
             }).collect()
         }
-        v => points(v),
+        Value::Table(_) => points(v),
+        v => err(format!("the curve: want points {{{{x, y}}, ...}} or {{x1, y1, x2, y2, ...}}, or a function(x) giving y; got {}", v.type_name())),
     }
 }
 
@@ -1335,9 +1339,9 @@ fn load_amount(amount: Option<f32>, default: f32, what: &str) -> Result<f32> {
 
 /// The part of a brush a dip reaches: `{side=-1..1, share=0..1, streak=0..1}`.
 fn part_of(t: &Table, what: &str) -> Result<paint::Part> {
-    let side = t.get::<Option<f32>>("side")?.unwrap_or(0.0);
-    let share = t.get::<Option<f32>>("share")?.unwrap_or(if side != 0.0 { 0.5 } else { 1.0 });
-    let streak = t.get::<Option<f32>>("streak")?.unwrap_or(0.0);
+    let side = num(&t, "side")?.unwrap_or(0.0);
+    let share = num(&t, "share")?.unwrap_or(if side != 0.0 { 0.5 } else { 1.0 });
+    let streak = num(&t, "streak")?.unwrap_or(0.0);
     if !(-1.0..=1.0).contains(&side) || !(0.0..=1.0).contains(&share) || !(0.0..=1.0).contains(&streak) {
         return err(format!("{what}: side is -1..1 (which edge of the brush goes in), share 0..1 (how much of its width), streak 0..1 (how unevenly)"));
     }
@@ -1372,11 +1376,11 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
             if let Some(q) = t.get::<Option<Value>>("quality")? {
                 return edge_quality(st, &q, region, b, seed);
             }
-            let (fo, so, lo) = (t.get::<Option<f32>>("found")?.unwrap_or(0.0), t.get::<Option<f32>>("soft")?.unwrap_or(0.0), t.get::<Option<f32>>("lost")?.unwrap_or(0.0));
+            let (fo, so, lo) = (num(&t, "found")?.unwrap_or(0.0), num(&t, "soft")?.unwrap_or(0.0), num(&t, "lost")?.unwrap_or(0.0));
             if !(fo >= 0.0 && so >= 0.0 && lo >= 0.0) || fo + so + lo <= 0.0 {
                 return err("edge={found=, soft=, lost=}: shares of the contour, at least one above 0");
             }
-            let period = t.get::<Option<f32>>("period")?.unwrap_or(40.0);
+            let period = num(&t, "period")?.unwrap_or(40.0);
             let sd = t.get::<Option<u64>>("seed")?.unwrap_or(seed);
             Ok(paint::fence::stretches(region, (fo, so, lo), period, 6.0, sd))
         }
@@ -1453,7 +1457,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     }
     let pad = h.length.1.max(len) + h.tool.width * 2.0;
     let b = support(Some(&mask), f, pad);
-    if let Some(c) = o.get::<Option<f32>>("coverage")? {
+    if let Some(c) = num(&o, "coverage")? {
         h = h.coverage(c);
     }
     if let Some(v) = o.get::<Option<Value>>("angle")? {
@@ -1484,7 +1488,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
         let p2 = pass_pile(st, &t.get::<Value>("pile")?, "work second")?;
         let part = part_of(&t, "work second")?;
-        let load = load_amount(t.get::<Option<f32>>("load")?, 0.4, "work second")?;
+        let load = load_amount(num(&t, "load")?, 0.4, "work second")?;
         h.second = Some(paint::handling::Second { palette: &tubes, pile: p2.mix.clone(), medium: p2.medium, thinner: p2.thinner(), load, part });
         second_pile = Some(p2);
     }
@@ -1559,7 +1563,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         let seed = pass_seed ^ 0xED6E_F00D;
         let q = edge_quality(st, &edge_v, &mask, b, seed)?;
         let (waver, reach) = match &edge_v {
-            Value::Table(t) => (t.get::<Option<f32>>("waver")?.unwrap_or(1.0), t.get::<Option<f32>>("reach")?.unwrap_or(1.0)),
+            Value::Table(t) => (num(&t, "waver")?.unwrap_or(1.0), num(&t, "reach")?.unwrap_or(1.0)),
             _ => (1.0, 1.0),
         };
         let fence = paint::fence::Fence::new(&mask, &q, h.tool.width, waver, reach, seed);
@@ -2170,8 +2174,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })
         })?)?;
     }
-    // palette{dirty=0..1, set_out={"tube name", ...}, clean=true}: how the board
-    // is kept; returns a description of the heaps on it (from engine 4)
+    // palette{dirty=0..1, set_out={"tube name", ...}, clean=true, scrape={p, "name"}}: how
+    // the board is kept; returns a description of the heaps on it (from engine 4)
     if st.borrow().tubes.engine >= 4 {
         let st = st.clone();
         g.set("palette", lua.create_function(move |_, t: Option<Table>| {
@@ -2196,13 +2200,33 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if t.get::<Option<bool>>("clean")?.unwrap_or(false) {
                     st.borrow_mut().board.clean();
                 }
+                // scrape={p1, "sky"}: piles, or the names palette() lists heaps under (a pile
+                // whose variable is gone): every heap listed under that name
                 if let Some(list) = t.get::<Option<Table>>("scrape")? {
-                    let piles = list.sequence_values::<Value>().map(|v| pile_of(&v?, "palette scrape")).collect::<Result<Vec<_>>>()?;
-                    if piles.iter().any(|p| p.heap == 0) {
-                        return err("palette: scrape takes piles knifed on this palette");
+                    let mut heaps = Vec::new();
+                    for v in list.sequence_values::<Value>() {
+                        match v? {
+                            Value::String(name) => {
+                                let name = name.to_str()?.to_string();
+                                let s = st.borrow();
+                                let named: Vec<u64> = s.board.live().iter().filter(|h| crate::board::label(h) == name).map(|h| h.id).collect();
+                                if named.is_empty() {
+                                    let on: Vec<String> = s.board.live().iter().map(|h| format!("{:?}", crate::board::label(h))).collect();
+                                    return err(format!("palette: scrape: no pile on the palette is listed as {name:?} (on it now: {})", if on.is_empty() { "none".to_string() } else { on.join(", ") }));
+                                }
+                                heaps.extend(named);
+                            }
+                            v => {
+                                let p = pile_of(&v, "palette scrape")?;
+                                if p.heap == 0 {
+                                    return err("palette: scrape takes piles knifed on this palette");
+                                }
+                                heaps.push(p.heap);
+                            }
+                        }
                     }
-                    for p in piles {
-                        st.borrow_mut().board.scrape(p.heap);
+                    for h in heaps {
+                        st.borrow_mut().board.scrape(h);
                     }
                 }
             }
@@ -2315,7 +2339,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let pts = points(&p)?;
             let ws: Vec<f32> = match w {
                 Value::Table(t) => t.sequence_values::<f32>().collect::<Result<_>>()?,
-                v => vec![f32::from_lua_value(v)?; pts.len()],
+                Value::Number(n) => vec![n as f32; pts.len()],
+                Value::Integer(n) => vec![n as f32; pts.len()],
+                v => return err(format!("ribbon: widths: want one width or a table of one per point, got {}", v.type_name())),
             };
             if ws.len() != pts.len() || pts.len() < 2 {
                 return err("ribbon: needs >= 2 points and one width per point (or one width)");

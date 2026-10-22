@@ -663,6 +663,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
         g.set("pastel", lua.create_function(move |lua, (v, o): (Value, Option<Table>)| {
             let pile = crate::api::pile_of(&v, "pastel")?;
             let tubes = st1.borrow().tubes.clone();
+            let pile = if tubes.pastel_current_heap { crate::api::resolve(&st1, pile) } else { pile };
             if let Some(o) = &o {
                 check_keys(o, STICK_KEYS, "pastel")?;
             }
@@ -931,6 +932,39 @@ mod tests {
             let difference = s.canvas().unwrap().pixels().iter().zip(&original).flat_map(|(a, b)| a.iter().zip(b).map(|(a, b)| (a - b).abs())).fold(0.0f32, f32::max);
             if enabled { assert!(difference < 2e-5, "original graphite pixels: {difference}"); }
             else { assert!(difference > 2e-5, "legacy replay: {difference}"); }
+        }
+    }
+
+    /// A new painting's `pastel(p)` takes the color of p's heap as it is now, added to,
+    /// without another visit to the heap or more time; an older log's takes the pile as it
+    /// was first knifed, so it replays as painted. The log and a save keep the switch.
+    #[test]
+    fn a_new_paintings_pastel_takes_its_heap_as_it_is_now() {
+        use crate::session::{PASTEL_HEAP_MARK, box_for};
+        for enabled in [false, true] {
+            let older = "--@ engine 8\n--@ paper\n";
+            let mut s = Session::with_box(64, box_for(if enabled { None } else { Some(older) }).unwrap()).unwrap().with_paper(true).unwrap();
+            run(&mut s, "canvas{size=64, aspect=1, seed=4, paper={grammage=200}}");
+            run(&mut s, r#"w = pile{{"lead white", 1}} w:add{{"bone black", 1}} q = pile{{"lead white", 1}}"#);
+            let mut stick = |src: &str| {
+                let before = s.st.borrow().clock;
+                let color = run(&mut s, &format!("p = pastel({src}) print(p.r, p.g, p.b)"));
+                (color, s.st.borrow().clock - before)
+            };
+            let (added, added_secs) = stick("w");
+            let (white, white_secs) = stick("q");
+            let (grey, _) = stick(r#"pile{{"lead white", 1}, {"bone black", 1}}"#);
+            assert_eq!(&added, if enabled { &grey } else { &white }, "{added} {white} {grey}");
+            assert_ne!(white, grey);
+            assert_eq!(added_secs, white_secs);
+            let program = s.program("pastel");
+            assert_eq!(program.lines().any(|l| l == PASTEL_HEAP_MARK), enabled);
+            assert_eq!(box_for(Some(&program)).unwrap().pastel_current_heap, enabled);
+            let path = std::env::temp_dir().join(format!("easel-pastel-heap-{}-{enabled}.ckpt", std::process::id()));
+            crate::save::write(&s, &program, &path).unwrap();
+            let restored = crate::save::read(&path).unwrap().session;
+            std::fs::remove_file(path).unwrap();
+            assert_eq!(restored.st.borrow().tubes.pastel_current_heap, enabled);
         }
     }
 

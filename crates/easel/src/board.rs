@@ -300,7 +300,7 @@ impl Board {
             s += &format!(
                 "  {}. {}{}: {}{}\n",
                 n + 1,
-                h.name.clone().unwrap_or_else(|| format!("pile {}", h.id)),
+                label(h),
                 if h.medium > 0.0 { format!(" (medium {:.2})", h.medium) } else if h.medium < 0.0 { format!(" (blotted {:.2})", -h.medium) } else { String::new() },
                 recipe,
                 if h.dirt_share() > 0.005 { format!("  [{:.0}% dirt]", 100.0 * h.dirt_share()) } else { String::new() }
@@ -312,15 +312,19 @@ impl Board {
     /// Why a full board refuses a heap (`what`: the verb, and why it needed one): the heaps
     /// on it, oldest first, and how one is scraped off.
     pub fn full(&self, tubes: &Palette, what: &str) -> String {
-        let heaps: Vec<String> = self.live().iter().map(|h| match &h.name {
-            Some(n) => format!("{n:?} ({})", recipe(h, tubes)),
-            None => recipe(h, tubes),
-        }).collect();
+        let heaps: Vec<String> = self.live().iter().map(|h| format!("{:?} ({})", label(h), recipe(h, tubes))).collect();
+        let oldest = format!("{:?}", self.live().first().map_or("pile 1".to_string(), |h| label(h)));
         format!(
-            "{what}: the palette is full. It holds {LIVE} piles and takes no more until one is scraped off. On it now, oldest first: {}. palette{{scrape={{p1, p2}}}} scrapes off the piles p1 and p2.",
+            "{what}: the palette is full. It holds {LIVE} piles and takes no more until one is scraped off. On it now, oldest first: {}. palette{{scrape={{p1, {oldest}}}}} scrapes off the pile p1 and the one listed as {oldest}.",
             heaps.join("; ")
         )
     }
+}
+
+/// The name a heap is listed under (`palette()`, a full board's refusal), which
+/// `palette{scrape=}` takes: the name it was knifed with, else `pile <id>`.
+pub fn label(h: &Heap) -> String {
+    h.name.clone().unwrap_or_else(|| format!("pile {}", h.id))
 }
 
 /// A heap's recipe now: its tubes' shares, its dirt included.

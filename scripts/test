@@ -161,6 +161,8 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \
+  session::tests::shape_and_number_errors_name_the_function_argument_and_line \
+  session::tests::numeric_option_errors_read_the_option_once \
   session::tests::rag_preparation_keeps_hand_time_without_mark_effects \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
@@ -194,6 +196,7 @@ known_rust glaze easel 'bin easel test' session::tests::a_glaze_tints_the_drawin
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
+check painter-easel-tools 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-tools.test.ts' '^# pass [1-9]'
 check painter-visit-lifecycle 'node --test --test-reporter=tap harness/painter/test/visit-lifecycle.test.ts' '^# pass [1-9][0-9]*$'
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"

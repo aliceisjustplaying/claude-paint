@@ -9,7 +9,8 @@ would have aged the painting).
 ## What a painter gets
 
 - `paint`, `look`, `status`, `log` take `scratch: true`; `paint` also takes `new_scratch: true`
-  (with `scratch`). Replies on the scratch canvas start with `[scratch canvas]`.
+  (with `scratch`). Replies on the scratch canvas start with `[scratch canvas]`, and
+  replies on the painting with `[painting]`.
 - The first scratch chunk sets the scratch canvas up with the painting's own `canvas{...}`, written
   back by the easel (`Studio::canvas_src`, `api.rs` `lua_src`) and logged as the scratch log's
   chunk 1. Before the painting has a canvas, a scratch chunk is refused with a message.

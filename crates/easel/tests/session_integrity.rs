@@ -18,6 +18,16 @@ fn ok(args: &[&str]) -> String {
     assert!(o.status.success(), "{args:?}: {}", String::from_utf8_lossy(&o.stderr));
     String::from_utf8(o.stdout).unwrap()
 }
+fn status_with_timeout(name: &str) -> std::io::Result<String> {
+    use std::{io::{Read, Write}, os::unix::net::UnixStream, time::Duration};
+    let mut conn = UnixStream::connect(sock_of(&root().join("out/easel").join(name)))?;
+    conn.set_read_timeout(Some(Duration::from_secs(1)))?;
+    conn.set_write_timeout(Some(Duration::from_secs(1)))?;
+    conn.write_all(b"7\nstatus\n")?;
+    let mut reply = String::new();
+    conn.read_to_string(&mut reply)?;
+    Ok(reply)
+}
 #[test]
 fn live_resolution_is_fixed() {
     let o = cmd(&["open", "s", "--width", "80"]);
@@ -44,6 +54,36 @@ fn edited_or_truncated_logs_cannot_reopen() {
     assert!(reopened.contains("resumed chunk 1/1"), "{reopened}");
     assert!(reopened.contains("resumed 1 chunks"), "{reopened}");
     ok(&["-s", "reopen", "close"]);
+}
+
+#[test]
+fn open_waits_for_previous_lock_holder_despite_stale_fatal() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    let name = "stale-fatal";
+    let _reaper = Reaper(name);
+    let dir = root().join("out/easel").join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lock = std::fs::File::create(dir.join("lock")).unwrap();
+    lock.lock().unwrap();
+    std::fs::write(dir.join("server.log"), "resuming previous server\neasel: fatal: previous server failed\n").unwrap();
+    let mut opener = Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["open", name])
+        .env_remove("EASEL_WIDTH")
+        .env("EASEL_ROOT", root())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut progress = String::new();
+    BufReader::new(opener.stdout.as_mut().unwrap()).read_line(&mut progress).unwrap();
+    drop(lock);
+    let output = opener.wait_with_output().unwrap();
+    assert_eq!(progress, "resuming previous server\n");
+    assert!(output.status.success(), "open: {output:?}");
+    assert!(ok(&["-s", name, "status"]).starts_with("0 chunks"));
+    ok(&["-s", name, "close"]);
 }
 
 // A corrupt/obsolete chunk must never leave a partially resumed server running.
@@ -317,6 +357,150 @@ fn racing_opens_start_one_server() {
         assert!(ok(&["-s", name, "status"]).starts_with("1 chunks"), "round {round}");
         ok(&["-s", name, "close"]);
     }
+}
+
+#[test]
+fn serve_waits_for_a_closing_servers_lock() {
+    use std::{
+        io::Read,
+        os::unix::net::UnixListener,
+        process::{Child, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Server(Child);
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let name = "serve-handoff";
+    ok(&["open", name]);
+    ok(&["-s", name, "do", "x = 1"]);
+    ok(&["-s", name, "close"]);
+    let dir = root().join("out/easel").join(name);
+    let lock = std::fs::File::open(dir.join("lock")).unwrap();
+    lock.lock().unwrap();
+    let sock = sock_of(&dir);
+    let listener = UnixListener::bind(&sock).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let mut server = Server(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["serve", name])
+        .env_remove("EASEL_WIDTH").env("EASEL_ROOT", root())
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())
+        .spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut conn = loop {
+        if let Ok((conn, _)) = listener.accept() {
+            break conn;
+        }
+        if let Some(status) = server.0.try_wait().unwrap() {
+            let mut error = String::new();
+            server.0.stderr.as_mut().unwrap().read_to_string(&mut error).unwrap();
+            panic!("serve exited instead of waiting for the closing server: {status}: {error}");
+        }
+        assert!(Instant::now() < deadline, "serve never checked the closing server");
+        std::thread::sleep(Duration::from_millis(1));
+    };
+    conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut request = [0; 9];
+    conn.read_exact(&mut request).unwrap();
+    assert_eq!(&request, b"7\nstatus\n");
+    std::fs::remove_file(&sock).unwrap();
+    drop(listener);
+    drop(conn);
+    drop(lock);
+    loop {
+        assert!(server.0.try_wait().unwrap().is_none(), "serve exited at startup");
+        if let Ok(reply) = status_with_timeout(name)
+            && reply.starts_with("ok\n1 chunks")
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "serve never started after the lock was released");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(status_with_timeout(name).unwrap().starts_with("ok\n1 chunks"));
+    ok(&["-s", name, "do", "assert(x == 1)"]);
+    ok(&["-s", name, "close"]);
+    assert!(server.0.wait().unwrap().success());
+}
+
+#[test]
+fn serve_refuses_a_stopped_owner() {
+    serve_refuses_unresponsive_owner("stopped-owner", true);
+}
+
+#[test]
+fn serve_refuses_an_owner_reading_an_incomplete_request() {
+    serve_refuses_unresponsive_owner("incomplete-owner", false);
+}
+
+fn serve_refuses_unresponsive_owner(name: &str, stopped: bool) {
+    use std::{
+        io::{Read, Write},
+        os::unix::{fs::MetadataExt, net::UnixStream},
+        process::{Child, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Server(Child);
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let spawn = || Server(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["serve", name])
+        .env_remove("EASEL_WIDTH").env("EASEL_ROOT", root())
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())
+        .spawn().unwrap());
+    let mut owner = spawn();
+    let sock = sock_of(&root().join("out/easel").join(name));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Ok(reply) = status_with_timeout(name)
+            && reply.starts_with("ok\n0 chunks")
+        {
+            break;
+        }
+        assert!(owner.0.try_wait().unwrap().is_none(), "{name}: owner exited at startup");
+        assert!(Instant::now() < deadline, "{name}: owner never started");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let ino = std::fs::metadata(&sock).unwrap().ino();
+    let incomplete = if stopped {
+        assert!(Command::new("kill").args(["-STOP", &owner.0.id().to_string()]).status().unwrap().success());
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let state = Command::new("ps").args(["-o", "stat=", "-p", &owner.0.id().to_string()]).output().unwrap();
+            if String::from_utf8_lossy(&state.stdout).contains('T') {
+                break;
+            }
+            assert!(Instant::now() < deadline, "{name}: owner did not stop");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        None
+    } else {
+        let mut conn = UnixStream::connect(&sock).unwrap();
+        conn.set_write_timeout(Some(Duration::from_secs(1))).unwrap();
+        conn.write_all(b"7\nsta").unwrap();
+        Some(conn)
+    };
+    let mut contender = spawn();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let status = loop {
+        if let Some(status) = contender.0.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "{name}: second serve blocked on its owner");
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    let mut error = String::new();
+    contender.0.stderr.as_mut().unwrap().read_to_string(&mut error).unwrap();
+    assert!(!status.success() && error.contains("another easel serves"), "{name}: {status}: {error}");
+    assert_eq!(std::fs::metadata(&sock).unwrap().ino(), ino, "{name}: second serve replaced the socket");
+    drop(incomplete);
 }
 
 // A second server for a session that has one is refused before it touches anything, and

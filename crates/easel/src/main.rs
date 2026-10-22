@@ -609,20 +609,19 @@ fn open(args: &[String]) -> Result<(), String> {
         if show_startup_progress(&log, &mut shown)? {
             last_progress = Instant::now();
         }
-        if let Ok((true, st)) = request(&name, "status", &[], &[])
+        if let Ok((ok, st)) = request(&name, "status", &[], &[])
             && !replaying(&st)
         {
+            if !ok {
+                return Err(st);
+            }
             let log = std::fs::read_to_string(dir.join("server.log")).unwrap_or_default();
             show_startup_progress(&log, &mut shown)?;
             set_current(&name)?;
             print!("easel {name:?} open: {st}");
             return Ok(());
         }
-        if log.contains("easel: fatal") {
-            #[cfg(feature = "state-store")]
-            if !started && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
-                continue;
-            }
+        if started && log.contains("easel: fatal") {
             return Err(log);
         }
         if last_progress.elapsed() > stall {
@@ -681,12 +680,20 @@ fn serve_lock(name: &str) -> Result<std::fs::File, String> {
         f
     } else {
         std::fs::create_dir_all(session_dir(name)).map_err(|e| e.to_string())?;
-        match try_lock(name)? {
-            Some(f) => f,
-            None => {
+        loop {
+            if let Some(f) = try_lock(name)? {
+                break f;
+            }
+            let (tx, rx) = std::sync::mpsc::channel();
+            let owner = name.to_string();
+            std::thread::spawn(move || {
+                let _ = tx.send(request(&owner, "status", &[], &[]));
+            });
+            if !matches!(rx.recv_timeout(Duration::from_millis(250)), Ok(Err(_))) {
                 let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
                 return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
             }
+            std::thread::sleep(Duration::from_millis(100));
         }
     };
     // who holds it, for anyone looking
@@ -2049,7 +2056,11 @@ impl Server {
                 Ok(format!("{}\n", p.display()))
             }
             "frames" => {
-                self.frames = matches!(args.first().map(|s| s.as_str()), Some("on") | None);
+                self.frames = match args.first().map(|s| s.as_str()) {
+                    Some("on") | None => true,
+                    Some("off") => false,
+                    _ => return Err("frames on|off".into()),
+                };
                 Ok(format!("frames {} ({})\n", if self.frames { "on" } else { "off" }, session_dir(&self.name).join("frames").display()))
             }
             "close" => {

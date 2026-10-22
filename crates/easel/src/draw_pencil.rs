@@ -532,8 +532,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             Ok(())
         })?)?;
     }
-    // drawing_guide(): the drawn lines as geometry over the whole canvas (1
-    // on a line, unbroken; the same in a crop): the mask to paint into the drawing
+    // drawing_guide(): the drawn lines as continuous coverage over the whole
+    // canvas (lighter for light lines; the same in a crop): the mask to paint into the drawing
     {
         let st1 = st.clone();
         g.set("drawing_guide", lua.create_function(move |_, ()| {

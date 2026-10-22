@@ -36,6 +36,38 @@ const server = http.createServer((req, res) => {
     assert.deepEqual(errors, []);
     assert.equal(await page.evaluate(() => document.activeElement.id), 'pkclose', 'the close button keeps focus');
     assert.equal(await page.locator('#picker').isVisible(), true, 'the picker stays open');
+
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => {
+      allSessions = ['a', 'b'].map(p => ({ p, folder:p, painter:true, mtime:0, title:p }));
+    });
+    await page.click('#who');
+    const label = await page.locator('#allwrap').boundingBox();
+    for (const checked of [true, false]) {
+      await page.locator('#pklist button').first().focus();
+      await page.mouse.move(label.x + label.width - 4, label.y + label.height / 2);
+      await page.mouse.down();
+      assert.equal(await page.locator('#picker').isVisible(), true, 'pressing the label text keeps the picker open');
+      await page.mouse.up();
+      assert.equal(await page.locator('#all').isChecked(), checked, 'clicking the label text toggles all sessions');
+      assert.equal(await page.locator('#who').getAttribute('aria-expanded'), 'true');
+    }
+    await page.keyboard.press('Escape');
+    for (const exit of ['Tab', 'blur']) {
+      await page.click('#who');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.locator('#pklist button').last().evaluate(b => b === document.activeElement), true);
+      assert.equal(await page.locator('#picker').isVisible(), true, 'focus within the picker keeps it open');
+      if (exit === 'Tab') await page.keyboard.press('Tab');
+      else await page.locator('#pklist button').last().evaluate(b => b.blur());
+      assert.equal(await page.locator('#picker').isVisible(), false, `${exit} out of the document closes the picker`);
+      assert.equal(await page.locator('#who').getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.evaluate(() => document.activeElement.tagName), 'BODY', 'closing does not steal focus');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'who');
+      assert.equal(await page.locator('#picker').isVisible(), false, 'returning to the header keeps the picker closed');
+    }
+    assert.deepEqual(errors, []);
     console.log('studio picker keys: OK');
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

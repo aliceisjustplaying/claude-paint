@@ -90,6 +90,30 @@ test("the usage-limit settle wait respects host cancellation", async (t) => {
 	}
 });
 
+test("session shutdown cancels the usage-limit wait without a host signal", async (t) => {
+	for (const key of Object.keys(process.env).filter((key) => key.startsWith("PAINTER_"))) t.mock.env(key, undefined);
+	const handlers: Record<string, (...args: any[]) => any> = {};
+	painter({ on: (name, handler) => { handlers[name] = handler; } } as never);
+	const message = { role: "assistant", stopReason: "error", errorMessage: "Usage limit reached" };
+	handlers.message_end({ message });
+	const timer = {} as ReturnType<typeof setTimeout>;
+	const pendingTimers = new Set<ReturnType<typeof setTimeout>>();
+	const schedule = t.mock.method(globalThis, "setTimeout", () => { pendingTimers.add(timer); return timer; });
+	t.mock.method(globalThis, "clearTimeout", (handle) => { pendingTimers.delete(handle); });
+	let settled = false;
+	const pending = handlers.agent_before_settle({ context: { contextEntries: [{ sourceEntry: { type: "message", id: "limit", message } }] } }, {})
+		.then((result: unknown) => { settled = true; return result; });
+	assert.equal(schedule.mock.callCount(), 1);
+	assert.equal(schedule.mock.calls[0].arguments[1], 30 * 60_000);
+	assert.equal(pendingTimers.size, 1);
+	assert.equal(settled, false);
+	handlers.session_shutdown();
+	await setImmediate();
+	assert.equal(settled, true, "shutdown must settle the hook without firing its timer");
+	assert.equal(await pending, undefined);
+	assert.equal(pendingTimers.size, 0, "shutdown must clear the pending limit timer");
+});
+
 test("monthly usage-limit waits schedule bounded timers without retrying immediately", async (t) => {
 	for (const mode of ["timer completes", "abort during wait", "remaining give-up duration"]) {
 		await t.test(mode, async (t) => {

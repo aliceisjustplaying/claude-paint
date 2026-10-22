@@ -77,6 +77,75 @@ fn open_drains_progress_written_between_reading_the_log_and_readiness() {
 }
 
 #[test]
+fn open_reports_failed_status_after_replay_progress() {
+    use std::{io::{Read, Write}, os::unix::net::UnixListener, process::{Child, Stdio}};
+
+    struct Opener(Child);
+    impl Drop for Opener {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    let s = "failed-status";
+    let dir = root().join("out/easel").join(s);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lock = std::fs::File::create(dir.join("lock")).unwrap();
+    lock.try_lock().unwrap();
+    let sock = support::sock_of(&dir);
+    let listener = UnixListener::bind(&sock).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let mut log = std::fs::File::create(dir.join("server.log")).unwrap();
+    writeln!(log, "resuming chunk 1/1").unwrap();
+    let mut opener = Opener(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["open", s])
+        .env_remove("EASEL_WIDTH").env_remove("EASEL_BOX").env_remove("EASEL_SESSION")
+        .env("EASEL_ROOT", root())
+        .stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap());
+    let error = "session integrity: painting.lua differs from the log the session wrote. The easel goes on only from the log it wrote; nothing ran.";
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut requests = 0usize;
+    let status = loop {
+        if let Some(status) = opener.0.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            opener.0.kill().unwrap();
+            opener.0.wait().unwrap();
+            std::fs::remove_file(&sock).unwrap();
+            panic!("open kept waiting after {} failed status replies and their diagnostic log lines", requests.saturating_sub(3));
+        }
+        match listener.accept() {
+            Ok((mut conn, _)) => {
+                conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                let mut request = [0; 9];
+                conn.read_exact(&mut request).unwrap();
+                assert_eq!(&request, b"7\nstatus\n");
+                match requests {
+                    0 | 1 => conn.write_all(b"err\nthe easel is starting; retry in a moment\n").unwrap(),
+                    2 => conn.write_all(b"ok\nrebuilding from the log (0 of 1 chunks)\n").unwrap(),
+                    _ => {
+                        writeln!(log, "status 0.00s err").unwrap();
+                        writeln!(conn, "err\n{error}").unwrap();
+                    }
+                }
+                requests += 1;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(1)),
+            Err(e) => panic!("status listener: {e}"),
+        }
+    };
+    std::fs::remove_file(sock).unwrap();
+    let mut stderr = String::new();
+    opener.0.stderr.as_mut().unwrap().read_to_string(&mut stderr).unwrap();
+    assert!(!status.success(), "open ignored the failed status");
+    assert!(stderr.contains(error), "{stderr}");
+    assert_eq!(requests, 4, "open polled again after the failed status");
+}
+
+#[test]
 fn a_full_palette_refuses_a_new_pile_and_names_the_piles_on_it() {
     let s = "full";
     let with = |a: &[&'static str]| [&["-s", s][..], a].concat();

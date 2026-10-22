@@ -87,7 +87,7 @@ test("a visit's reply comes from its session when pi printed nothing", async () 
 	writeFileSync(quiet, `#!/bin/sh
 while [ "$1" != "--session-dir" ]; do shift; done
 mkdir -p "$2"
-printf '%s\\n' '{"message":{"role":"assistant","content":[{"type":"toolCall","name":"look"}]}}' '{"message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"Lift the sky."}]}}' '{"message":{"role":"assistant","stopReason":"error","content":[{"type":"text","text":"overloaded"}]}}' > "$2/a.jsonl"
+printf '%s\\n' '{"message":{"role":"assistant","content":[{"type":"toolCall","name":"look"}]}}' '{"message":{"role":"assistant","stopReason":"error","content":[{"type":"text","text":"overloaded"}]}}' '{"message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"Lift the sky."}]}}' > "$2/a.jsonl"
 `, { mode: 0o755 });
 	assert.equal(await visit(s, { args: [], dir }, "sitting", undefined, quiet), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
 	assert.equal(sessionReply(join(dir, "missing")), undefined);

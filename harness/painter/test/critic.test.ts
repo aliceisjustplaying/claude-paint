@@ -47,19 +47,22 @@ test("a visit's message says what there is to read and where the notes go", () =
 
 test("a visit's message quotes the painter's open passages and asks which the critic would take up first", () => {
 	const s = studio();
-	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter[\s\S]*Say which passage, if any, you would take up first, whether or not it is on the painter's list\./);
+	assert.match(visitMessage(s, "sitting"), /The painter's journal has no `Open passages:` list yet\.\n\nThen tell the painter, as one painter talking to another, whether the picture is finished\. Open your notes with one line that reads `Verdict: finished` or `Verdict: not finished`\.[\s\S]*Say which passage, if any, you would take up first, whether or not it is on the painter's list\./);
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n- day 2, 18:00: handoff\n  Open passages:\n  - the far shore: flat\n");
 	assert.match(visitMessage(s, "asked"), /Its latest list, quoted as the painter wrote it:\n\n> Open passages:\n> - the far shore: flat\n\nThen tell the painter/);
 });
 
-test("a later sitting's passages to take up: the open passages, then the critic's notes", () => {
+test("a later sitting's passages to take up: the open passages, then the critic's last visit under its own heading", () => {
 	const s = studio();
 	assert.equal(passagesToTakeUp(s, true), "## Passages to take up\n\nYour journal has no `Open passages:` list yet. Any passages your last handoff left open are in your journal, quoted below under \"Your journal\".");
 	writeFileSync(join(s, "notes/journal.md"), "- day 2, 18:00: Open passages:\n  - the far shore: flat\n");
 	writeFileSync(join(s, "notes/critic.md"), "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
 	assert.equal(passagesToTakeUp(s, false), "## Passages to take up\n\nYour open passages, from your journal handoff (notes/journal.md), quoted as you wrote them:\n\n> Open passages:\n> - the far shore: flat");
 	assert.equal(passagesToTakeUp(s, true), passagesToTakeUp(s, false) +
-		"\n\nThe critic's notes from its last visit (notes/critic.md), quoted as the critic wrote them. You decide what to take from them.\n\n> From the critic's visit at the end of a sitting:\n>\n> Lift the sky.");
+		"\n\n## The critic's last visit\n\nThe critic's notes from its last visit (notes/critic.md), quoted as the critic wrote them. They are its view of the picture, not your list. " +
+		"Weigh each point against what you see, take up the ones that would make the picture better, and say in your journal which you leave and why. " +
+		"It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the passage's real scale. " +
+		"When it says the picture is finished and you agree, end this sitting without marks.\n\n> From the critic's visit at the end of a sitting:\n>\n> Lift the sky.");
 });
 
 test("a visit writes the critic's notes to the studio and keeps a copy; a failed one changes nothing", async () => {
@@ -120,6 +123,6 @@ test("the critic visits at the end of a sitting, and the next sitting opens with
 	sitting("You're back at the easel.", { PAINTER_SITTING_RECOVERY: "1", PAINTER_OPEN_PASSAGES: "1" });
 	const [opened] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { role: string; text: string }[]);
 	const text = opened.find((m) => m.role === "user")!.text;
-	assert.match(text, /^## Passages to take up\n\nYour open passages[^\n]*\n\n> Open passages:\n> - the far shore: flat\n\nThe critic's notes from its last visit[^\n]*\n\n> From the critic's visit at the end of a sitting:\n>\n> done\n\nYou're back at the easel\.\n\n## BRIEF\.md/);
+	assert.match(text, /^## Passages to take up\n\nYour open passages[^\n]*\n\n> Open passages:\n> - the far shore: flat\n\n## The critic's last visit\n\nThe critic's notes from its last visit[^\n]*\n\n> From the critic's visit at the end of a sitting:\n>\n> done\n\nYou're back at the easel\.\n\n## BRIEF\.md/);
 	assert.doesNotMatch(text, /## The critic's notes/);
 });

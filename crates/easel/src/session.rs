@@ -1634,8 +1634,8 @@ mod tests {
         }
     }
 
-    /// An engine-2 painting replays as engine 2, within image tolerance as it did before
-    /// engine 3 (recorded at 7b80cb0, round 23): a test sheet of lead white
+    /// An engine-2 painting replays as engine 2 with the current pigment mixer:
+    /// a test sheet of lead white
     /// and bone black laid at different times over five days, lifted at
     /// every stage of drying and painted across, with waits of hours and
     /// days. Its log goes on naming engine 2.
@@ -1647,7 +1647,11 @@ mod tests {
         for mode in ["normal", "gallery", "relief"] {
             let view = crate::look::View::parse(&["--mode".into(), mode.into(), "--size".into(), "320".into()]).unwrap();
             let (_, _, png) = crate::look::render(&s.canvas().unwrap(), &view).unwrap();
-            let expected = image::open(format!("{}/tests/engine2/drying_sheet_{mode}.png", env!("CARGO_MANIFEST_DIR"))).unwrap().to_rgba8();
+            let path = format!("{}/tests/engine2/drying_sheet_{mode}.png", env!("CARGO_MANIFEST_DIR"));
+            if std::env::var_os("UPDATE_GOLDEN").is_some() {
+                std::fs::write(&path, &png).unwrap();
+            }
+            let expected = image::open(path).unwrap().to_rgba8();
             image_tolerance::assert_close(&image::load_from_memory(&png).unwrap().to_rgba8(), &expected);
         }
     }

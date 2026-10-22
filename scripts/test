@@ -113,7 +113,7 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
-check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
+check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \

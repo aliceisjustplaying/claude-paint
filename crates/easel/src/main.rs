@@ -618,11 +618,7 @@ fn open(args: &[String]) -> Result<(), String> {
             print!("easel {name:?} open: {st}");
             return Ok(());
         }
-        if log.contains("easel: fatal") {
-            #[cfg(feature = "state-store")]
-            if !started && std::env::var("EASEL_STATE_SESSION").ok().as_deref() == Some(name.as_str()) {
-                continue;
-            }
+        if started && log.contains("easel: fatal") {
             return Err(log);
         }
         if last_progress.elapsed() > stall {

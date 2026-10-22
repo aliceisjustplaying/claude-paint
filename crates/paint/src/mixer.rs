@@ -1,5 +1,5 @@
 //! Independent pigment mixing from Sochorová and Jamriška (2021), equations
-//! 1–14: four primary concentrations and an additive linear RGB residual.
+//! 1–14: five primary concentrations and an additive linear RGB residual.
 //! The primaries' K/S data are derived from measured reflectance of real oil
 //! paints (CC0 Revigo data, `scripts/pigment_data/revigo`); both tables are
 //! original. Only the MIT spectral.js D65/CIE conversion from `spectral.rs` is
@@ -8,37 +8,39 @@
 
 use crate::color::{Rgb, linear_to_srgb};
 
-pub const LATENT_SIZE: usize = 7;
-const SIZE: usize = 33;
-const FORWARD_AXIS: [f32; SIZE] = {
-    let mut axis = [0.0; SIZE];
+pub const LATENT_SIZE: usize = 8;
+const PRIMARIES: usize = 5;
+const INVERSE_SIZE: usize = 33;
+const FORWARD_SIZE: usize = 21;
+const FORWARD_AXIS: [f32; FORWARD_SIZE] = {
+    let mut axis = [0.0; FORWARD_SIZE];
     let mut i = 0;
-    while i < SIZE {
+    while i < FORWARD_SIZE {
         let a = i as f32;
-        let b = (SIZE - 1 - i) as f32;
+        let b = (FORWARD_SIZE - 1 - i) as f32;
         axis[i] = a * a / (a * a + b * b);
         i += 1;
     }
     axis
 };
-const FORWARD_SCALE: [f32; SIZE - 1] = {
-    let mut scale = [0.0; SIZE - 1];
+const FORWARD_SCALE: [f32; FORWARD_SIZE - 1] = {
+    let mut scale = [0.0; FORWARD_SIZE - 1];
     let mut i = 0;
-    while i < SIZE - 1 {
+    while i < FORWARD_SIZE - 1 {
         scale[i] = 1.0 / (FORWARD_AXIS[i + 1] - FORWARD_AXIS[i]);
         i += 1;
     }
     scale
 };
-const INVERSE: &[u8; SIZE * SIZE * SIZE * 6] = include_bytes!("mixer/inverse.bin");
-const FORWARD: &[u8; SIZE * SIZE * SIZE * 12] = include_bytes!("mixer/forward.bin");
+const INVERSE: &[u8; INVERSE_SIZE * INVERSE_SIZE * INVERSE_SIZE * 2 * (PRIMARIES - 1)] = include_bytes!("mixer/inverse.bin");
+const FORWARD: &[u8; FORWARD_SIZE * FORWARD_SIZE * FORWARD_SIZE * FORWARD_SIZE * 12] = include_bytes!("mixer/forward.bin");
 
 pub fn identity() -> u64 {
     use sha2::{Digest, Sha256};
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent7/km-linear/additive-linear-rgb/sqrt-stick/concentration-trilinear/v2");
+        hash.update(b"Stillwet mixer/latent8/km-linear/additive-linear-rgb/sqrt-stick/concentration-quadrilinear/v3");
         hash.update(FORWARD);
         hash.update(INVERSE);
         u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
@@ -46,19 +48,19 @@ pub fn identity() -> u64 {
 }
 
 pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
-    let c = lookup(rgb.map(linear_to_srgb), false);
-    let c3 = (1.0 - c.iter().sum::<f32>()).max(0.0);
-    let mut lat = [c[0], c[1], c[2], c3, 0.0, 0.0, 0.0];
+    let c = inverse(rgb.map(linear_to_srgb));
+    let last = (1.0 - c.iter().sum::<f32>()).max(0.0);
+    let mut lat = [c[0], c[1], c[2], c[3], last, 0.0, 0.0, 0.0];
     let base = pigment_rgb(&lat);
     for k in 0..3 {
-        lat[4 + k] = rgb[k] - base[k];
+        lat[PRIMARIES + k] = rgb[k] - base[k];
     }
     lat
 }
 
 pub fn decode(lat: &[f32; LATENT_SIZE]) -> Rgb {
     let base = pigment_rgb(lat);
-    std::array::from_fn(|k| (base[k] + lat[4 + k]).clamp(0.0, 1.0))
+    std::array::from_fn(|k| (base[k] + lat[PRIMARIES + k]).clamp(0.0, 1.0))
 }
 
 pub fn lerp(a: &Rgb, b: &Rgb, t: f32) -> Rgb {
@@ -71,44 +73,63 @@ pub fn lerp(a: &Rgb, b: &Rgb, t: f32) -> Rgb {
 }
 
 fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
-    let c = [lat[0].max(0.0), lat[1].max(0.0), lat[2].max(0.0), lat[3].max(0.0)];
+    let c: [f32; PRIMARIES] = std::array::from_fn(|k| lat[k].max(0.0));
     let ratio = |a: f32, b: f32| {
         let a = a.sqrt();
         let b = b.sqrt();
         if a + b > 0.0 { a / (a + b) } else { 0.0 }
     };
-    lookup([ratio(c[0], c[1] + c[2] + c[3]), ratio(c[1], c[2] + c[3]), ratio(c[2], c[3])], true)
+    forward(std::array::from_fn(|k| ratio(c[k], c[k + 1..].iter().sum())))
 }
 
-fn lookup(at: [f32; 3], forward: bool) -> Rgb {
-    let p = at.map(|v| v.clamp(0.0, 1.0) * (SIZE - 1) as f32);
-    let lo = p.map(|v| (v as usize).min(SIZE - 2));
-    let t: [f32; 3] = std::array::from_fn(|k| {
-        if !forward { return p[k] - lo[k] as f32; }
+/// Concentrations of the first four primaries at an sRGB point, trilinear
+/// over the inverse grid.
+fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
+    let p = at.map(|v| v.clamp(0.0, 1.0) * (INVERSE_SIZE - 1) as f32);
+    let lo = p.map(|v| (v as usize).min(INVERSE_SIZE - 2));
+    let t: [f32; 3] = std::array::from_fn(|k| p[k] - lo[k] as f32);
+    let mut out = [0.0; PRIMARIES - 1];
+    for corner in 0..8 {
+        let mut weight = 1.0;
+        let mut index = 0;
+        for k in 0..3 {
+            let bit = (corner >> k) & 1;
+            weight *= if bit == 0 { 1.0 - t[k] } else { t[k] };
+            index = index * INVERSE_SIZE + lo[k] + bit;
+        }
+        for (channel, value) in out.iter_mut().enumerate() {
+            let offset = (index * (PRIMARIES - 1) + channel) * 2;
+            *value += weight * u16::from_le_bytes(INVERSE[offset..offset + 2].try_into().unwrap()) as f32 / 65535.0;
+        }
+    }
+    out
+}
+
+/// The pigment mixture's linear RGB at a point of the square-root stick
+/// coordinates, quadrilinear over the forward grid, whose axes are dense at
+/// their ends (`FORWARD_AXIS`) to resolve the steep KM change near a pure
+/// pigment.
+fn forward(at: [f32; PRIMARIES - 1]) -> Rgb {
+    let p = at.map(|v| v.clamp(0.0, 1.0) * (FORWARD_SIZE - 1) as f32);
+    let lo = p.map(|v| (v as usize).min(FORWARD_SIZE - 2));
+    let t: [f32; PRIMARIES - 1] = std::array::from_fn(|k| {
         let a = at[k].clamp(0.0, 1.0);
         let b = 1.0 - a;
         let concentration = a * a / (a * a + b * b);
         ((concentration - FORWARD_AXIS[lo[k]]) * FORWARD_SCALE[lo[k]]).clamp(0.0, 1.0)
     });
     let mut out = [0.0; 3];
-    for i in 0..2 {
-        for j in 0..2 {
-            for k in 0..2 {
-                let index = ((lo[0] + i) * SIZE + lo[1] + j) * SIZE + lo[2] + k;
-                let weight = (if i == 0 { 1.0 - t[0] } else { t[0] })
-                    * (if j == 0 { 1.0 - t[1] } else { t[1] })
-                    * (if k == 0 { 1.0 - t[2] } else { t[2] });
-                for channel in 0..3 {
-                    let value = if forward {
-                        let offset = index * 12 + channel * 4;
-                        f32::from_le_bytes(FORWARD[offset..offset + 4].try_into().unwrap())
-                    } else {
-                        let offset = index * 6 + channel * 2;
-                        u16::from_le_bytes(INVERSE[offset..offset + 2].try_into().unwrap()) as f32 / 65535.0
-                    };
-                    out[channel] += weight * value;
-                }
-            }
+    for corner in 0..(1 << (PRIMARIES - 1)) {
+        let mut weight = 1.0;
+        let mut index = 0;
+        for k in 0..PRIMARIES - 1 {
+            let bit = (corner >> k) & 1;
+            weight *= if bit == 0 { 1.0 - t[k] } else { t[k] };
+            index = index * FORWARD_SIZE + lo[k] + bit;
+        }
+        for (channel, value) in out.iter_mut().enumerate() {
+            let offset = index * 12 + channel * 4;
+            *value += weight * f32::from_le_bytes(FORWARD[offset..offset + 4].try_into().unwrap());
         }
     }
     out
@@ -126,8 +147,8 @@ mod tests {
                 for b in 0..9 {
                     let rgb = [r as f32 / 8.0, g as f32 / 8.0, b as f32 / 8.0];
                     let lat = encode(&rgb);
-                    assert!(lat[..4].iter().all(|&c| c >= 0.0));
-                    assert!((lat[..4].iter().sum::<f32>() - 1.0).abs() < 1e-5);
+                    assert!(lat[..5].iter().all(|&c| c >= 0.0));
+                    assert!((lat[..5].iter().sum::<f32>() - 1.0).abs() < 1e-5);
                     let back = decode(&lat);
                     assert!((0..3).all(|k| (rgb[k] - back[k]).abs() < 2e-6));
                 }
@@ -225,8 +246,8 @@ mod tests {
     // in zinc white, sits 0.302 from the pure zinc white (07A) in OKLab, both
     // measured over the white field and shown specular-excluded
     // (scripts/pigment_data/revigo, Geldof et al. 2018). The bound is that
-    // value plus a margin. With the current tables the strongest 1% trace is
-    // bone black at 0.122, then ultramarine blue 0.112 and Prussian blue 0.074.
+    // value plus a margin. With the current tables the strongest 1% traces are
+    // ultramarine blue 0.107, Prussian blue 0.102 and viridian 0.093.
     #[test]
     fn catalog_traces_do_not_overpower_white() {
         let palette = crate::Palette::new("trace study", crate::palette::catalog());

@@ -10,8 +10,8 @@ The implementation follows Sochorová and Jamriška, *Practical Pigment Mixing
 for Digital Painting* (2021), equations 1–14:
 https://doi.org/10.1145/3478513.3480549.
 
-Four real oil paints are the primaries: Prussian blue, chrome yellow
-lemon, eosin lake (geranium lake) and zinc white, from the Revigo
+Five real oil paints are the primaries: cobalt blue, chrome yellow
+lemon, eosin lake (geranium lake), bone black and zinc white, from the Revigo
 project's reconstruction of Van Gogh's palette (Geldof, Proaño Gaibor,
 Ligterink, Hendriks and Kirchner 2018, https://doi.org/10.1186/s40494-018-0181-6).
 Their reflectance measurements are published under CC0 at
@@ -35,32 +35,50 @@ shown specular-excluded through the same Saunderson constants, the matte
 paint colour the catalog's masstones describe. D65/CIE integration gives
 linear RGB; the color-matching matrix comes from the existing MIT
 `spectral.rs` port. Both K and S are wavelength-dependent as measured:
-the lake and Prussian blue scatter almost nothing, chrome yellow and zinc
-white scatter strongly, and Prussian blue's absorption is about eighty times
-the lake's at 550 nm, so a trace of it tints white strongly, as the
-measured 1.1 % tint does. Zinc white is the white because the source used
-it as the base of every tint and its series fits best (lead white's three
-samples are inconsistent under the 100 µm assumption, fit rms 0.05 over
-black). These are the mixer's primaries, not the palette's separate tube
-hiding, tinting-strength or scattering parameters. Those rendering
-properties are unchanged.
+the lake and bone black scatter almost nothing, chrome yellow and zinc
+white scatter strongly, cobalt blue in between, and bone black's
+absorption is about ten times the lake's at 550 nm. These are the mixer's
+primaries, not the palette's separate tube hiding, tinting-strength or
+scattering parameters. Those rendering properties are unchanged.
+
+Which five paints, out of the three blues, two chrome yellows, three
+reds, bone black and two whites the data measures, is decided by
+`scripts/pigment_basis_select.py` on half of the measured two-paint
+mixtures only. The mixtures are split by paint before any score is read:
+the paints of odd-numbered series (eosin on wax, red lead, viridian,
+ultramarine) select, those of even-numbered series (eosin, cochineal,
+vermilion, emerald green, cobalt blue, Kremer chrome yellow) test. Each
+candidate basis encodes the selection paints from their measured masstone
+colours, mixes them at the measured weights and is scored by the mean
+OKLab distance to the measured mixture, leaving out its own fit data; the
+lowest score wins, with ties within 0.005 broken by the residual the
+catalog's tube colours need. `scripts/pigment_mixer_score.py` then scores
+the built tables on the test half, which no choice ever read, with main's
+mixer on the same inputs for reference, and reports the selection half
+separately.
 
 Nothing in the basis is fitted to a look or to the display gamut. The
 forward table is the KM mixture clipped to the sRGB
 cube. The inverse solves a constrained least-squares fit of that clipped
-output, four nonnegative concentrations summing to one, plus 0.05 times
+output, five nonnegative concentrations summing to one, plus 0.05 times
 the raw RGB fit error. This regularizer can trade clipped fit error for
 raw fit error; it is not a lexicographic tie-break or a guarantee of a
 unique or smooth inverse. An additive RGB
 residual stores the difference between the requested RGB and the decoded
-pigment mixture. Thus the latent remains seven floats: four concentrations
+pigment mixture. Thus the latent is eight floats: five concentrations
 and three residual channels. Weighted averages operate directly on those
-seven channels.
+eight channels. Bone black is a primary because without it the inverse
+has to build every dark from the three chromatic absorbers, which is black
+in masstone but a navy in a tint; with it, grays and dark tints have a
+neutral absorber to use.
 
-The inverse and forward functions use independently generated 33³ tables
-(632 KiB combined). The inverse is sampled on an sRGB grid. The forward
-table uses endpoint-dense, squared-ratio coordinates to resolve steep KM
-changes near a pure pigment. The residual is calculated against the same
+The inverse and forward functions use independently generated tables:
+the inverse 33³ nodes on an sRGB grid (four u16 concentrations each,
+288 KiB), the forward 21⁴ nodes over the four square-root stick
+coordinates (2.3 MiB, quadrilinear), with endpoint-dense, squared-ratio
+axes to resolve steep KM changes near a pure pigment. 21 nodes per axis
+keep the earlier 33³ table's interpolation error on catalog ramps (mean
+0.006 against 0.009 OKLab, 99th percentile 0.048 against 0.055). The residual is calculated against the same
 forward decoder used at runtime, so table interpolation does not introduce
 a color error in an encode/decode round trip.
 
@@ -83,7 +101,7 @@ are inputs to this generator.
 
 This round was checked against the independent mixer guards (the trace
 guard's bound now follows the measured strongest tinter), actual
-table/runtime diagnostics, a held-out comparison against measured paint
+table/runtime diagnostics, the test-half score against measured paint
 mixtures and the main-vs-new sheet by eye. Passing the guards does not
 close remaining visual differences.
 

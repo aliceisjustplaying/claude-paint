@@ -30,7 +30,10 @@ from scipy.optimize import least_squares, minimize
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts/pigment_data/revigo"
 OUT = ROOT / "crates/paint/src/mixer"
-SIZE = 33
+INVERSE_SIZE = 33
+# 21 nodes per forward axis keep the previous 33-node three-axis table's interpolation error on catalog ramps
+# (mean 0.006 vs 0.009 OKLab, 99th percentile 0.048 vs 0.055) at 2.3 MiB; 25 would halve the error for twice the size.
+FORWARD_SIZE = 21
 RAW_FIT_WEIGHT = .05
 # An inverse node within this linear-RGB distance below the white primary stores the white vertex and leaves
 # the difference to the runtime's RGB residual, so a colour inside such a cell interpolates to the vertex
@@ -39,8 +42,10 @@ NEAR_WHITE = 0.07
 # Saunderson surface-reflection constants the source used for its specular-included measurements
 # (k1 collimated, k2 diffuse). Mixed colours are shown specular-excluded, the matte paint colour.
 K1, K2 = 0.04, 0.49
-# Latent order: blue, yellow, magenta, white. Source sample series per paint are in the data README.
-PRIMARIES = ["PrussianBlue", "ChromeYellowOtero", "Eosin2PbWax", "ZincWhite"]
+# Latent order: blue, yellow, magenta, black, white. Source sample series per paint are in the data README.
+# Chosen by scripts/pigment_basis_select.py on the selection half of the measured mixtures.
+PRIMARIES = ["CobaltBlue", "ChromeYellowOtero", "Eosin", "BoneBlack", "ZincWhite"]
+# The white and black every ladder was mixed with, fitted first from their own series.
 HELPERS = ["ZincWhite", "BoneBlack"]
 EXCLUDED_SAMPLES = {"07B", "14F"}  # the same paints ground in a different oil
 
@@ -142,17 +147,18 @@ def derive():
             if fraction > 0 and name not in HELPERS:
                 series.setdefault(name, []).append(sid)
     known, fit_rms = {}, {}
-    whites = [sid for sid, (names, _) in samples.items() if sid not in EXCLUDED_SAMPLES and complete(sid) and set(names) == {"ZincWhite", "BoneBlack"}]
-    found, rms = fit(nm, spectra, samples, HELPERS, {}, sorted(whites))
+    whites = sorted(sid for sid, (names, _) in samples.items() if sid not in EXCLUDED_SAMPLES and complete(sid) and set(names) == set(HELPERS))
+    found, rms = fit(nm, spectra, samples, HELPERS, {}, whites)
     known.update(found); fit_rms.update(rms)
+    used = {name: whites for name in HELPERS}
     for name in PRIMARIES:
         if name in known:
             continue
-        ids = [sid for sid in series[name]
-               if all(n in known or n == name for n, c in zip(*samples[sid]) if c > 0)]
-        found, rms = fit(nm, spectra, samples, [name], known, sorted(ids))
-        known.update(found); fit_rms.update(rms)
-    return nm, known, fit_rms, {name: sorted(ids) for name, ids in series.items() if name in PRIMARIES}
+        ids = sorted(sid for sid in series[name]
+                     if all(n in known or n == name for n, c in zip(*samples[sid]) if c > 0))
+        found, rms = fit(nm, spectra, samples, [name], known, ids)
+        known.update(found); fit_rms.update(rms); used[name] = ids
+    return nm, known, fit_rms, used
 
 
 def main():
@@ -168,12 +174,14 @@ def main():
         c = np.maximum(c, 0)
         return saunderson(km((c @ absorption) / (c @ scatter)), False) @ matrix.T
 
-    white = np.clip(mix(np.array([0.0, 0.0, 0.0, 1.0])), 0, 1)
+    count = len(PRIMARIES)
+    vertex = np.eye(count)[-1]
+    white = np.clip(mix(vertex), 0, 1)
     gain = (1 - K1) * (1 - K2)
 
     def unmix(rgb):
         if (white - rgb).max() < NEAR_WHITE:
-            return np.array([0.0, 0.0, 0.0, 1.0])
+            return vertex
 
         def error(c):
             den = c @ scatter
@@ -187,10 +195,10 @@ def main():
             jac = ((absorption - q * scatter) / den) * (-r / np.sqrt(np.maximum(q * (q + 2), 1e-24))) * surface
             return diff @ diff + RAW_FIT_WEIGHT * (rdiff @ rdiff), 2 * jac @ matrix.T @ (diff * within + RAW_FIT_WEIGHT * rdiff)
 
-        fit = minimize(error, np.full(4, .25), jac=True, method="SLSQP",
-                       bounds=[(0, 1)] * 4,
+        fit = minimize(error, np.full(count, 1 / count), jac=True, method="SLSQP",
+                       bounds=[(0, 1)] * count,
                        constraints=[{"type": "eq", "fun": lambda c: c.sum() - 1,
-                                     "jac": lambda c: np.ones(4)}],
+                                     "jac": lambda c: np.ones(count)}],
                        options={"ftol": 1e-11, "maxiter": 100})
         if not np.all(np.isfinite(fit.x)):
             raise RuntimeError(f"invalid unmix at {rgb}")
@@ -198,19 +206,24 @@ def main():
         return c / c.sum()
 
     OUT.mkdir(exist_ok=True)
-    axis = np.linspace(0, 1, SIZE)
-    grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1).reshape(-1, 3)
-    u, v, w = warp(grid).T
-    concentrations = np.stack([u, (1-u)*v, (1-u)*(1-v)*w, (1-u)*(1-v)*(1-w)], axis=-1)
+    sticks = warp(np.stack(np.meshgrid(*[np.linspace(0, 1, FORWARD_SIZE)] * (count - 1), indexing="ij"), axis=-1).reshape(-1, count - 1))
+    rest = np.ones(len(sticks))
+    concentrations = []
+    for stick in sticks.T:
+        concentrations.append(rest * stick)
+        rest = rest * (1 - stick)
+    concentrations = np.stack([*concentrations, rest], axis=-1)
     raw = mix(concentrations)
     forward = np.clip(raw, 0, 1)
     (OUT / "forward.bin").write_bytes(forward.astype("<f4").tobytes())
+    axis = np.linspace(0, 1, INVERSE_SIZE)
+    grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1).reshape(-1, 3)
     linear = np.where(grid <= .04045, grid / 12.92, ((grid + .055) / 1.055)**2.4)
     inverse = np.array([unmix(rgb) for rgb in linear])
-    quantized = np.floor(inverse[:, :3] * 65535).astype("<u2")
+    quantized = np.floor(inverse[:, :-1] * 65535).astype("<u2")
     (OUT / "inverse.bin").write_bytes(quantized.tobytes())
     provenance = {
-        "method": "Measured Prussian blue, chrome yellow lemon, eosin lake and zinc white oil paints (Revigo reconstruction of Van Gogh's palette); "
+        "method": "Measured cobalt blue, chrome yellow lemon, eosin lake, bone black and zinc white oil paints (Revigo reconstruction of Van Gogh's palette); "
                   "K and S per wavelength from 100 um films over black and white, pure and mixed with zinc white and bone black; "
                   "plain linear two-constant KM mixing of weight concentrations; infinite-thickness reflectance shown specular-excluded; "
                   "forward table clipped to the sRGB cube, inverse fitted with clipped and raw RGB error with near-white nodes stored as the white vertex, "
@@ -219,13 +232,14 @@ def main():
                   "the MIT spectral.rs D65/CIE matrix for the colour conversion",
         "primaries": PRIMARIES,
         "samples_used": used,
-        "helper_paints": HELPERS,
         "fit_rms_reflectance_over_black_and_white": fit_rms,
         "saunderson": {"k1": K1, "k2": K2, "measured": "specular included", "shown": "specular excluded"},
         "film_thickness_um": 100,
         "measured_wavelengths_nm": [int(x) for x in nm_data],
         "extension": "380-390 nm hold the 400 nm value, 710-750 nm hold the 700 nm value",
-        "size": SIZE,
+        "inverse_size": INVERSE_SIZE,
+        "forward_size": FORWARD_SIZE,
+        "latent": "five concentrations in the order of primaries, then the linear RGB residual",
         "concentration_law": "linear",
         "unmix_raw_fit_weight": RAW_FIT_WEIGHT,
         "near_white_distance": NEAR_WHITE,

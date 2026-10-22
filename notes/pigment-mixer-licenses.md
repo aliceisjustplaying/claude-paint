@@ -23,7 +23,7 @@ The paper is linked, not redistributed.
 | Component | License | Where | Action |
 |---|---|---|---|
 | Removed Mixbox 2.0.0 | CC-BY-NC-4.0 | Initial root Cargo resolution and old third-party notice | Completely removed, with no optional feature, copied source, LUT, coefficients or port. Historical wet checkpoints are refused rather than reinterpreted. |
-| Independent mixer, derived K/S and 33³ tables | Project MIT | `crates/paint/src/mixer.rs`, `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | K/S derived from the CC0 Revigo measurements below; reproduce using the pinned generator. No paper-image import. |
+| Independent mixer, derived K/S and tables | Project MIT | `crates/paint/src/mixer.rs`, `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | K/S derived from the CC0 Revigo measurements below; reproduce using the pinned generator. No paper-image import. |
 | Revigo paint reflectance data | CC0 1.0 | `scripts/pigment_data/revigo`; upstream `fligt/revigo-spectra` at `f09ed72` | Vendored unchanged with its CC0 text and a provenance README; cite Geldof et al. 2018 (doi:10.1186/s40494-018-0181-6, CC BY 4.0) in publications. |
 | spectral.js 3.0 Rust port and D65/CIE tables | MIT | `crates/paint/src/spectral.rs`; upstream `rvanwijnen/spectral.js` at `bb2b05c9d1e65ae824d47e3b1cc17ea32c8ee68f` | Preserve Ronald van Wijnen’s full MIT notice in `THIRD_PARTY_NOTICES.md`. No separate FORS database imported. |
 | Root Rust dependency closure | Commercial-use MIT/Apache/BSD/Zlib/Unicode or permissive alternatives | Root and paint Cargo locks; 85-package final Cargo metadata | Exact expressions and actions appear below and in the JSON inventory. Choose the permissive alternative where available; keep notices. |

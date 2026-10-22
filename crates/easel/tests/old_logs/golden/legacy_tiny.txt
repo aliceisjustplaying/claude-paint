@@ -1,9 +1,9 @@
-png_sha256 7ebc27a9aff986756cc5b6a341183e683b8801ee41c999eac962d0366ebb067e
-chunk 1 canvas=108bcfe03103f777 brushes=cbf29ce484222325 nbrushes=0 studio=1d99537dc0b345eb
-chunk 2 canvas=715de1aa05ae8a47 brushes=cbf29ce484222325 nbrushes=0 studio=10525a8d13c660e6
-chunk 3 canvas=6e8b7bb7f5b38cc6 brushes=cbf29ce484222325 nbrushes=0 studio=18ae94136562e1c3
-chunk 4 canvas=8c5b58748b1685d8 brushes=cbf29ce484222325 nbrushes=0 studio=eb4a144983e2871e
-chunk 5 canvas=f7013807dcce18eb brushes=cbf29ce484222325 nbrushes=0 studio=12f718f12d137465
-chunk 6 canvas=eabdb723ea399937 brushes=cbf29ce484222325 nbrushes=0 studio=7fefd4e780baa054
-chunk 7 canvas=32ea62bccbb70255 brushes=cbf29ce484222325 nbrushes=0 studio=cc2ce9bd23069808
-chunk 8 canvas=74b19c036e8c6b6b brushes=cbf29ce484222325 nbrushes=0 studio=abd67521c7327b7c
+png_sha256 eacf69ee55d0aea8f7e46c9afcc6e8b668e514acb1f579d626f5a43a81d6f950
+chunk 1 canvas=71dc929b4da028f1 brushes=cbf29ce484222325 nbrushes=0 studio=8ec8a7514dce459b
+chunk 2 canvas=21c39ceb54cd6430 brushes=cbf29ce484222325 nbrushes=0 studio=06f79297d169b732
+chunk 3 canvas=50731d170e0d8148 brushes=cbf29ce484222325 nbrushes=0 studio=6e892e9f6979da07
+chunk 4 canvas=76eebb6aad87442e brushes=cbf29ce484222325 nbrushes=0 studio=ac2fcc521c1d88af
+chunk 5 canvas=5deb73901b4ba1e3 brushes=cbf29ce484222325 nbrushes=0 studio=bbd78c9a89394b12
+chunk 6 canvas=4db7ca3ddb6413ac brushes=cbf29ce484222325 nbrushes=0 studio=cd68c1a1505d165e
+chunk 7 canvas=1374a713813c337d brushes=cbf29ce484222325 nbrushes=0 studio=a5de59e5039c247e
+chunk 8 canvas=11076122a2e5562f brushes=cbf29ce484222325 nbrushes=0 studio=66956b2fcbbc26ee

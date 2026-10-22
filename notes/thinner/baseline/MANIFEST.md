@@ -1,109 +1,101 @@
-# MANIFEST: how the baseline was made
+# MANIFEST: STIL-212 current-mixer baseline
 
-Made 2026-10-04 02:28 to 02:45 BST by the speed agent (branch `codex/speed`,
-working copy `~/src/a/claude-paint-speed`) under the overnight plan whose
-SHA-256 is `382fc2debb7a56505f9b4723c6591f22644feccb330fef62dc723b635f098e30`.
-Every heavy command ran as one `scripts/lockrun` job at a time.
+Recorded on 2026-10-22 on the approved cloud verification machine. These
+active expectations were explicitly authorized for the independent mixer.
+They are not historical Mixbox/af49348 results. Scene inputs and tolerance
+code were not changed by the capture.
 
-## Code
+## Producing build
 
-- **Reference results** (`ref/`): engine-3 code at
-  `af49348239421791509f7b7c36e9dc39305b26fe`, unchanged. The working copy
-  was af49348 plus the `scripts/lockrun` commits (`c362a1f`, `8b71762`),
-  which touch no file under `crates/`, `Cargo.*` or `.cargo/`
-  (`git diff af49348 8b71762 --stat`: `scripts/lockrun`,
-  `scripts/tests/lockrun.sh` only).
-- **State dumps** (`state/`, `proof/`, `old_files/paintck8_save_stroke.ckpt.xz`):
-  the same code plus the dumper, which is in this baseline's commit: the new
-  files `crates/paint/src/state_dump.rs` (sha256 `59688af0…b816`) and
-  `crates/easel/src/state_dump.rs` (`68a8500c…2720`), `pub mod state_dump;` in
-  `crates/paint/src/lib.rs`, and in `crates/easel/src/main.rs` the
-  `mod state_dump;` line, the `--dump-state` flag and two calls in `run`.
-  Nothing else changed (`git diff af49348 -- crates Cargo.lock Cargo.toml .cargo`:
-  11 insertions, 1 deletion in main.rs and lib.rs, plus the two new files).
-
-## Toolchain and build
-
-| | |
+| Item | Value |
 |---|---|
-| rustc | 1.97.1 (8bab26f4f 2026-07-14), LLVM 22.1.6, host aarch64-apple-darwin |
-| cargo | 1.97.1 (c980f4866 2026-06-30) |
-| profile | `release`: opt-level 3, debug false, incremental false, codegen-units 1 (Cargo.toml) |
-| build settings | `.cargo/config.toml` `[env] CFLAGS = "-Dluai_makeseed()=0x5eedu"` (Lua's fixed hash seed); `~/.cargo/config.toml` sets `rustc-wrapper = "sccache"` (sccache 0.17.0, a compile cache) |
-| features | easel defaults (`replay`, `finish`; `replay` turns on `all-boxes` and `paint/hand-hook`) |
-| Cargo.lock | sha256 `568ddfcc23523c2c6c97fb54e0b1c79eb0609d5df2767bbc16456df0700de016` (unchanged from af49348) |
-| machine | Apple M3 Pro, 12 cores (6 performance, 6 efficiency), macOS 27.0.1 (26A434) |
-| threads | rayon default (12) for `ref/` and `state/`; `RAYON_NUM_THREADS=1` for `proof/digest_t1` |
-| other tools | Python 3.13.15 (standard library only), xz 5.8.4 (`xz -9e -T1`), GNU bash 5.3.15 |
+| Source | `d9b1d7ded2ae87480d9d58ef2872c2c2675b3734` |
+| Easel SHA-256 | `bab36684b9d9dfeb3eb79adc36bd166bf315922c65691da2bd6989eaf8140eb3` |
+| Cargo.lock SHA-256 | `8511bd710df7e47ca3f1c8754de74c89dc5f5d74ce0c2e7d1fa3359eddf44cb8` |
+| rustc | `1.99.0 (b940084d7 2026-09-28)`, LLVM 23.1.1 |
+| cargo | `1.99.0 (5f94df478 2026-08-27)` |
+| Host/platform | `x86_64-unknown-linux-gnu`, `linux-x86_64`, Ubuntu 24.04 |
+| CPU | AMD EPYC, 16 logical CPUs available, affinity restricted to IDs 0–3 |
+| Profile | Workspace `test`: opt-level 2, codegen-units 256, incremental, debug assertions and overflow checks enabled; `profile.test.debug=0` |
+| Features | Workspace defaults |
+| Threads | `CARGO_BUILD_JOBS=4`, `RUST_TEST_THREADS=4`, `RAYON_NUM_THREADS=4`; only the explicit one-thread proof overrides Rayon to 1 |
+| Other tools | Python 3.12.3 via uv 0.13.4, GNU bash 5.2.21, xz 5.4.5 |
+| Canvas checkpoint | PAINTC19 envelope, base edition 9, mixer identity 1 |
 
-| build | command | time | binary sha256 |
-|---|---|---|---|
-| af49348, empty target dir (55 crates; sccache may have served cached dependencies, unverified) | `/usr/bin/time -p scripts/lockrun --timeout 600 --owner speed:initial-release-build --log notes/speed/logs/b_release_build.log -- cargo build --release -p easel` | 43.85 s (cargo), 44.04 s wall | `4201cec1f9ddcc8bcd48106ab5b36a3e337bb9619f138f384eb0e81b1ae040f6` |
-| with the dumper (paint and easel rebuilt) | `/usr/bin/time -p scripts/lockrun --timeout 600 --lock-timeout 5 --owner speed:dumper-release-build --log notes/speed/logs/c_dumper_release_build.log --quiet -- cargo build --release -p easel` | 43.11 s (cargo), 43.25 s wall | `a5f3775843fa006a36417d3cfb315746bada0d2ffd8746279105a12c3b63b009` |
-
-The first binary was copied to `$TMPDIR/cp-speed/easel-af49348` before the
-dumper was added. The second was copied to `$TMPDIR/cp-speed/easel-dumper`.
-
-## Canvas
-
-Every scene: 128×64 px (`easel run --width 128`, `canvas{aspect=2}`),
-1000×500 canvas units, `size=200` mm (0.2 mm a unit, 1.5625 mm a pixel),
-`--@ box inness`, `--@ engine 3`.
-
-## Commands
-
-One lockrun job (1.8 s wall; `W=$TMPDIR/cp-speed/runs`, `T=notes/thinner/baseline/tools/run_scenes.sh`):
+The working checkout was clean when the producing build started. All
+commands below inherited `taskset -c 0,1,2,3` and the three thread/job
+variables above. The same settings were used for the main benchmark.
 
 ```sh
-/usr/bin/time -p scripts/lockrun --timeout 60 --lock-timeout 5 --owner speed:baseline-scenes --log notes/speed/logs/c_baseline_runs.log --quiet -- bash -c "set -e;
-  $T $TMPDIR/cp-speed/easel-af49348 $W/ref;
-  $T $TMPDIR/cp-speed/easel-dumper $W/dump --dump;
-  $T $TMPDIR/cp-speed/easel-dumper $W/nodump;
-  RAYON_NUM_THREADS=1 $T $TMPDIR/cp-speed/easel-dumper $W/t1 --dump"
+cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel \
+  --test smoke --test look --test session_integrity --test live_frames \
+  --test live_replay_checkpoint --test replay_frames_resume --test painter_signals \
+  --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 \
+  --test thinner_physics --test thinner_pigments --test engine9_plumbing \
+  --message-format=json-render-diagnostics
 ```
 
-Then, without the engine:
+## Record commands
 
-- Each scene in `dump`, `nodump` and `t1` against `ref`: digest lines
-  without `secs=` (`cmp`), PNG bytes (`cmp`), printed output (`cmp`), all
-  equal; each of the 27 dumps in `t1` against `dump` byte for byte, all equal.
-- Each dump's embedded `digest` against `ref/digest`'s line for its chunk:
-  27 of 27 equal.
-- `tools/checkpoint_from_dump.py <dump> --digest ref/digest/<scene>.txt`
-  for all 27 dumps: every rebuilt PAINTCK8 checkpoint's FNV-1a equals
-  af49348's `canvas=` digest.
-- `tools/compare_build.sh $TMPDIR/cp-speed/easel-dumper --added-zero` (under
-  lockrun, 1.0 s): all six scenes equal on every field, with the same PNG,
-  output and digests.
-- `ref/` = `$W/ref/{png,digest,out,times.tsv}`; `state/<scene>/` =
-  `xz -9e -T1` of `$W/dump/state/<scene>/chunk-*.state`; `proof/` =
-  `$W/{dump,nodump,t1}/digest` and `times.tsv`.
-- `old_files/paintck8_save_stroke.ckpt.xz` = `xz -9e -T1` of
-  `$W/dump/state/stroke/final.ckpt`, written by `save::write` (unchanged
-  af49348 code) from the state shown equal above.
-  `old_files/paintck8_save_header.bin` is its first 280 bytes: `PAINTCK8`,
-  the header length and the `easel save 1` header (box inness, engine 3,
-  width 128).
-- `old_files/engine3_log_*.lua`: af49348's live session (the unchanged
-  binary, `EASEL_ROOT` a temporary directory, no canvas made): `easel open
-  old; easel -s old do 'x = 1'; easel -s old close`, and the same with
-  `EASEL_BOX=inness` for session `oldbox`.
-- A painter build check after adding the dumper: `cargo check --release -p
-  easel --no-default-features` and `... --features box-inness` (6.4 s, no
-  warnings; `notes/speed/logs/c_check_no_default.log`).
+`EASEL` below is the absolute path to `target/debug/easel` from that build.
+`CAPTURE` is a scratch directory outside the package. No release-profile
+or separately rebuilt executable supplied these expectations.
 
-## Times (wall seconds per scene, one run each)
+```sh
+notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/dump" --dump
+notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/nodump"
+RAYON_NUM_THREADS=1 notes/thinner/baseline/tools/run_scenes.sh "$EASEL" "$CAPTURE/t1" --dump
+```
 
-| scene | af49348 (`ref`) | dumper, no dump | dumper, dumping | dumping, 1 thread |
-|---|---|---|---|---|
-| body | 0.102 | 0.097 | 0.347 | 0.120 |
-| overlap | 0.021 | 0.020 | 0.031 | 0.041 |
-| pickup | 0.020 | 0.019 | 0.031 | 0.041 |
-| rag | 0.030 | 0.030 | 0.046 | 0.055 |
-| stroke | 0.018 | 0.018 | 0.027 | 0.037 |
-| wait | 0.027 | 0.026 | 0.041 | 0.051 |
+Each run uses the unchanged six `scenes/*.lua` inputs at width 128.
+The dump run supplies `ref/png`, `ref/digest`, `ref/out` and
+`ref/times.tsv`. Each `dump/state/<scene>/chunk-NNN.state` supplies its
+existing `state/<scene>/chunk-NNN.state.xz` through `xz -9e -T1 -c`.
+The three runs supply `proof/digest_{dump,nodump,t1}` and
+`proof/times_{dump,nodump,t1}.tsv`. `ref/png/platform.txt` is the measured
+output of `uv run --script scripts/compare_images.py --print-platform`.
 
-## Files
+Before copying, each scene's PNG bytes and printed output were compared
+with `cmp` across all three runs. Digest lines were compared with
+`cmp` after `sed 's/ secs=[^ ]*//'`. Four-thread and one-thread dumps
+were compared using the unchanged `state_compare.py --quiet --added-zero`.
+Package verification reconstructs all 27 canvas checkpoints and checks
+their FNV-1a against `ref/digest` without an exception.
 
-`SHA256SUMS` lists every file in this directory with its SHA-256
-(`shasum -a 256 -c SHA256SUMS` from here). The whole package is about 4 MB.
+## Other active fixtures recorded with the same build
+
+The producing Rust test executables were selected from Cargo's artifact
+stream. From their crate directories, with `UPDATE_GOLDEN=1`, the exact
+test names were:
+
+```text
+tests::fixture_matches_golden
+bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure
+session::tests::engine_2_logs_replay_as_before
+```
+
+The first two record `crates/paint/tests/golden_scene.png` (and platform)
+and `plough_volume_cure.png`. The session test records all three
+`crates/easel/tests/engine2/drying_sheet_{normal,gallery,relief}.png` views.
+The same build also supplied:
+
+```sh
+scripts/tests/old_logs.sh "$EASEL" --record crates/easel/tests/old_logs/golden
+"$EASEL" run crates/easel/tests/r19_default_box.lua --out crates/easel/tests/r19_default_box.png
+uv run --script scripts/compare_images.py --print-platform > crates/easel/tests/r19_default_box.platform
+```
+
+The separate r19 image uses its default width 2400. The old-log recorder
+uses each unchanged case's width from `cases.tsv`, including r19 at 320.
+
+## Historical files and checksums
+
+`old_files/` is retained unchanged: its PAINTCK8 save/header and original
+logs remain historical compatibility inputs. They are not the producer
+or expected state of the active regression baseline.
+
+`SHA256SUMS` is refreshed after recording and documentation updates with
+all package files except itself. `tools/verify_package.sh` checks this
+complete inventory, the state comparer's tests and all 27 reconstructed
+checkpoint digests. Raw execution logs and intermediate uncompressed
+captures remain in the verification scratch, outside this package.

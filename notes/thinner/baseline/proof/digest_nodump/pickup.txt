@@ -1,4 +1,4 @@
-chunk 1 secs=0.004 canvas=907ef1487cc1a62d brushes=cbf29ce484222325 nbrushes=0 studio=e3aebc6b0238c872
-chunk 2 secs=0.004 canvas=e66860641ac39e6e brushes=29b71baeacceb2c5 nbrushes=1 studio=92baa5b8742be770
-chunk 3 secs=0.002 canvas=0fabdb00467435d2 brushes=511271dcd8c4f7ef nbrushes=2 studio=4e49c1a5571dfbdc
-chunk 4 secs=0.001 canvas=f65208d736da6bf7 brushes=86ddac07651f9dca nbrushes=2 studio=1688844843d0e680
+chunk 1 secs=0.018 canvas=48a0afcffc354cf9 brushes=cbf29ce484222325 nbrushes=0 studio=e3aebc6b0238c872
+chunk 2 secs=0.013 canvas=ac359c6d3fbb1743 brushes=33c4418ee3e29fd5 nbrushes=1 studio=f85057bbd43c7472
+chunk 3 secs=0.005 canvas=474ea6e08eb5a740 brushes=66b2a2baf518ccd9 nbrushes=2 studio=10ca09cc65af409a
+chunk 4 secs=0.003 canvas=e71bef5351007856 brushes=0423ddbeed2ff245 nbrushes=2 studio=bfa5c7ccfbe79446

@@ -4,9 +4,9 @@
 //! latent space, weighted by each tube's tinting strength. The painter
 //! chooses the proportions.
 //!
-//! Masstone colors, hiding and tinting strength are approximations from
-//! pigment knowledge (not measurements); each palette's tube list cites its
-//! source.
+//! Fifteen tubes use measured oil-paint spectra and calibrated constant
+//! recipe weights. The other colors, hiding and handling properties are
+//! estimates from pigment knowledge; each tube list cites its source.
 //!
 
 use crate::color::{Rgb, hex, luminance};
@@ -26,19 +26,14 @@ pub struct Tube {
     /// Hiding power of one coat of the tube paint (0 transparent .. 1
     /// opaque): contrast ratio, see `pigment::hiding_of`.
     ///
-    /// An input calibration scalar, not a measurement of the rendered
-    /// film: `scatter_for` turns it into the paint's scattering through a
-    /// grayscale surrogate (a gray paint of the masstone's luminance, one
-    /// coat over black and white 1.0). The renderer then absorbs per RGB
-    /// channel, so a rendered coat's luminance contrast ratio differs from
-    /// this number and two tubes can rank differently by the two (raw and
-    /// burnt sienna: 0.40 and 0.45 here, about 0.45 and 0.44 rendered over a
-    /// black/80% white chart; thinner check 13, notes/thinner/ACCEPTANCE.md).
+    /// An estimated input for the older RGB-channel layer model, not a
+    /// measurement of the rendered film. Engine 9 with the glaze-film
+    /// switch instead uses spectral K and S at the film's physical thickness.
     pub hiding: f32,
     /// Stiffness straight from the tube (0 fluid .. 1 stiff).
     pub stiff: f32,
-    /// Tinting strength relative to an average pigment (smalt is weak,
-    /// Prussian blue very strong).
+    /// Constant recipe weight: calibrated against measured mixtures for
+    /// measured tubes, estimated tinting strength for the others.
     pub strength: f32,
     /// How fast the paint dries in oil, relative to average paint (1):
     /// `drying::drier`. Engines 1 and 2.
@@ -537,8 +532,9 @@ impl Tube {
 /// data (`scripts/pigment_data/revigo`): lead white, zinc white, bone
 /// black, cobalt, ultramarine and Prussian blue, the three vermilions,
 /// chrome yellow, lemon chrome, viridian, emerald green, red lead and
-/// carmine lake. Those use their own measured K and S, with scalar strength
-/// 1.0: the spectra already carry their relative absorption and scattering.
+/// carmine lake. Those use their own measured K and S, with constant recipe
+/// weights calibrated against measured mixtures; their spectra carry their
+/// relative absorption and scattering.
 /// `mixer/measured.json` records the pure films and round-3 fit samples used.
 pub fn catalog() -> Vec<Tube> {
     vec![
@@ -647,6 +643,7 @@ fn pick(names: &[&str]) -> Vec<Tube> {
 #[derive(Clone, Debug)]
 pub struct Mixture {
     pub pigment_latent: [f32; crate::mixer::LATENT_SIZE],
+    pub spectral_films: bool,
     /// (tube index, fraction by volume), fractions sum to 1.
     pub parts: Vec<(usize, f32)>,
     /// Masstone of the mixture (pigment mix of the tubes' masstones, weighted
@@ -985,6 +982,9 @@ impl Palette {
         for v in lat.iter_mut() {
             *v /= wsum.max(1e-9);
         }
+        if self.engine >= crate::PIGMENT_MIXER && self.glaze_film {
+            sct = crate::mixer::scattering(&lat);
+        }
         (lat, sct, stf)
     }
 
@@ -1010,13 +1010,29 @@ impl Palette {
         let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
-        Mixture { pigment_latent, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
+        Mixture { pigment_latent, spectral_films: self.engine >= crate::PIGMENT_MIXER && self.glaze_film, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
     }
 
     /// How the parts (tube index, fraction by volume) look dry, out of oil
     /// (a pastel stick, a toned sheet's pulp): `dry::dry_color` from each
     /// tube's masstone, scattering in oil and refractive index.
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
+        if self.engine >= crate::PIGMENT_MIXER && parts.iter().any(|&(i, _)| crate::mixer::tube(self.tubes[i].name).is_some()) {
+            let pigment = |i: usize| crate::mixer::tube(self.tubes[i].name).map_or_else(
+                || crate::spectral::SpectralPigment::masstone(self.tubes[i].color, self.scat[i]),
+                |lat| crate::mixer::pigment(&lat).scaled(crate::COAT_UM / 100.0),
+            );
+            let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(
+                || crate::mixer::pigment(&crate::mixer::tube("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0),
+                |i| pigment(i).s,
+            );
+            let list: Vec<_> = parts.iter().map(|&(i, f)| {
+                let name = self.tubes[i].name;
+                let n = crate::dry::carbon_ratio(name).map_or_else(|| crate::dry::refractive_index(name), |r| -r);
+                (pigment(i), n, f)
+            }).collect();
+            return crate::dry::spectral_color(&list, &white);
+        }
         let white = self.tubes.iter().position(|t| t.name == "lead white").map_or_else(|| self.scat.iter().cloned().fold(0.0, f32::max), |i| self.scat[i]);
         let list: Vec<(crate::Rgb, f32, f32, f32)> = parts
             .iter()
@@ -1076,7 +1092,7 @@ impl Mixture {
         // that share of it out (blot 0.5 leaves half)
         // (packed and drained oil stay the pigment's: medium and blotting
         // change only how much more or less the paint holds)
-        Paint { pigment_latent: Some(self.pigment_latent), parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
+        Paint { pigment_latent: Some(self.pigment_latent), spectral_films: self.spectral_films, parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying

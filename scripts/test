@@ -4,7 +4,7 @@
 # passes only if it exits 0 and prints what proves its tests ran: every named
 # Rust test's ok line, or a count of at least one. The registered rag
 # baseline mismatch (exit 4 with KNOWN_FAILURE: rag-historical-baseline-main)
-# and the isolated knife/glaze single-test failures are reported as known.
+# and the isolated knife single-test failure are reported as known.
 # Exit 0 if nothing else failed, 1 otherwise.
 #
 #   scripts/test          (CARGO_TARGET_DIR is honored; a failed run keeps its logs)
@@ -131,6 +131,11 @@ check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
+  mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
+  mixer::tests::palette_previews_follow_canvas_film_optics \
+  mixer::tests::measured_films_report_errors_over_both_revigo_fields \
+  mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \
+  mixer::tests::measured_dry_colors_do_not_reconstruct_absorption_from_rgb \
   mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral \
   mixer::tests::white_tints_keep_their_blue_chroma \
   mixer::tests::white_and_black_keep_middle_tints_neutral \
@@ -180,6 +185,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   look::tests::masks_overlay_fill_and_outlines_in_crop_and_mirror_coordinates \
   session::tests::new_paintings_record_the_glaze_film_and_older_logs_replay_without_it \
   session::tests::a_scumble_at_half_coverage_leaves_gaps \
+  session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible \
   session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it \
   api::draw_rag::tests::a_wipe_on_a_full_face_says_so \
   session::tests::a_gesture_keeps_its_width_to_its_last_point \
@@ -193,8 +199,6 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
 # The first 2.0 painting is the judge of knife skim over wet dark paint.
 known_rust knife-skim paint 'lib paint test' bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint
-# The first 2.0 painting is the judge of glaze contrast and warmth.
-known_rust glaze easel 'bin easel test' session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible
 check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'

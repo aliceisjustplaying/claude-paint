@@ -181,20 +181,36 @@ struct Batch {
 
 #[test]
 fn live_open_refuses_obsolete_pigment_checkpoints_without_replaying() {
-    let mut studio = Studio::new("obsolete-pigment", false);
-    studio.start();
-    studio.ok(&["do", "x = 1"]);
-    studio.close();
-    let mut obsolete = b"EASLRP01".to_vec();
-    obsolete.extend([0; 32]);
-    std::fs::write(studio.dir().join("replay.ckpt"), obsolete).unwrap();
-    let output = studio.cmd(&["open", "painting"]);
-    assert!(!output.status.success());
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("obsolete pigment representation"), "{error}");
-    let log = String::from_utf8(studio.bytes("server.log")).unwrap();
-    assert!(!log.contains("resuming chunk"), "{log}");
-    assert!(!log.contains("replaying the full log"), "{log}");
+    use sha2::{Digest, Sha256};
+    for format in 0..3 {
+        let mut studio = Studio::new(&format!("obsolete-pigment-{format}"), false);
+        studio.start();
+        for _ in 0..10 { studio.ok(&["do", "x = (x or 0) + 1"]); }
+        studio.close();
+        let obsolete = if format < 2 {
+            let mut bytes = [b"EASLRP01", b"EASLRP02"][format].to_vec();
+            bytes.extend([0; 32]);
+            bytes
+        } else {
+            let bytes = studio.bytes("replay.ckpt");
+            assert_eq!(&bytes[..8], b"EASLRP03");
+            let mut payload = zstd::stream::decode_all(&bytes[48..]).unwrap();
+            payload[..8].copy_from_slice(&(paint::mixer::identity() ^ 1).to_le_bytes());
+            let mut changed = bytes[..48].to_vec();
+            changed.extend(zstd::stream::encode_all(payload.as_slice(), 1).unwrap());
+            let digest = Sha256::digest(&changed[40..]);
+            changed[8..40].copy_from_slice(&digest);
+            changed
+        };
+        std::fs::write(studio.dir().join("replay.ckpt"), obsolete).unwrap();
+        let output = studio.cmd(&["open", "painting"]);
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("obsolete pigment representation"), "{error}");
+        let log = String::from_utf8(studio.bytes("server.log")).unwrap();
+        assert!(!log.contains("resuming chunk"), "{log}");
+        assert!(!log.contains("replaying the full log"), "{log}");
+    }
 }
 
 struct Fixture {

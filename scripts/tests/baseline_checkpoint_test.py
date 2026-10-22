@@ -46,6 +46,7 @@ def scene():
         "hand_slice": numeric("f32", 0.0, 0.0),
         "tally": numeric("u64", *[0] * 9),
         "engine": numeric("u32", 3),
+        "mixer.identity": numeric("u64", 0xAB12345678),
         "wet.solvent": numeric("f32", 0.0),
     }
     fields.update(("clock." + name, numeric("f32")) for name in ("cure", "lev", "seen", "sub", "srate", "th"))
@@ -56,7 +57,7 @@ class BaselineCheckpointTests(unittest.TestCase):
     def test_current_mixer_envelope_and_solvent_section_are_reconstructed(self):
         fields = scene()
         rebuilt = checkpoint.rebuild(fields)
-        self.assertEqual(rebuilt[:40], b"PAINTC19" + struct.pack("<4Q", 0, 1, 9, 0))
+        self.assertEqual(rebuilt[:40], b"PAINTC19" + struct.pack("<4Q", 0, 0xAB12345678, 9, 0))
         self.assertEqual(rebuilt[-12:], struct.pack("<Qf", 3, 0.0))
         fields["wet.solvent"] = numeric("f32", 0.25)
         changed = checkpoint.rebuild(fields)
@@ -81,6 +82,22 @@ class BaselineCheckpointTests(unittest.TestCase):
             dump(source, fields)
             digest.write_text("chunk=1 canvas=0000000000000000\n")
             self.assertEqual(subprocess.run(args, capture_output=True).returncode, 1)
+
+    def test_producing_identity_is_preserved_and_required(self):
+        fields = scene()
+        original = checkpoint.rebuild(fields)
+        fields["mixer.identity"] = numeric("u64", 123456789)
+        changed = checkpoint.rebuild(fields)
+        self.assertEqual(changed[16:24], struct.pack("<Q", 123456789))
+        self.assertEqual(changed[:16] + changed[24:], original[:16] + original[24:])
+        for value in [None, numeric("f64", 1.0), numeric("u64", 1, 2), ("u64", (1,), b"x")]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                fields = scene()
+                if value is None:
+                    del fields["mixer.identity"]
+                else:
+                    fields["mixer.identity"] = value
+                checkpoint.rebuild(fields)
 
     def test_unsupported_or_incomplete_layouts_are_refused(self):
         for change in [

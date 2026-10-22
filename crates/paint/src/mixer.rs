@@ -31,6 +31,18 @@ const FORWARD_SCALE: [f32; SIZE - 1] = {
 const INVERSE: &[u8; SIZE * SIZE * SIZE * 6] = include_bytes!("mixer/inverse.bin");
 const FORWARD: &[u8; SIZE * SIZE * SIZE * 12] = include_bytes!("mixer/forward.bin");
 
+pub fn identity() -> u64 {
+    use sha2::{Digest, Sha256};
+    static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *IDENTITY.get_or_init(|| {
+        let mut hash = Sha256::new();
+        hash.update(b"Stillwet mixer/latent7/km-power/additive-linear-rgb/sqrt-stick/concentration-trilinear/v1");
+        hash.update(FORWARD);
+        hash.update(INVERSE);
+        u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
+    })
+}
+
 pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
     let c = lookup(rgb.map(linear_to_srgb), false);
     let c3 = (1.0 - c.iter().sum::<f32>()).max(0.0);

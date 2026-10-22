@@ -106,15 +106,26 @@ the synthetic basis and the credited CIE conversion matrix.
 
 ## Checkpoints and compatibility
 
-New canvas checkpoints use `PAINTC19`, identifying mixer 1 independently
+New canvas checkpoints use `PAINTC19`, identifying the mixer independently
 of the engine number and retaining the preceding material layout inside
 the envelope. Older checkpoints with wet paint are explicitly refused:
 their seven floats describe a different latent space. Empty older wet
 layers can be imported with their stale latents cleared. Old resumable
 replay checkpoints are also refused, because recorded brushes and tool
 events contain the old representation. New replay checkpoints use
-`EASLRP02`. Replaying an old log is supported; interpreting an old wet
+`EASLRP03`. Its compressed payload starts with the mixer identity before
+any tool state, even when no canvas exists. Replaying an old log is supported; interpreting an old wet
 latent as a new one is not.
+
+The identity is the first eight SHA-256 digest bytes interpreted as a
+little-endian u64. The hash covers the exact schema tag in `mixer::identity`,
+then the forward table and the inverse table. The tag names the latent
+layout, concentration coordinates, additive residual and interpolation;
+a change to those semantics requires a new tag. Table changes alter the
+identity automatically. The hash is cached outside the pixel path. This
+is a compatibility fingerprint, not authentication. State dumps preserve
+the producing identity as `mixer.identity`, so reconstructing a historical
+dump never labels it with whichever tables happen to be checked out.
 
 ## Fixture and baseline policy
 

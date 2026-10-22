@@ -20,7 +20,7 @@
 //! edition numbers: it ends after the hand-time ledger, without an engine word.
 //! Engine-1 writes retain base layout 8 inside the current envelope.
 //! New writes use version 19 (`PAINTC19`): after the header, three u64 words
-//! identify the pigment mixer (1), the base layout below and whether tube
+//! identify the pigment mixer, the base layout below and whether tube
 //! parts follow (0 or 1). This identity is independent of the engine number.
 //! Older files containing wet paint are refused because their latent vectors
 //! cannot be decoded by this mixer. Empty older files can still be read.
@@ -442,7 +442,7 @@ impl Canvas {
         w.write_all(MAGIC19)?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
-        put_u64(w, 1)?;
+        put_u64(w, crate::mixer::identity())?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
         let f = self.f;
@@ -578,8 +578,8 @@ impl Canvas {
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
         let own_mixer = version == 19;
-        if own_mixer && get_u64(r)? != 1 {
-            return Err(bad("checkpoint mixer identity is unknown"));
+        if own_mixer && get_u64(r)? != crate::mixer::identity() {
+            return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
         let mut pigments = version == 18;
         let version = if pigments || own_mixer {
@@ -896,7 +896,7 @@ mod tests {
     fn base_format(b: &[u8]) -> u64 {
         assert_eq!(&b[..8], MAGIC19);
         let header = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
-        assert_eq!(u64::from_le_bytes(b[16 + header..24 + header].try_into().unwrap()), 1);
+        assert_eq!(u64::from_le_bytes(b[16 + header..24 + header].try_into().unwrap()), crate::mixer::identity());
         u64::from_le_bytes(b[24 + header..32 + header].try_into().unwrap())
     }
 
@@ -904,6 +904,19 @@ mod tests {
         base_format(b);
         let header = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
         set(b, 24 + header, version);
+    }
+
+    #[test]
+    fn a_different_mixer_identity_is_refused_before_reading_latents() {
+        let c = Canvas::new_window(2, 1.0, [0.1; 3], None);
+        let mut bytes = Vec::new();
+        c.write_state(&mut bytes, "").unwrap();
+        assert!(load(bytes.clone()).is_ok());
+        for identity in [1, crate::mixer::identity() ^ 1] {
+            set(&mut bytes, 16, identity);
+            let error = load(bytes.clone()).err().unwrap();
+            assert!(error.to_string().contains("obsolete pigment representation"));
+        }
     }
 
     /// A canvas with the drain switch is written as version 14: version 11's

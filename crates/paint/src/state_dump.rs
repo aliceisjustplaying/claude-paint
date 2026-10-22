@@ -77,6 +77,7 @@ impl Canvas {
             Field { name: "linen_seed", shape: vec![1], values: Values::U64(vec![self.linen.map_or(0, |l| l.seed)]) },
             Field { name: "surf_gen", shape: vec![1], values: Values::U64(vec![self.surf_gen]) },
             Field { name: "engine", shape: vec![1], values: Values::U32(vec![self.engine]) },
+            Field { name: "mixer.identity", shape: vec![1], values: Values::U64(vec![crate::mixer::identity()]) },
             Field { name: "ground_um", shape: vec![1], values: Values::F32(vec![self.ground_um]) },
             Field { name: "color", shape: px(3), values: Values::F32(self.px.iter().flat_map(|p| *p).collect()) },
             Field { name: "height", shape: px(1), values: Values::F32(self.height.clone()) },

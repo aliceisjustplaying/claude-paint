@@ -48,7 +48,9 @@ def rebuild(fields):
         raise ValueError("only engine-3 baseline scenes without drawings or tube parts are supported")
     if fields["wet.solvent"][:2] != ("f32", fields["wet.vol"][1]):
         raise ValueError("wet.solvent must be f32 with the wet.vol shape")
-    out = [b"PAINTC19", u64(0), u64(1), u64(9), u64(0)]
+    if fields.get("mixer.identity", ())[:2] != ("u64", (1,)) or len(raw("mixer.identity")) != 8:
+        raise ValueError("mixer.identity must be one u64 from the producing build")
+    out = [b"PAINTC19", u64(0), raw("mixer.identity"), u64(9), u64(0)]
     out += [u64(v) for v in vals("frame")]
     out += [raw("scale"), raw("mm_per_unit")]
     linen = vals("linen")

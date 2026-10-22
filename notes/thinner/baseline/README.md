@@ -49,7 +49,8 @@ Fields include the canvas, wet paint, drying clock, solvent, held tools
 and studio values. Lua globals and derived caches are not represented.
 
 `tools/checkpoint_from_dump.py` reconstructs the engine-3 PAINTC19 canvas
-checkpoint with base edition 9 and mixer identity 1, including solvent.
+checkpoint with base edition 9 and the dump's producing mixer identity,
+including solvent. Missing or malformed identity metadata is refused.
 `tools/verify_package.sh` requires its FNV-1a to match the recorded
 `canvas=` digest for every one of the 27 chunks. The historical PAINTCK8
 files in `old_files/` are deliberately not regenerated.

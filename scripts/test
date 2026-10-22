@@ -124,6 +124,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   mixer::tests::white_and_black_keep_middle_tints_neutral \
   mixer::tests::palette_violet_and_ultramarine_tints_keep_their_hue \
   mixer::tests::catalog_traces_do_not_overpower_white \
+  checkpoint::tests::a_different_mixer_identity_is_refused_before_reading_latents \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
@@ -147,6 +148,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
+  replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   check::tests::visible_color_accepts_two_srgb_levels_at_every_pixel \
   check::tests::visible_color_rejects_three_srgb_levels_in_any_channel \
   check::tests::surface_uses_absolute_and_relative_tolerance \

@@ -111,7 +111,8 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::live_resume_rejects_missing_and_changed_prefix_before_reconstruction \
   replay_checkpoint::tests::live_checkpoint_uses_its_startup_identity \
   replay_checkpoint::tests::live_scope_restores_both_traces_on_unwind \
-  replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure
+  replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure \
+  replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'

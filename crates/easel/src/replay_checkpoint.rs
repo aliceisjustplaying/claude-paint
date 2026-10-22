@@ -76,11 +76,99 @@ struct Event {
 enum Outcome { Value(Vec<u8>), RuntimeError(String) }
 
 #[derive(Default)]
+struct Events {
+    file: Option<RefCell<std::fs::File>>,
+    len: usize,
+    end: u64,
+    cursor: u64,
+}
+
+impl Events {
+    fn len(&self) -> usize { self.len }
+
+    fn push(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+        if self.file.is_none() {
+            self.file = Some(RefCell::new(tempfile::tempfile().map_err(|e| e.to_string())?));
+        }
+        let file = self.file.as_mut().unwrap().get_mut();
+        file.seek(SeekFrom::Start(self.end)).map_err(|e| e.to_string())?;
+        file.write_all(&(bytes.len() as u64).to_le_bytes()).and_then(|_| file.write_all(&bytes)).map_err(|e| e.to_string())?;
+        self.end = file.stream_position().map_err(|e| e.to_string())?;
+        self.len += 1;
+        Ok(())
+    }
+
+    fn next(&mut self) -> Result<Option<Vec<u8>>, String> {
+        if self.cursor == self.end { return Ok(None); }
+        let file = self.file.as_mut().unwrap().get_mut();
+        file.seek(SeekFrom::Start(self.cursor)).map_err(|e| e.to_string())?;
+        let bytes = Self::read(file)?;
+        self.cursor = file.stream_position().map_err(|e| e.to_string())?;
+        Ok(Some(bytes))
+    }
+
+    fn read(file: &mut std::fs::File) -> Result<Vec<u8>, String> {
+        let mut length = [0; 8];
+        file.read_exact(&mut length).map_err(|e| e.to_string())?;
+        let length = u64::from_le_bytes(length);
+        if length > 4 << 30 { return Err("replay checkpoint: oversized effect event".into()); }
+        let mut bytes = vec![0; length as usize];
+        file.read_exact(&mut bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    }
+
+    fn truncate(&mut self, len: usize, end: u64, cursor: u64) -> Result<(), String> {
+        if let Some(file) = &self.file {
+            file.borrow_mut().set_len(end).map_err(|e| e.to_string())?;
+        }
+        self.len = len;
+        self.end = end;
+        self.cursor = cursor;
+        Ok(())
+    }
+}
+
+impl Serialize for Events {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeSeq};
+        let mut sequence = serializer.serialize_seq(Some(self.len))?;
+        if let Some(file) = &self.file {
+            let mut file = file.borrow_mut();
+            file.seek(SeekFrom::Start(0)).map_err(S::Error::custom)?;
+            for _ in 0..self.len {
+                let bytes = Self::read(&mut file).map_err(S::Error::custom)?;
+                sequence.serialize_element(&bytes)?;
+            }
+        }
+        sequence.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Events {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Events;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { f.write_str("replay effect events") }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut sequence: A) -> Result<Events, A::Error> {
+                use serde::de::Error;
+                let mut events = Events::default();
+                while let Some(bytes) = sequence.next_element::<Vec<u8>>()? {
+                    events.push(bytes).map_err(A::Error::custom)?;
+                }
+                Ok(events)
+            }
+        }
+        deserializer.deserialize_seq(Visitor)
+    }
+}
+
+#[derive(Default)]
 struct Trace {
     enabled: bool,
     playback: bool,
     nested: bool,
-    events: Vec<Vec<u8>>,
+    events: Events,
     at: usize,
     failure: Option<String>,
     brushes: Vec<Rc<RefCell<paint::Held>>>,
@@ -135,6 +223,8 @@ pub fn hold_tools(st: &S) {
 
 pub struct Mark {
     events: usize,
+    end: u64,
+    cursor: u64,
     at: usize,
     failure: Option<String>,
 }
@@ -142,16 +232,16 @@ pub struct Mark {
 pub fn mark() -> Mark {
     TRACE.with(|t| {
         let t = t.borrow();
-        Mark { events: t.events.len(), at: t.at, failure: t.failure.clone() }
+        Mark { events: t.events.len(), end: t.events.end, cursor: t.events.cursor, at: t.at, failure: t.failure.clone() }
     })
 }
 
 pub fn rollback(mark: Mark) {
     TRACE.with(|t| {
         let mut t = t.borrow_mut();
-        t.events.truncate(mark.events);
+        let failure = t.events.truncate(mark.events, mark.end, mark.cursor).err();
         t.at = mark.at;
-        t.failure = mark.failure;
+        t.failure = failure.or(mark.failure);
     });
 }
 
@@ -171,7 +261,7 @@ fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl Fn
     let event = TRACE.with(|t| {
         let mut t = t.borrow_mut();
         if !t.playback { return Ok(None); }
-        let bytes = t.events.get(t.at).ok_or_else(|| "replay checkpoint: exhausted effect trace".to_string())?;
+        let bytes = t.events.next()?.ok_or_else(|| "replay checkpoint: exhausted effect trace".to_string())?;
         let raw = zstd::stream::decode_all(bytes.as_slice()).map_err(|e| format!("replay checkpoint trace: {e}"))?;
         let event: Event = decode(&raw)?;
         t.at += 1;
@@ -206,7 +296,7 @@ fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl Fn
         state: st.map(State::capture), outcome,
     };
     let bytes = zstd::stream::encode_all(encode(&event).map_err(failed)?.as_slice(), 1).map_err(|e| failed(e.to_string()))?;
-    TRACE.with(|t| t.borrow_mut().events.push(bytes));
+    TRACE.with(|t| t.borrow_mut().events.push(bytes)).map_err(failed)?;
     value
 }
 
@@ -233,7 +323,7 @@ impl Identity {
 struct Saved {
     identity: Identity,
     done: usize,
-    events: Vec<Vec<u8>>,
+    events: Events,
     state: State,
     digests: Option<Vec<String>>,
 }
@@ -274,7 +364,7 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
             let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
             TRACE.with(|t| {
                 #[derive(Serialize)]
-                struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Vec<Vec<u8>>, state: &'a State, digests: &'a Option<Vec<String>> }
+                struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Events, state: &'a State, digests: &'a Option<Vec<String>> }
                 bincode::serialize_into(&mut writer, &SavedRef { identity, done, events: &t.borrow().events, state: &state, digests }).map_err(|e| e.to_string())
             })?;
             bincode::serialize_into(&mut writer, &s.canvas().is_some()).map_err(|e| e.to_string())?;
@@ -802,7 +892,7 @@ print(counter,rand(),drying(300,300))
         }
         assert_eq!(canvas(&restored), canvas(&s));
         assert_eq!(encode(&State::capture(&restored.st)).unwrap(), encode(&State::capture(&s.st)).unwrap());
-        assert_eq!(resumed.trace.events, live.trace.events);
+        assert_eq!(encode(&resumed.trace.events).unwrap(), encode(&live.trace.events).unwrap());
         assert!(!resumed.trace.playback);
         resumed.written -= Duration::from_secs(900);
         resumed.completed(&path, &restored, &source, 64).unwrap();
@@ -889,6 +979,35 @@ print(counter,rand(),drying(300,300))
         assert_eq!(outer.trace.events.len(), 2);
         assert_eq!(inner.trace.events.len(), 1);
         TRACE.with(|t| assert!(!t.borrow().enabled));
+    }
+
+    #[test]
+    fn effect_history_does_not_accumulate_in_memory() {
+        const CHILD: &str = "EASEL_TEST_EFFECT_MEMORY";
+        if std::env::var_os(CHILD).is_some() {
+            let mut live = Live::new();
+            let mut rng = paint::Rng::new(73);
+            let mut payload = vec![0u8; 64 << 10];
+            live.with(|| {
+                for _ in 0..1024 {
+                    for bytes in payload.chunks_exact_mut(8) {
+                        bytes.copy_from_slice(&rng.next_u64().to_le_bytes());
+                    }
+                    read("memory", || Ok(payload.clone())).unwrap();
+                }
+            });
+            assert_eq!(live.trace.events.len(), 1024);
+            let output = std::process::Command::new(if cfg!(target_os = "macos") { "/bin/ps" } else { "ps" })
+                .args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().unwrap();
+            assert!(output.status.success());
+            let rss: usize = std::str::from_utf8(&output.stdout).unwrap().trim().parse().unwrap();
+            assert!(rss < 48 << 10, "effect history retained {rss} KiB RSS for 64 MiB of payloads");
+            return;
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory", "--nocapture"])
+            .env(CHILD, "1").output().unwrap();
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     }
 
     #[test]

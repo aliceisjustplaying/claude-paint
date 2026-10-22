@@ -118,6 +118,7 @@ rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases replay as af49348 did$'
 check studio-viewer "cd studio && $pytest -rs test_studio.py" "$passed"
+check studio-pictures 'node --test --test-reporter=tap studio/test_pictures.cjs' '^# pass [1-9][0-9]*$'
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \

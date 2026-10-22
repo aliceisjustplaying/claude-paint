@@ -101,15 +101,21 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
  */
 export function sessionReply(sessions: string): string | undefined {
 	if (!existsSync(sessions)) return undefined;
+	let lastAssistant = true;
 	for (const f of readdirSync(sessions).filter((f) => f.endsWith(".jsonl")).sort().reverse()) {
 		for (const line of readFileSync(join(sessions, f), "utf8").split("\n").reverse()) {
-			let m: { role?: string; stopReason?: string; content?: { type?: string; text?: string }[] } | undefined;
+			let m: { role?: string; stopReason?: string; errorMessage?: string; content?: { type?: string; text?: string }[] } | undefined;
 			try {
 				m = JSON.parse(line).message;
 			} catch {
 				continue;
 			}
-			if (m?.role !== "assistant" || m.stopReason === "error" || m.stopReason === "aborted" || !Array.isArray(m.content)) continue;
+			if (m?.role !== "assistant") continue;
+			if (lastAssistant && (m.stopReason === "error" || m.stopReason === "aborted")) {
+				throw new Error(`the critic couldn't visit: ${m.errorMessage || m.stopReason}`);
+			}
+			lastAssistant = false;
+			if (m.stopReason === "error" || m.stopReason === "aborted" || !Array.isArray(m.content)) continue;
 			if (m.content.some((p) => p.type === "toolCall")) continue;
 			const text = m.content.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n").trim();
 			if (text) return text;
@@ -131,7 +137,7 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	const started = stamp();
 	const sessions = join(critic.dir, "sessions", started);
 	let timedOut = false;
-	const { code, out, err } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
+	const { code, out, err, reply } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
 		if (signal?.aborted) return fail(new Error("Operation aborted"));
 		const p = spawn("node", [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
 			{ cwd: studio, stdio: ["pipe", "pipe", "pipe"], detached: true });
@@ -152,11 +158,13 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 		p.stderr.on("data", (d) => (err += d));
 		p.on("error", (e) => (cleanup(), fail(e)));
 		p.on("close", (code) => (cleanup(), done({ code, out, err })));
-	}).catch((error) => {
+	}).then((result) => ({
+		...result,
+		reply: (result.code === 0 ? sessionReply(sessions) : undefined) ?? result.out.trim(),
+	})).catch((error) => {
 		if (!signal?.aborted) appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: failed: ${error.message}\n`);
 		throw error;
 	});
-	const reply = (code === 0 ? sessionReply(sessions) : undefined) ?? out.trim();
 	const failure = signal?.aborted ? "Operation aborted"
 		: timedOut ? "critic timed out after 20 minutes and was stopped"
 		: code !== 0 || !reply ? `the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}` : undefined;

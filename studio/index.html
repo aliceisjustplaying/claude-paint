@@ -1084,7 +1084,8 @@ const unscratched = look => (look || '').replace(/(?:, )?scratch True/, '').repl
 const isWholeScratch = e => e.look !== undefined && isScratch(e) && isWhole({ look: unscratched(e.look) });
 const scratchReset = e => e.kind === 'paint' && e.scratch && (e.new_scratch || e.scratch_reset || /^a (?:fresh scratch canvas|scratch canvas beside the painting)/m.test(e.out || ''));
 const scratchBoundary = e => scratchReset(e) || e.kind === 'paint' && e.scratch && e.err;
-const wholePicture = e => !hasLooks ? e.whole !== false : isScratch(e) ? isWholeScratch(e) : isWhole(e);
+const wholePicture = e => e.look === undefined ? e.whole === true || !hasLooks && e.whole !== false : isScratch(e) ? isWholeScratch(e) : isWhole(e);
+const isMask = e => /(?:^|, )mask /.test(e.look || '');
 // whether the painter is at the scratch canvas at event i: its newest chunk or look was there
 function scratchingAt(i) {
   for (let k = Math.min(i, events.length - 1); k >= 0; k--) { const e = events[k];
@@ -1269,9 +1270,9 @@ function picturesAt(i, rest, sc = false) {
     if (e.kind === 'image' && e.display_pending && displayLight !== 'color') continue;
     if (e.kind === 'sitting' || e.kind === 'user') before = true;
     else if (e.kind === 'image' && !isPalette(e) && (e.ref || isScratch(e) === sc)) { if (cur < 0) { cur = k; old = before; }
-      if (!e.ref) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
+      if (!e.ref && !isMask(e)) { if (mine < 0) mine = k; if (wholePicture(e)) { whole = k; break; } } } }
   const main = whole >= 0 ? whole : mine;
-  return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref) ? cur : -1];
+  return [main, cur >= 0 && cur !== main && !old && !rest && (whole >= 0 || events[cur].ref || isMask(events[cur])) ? cur : -1];
 }
 function snapshotAge(k, sc) {
   const e = events[k];

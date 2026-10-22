@@ -62,6 +62,28 @@ mixing patent by either author or Secret Weapons; that is a search result,
 not a patent-clearance opinion. The PR's evidence records the queries,
 license audit, mixing comparison and painting replay.
 
+## Measured comparison
+
+`notes/pigment-mixer-comparison.csv` records 1,045 old/new mixtures across
+95 ramps: all 91 pairs in the 14-tube default box, three direct RGB pairs
+and lead white/ultramarine from the full catalog, each in 10% steps. Tube
+mixtures use the actual palette path and retain its tinting strengths.
+RGB columns are linear, with per-mix Euclidean OKLab differences.
+
+The original is clean main `d94eafd6`; the new model is `6e438e7`, with
+forward/inverse table hashes recorded in `primaries.json`. Mean ΔE is
+0.02533, median 0.01801, p95 0.08002 and maximum 0.14232. The largest
+differences include white/bone black and blue tints. The white/black ramp
+stays near neutral but is lighter than the original; blue tints are grayer.
+These are measured differences, not a claim of visual acceptance or
+physical calibration. The comparison data is not a generator input.
+
+Both full-log gallery replays of *Last Light on the Tarn* (Claude Opus 5.5,
+round unknown), [studio f0dc5e](https://stillwet.art/studio/?p=paint-studio-f0dc5e),
+completed all 108 chunks at width 640. The only log change was engine 8 to
+9. The new painting shifts cooler/greener. Chart and painting images are
+attached to the PR, alongside the same-machine four-core gate results.
+
 ## Checkpoints and compatibility
 
 New canvas checkpoints use `PAINTC19`, identifying mixer 1 independently

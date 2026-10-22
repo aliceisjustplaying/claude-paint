@@ -1547,7 +1547,6 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h = h.scrub(n);
     }
     let (clip, limit) = clip_opt(&o, limit)?;
-    let feedback_limit = limit.clone();
     if let Some(c) = clip {
         h = h.clip(c);
     }
@@ -1653,11 +1652,14 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         sources.extend(second_pile);
         h.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), sources, h.mix_jitter));
     }
-    let options = feedback_options(&o)?;
+    let (options, feedback_clip) = feedback_options(&o)?;
     // (dipping into the piles on the palette)
     time::verb(st, Verb::Pass, |s| {
-        crate::pass_feedback::pass(s, &region, &mask, feedback_limit.as_deref(), &options, if preset == Some("blend") { "blend" } else { "work" });
-        s.canvas.as_mut().ok_or_else(no_canvas)?.work_with(&mut s.hand.piles, &mask, &h, seed);
+        let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+        let before = c.tally();
+        c.work_with(&mut s.hand.piles, &mask, &h, seed);
+        let made = c.tally().since(&before);
+        crate::pass_feedback::pass(s, &region, &mask, feedback_clip.as_deref(), &options, if preset == Some("blend") { "blend" } else { "work" }, made.strokes + made.touches);
         if h.dip_with.is_some() {
             s.board = board.lock().unwrap().clone();
         }
@@ -1738,15 +1740,19 @@ impl FromLuaValue for f32 {
     }
 }
 
-fn feedback_options(o: &Table) -> Result<String> {
+fn feedback_options(o: &Table) -> Result<(String, Option<Rc<Mask>>)> {
     let mut names = Vec::new();
+    let mut clip = None;
     for key in ["visible", "behind", "at", "clip"] {
         let v = o.raw_get::<Value>(key)?;
         if !v.is_nil() && (key != "clip" || matches!(v, Value::UserData(_))) {
             names.push(format!("{key}="));
+            if key == "clip" {
+                clip = Some(mask_of(&v)?);
+            }
         }
     }
-    Ok(names.join("/"))
+    Ok((names.join("/"), clip))
 }
 
 /// `clip=` on a pass: true, false, or a mask the strokes are clipped to,
@@ -1846,10 +1852,13 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
             sp.dip_with = Some(pass_dips(board.clone(), (*tubes).clone(), vec![pile], sp.mix_jitter));
         }
     }
-    let options = feedback_options(&o)?;
+    let (options, feedback_clip) = feedback_options(&o)?;
     time::verb(st, Verb::Pass, |s| {
-        crate::pass_feedback::pass(s, &region, &mask, sp.limit.as_deref(), &options, "stipple");
-        s.canvas.as_mut().ok_or_else(no_canvas)?.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+        let before = c.tally();
+        c.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
+        let made = c.tally().since(&before);
+        crate::pass_feedback::pass(s, &region, &mask, feedback_clip.as_deref(), &options, "stipple", made.strokes + made.touches);
         if sp.dip_with.is_some() {
             s.board = board.lock().unwrap().clone();
         }

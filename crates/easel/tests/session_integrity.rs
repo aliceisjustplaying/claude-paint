@@ -319,6 +319,71 @@ fn racing_opens_start_one_server() {
     }
 }
 
+#[test]
+fn serve_waits_for_a_closing_servers_lock() {
+    use std::{
+        io::Read,
+        os::unix::net::UnixListener,
+        process::{Child, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Server(Child);
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let name = "serve-handoff";
+    ok(&["open", name]);
+    ok(&["-s", name, "do", "x = 1"]);
+    ok(&["-s", name, "close"]);
+    let dir = root().join("out/easel").join(name);
+    let lock = std::fs::File::open(dir.join("lock")).unwrap();
+    lock.lock().unwrap();
+    let sock = sock_of(&dir);
+    let listener = UnixListener::bind(&sock).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let mut server = Server(Command::new(env!("CARGO_BIN_EXE_easel"))
+        .args(["serve", name])
+        .env_remove("EASEL_WIDTH").env("EASEL_ROOT", root())
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped())
+        .spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut conn = loop {
+        if let Ok((conn, _)) = listener.accept() {
+            break conn;
+        }
+        if let Some(status) = server.0.try_wait().unwrap() {
+            let mut error = String::new();
+            server.0.stderr.as_mut().unwrap().read_to_string(&mut error).unwrap();
+            panic!("serve exited instead of waiting for the closing server: {status}: {error}");
+        }
+        assert!(Instant::now() < deadline, "serve never checked the closing server");
+        std::thread::sleep(Duration::from_millis(1));
+    };
+    conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut request = [0; 9];
+    conn.read_exact(&mut request).unwrap();
+    assert_eq!(&request, b"7\nstatus\n");
+    std::fs::remove_file(&sock).unwrap();
+    drop(listener);
+    drop(conn);
+    drop(lock);
+    loop {
+        assert!(server.0.try_wait().unwrap().is_none(), "serve exited at startup");
+        if cmd(&["-s", name, "status"]).status.success() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "serve never started after the lock was released");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(ok(&["-s", name, "status"]).starts_with("1 chunks"));
+    ok(&["-s", name, "do", "assert(x == 1)"]);
+    ok(&["-s", name, "close"]);
+    assert!(server.0.wait().unwrap().success());
+}
+
 // A second server for a session that has one is refused before it touches anything, and
 // a server that died without closing (its socket left behind) is replaced by the next open.
 #[test]

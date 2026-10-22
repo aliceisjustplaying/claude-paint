@@ -681,12 +681,15 @@ fn serve_lock(name: &str) -> Result<std::fs::File, String> {
         f
     } else {
         std::fs::create_dir_all(session_dir(name)).map_err(|e| e.to_string())?;
-        match try_lock(name)? {
-            Some(f) => f,
-            None => {
+        loop {
+            if let Some(f) = try_lock(name)? {
+                break f;
+            }
+            if request(name, "status", &[], &[]).is_ok() {
                 let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
                 return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
             }
+            std::thread::sleep(Duration::from_millis(100));
         }
     };
     // who holds it, for anyone looking

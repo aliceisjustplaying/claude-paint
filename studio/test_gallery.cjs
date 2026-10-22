@@ -159,6 +159,18 @@ async function ready(page, which, light) {
         assert.equal(await page.evaluate(() => STATIC), staticMode);
         assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
       }
+      await page.evaluate(() => {
+        events.push({ ts:new Date().toISOString(), kind:'look', text:'mask sky' },
+          { ts:new Date().toISOString(), kind:'image', img:4, look:'mask sky' });
+        live = false; show(events.length - 1);
+      });
+      assert.equal(await page.evaluate(() => picturesAt(pos, false)[0]), 3, 'a mask look keeps the whole painting');
+      for (const light of ['color', 'gallery', 'relief']) {
+        await selectLight(light); await ready(page, 'img', light); await ready(page, 'img2', 'color');
+        assert.equal(await page.locator('#img').getAttribute('data-picture'), '0');
+        assert.equal(await page.locator('#img2').getAttribute('data-picture'), '4', 'the mask stays in the study view');
+      }
+      await selectLight('color');
       await page.goto(url('scratch')); await ready(page, 'img', false);
       await selectLight('gallery'); await ready(page, 'img', true); await ready(page, 'pipimg', true);
       assert.match(await page.locator('#cap').textContent(), /Scratch canvas.*Gallery light/);

@@ -6,10 +6,10 @@ retain the corresponding handling behavior, not the retired pigment
 implementation. These are current-mixer expectations, not af49348 or
 historical-library output.
 
-Producing source: `d9b1d7ded2ae87480d9d58ef2872c2c2675b3734`.
+Producing source: `d3c9d5940e0d9a7caba0f057461611e9abd53c57`.
 The workspace test-profile easel was built with `profile.test.debug=0`,
 Rust 1.99.0, CPU affinity 0–3 and four build/test/Rayon threads. Its SHA-256
-is `bab36684b9d9dfeb3eb79adc36bd166bf315922c65691da2bd6989eaf8140eb3`.
+is `b811186de2267f5d0fd5b3f20799da9adb2d4095d05f1f58c29fe6ab4ddd7395`.
 Full build provenance is in `notes/thinner/baseline/MANIFEST.md`.
 
 Recorded on 2026-10-22 with:

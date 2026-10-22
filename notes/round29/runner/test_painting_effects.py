@@ -83,3 +83,11 @@ def test_legacy_sittings_keep_their_original_evidence():
     assert runner.added_painting(dict(effects_before=None, effects_after=1,
                                     painting_before=3, painting_after=3,
                                     chunks_before=3, chunks_after=4))
+
+
+def test_completed_legacy_sitting_uses_chunk_bounds_before_old_painting_counts():
+    sitting = dict(sitting=2, status="completed", reviewed=True,
+                   painting_before=2, painting_after=2, chunks_before=2, chunks_after=3)
+    assert runner.next_step([sitting]) == ("new", 3)
+    assert runner.next_step([dict(sitting, effects_before=None, effects_after=None)]) == ("new", 3)
+    assert runner.next_step([dict(sitting, chunks_after=2)])[0] is None

@@ -509,7 +509,8 @@ def count_painting(d):
 
 def added_painting(s):
     """Whether a sitting painted; unavailable engine evidence falls back to accepted chunks."""
-    if "effects_before" in s or "effects_after" in s:
+    if ("effects_before" in s or "effects_after" in s
+            or (s.get("chunks_before") is not None and s.get("chunks_after") is not None)):
         before, after = (("effects_before", "effects_after")
                          if s.get("effects_before") is not None and s.get("effects_after") is not None
                          else ("chunks_before", "chunks_after"))

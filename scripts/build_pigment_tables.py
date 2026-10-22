@@ -4,7 +4,7 @@
 # ///
 """Generate Stillwet's pigment tables from measured reflectance of real oil paints, not Mixbox data.
 
-The primaries are four paints of the Revigo project's reconstruction of Van Gogh's palette (Geldof,
+The RGB reconstruction primaries are five paints of the Revigo project's reconstruction of Van Gogh's palette (Geldof,
 Proano Gaibor, Ligterink, Hendriks and Kirchner 2018, doi:10.1186/s40494-018-0181-6), whose reflectance
 measurements are published under CC0 in https://github.com/fligt/revigo-spectra and vendored in
 scripts/pigment_data/revigo. Every paint was drawn down 100 um thick over the black and the white field
@@ -31,9 +31,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts/pigment_data/revigo"
 OUT = ROOT / "crates/paint/src/mixer"
 INVERSE_SIZE = 33
-# 21 nodes per forward axis keep the previous 33-node three-axis table's interpolation error on catalog ramps
-# (mean 0.006 vs 0.009 OKLab, 99th percentile 0.048 vs 0.055) at 2.3 MiB; 25 would halve the error for twice the size.
-FORWARD_SIZE = 21
 RAW_FIT_WEIGHT = .05
 # An inverse node within this linear-RGB distance below the white primary stores the white vertex and leaves
 # the difference to the runtime's RGB residual, so a colour inside such a cell interpolates to the vertex
@@ -89,10 +86,6 @@ def film(K, S, rg):
 
 def km(q):
     return 1 / (1 + q + np.sqrt(q * (q + 2)))
-
-
-def warp(x):
-    return x**2 / (x**2 + (1 - x)**2)
 
 
 def fit(nm, spectra, samples, unknown, known, ids):
@@ -206,16 +199,6 @@ def main():
         return c / c.sum()
 
     OUT.mkdir(exist_ok=True)
-    sticks = warp(np.stack(np.meshgrid(*[np.linspace(0, 1, FORWARD_SIZE)] * (count - 1), indexing="ij"), axis=-1).reshape(-1, count - 1))
-    rest = np.ones(len(sticks))
-    concentrations = []
-    for stick in sticks.T:
-        concentrations.append(rest * stick)
-        rest = rest * (1 - stick)
-    concentrations = np.stack([*concentrations, rest], axis=-1)
-    raw = mix(concentrations)
-    forward = np.clip(raw, 0, 1)
-    (OUT / "forward.bin").write_bytes(forward.astype("<f4").tobytes())
     axis = np.linspace(0, 1, INVERSE_SIZE)
     grid = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1).reshape(-1, 3)
     linear = np.where(grid <= .04045, grid / 12.92, ((grid + .055) / 1.055)**2.4)
@@ -226,7 +209,7 @@ def main():
         "method": "Measured cobalt blue, chrome yellow lemon, eosin lake, bone black and zinc white oil paints (Revigo reconstruction of Van Gogh's palette); "
                   "K and S per wavelength from 100 um films over black and white, pure and mixed with zinc white and bone black; "
                   "plain linear two-constant KM mixing of weight concentrations; infinite-thickness reflectance shown specular-excluded; "
-                  "forward table clipped to the sRGB cube, inverse fitted with clipped and raw RGB error with near-white nodes stored as the white vertex, "
+                  "exact spectral decoder clipped to the sRGB cube, inverse fitted with clipped and raw RGB error with near-white nodes stored as the white vertex, "
                   "plus linear RGB residual",
         "source": "scripts/pigment_data/revigo (CC0, github.com/fligt/revigo-spectra; Geldof et al. 2018, doi:10.1186/s40494-018-0181-6); "
                   "the MIT spectral.rs D65/CIE matrix for the colour conversion",
@@ -238,24 +221,58 @@ def main():
         "measured_wavelengths_nm": [int(x) for x in nm_data],
         "extension": "380-390 nm hold the 400 nm value, 710-750 nm hold the 700 nm value",
         "inverse_size": INVERSE_SIZE,
-        "forward_size": FORWARD_SIZE,
-        "latent": "five concentrations in the order of primaries, then the linear RGB residual",
+        "latent": "18 measured pigment concentrations (the first five are RGB reconstruction primaries), then the linear RGB residual; see measured.json",
         "concentration_law": "linear",
         "unmix_raw_fit_weight": RAW_FIT_WEIGHT,
         "near_white_distance": NEAR_WHITE,
         "near_white_nodes": int(((white - linear).max(axis=1) < NEAR_WHITE).sum()),
         "white_linear_rgb": white.tolist(),
-        "raw_forward_range": [float(raw.min()), float(raw.max())],
-        "clipped_forward_fraction": float(((raw < 0) | (raw > 1)).any(axis=1).mean()),
         "wavelengths_nm": nm.tolist(),
         "reflectance": reflectance.tolist(),
         "absorption": absorption.tolist(),
         "scattering": scatter.tolist(),
         "sha256": {name: hashlib.sha256((OUT / name).read_bytes()).hexdigest()
-                   for name in ["forward.bin", "inverse.bin"]},
+                   for name in ["inverse.bin"]},
     }
     (OUT / "primaries.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    build_measured(fitted)
     print(json.dumps(provenance["sha256"], indent=2), flush=True)
+
+
+def build_measured(fitted):
+    from pigment_strength_fit import split_for_strengths
+
+    nm, spectra, samples = load_data()
+    provenance = json.loads((OUT / "primaries.json").read_text())
+    pure, pairs, fit_ids, test, selected = split_for_strengths(
+        samples, spectra, PRIMARIES, set(sum(provenance["samples_used"].values(), [])))
+    order = PRIMARIES + sorted(set(pure) - set(PRIMARIES))
+    used = dict(provenance["samples_used"])
+    rms = {}
+    for name in order[len(PRIMARIES):]:
+        ids = [pure[name]]
+        if name in fit_ids:
+            ids.append(fit_ids[name])
+        assert not set(ids) & set(test), "test mixtures cannot calibrate K or S"
+        found, residuals = fit(nm, spectra, samples, [name], fitted, ids)
+        fitted.update(found)
+        used[name] = ids
+        rms.update(residuals)
+    extend = lambda v: np.concatenate([np.full(2, v[0]), v, np.full(5, v[-1])])
+    coefficients = np.array([[extend(fitted[name][0]), extend(fitted[name][1])] for name in order])
+    (OUT / "measured.bin").write_bytes(coefficients.astype("<f4").tobytes())
+    (OUT / "measured.json").write_text(json.dumps({
+        "method": "Linear two-constant KM; each paint retains its own measured K and S. No additional strength multiplier or RGB residual for measured paints.",
+        "order": order,
+        "samples_used": used,
+        "additional_fit_rms_reflectance_over_black_and_white": rms,
+        "fit_set": fit_ids,
+        "test_set": test,
+        "selection_touched": selected,
+        "absorption": coefficients[:, 0].tolist(),
+        "scattering": coefficients[:, 1].tolist(),
+        "sha256": hashlib.sha256((OUT / "measured.bin").read_bytes()).hexdigest(),
+    }, indent=2) + "\n")
 
 
 if __name__ == "__main__":

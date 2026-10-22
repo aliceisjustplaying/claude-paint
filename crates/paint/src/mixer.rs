@@ -1,5 +1,5 @@
 //! Independent pigment mixing from Sochorová and Jamriška (2021), equations
-//! 1–14: five primary concentrations and an additive linear RGB residual.
+//! 1–14: measured pigment concentrations and an additive linear RGB residual.
 //! The primaries' K/S data are derived from measured reflectance of real oil
 //! paints (CC0 Revigo data, `scripts/pigment_data/revigo`); both tables are
 //! original. Only the MIT spectral.js D65/CIE conversion from `spectral.rs` is
@@ -8,40 +8,52 @@
 
 use crate::color::{Rgb, linear_to_srgb};
 
-pub const LATENT_SIZE: usize = 8;
+pub const LATENT_SIZE: usize = 21;
 const PRIMARIES: usize = 5;
+const PIGMENTS: usize = LATENT_SIZE - 3;
 const INVERSE_SIZE: usize = 33;
-const FORWARD_SIZE: usize = 21;
-const FORWARD_AXIS: [f32; FORWARD_SIZE] = {
-    let mut axis = [0.0; FORWARD_SIZE];
-    let mut i = 0;
-    while i < FORWARD_SIZE {
-        let a = i as f32;
-        let b = (FORWARD_SIZE - 1 - i) as f32;
-        axis[i] = a * a / (a * a + b * b);
-        i += 1;
-    }
-    axis
-};
-const FORWARD_SCALE: [f32; FORWARD_SIZE - 1] = {
-    let mut scale = [0.0; FORWARD_SIZE - 1];
-    let mut i = 0;
-    while i < FORWARD_SIZE - 1 {
-        scale[i] = 1.0 / (FORWARD_AXIS[i + 1] - FORWARD_AXIS[i]);
-        i += 1;
-    }
-    scale
-};
 const INVERSE: &[u8; INVERSE_SIZE * INVERSE_SIZE * INVERSE_SIZE * 2 * (PRIMARIES - 1)] = include_bytes!("mixer/inverse.bin");
-const FORWARD: &[u8; FORWARD_SIZE * FORWARD_SIZE * FORWARD_SIZE * FORWARD_SIZE * 12] = include_bytes!("mixer/forward.bin");
+const MEASURED: &[u8; PIGMENTS * 2 * crate::spectral::N * 4] = include_bytes!("mixer/measured.bin");
+const NAMES: [&str; PIGMENTS] = [
+    "CobaltBlue", "ChromeYellowOtero", "Eosin", "BoneBlack", "ZincWhite",
+    "BariumSulphate", "CalciumCarbonate", "ChromeYellow", "Cochineal", "EmeraldGreen",
+    "Eosin1Wax", "Eosin2PbWax", "LeadWhite", "Minium", "PrussianBlue", "UltramarineBlue",
+    "Vermillion", "ViridianGreen",
+];
+
+pub fn measured(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    let i = NAMES.iter().position(|&n| n == name)?;
+    let mut lat = [0.0; LATENT_SIZE];
+    lat[i] = 1.0;
+    Some(lat)
+}
+
+pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    measured(match name {
+        "lead white" => "LeadWhite",
+        "zinc white" => "ZincWhite",
+        "bone black" => "BoneBlack",
+        "cobalt blue" => "CobaltBlue",
+        "ultramarine blue" => "UltramarineBlue",
+        "Prussian blue" => "PrussianBlue",
+        "vermilion" | "orange vermilion" | "Chinese vermilion" => "Vermillion",
+        "chrome yellow" => "ChromeYellow",
+        "lemon chrome" => "ChromeYellowOtero",
+        "viridian" => "ViridianGreen",
+        "emerald green" => "EmeraldGreen",
+        "red lead" => "Minium",
+        "carmine lake" => "Cochineal",
+        _ => return None,
+    })
+}
 
 pub fn identity() -> u64 {
     use sha2::{Digest, Sha256};
     static IDENTITY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *IDENTITY.get_or_init(|| {
         let mut hash = Sha256::new();
-        hash.update(b"Stillwet mixer/latent8/km-linear/additive-linear-rgb/sqrt-stick/concentration-quadrilinear/v3");
-        hash.update(FORWARD);
+        hash.update(b"Stillwet mixer/latent21/km-linear/measured-ks/saunderson/additive-linear-rgb/v4");
+        hash.update(MEASURED);
         hash.update(INVERSE);
         u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
     })
@@ -50,17 +62,18 @@ pub fn identity() -> u64 {
 pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
     let c = inverse(rgb.map(linear_to_srgb));
     let last = (1.0 - c.iter().sum::<f32>()).max(0.0);
-    let mut lat = [c[0], c[1], c[2], c[3], last, 0.0, 0.0, 0.0];
+    let mut lat = [0.0; LATENT_SIZE];
+    lat[..PRIMARIES].copy_from_slice(&[c[0], c[1], c[2], c[3], last]);
     let base = pigment_rgb(&lat);
     for k in 0..3 {
-        lat[PRIMARIES + k] = rgb[k] - base[k];
+        lat[PIGMENTS + k] = rgb[k] - base[k];
     }
     lat
 }
 
 pub fn decode(lat: &[f32; LATENT_SIZE]) -> Rgb {
     let base = pigment_rgb(lat);
-    std::array::from_fn(|k| (base[k] + lat[PRIMARIES + k]).clamp(0.0, 1.0))
+    std::array::from_fn(|k| (base[k] + lat[PIGMENTS + k]).clamp(0.0, 1.0))
 }
 
 pub fn lerp(a: &Rgb, b: &Rgb, t: f32) -> Rgb {
@@ -73,13 +86,26 @@ pub fn lerp(a: &Rgb, b: &Rgb, t: f32) -> Rgb {
 }
 
 fn pigment_rgb(lat: &[f32; LATENT_SIZE]) -> Rgb {
-    let c: [f32; PRIMARIES] = std::array::from_fn(|k| lat[k].max(0.0));
-    let ratio = |a: f32, b: f32| {
-        let a = a.sqrt();
-        let b = b.sqrt();
-        if a + b > 0.0 { a / (a + b) } else { 0.0 }
-    };
-    forward(std::array::from_fn(|k| ratio(c[k], c[k + 1..].iter().sum())))
+    static COEFFICIENTS: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; PIGMENTS]> = std::sync::OnceLock::new();
+    let coefficients = COEFFICIENTS.get_or_init(|| std::array::from_fn(|p| std::array::from_fn(|ks| std::array::from_fn(|w| {
+        let offset = ((p * 2 + ks) * crate::spectral::N + w) * 4;
+        f32::from_le_bytes(MEASURED[offset..offset + 4].try_into().unwrap())
+    }))));
+    let mut absorption = [0.0; crate::spectral::N];
+    let mut scattering = [0.0; crate::spectral::N];
+    for p in 0..PIGMENTS {
+        let c = lat[p].max(0.0);
+        if c == 0.0 { continue; }
+        for w in 0..crate::spectral::N {
+            absorption[w] += c * coefficients[p][0][w];
+            scattering[w] += c * coefficients[p][1][w];
+        }
+    }
+    let reflectance = std::array::from_fn(|w| {
+        let r = crate::spectral::km(absorption[w] / scattering[w].max(1e-12));
+        (1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)
+    });
+    crate::spectral::to_rgb(&reflectance).map(|v| v.clamp(0.0, 1.0))
 }
 
 /// Concentrations of the first four primaries at an sRGB point, trilinear
@@ -105,40 +131,73 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
     out
 }
 
-/// The pigment mixture's linear RGB at a point of the square-root stick
-/// coordinates, quadrilinear over the forward grid, whose axes are dense at
-/// their ends (`FORWARD_AXIS`) to resolve the steep KM change near a pure
-/// pigment.
-fn forward(at: [f32; PRIMARIES - 1]) -> Rgb {
-    let p = at.map(|v| v.clamp(0.0, 1.0) * (FORWARD_SIZE - 1) as f32);
-    let lo = p.map(|v| (v as usize).min(FORWARD_SIZE - 2));
-    let t: [f32; PRIMARIES - 1] = std::array::from_fn(|k| {
-        let a = at[k].clamp(0.0, 1.0);
-        let b = 1.0 - a;
-        let concentration = a * a / (a * a + b * b);
-        ((concentration - FORWARD_AXIS[lo[k]]) * FORWARD_SCALE[lo[k]]).clamp(0.0, 1.0)
-    });
-    let mut out = [0.0; 3];
-    for corner in 0..(1 << (PRIMARIES - 1)) {
-        let mut weight = 1.0;
-        let mut index = 0;
-        for k in 0..PRIMARIES - 1 {
-            let bit = (corner >> k) & 1;
-            weight *= if bit == 0 { 1.0 - t[k] } else { t[k] };
-            index = index * FORWARD_SIZE + lo[k] + bit;
-        }
-        for (channel, value) in out.iter_mut().enumerate() {
-            let offset = index * 12 + channel * 4;
-            *value += weight * f32::from_le_bytes(FORWARD[offset..offset + 4].try_into().unwrap());
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::color::{hex, to_oklab};
+
+    #[test]
+    fn measured_tubes_keep_their_pigment_through_piles_and_brush_loads() {
+        let palette = crate::Palette::new("measured study", crate::palette::catalog());
+        let index = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = index("zinc white");
+        assert_eq!(palette.tubes.iter().filter(|t| tube(t.name).is_some()).count(), 15);
+        for name in ["Prussian blue", "carmine lake"] {
+            let pigment = index(name);
+            let a = tube("zinc white").unwrap();
+            let b = tube(name).unwrap();
+            assert_eq!(palette.tubes[pigment].color, decode(&b));
+            assert_eq!(palette.tubes[pigment].strength, 1.0);
+            let expected = std::array::from_fn(|k| 0.9 * a[k] + 0.1 * b[k]);
+            let pile = palette.pile(vec![(white, 0.9), (pigment, 0.1)]);
+            assert_eq!(pile.pigment_latent, expected);
+            assert_eq!(pile.color, decode(&expected));
+            assert_ne!(encode(&pile.color), expected);
+            for medium in [-0.3, 0.0, 0.5] {
+                let paint = pile.laid(medium).with_thinner(0.2);
+                assert_eq!(paint.latent().color, expected);
+                let mut knife = crate::Knife::new(20.0);
+                knife.load(paint, 0.5);
+                assert!((0..LATENT_SIZE).all(|k| (knife.paint().unwrap().latent()[k] - expected[k]).abs() < 1e-6));
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_only_tubes_and_mixed_recipes_keep_linear_latents() {
+        let palette = crate::Palette::new("mixed study", crate::palette::catalog());
+        let index = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let (rgb, measured) = (index("yellow ochre"), index("vermilion"));
+        let a = encode(&palette.tubes[rgb].color);
+        let b = tube("vermilion").unwrap();
+        assert_eq!(palette.tubes[rgb].strength, 0.8);
+        let pile = palette.pile(vec![(rgb, 0.5), (measured, 0.5)]);
+        let expected: [f32; LATENT_SIZE] = std::array::from_fn(|k| (0.8 * a[k] + b[k]) / 1.8);
+        assert!((0..LATENT_SIZE).all(|k| (pile.pigment_latent[k] - expected[k]).abs() < 1e-6));
+        assert_eq!(pile.paint(0.0).latent().color, pile.pigment_latent);
+        let nested = decode(&std::array::from_fn(|k| 0.25 * a[k] + 0.75 * b[k]));
+        let midpoint: [f32; LATENT_SIZE] = std::array::from_fn(|k| 0.5 * (a[k] + b[k]));
+        let direct = decode(&std::array::from_fn(|k| 0.5 * (midpoint[k] + b[k])));
+        assert!((0..3).all(|k| (nested[k] - direct[k]).abs() < 1e-6));
+    }
+
+    #[test]
+    fn measured_pigment_survives_wet_exchange_and_checkpoints() {
+        let palette = crate::Palette::new("checkpoint study", crate::palette::catalog());
+        let index = palette.tubes.iter().position(|t| t.name == "Prussian blue").unwrap();
+        let mut knife = crate::Knife::new(200.0);
+        knife.load(palette.pile(vec![(index, 1.0)]).paint(0.0), 0.5);
+        let mut canvas = crate::Canvas::new_window(16, 1.0, [0.3; 3], None).with_engine(crate::PIGMENT_MIXER);
+        canvas.knife(&mut knife, &[(300.0, 500.0), (700.0, 500.0)], (0.5, 0.5), Some(0.0), true, 0.0);
+        let pigment = NAMES.iter().position(|&n| n == "PrussianBlue").unwrap();
+        assert!(canvas.wet.lat.iter().any(|lat| lat[pigment] > 0.0));
+        let mut bytes = Vec::new();
+        canvas.write_state(&mut bytes, "measured pigment").unwrap();
+        let (restored, _) = crate::Canvas::read_state(&mut std::io::Cursor::new(&bytes)).unwrap();
+        let mut rebuilt = Vec::new();
+        restored.write_state(&mut rebuilt, "measured pigment").unwrap();
+        assert_eq!(rebuilt, bytes);
+    }
 
     #[test]
     fn round_trips_colors_and_keeps_linear_latents() {

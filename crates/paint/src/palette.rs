@@ -60,7 +60,8 @@ pub struct Tube {
 
 fn tube(name: &'static str, pigment: &'static str, color: &str, hiding: f32, stiff: f32, strength: f32, drying: f32) -> Tube {
     let (oa, density, drain) = pigment_oil(name);
-    Tube { name, pigment, color: hex(color), hiding, stiff, strength, drying, drying_3: drying, oa, density, drain }
+    let color = crate::mixer::tube(name).map_or_else(|| hex(color), |lat| crate::mixer::decode(&lat));
+    Tube { name, pigment, color, hiding, stiff, strength, drying, drying_3: drying, oa, density, drain }
 }
 
 /// Each pigment's oil absorption (g/100 g), density (g/cm³) and drained
@@ -530,33 +531,31 @@ impl Tube {
 /// pigments found, and the comment at each gives its basis. All numbers are
 /// estimates from the pigment literature, not measurements (the three
 /// chromate yellows' color and strength are from measurements of
-/// reconstructed pigments and test paints), except the tinting strengths
+/// reconstructed pigments and test paints), except the masstones and mixing
 /// of the fifteen tubes with a measured counterpart in the Revigo paint
 /// data (`scripts/pigment_data/revigo`): lead white, zinc white, bone
 /// black, cobalt, ultramarine and Prussian blue, the three vermilions,
 /// chrome yellow, lemon chrome, viridian, emerald green, red lead and
-/// carmine lake. Those are calibrated by `scripts/pigment_strength_fit.py`
-/// so the tube tints measured zinc white as the measured paint does at the
-/// ~10 % tint (`scripts/pigment_strengths.json` records the sample and
-/// residual of each); a large value means the tube's masstone is lighter
-/// than the real paint's, so more of it is needed to tint as the paint does.
+/// carmine lake. Those use their own measured K and S, with scalar strength
+/// 1.0: the spectra already carry their relative absorption and scattering.
+/// `mixer/measured.json` records the pure films and round-3 fit samples used.
 pub fn catalog() -> Vec<Tube> {
     vec![
         // ---- the tube box (round 19)
-        tube("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 0.49, drier::LEAD_WHITE),
+        tube("lead white", "basic lead carbonate", "#efe9dc", 0.82, 0.8, 1.0, drier::LEAD_WHITE),
         // semi-transparent cobalt glass, weak
         tube("smalt", "cobalt potash glass, coarse", "#5a6e9e", 0.3, 0.55, 0.45, drier::SMALT),
         tube("pale smalt", "a paler grade of smalt", "#8d9bb8", 0.35, 0.55, 0.35, drier::SMALT),
         tube("yellow ochre", "hydrated iron oxide earth", "#b98a36", 0.8, 0.7, 0.8, drier::OCHRE),
         tube("red earth", "iron oxide earth", "#9c4a30", 0.85, 0.7, 0.9, drier::RED_EARTH),
-        tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 6.77, drier::VERMILION),
+        tube("vermilion", "mercuric sulfide", "#cf3a24", 0.9, 0.75, 1.0, drier::VERMILION),
         tube("raw umber", "iron and manganese oxide earth", "#5c4c3a", 0.8, 0.65, 0.9, drier::UMBER),
         // (every box but the giverny box, which has no black)
-        tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 3.01, drier::BONE_BLACK).engine3(drier::engine3::BONE_BLACK),
-        tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 3.94, drier::COBALT_BLUE).engine3(drier::engine3::COBALT_BLUE),
-        tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 9.21, drier::CHROME_YELLOW),
+        tube("bone black", "charred bone (carbon, calcium phosphate)", "#1e1b19", 0.9, 0.7, 1.0, drier::BONE_BLACK).engine3(drier::engine3::BONE_BLACK),
+        tube("cobalt blue", "cobalt aluminate", "#2f55a8", 0.55, 0.6, 1.0, drier::COBALT_BLUE).engine3(drier::engine3::COBALT_BLUE),
+        tube("chrome yellow", "lead chromate", "#e8b21c", 0.9, 0.7, 1.0, drier::CHROME_YELLOW),
         // Prussian blue transparent and very strong [AP3 pp.196–197]
-        tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 11.6, drier::PRUSSIAN_BLUE).engine3(drier::engine3::PRUSSIAN_BLUE),
+        tube("Prussian blue", "iron ferrocyanide", "#172440", 0.35, 0.45, 1.0, drier::PRUSSIAN_BLUE).engine3(drier::engine3::PRUSSIAN_BLUE),
         // green earth translucent, weak, short of body [AP1 p.146; FIELD
         // p.129], its masstone from Munsell 7.5G/2.9/1.5 [AP1 Table 1]; its
         // drying rate is an estimate (an earth: medium)
@@ -571,7 +570,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("zinc white", "zinc oxide", "#f3f3ef", 0.6, 0.6, 1.0, drier::ZINC_WHITE),
         tube("lead-tin yellow", "lead-tin oxide", "#e3cc6a", 0.85, 0.75, 0.6, drier::LEAD_WHITE),
         tube("Naples yellow", "lead antimonate", "#e2b964", 0.85, 0.75, 0.6, drier::NAPLES_YELLOW),
-        tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 15.96, drier::CHROME_YELLOW),
+        tube("lemon chrome", "pale lead chromate with lead sulfate", "#eed83c", 0.8, 0.7, 1.0, drier::CHROME_YELLOW),
         tube("pale cadmium", "cadmium sulfide, a pale grade", "#f0c63c", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         tube("deep cadmium", "cadmium sulfide, a deep grade", "#e8861e", 0.9, 0.6, 1.2, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         tube("cadmium yellow", "cadmium sulfide", "#e8a51f", 0.85, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
@@ -584,9 +583,9 @@ pub fn catalog() -> Vec<Tube> {
         // Mars orange: "much transparency" in the period account (Salter's
         // Field, 1869), so less hiding than the other Mars tubes
         tube("Mars orange", "synthetic iron oxide, an orange grade", "#b8602a", 0.5, 0.7, 1.1, drier::MARS),
-        tube("red lead", "lead tetroxide", "#e0542b", 0.85, 0.8, 1.99, drier::RED_LEAD),
-        tube("orange vermilion", "mercuric sulfide, a yellower grade", "#dd4a22", 0.9, 0.75, 7.04, drier::VERMILION),
-        tube("Chinese vermilion", "mercuric sulfide, a deeper grade", "#b8282e", 0.9, 0.75, 6.82, drier::VERMILION),
+        tube("red lead", "lead tetroxide", "#e0542b", 0.85, 0.8, 1.0, drier::RED_LEAD),
+        tube("orange vermilion", "mercuric sulfide, a yellower grade", "#dd4a22", 0.9, 0.75, 1.0, drier::VERMILION),
+        tube("Chinese vermilion", "mercuric sulfide, a deeper grade", "#b8282e", 0.9, 0.75, 1.0, drier::VERMILION),
         tube("cadmium red", "cadmium sulfoselenide", "#c3321f", 0.9, 0.7, 1.1, drier::CADMIUM).engine3(drier::engine3::CADMIUM),
         tube("Mars red", "synthetic iron oxide", "#a33f2a", 0.9, 0.7, 1.2, drier::MARS),
         tube("Indian red", "nearly pure ferric oxide", "#7a3a33", 0.92, 0.7, 1.2, drier::RED_EARTH),
@@ -602,13 +601,13 @@ pub fn catalog() -> Vec<Tube> {
         tube("bone brown", "bone roasted until brown", "#4b3527", 0.6, 0.6, 0.9, drier::BONE_BROWN),
         tube("bitumen", "asphaltum", "#2e2017", 0.12, 0.3, 0.7, drier::BITUMEN),
         tube("cerulean blue", "cobalt stannate", "#3f82b3", 0.8, 0.7, 0.6, drier::COBALT_BLUE),
-        tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.31, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
+        tube("ultramarine blue", "synthetic ultramarine", "#232a8c", 0.3, 0.5, 1.0, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         // the last, palest extraction of natural ultramarine: mostly
         // colorless matter, so weak and transparent
         tube("ultramarine ash", "natural ultramarine, a pale last extraction", "#7d8aa8", 0.15, 0.5, 0.3, drier::ULTRAMARINE).engine3(drier::engine3::ULTRAMARINE),
         tube("Antwerp blue", "Prussian blue on an alumina base", "#26406c", 0.4, 0.45, 1.6, drier::ANTWERP_BLUE),
-        tube("viridian", "hydrated chromium oxide", "#1c4a40", 0.3, 0.5, 0.64, drier::VIRIDIAN),
-        tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 0.58, drier::COPPER),
+        tube("viridian", "hydrated chromium oxide", "#1c4a40", 0.3, 0.5, 1.0, drier::VIRIDIAN),
+        tube("emerald green", "copper aceto-arsenite", "#23a57a", 0.6, 0.6, 1.0, drier::COPPER),
         // cobalt pigments are siccative in oil; set at cobalt blue's rate
         tube("cobalt violet", "cobalt phosphate or arsenate", "#7e4c8e", 0.35, 0.55, 0.35, drier::COBALT_BLUE),
         // lead-free chromate yellows of the 1850s-80s, as reconstructed from
@@ -623,7 +622,7 @@ pub fn catalog() -> Vec<Tube> {
         tube("zinc yellow", "potassium zinc chromate", "#fcc400", 0.4, 0.6, 0.65, drier::ZINC_YELLOW),
         // cochineal lake: found with madder in late-19th-c. French paint
         // (Pozzi et al. 2014); fugitive. Estimates
-        tube("carmine lake", "carminic acid (cochineal) on alumina", "#861c3c", 0.1, 0.3, 66.86, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
+        tube("carmine lake", "carminic acid (cochineal) on alumina", "#861c3c", 0.1, 0.3, 1.0, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // flavonoid yellow lake (Butler 1984; NG TB 24); fugitive. Estimates
         tube("yellow lake", "flavonoid dye (weld, quercitron) on alumina and chalk", "#9e7525", 0.08, 0.35, 0.5, drier::MADDER_LAKE).engine3(drier::engine3::ALIZARIN),
         // Engine-3 drying follows the medium carbon-black class; estimate.
@@ -646,6 +645,7 @@ fn pick(names: &[&str]) -> Vec<Tube> {
 /// A mixture on the palette: parts of tubes.
 #[derive(Clone, Debug)]
 pub struct Mixture {
+    pub pigment_latent: [f32; crate::mixer::LATENT_SIZE],
     /// (tube index, fraction by volume), fractions sum to 1.
     pub parts: Vec<(usize, f32)>,
     /// Masstone of the mixture (pigment mix of the tubes' masstones, weighted
@@ -842,7 +842,7 @@ impl std::fmt::Debug for Palette {
 
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
-        let lat = tubes.iter().map(|t| crate::mixer::encode(&t.color)).collect();
+        let lat = tubes.iter().map(|t| crate::mixer::tube(t.name).unwrap_or_else(|| crate::mixer::encode(&t.color))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, lat, scat, pack, stock: name }
@@ -966,7 +966,7 @@ impl Palette {
     }
 
     /// Masstone, scattering per coat and stiffness of a mixture.
-    fn eval(&self, parts: &[(usize, f32)]) -> (Rgb, f32, f32) {
+    fn eval(&self, parts: &[(usize, f32)]) -> ([f32; crate::mixer::LATENT_SIZE], f32, f32) {
         let mut lat = [0.0f32; crate::mixer::LATENT_SIZE];
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
@@ -981,7 +981,7 @@ impl Palette {
         for v in lat.iter_mut() {
             *v /= wsum.max(1e-9);
         }
-        (crate::mixer::decode(&lat), sct, stf)
+        (lat, sct, stf)
     }
 
     /// The pile mixed from these parts (tube index, fraction by volume;
@@ -992,7 +992,8 @@ impl Palette {
     }
 
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
-        let (color, scatter, stiff) = self.eval(&parts);
+        let (pigment_latent, scatter, stiff) = self.eval(&parts);
+        let color = crate::mixer::decode(&pigment_latent);
         let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
         // each tube's share of the pile's oil: its volume times its oil share
         let (mut oil, mut packed, mut floor) = (0.0, 0.0, 0.0);
@@ -1005,7 +1006,7 @@ impl Palette {
         let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
-        Mixture { hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
+        Mixture { pigment_latent, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
     }
 
     /// How the parts (tube index, fraction by volume) look dry, out of oil
@@ -1071,7 +1072,7 @@ impl Mixture {
         // that share of it out (blot 0.5 leaves half)
         // (packed and drained oil stay the pigment's: medium and blotting
         // change only how much more or less the paint holds)
-        Paint { parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
+        Paint { pigment_latent: Some(self.pigment_latent), parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying

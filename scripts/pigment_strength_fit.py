@@ -84,7 +84,8 @@ def split_for_strengths(samples, spectra, primaries, fit_data):
 
 def predict(binary, rows):
     """rows of (rgb_a, s_a, rgb_b, s_b, t) -> linear RGB predictions."""
-    inputs = "".join(" ".join(f"{x:.6f}" for x in [*a, sa, *b, sb, t]) + "\n" for a, sa, b, sb, t in rows)
+    inputs = "".join((f"{a} {sa:.6f} {b} {sb:.6f} {t:.6f}" if isinstance(a, str) else
+                      " ".join(f"{x:.6f}" for x in [*a, sa, *b, sb, t])) + "\n" for a, sa, b, sb, t in rows)
     out = subprocess.run([binary], input=inputs, capture_output=True, text=True, check=True).stdout.splitlines()
     return [np.array([float(x) for x in line.split()]) for line in out if line.strip()]
 
@@ -116,6 +117,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mixpairs")
     parser.add_argument("--out", default=str(ROOT / "scripts/pigment_strengths.json"))
+    parser.add_argument("--measured", action="store_true")
     args = parser.parse_args()
     matrix = gen.spectral_array("XYZ_RGB") @ gen.spectral_array("CMF")
     _, spectra, samples = gen.load_data()
@@ -127,6 +129,21 @@ def main():
     print("fit set:", " ".join(f"{p}={sid}" for p, sid in sorted(fit.items())))
     print("test set:", " ".join(test))
     print("selection-touched, reported apart:", " ".join(selected))
+    if args.measured:
+        measured = json.loads((ROOT / "crates/paint/src/mixer/measured.json").read_text())
+        assert measured["test_set"] == test
+        assert not set(test) & set(sum(measured["samples_used"].values(), []))
+        Path(args.out).write_text(json.dumps({
+            "encoding": "measured-ks",
+            "calibration": "K and S from primary ladders, pure films and the fixed round-3 fit set only; no additional scalar fit",
+            "fit_set": {p: fit[p] for p in sorted(fit)},
+            "test_set": test,
+            "selection_touched": selected,
+            "paint_strengths": {p: 1.0 for p in measured["order"]},
+            "tube_strengths": {tube: {"paint": paint, "strength": 1.0} for tube, paint in COUNTERPARTS.items()},
+        }, indent=2) + "\n")
+        print("wrote", args.out)
+        return
     strengths = {p: 1.0 for p in primaries}
     errors = {}
     for paint, sid in sorted(fit.items()):

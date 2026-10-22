@@ -1,5 +1,5 @@
 {
-  "method": "Measured cobalt blue, chrome yellow lemon, eosin lake, bone black and zinc white oil paints (Revigo reconstruction of Van Gogh's palette); K and S per wavelength from 100 um films over black and white, pure and mixed with zinc white and bone black; plain linear two-constant KM mixing of weight concentrations; infinite-thickness reflectance shown specular-excluded; forward table clipped to the sRGB cube, inverse fitted with clipped and raw RGB error with near-white nodes stored as the white vertex, plus linear RGB residual",
+  "method": "Measured cobalt blue, chrome yellow lemon, eosin lake, bone black and zinc white oil paints (Revigo reconstruction of Van Gogh's palette); K and S per wavelength from 100 um films over black and white, pure and mixed with zinc white and bone black; plain linear two-constant KM mixing of weight concentrations; infinite-thickness reflectance shown specular-excluded; exact spectral decoder clipped to the sRGB cube, inverse fitted with clipped and raw RGB error with near-white nodes stored as the white vertex, plus linear RGB residual",
   "source": "scripts/pigment_data/revigo (CC0, github.com/fligt/revigo-spectra; Geldof et al. 2018, doi:10.1186/s40494-018-0181-6); the MIT spectral.rs D65/CIE matrix for the colour conversion",
   "primaries": [
     "CobaltBlue",
@@ -154,8 +154,7 @@
   ],
   "extension": "380-390 nm hold the 400 nm value, 710-750 nm hold the 700 nm value",
   "inverse_size": 33,
-  "forward_size": 21,
-  "latent": "five concentrations in the order of primaries, then the linear RGB residual",
+  "latent": "18 measured pigment concentrations (the first five are RGB reconstruction primaries), then the linear RGB residual; see measured.json",
   "concentration_law": "linear",
   "unmix_raw_fit_weight": 0.05,
   "near_white_distance": 0.07,
@@ -165,11 +164,6 @@
     0.8433920443612436,
     0.8083532021267764
   ],
-  "raw_forward_range": [
-    -0.03619726626730119,
-    0.9981066747446234
-  ],
-  "clipped_forward_fraction": 0.48484941973766077,
   "wavelengths_nm": [
     380,
     390,
@@ -817,7 +811,6 @@
     ]
   ],
   "sha256": {
-    "forward.bin": "5810ad246d8f45845ae90c6e6d68d6a39e021ef37f4f0dce7ff85aabb8e96242",
     "inverse.bin": "b6d86e4c8c9f9fc0ee430f5c2e9c6546da632b8fc858e509de3c0a2d7d770eed"
   }
 }

@@ -1,152 +1,113 @@
 # Independent pigment mixing (engine 9)
 
-New easel paintings record engine 9. Every engine number now uses the same
-independent pigment mixer; there is no compatibility feature or restricted
-mixing dependency. Existing logs remain replayable, with different colors.
+New easel paintings record engine 9. Every engine number uses the same
+independent pigment mixer. Existing logs remain replayable with different
+colors. There is no Mixbox runtime, table, coefficient or fitting input.
 
-## Model and provenance
+## Current design: measured tubes keep their pigment
 
-The implementation follows Sochorová and Jamriška, *Practical Pigment Mixing
-for Digital Painting* (2021), equations 1–14:
-https://doi.org/10.1145/3478513.3480549.
+Fifteen of the 54 catalog tubes have a Revigo counterpart. They enter the
+mixer as that paint's own wavelength-dependent absorption K and scattering
+S, not as an RGB reconstruction. Their displayed masstones come from the
+same coefficients, without an RGB residual. All fifteen use scalar strength
+1.0: their measured K and S already carry their relative tinting strength.
+The three vermilion grades share the single measured Vermillion paint.
+Their separate hiding, stiffness, drying and oil properties remain catalog
+properties, not new spectral fits.
 
-Five real oil paints are the primaries: cobalt blue, chrome yellow
-lemon, eosin lake (geranium lake), bone black and zinc white, from the Revigo
-project's reconstruction of Van Gogh's palette (Geldof, Proaño Gaibor,
-Ligterink, Hendriks and Kirchner 2018, https://doi.org/10.1186/s40494-018-0181-6).
-Their reflectance measurements are published under CC0 at
-https://github.com/fligt/revigo-spectra and vendored unchanged in
-`scripts/pigment_data/revigo` (credited in `THIRD_PARTY_NOTICES.md`).
-Each paint was drawn down 100 µm thick over the black and the white field
-of an opacity chart, pure and mixed by weight with zinc white and bone
-black, and measured 400–700 nm with specular included. The generator
-solves, per wavelength, the non-hiding Kubelka–Munk film equation with the
-source's Saunderson constants (k₁ 0.04, k₂ 0.49) for each paint's
-absorption K and scattering S, zinc white and bone black first from their
-own series, then each chromatic from its pure film, tints and tones. That
-is the paper's own method; the fit residuals per sample are recorded in
-`primaries.json`. The data's 400–700 nm grid is extended to the
-conversion's 380–750 nm by holding the end values.
+The other 39 tubes still enter through RGB: the same 33³ inverse table
+represents their catalog colors with five primary concentrations, plus an
+additive linear RGB residual. Their scalar strengths are unchanged,
+0.3–1.6. Those numbers weight the recipe; they do not make a measured and an
+RGB-only pigment equally strong. For an RGB-only tube, the five measured
+primaries in its recipe determine its wavelength-dependent tinting behavior.
+No missing pigment spectra or strength measurements are invented.
 
-For concentrations c, the mixture uses K = ΣcᵢKᵢ and S = ΣcᵢSᵢ (plain
-linear two-constant KM on weight shares; there is no concentration law),
-then the infinite-thickness reflectance 1 / (1 + K/S + √((K/S)(K/S + 2)))
-shown specular-excluded through the same Saunderson constants, the matte
-paint colour the catalog's masstones describe. D65/CIE integration gives
-linear RGB; the color-matching matrix comes from the existing MIT
-`spectral.rs` port. Both K and S are wavelength-dependent as measured:
-the lake and bone black scatter almost nothing, chrome yellow and zinc
-white scatter strongly, cobalt blue in between, and bone black's
-absorption is about ten times the lake's at 550 nm. These are the mixer's
-primaries, not the palette's separate tube hiding, tinting-strength or
-scattering parameters. Those rendering properties are unchanged.
+The latent has 21 floats: eighteen measured paint concentrations, followed
+by three linear RGB residual channels. Its first five paints remain cobalt
+blue, lemon chrome, eosin lake, bone black and zinc white. Thirteen more
+paints supply the remaining catalog counterparts and the measured-paint
+evaluation, including its white extenders. The order and all coefficients
+are recorded in `crates/paint/src/mixer/measured.json`.
 
-Which five paints, out of the three blues, two chrome yellows, three
-reds, bone black and two whites the data measures, is decided by
-`scripts/pigment_basis_select.py` on half of the measured two-paint
-mixtures only. The mixtures are split by paint before any score is read:
-the paints of odd-numbered series (eosin on wax, red lead, viridian,
-ultramarine) select, those of even-numbered series (eosin, cochineal,
-vermilion, emerald green, cobalt blue, Kremer chrome yellow) test. Each
-candidate basis encodes the selection paints from their measured masstone
-colours, mixes them at the measured weights and is scored by the mean
-OKLab distance to the measured mixture, leaving out its own fit data; the
-lowest score wins, with ties within 0.005 broken by the residual the
-catalog's tube colours need. `scripts/pigment_mixer_score.py` then scores
-the built tables on the test half, which no choice ever read, with main's
-mixer on the same inputs for reference, and reports the selection half
-separately.
+Mixing is an ordinary weighted latent average. For every wavelength,
+K = ΣcᵢKᵢ and S = ΣcᵢSᵢ, then
+R∞ = 1 / (1 + K/S + √((K/S)(K/S + 2))).
+There is no concentration law. The decoder evaluates this equation directly
+at 38 wavelengths, applies the source's specular-excluded Saunderson
+conversion and integrates through D65/CIE to linear RGB. The old 21⁴ forward
+table is removed: a fixed-dimensional table cannot decode arbitrary
+combinations of eighteen pigments. RGB residuals are computed against this
+same exact decoder, so RGB encode/decode round trips remain exact.
 
-The palette's tinting strengths are the one free parameter calibrated to
-the measurements. `scripts/pigment_strength_fit.py` fixes its own split
-first: the fit set is each measured paint's zinc-white tint nearest 10 %
-(the usual tinting-strength ratio) and, for lead white, its 10 % bone
-black tone; the test set is every other measured two-paint mixture (the
-50 % and 1 % tints, every lead-white and extender mixture), minus the
-primaries' own ladders and the mixtures the primary selection read. For
-each paint the strength is the weight factor that makes the tube's latent,
-averaged with the white's as `Palette::pile` does, land nearest the
-measured fit tint; the same fit with the catalog tube's own masstone in
-place of the measured one gives the fifteen catalog tubes with a measured
-counterpart their strengths (`scripts/pigment_strengths.json`). A
-strength scales how much of a tube's recipe enters a mix; it cannot change
-the recipe, so a tube whose masstone RGB encodes as black (cochineal,
-Prussian blue) tints in the recipe's hue, not the paint's, whatever its
-strength. `scripts/pigment_mixer_score.py` reports the test, fit and
-selection-touched sets apart.
+`Palette::pile` retains the mixed latent. `Mixture::paint`, medium,
+drying-rate changes, brush loads, knife loads and the wet layer carry it
+without decoding to RGB and reconstructing another pigment. A knife's
+reported paint also retains its existing latent. RGB-only piles retain
+their original RGB-derived recipes through those handoffs too. Baking a
+layer still renders its appearance to RGB; this change does not turn the
+layering optics into a spectral renderer.
 
-Nothing in the basis is fitted to a look or to the display gamut. The
-forward table is the KM mixture clipped to the sRGB
-cube. The inverse solves a constrained least-squares fit of that clipped
-output, five nonnegative concentrations summing to one, plus 0.05 times
-the raw RGB fit error. This regularizer can trade clipped fit error for
-raw fit error; it is not a lexicographic tie-break or a guarantee of a
-unique or smooth inverse. An additive RGB
-residual stores the difference between the requested RGB and the decoded
-pigment mixture. Thus the latent is eight floats: five concentrations
-and three residual channels. Weighted averages operate directly on those
-eight channels. Bone black is a primary because without it the inverse
-has to build every dark from the three chromatic absorbers, which is black
-in masstone but a navy in a tint; with it, grays and dark tints have a
-neutral absorber to use.
+## Measurement source and calibration split
 
-The inverse and forward functions use independently generated tables:
-the inverse 33³ nodes on an sRGB grid (four u16 concentrations each,
-288 KiB), the forward 21⁴ nodes over the four square-root stick
-coordinates (2.3 MiB, quadrilinear), with endpoint-dense, squared-ratio
-axes to resolve steep KM changes near a pure pigment. 21 nodes per axis
-keep the earlier 33³ table's interpolation error on catalog ramps (mean
-0.006 against 0.009 OKLab, 99th percentile 0.048 against 0.055). The residual is calculated against the same
-forward decoder used at runtime, so table interpolation does not introduce
-a color error in an encode/decode round trip.
+The Revigo reconstruction of Van Gogh's palette is documented in Geldof,
+Proaño Gaibor, Ligterink, Hendriks and Kirchner (2018),
+https://doi.org/10.1186/s40494-018-0181-6. Unchanged reflectance measurements
+and their CC0 license are vendored in `scripts/pigment_data/revigo` from
+https://github.com/fligt/revigo-spectra and credited in
+`THIRD_PARTY_NOTICES.md`.
 
-Mixing already encoded latents is linear. Decoding to RGB and encoding
-again can change the recipe and later mixing behavior, especially for
-colors outside the primaries' gamut. The existing palette/load and
-drying paths retain that approximation. Neither the coarse inverse nor
-the surrogate fit is a claim of measured physical pigment accuracy.
+The paints were drawn down 100 µm over black and white fields, pure and in
+weight mixtures, measured at 400–700 nm with specular included. Per
+wavelength, the generator solves the non-hiding KM film equation with the
+paper's Saunderson constants k₁ = 0.04 and k₂ = 0.49. Values outside the
+measured range hold the nearest endpoint to cover the existing MIT
+`spectral.rs` conversion's 380–750 nm range.
 
-## Reproduction
+The five RGB reconstruction primaries and their fits are unchanged from
+round 2. Their selection used the split committed in
+`scripts/pigment_basis_select.py`; their own measurement ladders are not
+test data. The RGB inverse table is byte-identical to round 3.
 
-`OPENBLAS_NUM_THREADS=1 uv run --script scripts/build_pigment_tables.py` regenerates both binary
-tables and `crates/paint/src/mixer/primaries.json`. The script pins its
-NumPy/SciPy build dependencies; neither is an engine runtime dependency.
-One BLAS thread fixes the optimizer's reduction order for reproduction.
-The JSON records the derived reflectance and K/S arrays, the samples each
-fit used and their residuals, the wavelength grid, the near-white node
-count, the clipped share of the forward grid and table SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
-are inputs to this generator.
+Every additional paint's K and S are derived from its pure film and, where
+available, its single round-3 fit tint. Lead white uses its pure film and
+08C. The extenders use only their pure films. There is no second scalar
+strength fit and no calibration on the remaining tint levels, mixtures with
+other whites or selection-touched mixtures. The generator asserts that no
+test mixture appears in its coefficient fit data.
 
-This round was checked against the independent mixer guards (the trace
-guard's bound now follows the measured strongest tinter), actual
-table/runtime diagnostics, the test-half score against measured paint
-mixtures and the main-vs-new sheet by eye. Passing the guards does not
-close remaining visual differences.
+`split_for_strengths` in `scripts/pigment_strength_fit.py` is unchanged.
+The eleven fit mixtures remain 01B 03B 04B 05B 06B 08C 09B 10B 11B 13B 14B.
+The seventeen test mixtures remain 03C 04C 04F 06C 08D 08E 08F 08G 10C 13C
+13F 13G 14C 16D 16F 17D 17F. The five previously selection-touched mixtures
+are reported separately. The test is not used to choose coefficients or
+strengths. No main output, picture or look target is a generation input.
+This preserves the committed split rather than claiming a fresh holdout:
+08E was previously read during round 2's primary selection.
 
-The implementation is project MIT code. The method's paper is cited, not
-redistributed. The public patent-record search found no matching pigment
-mixing patent by either author or Secret Weapons; that is a search result,
-not a patent-clearance opinion. The PR's evidence records the queries,
-license audit, mixing comparison and painting replay.
+## Reproduction and evaluation
 
-## Validation and visual comparison
+```sh
+OPENBLAS_NUM_THREADS=1 uv run --script scripts/build_pigment_tables.py
+cargo build --release --locked -p paint --example mixpairs
+cargo build --release --locked -p easel
+uv run --script scripts/pigment_strength_fit.py target/release/examples/mixpairs --measured
+uv run --script scripts/pigment_mixer_score.py target/release/examples/mixpairs \
+  --strengths scripts/pigment_strengths.json --out score.md --sheet real-paint.png
+```
 
-`notes/pigment-mixer-comparison.csv` contains only the independent mixer's
-linear RGB results for 1,045 mixtures across 95 ramps: all 91 pairs in the
-14-tube default box, three direct RGB pairs and lead white/ultramarine
-from the full catalog, each in 10% steps. Tube mixtures use the actual
-palette path and retain its tinting strengths. Old-engine samples and
-their comparison columns are retained outside the repository as review
-evidence, not as generator, fit or test inputs.
+Generation pins NumPy and SciPy and one BLAS thread. `primaries.json`
+records the original basis fits and inverse hash. `measured.json` records
+every coefficient, source sample, fit residual and coefficient-table hash.
+`pigment_strengths.json` records the unchanged evaluation split and unit
+measured strengths; `--measured` does not optimize a scalar.
 
-The independent mixer tests constrain hue, neutral grays, trace sensitivity,
-blue chroma, lightness and round trips without pinning any old-engine
-output. Passing them does not establish visual acceptance. The same eight
-ramps and ten recipe probes are rendered side by side with main, along
-with the gallery pair for *Last Light on the Tarn* (Claude Opus 5.5,
-round unknown), [studio f0dc5e](https://stillwet.art/studio/?p=paint-studio-f0dc5e).
-Those images are judged by eye only; no old-engine numeric output enters
-the color-basis fit.
+The scoring example accepts named measured paints as well as RGB inputs.
+The new mixer is scored using each paint's own K and S at the measured
+weight share. Main is scored only as a reference, from measured masstone
+RGBs and its own round-3 fit-set-calibrated strengths. Test, fit and
+selection-touched scores are labeled separately. The fit score is not an
+independent test. Guard thresholds and existing goldens are unchanged.
 
 ## Earlier constant edits
 
@@ -170,48 +131,35 @@ the synthetic basis and the credited CIE conversion matrix.
 
 ## Checkpoints and compatibility
 
-New canvas checkpoints use `PAINTC19`, identifying the mixer independently
-of the engine number and retaining the preceding material layout inside
-the envelope. Older checkpoints with wet paint are explicitly refused:
-their seven floats describe a different latent space. Empty older wet
-layers can be imported with their stale latents cleared. Old resumable
-replay checkpoints are also refused, because recorded brushes and tool
-events contain the old representation. New replay checkpoints use
-`EASLRP03`. Its compressed payload starts with the mixer identity before
-any tool state, even when no canvas exists. Replaying an old log is supported; interpreting an old wet
-latent as a new one is not.
+`PAINTC19` checkpoints and `EASLRP03` replay envelopes check the mixer
+identity before interpreting current latents. The first eight SHA-256 bytes
+of the exact decoder schema tag, measured coefficient bytes and inverse
+table identify this representation. Round-3 occupied checkpoints and tool
+snapshots are incompatible and explicitly refused; old Lua logs remain
+supported. Empty obsolete canvas wet layers can still be imported with
+their old latents cleared.
 
-The identity is the first eight SHA-256 digest bytes interpreted as a
-little-endian u64. The hash covers the exact schema tag in `mixer::identity`,
-then the forward table and the inverse table. The tag names the latent
-layout, concentration coordinates, additive residual and interpolation;
-a change to those semantics requires a new tag. Table changes alter the
-identity automatically. The hash is cached outside the pixel path. This
-is a compatibility fingerprint, not authentication. State dumps preserve
-the producing identity as `mixer.identity`, so reconstructing a historical
-dump never labels it with whichever tables happen to be checked out.
+State dumps retain their producing `mixer.identity`, so reconstruction
+never relabels historical dumps with current tables. The new representation
+is covered by RGB round trips, mixed measured/RGB associativity, catalog
+pigment preservation through pile/paint/knife handoffs and occupied
+measured-pigment checkpoint round trips.
 
-## Fixture and baseline policy
+## Fixture and licensing policy
 
-The mixer-dependent expected images and state captures are re-recorded
-with explicit authorization for this change. All existing state and image
-tolerances remain. Nonmixer state expectations retain main's values and
-the thinner's known rag physics mismatch remains explicitly diagnosed,
-not accepted as a new baseline pass. Only mixer-dependent colors, latents
-and piles are refreshed. Every image must meet its existing tolerance,
-including rag, and existing zero-solvent fields remain exactly zero.
-The package reconstructs every saved canvas checkpoint from its state
-dump and checks its FNV digest.
+No old-log golden or thinner capture is re-recorded in round 4. Expected
+images from a different table fingerprint remain diagnosed as failures,
+with unchanged tolerances. No noncolor transport parameter is calibrated.
 
-`UPDATE_GOLDEN=1` enables the existing scene recorder, the seeded numerical
-plough recorder and the engine-2 drying-sheet recorder. The old-log recorder
-is `scripts/tests/old_logs.sh <easel> --record <directory>`. The six thinner
-scenes are captured with `notes/thinner/baseline/tools/run_scenes.sh`; its
-manifest records the actual producing build and commands. Synthetic
-obsolete-checkpoint tests generate their own input instead of distributing
-the historical binary fixture.
+The model follows Sochorová and Jamriška, *Practical Pigment Mixing for
+Digital Painting* (2021), equations 1–14,
+https://doi.org/10.1145/3478513.3480549. The implementation is project MIT
+code. The method's paper is cited, not redistributed. The earlier public
+patent-record search found no matching pigment mixing patent by either
+author or Secret Weapons; that is a search result, not a patent-clearance
+opinion.
 
-Other generated fixture sources are in `notes/pigment-mixer-assets.md`.
-The complete named license/action table and retained reference source list
-are in `notes/pigment-mixer-licenses.md`; the portable per-package inventory
-is `notes/pigment-mixer-dependencies.json`.
+Generated fixture sources are in `notes/pigment-mixer-assets.md`. The
+license/action table and retained reference source list are in
+`notes/pigment-mixer-licenses.md`; the per-package inventory is
+`notes/pigment-mixer-dependencies.json`.

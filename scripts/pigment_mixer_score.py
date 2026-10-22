@@ -2,14 +2,14 @@
 # requires-python = ">=3.12"
 # dependencies = ["numpy==2.4.2", "scipy==1.17.1", "pillow==12.3.0"]
 # ///
-"""Score the built mixer against measured paint mixtures it never saw, with calibrated tinting strengths.
+"""Score the built mixer on the fixed round-3 measured-paint split.
 
 Every two-paint mixture in the Revigo data whose pure paints are measured is predicted from the two paints'
-measured colours (over the white field, specular excluded), the measured weight share and each paint's tinting
-strength from scripts/pigment_strengths.json (fitted on that file's fit set alone, see pigment_strength_fit.py),
-through the engine's own tables (the mixpairs example), and compared with the measured mixture in OKLab. The test
-set is the score; the fit set and the mixtures scripts/pigment_basis_select.py read while choosing the primaries
-are reported apart and labelled.
+own measured K and S when the calibration encoding is measured-ks, or from their measured masstone colours
+otherwise, at the measured weight share and strength from scripts/pigment_strengths.json. Predictions use the
+engine's own decoder (the mixpairs example), compared with the measured mixture in OKLab. The fixed test set is
+the score; the fit and selection-touched groups are reported apart. This preserves round 3's split, including
+08E, which round 2 had previously read during primary selection. No new fit reads that test sample.
 
     cargo build --release -p paint --example mixpairs
     uv run --script scripts/pigment_mixer_score.py target/release/examples/mixpairs --strengths scripts/pigment_strengths.json \
@@ -81,20 +81,21 @@ def main():
     assert calibration["test_set"] == test, "the strengths file was fitted on another split"
     colour = lambda n: measured_colour(spectra, pure[n], matrix) if n != "BoneBlack" else np.zeros(3)
     lines, groups = [], []
-    for name, ids in (("Test set (untouched by every fit and choice)", test), ("Fit set (the strengths were fitted on these)", sorted(fit.values())), ("Selection-touched (read while choosing the primaries)", selected)):
+    for name, ids in (("Fixed round-3 test set (08E was previously selection-touched)", test), ("Fit set (new K/S or reference strengths calibrated on these)", sorted(fit.values())), ("Selection-touched (read while choosing the primaries)", selected)):
         rows = []
         for sid in ids:
             paint, white, share = pairs[sid]
             rows.append((sid, paint, white, share))
         def inputs(strengths):
             out = []
+            input_colour = (lambda n: n) if strengths.get("encoding") == "measured-ks" else colour
             for sid, paint, white, share in rows:
                 s_paint = strengths["paint_strengths"].get(paint, 1.0)
                 s_white = strengths["paint_strengths"].get(white, 1.0)
                 if paint == "BoneBlack":
-                    out.append((colour(white), s_white, colour("BoneBlack"), 1.0, share))
+                    out.append((input_colour(white), s_white, input_colour("BoneBlack"), 1.0, share))
                 else:
-                    out.append((colour(white), s_white, colour(paint), s_paint, share))
+                    out.append((input_colour(white), s_white, input_colour(paint), s_paint, share))
             return out
         new = predict(args.mixpairs, inputs(calibration))
         reference = predict(args.reference, inputs(reference_calibration)) if args.reference else [None] * len(rows)

@@ -2866,7 +2866,7 @@ impl Knife {
         }
         let color = crate::mixer::decode(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { pigment_latent: Some(self.lat.color), parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {

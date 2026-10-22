@@ -1,5 +1,6 @@
 {
-  "mixpairs": "mixpairs",
+  "encoding": "measured-ks",
+  "calibration": "K and S from primary ladders, pure films and the fixed round-3 fit set only; no additional scalar fit",
   "fit_set": {
     "ChromeYellow": "14B",
     "Cochineal": "04B",
@@ -40,126 +41,85 @@
     "16E"
   ],
   "paint_strengths": {
-    "BoneBlack": 1.0,
-    "ChromeYellow": 1.9396,
-    "ChromeYellowOtero": 1.0,
     "CobaltBlue": 1.0,
-    "Cochineal": 229.8861,
-    "EmeraldGreen": 0.2548,
+    "ChromeYellowOtero": 1.0,
     "Eosin": 1.0,
-    "Eosin1Wax": 0.3321,
-    "Eosin2PbWax": 0.4288,
-    "LeadWhite": 0.3919,
-    "Minium": 1.9737,
-    "PrussianBlue": 60.6882,
-    "UltramarineBlue": 0.8638,
-    "Vermillion": 6.8931,
-    "ViridianGreen": 0.3604,
-    "ZincWhite": 1.0
-  },
-  "fit_residuals": {
-    "ChromeYellow": 0.0355,
-    "Cochineal": 0.1007,
-    "EmeraldGreen": 0.0425,
-    "Eosin1Wax": 0.0121,
-    "Eosin2PbWax": 0.0162,
-    "LeadWhite": 0.0159,
-    "Minium": 0.0046,
-    "PrussianBlue": 0.1654,
-    "UltramarineBlue": 0.0287,
-    "Vermillion": 0.046,
-    "ViridianGreen": 0.0572
+    "BoneBlack": 1.0,
+    "ZincWhite": 1.0,
+    "BariumSulphate": 1.0,
+    "CalciumCarbonate": 1.0,
+    "ChromeYellow": 1.0,
+    "Cochineal": 1.0,
+    "EmeraldGreen": 1.0,
+    "Eosin1Wax": 1.0,
+    "Eosin2PbWax": 1.0,
+    "LeadWhite": 1.0,
+    "Minium": 1.0,
+    "PrussianBlue": 1.0,
+    "UltramarineBlue": 1.0,
+    "Vermillion": 1.0,
+    "ViridianGreen": 1.0
   },
   "tube_strengths": {
     "lead white": {
-      "strength": 0.49,
-      "was": 1.0,
-      "sample": "08C",
-      "fit_residual": 0.0167
+      "paint": "LeadWhite",
+      "strength": 1.0
     },
     "zinc white": {
-      "strength": 1.0,
-      "was": 1.0,
-      "sample": null,
-      "fit_residual": 0.0
+      "paint": "ZincWhite",
+      "strength": 1.0
     },
     "bone black": {
-      "strength": 3.01,
-      "was": 1.1,
-      "sample": "07D",
-      "fit_residual": 0.0205
+      "paint": "BoneBlack",
+      "strength": 1.0
     },
     "cobalt blue": {
-      "strength": 3.94,
-      "was": 0.8,
-      "sample": "12B",
-      "fit_residual": 0.03
+      "paint": "CobaltBlue",
+      "strength": 1.0
     },
     "ultramarine blue": {
-      "strength": 1.31,
-      "was": 1.1,
-      "sample": "11B",
-      "fit_residual": 0.0172
+      "paint": "UltramarineBlue",
+      "strength": 1.0
     },
     "Prussian blue": {
-      "strength": 11.6,
-      "was": 3.0,
-      "sample": "13B",
-      "fit_residual": 0.0472
+      "paint": "PrussianBlue",
+      "strength": 1.0
     },
     "vermilion": {
-      "strength": 6.77,
-      "was": 1.0,
-      "sample": "06B",
-      "fit_residual": 0.0498
+      "paint": "Vermillion",
+      "strength": 1.0
     },
     "orange vermilion": {
-      "strength": 7.04,
-      "was": 1.0,
-      "sample": "06B",
-      "fit_residual": 0.054
+      "paint": "Vermillion",
+      "strength": 1.0
     },
     "Chinese vermilion": {
-      "strength": 6.82,
-      "was": 1.0,
-      "sample": "06B",
-      "fit_residual": 0.049
+      "paint": "Vermillion",
+      "strength": 1.0
     },
     "chrome yellow": {
-      "strength": 9.21,
-      "was": 1.0,
-      "sample": "14B",
-      "fit_residual": 0.0199
+      "paint": "ChromeYellow",
+      "strength": 1.0
     },
     "lemon chrome": {
-      "strength": 15.96,
-      "was": 0.8,
-      "sample": "15C",
-      "fit_residual": 0.0178
+      "paint": "ChromeYellowOtero",
+      "strength": 1.0
     },
     "viridian": {
-      "strength": 0.64,
-      "was": 0.9,
-      "sample": "09B",
-      "fit_residual": 0.0449
+      "paint": "ViridianGreen",
+      "strength": 1.0
     },
     "emerald green": {
-      "strength": 0.58,
-      "was": 0.6,
-      "sample": "10B",
-      "fit_residual": 0.0445
+      "paint": "EmeraldGreen",
+      "strength": 1.0
     },
     "red lead": {
-      "strength": 1.99,
-      "was": 0.8,
-      "sample": "05B",
-      "fit_residual": 0.0043
+      "paint": "Minium",
+      "strength": 1.0
     },
     "carmine lake": {
-      "strength": 66.86,
-      "was": 1.2,
-      "sample": "04B",
-      "fit_residual": 0.0332
+      "paint": "Cochineal",
+      "strength": 1.0
     }
   }
 }

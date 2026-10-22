@@ -54,7 +54,7 @@ fn public_palette_engine_changes_and_clones_keep_the_universal_cache() {
         let mut total = 0.0;
         for &(i, fraction) in &parts {
             let weight = fraction * p.tubes[i].strength;
-            let latent = mixer::encode(&p.tubes[i].color);
+            let latent = mixer::tube(p.tubes[i].name).unwrap_or_else(|| mixer::encode(&p.tubes[i].color));
             for k in 0..mixer::LATENT_SIZE { expected[k] += latent[k] * weight; }
             total += weight;
         }

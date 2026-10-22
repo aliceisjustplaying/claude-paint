@@ -5,7 +5,19 @@ use std::io::BufRead;
 // "r g b sa r g b sb t" weights each paint's latent by its tinting strength as well, as Palette::pile does.
 fn main() {
     for line in std::io::stdin().lock().lines() {
-        let v: Vec<f32> = line.unwrap().split_whitespace().map(|x| x.parse().unwrap()).collect();
+        let line = line.unwrap();
+        let fields: Vec<_> = line.split_whitespace().collect();
+        if fields.len() == 5 {
+            let la = paint::mixer::measured(fields[0]).expect("unknown measured paint");
+            let lb = paint::mixer::measured(fields[2]).expect("unknown measured paint");
+            let (sa, sb, t): (f32, f32, f32) = (fields[1].parse().unwrap(), fields[3].parse().unwrap(), fields[4].parse().unwrap());
+            let (wa, wb) = ((1.0 - t) * sa, t * sb);
+            let lat: [f32; LATENT_SIZE] = std::array::from_fn(|k| (la[k] * wa + lb[k] * wb) / (wa + wb).max(1e-9));
+            let c = decode(&lat);
+            println!("{} {} {}", c[0], c[1], c[2]);
+            continue;
+        }
+        let v: Vec<f32> = fields.iter().map(|x| x.parse().unwrap()).collect();
         let (a, sa, b, sb, t) = match v.len() {
             7 => ([v[0], v[1], v[2]], 1.0, [v[3], v[4], v[5]], 1.0, v[6]),
             9 => ([v[0], v[1], v[2]], v[3], [v[4], v[5], v[6]], v[7], v[8]),

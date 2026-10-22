@@ -19,9 +19,11 @@ linear RGB. The color-matching matrix comes from the existing MIT
 
 The primary reflectance curves and scattering functions are independently
 authored, not measured pigment data. Blue and magenta use broad smooth
-bands, yellow a rising edge and white a nearly flat reflector. White
-scatters more strongly than the chromatics; blue's scattering varies by
-about a factor of two, not an extreme wavelength-dependent multiplier.
+bands, yellow a two-step rising edge and white a nearly flat reflector.
+The blue and magenta are dark, weakly scattering pigments, so dark tube
+colors can be represented mostly by pigment rather than large negative
+RGB corrections. Scattering is wavelength-independent for every primary;
+white scatters more strongly than the chromatics.
 These are the mixer's virtual primaries, not the palette's separate tube
 hiding, tinting-strength or scattering parameters. Those rendering
 properties are unchanged.
@@ -49,9 +51,10 @@ the surrogate fit is a claim of measured physical pigment accuracy.
 
 ## Reproduction
 
-`uv run --script scripts/build_pigment_tables.py` regenerates both binary
+`OPENBLAS_NUM_THREADS=1 uv run --script scripts/build_pigment_tables.py` regenerates both binary
 tables and `crates/paint/src/mixer/primaries.json`. The script pins its
 NumPy/SciPy build dependencies; neither is an engine runtime dependency.
+One BLAS thread fixes the optimizer's reduction order for reproduction.
 The JSON records the generated K/S arrays, wavelength grid and table
 SHA-256 values. No old mixer code, coefficients, tables or sampled outputs
 are inputs to this generator.

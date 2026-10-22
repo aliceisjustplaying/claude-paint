@@ -40,13 +40,12 @@ def main():
     matrix = spectral_array("XYZ_RGB") @ spectral_array("CMF")
     nm = np.arange(380, 751, 10)
     reflectance = np.array([
-        .012 + .36 * np.exp(-((nm - 455) / 85)**2),
-        .012 + .7 * sigmoid((nm - 505) / 13),
-        .009 + .38 * np.exp(-((nm - 425) / 38)**2) + .7 * sigmoid((nm - 600) / 16),
+        .01 + .05 * np.exp(-((nm - 445) / 80)**2),
+        .003 + .5 * sigmoid((nm - 480) / 6) + .2 * sigmoid((nm - 505) / 13),
+        .004 + .04 * np.exp(-((nm - 430) / 40)**2) + .25 * sigmoid((nm - 600) / 16),
         np.full(38, .93),
     ])
-    scatter = np.array([.7, 1.1, .6, 8.0])[:, None] * np.ones((4, 38))
-    scatter[0] *= 1 - .5 * np.exp(-((nm - 545) / 60)**2)
+    scatter = np.array([.1, .8, .1, 3.0])[:, None] * np.ones((4, 38))
     absorption = scatter * (1 - reflectance)**2 / (2 * reflectance)
     boundary = np.array([
         (i, j, k, 16 - i - j - k)

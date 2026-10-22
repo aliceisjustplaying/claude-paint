@@ -132,4 +132,19 @@ mod tests {
             assert!(chroma < 0.025, "black/white {fraction} tint has a color cast: {chroma}");
         }
     }
+
+    #[test]
+    fn white_tints_keep_their_blue_chroma() {
+        let palette = crate::Palette::new("tint study", crate::palette::catalog());
+        let index = |name| palette.tubes.iter().position(|tube| tube.name == name).unwrap();
+        for (name, fraction, minimum_chroma) in [
+            ("Prussian blue", 0.1, 0.02),
+            ("ultramarine blue", 0.5, 0.08),
+        ] {
+            let color = palette.pile(vec![(index("lead white"), 1.0 - fraction), (index(name), fraction)]).color;
+            let [_, a, b] = to_oklab(color);
+            let chroma = (a * a + b * b).sqrt();
+            assert!(b < 0.0 && chroma > minimum_chroma, "lead white/{name} tint lost its blue chroma: {chroma}");
+        }
+    }
 }

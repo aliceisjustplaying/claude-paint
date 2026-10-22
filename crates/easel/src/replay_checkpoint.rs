@@ -584,6 +584,20 @@ fn hash_reader(reader: &mut impl Read) -> Result<[u8; 32], String> {
     Ok(hash.finalize().into())
 }
 
+fn read_saved(reader: &mut impl Read, limit: u64) -> Result<Saved, String> {
+    let options = bincode::DefaultOptions::new().with_fixint_encoding().with_limit(limit);
+    let identity = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
+    let done = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
+    let count: usize = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
+    let mut events = Events::default();
+    for _ in 0..count {
+        events.push(options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?)?;
+    }
+    let state = options.deserialize_from(&mut *reader).map_err(|e| e.to_string())?;
+    let digests = options.deserialize_from(reader).map_err(|e| e.to_string())?;
+    Ok(Saved { identity, done, events, state, digests })
+}
+
 fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
     let result = (|| {
         let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
@@ -596,7 +610,7 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         let mut elapsed = [0; 8];
         f.read_exact(&mut elapsed).map_err(|e| e.to_string())?;
         let mut reader = zstd::stream::read::Decoder::new(f).map_err(|e| e.to_string())?;
-        let saved = bincode::DefaultOptions::new().with_fixint_encoding().with_limit(4 << 30).deserialize_from(&mut reader).map_err(|e| e.to_string())?;
+        let saved = read_saved(&mut reader, 4 << 30)?;
         let has_canvas: bool = bincode::deserialize_from(&mut reader).map_err(|e| e.to_string())?;
         let (canvas, header) = if has_canvas {
             let (canvas, header) = paint::Canvas::read_state(&mut reader).map_err(|e| e.to_string())?;
@@ -689,6 +703,34 @@ print(counter,rand(),drying(300,300))
         let mut bytes = Vec::new();
         s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
         bytes
+    }
+
+    #[test]
+    fn checkpoint_budget_is_per_record_not_per_history() {
+        let limit = 64 << 10;
+        let mut saved = Saved {
+            identity: Identity { build: [1; 32], source: [2; 32], width: 64, environment: Vec::new() },
+            done: 20,
+            events: Events::default(),
+            state: State::capture(&session().st),
+            digests: Some(vec!["kept".into()]),
+        };
+        for _ in 0..20 { saved.events.push(vec![7; 8 << 10]).unwrap(); }
+        let mut bytes = encode(&saved).unwrap();
+        assert!(bytes.len() > limit as usize);
+        bytes.push(0);
+        let mut reader = bytes.as_slice();
+        let restored = read_saved(&mut reader, limit).unwrap();
+        assert_eq!(restored.identity, saved.identity);
+        assert_eq!(restored.done, saved.done);
+        assert_eq!(encode(&restored.events).unwrap(), encode(&saved.events).unwrap());
+        assert_eq!(encode(&restored.state).unwrap(), encode(&saved.state).unwrap());
+        assert_eq!(restored.digests, saved.digests);
+        assert_eq!(reader, [0]);
+
+        saved.events = Events::default();
+        saved.events.push(vec![0; limit as usize]).unwrap();
+        assert!(read_saved(&mut encode(&saved).unwrap().as_slice(), limit).err().unwrap().contains("size limit"));
     }
 
     #[test]

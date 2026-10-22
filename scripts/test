@@ -97,6 +97,7 @@ rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
+  replay_checkpoint::tests::checkpoint_budget_is_per_record_not_per_history \
   replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
   replay_checkpoint::tests::batch_identity_is_only_built_for_checkpoints_or_frames \

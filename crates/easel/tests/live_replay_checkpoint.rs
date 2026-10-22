@@ -525,7 +525,7 @@ fn stale_rebuild_after_executable_replacement(state_store: bool) {
     let revision = state_store.then(|| studio.bytes("state/CURRENT"));
     let old_inode = std::fs::metadata(&studio.binary).unwrap().ino();
     let replacement = studio.binary.with_extension("replacement");
-    std::fs::copy(env!("CARGO_BIN_EXE_easel"), &replacement).unwrap();
+    assert!(Command::new("cp").arg(env!("CARGO_BIN_EXE_easel")).arg(&replacement).status().unwrap().success());
     std::fs::rename(replacement, &studio.binary).unwrap();
     assert_ne!(std::fs::metadata(&studio.binary).unwrap().ino(), old_inode);
     let failed = studio.cmd(&["do", "for i=1,1000 do t['x' .. i] = i end; for i=1,1000 do t['x' .. i] = nil end; error('force stale rebuild')"]);

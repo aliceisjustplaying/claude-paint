@@ -119,5 +119,5 @@ fn unknown_checkpoint_mixer_identity_is_refused() {
     let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let identity = 16 + header_len;
     bytes[identity..identity + 8].copy_from_slice(&2u64.to_le_bytes());
-    assert!(Canvas::read_state(&mut Cursor::new(bytes)).err().unwrap().to_string().contains("mixer identity is unknown"));
+    assert!(Canvas::read_state(&mut Cursor::new(bytes)).err().unwrap().to_string().contains("obsolete pigment representation"));
 }

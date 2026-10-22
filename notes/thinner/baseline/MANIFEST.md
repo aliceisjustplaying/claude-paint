@@ -7,10 +7,16 @@ table hashes identify the capture without treating it as finished.
 ## Producing build
 
 Recorded on 2026-10-22 from source
-`116943558560499a8950e0cb99eb91b477d3ae09` on Linux x86_64.
+`0c1872d6af305f982c4bb424bef015133c75bfcc` on Linux x86_64.
 The test-profile easel was built with `profile.test.debug=0`.
 Its SHA-256 is
-`7f5c05849e74d3236e5caa22ab052430b27e5481d32f11a881406bbea21bfa6d`.
+`42c9caa49b5479abe865441ffe6ec9760cabdb910ce82ce8891fbafada3d4867`.
+
+The producing mixer identity is `5477582544128984857`
+(`0x4c04484d6ab04719`). It fingerprints the two tables and the decoder
+schema, independently of the engine number. Each dump preserves it in
+the scalar `u64` field `mixer.identity`; reconstruction copies this value
+instead of labeling an old dump with the current checkout's tables.
 
 The Nix development shell supplied the toolchain. The isolated sakaki job
 used `MemoryMax=6G`, `CPUQuota=400%`, `nice -n 10`,
@@ -29,7 +35,9 @@ All 27 stored dumps combine main `d94eafd60` physics with this capture's
 Every other pre-existing value is retained exactly from main, including
 rag loads, wet volumes, hiding, floors, drying clocks and bristle volumes.
 The field audit checks both halves exactly, not only within tolerance.
-New solvent fields are zero.
+New solvent fields are zero. The new identity metadata equals the
+producing capture exactly; it is not a physics-field exception or an
+ignored comparison field.
 
 These are field-transplanted expectations, not untouched replay dumps.
 The `canvas=` hashes in state headers and `ref/digest/` are reconstructed

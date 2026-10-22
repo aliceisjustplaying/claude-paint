@@ -1521,7 +1521,7 @@ mod tests {
     fn checkpoint_base_format(bytes: &[u8]) -> u64 {
         assert_eq!(&bytes[..8], b"PAINTC19");
         let header = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
-        assert_eq!(u64::from_le_bytes(bytes[16 + header..24 + header].try_into().unwrap()), 1);
+        assert_eq!(u64::from_le_bytes(bytes[16 + header..24 + header].try_into().unwrap()), paint::mixer::identity());
         u64::from_le_bytes(bytes[24 + header..32 + header].try_into().unwrap())
     }
 

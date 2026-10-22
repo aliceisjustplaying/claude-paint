@@ -16,7 +16,7 @@ fn synthetic_v7() -> Vec<u8> {
     assert_eq!(&current[..8], b"PAINTC19");
     let header_len = u64::from_le_bytes(current[8..16].try_into().unwrap()) as usize;
     let envelope = 16 + header_len;
-    assert_eq!(u64::from_le_bytes(current[envelope..envelope + 8].try_into().unwrap()), 1);
+    assert_eq!(u64::from_le_bytes(current[envelope..envelope + 8].try_into().unwrap()), paint::mixer::identity());
     assert_eq!(u64::from_le_bytes(current[envelope + 8..envelope + 16].try_into().unwrap()), 8);
     assert_eq!(u64::from_le_bytes(current[envelope + 16..envelope + 24].try_into().unwrap()), 0);
     assert_eq!(u64::from_le_bytes(current[current.len() - 8..].try_into().unwrap()), 1);

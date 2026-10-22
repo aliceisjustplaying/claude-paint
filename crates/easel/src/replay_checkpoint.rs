@@ -997,7 +997,7 @@ print(counter,rand(),drying(300,300))
                 }
             });
             assert_eq!(live.trace.events.len(), 1024);
-            let output = std::process::Command::new("/bin/ps")
+            let output = std::process::Command::new(if cfg!(target_os = "macos") { "/bin/ps" } else { "ps" })
                 .args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().unwrap();
             assert!(output.status.success());
             let rss: usize = std::str::from_utf8(&output.stdout).unwrap().trim().parse().unwrap();

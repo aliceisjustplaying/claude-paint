@@ -167,8 +167,10 @@ def read_approvals(repo):
     if not git_ok(repo, "rev-parse", "--verify", "-q", APPROVALS_REF):
         return []
     out = []
-    for line in git(repo, "notes", "--ref=golden-approvals", "list").splitlines():
-        note, obj = line.split()
+    notes = [line.split() for line in git(repo, "notes", "--ref=golden-approvals", "list").splitlines()]
+    types = git(repo, "cat-file", "--batch-check=%(objecttype)",
+                input="".join(obj + "\n" for _, obj in notes)).splitlines()
+    for (note, obj), kind in zip(notes, types):
         text = git(repo, "cat-file", "blob", note)
         for raw in text.splitlines():
             raw = raw.strip()
@@ -180,6 +182,8 @@ def read_approvals(repo):
                 out.append({"attached_to": obj, "invalid": "not JSON"})
                 continue
             a = dict(a, attached_to=obj) if isinstance(a, dict) else {"attached_to": obj}
+            if kind != "commit":
+                a["invalid"] = "not an available commit"
             out.append(a)
     return out
 

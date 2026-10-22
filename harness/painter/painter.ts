@@ -189,7 +189,7 @@ export default function painter(pi: ExtensionAPI) {
 			console.error(`painter: usage limit since ${new Date(limited.since).toISOString()}; settling on it`);
 			return undefined;
 		}
-		const signal = ctx.signal;
+		const signal = ctx.signal ? AbortSignal.any([sitting.signal, ctx.signal]) : sitting.signal;
 		if (signal?.aborted) return undefined;
 		console.error(`painter: usage limit; asking again in ${Math.round(wait / 60_000)} min`);
 		await new Promise<void>((resolve) => {

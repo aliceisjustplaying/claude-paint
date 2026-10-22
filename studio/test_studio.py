@@ -1342,6 +1342,65 @@ def test_the_event_slider_is_named_and_described_by_its_position():
     assert 'aria-describedby="pos"' in scrub and 'id="pos"' in html
 
 
+def test_rewound_event_total_refreshes_after_a_shorter_epoch_and_append():
+    lines = open(os.path.join(HERE, "index.html")).readlines()
+    functions = []
+    for name in ("reset", "poll", "show", "status"):
+        first = next(i for i, line in enumerate(lines)
+                     if line.startswith((f"function {name}(", f"async function {name}(")))
+        last = first if lines[first].rstrip().endswith("}") else next(
+            i for i in range(first + 1, len(lines)) if lines[i].rstrip() == "}")
+        functions.append("".join(lines[first:last + 1]))
+    script = r"""
+const assert = require('node:assert/strict');
+const elements = new Map(), noop = () => {};
+const $ = id => {
+  if (!elements.has(id)) elements.set(id, {classList:{toggle:noop}, appendChild:noop, querySelector:() => ({})});
+  return elements.get(id);
+};
+const document = {createDocumentFragment:() => ({})};
+const stop = noop, clearCode = noop, noPicture = noop, stripEnd = noop, ticks = noop,
+  refreshLiveCode = noop, warmSoon = noop, codeAt = noop, journal = noop, journalScroll = noop,
+  doing = noop, ago = noop, outcomeLabel = noop, qOf = noop, easelClockAt = noop;
+const P = () => 'fixture', stopped = () => true, sittingAt = () => 0, paintedFor = () => 0, fmt = String;
+let renders = 0;
+const pictures = () => renders++;
+let Q = 'p=fixture', gen = 0, busy = false, STATIC = false, HOSTED = false,
+  epoch = null, events = [], nUpd = 0, pos = 0, live = true, playing = null,
+  sitStarts = [], nSittings = 0, allSessions = [], sessionsLoaded = false,
+  disconnected = false, response;
+const fetch = async () => ({ok:true, headers:{get:() => null}, json:async () => structuredClone(response)});
+""" + "\n".join(functions) + r"""
+(async () => {
+  for (STATIC of [false, true]) {
+    reset(); live = true;
+    const fixture = Array.from({length:16}, (_, i) => ({kind:'say', text:String(i), ts:'2026-10-06T10:00:00Z'}));
+    response = {epoch:1, sittings:1, events:fixture};
+    await poll();
+    live = false; show(14);
+    assert.equal($('pos').textContent, '15/16');
+    response = {epoch:2, sittings:1, events:fixture.slice(0, 2)};
+    lastStatic = 0; await poll();
+    assert.equal($('pos').textContent, '2/2');
+    assert.equal(pos, 1);
+    assert.equal($('scrub').max, 1);
+    const previousRenders = renders;
+    response.events = STATIC ? fixture.slice(0, 3) : fixture.slice(2, 3);
+    lastStatic = 0; await poll();
+    assert.equal(events.length, 3);
+    assert.equal($('scrub').max, 2);
+    assert.equal($('scrub').value, 1);
+    assert.equal(pos, 1);
+    assert.equal(live, false);
+    assert.equal(renders, previousRenders, 'appending while rewound does not redraw the selection');
+    assert.equal($('pos').textContent, '2/3');
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run(["node", "-"], input=script, text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+
+
 def test_ask_critic_shows_the_note_and_the_whole_reply(home, server):
     _, studio, log = home
     reply = "The horizon sits too high. " * 100

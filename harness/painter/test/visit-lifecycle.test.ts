@@ -56,6 +56,50 @@ test("a visit runs its supervisor with Node when the extension host is pi", asyn
 	}
 });
 
+for (const stopReason of ["error", "aborted"]) {
+	for (const stdout of ["", "Printed critique"]) test(`a terminal critic ${stopReason} rejects a zero exit with ${stdout ? "printed text" : "empty stdout"}`, async () => {
+		const f = fixture();
+		writeFileSync(join(f.dir, "notes/critic.md"), "previous notes");
+		const entries = [
+			{ message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Lift the sky." }] } },
+			{ message: { role: "assistant", stopReason, errorMessage: "provider unavailable", content: [] } },
+		];
+		writeFileSync(f.pi, `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const sessions = process.argv[process.argv.indexOf('--session-dir') + 1];
+fs.mkdirSync(sessions, { recursive: true });
+fs.writeFileSync(path.join(sessions, 'a.jsonl'), ${JSON.stringify(entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n")});
+process.stdout.write(${JSON.stringify(stdout)});
+`, { mode: 0o755 });
+		await assert.rejects(visit(f.dir, f.critic, "sitting", undefined, f.pi), /the critic couldn't visit: provider unavailable/);
+		assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "previous notes");
+		const log = readFileSync(join(f.critic.dir, "visits.log"), "utf8");
+		assert.match(log, /sitting: failed: the critic couldn't visit: provider unavailable/);
+		assert.doesNotMatch(log, /sitting: exit 0/);
+	});
+}
+
+test("a healthy critic completion after transient errors accepts the session reply with empty stdout", async () => {
+	const f = fixture();
+	const entries = [
+		{ message: { role: "assistant", stopReason: "error", errorMessage: "temporary provider error", content: [] } },
+		{ message: { role: "assistant", stopReason: "aborted", content: [] } },
+		{ message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Lift the sky." }] } },
+	];
+	writeFileSync(f.pi, `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const sessions = process.argv[process.argv.indexOf('--session-dir') + 1];
+fs.mkdirSync(sessions, { recursive: true });
+fs.writeFileSync(path.join(sessions, 'a.jsonl'), ${JSON.stringify(entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n")});
+`, { mode: 0o755 });
+	const notes = await visit(f.dir, f.critic, "sitting", undefined, f.pi);
+	assert.equal(notes, "From the critic's visit at the end of a sitting:\n\nLift the sky.\n");
+	assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), notes);
+	assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /sitting: exit 0, 0 characters/);
+});
+
 test("aborting a visit escalates past an ignored SIGTERM and preserves the previous notes", async () => {
 	const f = fixture();
 	const descendantFile = join(f.dir, "descendant");

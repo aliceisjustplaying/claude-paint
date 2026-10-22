@@ -95,10 +95,11 @@ rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
 rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
-check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py" "$passed"
+check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py scripts/tests/golden_approve_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
+  replay_checkpoint::tests::checkpoint_budget_is_per_record_not_per_history \
   replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
   replay_checkpoint::tests::batch_identity_is_only_built_for_checkpoints_or_frames \
@@ -113,7 +114,8 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::live_resume_rejects_missing_and_changed_prefix_before_reconstruction \
   replay_checkpoint::tests::live_checkpoint_uses_its_startup_identity \
   replay_checkpoint::tests::live_scope_restores_both_traces_on_unwind \
-  replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure
+  replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure \
+  replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'

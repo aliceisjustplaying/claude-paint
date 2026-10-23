@@ -197,10 +197,27 @@ fn put_all(w: &mut impl Write, v: impl Iterator<Item = f32>) -> io::Result<()> {
     w.write_all(&buf)
 }
 
+/// `n` floats, read through a small buffer: the only allocation is the result
+/// (a 2400 px canvas's latents are close to a gigabyte, and a canvas is read
+/// back beside the live one when a chunk is rolled back).
 fn get_all(r: &mut impl Read, n: usize) -> io::Result<Vec<f32>> {
-    let mut bytes = vec![0u8; n * 4];
-    r.read_exact(&mut bytes)?;
-    Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
+    let mut v = Vec::with_capacity(n);
+    get_into(r, n, |x| v.push(x))?;
+    Ok(v)
+}
+
+fn get_into(r: &mut impl Read, n: usize, mut put: impl FnMut(f32)) -> io::Result<()> {
+    let mut buf = [0u8; 1 << 16];
+    let mut left = n * 4;
+    while left > 0 {
+        let take = left.min(buf.len());
+        r.read_exact(&mut buf[..take])?;
+        for b in buf[..take].as_chunks::<4>().0 {
+            put(f32::from_le_bytes(*b));
+        }
+        left -= take;
+    }
+    Ok(())
 }
 
 fn bad(msg: &str) -> io::Error {
@@ -692,16 +709,28 @@ impl Canvas {
         c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
         c.film = get_all(r, n)?;
-        let mut wet = crate::wet::Wet::new(n);
+        // every per-pixel field is read below (the floor is not stored), so none is
+        // allocated twice: a 2400 px canvas's latents alone are close to a gigabyte
+        let mut wet = crate::wet::Wet::new(0);
+        wet.floor = vec![0.0; n];
         wet.vol = get_all(r, n)?;
         let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
-        let lat = get_all(r, n * width)?;
         if own_mixer {
-            wet.lat = lat.chunks_exact(width).map(|stored| {
-                let mut color = [0.0; LAT];
-                color[..width].copy_from_slice(stored);
-                crate::wet::Latent::from_color(color)
-            }).collect();
+            // the stored latents go straight into the pixels' (no copy of them all as floats)
+            let mut lat = Vec::with_capacity(n);
+            let (mut color, mut k) = ([0.0; LAT], 0);
+            get_into(r, n * width, |x| {
+                color[k] = x;
+                k += 1;
+                if k == width {
+                    lat.push(crate::wet::Latent::from_color(color));
+                    (color, k) = ([0.0; LAT], 0);
+                }
+            })?;
+            wet.lat = lat;
+        } else {
+            get_into(r, n * width, |_| {})?;
+            wet.lat = vec![crate::wet::Latent::default(); n];
         }
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')

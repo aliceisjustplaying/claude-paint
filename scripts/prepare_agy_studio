@@ -14,11 +14,11 @@ CRITIC_READING = (
     "and whenever you ask for a visit with `ask_critic`. The critic looks at the\n"
     "painting with the same `look` you use and reads your journal and the note\n"
     "you give `ask_critic` (kept in notes/to_critic.md); it doesn't paint. It\n"
-    "writes whether it thinks the picture is finished and, if not, what it would\n"
-    "fix and why, in notes/critic.md, which you get at the start of your next\n"
-    "sitting or as `ask_critic`'s reply. It doesn't see your code, masks or\n"
-    "mixtures: weigh what it sees against the picture, and treat a method it\n"
-    "suggests as one way to try, at the passage's real scale."
+    "writes whether it thinks the picture is finished and, if not, what matters\n"
+    "most to the picture and why, in notes/critic.md, which you get at the start\n"
+    "of your next sitting or as `ask_critic`'s reply. It doesn't see your code,\n"
+    "masks or mixtures: weigh what it sees against the picture, and treat a\n"
+    "method it suggests as one way to try, at the passage's real scale."
 )
 
 

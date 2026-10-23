@@ -307,7 +307,7 @@
     "id": "oil-ground",
     "title": "Oil ground handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
         62,
@@ -326,11 +326,11 @@
     "id": "oil-spatter",
     "title": "Oil spatter at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        122,
-        132
+        123,
+        133
       ]
     ],
     "keywords": [
@@ -343,11 +343,11 @@
     "id": "oil-loading",
     "title": "Uneven paint loading at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        172,
-        178
+        173,
+        179
       ]
     ],
     "keywords": [
@@ -362,11 +362,11 @@
     "id": "oil-impasto",
     "title": "Impasto handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        196,
-        207
+        197,
+        208
       ]
     ],
     "keywords": [
@@ -380,11 +380,11 @@
     "id": "oil-knife",
     "title": "Knife handling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        209,
-        219
+        210,
+        220
       ]
     ],
     "keywords": [
@@ -398,11 +398,11 @@
     "id": "oil-blending",
     "title": "Blending at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        220,
-        233
+        221,
+        234
       ]
     ],
     "keywords": [
@@ -417,11 +417,11 @@
     "id": "oil-glazes",
     "title": "Glazing and scumbling at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        234,
-        251
+        235,
+        252
       ]
     ],
     "keywords": [
@@ -438,11 +438,11 @@
     "id": "oil-rag-time",
     "title": "Rag handling and drying time at the easel",
     "source": "notes/techniques.md",
-    "sha256": "f8abd88ef2505fa85e9cfae075d0119a155804d1a0e4a592c22bba8c850f0e9e",
+    "sha256": "cc3b9f6dad29a63db546568c1b5303a1ba0c405ed771e85c8925406e9b03ca31",
     "lines": [
       [
-        280,
-        326
+        281,
+        327
       ]
     ],
     "keywords": [

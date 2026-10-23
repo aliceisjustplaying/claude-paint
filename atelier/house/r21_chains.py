@@ -10,7 +10,7 @@ All code, harness and exported materials come from the local box commit.
 --prepare exports the studio and writes its brief, then stops before opening
 the easel or starting any painter, reader or model request.
 Revision r41 (template and sitting prompts only): the first sitting's message names the handoff's
-"Open passages:" list, and a later sitting opens with that list (harness/painter/painter.ts with
+"Open passages:" list, and a later sitting shows that list (harness/painter/painter.ts with
 PAINTER_OPEN_PASSAGES=1) instead of asking whether the painter is happy with the picture.
 """
 import argparse
@@ -55,49 +55,54 @@ TOOLS = "paint,look,note,status,log,read"
 HARNESS = ["--no-extensions", "-e", str(H / "painter.ts"), "-e", str(H / "compaction.ts"),
            "--system-prompt", str(H / "system_prompt.md"), "--tools", TOOLS,
            "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-approve"]
-PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the "
-               "painting's title if you give it one and a few sentences about the picture. "
-               "At the end of each sitting, leave a handoff in your journal and last reply. In the journal, list "
-               "the passages still open under a line reading `Open passages:`, one passage to a line starting "
-               "with `- `, saying where it is and what it still needs, or write `Open passages: none` when nothing "
-               "is open; the next sitting opens with that list. "
-               "Add the practical lessons to carry forward, from what you observed and from recipes that failed. Before retrying "
-               "a failed recipe, identify what has changed and why that could address the observed failure. "
-               "Carry forward the conditions of material trials and repairs: substrate and wetness, recipe ratios, "
-               "medium or thinner, load, coverage and viewed result; label broader rules as hypotheses. "
-               "Record what you observed and what remains uncertain.")
-# painter.ts (PAINTER_OPEN_PASSAGES=1) puts the passages to take up above this: the open passages from the
-# journal handoff and, with a critic, its latest notes
-SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
-                   "Your brief is in BRIEF.md and your journal in notes/journal.md. "
-                   "Read your journal handoff and apply its practical lessons before acting. "
-                   "Take up your open passages: look at each in an appropriate detail crop in normal color, "
-                   "then improve it or accept it as it is, and say which in your journal, with your reason. "
-                   "A passage you've resolved or accepted comes off the list. "
-                   "You may finish with imperfections you deliberately accept. "
-                   "A fresh look at the whole canvas and detail crops in normal color can show passages the "
-                   "list doesn't have yet; add them to it. "
-                   "Continue one campaign at a time, inspecting the whole picture and relevant detail before "
-                   "writing the next campaign's code. Let the result inform your next action and check local "
-                   "repairs against the whole picture; reconsider the composition or method if a repair repeats "
-                   "the problem. Judge unfamiliar mixtures and marks through small laid trials on the intended "
-                   "substrate after the intended treatment. Carry forward the observed material conditions "
-                   "and treat broader rules as hypotheses. "
-                   "Before retrying a failed recipe, identify what has changed and why that could "
-                   "address the observed failure. Record what you observed and what remains uncertain. "
-                   "You can keep working for hours if you like, and the painting's simulated time is "
-                   "yours to use, whether that means days or years. Enjoy it. "
-                   "At the end of the sitting, record an updated handoff in your journal and last reply: "
-                   "the `Open passages:` list as it now stands (`Open passages: none` when nothing is open) and the practical lessons that still apply. "
-                   "The painting is finished when you end a sitting in which you made no marks on the painting "
-                   "and looked at the whole canvas and at a detail crop in normal color, even if the list still "
-                   "names passages. Record your reflections in your journal before you end that sitting.")
+PAINTER_MSG = ("Your brief is in BRIEF.md in this folder. Your last message is your reply: the painting's title if you "
+               "give it one and a few sentences about the picture. In this first painting sitting, aim for a readable "
+               "provisional whole: the drawing, the large values and colors and the main spatial relationships, enough "
+               "that the whole picture reads. After each campaign, choose the next one from what the whole picture needs. "
+               "When the whole reads, it usually serves the picture to end the sitting there and come back with fresh "
+               "eyes, rather than carry every passage to finished detail now. If the picture comes right in one direct "
+               "campaign, painting it that way is yours to choose. At the end of each sitting, leave a handoff in your "
+               "journal and last reply. In the journal, say what you think the picture needs next and why. Then list the "
+               "passages still open under a line reading `Open passages:`, one passage to a line starting with `- `, "
+               "saying where it is and what it still needs, or write `Open passages: none` when nothing is open; the next "
+               "sitting shows you that list. Add the practical lessons to carry forward, from what you observed and from "
+               "recipes that failed. Before retrying a failed recipe, identify what has changed and why that could "
+               "address the observed failure. Carry forward the conditions of material trials and repairs: substrate and "
+               "wetness, recipe ratios, medium or thinner, load, coverage and viewed result; label broader rules as "
+               "hypotheses. Record what you observed and what remains uncertain.")
+SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. Your brief is in BRIEF.md and your journal in "
+                   "notes/journal.md. Read your journal handoff and apply its practical lessons before acting. Then look at "
+                   "the whole canvas in normal color with fresh eyes, before you turn to your open passages or any critic's "
+                   "notes, and choose the work the picture needs now. That might be laying in again where the whole doesn't "
+                   "read yet. It might be working up a form, a space, the light or the character of the place that is still "
+                   "unresolved. It might be integrating the whole: what the eye finds first and which edges are sharp, soft "
+                   "or lost. Say in your journal what you've chosen and why, and choose again after each campaign from what "
+                   "you see. You can repeat a kind of work or go back to an earlier one. A large change is yours to make in "
+                   "any sitting, and no sitting requires one. Your open passages and any critic's notes, quoted below, are "
+                   "candidates for that work, not its order. When taking up a passage would do the most for the picture, look "
+                   "at it in an appropriate detail crop in normal color, then improve it or accept it as it is, and say which "
+                   "in your journal, with your reason. A passage you've resolved or accepted comes off the list. You may "
+                   "finish with imperfections you deliberately accept. A fresh look at the whole canvas and detail crops in "
+                   "normal color can show passages the list doesn't have yet; add them to it. Continue one campaign at a "
+                   "time, inspecting the whole picture and relevant detail before writing the next campaign's code. Let the "
+                   "result inform your next action and check local repairs against the whole picture; reconsider the "
+                   "composition or method if a repair repeats the problem. Judge unfamiliar mixtures and marks through small "
+                   "laid trials on the intended substrate after the intended treatment. Carry forward the observed material "
+                   "conditions and treat broader rules as hypotheses. Before retrying a failed recipe, identify what has "
+                   "changed and why that could address the observed failure. Record what you observed and what remains "
+                   "uncertain. You can keep working for hours if you like, and the painting's simulated time is yours to use, "
+                   "whether that means days or years. Enjoy it. At the end of the sitting, record an updated handoff in your "
+                   "journal and last reply: what you think the picture needs next and why, the `Open passages:` list as it "
+                   "now stands (`Open passages: none` when nothing is open) and the practical lessons that still apply. The "
+                   "painting is finished when you end a sitting in which you made no marks on the painting and looked at the "
+                   "whole canvas and at a detail crop in normal color, even if the list still names passages. Record your "
+                   "reflections in your journal before you end that sitting.")
 
 
 FINISHING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                      "Your brief is in BRIEF.md and your journal in notes/journal.md. "
                      "The critic looked at the painting after your last sitting and thinks it is finished; "
-                     "its notes are above. Look at the whole canvas and a detail crop in normal color and "
+                     "its notes are below. Look at the whole canvas and a detail crop in normal color and "
                      "decide whether you agree. If you do, make no marks: record your reflections in your "
                      "journal, with `Open passages: none` or the passages you accept as they are, and end the "
                      "sitting. That finishes the painting. If you don't, say in your journal what you would "
@@ -551,7 +556,7 @@ def painter_cmd(m, message=PAINTER_MSG, session=None):
 def painter_env(m, message):
     """The painter's environment: a later sitting (SITTING_MESSAGE or FINISHING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
     so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
-    and a fresh look at the canvas, and PAINTER_OPEN_PASSAGES=1, so the passages to take up come first."""
+    and a fresh look at the canvas, and PAINTER_OPEN_PASSAGES=1, so the open passages and critic notes follow the runner message."""
     later = {"PAINTER_SITTING_RECOVERY": "1", "PAINTER_OPEN_PASSAGES": "1"}
     return {**(m["env"] or {}), **(later if message.startswith((SITTING_MESSAGE, FINISHING_MESSAGE)) else {})}
 

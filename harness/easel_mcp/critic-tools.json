@@ -1,7 +1,7 @@
 [
   {
     "name": "ask_critic",
-    "description": "Ask the critic to visit the studio now. The critic looks at the painting and reads your journal and your note, then writes back whether it thinks the picture is finished and, if not, what it would fix and why. Its notes are this tool's reply, and are saved as notes/critic.md. note: what you'd like the critic to know or look at; it stays in notes/to_critic.md for later visits until you leave another.",
+    "description": "Ask the critic to visit the studio now. The critic looks at the painting and reads your journal and your note, then writes back whether it thinks the picture is finished and, if not, what matters most to the picture and why. Its notes are this tool's reply, and are saved as notes/critic.md. note: what you'd like the critic to know or look at; it stays in notes/to_critic.md for later visits until you leave another.",
     "inputSchema": {
       "type": "object",
       "properties": {

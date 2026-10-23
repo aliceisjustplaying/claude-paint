@@ -146,7 +146,7 @@ class CriticTests(unittest.IsolatedAsyncioTestCase):
                 result = await session.call_tool("end_sitting", {})
                 self.assertFalse(result.isError, result.content)
                 text = result.content[0].text
-                self.assertTrue(text.startswith("## Passages to take up\n"), text)
+                self.assertTrue(text.startswith("## Passages you left open\n"), text)
                 self.assertIn("> Open passages:\n> - the shore: flat", text)
                 self.assertIn("> From the critic's visit at the end of a sitting:\n>\n> Lift the sky.\n> Keep the shore.", text)
                 self.assertLess(text.index("The critic's notes"), text.index("You're back at the easel."))

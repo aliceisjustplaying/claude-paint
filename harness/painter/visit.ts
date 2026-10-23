@@ -71,22 +71,30 @@ export function visitMessage(studio: string, occasion: Occasion): string {
 		? `The painter's journal handoff lists the passages it has left open. Its latest list, quoted as the painter wrote it:\n\n${quote(passages)}`
 		: `The painter's journal has no \`${OPEN_PASSAGES}\` list yet.`;
 	const gets = occasion === "sitting"
-		? `It is saved in the studio as ${CRITIQUE}, and the painter's next sitting opens with it.`
+		? `It is saved in the studio as ${CRITIQUE}, and the painter gets it at the start of its next sitting.`
 		: `The painter reads it as soon as you finish, and it is saved in the studio as ${CRITIQUE}.`;
 	return [
 		why,
 		"Start with the whole canvas, then take only the few views that answer what you noticed there: a detail crop, the value, squint, " +
 			"mirror, relief or gallery view, the palette. Don't look again at a view you've already seen. " + read,
 		list,
-		"Then tell the painter, as one painter talking to another, whether the picture is finished. Open your notes with one line that reads " +
-			"`Verdict: finished` or `Verdict: not finished`. The picture is finished when you see no change that would make it clearly better as a " +
-			"whole, rather than different, and that is worth the risk to what already holds. A fault you can name isn't enough on its own. The " +
-			"painting ends when the painter ends a sitting without marks, so each point you give keeps it at the easel for at least another sitting. " +
-			"If it is finished, say what holds and stop there. If it isn't, give the one to five things that matter most to the picture. For each, " +
-			"say what you see, what it does to the picture and what you would do about it. You see the painting and the journal, not the painter's " +
-			"code, masks or mixtures, so give your method as one way to try. Go with what you see rather than weighing every alternative, and leave " +
-			"the rest for a later visit. Write your notes once, as you would say them. Say which passage, if any, you would take up first, whether " +
-			"or not it is on the painter's list. Your last message is what the painter gets. " + gets +
+		"Then tell the painter, as one painter talking to another, whether the picture is finished. Open your " +
+			"notes with one line that reads `Verdict: finished` or `Verdict: not finished`. Judge the picture as it " +
+			"stands now, at whatever stage it is. The picture is finished when you see no change that would make it " +
+			"clearly better as a whole, rather than different, and that is worth the risk to what already holds. A " +
+			"fault you can name isn't enough on its own. A picture can be finished early, even after its first sitting " +
+			"or as a direct painting made all at once. The stage the painter says it is in, how many sittings it has " +
+			"had and how much has changed since your last visit are no reason in themselves to call it finished or not " +
+			"finished. The painting ends when the painter ends a sitting without marks, so each point you give keeps " +
+			"it at the easel for at least another sitting. If it is finished, say what holds and stop there. If it " +
+			"isn't, don't default to touching up: what matters most may be something the picture hasn't developed yet, " +
+			"in its forms, its space, its light or the character of the place. An early picture may need building more " +
+			"than mending. Give the one to five things that matter most to the picture. For each, say what you see, " +
+			"what it does to the picture and what you would do about it. You see the painting and the journal, not the " +
+			"painter's code, masks or mixtures, so give your method as one way to try. Go with what you see rather " +
+			"than weighing every alternative, and leave the rest for a later visit. Write your notes once, as you " +
+			"would say them. Say what you would take up first: a passage on the painter's list, one off it or " +
+			"something across the whole picture. Your last message is what the painter gets. " + gets +
 			" The painter decides what to do with it. Once you've written your notes, your visit is over.",
 	].join("\n\n");
 }
@@ -188,20 +196,20 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 }
 
 /**
- * What opens a later sitting with PAINTER_OPEN_PASSAGES=1 (the house runner from r41), before the runner's
+ * What opens a later sitting with PAINTER_OPEN_PASSAGES=1 (the house runner from r41), after the runner's
  * message: the journal's latest list of open passages and, with a critic, its latest notes.
  */
 export function passagesToTakeUp(studio: string, critic: boolean): string {
 	const passages = journalPassages(studio);
-	const parts = ["## Passages to take up"];
+	const parts = ["## Passages you left open"];
 	parts.push(passages
-		? `Your open passages, from your journal handoff (${JOURNAL}), quoted as you wrote them:\n\n${quote(passages)}`
+		? `Your open passages, from your journal handoff (${JOURNAL}), quoted as you wrote them. They are what you noted last time, not the order of work: weigh each against the picture as a whole.\n\n${quote(passages)}`
 		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Any passages your last handoff left open are in your journal, quoted below under "Your journal".`);
 	const path = join(studio, CRITIQUE);
 	if (critic && existsSync(path)) {
 		parts.push("## The critic's last visit", `The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. They are its view of the ` +
 			"picture, not your list. Weigh each point against what you see, take up the ones that would make the picture better, and say in your " +
-			"journal which you leave and why. It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the " +
+			"journal which you leave and why. A point isn't first just because it is named: it competes with whatever would do most for the picture now. It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the " +
 			"passage's real scale. When it says the picture is finished and you agree, end this sitting without marks." +
 			`\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);
 	}

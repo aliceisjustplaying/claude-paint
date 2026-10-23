@@ -32,7 +32,7 @@
  *    calls ask_critic. A later sitting opens with the critic's latest notes after the summary.
  * 9. With PAINTER_OPEN_PASSAGES=1 (the house runner from r41 sets it with PAINTER_SITTING_RECOVERY), a later
  *    sitting opens with the passages to take up (visit.ts): the open passages from the painter's journal
- *    handoff and, with a critic, its latest notes, before the runner's message; the summary follows it.
+ *    handoff and, with a critic, its latest notes, after the runner's message; the summary follows them.
  * The PAINTER_* variables are read once and removed from the environment.
  */
 import { Type } from "@earendil-works/pi-ai";
@@ -136,7 +136,7 @@ export default function painter(pi: ExtensionAPI) {
 			const images = view ? await viewImages(view, ctx, signal) : [];
 			if (signal.aborted) return { action: "handled" as const };
 			let text = passagesFirst
-				? `${passagesToTakeUp(studio, critic !== undefined)}\n\n${event.text}\n\n${summary}`
+				? `${event.text}\n\n${passagesToTakeUp(studio, critic !== undefined)}\n\n${summary}`
 				: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
 			if (view && !images.length) text += `\n\n${unavailableView(view)}`;
 			return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
@@ -259,7 +259,7 @@ export default function painter(pi: ExtensionAPI) {
 				label: "ask_critic",
 				description:
 					"Ask the critic to visit the studio now. The critic looks at the painting and reads your journal and your note, " +
-					`then writes back whether it thinks the picture is finished and, if not, what it would fix and why. Its notes are this tool's reply, and are saved as ${CRITIQUE}. ` +
+					`then writes back whether it thinks the picture is finished and, if not, what matters most to the picture and why. Its notes are this tool's reply, and are saved as ${CRITIQUE}. ` +
 					`note: what you'd like the critic to know or look at; it stays in ${TO_CRITIC} for later visits until you leave another.`,
 				parameters: Type.Object({ note: Type.Optional(Type.String()) }),
 				async execute(_id, p, signal) {

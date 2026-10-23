@@ -16,7 +16,8 @@ function fixture() {
 	writeFileSync(pi, `#!${process.execPath}
 const fs = require('node:fs');
 process.on('SIGTERM', () => fs.writeFileSync(${JSON.stringify(join(dir, "terminated"))}, 'yes'));
-fs.writeFileSync(${JSON.stringify(pid)}, String(process.pid));
+fs.writeFileSync(${JSON.stringify(pid + ".tmp")}, String(process.pid));
+fs.renameSync(${JSON.stringify(pid + ".tmp")}, ${JSON.stringify(pid)});
 setInterval(() => {}, 1000);
 `, { mode: 0o755 });
 	return { dir, pi, pid, critic: { args: [], dir: join(dir, "critic") } };
@@ -30,7 +31,12 @@ async function until(check: () => boolean) {
 	assert.fail("process lifecycle did not settle");
 }
 
+function validPid(pid: number): boolean {
+	return Number.isSafeInteger(pid) && pid > 1 && pid <= 2147483647;
+}
+
 function alive(pid: number): boolean {
+	if (!validPid(pid)) return false;
 	try {
 		process.kill(pid, 0);
 		if (process.platform === "linux" && /\) Z /.test(readFileSync(`/proc/${pid}/stat`, "utf8"))) return false;
@@ -39,6 +45,45 @@ function alive(pid: number): boolean {
 		return false;
 	}
 }
+
+async function readyPid(path: string): Promise<number> {
+	let pid = 0;
+	await until(() => {
+		try {
+			const text = readFileSync(path, "utf8").trim();
+			pid = /^\d+$/.test(text) ? Number(text) : 0;
+			return validPid(pid);
+		} catch { return false; }
+	});
+	return pid;
+}
+
+function stopGroup(pid: number) {
+	if (!validPid(pid)) return;
+	try { process.kill(-pid, "SIGKILL"); } catch {}
+}
+
+test("PID readiness waits through an empty file before allowing cleanup", async () => {
+	const f = fixture();
+	writeFileSync(f.pid, "");
+	let settled = false;
+	const pending = readyPid(f.pid).then(pid => { settled = true; return pid; });
+	await delay(60);
+	assert.equal(settled, false);
+	writeFileSync(f.pid, String(process.pid));
+	assert.equal(await pending, process.pid);
+});
+
+test("PID probes and group cleanup never signal invalid targets", (t) => {
+	const kill = t.mock.method(process, "kill", () => true);
+	for (const pid of [0, -0, -42, 1, NaN, Infinity, 2.5, 2147483648]) {
+		assert.equal(alive(pid), false);
+		stopGroup(pid);
+	}
+	assert.equal(kill.mock.callCount(), 0);
+	stopGroup(42);
+	assert.deepEqual(kill.mock.calls[0].arguments, [-42, "SIGKILL"]);
+});
 
 test("a visit runs its supervisor with Node when the extension host is pi", async () => {
 	const f = fixture();
@@ -106,7 +151,8 @@ test("aborting a visit escalates past an ignored SIGTERM and preserves the previ
 	writeFileSync(f.pi, readFileSync(f.pi, "utf8") + `
 require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(`
 process.on('SIGTERM', () => {});
-require('node:fs').writeFileSync(${JSON.stringify(descendantFile)}, String(process.pid));
+require('node:fs').writeFileSync(${JSON.stringify(descendantFile + ".tmp")}, String(process.pid));
+require('node:fs').renameSync(${JSON.stringify(descendantFile + ".tmp")}, ${JSON.stringify(descendantFile)});
 setInterval(() => {}, 1000);
 `)}], { stdio: 'inherit' });
 `);
@@ -114,9 +160,8 @@ setInterval(() => {}, 1000);
 	const controller = new AbortController();
 	const result = visit(f.dir, f.critic, "asked", controller.signal, f.pi);
 	const rejected = assert.rejects(result, /Operation aborted/);
-	await until(() => existsSync(f.pid) && existsSync(descendantFile));
-	const pid = Number(readFileSync(f.pid, "utf8"));
-	const descendant = Number(readFileSync(descendantFile, "utf8"));
+	const pid = await readyPid(f.pid);
+	const descendant = await readyPid(descendantFile);
 	try {
 		controller.abort();
 		await until(() => !alive(pid));
@@ -126,7 +171,7 @@ setInterval(() => {}, 1000);
 		assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "previous notes");
 		assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /asked: failed: Operation aborted/);
 	} finally {
-		try { process.kill(-pid, "SIGKILL"); } catch {}
+		stopGroup(pid);
 	}
 });
 
@@ -135,8 +180,7 @@ test("a visit is capped at twenty minutes even without a caller signal", async (
 	t.mock.timers.enable({ apis: ["setTimeout"] });
 	const result = visit(f.dir, f.critic, "sitting", undefined, f.pi);
 	const rejected = assert.rejects(result, /critic timed out after 20 minutes and was stopped/);
-	await until(() => existsSync(f.pid));
-	const pid = Number(readFileSync(f.pid, "utf8"));
+	const pid = await readyPid(f.pid);
 	try {
 		t.mock.timers.tick(20 * 60_000 - 1);
 		assert.ok(alive(pid));
@@ -146,7 +190,7 @@ test("a visit is capped at twenty minutes even without a caller signal", async (
 		assert.ok(!existsSync(join(f.dir, "notes/critic.md")));
 		assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /sitting: failed: critic timed out/);
 	} finally {
-		try { process.kill(-pid, "SIGKILL"); } catch {}
+		stopGroup(pid);
 	}
 });
 
@@ -156,15 +200,14 @@ for (const signal of ["SIGTERM", "SIGKILL"] as const) test(`a critic is cleaned 
 import { visit } from ${JSON.stringify(new URL("../visit.ts", import.meta.url).href)};
 await visit(${JSON.stringify(f.dir)}, ${JSON.stringify(f.critic)}, "sitting", undefined, ${JSON.stringify(f.pi)});
 `], { stdio: "ignore" });
-	await until(() => existsSync(f.pid));
-	const pid = Number(readFileSync(f.pid, "utf8"));
+	const pid = await readyPid(f.pid);
 	try {
 		parent.kill(signal);
 		await until(() => !alive(pid));
 		assert.ok(existsSync(join(f.dir, "terminated")));
 	} finally {
 		parent.kill("SIGKILL");
-		try { process.kill(-pid, "SIGKILL"); } catch {}
+		stopGroup(pid);
 	}
 });
 
@@ -211,15 +254,14 @@ test("boundary visits use sitting cancellation and aren't suppressed by a rememb
 		await emit("before_agent_start", { systemPromptOptions: {} });
 		writeFileSync(f.pi, hanging, { mode: 0o755 });
 		const ending = emit("agent_before_settle", event, {});
-		await until(() => existsSync(f.pid));
-		const pid = Number(readFileSync(f.pid, "utf8"));
+		const pid = await readyPid(f.pid);
 		try {
 			await emit("session_shutdown");
 			await until(() => !alive(pid));
 			await ending;
 			assert.match(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), /critique/);
 		} finally {
-			try { process.kill(-pid, "SIGKILL"); } catch {}
+			stopGroup(pid);
 		}
 	} finally {
 		process.chdir(cwd);

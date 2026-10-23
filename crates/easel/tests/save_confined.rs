@@ -113,7 +113,7 @@ impl Drop for Studio {
         if !self.command(&["close"]).status.success()
             && let Ok(pid) =
                 std::fs::read_to_string(self.root.join(format!("out/easel/{}/lock", self.session)))
-            && pid.trim().parse::<u32>().is_ok()
+            && pid.trim().parse::<i32>().is_ok_and(|pid| pid > 1)
         {
             let _ = Command::new("kill").args(["-KILL", pid.trim()]).status();
         }

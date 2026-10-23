@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,18 @@ import { post } from "./helpers.ts";
 
 const repo = resolve(import.meta.dirname, "../../..");
 let template = process.env["DELVE_TEST_TEMPLATE"];
+
+test("server cleanup never signals an invalid lock PID", async t => {
+  const dir = mkdtempSync(join(tmpdir(), "delve-lock-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "out/easel/painting"), { recursive: true });
+  const kill = t.mock.method(process, "kill", () => true);
+  for (const text of ["", " ", "0", "-42", "1", "NaN", "2.5", "2147483648"]) {
+    writeFileSync(join(dir, "out/easel/painting/lock"), text);
+    await stopServer(dir);
+  }
+  assert.equal(kill.mock.callCount(), 0);
+});
 
 /** The house studio this bot paints in, exported once from the checkout's HEAD by the house exporter. */
 function studioTemplate(): string {

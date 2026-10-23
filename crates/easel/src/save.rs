@@ -230,6 +230,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
         logged.push_str(&format!("{PAPER_MARK}\n"));
     }
     let mut tubes = crate::session::box_for(Some(&logged))?;
+    tubes.material_revision = canvas.material_revision();
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
     tubes.glaze_film = canvas.glaze_film();

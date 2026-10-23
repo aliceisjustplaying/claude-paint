@@ -241,6 +241,7 @@ pub struct Canvas {
     pub(crate) hand_slice: Option<f32>,
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
+    pub(crate) material_revision: u32,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
@@ -325,6 +326,7 @@ impl Canvas {
             tally: crate::tally::Tally::default(),
             hand_slice: None,
             engine: crate::ENGINE,
+            material_revision: 0,
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
@@ -347,6 +349,7 @@ impl Canvas {
     /// paints as the version its painting was painted with.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
+        self.material_revision = u32::from(v >= 9);
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
         self.liquid_film_levels &= v >= 4;
@@ -359,6 +362,16 @@ impl Canvas {
     }
     pub fn engine(&self) -> u32 {
         self.engine
+    }
+
+    pub fn with_material_revision(mut self, revision: u32) -> Self {
+        assert!(revision <= 1 && (revision == 0 || self.engine >= 9));
+        self.material_revision = revision;
+        self
+    }
+
+    pub fn material_revision(&self) -> u32 {
+        self.material_revision
     }
 
     /// Turn on the drain switch (an easel log's `--@ drain`, engine 5 and

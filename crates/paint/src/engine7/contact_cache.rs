@@ -219,3 +219,8 @@ fn running_median(s: &[f32], r: usize, out: &mut [f32]) {
         win[to] = come;
     }
 }
+
+#[doc(hidden)]
+impl ContactCache {
+    pub fn heap_bytes(&self) -> usize { self.stale.capacity() + (self.seen.capacity() + self.base.capacity()) * 4 }
+}

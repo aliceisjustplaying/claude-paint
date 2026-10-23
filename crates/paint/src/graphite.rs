@@ -1071,3 +1071,8 @@ mod tests {
         assert!(c.r[0] > c.r[1]);
     }
 }
+
+#[doc(hidden)]
+impl Drawing {
+    pub fn heap_bytes(&self) -> usize { self.cells.capacity() * std::mem::size_of::<Cell>() + self.guide.capacity() * 4 + self.guide_floor.as_ref().map_or(0, |g| g.capacity() * 4) }
+}

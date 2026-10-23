@@ -898,3 +898,48 @@ mod tests {
         );
     }
 }
+
+#[doc(hidden)]
+impl Canvas {
+    /// Diagnostic: heap bytes by field (capacity-based), plus counts.
+    pub fn memory_census(&self) -> Vec<(&'static str, usize)> {
+        use std::mem::size_of;
+        fn walk(l: &crate::wet::Latent, depth: usize, c: &mut [usize; 6]) {
+            c[0] += l.parts.capacity() * size_of::<(usize, f32)>();
+            c[1] += l.layers.capacity() * size_of::<crate::wet::Layer>();
+            c[2] += l.parts.len();
+            if depth == 0 { c[3] += l.layers.len(); } else { c[4] += l.layers.len(); }
+            if depth == 0 && !l.layers.is_empty() { c[5] += 1; }
+            for layer in &l.layers { walk(&layer.lat, depth + 1, c); }
+        }
+        let mut lat = [0usize; 6];
+        for l in &self.wet.lat { walk(l, 0, &mut lat); }
+        let wet_px = self.wet.vol.iter().filter(|&&v| v > 0.0).count();
+        let mut v = vec![
+            ("px", self.px.capacity() * size_of::<Rgb>()),
+            ("backing", self.backing.capacity() * size_of::<crate::mixer::Backing>()),
+            ("height+film+gloss+absorb", (self.height.capacity() + self.film.capacity() + self.gloss.capacity() + self.absorb.capacity()) * 4),
+            ("micro", self.micro.capacity() * 4),
+            ("wet.lat inline", self.wet.lat.capacity() * size_of::<crate::wet::Latent>()),
+            ("wet.lat parts heap", lat[0]),
+            ("wet.lat layers heap", lat[1]),
+            ("wet.hide", self.wet.hide.capacity() * size_of::<crate::wet::Prop>()),
+            ("wet.vol+floor+cover+solv+laid", (self.wet.vol.capacity() + self.wet.floor.capacity() + self.wet.cover.capacity() + self.wet.solv.capacity() + self.wet.laid.capacity()) * 4),
+            ("wet.stroke+touched+laid_id", (self.wet.stroke.capacity() + self.wet.touched.capacity() + self.wet.laid_id.capacity()) * 4),
+            ("wet.clock.px", self.wet.clock.px.capacity() * size_of::<crate::drying::Px>()),
+            ("base", self.base.as_ref().map_or(0, |(_, b)| b.capacity() * 4)),
+            ("e7_contact", self.e7_contact.heap_bytes()),
+            ("drawing", self.drawing.as_ref().map_or(0, |d| d.heap_bytes())),
+            ("receptive", self.receptive.as_ref().map_or(0, |r| r.capacity() * 4)),
+            ("soak", self.soak.as_ref().map_or(0, |s| s.weave.capacity() * 4)),
+            ("sheet", self.sheet.as_ref().map_or(0, |s| s.over.capacity() + s.a.capacity() * 4 + s.r.capacity() * 12)),
+        ];
+        v.push(("#parts", lat[2]));
+        v.push(("#layers", lat[3]));
+        v.push(("#nested layers", lat[4]));
+        v.push(("#px with layers", lat[5]));
+        v.push(("#px wet", wet_px));
+        v.push(("#px", self.px.len()));
+        v
+    }
+}

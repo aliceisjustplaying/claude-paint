@@ -2388,3 +2388,18 @@ mod memory_cap_tests {
         assert_eq!(s._serials.held.get(), 0, "credit left after the snapshot is gone");
     }
 }
+
+#[repr(C)]
+pub struct Mallinfo2 { pub arena: usize, pub ordblks: usize, pub smblks: usize, pub hblks: usize, pub hblkhd: usize, pub usmblks: usize, pub fsmblks: usize, pub uordblks: usize, pub fordblks: usize, pub keepcost: usize }
+unsafe extern "C" {
+    fn mallinfo2() -> Mallinfo2;
+}
+pub fn memdiag(tag: &str, s: &Session) {
+    let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    let field = |k: &str| status.lines().find(|l| l.starts_with(k)).and_then(|l| l.split_whitespace().nth(1)).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+    let m = unsafe { mallinfo2() };
+    let census = s.canvas().map(|c| c.memory_census()).unwrap_or_default();
+    let total: usize = census.iter().filter(|(k, _)| !k.starts_with('#')).map(|(_, b)| b).sum();
+    let fields: Vec<String> = census.iter().map(|(k, b)| if k.starts_with('#') { format!("{k}={b}") } else { format!("{k}={}", b >> 20) }).collect();
+    eprintln!("MEMDIAG\t{tag}\trss_mib={}\tswap_mib={}\thwm_mib={}\tarena_mib={}\thblkhd_mib={}\tuord_mib={}\tford_mib={}\tlua_used_mib={}\tcanvas_mib={}\t{}", field("VmRSS:") >> 10, field("VmSwap:") >> 10, field("VmHWM:") >> 10, m.arena >> 20, m.hblkhd >> 20, m.uordblks >> 20, m.fordblks >> 20, s._serials.used.get() >> 20, total >> 20, fields.join("\t"));
+}

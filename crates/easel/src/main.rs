@@ -1452,6 +1452,7 @@ impl Server {
 
     fn run_chunk(&mut self, src: &str) -> Result<session::Ran, String> {
         let result = frames::with(&mut self.hand_frames, || self.replay.with(|| self.s.run(src)));
+        session::memdiag(&format!("{} chunk {} {}", self.name, self.s.log.len(), if result.is_ok() { "ok" } else { "failed" }), &self.s);
         if result.is_err() {
             self.start_hand_frames((!self.s.log.is_empty()).then_some(self.s.log.len()))?;
         }
@@ -2434,6 +2435,7 @@ fn run(args: &[String]) -> Result<(), String> {
         if let Some(store) = &mut store { store.publish(&s, &s.program(&stem)).map_err(|e| format!("state publication after chunk {} failed: {e}", i + 1))?; }
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
+        session::memdiag(&format!("run chunk {}", i + 1), &s);
         if paint::engine7::stats() {
             eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
         }

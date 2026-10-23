@@ -106,6 +106,39 @@ class SittingTests(unittest.TestCase):
         self.assertEqual(D.choose(self.runner, self.model, self.studio, self.run), result)
         self.assertEqual(self.messages, [D.SITTING_ZERO])
 
+    def test_saved_roll_rejects_edited_or_ineligible_records_without_reroll(self):
+        concepts = D.parse_concepts(GOOD)
+        with patch.object(D.secrets, "choice", side_effect=lambda options: options[0]):
+            valid = D.roll(concepts)
+        cases = [
+            {"pick": {"number": 99, "text": "Externally edited pick"}},
+            {**valid, "pick": concepts[-1]},
+            {**valid, "pick": {**valid["pick"], "text": "edited"}},
+            {**valid, "dropped": []},
+            {**valid, "concepts": concepts[:-1]},
+            {**valid, "concepts": [{**concepts[0], "estimate": 101}, *concepts[1:]]},
+            {**valid, "concepts": [{**concepts[0], "estimate": True}, *concepts[1:]]},
+            {**valid, "pick": {**valid["pick"], "number": True}},
+            {**valid, "dropped": None},
+            [], None,
+        ]
+        for record in cases:
+            with self.subTest(record=record):
+                path = self.run / "die_roll.json"
+                path.write_text(json.dumps(record))
+                before = path.read_bytes()
+                with self.assertRaises(ValueError), patch.object(D.secrets, "choice", side_effect=AssertionError("rerolled")):
+                    D.choose(None, None, None, self.run)
+                self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.messages, [])
+
+    def test_saved_roll_reports_invalid_json_without_modifying_it(self):
+        path = self.run / "die_roll.json"
+        path.write_text("not JSON")
+        with self.assertRaisesRegex(ValueError, "invalid saved die roll"), patch.object(D.secrets, "choice", side_effect=AssertionError("rerolled")):
+            D.choose(None, None, None, self.run)
+        self.assertEqual(path.read_text(), "not JSON")
+
     def test_retries_once(self):
         self.replies = ["bad", GOOD]
         D.choose(self.runner, self.model, self.studio, self.run)

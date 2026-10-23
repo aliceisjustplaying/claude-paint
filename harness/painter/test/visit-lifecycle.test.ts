@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmdirSync, writeFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
-import { visit } from "../visit.ts";
+import { passagesToTakeUp, sittingCritique, visit } from "../visit.ts";
 
 function fixture() {
 	const dir = mkdtempSync(join(tmpdir(), "visit-lifecycle-"));
@@ -83,6 +83,59 @@ test("PID probes and group cleanup never signal invalid targets", (t) => {
 	assert.equal(kill.mock.callCount(), 0);
 	stopGroup(42);
 	assert.deepEqual(kill.mock.calls[0].arguments, [-42, "SIGKILL"]);
+});
+
+for (const previous of [false, true]) test(`a failed latest visit is explicit in both openings ${previous ? "with older notes" : "without prior notes"}`, async () => {
+	const f = fixture();
+	if (previous) writeFileSync(join(f.dir, "notes/critic.md"), "Old advice\n");
+	writeFileSync(f.pi, "#!/bin/sh\necho unavailable >&2\nexit 7\n", { mode: 0o755 });
+	await assert.rejects(visit(f.dir, f.critic, "sitting", undefined, f.pi), /unavailable/);
+	const passages = passagesToTakeUp(f.dir, true);
+	const critique = sittingCritique(f.dir);
+	const warning = previous ? "The critic's last visit failed, so it left no new notes." : "The critic's last visit failed, so it left no notes.";
+	assert.ok(passages.includes(warning));
+	assert.ok(critique.includes(warning));
+	assert.ok(!passagesToTakeUp(f.dir, false).includes(warning));
+	if (previous) {
+		assert.match(passages, /Its notes from an earlier visit \(notes\/critic\.md\) are below, quoted as the critic wrote them\. They don't cover anything you've painted since that visit\./);
+		assert.match(critique, /These are from an earlier visit and don't cover anything you've painted since\. Quoted as the critic wrote them:/);
+		assert.ok(passages.indexOf(warning) < passages.indexOf("> Old advice"));
+		assert.ok(critique.indexOf(warning) < critique.indexOf("> Old advice"));
+		assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "Old advice\n");
+	} else {
+		assert.equal(critique, `\n\n## The critic's notes\n\n${warning}`);
+		assert.ok(!existsSync(join(f.dir, "notes/critic.md")));
+	}
+	writeFileSync(f.pi, "#!/bin/sh\necho 'New advice'\n", { mode: 0o755 });
+	await visit(f.dir, f.critic, "sitting", undefined, f.pi);
+	for (const opening of [passagesToTakeUp(f.dir, true), sittingCritique(f.dir)]) {
+		assert.ok(!opening.includes("last visit failed"));
+		assert.ok(opening.includes("> New advice"));
+	}
+});
+
+test("an archive collision preserves old advice and reports failure until a complete visit publishes", async () => {
+	const f = fixture();
+	writeFileSync(join(f.dir, "notes/critic.md"), "Old advice\n");
+	writeFileSync(f.pi, `#!${process.execPath}
+const fs = require('node:fs'), path = require('node:path');
+const sessions = process.argv[process.argv.indexOf('--session-dir') + 1];
+fs.mkdirSync(path.join(path.dirname(path.dirname(sessions)), path.basename(sessions) + '-asked.md'));
+console.log('New advice');
+`, { mode: 0o755 });
+	await assert.rejects(visit(f.dir, f.critic, "asked", undefined, f.pi), { code: "EISDIR" });
+	assert.equal(readFileSync(join(f.dir, "notes/critic.md"), "utf8"), "Old advice\n");
+	const log = readFileSync(join(f.critic.dir, "visits.log"), "utf8");
+	assert.match(log, /asked: failed:.*EISDIR/);
+	assert.doesNotMatch(log, /asked: exit 0/);
+	assert.match(sittingCritique(f.dir), /last visit failed[\s\S]*> Old advice/);
+	for (const entry of readdirSync(f.critic.dir).filter((name) => name.endsWith("-asked.md"))) rmdirSync(join(f.critic.dir, entry));
+	writeFileSync(f.pi, "#!/bin/sh\necho 'New advice'\n", { mode: 0o755 });
+	await visit(f.dir, f.critic, "asked", undefined, f.pi);
+	assert.match(readFileSync(join(f.critic.dir, "visits.log"), "utf8"), /asked: exit 0/);
+	assert.doesNotMatch(sittingCritique(f.dir), /last visit failed/);
+	const archive = readdirSync(f.critic.dir).find((name) => name.endsWith("-asked.md"))!;
+	assert.equal(readFileSync(join(f.critic.dir, archive), "utf8"), readFileSync(join(f.dir, "notes/critic.md"), "utf8"));
 });
 
 test("a visit runs its supervisor with Node when the extension host is pi", async () => {

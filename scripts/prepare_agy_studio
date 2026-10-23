@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import tempfile
 
 
 CRITIC_READING = (
@@ -40,12 +41,13 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
     agents = studio / ".agents/agents"
     if (studio / ".agents/mcp_config.json").exists() or (agents / "easel-painter.md").exists():
         raise ValueError("the studio already has agy configuration")
-    runtime.mkdir(parents=True, exist_ok=True)
-    agents.mkdir(parents=True, exist_ok=True)
+    outputs = {}
     for name in ("server.py", "remote.py", "references.py", "tools.json", "sittings.py", "sitting-tools.json", "sitting-message.txt", "painting_chunks.py", "critic.py", "critic-tools.json"):
-        shutil.copy2(repo / "harness/easel_mcp" / name, runtime / name)
-    shutil.copy2(repo / "harness/agy/painter.md", agents / "easel-painter.md")
-    shutil.copy2(repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")
+        source = repo / "harness/easel_mcp" / name
+        outputs[runtime / name] = (source.read_bytes(), source.stat().st_mode & 0o777)
+    for source, target in ((repo / "harness/agy/painter.md", agents / "easel-painter.md"),
+                           (repo / "harness/agy/LAUNCH.md", studio / "LAUNCH.md")):
+        outputs[target] = (source.read_bytes(), source.stat().st_mode & 0o777)
     sessions_root = sessions_root.expanduser().resolve()
     args = ["run", "--no-project", "--script", str(runtime / "server.py"), "--studio", str(studio),
             "--sittings", "--agy", "--break-seconds", str(break_seconds), "--sessions-root", str(sessions_root)]
@@ -60,15 +62,47 @@ def prepare(studio, sessions_root, break_seconds=0, sitting_seconds=None):
             if guide.is_file():
                 text = guide.read_text()
                 if CRITIC_READING.lstrip("\n") not in text:
-                    guide.write_text(text + CRITIC_READING)
+                    outputs[guide] = ((text + CRITIC_READING).encode(), guide.stat().st_mode & 0o777)
     config = {"mcpServers": {"easel": {"command": uv, "args": args, "cwd": str(studio), "env": env}}}
-    (studio / ".agents/mcp_config.json").write_text(json.dumps(config, indent=2) + "\n")
+    outputs[studio / ".agents/mcp_config.json"] = ((json.dumps(config, indent=2) + "\n").encode(), 0o644)
     folder = "--" + str(studio).strip("/").replace("/", "-") + "--"
     if "-src-a-" not in folder:
         folder = f"--mcp-src-a-{studio.name}--"
     viewer = sessions_root / folder / "agy.jsonl"
     metadata = {"recorder": str(studio / "out/easel/mcp/session.jsonl"), "output": str(viewer)}
-    (studio / ".agents/recording.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    outputs[studio / ".agents/recording.json"] = ((json.dumps(metadata, indent=2) + "\n").encode(), 0o644)
+    originals = {path: (path.read_bytes(), path.stat().st_mode & 0o777) if path.exists() else None for path in outputs}
+    with tempfile.TemporaryDirectory(prefix=".agy-prepare-", dir=studio) as temporary:
+        stage = Path(temporary)
+        for index, (path, (data, mode)) in enumerate(outputs.items()):
+            (stage / str(index)).write_bytes(data)
+            (stage / str(index)).chmod(mode)
+            if originals[path] is not None:
+                data, mode = originals[path]
+                (stage / f"before-{index}").write_bytes(data)
+                (stage / f"before-{index}").chmod(mode)
+        published = []
+        try:
+            for index, path in enumerate(outputs):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if originals[path] is None:
+                    os.link(stage / str(index), path)
+                else:
+                    os.replace(stage / str(index), path)
+                published.append((index, path, path.stat()))
+        except BaseException:
+            for index, path, owned in reversed(published):
+                try:
+                    current = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if (current.st_dev, current.st_ino) != (owned.st_dev, owned.st_ino):
+                    continue
+                if originals[path] is None:
+                    path.unlink()
+                else:
+                    os.replace(stage / f"before-{index}", path)
+            raise
     return config
 
 

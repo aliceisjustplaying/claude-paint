@@ -46,7 +46,28 @@ def opening(result):
 def choose(runner, model, studio, run_dir):
     record = run_dir / "die_roll.json"
     if record.exists():
-        return opening(json.loads(record.read_text()))
+        try:
+            result = json.loads(record.read_text())
+            concepts = result["concepts"]
+            if not isinstance(concepts, list) or len(concepts) != 16:
+                raise ValueError
+            if any(not isinstance(c, dict) or type(c.get("number")) is not int or type(c.get("estimate")) is not int
+                   or not isinstance(c.get("text"), str) for c in concepts):
+                raise ValueError
+            text = "\n\n".join(f'{c["number"]}. {c["text"]}\nEstimate: {c["estimate"]}/100' for c in concepts)
+            if parse_concepts(text) != concepts:
+                raise ValueError
+            dropped = sorted(concepts, key=lambda c: (-c["estimate"], c["number"]))[:10]
+            if not isinstance(result["dropped"], list) or any(type(n) is not int for n in result["dropped"]):
+                raise ValueError
+            pick = result["pick"]
+            if not isinstance(pick, dict) or type(pick.get("number")) is not int or type(pick.get("estimate")) is not int:
+                raise ValueError
+            if result["dropped"] != [c["number"] for c in dropped] or result["pick"] not in [c for c in concepts if c not in dropped]:
+                raise ValueError
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"invalid saved die roll in {record}: it needs the sixteen concepts, the ten dropped numbers and a pick from the other six; no die was rolled again") from error
+        return opening(result)
     logs = [studio / "paintings/lua/painting.lua", studio / "out/easel/painting/committed.lua"]
     before = [p.read_bytes() if p.exists() else None for p in logs]
     if runner.count_chunks(studio):

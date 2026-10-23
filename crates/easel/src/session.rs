@@ -2413,3 +2413,20 @@ pub fn refresh(s: &Session) -> std::io::Result<()> {
     st.canvas = Some(snap.restore()?);
     Ok(())
 }
+
+unsafe extern "C" {
+    fn malloc_info(options: i32, stream: *mut libc_file) -> i32;
+    fn fopen(path: *const u8, mode: *const u8) -> *mut libc_file;
+    fn fclose(stream: *mut libc_file) -> i32;
+}
+#[repr(C)]
+pub struct libc_file { _private: [u8; 0] }
+pub fn malloc_info_to(path: &str) {
+    let p = format!("{path}\0");
+    unsafe {
+        let f = fopen(p.as_ptr(), b"w\0".as_ptr());
+        if f.is_null() { return; }
+        malloc_info(0, f);
+        fclose(f);
+    }
+}

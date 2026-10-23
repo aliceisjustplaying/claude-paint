@@ -2445,6 +2445,7 @@ fn run(args: &[String]) -> Result<(), String> {
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
         session::memdiag(&format!("run chunk {}", i + 1), &s);
+        if let Some(dir) = std::env::var_os("EASEL_MALLOC_INFO") { session::malloc_info_to(&format!("{}/malloc-info-{}.xml", dir.to_string_lossy(), i + 1)); }
         if let Some(every) = std::env::var("EASEL_REFRESH_EVERY").ok().and_then(|v| v.parse::<usize>().ok()) && (i + 1) % every == 0 {
             session::refresh(&s).map_err(|e| e.to_string())?;
             unsafe extern "C" { fn malloc_trim(pad: usize) -> i32; }

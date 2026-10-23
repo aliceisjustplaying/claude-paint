@@ -349,6 +349,88 @@ class HouseCleanupTests(unittest.TestCase):
                     opened.assert_not_called()
                     painter.assert_not_called()
 
+    def test_finished_rerun_leaves_an_already_correct_reply_untouched(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            with self.subTest(runner=str(path)):
+                runner, rd, sittings = self.finalization_case(path, f"untouched-{i}")
+                outcome = dict(status="finished", reason=runner.next_step(sittings)[1], finished_at=1792656000.0)
+                runner.write_outcome(rd, 1, outcome)
+                reply = rd / "p1_final.txt"
+                reply.write_bytes(Path(sittings[-1]["final_file"]).read_bytes())
+                before = reply.stat()
+                with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner.shutil, "copy", side_effect=AssertionError("published reply overwritten")), \
+                     patch.object(runner.os, "replace") as replaced:
+                    self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                replaced.assert_not_called()
+                self.assertEqual((reply.stat().st_ino, reply.stat().st_mtime_ns), (before.st_ino, before.st_mtime_ns))
+                self.assertEqual(reply.read_text(), "A finished painting")
+                self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()), outcome)
+
+    def test_finished_reply_repairs_are_atomic_even_when_interrupted(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            for failure in (OSError, KeyboardInterrupt):
+                for stage in ("fsync", "replace"):
+                    with self.subTest(runner=str(path), failure=failure.__name__, stage=stage):
+                        runner, rd, sittings = self.finalization_case(path, f"atomic-{i}-{failure.__name__}-{stage}")
+                        outcome = dict(status="finished", reason=runner.next_step(sittings)[1], finished_at=1792656000.0)
+                        runner.write_outcome(rd, 1, outcome)
+                        reply = rd / "p1_final.txt"
+                        reply.write_text("An old partial reply")
+                        replace = os.replace
+
+                        def publish(source, target):
+                            self.assertEqual(Path(target), reply)
+                            self.assertEqual(reply.read_text(), "An old partial reply")
+                            self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()), outcome)
+                            self.assertEqual(Path(source).read_text(), "A finished painting")
+                            replace(source, target)
+
+                        with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                             patch.object(runner, "close_easel") as close, \
+                             patch.object(runner, "open_easel") as opened, \
+                             patch.object(runner, "run") as painter:
+                            with patch.object(runner.os, stage, side_effect=failure("publication interrupted")), \
+                                 self.assertRaises(failure):
+                                runner.paint("OPUS", 1, self.studio, rd)
+                            self.assertEqual(reply.read_text(), "An old partial reply")
+                            self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()), outcome)
+                            self.assertFalse((rd / "p1.painted").exists())
+                            self.assertFalse(list(rd.glob(".p1_final.*.tmp")))
+                            with patch.object(runner.os, "replace", side_effect=publish) as replaced, \
+                                 patch.object(runner.os, "fsync", wraps=os.fsync) as synced:
+                                self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                            replaced.assert_called_once()
+                            self.assertEqual(synced.call_count, 2)
+                            close.assert_not_called()
+                            opened.assert_not_called()
+                            painter.assert_not_called()
+                        self.assertEqual(reply.read_text(), "A finished painting")
+                        self.assertFalse(list(rd.glob(".p1_final.*.tmp")))
+
+    def test_legacy_finished_outcome_repairs_marker_using_outcome_mtime(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            with self.subTest(runner=str(path)):
+                runner, rd, sittings = self.finalization_case(path, f"legacy-{i}")
+                outcome = dict(status="finished", reason=runner.next_step(sittings)[1])
+                outcome_path = rd / "p1_outcome.json"
+                runner.write_outcome(rd, 1, outcome)
+                os.utime(outcome_path, (1792656000.0, 1792656000.0))
+                with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner, "close_easel") as close, \
+                     patch.object(runner, "open_easel") as opened, \
+                     patch.object(runner, "run") as painter:
+                    self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                    self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                close.assert_not_called()
+                opened.assert_not_called()
+                painter.assert_not_called()
+                self.assertEqual((rd / "p1_final.txt").read_text(), "A finished painting")
+                self.assertEqual((rd / "p1.painted").read_text(),
+                                 f"1792656000.0 {len(sittings)} record(s): {outcome['reason']}\n")
+                self.assertEqual(json.loads(outcome_path.read_text()), outcome)
+                self.assertEqual(outcome_path.stat().st_mtime, 1792656000.0)
+
     def test_executed_effects_not_source_tokens_decide_whether_to_continue(self):
         for path in self.runners:
             with self.subTest(runner=str(path)):

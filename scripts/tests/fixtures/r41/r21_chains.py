@@ -898,16 +898,37 @@ def open_easel(d, tag):
 
 
 def paint(name, n, d, rd):
-    """Run the painter's sittings until next_step says stop; resumable from p<n>_sittings.json."""
+    """Run the painter's sittings until next_step says stop; resumable from p<n>_sittings.json.
+    Legacy finished markers use the outcome file's mtime when no finish timestamp was recorded.
+    """
     m = LANES[name]["model"]
     tag = f"{name}{n}"
     sittings = load_sittings(rd, n)
     outcome_path = rd / f"p{n}_outcome.json"
     previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
     if previous.get("status") == "finished":
-        shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
+        reply = Path(sittings[-1]["final_file"]).read_bytes()
+        final_path = rd / f"p{n}_final.txt"
+        if not final_path.exists() or final_path.read_bytes() != reply:
+            pending = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=rd, prefix=f".p{n}_final.", suffix=".tmp", delete=False) as final:
+                    pending = Path(final.name)
+                    final.write(reply)
+                    final.flush()
+                    os.fsync(final.fileno())
+                os.replace(pending, final_path)
+                directory = os.open(rd, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            finally:
+                if pending is not None:
+                    pending.unlink(missing_ok=True)
         if not (rd / f"p{n}.painted").exists():
-            (rd / f"p{n}.painted").write_text(f"{previous['finished_at']} {len(sittings)} record(s): {previous['reason']}\n")
+            finished_at = previous.get("finished_at") or outcome_path.stat().st_mtime
+            (rd / f"p{n}.painted").write_text(f"{finished_at} {len(sittings)} record(s): {previous['reason']}\n")
         return sittings
     for s in sittings:
         if s.get("status") == "running":      # the runner stopped during this sitting

@@ -387,7 +387,7 @@ impl Paint {
                 volume: 1.0, pigment: body * pigment_fraction, binder: body * (1.0 - pigment_fraction),
                 solvent: crate::COAT_UM as f64 * (self.solvent as f64 + self.thinner as f64 / (1.0 - self.thinner as f64)),
                 oxygen: 0.0, oxidation: 0.0, network: 0.0, inhibitor: 1.0,
-                recipe, history: Default::default(),
+                recipe: std::sync::Arc::new(recipe), history: Default::default(),
             }] });
         }
         latent

@@ -46,8 +46,8 @@ impl Canvas {
                 for i in 0..changed_height.len() {
                     let delta = changed_height[i] - baseline[i];
                     if delta != 0.0 {
-                        store.with_column_mut(i, |column, _| {
-                            column.state.support_z_um += delta;
+                        store.with_state_mut(i, |state| {
+                            state.support_z_um += delta;
                             Ok(())
                         })?;
                     }
@@ -95,29 +95,26 @@ impl Canvas {
         material.commit();
         material.store.pixel_area = self.px_mm() as f64 * self.px_mm() as f64;
         for i in 0..self.f.w * self.f.h {
-            material
-                .store
-                .with_column_mut(i, |column, _| {
-                    let backing = self
-                        .backing
-                        .get(i)
-                        .copied()
-                        .unwrap_or(Backing {
-                            reflectance: column.state.reflectance,
-                            residual: column.state.residual,
-                            color: column.state.color,
-                        })
-                        .under(self.px[i]);
-                    column.state.reflectance = backing.reflectance;
-                    column.state.residual = backing.residual;
-                    column.state.color = backing.color;
-                    column.state.support_z_um = self.height[i];
-                    column.state.film = self.film[i];
-                    column.state.gloss = self.gloss[i];
-                    column.state.absorb = self.absorb[i];
+            let original = material.store.read_column(i).expect("material pixel").state;
+            let backing = self.backing.get(i).copied().unwrap_or(Backing {
+                reflectance: original.reflectance,
+                residual: original.residual,
+                color: original.color,
+            }).under(self.px[i]);
+            let mut state = original.clone();
+            state.reflectance = backing.reflectance;
+            state.residual = backing.residual;
+            state.color = backing.color;
+            state.support_z_um = self.height[i];
+            state.film = self.film[i];
+            state.gloss = self.gloss[i];
+            state.absorb = self.absorb[i];
+            if state != *original {
+                material.store.with_state_mut(i, |target| {
+                    *target = state;
                     Ok(())
-                })
-                .expect("valid material support");
+                }).expect("valid material support");
+            }
         }
         self.material = Some(material);
         self.backing.clear();
@@ -140,18 +137,21 @@ impl Canvas {
                 .copied()
                 .unwrap_or_default()
                 .under(self.px[i]);
-            store
-                .with_column_mut(i, |column, _| {
-                    column.state.support_z_um = self.height[i];
-                    column.state.film = self.film[i];
-                    column.state.gloss = self.gloss[i];
-                    column.state.absorb = self.absorb[i];
-                    column.state.reflectance = backing.reflectance;
-                    column.state.residual = backing.residual;
-                    column.state.color = backing.color;
+            let original = store.read_column(i).expect("material pixel").state;
+            let mut state = original.clone();
+            state.support_z_um = self.height[i];
+            state.film = self.film[i];
+            state.gloss = self.gloss[i];
+            state.absorb = self.absorb[i];
+            state.reflectance = backing.reflectance;
+            state.residual = backing.residual;
+            state.color = backing.color;
+            if state != *original {
+                store.with_state_mut(i, |target| {
+                    *target = state;
                     Ok(())
-                })
-                .expect("valid material support");
+                }).expect("valid material support");
+            }
         }
         self.material = Some(Material::new(store));
         self.backing.clear();

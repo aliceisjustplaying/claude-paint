@@ -19,6 +19,20 @@ pub fn with_material_schema<R>(enabled: bool, work: impl FnOnce() -> R) -> R {
     result
 }
 
+pub(crate) mod shared_recipe {
+    use super::super::exchange::Recipe;
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    pub fn serialize<S: serde::Serializer>(value: &Arc<Recipe>, serializer: S) -> Result<S::Ok, S::Error> {
+        value.as_ref().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Arc<Recipe>, D::Error> {
+        Recipe::deserialize(deserializer).map(Arc::new)
+    }
+}
+
 pub(crate) mod kinetics {
     use super::super::chemistry::Kinetics;
     use serde::{Deserialize, Serialize};

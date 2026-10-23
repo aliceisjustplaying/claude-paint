@@ -7,6 +7,7 @@ pub mod inert;
 pub(crate) mod presentation;
 pub mod exchange;
 pub mod knife;
+pub mod mechanics;
 pub(crate) mod knife_contact;
 pub mod mixture;
 pub(crate) mod native;

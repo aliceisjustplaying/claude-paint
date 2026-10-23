@@ -138,9 +138,9 @@ struct WorkCell {
     capacity: f64,
     permeability: f64,
     right: f64,
-    diagonal: f64,
-    upper: f64,
-    rhs: f64,
+    effective_capacity: f64,
+    left_activity: f64,
+    right_weight: f64,
 }
 
 impl WorkCell {
@@ -279,31 +279,38 @@ pub fn advance_column_with_scratch(
             0.0
         };
         for j in 0..n {
-            let left = if j == 0 { 0.0 } else { work[j - 1].right };
-            let right = work[j].right + if j + 1 == n { air_conductance } else { 0.0 };
+            let left = if j == 0 { 0.0 } else { dt * work[j - 1].right };
+            let previous = if j == 0 { 0.0 } else { work[j - 1].effective_capacity };
+            let carried = if left == 0.0 || previous == 0.0 {
+                0.0
+            } else if left >= previous {
+                previous / (1.0 + previous / left)
+            } else {
+                left / (1.0 + left / previous)
+            };
+            let previous_activity = if j == 0 { 0.0 } else { work[j - 1].left_activity };
+            let right = dt * (work[j].right + if j + 1 == n { air_conductance } else { 0.0 });
             let w = &mut work[j];
-            w.diagonal = w.capacity + dt * (left + right);
-            w.upper = -dt * w.right;
-            w.rhs = w.capacity * w.oxygen
-                + if j + 1 == n {
-                    dt * air_conductance * air_activity
-                } else {
-                    0.0
-                };
-            if w.capacity == 0.0 {
-                w.diagonal = 1.0;
-            }
-            if j > 0 {
-                let factor = -dt * left / work[j - 1].diagonal;
-                work[j].diagonal -= factor * work[j - 1].upper;
-                work[j].rhs -= factor * work[j - 1].rhs;
-            }
+            w.effective_capacity = w.capacity + carried;
+            w.left_activity = if w.effective_capacity > 0.0 {
+                w.oxygen + carried / w.effective_capacity * (previous_activity - w.oxygen)
+            } else { 0.0 };
+            w.right_weight = if right == 0.0 {
+                0.0
+            } else if right >= w.effective_capacity {
+                1.0 / (1.0 + w.effective_capacity / right)
+            } else {
+                let ratio = right / w.effective_capacity;
+                ratio / (1.0 + ratio)
+            };
         }
-        work[n - 1].oxygen = work[n - 1].rhs / work[n - 1].diagonal;
+        let top = &mut work[n - 1];
+        top.oxygen = top.left_activity + top.right_weight * (air_activity - top.left_activity);
+        budget.air_exchange += top.effective_capacity * top.right_weight * (air_activity - top.left_activity);
         for j in (0..n - 1).rev() {
-            work[j].oxygen = (work[j].rhs - work[j].upper * work[j + 1].oxygen) / work[j].diagonal;
+            work[j].oxygen = work[j].left_activity
+                + work[j].right_weight * (work[j + 1].oxygen - work[j].left_activity);
         }
-        budget.air_exchange += dt * air_conductance * (air_activity - work[n - 1].oxygen);
         for w in work.iter_mut() {
             let m = &kinetics[cells[w.index].recipe as usize];
             if w.capacity > 0.0 && w.binder > 0.0 && w.oxygen > 0.0 {
@@ -1155,6 +1162,31 @@ mod tests {
             assert!((a.oxidation - b.oxidation).abs() < 5e-7);
             assert!((a.network - b.network).abs() < 5e-7);
             assert!((a.inhibitor - b.inhibitor).abs() < 5e-7);
+        }
+    }
+
+    #[test]
+    fn ultrathin_diffusion_preserves_bounds_and_relative_oxygen_balance() {
+        for thickness in [1e-2_f32, 1e-6, 1e-12, 1e-20, 1e-30] {
+            for closed in [false, true] {
+                let kinetics = Kinetics {
+                    air_transfer_um_s: if closed { 0.0 } else { 0.1 },
+                    oxidation_rate_s: 0.0,
+                    inhibitor_rate_s: 0.0,
+                    network_rate_s: 0.0,
+                    solvent_evaporation_rate_s: 0.0,
+                    ..Kinetics::default()
+                };
+                let mut cells = [
+                    Cell { binder_um: thickness, oxygen: if closed { 0.2 } else { 0.0 }, ..Cell::default() },
+                    Cell { binder_um: 3.0 * thickness, oxygen: if closed { 0.8 } else { 0.0 }, ..Cell::default() },
+                ];
+                let budget = advance_column(&mut cells, &[kinetics], 600.0, 1.0).unwrap();
+                assert!(cells.iter().all(|cell| (0.0..=1.0).contains(&cell.oxygen)));
+                let scale = budget.initial_oxygen.abs() + budget.air_exchange.abs();
+                assert!(budget.balance_error.abs() <= 1e-12 * scale, "{thickness} {closed} {budget:?}");
+                if closed { assert_eq!(budget.air_exchange, 0.0); }
+            }
         }
     }
 }

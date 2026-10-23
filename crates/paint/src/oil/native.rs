@@ -1,10 +1,60 @@
-use super::exchange::{self, MaterialPayload, MechanicalHistory, Recipe, SinkKind};
+use super::exchange::{self, MaterialPayload, MechanicalHistory, Recipe, RecipePool, SinkKind};
 use super::store::{DepositMode, Formulation, MaterialError, RemovalMode, TakeRequest};
 use super::transfer::{Fragment, MaterialTransfer, TransferCell};
 use super::{Material, chemistry::ObservationModel};
 use crate::wet::{Latent, Layer, Wet};
 use crate::{COAT_UM, Canvas};
 use std::sync::Arc;
+use std::collections::HashMap;
+
+#[derive(Default)]
+struct NativeRecipes {
+    recipes: RecipePool,
+    projected: HashMap<usize, (Arc<Formulation>, Arc<Recipe>)>,
+    restored: HashMap<usize, (Arc<Recipe>, Arc<Formulation>)>,
+}
+
+impl NativeRecipes {
+    fn project(&mut self, formulation: Arc<Formulation>) -> Arc<Recipe> {
+        let key = Arc::as_ptr(&formulation) as usize;
+        if let Some((_, recipe)) = self.projected.get(&key) {
+            return recipe.clone();
+        }
+        let recipe = self.recipes.intern(Arc::new(Recipe {
+            binders: formulation.binders(),
+            color: formulation.latent().color,
+            parts: formulation.latent().parts.clone(),
+            properties: formulation.prop(),
+            kinetics: formulation.kinetics(),
+        }));
+        self.restored.entry(Arc::as_ptr(&recipe) as usize)
+            .or_insert_with(|| (recipe.clone(), formulation.clone()));
+        self.projected.insert(key, (formulation, recipe.clone()));
+        recipe
+    }
+
+    fn formulation(&mut self, recipe: &Arc<Recipe>) -> Result<Arc<Formulation>, MaterialError> {
+        let key = Arc::as_ptr(recipe) as usize;
+        if let Some((_, formulation)) = self.restored.get(&key) {
+            return Ok(formulation.clone());
+        }
+        let canonical = self.recipes.intern(recipe.clone());
+        let canonical_key = Arc::as_ptr(&canonical) as usize;
+        let formulation = if let Some((_, formulation)) = self.restored.get(&canonical_key) {
+            formulation.clone()
+        } else {
+            let mut latent = Latent::from_color(recipe.color);
+            latent.parts = recipe.parts.clone();
+            let formulation = Arc::new(Formulation::new_with_binders(
+                latent, recipe.properties, recipe.kinetics, recipe.binders,
+            )?);
+            self.restored.insert(canonical_key, (canonical, formulation.clone()));
+            formulation
+        };
+        self.restored.insert(key, (recipe.clone(), formulation.clone()));
+        Ok(formulation)
+    }
+}
 
 pub(crate) struct NativeExchange {
     pub(crate) before: Material,
@@ -20,6 +70,7 @@ pub(crate) struct NativeExchange {
     pub(crate) absorb: Vec<f32>,
     pub(crate) receptive: Option<Vec<f32>>,
     initial_solvent: Vec<f32>,
+    recipes: NativeRecipes,
 }
 
 #[cfg(test)]
@@ -58,6 +109,65 @@ mod tests {
             .write_to(&mut bytes)
             .unwrap();
         bytes
+    }
+
+    #[test]
+    fn projected_cells_share_recipes_without_merging_chemistry_or_history() {
+        let mut source = super::super::store::tests::paint(4.0, 1, 0.1);
+        let original = source.fragments[0].cells[0].formulation.clone();
+        let mut upper = source.fragments[0].cells[0].clone();
+        upper.formulation = Arc::new((*original).clone());
+        upper.oxygen = 0.7;
+        upper.network = 0.2;
+        source.fragments[0].cells.push(upper);
+        let mut recipes = NativeRecipes::default();
+        let projected = payload(source, 1.0, &mut recipes);
+        assert_eq!(projected.fragments.len(), 2);
+        assert!(Arc::ptr_eq(&projected.fragments[0].recipe, &projected.fragments[1].recipe));
+        assert_eq!(projected.fragments[0].network, 0.1f32 as f64);
+        assert_eq!(projected.fragments[1].network, 0.2f32 as f64);
+        let returned = transfer(projected, 1.0, &mut recipes).unwrap();
+        assert_eq!(returned.fragments.len(), 2);
+        assert!(returned.fragments.iter().all(|fragment| Arc::ptr_eq(&fragment.cells[0].formulation, &original)));
+        assert_eq!(returned.fragments[1].cells[0].oxygen, 0.7);
+    }
+
+    #[test]
+    fn identical_optical_cells_do_not_duplicate_layers_or_detach_bare_tiles() {
+        let mut canvas = canvas(8);
+        let before = canvas.material_store().unwrap().tiles[0].clone();
+        canvas.with_native_material(|_| {});
+        assert!(Arc::ptr_eq(&canvas.material_store().unwrap().tiles[0], &before));
+        canvas.edit_material(|store| {
+            let mut material = super::super::store::tests::paint(8.0 * store.pixel_area(), 1, 0.01);
+            let mut upper = material.fragments[0].cells[0].clone();
+            upper.network = 0.02;
+            material.fragments[0].cells.push(upper);
+            store.deposit(0, material, DepositMode::Cover)
+        }).unwrap();
+        let before = canvas.material_store().unwrap().read_column(0).unwrap().to_owned();
+        canvas.with_native_material(|canvas| {
+            let latent = &canvas.wet.lat[0];
+            assert!(latent.layers.is_empty());
+            let fragments = &latent.material.as_ref().unwrap().fragments;
+            assert_eq!(fragments.len(), 2);
+            assert!(Arc::ptr_eq(&fragments[0].recipe, &fragments[1].recipe));
+            assert_ne!(fragments[0].network, fragments[1].network);
+        });
+        assert_eq!(canvas.material_store().unwrap().read_column(0).unwrap().to_owned(), before);
+    }
+
+    #[test]
+    fn a_panic_during_native_commit_restores_the_retained_interval() {
+        let mut canvas = canvas(8);
+        canvas.wait(3.25);
+        let before = state(&canvas);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            canvas.with_native_material(|canvas| canvas.wet.material_changed.clear());
+        }));
+        assert!(result.is_err());
+        assert_eq!(state(&canvas), before);
+        assert!(canvas.wet.vol.is_empty() && canvas.native_exchange.is_none());
     }
 
     #[test]
@@ -299,7 +409,7 @@ mod knife_tests {
     }
 }
 
-fn payload(transfer: MaterialTransfer, area: f64) -> MaterialPayload {
+fn payload(transfer: MaterialTransfer, area: f64, recipes: &mut NativeRecipes) -> MaterialPayload {
     let mut fragments = Vec::new();
     for packet in transfer.fragments {
         let height = packet.cells.iter().map(TransferCell::volume).sum::<f64>()
@@ -334,13 +444,7 @@ fn payload(transfer: MaterialTransfer, area: f64) -> MaterialPayload {
                 oxidation: cell.oxidation as f64,
                 network: cell.network as f64,
                 inhibitor: cell.inhibitor as f64,
-                recipe: Recipe {
-                    binders: cell.formulation.binders(),
-                    color: cell.formulation.latent().color,
-                    parts: cell.formulation.latent().parts.clone(),
-                    properties: cell.formulation.prop(),
-                    kinetics: cell.formulation.kinetics(),
-                },
+                recipe: recipes.project(cell.formulation),
                 history,
             });
             bottom = top;
@@ -349,20 +453,13 @@ fn payload(transfer: MaterialTransfer, area: f64) -> MaterialPayload {
     MaterialPayload { fragments }
 }
 
-fn transfer(payload: MaterialPayload, area: f64) -> Result<MaterialTransfer, MaterialError> {
+fn transfer(payload: MaterialPayload, area: f64, recipes: &mut NativeRecipes) -> Result<MaterialTransfer, MaterialError> {
     let mut fragments = Vec::new();
     for fragment in payload.fragments {
         if fragment.pigment + fragment.binder + fragment.solvent == 0.0 {
             continue;
         }
-        let mut latent = Latent::from_color(fragment.recipe.color);
-        latent.parts = fragment.recipe.parts;
-        let formulation = Arc::new(Formulation::new_with_binders(
-            latent,
-            fragment.recipe.properties,
-            fragment.recipe.kinetics,
-            fragment.recipe.binders,
-        )?);
+        let formulation = recipes.formulation(&fragment.recipe)?;
         fragments.push(Fragment {
             cells: vec![TransferCell {
                 pigment: fragment.pigment * area,
@@ -404,7 +501,7 @@ impl Canvas {
         let area = material.store.pixel_area();
         let removed = material.store.take_top(pixel, TakeRequest { amount_um, mode: RemovalMode::Coherent })?;
         let height = material.store.surface_height(pixel)?;
-        let removed = payload(removed, area);
+        let removed = payload(removed, area, &mut self.native_exchange.as_mut().expect("native exchange").recipes);
         if removed.fragments.is_empty() { return Ok(removed); }
         self.height[local] = height;
         self.px[local] = self.material_look_px(pixel);
@@ -527,14 +624,16 @@ impl Canvas {
         }
         self.begin_material_exchange(bounds)
             .expect("material exchange projection");
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(self)));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let result = work(self);
+            self.finish_material_exchange()?;
+            Ok::<R, MaterialError>(result)
+        }));
         match result {
-            Ok(result) => {
-                if let Err(error) = self.finish_material_exchange() {
-                    self.abort_material_exchange();
-                    panic!("material exchange commit: {error}");
-                }
-                result
+            Ok(Ok(result)) => result,
+            Ok(Err(error)) => {
+                self.abort_material_exchange();
+                panic!("material exchange commit: {error}");
             }
             Err(error) => {
                 self.abort_material_exchange();
@@ -580,6 +679,7 @@ impl Canvas {
         wet.material_changed.resize(n, 0);
         wet.ensure_solvent();
         let area = material.store.pixel_area();
+        let mut recipes = NativeRecipes::default();
         for i in 0..n {
             let index = source(i);
             let column = material.store.read_column(index)?;
@@ -599,10 +699,12 @@ impl Canvas {
             wet.laid[i] = column.state.laid;
             wet.floor[i] = column.state.floor;
             wet.solv[i] = column.state.free_solvent_um;
-            material.store.with_column_mut(index, |column, _| {
-                column.state.free_solvent_um = 0.0;
-                Ok(())
-            })?;
+            if column.state.free_solvent_um != 0.0 {
+                material.store.with_state_mut(index, |state| {
+                    state.free_solvent_um = 0.0;
+                    Ok(())
+                })?;
+            }
             let amount = material.store.sample_with_limit(index, limit)?.mobile_um;
             if amount <= 0.0 {
                 continue;
@@ -614,31 +716,49 @@ impl Canvas {
                     mode: RemovalMode::Mobile { max_network: limit },
                 },
             )?;
-            let mut material_payload = payload(removed, area);
+            let mut material_payload = payload(removed, area, &mut recipes);
             let coverage = material_payload
                 .fragments
                 .last()
                 .map_or(1.0, |f| f.history.coverage);
             let volume = material_payload.volume() as f32;
-            let mut layers = Vec::new();
+            let mut layers: Vec<Layer> = Vec::new();
+            let (mut optical_volume, mut latent, mut prop) = (0.0, Latent::default(), [0.0; 10]);
+            let mut last_coverage = 0.0;
             let mut cure = 0.0;
             for fragment in &material_payload.fragments {
                 if fragment.volume == 0.0 {
                     continue;
                 }
-                let mut latent = Latent::from_color(fragment.recipe.color);
-                latent.parts = fragment.recipe.parts.clone();
-                layers.push(Layer {
-                    share: fragment.volume as f32,
-                    lat: latent,
-                    hide: fragment.properties(),
-                });
+                let hide = fragment.properties();
+                if let Some(layer) = layers.last_mut().filter(|layer| {
+                    layer.lat.color == fragment.recipe.color
+                        && layer.lat.parts == fragment.recipe.parts
+                        && layer.hide == hide
+                        && last_coverage == fragment.history.coverage
+                }) {
+                    crate::wet::mix_into(&mut optical_volume, &mut latent, &mut prop,
+                        fragment.volume as f32, &layer.lat, hide);
+                    layer.share += fragment.volume as f32;
+                } else {
+                    let mut layer = Latent::from_color(fragment.recipe.color);
+                    layer.parts = fragment.recipe.parts.clone();
+                    crate::wet::mix_into(&mut optical_volume, &mut latent, &mut prop,
+                        fragment.volume as f32, &layer, hide);
+                    layers.push(Layer { share: fragment.volume as f32, lat: layer, hide });
+                    last_coverage = fragment.history.coverage;
+                }
                 wet.solv[i] += fragment.solvent as f32;
                 cure +=
                     fragment.volume as f32 * fragment.network as f32 / limit * crate::drying::GEL;
             }
             if volume > 0.0 {
-                let (_, mut latent, prop) = Latent::from_layers(layers);
+                if layers.len() > 1 {
+                    for layer in &mut layers {
+                        layer.share /= optical_volume;
+                    }
+                    latent.layers = layers;
+                }
                 material_payload.scale(1.0 / volume as f64);
                 latent.material = Some(material_payload);
                 wet.vol[i] = volume;
@@ -683,6 +803,7 @@ impl Canvas {
             absorb: std::mem::replace(&mut self.absorb, absorb),
             receptive: std::mem::replace(&mut self.receptive, receptive),
             initial_solvent: wet.solv.clone(),
+            recipes,
         });
         self.f = crate::Frame {
             w: width,
@@ -702,29 +823,51 @@ impl Canvas {
     fn finish_material_exchange(&mut self) -> Result<(), MaterialError> {
         let mut material = self
             .material
-            .clone()
+            .take()
             .ok_or(MaterialError::Invalid("missing material backend"))?;
         let area = material.store.pixel_area();
-        let exchange = self.native_exchange.as_ref().expect("native exchange");
+        let exchange = self.native_exchange.as_mut().expect("native exchange");
+        let (rect, frame_width, width) = (exchange.rect, exchange.frame.w, self.f.w);
         let source = |i: usize| {
-            (exchange.rect.1 + i / self.f.w) * exchange.frame.w + exchange.rect.0 + i % self.f.w
+            (rect.1 + i / width) * frame_width + rect.0 + i % width
         };
         for i in 0..self.f.w * self.f.h {
             if self.wet.material_changed[i] == 0
                 && self.wet.material_sinks[i].is_empty()
                 && self.wet.solv[i] == exchange.initial_solvent[i]
             {
-                let mut original = exchange.before.store.read_column(source(i))?.to_owned();
-                original.state.stroke = self.wet.stroke[i];
-                original.state.touched = self.wet.touched[i];
-                original.state.laid_id = self.wet.laid_id[i];
-                original.state.laid = self.wet.laid[i];
-                original.state.floor = self.wet.floor[i];
-                original.state.absorb = self.absorb[i];
-                material.store.with_column_mut(source(i), |column, _| {
-                    *column = original;
-                    Ok(())
-                })?;
+                let original = exchange.before.store.read_column(source(i))?;
+                let retained = material.store.read_column(source(i))?;
+                let same_material = original.cells == retained.cells
+                    && original.coverage == retained.coverage
+                    && original.inert_coatings().eq(retained.inert_coatings())
+                    && original.packets.len() == retained.packets.len()
+                    && original.packets.iter().zip(retained.packets).all(|(a, b)| {
+                        let (mut a, mut b) = (*a, *b);
+                        a.first_cell -= original.first_cell;
+                        b.first_cell -= retained.first_cell;
+                        a == b
+                    });
+                let mut state = original.state.clone();
+                state.stroke = self.wet.stroke[i];
+                state.touched = self.wet.touched[i];
+                state.laid_id = self.wet.laid_id[i];
+                state.laid = self.wet.laid[i];
+                state.floor = self.wet.floor[i];
+                state.absorb = self.absorb[i];
+                if !same_material {
+                    let original = original.to_owned();
+                    material.store.with_column_mut(source(i), |column, _| {
+                        *column = original;
+                        Ok(())
+                    })?;
+                }
+                if state != *material.store.read_column(source(i))?.state {
+                    material.store.with_state_mut(source(i), |target| {
+                        *target = state;
+                        Ok(())
+                    })?;
+                }
                 continue;
             }
             let volume = self.wet.vol[i];
@@ -738,25 +881,30 @@ impl Canvas {
             let bound_solvent = material_payload.inventory().solvent;
             material.store.deposit(
                 source(i),
-                transfer(material_payload, area)?,
+                transfer(material_payload, area, &mut exchange.recipes)?,
                 DepositMode::Cover,
             )?;
-            material.store.with_column_mut(source(i), |column, _| {
-                column.state.free_solvent_um =
-                    (self.wet.solv[i] as f64 - bound_solvent).max(0.0) as f32;
-                column.state.stroke = self.wet.stroke[i];
-                column.state.touched = self.wet.touched[i];
-                column.state.laid_id = self.wet.laid_id[i];
-                column.state.laid = self.wet.laid[i];
-                column.state.floor = self.wet.floor[i];
-                column.state.absorb = self.absorb[i];
-                for sink in &self.wet.material_sinks[i] {
-                    if sink.kind == SinkKind::Ground {
-                        column.state.ground_oil += sink.material.inventory().binder as f32;
-                    }
+            let original = material.store.read_column(source(i))?.state;
+            let mut state = original.clone();
+            state.free_solvent_um =
+                (self.wet.solv[i] as f64 - bound_solvent).max(0.0) as f32;
+            state.stroke = self.wet.stroke[i];
+            state.touched = self.wet.touched[i];
+            state.laid_id = self.wet.laid_id[i];
+            state.laid = self.wet.laid[i];
+            state.floor = self.wet.floor[i];
+            state.absorb = self.absorb[i];
+            for sink in &self.wet.material_sinks[i] {
+                if sink.kind == SinkKind::Ground {
+                    state.ground_oil += sink.material.inventory().binder as f32;
                 }
-                Ok(())
-            })?;
+            }
+            if state != *original {
+                material.store.with_state_mut(source(i), |target| {
+                    *target = state;
+                    Ok(())
+                })?;
+            }
         }
         self.material = Some(material);
         self.release_material_exchange(false);

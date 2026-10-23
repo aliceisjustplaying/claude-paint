@@ -1,5 +1,6 @@
 use super::chemistry::Kinetics;
 use super::exchange::{Fragment, MechanicalHistory, Recipe};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MixtureError {
@@ -245,7 +246,7 @@ pub fn mix_mobile(
         oxidation: oxidation.min(1.0),
         network: network.min(1.0),
         inhibitor: inhibitor.min(1.0),
-        recipe,
+        recipe: Arc::new(recipe),
         history,
     })
 }
@@ -266,7 +267,7 @@ mod tests {
             oxidation: 0.2,
             network: 0.1,
             inhibitor: 0.3,
-            recipe: Recipe {
+            recipe: Arc::new(Recipe {
                 color: [0.2; crate::wet::LAT],
                 parts: vec![(0, 1.0)],
                 properties: [2.0, 0.8, 2.0, 0.0, 1.0, 0.7, 0.6, 0.0, 0.5, 0.0],
@@ -281,7 +282,7 @@ mod tests {
                     ..Kinetics::default()
                 },
                 binders: [1.0, 0.0, 0.0, 0.0, 0.0],
-            },
+            }),
             history: MechanicalHistory::default(),
         }
     }
@@ -325,8 +326,8 @@ mod tests {
         b.oxidation = 0.9;
         b.network = 0.95;
         b.inhibitor = 0.6;
-        b.recipe.kinetics.oxygen_solubility = 1.2;
-        b.recipe.kinetics.solvent_solubility = 0.1;
+        Arc::make_mut(&mut b.recipe).kinetics.oxygen_solubility = 1.2;
+        Arc::make_mut(&mut b.recipe).kinetics.solvent_solubility = 0.1;
         let expected_capacity = a.oxygen_capacity() + b.oxygen_capacity();
         let expected = inventory(vec![a.clone(), b.clone()]);
         let c = mix_mobile(&[a, b], 4.0, MechanicalHistory::default()).unwrap();
@@ -346,8 +347,8 @@ mod tests {
         let mut b = a.clone();
         b.binder = 30.0;
         b.solvent = 20.0;
-        b.recipe.kinetics.oxygen_solubility = 1.3;
-        b.recipe.kinetics.solvent_solubility = 0.05;
+        Arc::make_mut(&mut b.recipe).kinetics.oxygen_solubility = 1.3;
+        Arc::make_mut(&mut b.recipe).kinetics.solvent_solubility = 0.05;
         let expected_capacity = a.oxygen_capacity() + b.oxygen_capacity();
         let c = mix_mobile(&[a.clone(), b], 1.0, MechanicalHistory::default()).unwrap();
         close(c.oxygen_capacity(), expected_capacity);
@@ -365,12 +366,12 @@ mod tests {
         let mut b = a.clone();
         b.volume = 3.0;
         b.binder = 30.0;
-        b.recipe.color = [0.6; crate::wet::LAT];
-        b.recipe.parts = vec![(7, 1.0)];
-        b.recipe.binders = [0.0, 1.0, 0.0, 0.0, 0.0];
-        b.recipe.kinetics.binder_code = 2;
-        b.recipe.kinetics.drier_code = 0;
-        b.recipe.kinetics.provenance_code = 4;
+        Arc::make_mut(&mut b.recipe).color = [0.6; crate::wet::LAT];
+        Arc::make_mut(&mut b.recipe).parts = vec![(7, 1.0)];
+        Arc::make_mut(&mut b.recipe).binders = [0.0, 1.0, 0.0, 0.0, 0.0];
+        Arc::make_mut(&mut b.recipe).kinetics.binder_code = 2;
+        Arc::make_mut(&mut b.recipe).kinetics.drier_code = 0;
+        Arc::make_mut(&mut b.recipe).kinetics.provenance_code = 4;
         let scatter = 0.25 * a.properties()[0] + 0.75 * b.properties()[0];
         let c = mix_mobile(&[a, b], 1.0, MechanicalHistory::default()).unwrap();
         assert_eq!(c.recipe.parts, vec![(0, 0.25), (7, 0.75)]);
@@ -391,9 +392,9 @@ mod tests {
         let mut b = a.clone();
         b.binder = 30.0;
         b.volume = 1.0;
-        b.recipe.kinetics.oxidation_rate_s = 0.003;
-        b.recipe.kinetics.autocatalysis = 4.0;
-        b.recipe.kinetics.oxygen_demand = 0.5;
+        Arc::make_mut(&mut b.recipe).kinetics.oxidation_rate_s = 0.003;
+        Arc::make_mut(&mut b.recipe).kinetics.autocatalysis = 4.0;
+        Arc::make_mut(&mut b.recipe).kinetics.oxygen_demand = 0.5;
         let expected_a =
             (0.25 * 0.001 * a.recipe.kinetics.autocatalysis + 0.75 * 0.003 * 4.0) / 0.0025;
         let c = mix_mobile(&[a, b], 1.0, MechanicalHistory::default()).unwrap();
@@ -419,9 +420,9 @@ mod tests {
     fn zero_rates_and_absent_solvent_need_no_division_by_zero() {
         let mut a = fragment();
         a.solvent = 0.0;
-        a.recipe.kinetics.oxidation_rate_s = 0.0;
-        a.recipe.kinetics.inhibitor_rate_s = 0.0;
-        a.recipe.kinetics.diffusivity_um2_s = 0.0;
+        Arc::make_mut(&mut a.recipe).kinetics.oxidation_rate_s = 0.0;
+        Arc::make_mut(&mut a.recipe).kinetics.inhibitor_rate_s = 0.0;
+        Arc::make_mut(&mut a.recipe).kinetics.diffusivity_um2_s = 0.0;
         let c = mix_mobile(&[a.clone(), a], 1.0, MechanicalHistory::default()).unwrap();
         assert_eq!(c.recipe.kinetics.oxidation_rate_s, 0.0);
         assert_eq!(c.recipe.kinetics.inhibitor_rate_s, 0.0);
@@ -434,13 +435,13 @@ mod tests {
     fn unsupported_identity_and_invalid_material_fail_explicitly() {
         let a = fragment();
         let mut b = a.clone();
-        b.recipe.kinetics.drier_code = 9;
+        Arc::make_mut(&mut b.recipe).kinetics.drier_code = 9;
         assert_eq!(
             mix_mobile(&[a.clone(), b], 1.0, MechanicalHistory::default()),
             Err(MixtureError::DifferentDrierFamilies)
         );
         let mut b = a.clone();
-        b.recipe.kinetics.revision += 1;
+        Arc::make_mut(&mut b.recipe).kinetics.revision += 1;
         assert_eq!(
             mix_mobile(&[a.clone(), b], 1.0, MechanicalHistory::default()),
             Err(MixtureError::DifferentRevisions)

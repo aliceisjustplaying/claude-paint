@@ -1,5 +1,8 @@
 use super::chemistry::Kinetics;
 use crate::wet::{LAT, Prop};
+use std::collections::{HashMap, hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
@@ -13,6 +16,36 @@ pub struct Recipe {
     #[cfg_attr(feature = "replay-effects", serde(with = "super::wire::kinetics"))]
     pub kinetics: Kinetics,
     pub binders: [f64; 5],
+}
+
+#[derive(Default)]
+pub(crate) struct RecipePool {
+    recipes: HashMap<u64, Vec<Arc<Recipe>>>,
+}
+
+impl RecipePool {
+    pub(crate) fn intern(&mut self, recipe: Arc<Recipe>) -> Arc<Recipe> {
+        let mut hash = DefaultHasher::new();
+        for value in recipe.color.iter().chain(&recipe.properties) {
+            (if *value == 0.0 { 0 } else { value.to_bits() }).hash(&mut hash);
+        }
+        recipe.parts.len().hash(&mut hash);
+        for (id, value) in &recipe.parts {
+            id.hash(&mut hash);
+            (if *value == 0.0 { 0 } else { value.to_bits() }).hash(&mut hash);
+        }
+        for value in super::store::kinetics_values(recipe.kinetics).into_iter().chain(recipe.binders) {
+            (if value == 0.0 { 0 } else { value.to_bits() }).hash(&mut hash);
+        }
+        [recipe.kinetics.binder_code, recipe.kinetics.drier_code,
+            recipe.kinetics.provenance_code, recipe.kinetics.revision].hash(&mut hash);
+        let candidates = self.recipes.entry(hash.finish()).or_default();
+        if let Some(existing) = candidates.iter().find(|existing| ***existing == *recipe) {
+            return existing.clone();
+        }
+        candidates.push(recipe.clone());
+        recipe
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -55,7 +88,8 @@ pub struct Fragment {
     pub oxidation: f64,
     pub network: f64,
     pub inhibitor: f64,
-    pub recipe: Recipe,
+    #[cfg_attr(feature = "replay-effects", serde(with = "super::wire::shared_recipe"))]
+    pub recipe: Arc<Recipe>,
     pub history: MechanicalHistory,
 }
 
@@ -80,7 +114,7 @@ mod tests {
                 oxidation: network * 0.8,
                 network,
                 inhibitor: 0.15,
-                recipe: Recipe {
+                recipe: Arc::new(Recipe {
                     binders: [1.0, 0.0, 0.0, 0.0, 0.0],
                     color: latent.color,
                     parts: vec![(0, 1.0)],
@@ -104,7 +138,7 @@ mod tests {
                         provenance_code: 1,
                         revision: 1,
                     },
-                },
+                }),
                 history: MechanicalHistory::default(),
             }],
         });
@@ -133,6 +167,23 @@ mod tests {
         for (a, b) in expected.into_iter().zip(actual) {
             assert!((a - b).abs() <= 2e-5 * a.abs().max(1.0), "{a} != {b}");
         }
+    }
+
+    #[test]
+    fn cloned_fragments_share_recipes_and_interning_uses_all_contents() {
+        let source = parcel(0.2, 0.4).material.unwrap().fragments.remove(0);
+        assert!(Arc::ptr_eq(&source.recipe, &source.clone().recipe));
+        let mut pool = RecipePool::default();
+        let mut first = (*source.recipe).clone();
+        first.color[0] = 0.0;
+        let a = pool.intern(Arc::new(first.clone()));
+        first.color[0] = -0.0;
+        let b = pool.intern(Arc::new(first.clone()));
+        assert!(Arc::ptr_eq(&a, &b));
+        first.kinetics.network_rate_s *= 2.0;
+        let c = pool.intern(Arc::new(first));
+        assert!(!Arc::ptr_eq(&a, &c));
+        assert_ne!(a, c);
     }
 
     #[test]
@@ -487,9 +538,12 @@ impl<'de> serde::Deserialize<'de> for MaterialPayload {
                 return Err(serde::de::Error::custom("invalid chemical tool payload"));
             }
         }
-        Ok(Self {
-            fragments: material.fragments,
-        })
+        let mut fragments = material.fragments;
+        let mut recipes = RecipePool::default();
+        for fragment in &mut fragments {
+            fragment.recipe = recipes.intern(fragment.recipe.clone());
+        }
+        Ok(Self { fragments })
     }
 }
 

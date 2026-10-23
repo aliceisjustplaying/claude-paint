@@ -43,6 +43,7 @@ use crate::rng::{Rng, hash2};
 use crate::smoothstep;
 use crate::surface::COAT_UM;
 use crate::tally::{Tally, pace as hand};
+use crate::wet::Latent;
 
 /// Hand time of a rag. [E]: estimates.
 pub mod pace {
@@ -640,9 +641,15 @@ impl Canvas {
                 if take > 0.0 {
                     // (the drain switch: the rag lifts from the top down,
                     // `bristle::take_from`)
-                    let h = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
+                    let layers = if self.engine >= crate::PIGMENT_MIXER && !self.wet.lat[i].layers.is_empty() {
+                        let (below, top) = self.wet.lat[i].split_top(self.wet.vol[i], self.wet.hide[i], take, self.drain);
+                        Some((Latent::from_layers(below), Latent::from_layers(top)))
+                    } else { None };
+                    let h = if let Some((_, (_, _, h))) = &layers {
+                        if self.drain { crate::bristle::fluid_of(*h) } else { *h }
+                    } else if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
                     if pooled {
-                        let l = &self.wet.lat[i];
+                        let l = layers.as_ref().map_or(&self.wet.lat[i], |(_, (_, lat, _))| lat);
                         got.lat.add_parts(l, take);
                         for q in 0..l.len() {
                             got.lat[q] += l[q] * take;
@@ -658,6 +665,11 @@ impl Canvas {
                         got.vol += take;
                     }
                     let ts = self.rag_take(i, take);
+                    if let Some(((volume, lat, hide), _)) = layers {
+                        self.wet.vol[i] = volume;
+                        self.wet.lat[i] = lat;
+                        self.wet.hide[i] = hide;
+                    }
                     got.solv += ts * COAT_UM;
                     row_s += ts;
                     row += take;
@@ -1273,6 +1285,37 @@ mod rag_lift {
 mod tests {
     use super::*;
     use crate::wet::OIL_VOLUME;
+
+    #[test]
+    fn a_rag_lifts_fluid_oil_first_from_a_retained_layer() {
+        let mut c = Canvas::new(2, 1.0, [0.3; 3]).with_engine(9).with_drain(true);
+        let base = crate::Paint::body([0.01; 3]);
+        let top = crate::Paint::body([1.0; 3]);
+        let mut below = base.prop();
+        below[4] = 0.4;
+        below[6] = 0.4;
+        below[7] = 1.0;
+        let mut above = top.prop();
+        above[4] = 0.7;
+        above[6] = 0.4;
+        above[7] = 0.5;
+        let (vol, lat, hide) = Latent::from_layers(vec![
+            crate::wet::Layer { share: 0.6, lat: base.latent(), hide: below },
+            crate::wet::Layer { share: 0.4, lat: top.latent(), hide: above },
+        ]);
+        c.wet.vol.fill(vol);
+        c.wet.lat.fill(lat);
+        c.wet.hide.fill(hide);
+        let mut rag = Rag::new(1000.0, 2);
+        let lifted = c.rag_contact(&mut rag, (0.0, 0.0, 1000.0, 1000.0), 0.5, Touch { secs: 1.0, slip_mm: 0.0 }, None, |_, _| (0.02, 1.0, 0.0, 0.0));
+        assert!(lifted > 0.0);
+        for i in 0..c.wet.vol.len() {
+            let take = vol - c.wet.vol[i];
+            assert!(take > 0.0 && take < 0.2, "lifted {take} coats");
+            assert!((c.wet.vol[i] * c.wet.hide[i][4] - (0.52 - take)).abs() < 1e-6);
+            assert!((c.wet.vol[i] * c.wet.hide[i][7] - 0.8).abs() < 1e-6);
+        }
+    }
 
     #[test]
     fn a_drained_rag_smear_conserves_integrated_scattering() {

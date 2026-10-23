@@ -130,6 +130,7 @@ const MAGIC16: &[u8; 8] = b"PAINTC16";
 const MAGIC17: &[u8; 8] = b"PAINTC17";
 const MAGIC18: &[u8; 8] = b"PAINTC18";
 const MAGIC19: &[u8; 8] = b"PAINTC19";
+const MAGIC20: &[u8; 8] = b"PAINTC20";
 const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
@@ -388,6 +389,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC17 => 17,
         m if m == MAGIC18 => 18,
         m if m == MAGIC19 => 19,
+        m if m == MAGIC20 => 20,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -412,7 +414,8 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        let pigments = self.wet.lat.iter().any(|p| !p.parts.is_empty());
+        let layers = self.wet.lat.iter().any(|p| !p.layers.is_empty());
+        let pigments = layers || self.wet.lat.iter().any(|p| !p.parts.is_empty());
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
@@ -441,7 +444,7 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(MAGIC19)?;
+        w.write_all(if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
@@ -573,13 +576,29 @@ impl Canvas {
                 }
             }
         }
+        if layers {
+            for pixel in &self.wet.lat {
+                put_u64(w, pixel.layers.len() as u64)?;
+                for layer in &pixel.layers {
+                    put_f32(w, layer.share)?;
+                    put_all(w, layer.lat.color.into_iter())?;
+                    put_all(w, layer.hide.into_iter())?;
+                    put_u64(w, layer.lat.parts.len() as u64)?;
+                    for &(i, amount) in &layer.lat.parts {
+                        put_u64(w, i as u64)?;
+                        put_f32(w, amount)?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
-        let own_mixer = version == 19;
+        let layers = version == 20;
+        let own_mixer = version >= 19;
         let identity = if own_mixer { get_u64(r)? } else { 0 };
         if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::film_identity() {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
@@ -872,9 +891,35 @@ impl Canvas {
                     pixel.parts.push((i, amount));
                 }
             }
-            if r.read(&mut [0u8; 1])? != 0 {
+            if !layers && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
+        }
+        if layers {
+            if c.engine < crate::PIGMENT_MIXER || !pigments { return Err(bad("checkpoint layers need engine 9 pigment storage")); }
+            for pixel in &mut c.wet.lat {
+                let count = get_u64(r)?;
+                if count > 1 << 20 { return Err(bad("checkpoint layer count is invalid")); }
+                for _ in 0..count {
+                    let share = get_f32(r)?;
+                    let color: [f32; LAT] = get_all(r, LAT)?.try_into().unwrap();
+                    let hide: crate::wet::Prop = get_all(r, 10)?.try_into().unwrap();
+                    if !share.is_finite() || share <= 0.0 || !color.iter().chain(&hide).all(|x| x.is_finite()) { return Err(bad("checkpoint layer is invalid")); }
+                    let mut lat = crate::wet::Latent::from_color(color);
+                    let parts = get_u64(r)?;
+                    if parts > 1 << 20 { return Err(bad("checkpoint layer pigment count is invalid")); }
+                    for _ in 0..parts {
+                        let i = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint layer pigment is invalid"))?;
+                        let amount = get_f32(r)?;
+                        if !amount.is_finite() || amount < 0.0 || lat.parts.iter().any(|p| p.0 == i) { return Err(bad("checkpoint layer pigment list is invalid")); }
+                        lat.parts.push((i, amount));
+                    }
+                    pixel.layers.push(crate::wet::Layer { share, lat, hide });
+                }
+                let sum: f32 = pixel.layers.iter().map(|l| l.share).sum();
+                if count > 0 && (sum - 1.0).abs() > 1e-4 { return Err(bad("checkpoint layer shares are invalid")); }
+            }
+            if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }
         if !own_mixer {
             if c.wet.vol.iter().any(|&v| v > 0.0) {

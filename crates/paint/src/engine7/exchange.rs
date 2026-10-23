@@ -110,9 +110,9 @@ fn ramp(e0: f32, inv: f32, x: f32) -> f32 {
 /// color, the properties `hd` of the paint that leaves it (`Surf::take`'s)
 /// and `cure`.
 #[inline(always)]
-unsafe fn packed(sf: &Surf, i: usize, hd: &Prop, cure: f32) -> [f32; PACK] {
+unsafe fn packed(sf: &Surf, i: usize, hd: &Prop, cure: f32, picked: Option<&Latent>) -> [f32; PACK] {
     unsafe {
-        let l = &*sf.lat.add(i);
+        let l = picked.unwrap_or(&*sf.lat.add(i));
         let mut p = [0.0f32; PACK];
         p[VOL] = 1.0;
         p[LAT0..LAT0 + LAT].copy_from_slice(&l.color);
@@ -425,9 +425,10 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     }
                     // (the paint lifted: with the drain switch from the top
                     // down, `bristle::take_from`; without, the film's)
+                    let picked = sf.pickup_lat(i, tk);
                     let hp = sf.take(i, tk);
-                    accumulate(&mut got, &packed(sf, i, &hp, cure), tk * px_area);
-                    got_parts.add_parts(&*sf.lat.add(i), tk * px_area);
+                    accumulate(&mut got, &packed(sf, i, &hp, cure, picked.as_ref()), tk * px_area);
+                    got_parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), tk * px_area);
                 }
             }
             if dep_per_w > 0.0 && !capped && phi <= 0.0 {
@@ -517,14 +518,15 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 // cure it had, the cover it brings (fine tools) and its
                 // solvent (µm), in the film's proportions (m ≤ v, so these
                 // never move more than is there)
+                let picked = sf.pickup_lat(i, out_m);
                 let hp = sf.take(i, out_m);
-                let mut src = packed(sf, i, &hp, cure);
+                let mut src = packed(sf, i, &hp, cure, picked.as_ref());
                 src[COVER] = src_cover;
                 src[SOLV] = src_solv;
                 for &(tx, ty, j, mm) in &moves[..n_moves] {
                     let cell = win.cell(tx, ty, j, || unreachable!("a plough cell is started before its paint lands"));
                     accumulate(&mut cell.a, &src, mm);
-                    cell.parts.add_parts(&*sf.lat.add(i), mm);
+                    cell.parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), mm);
                 }
                 ploughed += out_m * px_area;
             }

@@ -164,6 +164,23 @@ exec '{shutil.which("ffmpeg")}' "$@"
                                           if p.name not in ("pace-change.tsv", "concat.txt")})
                 self.assertIn("duration ", (frames / "concat.txt").read_text())
 
+    def test_numeric_reused_clip_preserves_backslashes_in_frames_directory(self):
+        frames = self.root / r"frames\new"
+        frames.mkdir()
+        rows = ["file\thand_secs\n"]
+        for i in range(3):
+            name = f"{i:06}.png"
+            Image.new("RGB", (64, 48), (i * 100, 30, 100)).save(frames / name)
+            rows.append(f"{name}\t{i * 60}\n")
+        (frames / "frames.tsv").write_text("".join(rows))
+        source = self.root / "unused.lua"
+        source.touch()
+        video = self.root / "backslash.mp4"
+        self.run_ok([REPO / "scripts/replay_clip", source, video, "--reuse",
+                     "--frames-dir", frames, "--width", "64", "--length", "4", "--pace", "0.6"])
+        self.probe(video, 4)
+        self.assertIn(str(frames / "000000.png"), (frames / "concat.txt").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -157,7 +157,8 @@ if [ "$pace" = dynamic ]; then
     --before "$finalfirst" "${painted[@]}" --out "$list" --eval
 else
 # entries use absolute paths because the list is outside $dir
-awk -F'\t' -v dir="$dir" -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
+REPLAY_FRAMES_DIR="$dir" awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '
+  BEGIN { dir = ENVIRON["REPLAY_FRAMES_DIR"] }
   # a name in quotes in the list: each quote in it closes, escapes and reopens
   function esc(s,  r, i) { r = ""; while ((i = index(s, q)) > 0) { r = r substr(s, 1, i - 1) q "\\" q q; s = substr(s, i + 1) } return r s }
   NR == 1 { next }

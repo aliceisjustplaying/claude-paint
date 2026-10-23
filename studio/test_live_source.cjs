@@ -49,13 +49,17 @@ async function failureFixture(browser, hosted, failure = '') {
     if (rel === 'manifest.json') return route.fulfill({ status:state.failure === 'manifest' ? 503 : 200, json:{ version:1, revision:state.revision.repeat(64), snapshot:object('c') } });
     if (rel === object('c')) return route.fulfill({ status:state.failure === 'snapshot' ? 503 : 200, json:{ files:{
       'data/sessions.json':object('d'), 'data/fixture/events.json':object('e'), 'data/fixture/file/paintings/lua/painting.lua':object('f'),
+      'data/fixture/file/paintings/lua/scratch.lua':object('f'), 'data/other/file/paintings/lua/painting.lua':object('f'),
     } } });
     if (rel === object('d') || rel === 'api/sessions') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, active:true, mtime:Date.now() / 1000, title:'Fixture' }] });
     if (rel === object('e') || rel === 'api/events') return route.fulfill({ json:{ epoch:0, sittings:1, events:state.events.slice(hosted ? 0 : +(u.searchParams.get('since') || 0)), updates:[], nupdates:0, total:state.events.length } });
     if (rel === object('f') || rel === 'api/file') {
       state.requests++;
+      state.sourceStarted?.();
       if (state.failure === 'network') return route.abort();
-      return route.fulfill({ status:state.failure === 'source' ? 503 : 200, contentType:'text/plain', body:state.source });
+      const failure = state.failure, source = state.source;
+      if (state.sourceWait) await state.sourceWait;
+      return route.fulfill({ status:failure === 'source' ? 503 : 200, contentType:'text/plain', body:source });
     }
     return route.continue();
   });
@@ -145,6 +149,60 @@ async function failureFixture(browser, hosted, failure = '') {
         await page.clock.runFor(2001);
         assert.equal(state.requests, recovered, 'an unchanged successful source is not fetched again');
       } finally { await page.close(); }
+    });
+    for (const revision of ['a', 'b']) await check('hosted slow source recovers after failure at ' + (revision === 'a' ? 'the same' : 'a new') + ' revision', async () => {
+      const { page, state } = await failureFixture(browser, true, 'source');
+      let finish;
+      try {
+        await page.waitForFunction(() => liveCodeFailed && !busy && codeBatch === null);
+        const failedRequests = state.requests;
+        state.failure = ''; state.revision = revision; state.source = 'local recovered=3';
+        state.sourceWait = new Promise(resolve => { finish = resolve; });
+        await page.clock.runFor(2001);
+        await page.waitForFunction(() => !busy);
+        const pendingRequests = state.requests;
+        assert(pendingRequests > failedRequests, 'a retry starts');
+        await page.clock.runFor(3001);
+        await page.waitForFunction(() => !busy);
+        assert.equal(state.requests, pendingRequests, 'manifest polls leave the slow successful download alone');
+        finish();
+        await page.waitForFunction(() => liveText === 'local recovered=3' && codeBatch === null);
+        assert.match(await page.locator('#code').textContent(), /recovered/);
+        assert.equal(await page.locator('#codestate').textContent(), '');
+        await page.clock.runFor(2001);
+        assert.equal(state.requests, pendingRequests, 'the recovered source is not fetched again');
+      } finally { finish?.(); await page.close(); }
+    });
+    for (const identity of ['painter', 'path', 'revision']) await check('hosted pending source is superseded by a new ' + identity, async () => {
+      const { page, state } = await failureFixture(browser, true);
+      let finishOlder, finishNewer;
+      try {
+        await page.waitForFunction(() => liveText === 'local old=1' && codeBatch === null);
+        const initial = state.requests;
+        state.source = 'local older=2';
+        state.sourceWait = new Promise(resolve => { finishOlder = resolve; });
+        const olderStarted = new Promise(resolve => { state.sourceStarted = resolve; });
+        await page.evaluate(() => { window.olderSource = refreshLiveCode(); });
+        await olderStarted;
+        state.source = 'local newer=3';
+        state.sourceWait = new Promise(resolve => { finishNewer = resolve; });
+        const newerStarted = new Promise(resolve => { state.sourceStarted = resolve; });
+        await page.evaluate(identity => {
+          if (identity === 'painter') Q = 'p=other';
+          if (identity === 'path') events.push({ kind:'paint', ts:new Date().toISOString(), code:'local scratch=1', out:'ok', scratch:true });
+          if (identity === 'revision') liveRevision = 'b'.repeat(64);
+          window.newerSource = refreshLiveCode();
+        }, identity);
+        await newerStarted;
+        finishOlder();
+        await page.evaluate(() => window.olderSource);
+        assert.equal(await page.evaluate(() => liveText), 'local old=1', 'the superseded source is discarded');
+        assert(await page.evaluate(() => { const request = liveTextRequest; refreshLiveCode(); return liveTextRequest === request; }), 'the newer request remains current');
+        assert.equal(state.requests, initial + 2, 'the older completion does not clear the newer pending request');
+        finishNewer();
+        await page.evaluate(() => window.newerSource);
+        assert.equal(await page.evaluate(() => liveText), 'local newer=3');
+      } finally { finishOlder?.(); finishNewer?.(); await page.close(); }
     });
     for (const hosted of [false, true]) await check((hosted ? 'hosted' : 'local') + ' cached source stays visible and labeled after failed refresh', async () => {
       const { page, state } = await failureFixture(browser, hosted);

@@ -847,7 +847,7 @@ function source(path, upto) {
   if (touched) s.value = { text, before, changed, known };
   return s.value;
 }
-let liveText = null, liveTextPath = null, liveTextRequest = 0, liveCodeFailed = false;
+let liveText = null, liveTextPath = null, liveTextRequest = 0, liveTextPending = null, liveCodeFailed = false;
 function codeState() {
   const stale = live && pos === events.length - 1 && liveCodeFailed;
   $('codestate').textContent = stale ? 'out of date' : '';
@@ -858,7 +858,10 @@ const codeShown = () => !document.body.classList.contains('nocode');
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
-  const request = ++liveTextRequest, q = Q, g = gen, revision = liveRevision;
+  const q = Q, g = gen, revision = liveRevision;
+  if (HOSTED && liveTextPending && liveTextPending.q === q && liveTextPending.g === g && liveTextPending.p === p && liveTextPending.revision === revision) return;
+  const request = ++liveTextRequest, pending = { q, g, p, revision };
+  if (HOSTED) liveTextPending = pending;
   const current = () => request === liveTextRequest && q === Q && g === gen && (!HOSTED || revision === liveRevision) && p === paintingFile(events.length - 1);
   try {
     const r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`);
@@ -868,6 +871,7 @@ async function refreshLiveCode() {
     liveText = t; liveTextPath = p; liveCodeFailed = false;
     if (t !== old && live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old);
   } catch (e) { if (!current()) return; liveCodeFailed = true; }
+  finally { if (liveTextPending === pending) liveTextPending = null; }
   codeState();
 }
 const { diffLines, lineHTML } = CodeDisplay;

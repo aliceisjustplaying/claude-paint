@@ -66,6 +66,134 @@ class ReconstructionCLI(unittest.TestCase):
         self.assertIn(str(self.home / 'src/a/stillwet-paintings'), roots)
         self.assertIn(str(self.home / 'src/a/stillwet-paintings-public'), roots)
 
+    def test_committed_typescript_config_is_ready_and_restores(self):
+        relative = 'experiments/watercolor/lab-app/tsconfig.json'
+        committed = SCRIPT.parent.parent / relative
+        original = committed.read_bytes()
+        config = self.write('src/a/claude-paint/' + relative, original)
+        self.plan_scope()
+        manifest = self.prepare()
+        self.assertEqual(manifest['blockers'], [])
+        self.cli('verify', self.candidate)
+        self.cli('restore', self.candidate, self.root / 'restored')
+        restored = self.root / 'restored/home/src/a/claude-paint' / relative
+        data = json.loads(restored.read_text())
+        self.assertIs(data['compilerOptions']['noUncheckedIndexedAccess'], False)
+        self.assertEqual(data['include'], ['src'])
+        self.assertEqual(config.read_bytes(), original)
+
+    def test_jsonc_configs_redact_decoded_strings_and_preserve_string_syntax(self):
+        config = self.write('src/a/claude-paint/tsconfig.build.json',
+                            '{/* config */ "compilerOptions": {"baseUrl": ' +
+                            json.dumps(str(self.home)) + ',}, "name": "\\u0073' +
+                            'arah", "literal": "https://example.test/*text*/,}",}\n')
+        self.write('src/a/claude-paint/settings.jsonc', '{// config\n"values": [1, 2,],}\n')
+        original = config.read_bytes()
+        self.plan_scope()
+        self.assertEqual(self.prepare()['blockers'], [])
+        self.cli('restore', self.candidate, self.root / 'restored')
+        restored = self.root / 'restored/home'
+        data = json.loads((restored / 'src/a/claude-paint/tsconfig.build.json').read_text())
+        self.assertEqual(data['compilerOptions']['baseUrl'], str(restored))
+        self.assertEqual(data['name'], 'alice')
+        self.assertEqual(data['literal'], 'https://example.test/*text*/,}')
+        self.assertEqual(json.loads((restored / 'src/a/claude-paint/settings.jsonc').read_text()),
+                         {'values': [1, 2]})
+        self.assertEqual(config.read_bytes(), original)
+
+    def test_jsonc_support_does_not_relax_malformed_logs_or_encoded_privacy(self):
+        rejected = {
+            'ordinary.json': '{// not a config\n"a": 1}',
+            'session.jsonl': '{"a": 1,}\n',
+            'tsconfig.json': '{/* unclosed comment',
+            'invalid.jsonc': '{"a":,}',
+            'empty-object.jsonc': '{,}',
+            'empty-array.jsonc': '[,]',
+            'double-comma.jsonc': '[1,,]',
+            'tsconfig.private.json': '{// valid config, private payload\n"encrypted_content": "' +
+                                     base64.b64encode(self.identity.encode()).decode() + '"}',
+        }
+        for name, text in rejected.items():
+            self.write('src/a/claude-paint/' + name, text)
+        self.plan_scope()
+        manifest = self.prepare()
+        self.assertEqual({Path(x['path']).name for x in manifest['blockers']}, set(rejected))
+        self.assertTrue(any('decoded base64' in x['reason'] for x in manifest['blockers']))
+
+    def test_standalone_runner_and_all_finished_painting_records_restore(self):
+        run = self.home / 'src/a/stillwet-runs/dryrun/run'
+        studio = self.home / 'tmp/paint-studio-finished'
+        sessions = self.home / '.pi/agent/sessions/--paint-studio-finished--'
+        config = self.write('src/a/stillwet-runs/dryrun/runner/run-config.json', json.dumps({
+            'studio': str(studio), 'source': str(self.project), 'run': str(run), 'critic': True}))
+        self.write('src/a/stillwet-runs/dryrun/run/studios.json', json.dumps({'OPUS1': str(studio)}))
+        self.write('src/a/stillwet-runs/dryrun/run/OPUS/p1_outcome.json', '{"status":"finished"}')
+        self.write('src/a/stillwet-runs/dryrun/run/OPUS/p1_sittings.json', json.dumps([
+            {'sitting': 1, 'status': 'completed', 'sessions': [str(sessions / 'first.jsonl')]},
+            {'sitting': 2, 'part': 2, 'status': 'completed', 'sessions': [str(sessions / 'continuation.jsonl')]},
+        ]))
+        expected = {
+            config.relative_to(self.home): None,
+            Path('src/a/stillwet-runs/dryrun/run/studios.json'): None,
+            Path('src/a/stillwet-runs/dryrun/run/OPUS/p1_outcome.json'): None,
+            Path('src/a/stillwet-runs/dryrun/run/OPUS/p1_sittings.json'): None,
+            Path('tmp/paint-studio-finished/notes/critic.md'): 'Latest critique',
+            Path('tmp/paint-studio-finished/notes/journal.md'): 'Painting journal',
+            Path('src/a/stillwet-runs/dryrun/run/OPUS/critic/first-sitting.md'): 'First critique',
+            Path('src/a/stillwet-runs/dryrun/run/OPUS/critic/second-sitting.md'): 'Second critique',
+            Path('src/a/stillwet-runs/dryrun/run/OPUS/critic/sessions/first/visit.jsonl'): '{"type":"message"}\n',
+            (sessions / 'first.jsonl').relative_to(self.home): '{"type":"message","content":"first sitting"}\n',
+            (sessions / 'continuation.jsonl').relative_to(self.home): '{"type":"compaction","summary":"continued"}\n',
+        }
+        for path, text in expected.items():
+            if text is not None:
+                self.write(path, text)
+        private = self.home / 'private/notes.txt'
+        private.parent.mkdir()
+        private.write_text('UNRELATED PRIVATE DATA')
+        self.write('src/a/stillwet-runs/dryrun/run/private.json', json.dumps({'path': str(private)}))
+        self.write('src/a/stillwet-runs/dryrun/run/.env', 'SECRET ENV')
+        data = self.plan_scope()
+        self.assertTrue(any(run.is_relative_to(Path(x['path'])) for x in data['roots']))
+        manifest = self.prepare()
+        self.assertEqual(manifest['blockers'], [])
+        self.cli('restore', self.candidate, self.root / 'restored')
+        restored = self.root / 'restored/home'
+        for path, text in expected.items():
+            self.assertTrue((restored / path).is_file(), str(path))
+            if text is not None and path.suffix != '.jsonl':
+                self.assertEqual((restored / path).read_text(), text)
+        restored_config = json.loads((restored / config.relative_to(self.home)).read_text())
+        self.assertEqual(restored_config['run'], str(restored / run.relative_to(self.home)))
+        self.assertEqual(restored_config['studio'], str(restored / studio.relative_to(self.home)))
+        sittings = json.loads((restored / 'src/a/stillwet-runs/dryrun/run/OPUS/p1_sittings.json').read_text())
+        self.assertEqual(len(sittings), 2)
+        for sitting in sittings:
+            for session in sitting['sessions']:
+                self.assertTrue(Path(session).is_file())
+                self.assertEqual(len(Path(session).read_text().splitlines()), 1)
+        self.assertFalse((restored / 'private').exists())
+        self.assertFalse((restored / 'src/a/stillwet-runs/dryrun/run/.env').exists())
+
+    def test_run_config_references_follow_newly_selected_indexes_only_within_scope(self):
+        run = self.home / 'tmp/stillwet-isolated-run'
+        studio = self.home / 'tmp/paint-studio-indexed'
+        self.write('src/a/claude-paint/runner/run-config.json', json.dumps({'run': str(run)}))
+        self.write('tmp/stillwet-isolated-run/studios.json', json.dumps({'OPUS1': str(studio)}))
+        self.write('tmp/paint-studio-indexed/notes/journal.md', 'Selected through two indexes')
+        unrelated = self.home / 'private/run-config.json'
+        unrelated.parent.mkdir()
+        unrelated.write_text(json.dumps({'run': str(self.home / 'tmp/stillwet-private')}))
+        (self.project / 'run-config.json').symlink_to(unrelated)
+        self.write('tmp/stillwet-isolated-run/OPUS/p1_sittings.json', json.dumps([
+            {'sessions': [str(self.home / '.pi/agent/sessions/--unrelated-private--/private.jsonl')]}]))
+        data = self.plan_scope()
+        roots = {x['path'] for x in data['roots']}
+        self.assertIn(str(run), roots)
+        self.assertIn(str(studio), roots)
+        self.assertNotIn(str(self.home / 'tmp/stillwet-private'), roots)
+        self.assertNotIn(str(self.home / '.pi/agent/sessions/--unrelated-private--'), roots)
+
     def test_current_full_sessions_preservation_and_portable_restore(self):
         """Uncommitted files, every sitting/entry and vanished data survive in a usable layout."""
         current = self.write('src/a/claude-paint/uncommitted.txt', str(self.home) + '/src/a/paint-studio-new\n')

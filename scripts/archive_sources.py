@@ -101,6 +101,7 @@ def discover(home, project):
     add(project, 'Current project, including uncommitted and ignored meaningful files')
     for name in ('stillwet', 'stillwet-data', 'stillwet-paintings', 'stillwet-paintings-public'):
         add(project.parent / name, 'Website source, data and local static assets')
+    add(project.parent / 'stillwet-runs', 'Runner configurations, rounds, outcomes and artifacts')
     for pattern in ('paint-studio-*', 'paint-r*', 'claude-paint-*'):
         for path in sorted(project.parent.glob(pattern)):
             if path.is_dir():
@@ -147,14 +148,27 @@ def discover(home, project):
         add(home / '.local/bin/pi', 'Pi launcher link')
 
     # Read only project manifests and runner indexes, not arbitrary global session contents.
+    scanned = set()
     candidates = set()
-    for root in list(roots):
-        path = Path(root)
-        if path.is_file() and (path.name in {'manifest.json', 'studios.json'} or path.name.endswith('_sittings.json')):
-            candidates.add(path)
-        elif path.is_dir() and '.pi' not in path.parts:
-            candidates.update(p for p in walk(path) if p.name in {'manifest.json', 'studios.json'} or p.name.endswith('_sittings.json'))
-    for path in sorted(candidates):
+    processed = set()
+    while True:
+        for root in set(roots) - scanned:
+            scanned.add(root)
+            path = Path(root)
+            if '.pi' in path.parts:
+                continue
+            for p in walk(path):
+                if (p.name in {'manifest.json', 'studios.json', 'run-config.json'} or p.name.endswith('_sittings.json')) and not (
+                    excluded(p.relative_to(home)) or p.is_symlink()
+                ):
+                    candidates.add(p)
+        pending = candidates - processed
+        if not pending:
+            break
+        path = min(pending)
+        processed.add(path)
+        if not path.is_file():
+            continue
         try:
             data = json.loads(path.read_text())
         except (ValueError, UnicodeError):
@@ -168,9 +182,10 @@ def discover(home, project):
             elif isinstance(value, list):
                 todo.extend(value)
             elif isinstance(value, str):
-                for match in re.finditer(r'(?:~/|/Users/[^/\s]+/|/home/[^/\s]+/)[^\s\"\'<>;,]+', value):
+                for match in re.finditer(r'(?:' + re.escape(str(home)) + r'/|~/|/Users/[^/\s]+/|/home/[^/\s]+/)[^\s\"\'<>;,]+', value):
                     ref = match.group().rstrip(').:')
-                    ref = re.sub(r'^(?:~|/Users/[^/]+|/home/[^/]+)', str(home), ref)
+                    if not ref.startswith(str(home) + '/'):
+                        ref = re.sub(r'^(?:~|/Users/[^/]+|/home/[^/]+)', str(home), ref)
                     ref = ref.replace('--Users-alice-', '--' + str(home).strip('/').replace('/', '-') + '-')
                     p = Path(ref)
                     if selected_path(p, home):

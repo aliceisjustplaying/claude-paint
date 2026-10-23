@@ -233,6 +233,7 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     tubes.quarter_tiles = canvas.quarter_tiles();
     tubes.adaptive_sweep = canvas.adaptive_sweep();
     tubes.glaze_film = canvas.glaze_film();
+    tubes.material = canvas.material();
     tubes.liquid_film_levels = canvas.liquid_film_levels();
     tubes.sealed_drawing_guide = canvas.sealed_drawing_guide();
     tubes.drawing_optics = canvas.drawing_optics();

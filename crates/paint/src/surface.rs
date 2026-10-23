@@ -23,7 +23,7 @@ use rayon::prelude::*;
 /// mock-up coats measure ~60–125 µm; one "coat" here is a lean, thin one.
 pub const COAT_UM: f32 = 25.0;
 /// Surface tension of drying oil, N/m.
-const SIGMA: f32 = 0.035;
+pub(crate) const SIGMA: f32 = 0.035;
 /// Time the paint levels before it has set enough to stop, s.
 pub(crate) const SET_TIME: f32 = 900.0;
 /// Thinnest layer `settle` treats as paint, µm (a ten-thousandth of a µm:
@@ -70,7 +70,7 @@ const BRIDGE_UM: f32 = 40.0;
 /// yield stress spans what oil paint has: 5 Pa for medium-rich paint up to
 /// some 3000 Pa for stiff tube paint (notes/research/oil_paint_physics.md;
 /// engines 1 to 3 stopped at 300 Pa, so a stroke's furrows leveled flat).
-fn rheology_at(engine: u32, stiff: f32) -> (f32, f32) {
+pub(crate) fn rheology_at(engine: u32, stiff: f32) -> (f32, f32) {
     if engine < 4 {
         return rheology(stiff);
     }

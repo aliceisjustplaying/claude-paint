@@ -28,6 +28,17 @@
 //! Retained wet layers use version 20. A retained spectral dry backing uses
 //! version 21: a wet-layer presence flag, those layers if present, then
 //! 38 reflectances, three residuals and three cached RGB values per pixel.
+//! A canvas painted with engine 9's material revision 1 or later
+//! (`Canvas::with_material`, `crate::skin`) is version 22 (`PAINTC22`): the
+//! header, the version it would otherwise be (19, 20 or 21, one u64), that
+//! version's bytes after its header, then the skin section, the file's last:
+//! a `SKIN` mark and the section's own version (1, `SKIN_V`), the material
+//! revision, the clock minute of the last tick (f64), and each buffer
+//! pixel's baked films top down (a count, then nine f32 per film:
+//! thickness, front depth, unexpanded skin, membrane force, bulk moved,
+//! birth minute, front rate, stiffness, binder share). A reader that
+//! doesn't know version 22 refuses the file instead of loading the
+//! picture as the old material.
 //!
 //! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
@@ -135,6 +146,7 @@ const MAGIC18: &[u8; 8] = b"PAINTC18";
 const MAGIC19: &[u8; 8] = b"PAINTC19";
 const MAGIC20: &[u8; 8] = b"PAINTC20";
 const MAGIC21: &[u8; 8] = b"PAINTC21";
+const MAGIC22: &[u8; 8] = b"PAINTC22";
 const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
@@ -152,6 +164,9 @@ const SOAK_V: u64 = 1;
 /// Marks the drain section ("DRAN"), and its version.
 const DRAIN_MARK: u64 = 0x4e415244;
 const DRAIN_V: u64 = 1;
+/// Marks the skin section ("SKIN"), and its version.
+const SKIN_MARK: u64 = 0x4e494b53;
+const SKIN_V: u64 = 1;
 const QUARTER_TILES: u64 = 1 << 33;
 const ADAPTIVE_SWEEP: u64 = 1 << 34;
 const GLAZE_FILM: u64 = 1 << 36;
@@ -395,6 +410,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC19 => 19,
         m if m == MAGIC20 => 20,
         m if m == MAGIC21 => 21,
+        m if m == MAGIC22 => 22,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -450,9 +466,13 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
+        let material = self.material >= 1;
+        w.write_all(if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
+        if material {
+            put_u64(w, if backing { 21 } else if layers { 20 } else { 19 })?;
+        }
         put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else if self.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
@@ -604,12 +624,31 @@ impl Canvas {
         if backing {
             put_all(w, self.backing.iter().flat_map(|b| b.reflectance.into_iter().chain(b.residual).chain(b.color)))?;
         }
+        if material {
+            put_u64(w, SKIN_MARK)?;
+            put_u64(w, SKIN_V)?;
+            put_u64(w, u64::from(self.material))?;
+            w.write_all(&self.skin.ticked.to_le_bytes())?;
+            for i in 0..self.f.w * self.f.h {
+                put_u64(w, self.skin.column(i).count() as u64)?;
+                put_all(w, self.skin.column(i).flat_map(|p| [p.h, p.s, p.x, p.n, p.w, p.born, p.v0, p.stiff, p.binder]))?;
+            }
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
+        let material = version == 22;
+        let version = if material {
+            match get_u64(r)? {
+                v @ 19..=21 => v as u32,
+                _ => return Err(bad("checkpoint material base format is invalid")),
+            }
+        } else {
+            version
+        };
         let mut layers = version == 20;
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
@@ -845,7 +884,7 @@ impl Canvas {
                     h[5..].copy_from_slice(k);
                 }
                 c.drain = true;
-                if !raw && version == 14 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+                if !raw && version == 14 && !pigments && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
@@ -858,7 +897,7 @@ impl Canvas {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
             c.soak = Some(Box::new(read_soak(r, n)?));
-            if version != 17 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if version != 17 && !pigments && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -867,7 +906,7 @@ impl Canvas {
             let (p, micro) = read_paper(r, n)?;
             c.paper = Some(p);
             c.micro = micro;
-            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -891,11 +930,11 @@ impl Canvas {
                 return Err(bad("checkpoint sheet mark is wrong"));
             }
             c.sheet = Some(read_sheet_body(r, n)?);
-            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
-        if version == 7 && !pigments && r.read(&mut [0u8; 1])? != 0 {
+        if version == 7 && !pigments && !material && r.read(&mut [0u8; 1])? != 0 {
             return Err(bad("version-7 checkpoint has trailing data"));
         }
         if pigments {
@@ -910,7 +949,7 @@ impl Canvas {
                     pixel.parts.push((i, amount));
                 }
             }
-            if !layers && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !layers && !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -945,7 +984,7 @@ impl Canvas {
                 let sum: f32 = pixel.layers.iter().map(|l| l.share).sum();
                 if count > 0 && (sum - 1.0).abs() > 1e-4 { return Err(bad("checkpoint layer shares are invalid")); }
             }
-            if !spectral_backing && r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
+            if !spectral_backing && !material && r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }
         if spectral_backing {
             if !c.spectral_films() {
@@ -964,6 +1003,36 @@ impl Canvas {
                 }
                 c.backing.push(b);
             }
+            if !material && r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
+        }
+        if material {
+            if get_u64(r)? != SKIN_MARK || get_u64(r)? != SKIN_V {
+                return Err(bad("checkpoint skin section is invalid"));
+            }
+            let rev = u32::try_from(get_u64(r)?).map_err(|_| bad("checkpoint material revision is invalid"))?;
+            if rev < 1 || rev > crate::skin::MATERIAL || c.engine < crate::PIGMENT_MIXER {
+                return Err(bad("checkpoint material revision is not one this build paints with"));
+            }
+            c.material = rev;
+            let mut b = [0u8; 8];
+            r.read_exact(&mut b)?;
+            let ticked = f64::from_le_bytes(b);
+            if !ticked.is_finite() {
+                return Err(bad("checkpoint skin clock is invalid"));
+            }
+            let mut columns = Vec::with_capacity(n);
+            for _ in 0..n {
+                let count = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint skin count is invalid"))?;
+                if count > 1 << 16 {
+                    return Err(bad("checkpoint skin count is invalid"));
+                }
+                let v = get_all(r, count * 9)?;
+                if !v.iter().all(|x| x.is_finite()) {
+                    return Err(bad("checkpoint skin film is invalid"));
+                }
+                columns.push(v.as_chunks::<9>().0.iter().map(|&[h, s, x, n, w, born, v0, stiff, binder]| crate::skin::Packet { h, s, x, n, w, born, v0, stiff, binder, below: u32::MAX }).collect());
+            }
+            c.skin = crate::skin::Film::from_columns(columns, ticked);
             if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }
         if !own_mixer {

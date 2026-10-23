@@ -245,7 +245,7 @@ impl Pace {
     }
 
     /// Minutes until an open film of cure `c` and rate `r` is touch-dry.
-    fn to_dry(self, c: f32, r: f32) -> f32 {
+    pub(crate) fn to_dry(self, c: f32, r: f32) -> f32 {
         if self == Pace::EVEN || c >= GEL {
             return (1.0 - c).max(0.0) / (r * self.set);
         }
@@ -253,8 +253,13 @@ impl Pace {
     }
 
     /// Cure per minute of a set film whose open film's rate was `r`.
-    fn set_rate(self, r: f32) -> f32 {
+    pub(crate) fn set_rate(self, r: f32) -> f32 {
         if self == Pace::EVEN { r } else { r * self.set }
+    }
+
+    /// Cure per minute of an open film of rate `r` before its gel point.
+    pub(crate) fn open_rate(self, r: f32) -> f32 {
+        if self == Pace::EVEN { r } else { r * self.open }
     }
 }
 
@@ -403,8 +408,10 @@ impl Canvas {
             self.wait_on_grid(dt);
             return;
         }
-        self.age(dt);
+        let start = self.wet.clock.now;
+        self.age_from(dt, false, start + dt as f64);
         self.wet.clock.now += dt as f64;
+        self.skin_advance(start, self.wet.clock.now);
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
@@ -461,7 +468,7 @@ impl Canvas {
             // minute and to the wait's end
             let minute = (aged.floor() + 1.0).min(end);
             if next == minute {
-                self.age_from((next - aged) as f32, true);
+                self.age_from((next - aged) as f32, true, next);
                 aged = next;
             }
             self.spread((next - t) as f32, &mut solvent);
@@ -469,12 +476,13 @@ impl Canvas {
             self.wet.clock.now = t;
             if solvent.is_empty() {
                 if end > aged {
-                    self.age_from((end - aged) as f32, true);
+                    self.age_from((end - aged) as f32, true, end);
                 }
                 break;
             }
         }
         self.wet.clock.now = end;
+        self.skin_advance(start, end);
     }
 
     /// `wait` on the minute grid until no solvent is left: to the next
@@ -491,13 +499,11 @@ impl Canvas {
 
     /// The open films age by `dt` minutes where they lie (the body of
     /// `wait`, without moving the clock).
-    fn age(&mut self, dt: f32) {
-        self.age_from(dt, false);
-    }
-
     /// `age`; with `flow` (`wait_on_grid`), a film under the bare
-    /// threshold that holds any paint keeps its cure and dries too.
-    fn age_from(&mut self, dt: f32, flow: bool) {
+    /// threshold that holds any paint keeps its cure and dries too. The
+    /// clock reads `end` when the step is over (the films that set keep
+    /// it, `skin`).
+    fn age_from(&mut self, dt: f32, flow: bool, end: f64) {
         let n = self.f.w * self.f.h;
         if self.wet.clock.px.len() != n {
             self.wet.clock.px = vec![Px::FRESH; n];
@@ -547,7 +553,7 @@ impl Canvas {
             }
         }
         // films past the gel point level and set
-        self.bake(false);
+        self.bake(false, end);
     }
 
     /// The open film's thickness (coats) as it dries, for each pixel of the
@@ -704,8 +710,10 @@ impl Canvas {
                 }
             }
         }
-        self.bake(true);
+        let start = self.wet.clock.now;
+        self.bake(true, start);
         self.wet.clock.now += left as f64;
+        self.skin_advance(start, self.wet.clock.now);
     }
 
     /// Fold what was painted since the last `wait` into the drying state: a
@@ -783,8 +791,8 @@ impl Canvas {
 
     /// Level and bake open films into the dry picture: every film (`all`,
     /// clearing the wet layer's residue too) or those past the gel point.
-    fn bake(&mut self, all: bool) {
-        BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, &mut s.borrow_mut()));
+    fn bake(&mut self, all: bool, end: f64) {
+        BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, end, &mut s.borrow_mut()));
     }
 
     fn level_open(&mut self) {
@@ -872,7 +880,7 @@ impl Canvas {
         }
     }
 
-    fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 8]) {
+    fn bake_with_scratch(&mut self, all: bool, end: f64, scratch: &mut [Vec<f32>; 8]) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
         let (x1, y1) = (x1.min(w), y1.min(h));
@@ -1057,6 +1065,19 @@ impl Canvas {
                 }
             });
         self.clear_bare_solvent(ex);
+        // (the new material keeps each baked film curing from the top down)
+        if self.skins() {
+            for y in 0..eh {
+                for x in 0..ew {
+                    let k = y * ew + x;
+                    if add[k] > 0.0 {
+                        let i = (ex.1 + y) * w + ex.0 + x;
+                        let cure = self.wet.clock.px.get(i).map_or(0.0, |p| p.cure);
+                        self.skin_bake(i, t[k], cure, end);
+                    }
+                }
+            }
+        }
         let wet = &mut self.wet;
         if wet.clock.px.is_empty() {
             return;

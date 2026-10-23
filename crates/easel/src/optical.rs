@@ -79,7 +79,6 @@ pub fn export(args: &[String]) -> Result<(), String> {
         let revision = crate::painting_store::ReadRevision::open(dir.into())?;
         revision.protect_output(out)?;
         let checkpoint = revision.checkpoint()?;
-        if crate::same_file(&checkpoint, out).map_err(invalid)? { return Err(invalid("snapshot must not replace its material input")); }
         match File::open(out) {
             Ok(file) => {
                 RenderSnapshot::read(&mut BufReader::with_capacity(65536, file))
@@ -88,7 +87,7 @@ pub fn export(args: &[String]) -> Result<(), String> {
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(e) => return Err(e),
         }
-        let restored = crate::save::read(&checkpoint).map_err(invalid)?;
+        let restored = crate::save::read_from(checkpoint, dir).map_err(invalid)?;
         let canvas = restored.session.canvas().ok_or_else(|| invalid("committed revision has no canvas"))?;
         let snapshot = RenderSnapshot::capture(&canvas, id(&revision.id)?, runtime()?)?;
         let (w, h) = snapshot.dimensions();

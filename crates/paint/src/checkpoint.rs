@@ -1259,6 +1259,36 @@ mod tests {
         assert_eq!(Canvas::read_state(&mut Cursor::new(bad)).err().unwrap().kind(), io::ErrorKind::InvalidData);
     }
 
+    /// Pastel dusted off a fixed layer, on a drawing without separate
+    /// optics (a log from before `--@ drawing-optics`), can keep a rounding
+    /// residue of loose pastel just below zero; the checkpoint reads back as
+    /// it was written and goes on as the painting would have.
+    #[test]
+    fn dusted_pastel_survives_a_checkpoint() {
+        use crate::pastel::{Pose, Stick, StrokePoint};
+        let mut c = crate::tests::drawing_paper(160);
+        let mut st = Stick::round([0.85, 0.55, 0.6], 0.8, 12.0);
+        let pose = Pose { force: 2.5, alt: 1.0, az: 0.8, roll: 0.0 };
+        let line = |y: f32| [StrokePoint { x: 100.0, y, pose, speed: 60.0 }, StrokePoint { x: 900.0, y, pose, speed: 60.0 }];
+        c.stick_stroke(&mut st, &line(300.0));
+        c.fix_pastel(None, 0.15);
+        c.stick_stroke(&mut st, &line(320.0));
+        c.dust_pastel(20.0, 10.0, &[(100.0, 310.0), (900.0, 310.0)], &mut 0.0, 5.0);
+        assert!(c.drawing.as_ref().unwrap().cells.iter().any(|c| c.loose < 0.0), "the brush left a residue below zero");
+        let bytes = |c: &Canvas| {
+            let mut b = Vec::new();
+            c.write_state(&mut b, "").unwrap();
+            b
+        };
+        let b = bytes(&c);
+        let (mut r, _) = Canvas::read_state(&mut Cursor::new(b.clone())).unwrap();
+        assert!(bytes(&r) == b, "rewritten as it was read");
+        let mut st2 = st.clone();
+        c.stick_stroke(&mut st, &line(340.0));
+        r.stick_stroke(&mut st2, &line(340.0));
+        assert!(bytes(&r) == bytes(&c) && st == st2);
+    }
+
     /// A sheet of paper (version 13), and one with a sheet laid on it
     /// (version 15), carry the recorded quarter tiles and adaptive sweep in
     /// their engine word, as every other version does.

@@ -275,6 +275,12 @@ pub fn touch(p: f32) -> f32 {
 /// What the eraser takes of the guide per pass at full strength.
 const GUIDE_LIFT: f32 = 0.85;
 
+/// How far below zero loose pastel may read back, µm: what float rounding
+/// leaves when a dry tool takes all of it from over fixed pastel on a drawing
+/// without separate optics (`take_loose` in sheet.rs: about 1e-7 of the
+/// cell's pastel), a thousandth of a micron, far less than a particle.
+const LOOSE_RESIDUE_UM: f32 = 1e-3;
+
 /// A line to draw: a dense path (units) with the pressure at every point.
 #[derive(Clone, Debug, Default)]
 pub struct Mark {
@@ -573,6 +579,8 @@ impl Drawing {
     /// The inverse of `to_f32s`, reading with `get(count)`; `n` window
     /// pixels, `whole` canvas pixels, `layout` the serialized layout (1, 2
     /// through 4; layout 2 predates separate non-pastel coverage). None if the data is inconsistent.
+    /// Loose pastel may sit a rounding residue below zero (`LOOSE_RESIDUE_UM`):
+    /// it is kept as written.
     pub(crate) fn from_f32s<E>(n: usize, whole: usize, layout: u64, mut get: impl FnMut(usize) -> Result<Vec<f32>, E>) -> Result<Option<Self>, E> {
         let sticks = layout >= 2;
         let cells: Vec<Cell> = if layout == 4 {
@@ -589,7 +597,7 @@ impl Drawing {
         let guide_floor = if has_floor == 1.0 { Some(get(whole)?) } else { None };
         let ok = |v: f32| v.is_finite() && (0.0..=1.0).contains(&v);
         let valid = (has_floor == 0.0 || has_floor == 1.0)
-            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose >= 0.0 && c.bound.is_finite() && c.bound >= 0.0)
+            && cells.iter().all(|c| ok(c.a) && c.r.iter().all(|&v| ok(v)) && ok(c.lift) && ok(c.floor) && ok(c.non_pastel) && ok(c.non_pastel_floor) && c.film.is_finite() && c.loose.is_finite() && c.loose > -LOOSE_RESIDUE_UM && c.bound.is_finite() && c.bound >= 0.0)
             && guide.iter().chain(guide_floor.iter().flatten()).all(|&v| ok(v));
         let valid = valid && cells.iter().all(|c| c.optics.is_none_or(|o| ok(o.fixed) && ok(o.graphite) && o.bound.into_iter().all(ok) && o.under.into_iter().all(f32::is_finite) && c.non_pastel_floor <= c.non_pastel && c.non_pastel_floor <= c.floor && c.floor + c.non_pastel - c.non_pastel_floor <= c.a + 1e-5));
         Ok(valid.then_some(Drawing { cells, guide, guide_floor, sticks, optics: layout == 4 }))

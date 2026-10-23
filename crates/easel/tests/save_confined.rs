@@ -3,6 +3,7 @@
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+mod support;
 
 // A new painting here is 2400 px (no bin/width, EASEL_WIDTH unset); a thin, bare canvas keeps this path test cheap.
 const CANVAS: &str = r#"canvas{size=100, aspect=5, linen=15, seed=7, raw="cotton duck"}"#;
@@ -110,13 +111,7 @@ impl Studio {
 
 impl Drop for Studio {
     fn drop(&mut self) {
-        if !self.command(&["close"]).status.success()
-            && let Ok(pid) =
-                std::fs::read_to_string(self.root.join(format!("out/easel/{}/lock", self.session)))
-            && pid.trim().parse::<i32>().is_ok_and(|pid| pid > 1)
-        {
-            let _ = Command::new("kill").args(["-KILL", pid.trim()]).status();
-        }
+        support::stop_servers(&self.root);
         let _ = std::fs::remove_dir_all(&self.base);
     }
 }

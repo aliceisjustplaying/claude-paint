@@ -4,6 +4,7 @@ use std::process::{Command, Output};
 
 #[path = "../../paint/tests/support/image_tolerance.rs"]
 mod image_tolerance;
+mod support;
 
 const CANVAS: &str = "canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{\"lead white\",6},{\"raw umber\",1}}, um=50, apply=\"roller\"}}}";
 const PREPARE: &str = "p=pile{{\"lead white\",6},{\"cobalt blue\",1}}; b=brush(\"filbert\",8); b:load(p,0.9)";
@@ -35,7 +36,7 @@ impl Studio {
 
 impl Drop for Studio {
     fn drop(&mut self) {
-        let _ = self.cmd(&["close"]);
+        support::stop_servers(&self.0);
     }
 }
 

@@ -14,6 +14,9 @@ function fixture() {
 	const critic = { args: [], dir: join(dir, "critic") };
 	mkdirSync(join(studio, "notes"), { recursive: true });
 	mkdirSync(join(studio, "out/easel"), { recursive: true });
+	assert.ok(process.env.EASEL_BIN, "set EASEL_BIN to the easel");
+	mkdirSync(join(studio, "bin"));
+	symlinkSync(process.env.EASEL_BIN, join(studio, "bin", "easel"));
 	mkdirSync(critic.dir);
 	const pi = join(dir, "pi");
 	writeFileSync(pi, `#!${process.execPath}\nconsole.log('new critique');\n`, { mode: 0o755 });

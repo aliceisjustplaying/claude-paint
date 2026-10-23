@@ -51,6 +51,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+/// A painted canvas is millions of small pigment lists and skim layers that
+/// come and go as the paint is worked; glibc's malloc leaves their holes in
+/// its arenas (2 GiB of free, unreturnable heap by the 30th chunk of a
+/// 2400 px engine-9 painting). mimalloc keeps such allocations in size
+/// classes and gives freed pages back to the system.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// The width a painting is painted, replayed and delivered at (px) unless it
 /// names another (`session::WIDTH_MARK`, configured when it began: `configured_width`).
 const LIVE_WIDTH: usize = 2400;
@@ -194,6 +202,7 @@ fn main() -> ExitCode {
         "snapshot-companions" => optical::companions(&rest),
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
+        "lock-journal" => lock_journal(),
         "tubes" => tubes(&rest),
         "hash-probe" => {
             println!("{}", session::hash_probe());
@@ -370,28 +379,61 @@ fn note(args: &[String], name: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+fn journal_lock_path() -> PathBuf {
+    root().join("out/easel/journal.lock")
+}
+
+/// `easel lock-journal`, for a journal revision (harness/painter/journal.ts): stdin is the
+/// journal's lock file, and the lock taken on it stays with that open file after this
+/// exits, until the revision closes it.
+fn lock_journal() -> Result<(), String> {
+    use std::os::{fd::AsFd, unix::fs::MetadataExt};
+    let p = journal_lock_path();
+    let f = std::fs::File::from(std::io::stdin().as_fd().try_clone_to_owned().map_err(|e| e.to_string())?);
+    let (held, want) = (f.metadata().map_err(|e| e.to_string())?, std::fs::metadata(&p).map_err(|e| format!("{}: {e}", p.display()))?);
+    if (held.dev(), held.ino()) != (want.dev(), want.ino()) {
+        return Err(format!("lock-journal: stdin isn't {}", p.display()));
+    }
+    f.lock().map_err(|e| format!("{}: {e}", p.display()))
+}
+
 fn append_note(clock: f64, text: &str) -> Result<String, String> {
     if text.trim().is_empty() {
         return Err("note: empty".into());
     }
     let p = journal_path();
-    std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let dir = p.parent().unwrap();
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // every session notes into the one journal, and a revision (`lock_journal`) replaces it:
+    // its lock is held from the read to the rename, so a note never replaces an entry or a
+    // revision another writer has just made
+    let lock = journal_lock_path();
+    std::fs::create_dir_all(lock.parent().unwrap()).map_err(|e| e.to_string())?;
+    let held = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&lock).map_err(|e| format!("{}: {e}", lock.display()))?;
+    held.lock().map_err(|e| format!("{}: {e}", lock.display()))?;
+    // the whole journal with the entry is written beside it, in this writer's own file, and
+    // renamed over the file it is (through a revision's link): an interrupted note leaves
+    // the journal as it was
+    let real = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
+    let mut journal = match std::fs::read(&real) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(format!("{}: {e}", p.display())),
+    };
     // an entry starts on a line of its own
-    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
-    let mut entry = String::new();
-    if len > 0 {
-        let mut last = [0u8; 1];
-        let mut r = std::fs::File::open(&p).map_err(|e| e.to_string())?;
-        use std::io::Seek;
-        r.seek(std::io::SeekFrom::End(-1)).map_err(|e| e.to_string())?;
-        r.read_exact(&mut last).map_err(|e| e.to_string())?;
-        if last[0] != b'\n' {
-            entry.push('\n');
-        }
+    if journal.last().is_some_and(|&b| b != b'\n') {
+        journal.push(b'\n');
     }
-    entry.push_str(&journal_entry(clock, text));
-    f.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
+    journal.extend_from_slice(journal_entry(clock, text).as_bytes());
+    use std::os::unix::fs::PermissionsExt;
+    let mut pending = tempfile::Builder::new().prefix(".journal.pending-").permissions(std::fs::Permissions::from_mode(0o666)).tempfile_in(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let staged = pending.path().to_path_buf();
+    if let Ok(m) = std::fs::metadata(&real) {
+        pending.as_file().set_permissions(m.permissions()).map_err(|e| format!("{}: {e}", staged.display()))?;
+    }
+    pending.write_all(&journal).and_then(|_| pending.as_file().sync_all()).map_err(|e| format!("{}: {e}", staged.display()))?;
+    pending.persist(&real).map_err(|e| format!("{}: {}", p.display(), e.error))?;
+    std::fs::File::open(real.parent().unwrap_or(dir)).and_then(|d| d.sync_all()).map_err(|e| e.to_string())?;
     Ok(format!("noted in {}\n", p.display()))
 }
 
@@ -829,50 +871,50 @@ fn serve(args: &[String]) -> Result<(), String> {
                     eprintln!("check 0.00s err");
                 }
             }
-            continue;
-        }
-        let t0 = Instant::now();
-        let r = if cmd == "do" {
-            // while the chunk runs, `status` answers how far it has got; other requests wait
-            session::PROGRESS.clear();
-            let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
-            // once the chunk is kept, the log on disk has grown past `written`: `report` says so
-            let status = || {
-                if session::PROGRESS.kept() == 0 {
-                    validate_log(&name, &written)?;
-                }
-                Ok(session::PROGRESS.report(t0.elapsed()))
-            };
-            match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
-                Ok((r, waiting)) => {
-                    pending.extend(waiting);
-                    r
-                }
-                Err(e) => Err(e),
-            }
         } else {
-            srv.handle(&cmd, &args, payload)
-        };
-        let reply = match &r {
-            Ok(b) => format!("ok\n{b}"),
-            Err(e) => format!("err\n{e}\n"),
-        };
-        let _ = conn.write_all(reply.as_bytes());
-        eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
-        #[cfg(feature = "state-store")]
-        if srv.state_failed {
-            let _ = std::fs::remove_file(&sock);
-            return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
-        }
-        if cmd == "close" && r.is_ok() {
-            if let Some(j) = checking.take() {
-                j.stop();
+            let t0 = Instant::now();
+            let r = if cmd == "do" {
+                // while the chunk runs, `status` answers how far it has got; other requests wait
+                session::PROGRESS.clear();
+                let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
+                // once the chunk is kept, the log on disk has grown past `written`: `report` says so
+                let status = || {
+                    if session::PROGRESS.kept() == 0 {
+                        validate_log(&name, &written)?;
+                    }
+                    Ok(session::PROGRESS.report(t0.elapsed()))
+                };
+                match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
+                    Ok((r, waiting)) => {
+                        pending.extend(waiting);
+                        r
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                srv.handle(&cmd, &args, payload)
+            };
+            let reply = match &r {
+                Ok(b) => format!("ok\n{b}"),
+                Err(e) => format!("err\n{e}\n"),
+            };
+            let _ = conn.write_all(reply.as_bytes());
+            eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
+            #[cfg(feature = "state-store")]
+            if srv.state_failed {
+                let _ = std::fs::remove_file(&sock);
+                return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
             }
-            for (mut conn, _) in pending.drain(..) {
-                let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+            if cmd == "close" && r.is_ok() {
+                if let Some(j) = checking.take() {
+                    j.stop();
+                }
+                for (mut conn, _) in pending.drain(..) {
+                    let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+                }
+                let _ = std::fs::remove_file(&sock);
+                break;
             }
-            let _ = std::fs::remove_file(&sock);
-            break;
         }
         // the same for the scratch canvas, at once (its log is short)
         if let Some(sc) = srv.scratch.as_mut()
@@ -883,8 +925,9 @@ fn serve(args: &[String]) -> Result<(), String> {
                 srv.scratch = None;
             }
         }
-        // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
-        // after the reply; status stays available and other requests are refused until done
+        // a failed chunk left the state inexact, or a resting canvas couldn't be brought back
+        // (session.rs `stale`): rebuild it from the log after the reply, whatever the request
+        // was; status stays available and other requests are refused until done
         if srv.s.stale {
             drop(conn);
             let t0 = Instant::now();
@@ -1025,11 +1068,12 @@ fn export_journal(path: &Path, source: &str) -> Result<(), String> {
 }
 
 /// Put a session's log aside as `<name>-N.lua` (the first N free) and drop its committed
-/// record, so a fresh session of that name starts empty. The path it went to, if any.
+/// record, so a fresh session of that name starts empty. The path it went to, if any. The
+/// record goes only once the log is aside: a log that can't be moved keeps it.
 fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
     let lp = log_path(name);
-    let _ = std::fs::remove_file(witness_path(name));
     if !lp.exists() {
+        let _ = std::fs::remove_file(witness_path(name));
         return Ok(None);
     }
     let mut n = 1;
@@ -1041,7 +1085,44 @@ fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
         n += 1;
     };
     std::fs::rename(&lp, &to).map_err(|e| format!("{}: {e}", lp.display()))?;
+    let _ = std::fs::remove_file(witness_path(name));
     Ok(Some(to))
+}
+
+/// A publication `save_log` didn't finish (the easel stopped, or couldn't undo it): its
+/// pending record names the revision it was publishing, and the log holds that revision
+/// or part of it. The pair goes on from an accepted revision: the pending one when the log
+/// holds all of it (only the record's rename was left), else the committed one, the part
+/// appended taken back out. Without a pending record a log that differs from its record
+/// was changed outside the easel and is refused (`validate_log`). What happened, for the
+/// reopen to say.
+fn recover_publication(name: &str) -> Result<Option<String>, String> {
+    let (lp, wp) = (log_path(name), witness_path(name));
+    let pending = wp.with_extension("pending");
+    let (Ok(log), Ok(next)) = (std::fs::read(&lp), std::fs::read(&pending)) else { return Ok(None) };
+    let witness = std::fs::read(&wp).ok();
+    if witness.as_deref() == Some(log.as_slice()) {
+        return Ok(None);
+    }
+    let sync_dir = |p: &Path| std::fs::File::open(p.parent().unwrap()).and_then(|d| d.sync_all()).map_err(|e| format!("{}: {e}", p.display()));
+    if next == log {
+        std::fs::rename(&pending, &wp).map_err(|e| format!("{}: {e}", wp.display()))?;
+        sync_dir(&wp)?;
+        return Ok(Some("warning: saving the last chunk was interrupted after the log held all of it; the chunk is kept".into()));
+    }
+    if !next.starts_with(&log) || witness.as_ref().is_some_and(|w| !log.starts_with(w)) {
+        return Ok(None);
+    }
+    match &witness {
+        Some(w) => {
+            let f = std::fs::OpenOptions::new().write(true).open(&lp).map_err(|e| format!("{}: {e}", lp.display()))?;
+            f.set_len(w.len() as u64).and_then(|_| f.sync_all()).map_err(|e| format!("{}: {e}", lp.display()))?;
+        }
+        None => std::fs::remove_file(&lp).map_err(|e| format!("{}: {e}", lp.display()))?,
+    }
+    std::fs::remove_file(&pending).map_err(|e| format!("{}: {e}", pending.display()))?;
+    sync_dir(&lp)?;
+    Ok(Some("warning: saving the last chunk was interrupted before the log held all of it; the painting goes on from the chunk before it".into()))
 }
 
 /// The log and the committed record on disk both hold `expected`.
@@ -1060,6 +1141,14 @@ fn validate_log(name: &str, expected: &str) -> Result<(), String> {
 fn palette_look(s: &Session) -> Result<(usize, usize, Vec<u8>), String> {
     let ground = s.ground_color().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     look::palette(&s.piles(), ground)
+}
+
+/// A point given to an observation of the canvas (`probe`, `look --hold`): on it, or past its far
+/// edges by up to half a pixel (a canvas's height in units is its pixels', which needn't be
+/// round), as the point at the edge.
+fn canvas_point(c: &Canvas, (x, y): (f32, f32)) -> Option<(f32, f32)> {
+    let (w, h, half) = (c.width(), c.height(), 0.5 / c.window().scale);
+    (x.is_finite() && y.is_finite() && x >= 0.0 && y >= 0.0 && x <= w + half && y <= h + half).then(|| (x.min(w), y.min(h)))
 }
 
 /// Half the side (units) of the passage a held knife is seen against, when no crop is given.
@@ -1084,9 +1173,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (paint, blade, full) = s.held(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     let (wu, hu) = (c.width(), c.height());
-    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
-        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
-    }
+    let at = canvas_point(&c, at).ok_or_else(|| format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1))?;
     let crop = v.crop.unwrap_or([(at.0 - HOLD_HALF).max(0.0), (at.1 - HOLD_HALF).max(0.0), (at.0 + HOLD_HALF).min(wu), (at.1 + HOLD_HALF).min(hu)]);
     if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
@@ -1143,15 +1230,13 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
 /// nothing in the log, the canvas and its wear untouched.
 fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
     use image::ImageEncoder;
-    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
         return Err("look --hold takes --at, --pose or --side, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (stick, turned) = s.held_stick(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     let (wu, hu) = (c.width(), c.height());
-    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
-        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
-    }
+    let at = canvas_point(&c, at).ok_or_else(|| format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1))?;
     let half = 60.0f32;
     let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
     // (as `hold_look`: the point in the passage shown)
@@ -1283,6 +1368,9 @@ impl Server {
                 export_journal(path, &source)?;
             }
         }
+        if let Some(note) = recover_publication(&name)? {
+            eprintln!("{note}");
+        }
         let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
         if let Some(t) = &text {
             validate_log(&name, t)?;
@@ -1407,12 +1495,35 @@ impl Server {
         if self.written.is_none() {
             opts.create_new(true);
         }
-        let mut f = opts.open(&p).map_err(|e| format!("session integrity: {e}"))?;
-        f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| format!("session integrity: {e}"))?;
+        // the pending record first: a reopen after a stop anywhere below goes on from an
+        // accepted revision (`recover_publication`)
         let pending = self.witness().with_extension("pending");
-        let mut f = std::fs::File::create(&pending).map_err(|e| e.to_string())?;
-        f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
-        std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
+        let mut appended = None;
+        let published = std::fs::File::create(&pending).and_then(|mut w| w.write_all(text.as_bytes()).and_then(|_| w.sync_all())).and_then(|_| {
+            let f = appended.insert(opts.open(&p)?);
+            f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all())?;
+            std::fs::rename(&pending, self.witness())
+        });
+        if let Err(e) = published {
+            // the log back to the revision before, and the state with it
+            let undone = match appended {
+                None => Ok(()),
+                Some(_) if self.written.is_none() => std::fs::remove_file(&p),
+                Some(f) => f.set_len(previous.len() as u64).and_then(|_| f.sync_all()),
+            };
+            if undone.is_ok() && std::fs::metadata(&pending).is_ok_and(|m| m.is_file()) {
+                let _ = std::fs::remove_file(&pending);
+            }
+            if !changed {
+                return Err(format!("session integrity: {e}"));
+            }
+            self.s.log.pop();
+            self.s.stale = true;
+            return Err(match undone {
+                Ok(()) => format!("the chunk ran, but the easel couldn't write it to the log ({e}), so it isn't kept: the painting goes on from the chunk before it; the easel rebuilds the painting from its log now; status reports the rebuild's progress and other commands must retry after it"),
+                Err(u) => format!("the chunk ran, but the easel couldn't write it to the log ({e}) or take it back out ({u}): reopen the painting, which goes on from the last chunk the log holds whole"),
+            });
+        }
         self.written = Some(text);
         if changed {
             self.record_frame();
@@ -1746,9 +1857,8 @@ impl Server {
         };
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let f = c.window();
-        // (to half a pixel: a canvas's height in units is its pixels', which needn't be round)
         let (w, h) = (c.width(), c.height());
-        if x0 < 0.0 || y0 < 0.0 || x1 > w + 0.5 / f.scale || y1 > h + 0.5 / f.scale {
+        if canvas_point(&c, (x0, y0)).is_none() || canvas_point(&c, (x1, y1)).is_none() {
             let round = |v: f32| (v * 100.0).round() / 100.0;
             return Err(format!("probe: {place} is outside the canvas (0,0 to {},{})", round(w), round(h)));
         }
@@ -1904,8 +2014,9 @@ impl Server {
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
-    fn check_input(&self) -> Result<check::Input, String> {
+    fn check_input(&mut self) -> Result<check::Input, String> {
         self.ready()?;
+        self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
             paper: self.s.st.borrow().paper,
@@ -1925,12 +2036,19 @@ impl Server {
             return Err("--new starts a fresh scratch canvas: do --scratch --new".into());
         }
         if !scratch {
+            // one canvas at a time is in memory: the scratch canvas rests while the
+            // painting is used, and the painting while the scratch canvas is
+            if let Some(sc) = self.scratch.as_mut() {
+                sc.s.rest().map_err(|e| format!("the scratch canvas couldn't be put aside: {e}"))?;
+            }
+            self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
             return self.serve_cmd(cmd, &args, payload);
         }
         if !matches!(cmd, "do" | "look" | "probe" | "status" | "log" | "globals" | "save") {
             return Err(format!("{cmd} is the painting's: it takes no --scratch"));
         }
         self.ready()?;
+        self.s.rest().map_err(|e| format!("the painting couldn't be put aside: {e}"))?;
         let mut out = String::new();
         // reopened when first asked for, so it never holds up the painting's reopen
         if self.scratch.is_none() && !new {
@@ -1940,11 +2058,12 @@ impl Server {
             let fresh = self.new_scratch().map_err(|e| format!("{out}{e}"))?;
             out += &fresh;
         }
-        let sc = self.scratch.as_mut().ok_or("there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting")?;
+        let sc = self.scratch.as_mut().ok_or_else(|| format!("{out}there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting"))?;
         if let Err(e) = sc.ready() {
             self.scratch = None;
             return Err(format!("{out}{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
         }
+        sc.s.wake().map_err(|e| format!("{out}the scratch canvas couldn't be brought back: {e}"))?;
         let reply = sc.serve_cmd(cmd, &args, payload).map_err(|e| format!("{out}{e}"))?;
         out += &reply;
         Ok(out)
@@ -2802,6 +2921,25 @@ mod tests {
         assert!(s.held_stick("nope").unwrap_err().contains("holds no pastel stick"));
         assert!(stick_hold_look(&s, "P.glow", (1400.0, 400.0), [1.5, 60.0, 45.0, 0.0], &plain).unwrap_err().contains("not on the canvas"));
         assert!(stick_hold_look(&s, "P.glow", at, [1.5, 60.0, 45.0, 0.0], &look::View { mirror: true, ..look::View::default() }).is_err());
+    }
+
+    /// A held stick refuses the edges mode, as a held knife does, and both take the points
+    /// probe takes: the canvas's far edges to half a pixel (H is 199.99998 units here).
+    #[test]
+    fn a_held_stick_or_knife_takes_probes_points_and_no_edges() {
+        let mut s = Session::new(2400).unwrap().with_paper(true).unwrap();
+        s.run(r#"canvas{size=300, aspect=5, paper={}, seed=9}"#).unwrap();
+        s.run(r#"P = {glow = pastel(pile{{"vermilion", 1}}, {kind="soft"})}; q = pile{{"lead white", 1}}"#).unwrap();
+        let pose = [1.5, 60.0, 45.0, 0.0];
+        let edges = look::View::parse(&["--mode".to_string(), "edges".to_string()]).unwrap();
+        assert!(stick_hold_look(&s, "P.glow", (500.0, 100.0), pose, &edges).is_err());
+        assert!(hold_look(&s, "q", (500.0, 100.0), &edges).is_err());
+        let plain = look::View::default();
+        assert!(s.canvas().unwrap().height() < 200.0);
+        stick_hold_look(&s, "P.glow", (500.0, 200.0), pose, &plain).unwrap();
+        hold_look(&s, "q", (500.0, 200.0), &plain).unwrap();
+        assert!(stick_hold_look(&s, "P.glow", (500.0, 201.0), pose, &plain).unwrap_err().contains("not on the canvas"));
+        assert!(hold_look(&s, "q", (1001.0, 100.0), &plain).unwrap_err().contains("not on the canvas"));
     }
 
     #[test]

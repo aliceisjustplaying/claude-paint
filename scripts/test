@@ -4,7 +4,9 @@
 # passes only if it exits 0 and prints what proves its tests ran: every named
 # Rust test's ok line, or a count of at least one. The registered rag
 # baseline mismatch (exit 4 with KNOWN_FAILURE: rag-historical-baseline-main)
-# and the isolated knife single-test failure are reported as known.
+# and the isolated knife single-test failure are reported as known. A check
+# that leaves an easel server running fails, and the gate kills what any
+# check left, also when the gate itself is killed (Linux).
 # Exit 0 if nothing else failed, 1 otherwise.
 #
 #   scripts/test          (CARGO_TARGET_DIR is honored; a failed run keeps its logs)
@@ -27,29 +29,91 @@ stop() {
 }
 trap stop INT TERM
 
+# The run's processes, found in /proc (Linux; elsewhere it finds none): a process belongs to a
+# check when it inherited the check's CLAUDE_PAINT_GATE or works in the check's temporary directory
+# (a harness client starts its easel with a bare environment, in a studio there), whatever session
+# it moved to. Only pids above 1 are ever signaled.
+#   perl -e "$procs" servers DIR   prints each easel server under DIR as "pid args"
+#   perl -e "$procs" kill DIR      kills every process under DIR, until none is left
+#   perl -e "$procs" watch DIR     moves to a session of its own, waits for the end of its stdin, then kills
+# shellcheck disable=SC2016 # perl's own variables
+procs='
+use POSIX ();
+my ($mode, $dir) = @ARGV;
+sub ours {
+  my @found;
+  for my $proc (glob "/proc/[1-9]*") {
+    my ($pid) = $proc =~ m{^/proc/([1-9][0-9]*)$} or next;
+    next if $pid <= 1 || $pid == $$;
+    my $cwd = readlink "$proc/cwd";
+    my $in = defined $cwd && index(($cwd =~ s/ \(deleted\)$//r) . "/", "$dir/") == 0;
+    if (!$in && open my $env, "<", "$proc/environ") {
+      local $/ = "\0";
+      while (my $var = <$env>) {
+        chomp $var;
+        if (index("$var/", "CLAUDE_PAINT_GATE=$dir/") == 0) { $in = 1; last }
+      }
+    }
+    next unless $in;
+    open my $cmd, "<", "$proc/cmdline" or next;
+    push @found, [$pid, split /\0/, do { local $/; <$cmd> // "" }];
+  }
+  @found;
+}
+if ($mode eq "watch") {
+  POSIX::setsid();
+  1 while <STDIN>;
+}
+if ($mode eq "servers") {
+  print "@$_\n" for grep { @$_ > 2 && $_->[1] =~ m{(^|/)easel$} && $_->[2] eq "serve" } ours();
+  exit;
+}
+for (1 .. 50) {
+  my @pids = map { $_->[0] } ours() or last;
+  kill "KILL", @pids;
+  select undef, undef, undef, 0.1;
+}
+'
+
+# The backstop: a watcher outside the gate's process group (woodpecker cancels or times out a step
+# by killing that group, so no trap runs) that kills whatever the run left running once the gate
+# has exited, however it exited. Only the gate holds the pipe's write end: its exit is the end of
+# the watcher's input.
+mkfifo "$work/alive"
+perl -e "$procs" watch "$work" <"$work/alive" >/dev/null 2>&1 &
+disown "$!"
+exec {alive}>"$work/alive"
+
 # launch NAME COMMAND: runs COMMAND in its own session (perl: macOS has no setsid), output in $work/NAME.log
 launch() {
   mkdir -p "$work/$1.tmp"
   echo "$EPOCHREALTIME" >"$work/$1.t0"
-  TMPDIR=$work/$1.tmp perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' bash -c "$2" >"$work/$1.log" 2>&1 </dev/null &
+  CLAUDE_PAINT_GATE=$work/$1.tmp TMPDIR=$work/$1.tmp perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' bash -c "$2" >"$work/$1.log" 2>&1 </dev/null {alive}>&- &
   name_of[$!]=$1
 }
 
-# reap: waits for one launched command, stops what it left running (a crashed test's easel
-# server) and records its exit and wall time
+# reap: waits for one launched command, records an easel server it left running (one that is
+# closing gets 5 s to go), stops whatever it left and records its exit and wall time
 reap() {
-  local pid rc name
+  local pid rc name left
   wait -n -p pid
   rc=$?
   name=${name_of[$pid]}
   unset "name_of[$pid]"
+  for _ in {1..50}; do
+    left=$(perl -e "$procs" servers "$work/$name.tmp")
+    [ -n "$left" ] || break
+    sleep 0.1
+  done
+  [ -z "$left" ] || echo "$left" >"$work/$name.left"
+  perl -e "$procs" kill "$work/$name.tmp"
   pkill -KILL -s "$pid"
   echo "$rc" >"$work/$name.rc"
   awk -v a="$(cat "$work/$name.t0")" -v b="$EPOCHREALTIME" 'BEGIN { printf "%.1f", b - a }' >"$work/$name.secs"
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --features easel/state-store --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
+launch build "cargo test --workspace --features easel/state-store --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test scratch_canvas_memory --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -93,13 +157,14 @@ passed='[1-9][0-9]* passed'
 unittest=$'^Ran [1-9]\n^OK'
 
 # longest first
-check pastel-engine "cd crates/paint && $(printf %q "$(exe 'lib paint test')") --include-ignored pastel::tests:: sheet::tests:: graphite::tests:: checkpoint::tests::paper_and_stick_pastel_survive_a_checkpoint checkpoint::tests::a_laid_sheet_survives_a_checkpoint checkpoint::tests::drained_masking_sheets_keep_each_support" '^test result: ok\. [1-9]'
+check pastel-engine "cd crates/paint && $(printf %q "$(exe 'lib paint test')") --include-ignored pastel::tests:: sheet::tests:: graphite::tests:: checkpoint::tests::paper_and_stick_pastel_survive_a_checkpoint checkpoint::tests::dusted_pastel_survives_a_checkpoint checkpoint::tests::a_laid_sheet_survives_a_checkpoint checkpoint::tests::drained_masking_sheets_keep_each_support" '^test result: ok\. [1-9]'
 check pastel-session "cd crates/easel && $(printf %q "$(exe 'bin easel test')") api::draw_pencil::tests:: tests::a_held_stick tests::reference_looks_do_not_bypass_stick_pose_gating" '^test result: ok\. [1-9]'
 rust smoke easel 'test smoke test'
 rust look easel 'test look test'
 rust session-integrity easel 'test session_integrity test'
 rust live-frames easel 'test live_frames test'
 rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
+rust scratch-canvas-memory easel 'test scratch_canvas_memory test'
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py scripts/tests/golden_approve_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
@@ -132,6 +197,7 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::live_scope_restores_both_traces_on_unwind \
   replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure \
   replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory
+rust rollback-snapshot easel 'bin easel test' session::tests::a_rollback_from_the_packed_canvas_leaves_the_same_bits session::tests::a_canvas_that_cannot_wake_is_rebuilt_from_the_log
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'
@@ -238,7 +304,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   session::tests::a_scumble_at_half_coverage_leaves_gaps \
   session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible \
   session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it \
-  api::draw_rag::tests::a_wipe_on_a_full_face_says_so \
+  api::draw_rag::tests::a_wipe_on_a_full_face_says_so api::draw_rag::tests::a_blot_on_a_full_face_says_so \
   session::tests::a_gesture_keeps_its_width_to_its_last_point \
   session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it \
   session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them \
@@ -249,6 +315,9 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::carried_palette_tests::graded_dips_preserve_palette_tint_strength_at_negligible_dirt \
   api::carried_palette_tests::every_internal_dip_carries_the_paint_retained_from_the_canvas \
   api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded \
+  api::calls_agree_tests::a_misspelled_brush_option_is_refused api::calls_agree_tests::brush_and_knife_loads_refuse_the_same_amounts \
+  api::calls_agree_tests::recipes_and_mixes_whose_parts_overflow_are_refused depth::tests::view_queries_pick_as_passes_do \
+  api::draw_rag::tests::a_faint_mask_wipe_lifts_by_its_value \
   api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
 # The first 2.0 painting is the judge of knife skim over wet dark paint.
 known_rust knife-skim paint 'lib paint test' bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint
@@ -256,6 +325,7 @@ check thinner-check2 "scripts/thinner_check2 $easel" '^check 2: PASS$'
 check easel-mcp 'uv run --no-project --script harness/easel_mcp/test_protocol.py ProtocolTests PreparationTests -v' "$unittest"
 check painter-read 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-client.test.ts' '^# pass [1-9][0-9]*$'
 check painter-easel-tools 'node --experimental-strip-types --test --test-reporter=tap harness/painter/test/easel-tools.test.ts' '^# pass [1-9]'
+check painter-journal "EASEL_BIN=$easel node --experimental-strip-types --test --test-reporter=tap harness/painter/test/journal.test.ts" '^# pass [1-9]'
 check painter-visit-lifecycle 'node --test --test-reporter=tap harness/painter/test/visit-lifecycle.test.ts' '^# pass [1-9][0-9]*$'
 check easel-mcp-remote 'uv run --no-project --script harness/easel_mcp/test_remote.py -v' "$unittest"
 check easel-mcp-critic 'uv run --no-project --script harness/easel_mcp/test_critic.py CriticTests -v' "$unittest"
@@ -304,6 +374,13 @@ while [ "${#name_of[@]}" -gt 0 ]; do reap; done
 failed=() known=()
 for i in "${!names[@]}"; do
   name=${names[$i]} log=$work/${names[$i]}.log rc=$(cat "$work/${names[$i]}.rc") missing=
+  if [ -s "$work/$name.left" ]; then
+    failed+=("$name")
+    echo "gate: $name: FAILED (exit $rc; it left easel servers running, killed by the gate:)"
+    sed 's/^/  ! /' "$work/$name.left"
+    sed 's/^/  | /' "$log"
+    continue
+  fi
   if [ "$rc" = 101 ] && [ -n "${known_rust_tests[$name]:-}" ] &&
     grep -qxF "test ${known_rust_tests[$name]} ... FAILED" "$log" &&
     grep -qE '^test result: FAILED\. 0 passed; 1 failed; 0 ignored; 0 measured;' "$log"; then

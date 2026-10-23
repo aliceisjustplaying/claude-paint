@@ -1,6 +1,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+mod support;
 
 struct Easel(PathBuf);
 
@@ -31,7 +32,7 @@ impl Easel {
 
 impl Drop for Easel {
     fn drop(&mut self) {
-        let _ = self.call(&["close"]);
+        support::stop_servers(&self.0);
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }

@@ -53,7 +53,7 @@ impl Studio {
 
 impl Drop for Studio {
     fn drop(&mut self) {
-        let _ = self.run(&["close"]);
+        support::stop_servers(&self.root);
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }

@@ -66,9 +66,30 @@
 //! `N_c / C`: about 0.1% on deep medium-rich paint (10 Pa yield) and
 //! 4.4% on stiff tube paint (3000 Pa), against the 1.35% a tube-paint
 //! skin reaches (`EXPAND`): medium-rich paint wrinkles, tube paint
-//! straight from the tube holds, as Ranquet's two films did. The wrinkle
-//! is drawn at the band of wavelengths nearest `q_c` (`BAND_LAMBDA`),
-//! and the threshold is the plate's at the wavenumber drawn. The gel
+//! straight from the tube holds, as Ranquet's two films did. The gel
+//! holds elastically only to its yield strain, a few percent: past it the
+//! paste flows from the troughs to the crests, and what holds the skin
+//! then is its yield stress `τ_y` as a plug flow through the depth it
+//! has, a pressure `π τ_y / q H` under a thin bulk and `π τ_y` under a
+//! deep one, which on a wrinkle of rms slope `σ` is a membrane force
+//! `2√2 τ_y / (q σ min(1, qH))`; the skin beats the lesser of this and
+//! the gel's elastic hold. Under a thin bulk the yield amplitude is under
+//! a micrometer (the layer shears `6 A / q H²`), so the brush marks a
+//! skin cures over have yielded it already and the yield stress is what
+//! it beats: a few hundred micrometers of medium-rich paint wrinkle where
+//! the elastic layer would have held them at a stiffness growing as
+//! `1 / H³`, and a yield stress ten times theirs holds at that thickness.
+//! Since the hold falls as the wrinkle grows, a wrinkle that starts runs
+//! until the slopes have the compression, and the skin takes the
+//! wavelength that needs the least at the slopes it has: on an elastic
+//! gel `q_c` above, on a yielded one where bending balances the plug
+//! flow, `(√2 τ_y / B σ)^(1/3)` on deep bulk and `(2√2 τ_y / B H σ)^(1/4)`
+//! on thin. The slopes a skin has at its wavelength are measured in the
+//! pass (`Packet::slope`, brush marks and wrinkle together), the pass
+//! draws at that measurement, and a skin not measured yet asks for a
+//! pass when it could wrinkle on a yielded bulk. The wrinkle is drawn at
+//! the band of wavelengths nearest its own (`BAND_LAMBDA`), and the
+//! threshold is the plate's at the wavenumber drawn. The gel
 //! relaxes in a fraction of a second and the compression builds over
 //! days, so the wrinkle is always at its equilibrium: past the threshold
 //! the plate buckles until the slopes it has made have taken up the
@@ -98,8 +119,10 @@
 //! The plate's thickness is what lies above each packet's front, and when
 //! the front reaches the bottom the soft bulk is gone and the wrinkle
 //! stays as it is. The surface tension of the oil counts against the
-//! compression (`surface::SIGMA`). A wrinkle whose wavelength is under
-//! two pixels is below the picture's resolution and isn't drawn.
+//! compression (`surface::SIGMA`). A wavelength under two pixels is
+//! below the picture's resolution: the skin is drawn at the finest the
+//! grid has if it beats the threshold there (every wavelength the
+//! compression beats is unstable; the least one only grows fastest).
 //!
 //! A skin that thickens under compression wrinkles more than one of its
 //! final thickness would: the thin early skin buckles at large slopes for
@@ -229,6 +252,11 @@ pub(crate) struct Packet {
     pub stiff: f32,
     /// Share of its volume that is binder: its skin's expansion.
     pub binder: f32,
+    /// The rms slope of the relief over it at its wrinkle's wavelength,
+    /// brush marks and wrinkle together, as the last pass measured it (0:
+    /// not measured yet). What the yielded bulk under its skin holds
+    /// against is this.
+    pub slope: f32,
     /// The packet under it, or `NONE`.
     pub below: u32,
 }
@@ -295,12 +323,42 @@ struct Site {
     /// The packet whose bulk moves (`NONE`: nothing to do here).
     at: u32,
     /// How much the mean square slope of the wrinkle has to grow by
-    /// (negative: how far the skin is from wrinkling).
+    /// (negative: how far the skin is from wrinkling), at the slopes the
+    /// skin was last measured with; 0 while it has none measured.
     delta: f32,
     /// The band its wavelength is drawn in (blur radius, px).
     band: u8,
     /// The least displacement the bulk allows, µm (none left under the skin).
     floor: f32,
+    /// Not measured yet, and the skin could wrinkle on a yielded bulk: a
+    /// pass measures it and draws at the measurement.
+    measure: bool,
+    /// Past its threshold with the yielded bulk the lesser hold, and the
+    /// hold it would shed by taking its ask is itself `GROW` of ask: the
+    /// wrinkle runs, so a pass draws it without waiting for `GROW` of ask.
+    runs: bool,
+    /// The plate's compression less the oil's surface tension, N/m.
+    nf: f32,
+    /// What bending costs at the band's wavenumber, `B q²`, N/m.
+    bend: f32,
+    /// The gel's elastic hold at that wavenumber, N/m.
+    hold: f32,
+    /// The plate's extensional stiffness `C`, N/m.
+    c: f32,
+    /// The most mean square slope the soft bulk has room for.
+    cap: f32,
+    /// The yielded bulk's hold, N/m, per unit of the slope it is divided by.
+    yielded: f32,
+}
+
+impl Site {
+    /// The mean square slope the skin asks for over what it has, with the
+    /// bulk holding at the lesser of its elastic and its yielded hold at
+    /// slopes `slope` (none measured, or none at all: the elastic one).
+    fn ask(&self, slope: f32) -> f32 {
+        let hold = if slope > 0.0 { self.hold.min(self.yielded / slope) } else { self.hold };
+        (2.0 * (self.nf - self.bend - hold) / self.c).min(self.cap)
+    }
 }
 
 /// Minutes to touch-dry of one coat of the paint `hd`, as `drying` has it.
@@ -327,6 +385,18 @@ fn take(n: usize) -> Vec<Vec<f32>> {
 
 fn give(s: Vec<Vec<f32>>) {
     SCRATCH.with(|c| *c.borrow_mut() = s);
+}
+
+/// What the band's filter (the relief blurred twice at radius `r`, less
+/// blurred twice at `2 r`) leaves of a sinusoid at the band's own
+/// wavelength, `BAND_LAMBDA r`: the slope it measures, over the relief's.
+fn band_gain(r: usize) -> f32 {
+    let lambda = BAND_LAMBDA * r as f32;
+    let twice = |width: usize| {
+        let g = (std::f32::consts::PI * width as f32 / lambda).sin() / (width as f32 * (std::f32::consts::PI / lambda).sin());
+        g * g
+    };
+    (twice(2 * r + 1) - twice(4 * r + 1)).max(0.05)
 }
 
 /// The binder's share of a paint's volume: its tubes' oil by volume, with
@@ -374,13 +444,13 @@ impl Canvas {
         let born = if cure >= GEL { end - ((cure - GEL) / pace.set_rate(r)) as f64 } else { end + ((GEL - cure) / pace.open_rate(r)) as f64 };
         let v0 = THROUGH * COAT_UM / one_coat_minutes(self.engine, drain, &hd);
         let below = self.skin.top[i];
-        let p = Packet { h: add_um, s: 0.0, x: 0.0, n: 0.0, w: 0.0, born: born as f32, v0, stiff: hd[1], binder: binder_share(&hd), below };
+        let p = Packet { h: add_um, s: 0.0, x: 0.0, n: 0.0, w: 0.0, born: born as f32, v0, stiff: hd[1], binder: binder_share(&hd), slope: 0.0, below };
         let at = self.skin.push(p);
         self.skin.top[i] = at;
     }
 
     /// The clock moves from `start` to `end` minutes: step the fronts, the
-    /// skins and the wrinkles at every whole hour in between.
+    /// skins and the wrinkles at every tick (`TICK_MIN`) in between.
     pub(crate) fn skin_advance(&mut self, start: f64, end: f64) {
         if !self.skins() || self.skin.live == 0 || end <= start {
             return;
@@ -409,7 +479,7 @@ impl Canvas {
         let dx_um = self.px_mm() * 1e3;
         let soft: Vec<usize> = (0..bw * bh).filter(|&k| site[k].at != NONE).collect();
         let padded = |k: usize| (bx.1 + k / bw - pb.1) * pw + bx.0 + k % bw - pb.0;
-        let mut scratch = take(19);
+        let mut scratch = take(20);
         let mut buffers = scratch.drain(..);
         let mut buffer = |n: usize| {
             let mut b = buffers.next().unwrap();
@@ -454,8 +524,8 @@ impl Canvas {
         let mut dw = buffer(pw * ph);
         // the pixels the pass touches: the amount of the pattern each takes
         // and whether the wrinkle relieves its compression
-        let mut took: Vec<(usize, f32, bool)> = Vec::new();
-        let (mut tmp, mut mr, mut m2r, mut mi, mut near, mut far, mut rho) = (buffer(0), buffer(0), buffer(0), buffer(0), buffer(0), buffer(0), buffer(0));
+        let mut took: Vec<(usize, f32, bool, f32)> = Vec::new();
+        let (mut tmp, mut mr, mut m2r, mut mi, mut near, mut far, mut rho, mut wrinkled) = (buffer(0), buffer(0), buffer(0), buffer(0), buffer(0), buffer(0), buffer(0), buffer(0));
         let (mut zr, mut px, mut py, mut dot) = (buffer(pw * ph), buffer(pw * ph), buffer(pw * ph), buffer(pw * ph));
         drop(buffers);
         for &band in &bands {
@@ -493,6 +563,22 @@ impl Canvas {
             dot.par_iter_mut().zip(&px).zip(&py).zip(&wx).zip(&wy).zip(&far).zip(&inner).for_each(|((((((d, px), py), wx), wy), f), m)| *d = if *f > 0.0 { m * (px * wx + py * wy) / f } else { 0.0 });
             blur2(&dot, 2 * r, &mut rho);
             over(&mut rho, &mi);
+            // the slopes the skin has at this wavelength, brush marks and
+            // wrinkle together: what its yielded bulk holds against. The
+            // measurement is kept on the packet, and the skin asks at it.
+            dot.par_iter_mut().zip(&wx).zip(&wy).zip(&inner).for_each(|(((d, x), y), m)| *d = m * (x * x + y * y));
+            blur2(&dot, 2 * r, &mut wrinkled);
+            over(&mut wrinkled, &mi);
+            let gain = band_gain(r);
+            for &k in &soft {
+                if site[k].band != band {
+                    continue;
+                }
+                let p = padded(k);
+                let slope = ((far[p] / gain).powi(2) + wrinkled[p].max(0.0)).sqrt();
+                self.skin.pool[site[k].at as usize].slope = slope;
+                need[p] = if site[k].cap > 0.0 { site[k].ask(slope) } else { 0.0 };
+            }
             // a wrinkle is a wavelength's worth of skin acting together:
             // what the skin asks for, averaged over one (the cured paint
             // around a soft spot asks nothing, and holds it; paint short
@@ -517,7 +603,8 @@ impl Canvas {
                 }
                 let p = padded(k);
                 let delta = dot[p];
-                let relieved = s.delta > 0.0 && mr[p] > 0.0;
+                let asked = need[p];
+                let relieved = asked > 0.0 && mr[p] > 0.0;
                 if delta <= 0.0 && !relieved {
                     continue;
                 }
@@ -529,7 +616,11 @@ impl Canvas {
                 // edge, stays where it is)
                 let a = if delta > 0.0 && far[p] > 0.0 { ((rho[p] * rho[p] + delta).sqrt() - rho[p].abs()).copysign(rho[p]) } else { 0.0 };
                 dw[p] = if a != 0.0 { a * (near[p] / far[p]).clamp(-cap, cap) } else { 0.0 };
-                took.push((k, a, relieved));
+                if a != 0.0 {
+                    let slope = &mut self.skin.pool[s.at as usize].slope;
+                    *slope = (*slope * *slope + delta).sqrt();
+                }
+                took.push((k, a, relieved, asked));
             }
         }
         if !took.is_empty() {
@@ -563,10 +654,10 @@ impl Canvas {
             // it reaches, each by its share of the plate's stiffness (a
             // trough cut short at the paint under it is credited in full:
             // the skin there is held a little less than it would be)
-            for &(k, _, relieved) in &took {
+            for &(k, _, relieved, asked) in &took {
                 let s = site[k];
                 let i = (bx.1 + k / bw) * w + bx.0 + k % bw;
-                let relief = if relieved { 0.5 * SKIN_PA / (1.0 - NU * NU) * s.delta * 1e-6 } else { 0.0 };
+                let relief = if relieved { 0.5 * SKIN_PA / (1.0 - NU * NU) * asked * 1e-6 } else { 0.0 };
                 let mut at = self.skin.top[i];
                 while at != NONE {
                     let p = &mut self.skin.pool[at as usize];
@@ -586,7 +677,7 @@ impl Canvas {
             self.surf_gen += 1;
             self.base = None;
         }
-        give(vec![z, wf, need, skin, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, zr, px, py, dot]);
+        give(vec![z, wf, need, skin, inner, wx, wy, dw, tmp, mr, m2r, mi, near, far, rho, wrinkled, zr, px, py, dot]);
     }
 
     /// The box (buffer pixels, end-exclusive) of the pixels holding packets.
@@ -614,7 +705,7 @@ impl Canvas {
     }
 
     /// One tick, the clock at `now` minutes: every packet's front advances
-    /// over the hour (from its birth, if that is later), its skin takes up
+    /// over the tick (from its birth, if that is later), its skin takes up
     /// expansion, then the skins on soft bulk wrinkle.
     fn skin_tick(&mut self, now: f64) {
         let w = self.f.w;
@@ -624,7 +715,7 @@ impl Canvas {
         let dx = self.px_mm() * 1e-3;
         let nyq = std::f32::consts::PI / dx;
         // 1. chemistry: what each packet's front has to cross, then every
-        // front, reserve and force over the hour
+        // front, reserve and force over the tick
         let mut above = vec![0.0f32; self.skin.pool.len()];
         for y in bx.1..bx.3 {
             for x in bx.0..bx.2 {
@@ -660,7 +751,7 @@ impl Canvas {
         // to the first soft one), its compression, and whether the gel under
         // it gives: the critical wavenumber and force of the plate on it
         let (bw, bh) = (bx.2 - bx.0, bx.3 - bx.1);
-        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, floor: 0.0 }; bw * bh];
+        let mut site = vec![Site { at: NONE, delta: 0.0, band: 0, floor: 0.0, measure: false, runs: false, nf: 0.0, bend: 0.0, hold: 0.0, c: 0.0, cap: 0.0, yielded: 0.0 }; bw * bh];
         let (top, pool, engine) = (&self.skin.top, &self.skin.pool, self.engine);
         site.par_chunks_mut(bw).enumerate().for_each(|(y, row)| {
             for (x, site) in row.iter_mut().enumerate() {
@@ -687,25 +778,52 @@ impl Canvas {
                 let t = plate * 1e-6;
                 let b = SKIN_PA * t * t * t / (12.0 * (1.0 - NU * NU));
                 let c = SKIN_PA * t / (1.0 - NU * NU);
-                let g = MODULUS_PER_YIELD * rheology_at(engine, p.stiff).1;
+                let yield_pa = rheology_at(engine, p.stiff).1;
+                let g = MODULUS_PER_YIELD * yield_pa;
                 // the bulk's depth over a wavelength: the wrinkle only moves
-                // it from trough to crest
+                // it from trough to crest, so once the front is past the
+                // film's own thickness the troughs have nothing left to give
+                // and the wrinkle stays as it is, whatever a crest still holds
                 let hb = (p.h - p.s) * 1e-6;
                 let nf = force - SIGMA;
-                if nf <= 0.0 || p.h + p.w - p.s <= DRY_UM {
+                if nf <= 0.0 || hb <= DRY_UM * 1e-6 || p.h + p.w - p.s <= DRY_UM {
                     continue;
                 }
+                // the gel's elastic hold at q, and the yielded paste's: a
+                // plug flow from trough to crest through the depth it has,
+                // a pressure of π τ_y / (q H) under a thin bulk and π τ_y
+                // under a deep one, which the plate presses with N q² A on
+                // a wrinkle of amplitude A (rms slope σ = q A / √2): a
+                // membrane force of π τ_y / (√2 q σ min(1, qH)); the skin
+                // beats the lesser of the two
+                let elastic = |q: f32| if q * hb >= DEEP { 2.0 * g / q } else { 12.0 * g / (hb * hb * hb * q * q * q * q) };
+                let yielded = |q: f32| std::f32::consts::FRAC_PI_2 * std::f32::consts::SQRT_2 * yield_pa / (q * (q * hb).min(1.0));
+                let need = |q: f32| b * q * q + if p.slope > 0.0 { elastic(q).min(yielded(q) / p.slope) } else { elastic(q) };
+                // the wavenumber that needs the least compression: on an
+                // elastic gel (G / B)^(1/3) on deep bulk, (24 G / B H³)^(1/6)
+                // on thin; on a yielded paste at the slopes measured, where
+                // bending balances the plug flow, (π τ_y / 2√2 B σ)^(1/3) on
+                // deep bulk and (π τ_y / √2 B H σ)^(1/4) on thin
                 let qh = (g / b).cbrt();
-                let qc = if qh * hb >= DEEP { qh } else { (24.0 * g / (b * hb * hb * hb)).powf(1.0 / 6.0).min(DEEP / hb) };
-                // resolved on this grid (a wavelength of two pixels or more)?
-                if qc > nyq {
-                    continue;
+                let mut qc = if qh * hb >= DEEP { qh } else { (24.0 * g / (b * hb * hb * hb)).powf(1.0 / 6.0).min(DEEP / hb) };
+                if p.slope > 0.0 {
+                    let deep = (std::f32::consts::FRAC_PI_4 * std::f32::consts::FRAC_1_SQRT_2 * yield_pa / (b * p.slope)).cbrt();
+                    let thin = (std::f32::consts::FRAC_PI_2 * std::f32::consts::SQRT_2 * yield_pa / (b * hb * p.slope)).powf(0.25);
+                    for q in [deep, thin] {
+                        if q > 0.0 && q.is_finite() && need(q) < need(qc) {
+                            qc = q;
+                        }
+                    }
                 }
                 // the wrinkle is drawn at the band nearest its wavelength,
-                // and the threshold is the plate's at the wavenumber drawn
-                let band = (2.0 * std::f32::consts::PI / (qc * dx) / BAND_LAMBDA).round().clamp(1.0, BAND_MAX as f32) as u8;
+                // and the threshold is the plate's at the wavenumber drawn;
+                // a wavelength under two pixels is below the picture's
+                // resolution, and the skin is drawn at the finest the grid
+                // has if it beats the threshold there (every wavelength the
+                // compression beats is unstable; the least one only grows
+                // fastest)
+                let band = (2.0 * std::f32::consts::PI / (qc.min(nyq) * dx) / BAND_LAMBDA).round().clamp(1.0, BAND_MAX as f32) as u8;
                 let q = 2.0 * std::f32::consts::PI / (band as f32 * BAND_LAMBDA * dx);
-                let nc = b * q * q + if q * hb >= DEEP { 2.0 * g / q } else { 12.0 * g / (hb * hb * hb * q * q * q * q) };
                 // von Kármán: slopes of mean square 2 (N − N_c) / C take up
                 // the compression past the threshold (short of it: how far
                 // the pixel is from wrinkling, for its neighbors' sake). A
@@ -714,8 +832,19 @@ impl Canvas {
                 // has, q² H² / 2: a film nearly cured through holds what
                 // compression it has left.
                 let room = (p.h + p.w - p.s) * 1e-6;
-                let delta = (2.0 * (nf - nc) / c).min(0.5 * (q * room) * (q * room));
-                *site = Site { at: soft, delta, band, floor: p.s - p.h + DRY_UM };
+                let mut s = Site { at: soft, delta: 0.0, band, floor: p.s - p.h + DRY_UM, measure: false, runs: false, nf, bend: b * q * q, hold: elastic(q), c, cap: 0.5 * (q * room) * (q * room), yielded: yielded(q) };
+                // a skin whose slopes are not measured asks nothing of its
+                // neighbors yet; it asks for a pass when it could wrinkle
+                // on a bulk that has yielded, and the pass draws at the
+                // slopes it measures
+                if p.slope > 0.0 {
+                    s.delta = s.ask(p.slope);
+                    let plateau = s.yielded / p.slope;
+                    s.runs = s.delta > 0.0 && plateau < s.hold && 2.0 * plateau * (1.0 - p.slope / (p.slope * p.slope + s.delta).sqrt()) / c >= GROW * GROW;
+                } else {
+                    s.measure = (2.0 * (nf - s.bend) / c).min(s.cap) >= GROW * GROW;
+                }
+                *site = s;
             }
         });
         // a skin asks for slopes only where it has soft bulk on every side
@@ -725,10 +854,10 @@ impl Canvas {
         let lone: Vec<usize> = (0..bw * bh).into_par_iter().filter(|&k| {
             let (x, y) = (k % bw, k / bw);
             let soft = |x: usize, y: usize| x < bw && y < bh && site[y * bw + x].at != NONE;
-            site[k].at != NONE && site[k].delta > 0.0 && !(soft(x.wrapping_sub(1), y) && soft(x + 1, y) && soft(x, y.wrapping_sub(1)) && soft(x, y + 1))
+            site[k].at != NONE && !(soft(x.wrapping_sub(1), y) && soft(x + 1, y) && soft(x, y.wrapping_sub(1)) && soft(x, y + 1))
         }).collect();
         for k in lone {
-            site[k].delta = 0.0;
+            site[k] = Site { delta: 0.0, measure: false, runs: false, cap: 0.0, ..site[k] };
         }
         // 3. the wrinkles: the relief band-passed at each wavelength in
         // use, scaled to unit rms slope, is the pattern; each pixel's bulk
@@ -738,7 +867,7 @@ impl Canvas {
         // through, or bare, asking nothing: the skin over a soft spot
         // smaller than a wavelength is held by the cured paint around it.
         // The pass runs when that average is GROW² of slope or more.
-        if site.iter().any(|s| s.at != NONE && s.delta >= GROW * GROW) {
+        if site.iter().any(|s| s.at != NONE && (s.delta >= GROW * GROW || s.measure || s.runs)) {
             let pad = 2 * BAND_MAX;
             let pb = (bx.0.saturating_sub(pad), bx.1.saturating_sub(pad), (bx.2 + pad).min(w), (bx.3 + pad).min(self.f.h));
             let (pw, ph) = (pb.2 - pb.0, pb.3 - pb.1);
@@ -754,10 +883,10 @@ impl Canvas {
             let mut bands: Vec<u8> = site.iter().filter(|s| s.at != NONE).map(|s| s.band).collect();
             bands.sort_unstable();
             bands.dedup();
-            let asks = bands.iter().any(|&band| {
+            let asks = site.iter().any(|s| s.at != NONE && s.measure) || bands.iter().any(|&band| {
                 crate::surface::box_blur_into(need, pw, ph, 2 * band as usize, tmp);
                 crate::surface::box_blur_into(tmp, pw, ph, 2 * band as usize, avg);
-                site.iter().enumerate().any(|(k, s)| s.at != NONE && s.band == band && avg[padded(k)] >= GROW * GROW)
+                site.iter().enumerate().any(|(k, s)| s.at != NONE && s.band == band && (avg[padded(k)] >= GROW * GROW || (s.runs && avg[padded(k)] > 0.0)))
             });
             give(scratch);
             if asks {
@@ -932,6 +1061,30 @@ mod tests {
         assert!(a < 1.5 * b, "stiff tube paint (3000 Pa yield) holds: {b} → {a}");
         let (b, a, _) = paired(film(paint(0.1), 2.0), 6.0);
         assert!((a - b).abs() < 0.5, "a thin medium-rich film has no soft bulk left to wrinkle: {b} → {a}");
+    }
+
+    #[test]
+    fn a_knife_slab_wrinkles_on_its_yielded_bulk_and_a_stiffer_one_holds() {
+        let bx = (6, 6, 58, 58);
+        let film = |paint: Paint, coats: f32| {
+            move |c: &mut Canvas| {
+                furrow(c, 3.0, 6);
+                lay(c, &paint, coats, bx);
+                c.dry();
+            }
+        };
+        // 200 µm of medium-rich paint drying at lead white's pace (a coat
+        // touch-dry in two days): less soft bulk than a wrinkle wavelength,
+        // which an elastic layer would hold flat (22.8 N/m against 6.7 of
+        // compression at day 20) and the yielded paste does not
+        let slab = |stiff: f32| Paint::new([0.9; 3], 0.9, stiff).with_drying(0.8);
+        let (b, a, c) = paired(film(slab(0.1), 8.0), 30.0);
+        assert!(a > 3.0 * b && a > 5.0, "a 200 µm medium-rich slab wrinkles: relief {b} → {a} µm rms");
+        let top = c.skin.column(32 * 64 + 32).next().unwrap();
+        assert!(top.slope > 0.05 && top.w.abs() > 1.0, "measured slopes and moved bulk: {top:?}");
+        // ten times the yield stress holds at that thickness
+        let (b, a, _) = paired(film(slab(0.46), 8.0), 30.0);
+        assert!(a < 1.5 * b, "a blotted slab (95 Pa yield) holds at 200 µm: {b} → {a}");
     }
 
     #[test]

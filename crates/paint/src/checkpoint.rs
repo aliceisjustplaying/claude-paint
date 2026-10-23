@@ -34,9 +34,10 @@
 //! version's bytes after its header, then the skin section, the file's last:
 //! a `SKIN` mark and the section's own version (1, `SKIN_V`), the material
 //! revision, the clock minute of the last tick (f64), and each buffer
-//! pixel's baked films top down (a count, then nine f32 per film:
+//! pixel's baked films top down (a count, then ten f32 per film:
 //! thickness, front depth, unexpanded skin, membrane force, bulk moved,
-//! birth minute, front rate, stiffness, binder share). A reader that
+//! birth minute, front rate, stiffness, binder share, measured slope). A
+//! reader that
 //! doesn't know version 22 refuses the file instead of loading the
 //! picture as the old material.
 //!
@@ -648,7 +649,7 @@ impl Canvas {
             w.write_all(&self.skin.ticked.to_le_bytes())?;
             for i in 0..self.f.w * self.f.h {
                 put_u64(w, self.skin.column(i).count() as u64)?;
-                put_all(w, self.skin.column(i).flat_map(|p| [p.h, p.s, p.x, p.n, p.w, p.born, p.v0, p.stiff, p.binder]))?;
+                put_all(w, self.skin.column(i).flat_map(|p| [p.h, p.s, p.x, p.n, p.w, p.born, p.v0, p.stiff, p.binder, p.slope]))?;
             }
         }
         Ok(())
@@ -1055,11 +1056,11 @@ impl Canvas {
                 if count > 1 << 16 {
                     return Err(bad("checkpoint skin count is invalid"));
                 }
-                let v = get_all(r, count * 9)?;
+                let v = get_all(r, count * 10)?;
                 if !v.iter().all(|x| x.is_finite()) {
                     return Err(bad("checkpoint skin film is invalid"));
                 }
-                columns.push(v.as_chunks::<9>().0.iter().map(|&[h, s, x, n, w, born, v0, stiff, binder]| crate::skin::Packet { h, s, x, n, w, born, v0, stiff, binder, below: u32::MAX }).collect());
+                columns.push(v.as_chunks::<10>().0.iter().map(|&[h, s, x, n, w, born, v0, stiff, binder, slope]| crate::skin::Packet { h, s, x, n, w, born, v0, stiff, binder, slope, below: u32::MAX }).collect());
             }
             c.skin = crate::skin::Film::from_columns(columns, ticked);
             if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }

@@ -165,6 +165,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   pass_feedback::tests::selection_notices_only_change_feedback \
   pass_feedback::tests::pile_shares_keep_the_given_parts_and_paint \
+  pass_feedback::tests::drying_notices_only_change_feedback \
+  pass_feedback::tests::drying_feedback_respects_weights_masks_and_query_age \
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \

@@ -558,6 +558,7 @@ impl Session {
         }));
         self.deadline.set(None);
         let secs = t0.elapsed().as_secs_f64();
+        crate::pass_feedback::finish(&mut self.st.borrow_mut());
         let out = self.st.borrow().out.clone();
         let (mut fail, globals) = match r {
             Ok(Ok(g)) => (None, Some(g)),

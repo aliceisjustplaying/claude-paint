@@ -1,5 +1,82 @@
 use crate::api::Studio;
-use paint::Mask;
+use paint::{Mask, Stage};
+
+#[derive(Default)]
+pub(crate) struct DryingFeedback {
+    queries: Vec<(f32, f32, Stage)>,
+    lines: usize,
+    omitted: usize,
+    #[cfg(test)]
+    disabled: bool,
+}
+
+impl DryingFeedback {
+    pub(crate) fn begin(&mut self) {
+        self.queries.clear();
+        self.lines = 0;
+        self.omitted = 0;
+    }
+
+    pub(crate) fn queried(&mut self, x: f32, y: f32, stage: Stage) {
+        #[cfg(test)]
+        if self.disabled { return; }
+        if let Some(q) = self.queries.iter_mut().find(|q| q.0 == x && q.1 == y) {
+            q.2 = stage;
+        } else {
+            self.queries.push((x, y, stage));
+        }
+    }
+}
+
+pub(crate) fn drying_pass(s: &mut Studio, mask: &Mask, clip: Option<&Mask>, (x0, y0, x1, y1): (usize, usize, usize, usize), verb: &str) {
+    #[cfg(test)]
+    if s.drying_feedback.disabled { return; }
+    let Some(c) = s.canvas.as_ref() else { return };
+    let f = mask.f;
+    let mut weights = [0.0f64; 4];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let i = y * f.w + x;
+            let w = mask.data[i] * clip.map_or(1.0, |m| m.data[i]);
+            if w > 0.0 {
+                weights[c.drying_at(f.ux(x), f.uy(y)) as usize] += w as f64;
+            }
+        }
+    }
+    let lines_before = s.drying_feedback.lines;
+    let mut omitted = false;
+    let total = weights.iter().sum::<f64>();
+    if total > 0.0 && weights[1] + weights[2] >= total * 0.1 {
+        if s.drying_feedback.lines < 3 {
+            let setting = weights[1] * 100.0 / total;
+            let tacky = weights[2] * 100.0 / total;
+            s.out.push_str(&format!("{verb}: {:.0}% of this pass went onto setting or tacky paint (setting {setting:.0}%, tacky {tacky:.0}%).\n", setting + tacky));
+            s.drying_feedback.lines += 1;
+        } else {
+            omitted = true;
+        }
+    }
+    for &(x, y, stage) in &s.drying_feedback.queries {
+        let i = f.index(x, y);
+        if !f.holds(x, y) || mask.data[i] * clip.map_or(1.0, |m| m.data[i]) <= 0.0 || c.drying_at(x, y) != stage {
+            continue;
+        }
+        if s.drying_feedback.lines < 3 {
+            let name = match stage { Stage::Open => "open", Stage::Setting => "setting", Stage::Tacky => "tacky", Stage::Dry => "dry" };
+            s.out.push_str(&format!("{verb}: the paint at {x},{y} was {name} when this pass went over it (drying() said so earlier in this chunk).\n"));
+            s.drying_feedback.lines += 1;
+        } else {
+            omitted |= matches!(stage, Stage::Setting | Stage::Tacky);
+        }
+    }
+    s.drying_feedback.omitted += usize::from(omitted && s.drying_feedback.lines == lines_before);
+}
+
+pub(crate) fn finish(s: &mut Studio) {
+    if s.drying_feedback.omitted > 0 {
+        s.out.push_str(&format!("(and {} more passes on setting or tacky paint)\n", s.drying_feedback.omitted));
+    }
+}
 
 pub(crate) fn pass(s: &mut Studio, original: &Mask, mask: &Mask, clip: Option<&Mask>, options: &str, verb: &str, marks: u64) {
     #[cfg(test)]
@@ -40,6 +117,155 @@ mod tests {
         assert_eq!(a.st.borrow().calls, b.st.borrow().calls);
         assert_eq!(a.st.borrow().mark_effects, b.st.borrow().mark_effects);
         assert_eq!(a.st.borrow().clock, b.st.borrow().clock);
+    }
+
+    #[test]
+    fn drying_notices_only_change_feedback() {
+        let mut on = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        let mut off = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        off.st.borrow_mut().drying_feedback.disabled = true;
+        for s in [&mut on, &mut off] {
+            s.run(CANVAS).unwrap();
+            s.run(r#"m=rect(100,100,100,100); work(m,{pile=p,coverage=3,fill=true,clip=true,seed=1})"#).unwrap();
+        }
+        same(&on, &off);
+        let src = r#"print(drying(150,150)); while drying(150,150)=="open" or drying(150,150)=="setting" do wait(10) end
+            assert(drying(150,150)=="tacky")
+            work(m,{pile=p,hand="glaze",coverage=0.5,clip=true,seed=2})"#;
+        let out = on.run(src).unwrap().out;
+        off.run(src).unwrap();
+        assert!(out.contains("of this pass went onto setting or tacky paint"));
+        assert!(out.contains("work: the paint at 150,150 was tacky when this pass went over it (drying() said so earlier in this chunk)."));
+        same(&on, &off);
+        let src = r#"for i=1,10 do blend(m,{coverage=0,seed=i}) end"#;
+        let out = on.run(src).unwrap().out;
+        off.run(src).unwrap();
+        assert_eq!(out.lines().count(), 4, "{out}");
+        assert!(out.ends_with("(and 7 more passes on setting or tacky paint)\n"), "{out}");
+        assert!(!out.contains("drying()"));
+        same(&on, &off);
+    }
+
+    #[test]
+    fn drying_feedback_respects_weights_masks_and_query_age() {
+        let mut on = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        let mut off = Session::with_box(100, box_for(None).unwrap()).unwrap();
+        off.st.borrow_mut().drying_feedback.disabled = true;
+        for s in [&mut on, &mut off] {
+            s.run(CANVAS).unwrap();
+            let out = s.run(r#"m=rect(100,100,100,100); work(m,{pile=p,coverage=3,fill=true,clip=true,seed=1})"#).unwrap().out;
+            assert_eq!(out, "");
+        }
+        for (point, mask, stage) in [
+            ("800,600", "rect(790,590,20,20)", "dry"),
+            ("150,150", "m", "open"),
+        ] {
+            let src = format!(r#"for i=1,10 do assert(drying({point})=="{stage}"); work({mask},{{pile=p,coverage=0}}) end"#);
+            let out = on.run(&src).unwrap().out;
+            off.run(&src).unwrap();
+            assert_eq!(out.lines().count(), 3, "{out}");
+            assert!(out.lines().all(|line| line.contains(&format!("was {stage} when"))), "{out}");
+            same(&on, &off);
+        }
+        let mut probe = on.canvas().unwrap().clone();
+        assert_eq!(probe.drying_at(150.0, 150.0), paint::Stage::Open);
+        let mut minutes = 0;
+        while probe.drying_at(150.0, 150.0) != paint::Stage::Tacky {
+            probe.wait(10.0);
+            minutes += 10;
+            assert!(minutes < 1440);
+        }
+        let src = format!(r#"assert(drying(150,150)=="open"); wait({minutes}); work(m,{{pile=p,coverage=0}})"#);
+        let out = on.run(&src).unwrap().out;
+        off.run(&src).unwrap();
+        assert!(out.contains("of this pass went onto setting or tacky paint"), "{out}");
+        assert!(!out.contains("drying()"), "{out}");
+        same(&on, &off);
+        let src = r#"drying(800,600)
+            for i=1,2 do work(rect(790,590,20,20),{pile=p,coverage=0}) end
+            assert(drying(150,150)=="tacky"); work(m,{pile=p,coverage=0})"#;
+        let out = on.run(src).unwrap().out;
+        off.run(src).unwrap();
+        assert_eq!(out.lines().count(), 3, "{out}");
+        assert!(out.lines().last().unwrap().contains("of this pass went onto setting or tacky paint"), "{out}");
+        same(&on, &off);
+        for src in [
+            r#"stipple(m,{pile=p,coverage=0})"#,
+            r#"blend(m,{coverage=0})"#,
+            r#"assert(drying(150,150)=="tacky"); work(m,{pile=p,coverage=0,clip=rect(700,600,20,20)})"#,
+            r#"assert(drying(800,600)=="dry"); work(m,{pile=p,coverage=0})"#,
+        ] {
+            let out = on.run(src).unwrap().out;
+            off.run(src).unwrap();
+            assert!(!out.contains("drying()"), "{out}");
+            if src.starts_with("stipple") { assert!(out.starts_with("stipple: "), "{out}"); }
+            if src.starts_with("blend") { assert!(out.starts_with("blend: "), "{out}"); }
+            if src.contains("clip=") { assert!(!out.contains("of this pass"), "{out}"); }
+            same(&on, &off);
+        }
+        let c = on.canvas().unwrap();
+        let f = c.frame();
+        let stages = c.stages();
+        drop(c);
+        let index = |stage| stages.iter().position(|&s| s == stage).unwrap();
+        let (dry, setting, tacky) = (index(paint::Stage::Dry), index(paint::Stage::Setting), index(paint::Stage::Tacky));
+        let mut mask = paint::Mask::empty(f);
+        mask.data[dry] = 0.4;
+        mask.data[setting] = 0.35;
+        mask.data[tacky] = 0.25;
+        let report = |mask: &paint::Mask, clip: Option<&paint::Mask>| {
+            let mut s = on.st.borrow_mut();
+            s.begin(99);
+            super::drying_pass(&mut s, mask, clip, crate::api::support_with_pixels(Some(mask), f, 200.0).1, "work");
+            s.out.clone()
+        };
+        assert_eq!(report(&mask, None), "work: 60% of this pass went onto setting or tacky paint (setting 35%, tacky 25%).\n");
+        let mut clip = paint::Mask::full(f);
+        clip.data[tacky] = 0.0;
+        assert_eq!(report(&mask, Some(&clip)), "work: 47% of this pass went onto setting or tacky paint (setting 47%, tacky 0%).\n");
+        mask.data[tacky] = 0.0;
+        mask.data[setting] = 0.1;
+        mask.data[dry] = 0.9;
+        assert_eq!(report(&mask, None), "work: 10% of this pass went onto setting or tacky paint (setting 10%, tacky 0%).\n");
+        mask.data[setting] = 0.099;
+        assert_eq!(report(&mask, None), "");
+    }
+
+    #[test]
+    #[ignore]
+    fn drying_feedback_cost_200_small_passes_at_2400() {
+        let src = r#"for i=1,200 do work(m,{pile=p,hand="glaze",coverage=0.5,clip=true,seed=i}) end"#;
+        let (mut on, mut off) = (Vec::new(), Vec::new());
+        let mut state = None;
+        for pair in 1..=3 {
+            for enabled in [true, false] {
+                let mut s = Session::with_box(2400, box_for(None).unwrap()).unwrap();
+                s.st.borrow_mut().drying_feedback.disabled = !enabled;
+                s.run(CANVAS).unwrap();
+                s.run(r#"m=rect(400,290,20,20)
+                    work(rect(390,280,40,40),{pile=p,coverage=3,fill=true,clip=true,seed=7})
+                    while drying(410,300)=="open" do wait(10) end
+                    assert(drying(410,300)=="setting")"#).unwrap();
+                let c = s.canvas().unwrap();
+                assert_eq!((c.frame().w, c.frame().h), (2400, 1920));
+                assert_eq!(c.drying_at(410.0, 300.0), paint::Stage::Setting);
+                drop(c);
+                let t0 = std::time::Instant::now();
+                let out = s.run(src).unwrap().out;
+                let elapsed = t0.elapsed().as_secs_f64();
+                if enabled { on.push(elapsed); } else { off.push(elapsed); }
+                assert_eq!(out.contains("of this pass went onto setting or tacky paint"), enabled, "{out}");
+                eprintln!("DRYING_COST pair={pair} enabled={enabled} seconds={elapsed:.6}");
+                let got = crate::state_digest_line(&s, 3, 0.0);
+                if let Some(want) = &state { assert_eq!(&got, want); } else { state = Some(got); }
+            }
+        }
+        on.sort_by(f64::total_cmp);
+        off.sort_by(f64::total_cmp);
+        let overhead = (on[1] / off[1] - 1.0) * 100.0;
+        eprintln!("DRYING_COST median_on={:.6} median_off={:.6} overhead_percent={overhead:.3}", on[1], off[1]);
+        eprintln!("DRYING_STATE identical across all six runs: {}", state.unwrap().trim());
+        assert!(overhead < 5.0, "drying feedback overhead {overhead:.3}% exceeds 5%");
     }
 
     #[test]

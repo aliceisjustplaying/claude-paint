@@ -97,6 +97,25 @@ class HouseCleanupTests(unittest.TestCase):
                                      dict(CUSTOM="kept", PAINTER_SITTING_RECOVERY="1", PAINTER_OPEN_PASSAGES="1"))
                 self.assertEqual(runner.painter_env(model, runner.PAINTER_MSG), dict(CUSTOM="kept"))
 
+    def test_painting_after_a_finished_verdict_invalidates_it_even_when_the_sitting_crashes(self):
+        for path in self.runners:
+            if path == RUNNERS[-1]:
+                continue
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                painted = dict(sitting=1, status="completed", effects_before=1, effects_after=2,
+                               critic_verdict="finished", final="The light holds.")
+                for counts in (dict(effects_before=2, effects_after=3),
+                               dict(effects_before=None, effects_after=None, chunks_before=2, chunks_after=3),
+                               dict(painting_before=2, painting_after=3)):
+                    crashed = dict(sitting=2, status="crashed", **counts)
+                    history = [painted, crashed, dict(sitting=3, status="crashed")]
+                    self.assertEqual(runner.next_step(history), ("new", 4))
+                    self.assertEqual(runner.return_message(history),
+                                     runner.SITTING_MESSAGE + "\n\nYour previous sitting's reply:\nThe light holds.")
+                    fresh = dict(painted, sitting=4, effects_before=3, effects_after=4)
+                    self.assertTrue(runner.return_message([*history, fresh]).startswith(runner.FINISHING_MESSAGE))
+
     def test_critic_verdict_requires_fresh_end_of_sitting_notes_with_a_verdict_first(self):
         notes = self.studio / "notes/critic.md"
         notes.parent.mkdir(parents=True)

@@ -125,8 +125,10 @@ def critic_verdict(d, since):
 def return_message(sittings):
     """Carry painter-owned observations verbatim; do not infer lessons from prose. After a sitting that added
     painting and that the critic's end-of-sitting visit called finished, the sitting opens with FINISHING_MESSAGE."""
-    done = [s for s in sittings if s.get("status") == "completed"]
-    finishing = done and added_painting(done[-1]) and done[-1].get("critic_verdict") == "finished"
+    latest = next((s for s in reversed(sittings)
+                   if s.get("status") == "completed" or added_painting(s)), {})
+    finishing = (latest.get("status") == "completed" and added_painting(latest)
+                 and latest.get("critic_verdict") == "finished")
     message = FINISHING_MESSAGE if finishing else SITTING_MESSAGE
     final = next((s.get("final") for s in reversed(sittings)
                   if s.get("status") == "completed" and s.get("final")), None)

@@ -161,7 +161,7 @@ def render(config, outcome, work):
     frames = cut_frames(saved, work, total, final)
     output = work / "painting.partial.mp4"
     command([REPO / "scripts/replay_clip", saved / "committed.lua", output,
-             "--reuse", "--frames-dir", frames, "--pace", "dynamic", "--length", "20",
+             "--reuse", "--frames-dir", frames, "--painted-input", "--pace", "dynamic", "--length", "20",
              "--fps", "30", "--final-first", "0.5", "--open-hold", "0", "--max-hold", "16.5",
              "--light", "gallery"])
     probe = verify_video(output)

@@ -97,6 +97,11 @@ impl Canvas {
             Field { name: "clock.mark", shape: vec![1], values: Values::U32(vec![ck.mark]) },
             Field { name: "clock.tacky", shape: vec![5], values: Values::U64(boxed(ck.tacky)) },
         ];
+        if !self.backing.is_empty() {
+            v.push(Field { name: "backing.reflectance", shape: px(crate::spectral::N), values: Values::F32(self.backing.iter().flat_map(|b| b.reflectance).collect()) });
+            v.push(Field { name: "backing.residual", shape: px(3), values: Values::F32(self.backing.iter().flat_map(|b| b.residual).collect()) });
+            v.push(Field { name: "backing.color", shape: px(3), values: Values::F32(self.backing.iter().flat_map(|b| b.color).collect()) });
+        }
         if wt.lat.iter().any(|l| !l.parts.is_empty()) {
             let mut offsets = vec![0u64];
             let mut tubes = Vec::new();

@@ -136,6 +136,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   style::ground_optics_tests::cached_grounds_track_retained_paint_stiffness_only_from_engine_9 \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
+  mixer::tests::splitting_measured_films_preserves_the_backing_spectrum \
   mixer::tests::palette_previews_follow_canvas_film_optics \
   mixer::tests::measured_films_report_errors_over_both_revigo_fields \
   mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \

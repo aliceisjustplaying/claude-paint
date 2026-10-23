@@ -216,10 +216,27 @@ impl Backing {
         let x = (coats / cover).min(1e4) * scatter / mean_s.max(1e-12);
         let mut transmission = [0.0; crate::spectral::N];
         let reflectance = std::array::from_fn(|w| {
-            let sub = inside(self.reflectance[w]);
-            let (r, t) = crate::pigment::layer1(p.k[w], p.s[w], x);
-            transmission[w] = t * t;
-            outside(r + t * t * sub / (1.0 - r * sub).max(1e-6))
+            let sub = self.reflectance[w] as f64;
+            let sub = sub / ((1.0 - 0.04) * (1.0 - 0.49) + 0.49 * sub);
+            let (k, s, x) = (p.k[w] as f64, p.s[w] as f64, x as f64);
+            let (r, t) = if s < 1e-6 {
+                (0.0, (-k * x).exp())
+            } else {
+                let a = 1.0 + k / s;
+                let b = (a * a - 1.0).max(0.0).sqrt();
+                if b < 1e-3 {
+                    let sx = s * x;
+                    (sx / (1.0 + a * sx), 1.0 / (1.0 + a * sx))
+                } else {
+                    let bsx = (b * s * x).min(40.0);
+                    let (sh, ch) = (bsx.sinh(), bsx.cosh());
+                    let c = a * sh + b * ch;
+                    (sh / c, b / c)
+                }
+            };
+            transmission[w] = (t * t) as f32;
+            let r = r + t * t * sub / (1.0 - r * sub).max(1e-6);
+            ((1.0 - 0.04) * (1.0 - 0.49) * r / (1.0 - 0.49 * r)) as f32
         });
         let transmitted = crate::spectral::to_rgb(&transmission);
         let residual: Rgb = std::array::from_fn(|k| {
@@ -393,6 +410,21 @@ mod tests {
                     assert!(delta < 2e-6, "retained wet layers changed the backing: {:?} != {expected:?}, delta {delta}", restored.px[0]);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn retained_backing_keeps_diluted_rgb_residuals() {
+        let mut palette = crate::Palette::new("diluted residuals", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        for name in ["green earth", "magenta"] {
+            let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let paint = palette.pile(vec![(i, 1.0)]).paint(0.8);
+            let under = [0.8; 3];
+            let expected = paint.over(under, 0.5);
+            let actual = Backing::default().under(under).over_wet(&paint.latent(), paint.scatter, 0.5, 1.0).color;
+            assert!((0..3).all(|k| (actual[k] - expected[k]).abs() < 2e-6), "{name}: {actual:?} != {expected:?}");
         }
     }
 

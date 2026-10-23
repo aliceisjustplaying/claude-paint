@@ -197,7 +197,7 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::live_scope_restores_both_traces_on_unwind \
   replay_checkpoint::tests::trace_rollback_discards_failed_events_and_restores_failure \
   replay_checkpoint::tests::effect_history_does_not_accumulate_in_memory
-rust rollback-snapshot easel 'bin easel test' session::tests::a_rollback_from_the_packed_canvas_leaves_the_same_bits
+rust rollback-snapshot easel 'bin easel test' session::tests::a_rollback_from_the_packed_canvas_leaves_the_same_bits session::tests::a_canvas_that_cannot_wake_is_rebuilt_from_the_log
 rust painter-signals easel 'test painter_signals test'
 rust studio-profiles easel 'test studio_profiles test'
 check old-logs "scripts/tests/old_logs.sh $easel" '^old_logs: all [1-9][0-9]* cases match recorded baselines$'

@@ -688,10 +688,18 @@ impl Session {
         Ok(())
     }
 
-    /// Bring a resting canvas back (`rest`).
+    /// Bring a resting canvas back (`rest`). A canvas that can't be brought back
+    /// leaves the session to a rebuild from its log (`stale`) before anything
+    /// paints on it or closes it, as a rollback that fails does.
     pub fn wake(&mut self) -> std::io::Result<()> {
         let Some(snap) = self.resting.take() else { return Ok(()) };
-        self.st.borrow_mut().canvas = Some(snap.restore()?);
+        match snap.restore() {
+            Ok(c) => self.st.borrow_mut().canvas = Some(c),
+            Err(e) => {
+                self.stale = true;
+                return Err(e);
+            }
+        }
         Ok(())
     }
 
@@ -1808,6 +1816,30 @@ mod tests {
             }
             assert_eq!(failed.program("p"), clean.program("p"));
         }
+    }
+
+    /// A resting canvas that can't be brought back (its packed file is gone) leaves
+    /// the session stale: the next chunk rebuilds the painting from its log, and
+    /// nothing in between takes the session for one without a canvas.
+    #[test]
+    fn a_canvas_that_cannot_wake_is_rebuilt_from_the_log() {
+        let mut s = Session::new(96).unwrap();
+        s.run("canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{\"lead white\", 3}, {\"red earth\", 1}}, um=60, apply=\"knife\"}}}").unwrap();
+        s.run("b = brush(\"flat\", 24)\nb:load(pile{{\"raw umber\", 1}}, 0.8)\nb:stroke({{100, 200}, {900, 200}})\nwait(30)").unwrap();
+        let bits = |s: &Session| {
+            let mut bytes = Vec::new();
+            s.canvas().unwrap().write_state(&mut bytes, "").unwrap();
+            bytes
+        };
+        let before = bits(&s);
+        s.rest().unwrap();
+        assert!(s.canvas().is_none());
+        s.resting.as_ref().unwrap().file.set_len(0).unwrap();
+        assert!(s.wake().is_err());
+        assert!(s.stale && s.canvas().is_none(), "a session without its canvas must be stale");
+        s.run("x = 1").unwrap();
+        assert!(!s.stale);
+        assert!(bits(&s) == before, "the rebuilt painting differs");
     }
 
     fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {

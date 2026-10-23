@@ -197,6 +197,81 @@ test("successful publications retain only two committed generations and leave an
 	assert.ok(readFileSync(join(f.studio, NOTEBOOK), "utf8").includes("entry 12"));
 });
 
+for (const boundary of ["fail", "kill"]) {
+	test(`journal: native appends survive a retry that ${boundary === "fail" ? "fails" : "is killed"} after an interrupted bootstrap`, () => {
+		const f = fixture();
+		const journal = join(f.studio, JOURNAL);
+		const history = join(f.studio, REVISIONS);
+		writeFileSync(journal, "old passage\n");
+		const interrupt = (bootstrap: boolean) => spawnSync(process.execPath, ["--input-type=module", "-e", `
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const stop = () => {
+ if (${JSON.stringify(boundary)} === 'kill') process.kill(process.pid, 'SIGKILL');
+ throw Object.assign(new Error('injected storage failure'), {code:'ENOSPC'});
+};
+const mkdtemp = fs.mkdtempSync;
+fs.mkdtempSync = (...args) => {
+ if (${bootstrap} && fs.existsSync(${JSON.stringify(join(f.studio, "out/easel/.note-publications/journal/current"))})) stop();
+ return mkdtemp(...args);
+};
+const rename = fs.renameSync;
+fs.renameSync = (from, to) => {
+ if (!${bootstrap} && String(from).endsWith('/next') && String(to).endsWith('/journal/current')) stop();
+ return rename(from, to);
+};
+syncBuiltinESMExports();
+const {reviseJournal} = await import(${JSON.stringify(new URL("../journal.ts", import.meta.url).href)});
+try {
+ reviseJournal(${JSON.stringify(f.studio)}, 'old passage', 'new passage');
+ process.exitCode = 99;
+} catch (error) {
+ console.log(error.code);
+}
+`], { encoding: "utf8" });
+		for (const bootstrap of [true, false]) {
+			const child = interrupt(bootstrap);
+			if (boundary === "kill") assert.equal(child.signal, "SIGKILL", child.stderr);
+			else {
+				assert.equal(child.status, 0, child.stderr);
+				assert.match(child.stdout, /ENOSPC/);
+			}
+			if (bootstrap) {
+				assert.ok(lstatSync(journal).isFile());
+				assert.ok(existsSync(join(f.studio, "out/easel/.note-publications/journal/current")));
+				appendFileSync(journal, "- day 2, 10:00: native journal append\n");
+			}
+			assert.equal(readFileSync(journal, "utf8"), "old passage\n- day 2, 10:00: native journal append\n");
+			assert.ok(!existsSync(history));
+		}
+		reviseJournal(f.studio, "old passage", "new passage");
+		assert.equal(readFileSync(journal, "utf8"), "new passage\n- day 2, 10:00: native journal append\n");
+		const records = readFileSync(history, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+		assert.equal(records.length, 1);
+		assert.equal(records[0].before, "old passage\n- day 2, 10:00: native journal append\n");
+	});
+}
+
+test("independent critic archive copies preserve the destination's permissions", () => {
+	for (const [mask, mode] of [[0o022, 0o600], [0o077, 0o640]]) {
+		const f = fixture();
+		const history = join(f.critic.dir, "notes-to-critic.jsonl");
+		writeFileSync(history, JSON.stringify({ note: "original" }) + "\n");
+		chmodSync(history, mode);
+		const previousMask = process.umask(mask);
+		try {
+			for (const note of ["first", "second"]) {
+				leaveNote(f.studio, f.critic, note);
+				assert.ok(lstatSync(history).isFile());
+				assert.equal(lstatSync(history).mode & 0o777, mode);
+			}
+		} finally {
+			process.umask(previousMask);
+		}
+		assert.deepEqual(readFileSync(history, "utf8").trim().split("\n").map((line) => JSON.parse(line).note), ["original", "first", "second"]);
+	}
+});
+
 for (const kind of ["journal", "notebook", "to-critic", "critic"]) {
 	for (const boundary of ["before", "after", "fail", "abort"]) {
 		if (boundary === "abort" && kind !== "critic") continue;

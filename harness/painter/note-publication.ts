@@ -1,4 +1,4 @@
-import { accessSync, closeSync, constants, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, closeSync, constants, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 function inside(root: string, path: string): boolean {
@@ -62,7 +62,8 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 		const target = destination(file.root ?? studio, file.path, label, join(pointer, file.slot), studio);
 		const before = existsSync(target.real) ? readFileSync(target.real) : undefined;
 		if (before !== undefined) accessSync(target.real, constants.W_OK);
-		return { ...file, ...target, before };
+		const mode = before === undefined ? undefined : lstatSync(target.real).mode & 0o777;
+		return { ...file, ...target, before, mode };
 	});
 	mkdirSync(base, { recursive: true });
 	let stage: string | undefined;
@@ -74,7 +75,8 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 		if (!existsSync(pointer)) {
 			stage = mkdtempSync(join(base, "generation-"));
 			for (const file of targets) if (file.before !== undefined) {
-				writeFileSync(join(stage, file.slot), file.before, { mode: lstatSync(file.real).mode & 0o777 });
+				writeFileSync(join(stage, file.slot), file.before, { mode: file.mode });
+				chmodSync(join(stage, file.slot), file.mode!);
 				sync(join(stage, file.slot));
 			}
 			sync(stage);
@@ -94,13 +96,15 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 			if (!targets.some((file) => file.slot === slot)) linkSync(join(previous, slot), join(stage, slot));
 		}
 		for (const file of targets) {
-			writeFileSync(join(stage, file.slot), file.text, { mode: file.before === undefined ? 0o666 : lstatSync(file.real).mode & 0o777 });
+			writeFileSync(join(stage, file.slot), file.text, { mode: file.mode ?? 0o666 });
+			if (file.mode !== undefined) chmodSync(join(stage, file.slot), file.mode);
 			sync(join(stage, file.slot));
 			if (file.independent) {
 				const dir = mkdtempSync(join(dirname(file.anchor), ".note-copy-"));
 				copyDirs.push(dir);
 				const path = join(dir, "archive");
-				writeFileSync(path, file.text);
+				writeFileSync(path, file.text, { mode: file.mode ?? 0o666 });
+				if (file.mode !== undefined) chmodSync(path, file.mode);
 				sync(path);
 				sync(dir);
 				copies.push({ path, anchor: file.anchor });
@@ -110,6 +114,18 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 		for (const file of targets) {
 			const published = join(pointer, file.slot);
 			if (lstatSync(file.anchor, { throwIfNoEntry: false })?.isSymbolicLink() && resolve(dirname(file.anchor), readlinkSync(file.anchor)) === published) continue;
+			const prior = join(previous, file.slot);
+			if (file.real !== prior) {
+				if (file.before === undefined) rmSync(prior, { force: true });
+				else {
+					const snapshot = join(stage, `.before-${file.slot}`);
+					writeFileSync(snapshot, file.before, { mode: file.mode });
+					chmodSync(snapshot, file.mode!);
+					sync(snapshot);
+					renameSync(snapshot, prior);
+				}
+				sync(previous);
+			}
 			mkdirSync(dirname(file.anchor), { recursive: true });
 			const link = join(dirname(file.anchor), `.note-link-${key}-${stage.split(sep).at(-1)}-${file.slot}`);
 			temporary.push(link);

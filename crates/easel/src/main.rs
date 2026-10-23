@@ -2005,8 +2005,9 @@ impl Server {
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
-    fn check_input(&self) -> Result<check::Input, String> {
+    fn check_input(&mut self) -> Result<check::Input, String> {
         self.ready()?;
+        self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
             paper: self.s.st.borrow().paper,
@@ -2026,12 +2027,19 @@ impl Server {
             return Err("--new starts a fresh scratch canvas: do --scratch --new".into());
         }
         if !scratch {
+            // one canvas at a time is in memory: the scratch canvas rests while the
+            // painting is used, and the painting while the scratch canvas is
+            if let Some(sc) = self.scratch.as_mut() {
+                sc.s.rest().map_err(|e| format!("the scratch canvas couldn't be put aside: {e}"))?;
+            }
+            self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
             return self.serve_cmd(cmd, &args, payload);
         }
         if !matches!(cmd, "do" | "look" | "probe" | "status" | "log" | "globals" | "save") {
             return Err(format!("{cmd} is the painting's: it takes no --scratch"));
         }
         self.ready()?;
+        self.s.rest().map_err(|e| format!("the painting couldn't be put aside: {e}"))?;
         let mut out = String::new();
         // reopened when first asked for, so it never holds up the painting's reopen
         if self.scratch.is_none() && !new {
@@ -2046,6 +2054,7 @@ impl Server {
             self.scratch = None;
             return Err(format!("{out}{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
         }
+        sc.s.wake().map_err(|e| format!("{out}the scratch canvas couldn't be brought back: {e}"))?;
         let reply = sc.serve_cmd(cmd, &args, payload).map_err(|e| format!("{out}{e}"))?;
         out += &reply;
         Ok(out)

@@ -318,6 +318,9 @@ pub struct Session {
     /// `save::read`): its next chunk is chunk `chunks_before + log.len() + 1`, as at the end
     /// of the log it was saved from. 0 for every other session.
     pub chunks_before: usize,
+    /// The canvas, packed away while the sitting's other canvas (the painting's or the
+    /// scratch's) is used (`rest`): one canvas at a time is in memory.
+    resting: Option<CanvasSnapshot>,
     /// Creation serials of the state's objects (outlives the state).
     _serials: Box<Serials>,
 }
@@ -394,7 +397,7 @@ impl Session {
         })?;
         let own = global_values(&lua)?;
         let globals = own.iter().map(|(k, v)| (k.clone(), (v.clone(), 0))).collect();
-        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: chunk_limit_for(width), heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, _serials: serials })
+        Ok(Session { lua: ManuallyDrop::new(lua), state, st, log: Vec::new(), replay: false, deadline, chunk_limit: chunk_limit_for(width), heap: Some((snap_f, restore_f)), prelude: Some(prelude), stale: false, unrestored: false, globals, own, chunks_before: 0, resting: None, _serials: serials })
     }
 
     /// A session that replays a program from the default box (tests;
@@ -566,6 +569,7 @@ impl Session {
         if self.stale {
             self.rebuild()?;
         }
+        self.wake().map_err(|e| format!("the canvas couldn't be brought back: {e}"))?;
         let trace = (!self.replay).then(crate::replay_checkpoint::mark);
         crate::replay_checkpoint::hold_tools(&self.st);
         let mut snap = if !self.replay { Some(self.snap().map_err(|e| e.to_string())?) } else { None };
@@ -668,6 +672,27 @@ impl Session {
 
     pub fn canvas(&self) -> Option<std::cell::Ref<'_, Canvas>> {
         std::cell::Ref::filter_map(self.st.borrow(), |s| s.canvas.as_ref()).ok()
+    }
+
+    /// Pack the canvas away on disk (`CanvasSnapshot`) while the sitting's other canvas
+    /// is used, so that the painting and the scratch canvas are never both in memory.
+    /// Nothing reads a resting session's canvas until `wake` (`run` wakes it).
+    pub fn rest(&mut self) -> std::io::Result<()> {
+        if self.resting.is_some() {
+            return Ok(());
+        }
+        let mut st = self.st.borrow_mut();
+        let Some(c) = st.canvas.as_ref() else { return Ok(()) };
+        self.resting = Some(CanvasSnapshot::take(c)?);
+        st.canvas = None;
+        Ok(())
+    }
+
+    /// Bring a resting canvas back (`rest`).
+    pub fn wake(&mut self) -> std::io::Result<()> {
+        let Some(snap) = self.resting.take() else { return Ok(()) };
+        self.st.borrow_mut().canvas = Some(snap.restore()?);
+        Ok(())
     }
 
     /// The session as a replayable program.

@@ -385,6 +385,8 @@ pub(crate) struct Tile {
     pub(crate) cells: Vec<Cell>,
     pub(crate) packets: Vec<Packet>,
     pub(crate) coverage: Vec<f32>,
+    pub(crate) live_cells: usize,
+    pub(crate) live_packets: usize,
     pub(crate) coatings: Vec<SparseCoating>,
     pub(crate) formulations: Vec<Arc<Formulation>>,
     pub(crate) states: Vec<PixelState>,
@@ -402,6 +404,8 @@ impl Tile {
             cells: Vec::new(),
             packets: Vec::new(),
             coverage: Vec::new(),
+            live_cells: 0,
+            live_packets: 0,
             coatings: Vec::new(),
             formulations: Vec::new(),
             states: vec![PixelState::default(); n],
@@ -445,43 +449,80 @@ impl Tile {
 
     fn replace(&mut self, pixel: usize, data: ColumnData) -> Result<(), MaterialError> {
         validate_column(&data, self.formulations.len())?;
-        let a = u32::try_from(self.cells.len()).map_err(|_| MaterialError::Capacity)?;
-        let b = u32::try_from(self.packets.len()).map_err(|_| MaterialError::Capacity)?;
         let nc = u32::try_from(data.cells.len()).map_err(|_| MaterialError::Capacity)?;
         let np = u32::try_from(data.packets.len()).map_err(|_| MaterialError::Capacity)?;
+        let previous = self.columns[pixel];
+        let live_cells = self.live_cells
+            .checked_sub(previous.cell_count as usize)
+            .and_then(|n| n.checked_add(data.cells.len()))
+            .ok_or(MaterialError::Capacity)?;
+        let live_packets = self.live_packets
+            .checked_sub(previous.packet_count as usize)
+            .and_then(|n| n.checked_add(data.packets.len()))
+            .ok_or(MaterialError::Capacity)?;
+        let in_place = previous.cell_count == nc && previous.packet_count == np;
+        let a = if in_place { previous.first_cell } else {
+            u32::try_from(self.cells.len()).map_err(|_| MaterialError::Capacity)?
+        };
+        let b = if in_place { previous.first_packet } else {
+            u32::try_from(self.packets.len()).map_err(|_| MaterialError::Capacity)?
+        };
         a.checked_add(nc).ok_or(MaterialError::Capacity)?;
         b.checked_add(np).ok_or(MaterialError::Capacity)?;
-        self.cells
-            .try_reserve(data.cells.len())
-            .map_err(|_| MaterialError::Capacity)?;
-        self.packets
-            .try_reserve(data.packets.len())
-            .map_err(|_| MaterialError::Capacity)?;
-        self.coverage
-            .try_reserve(data.coverage.len())
-            .map_err(|_| MaterialError::Capacity)?;
-        self.coatings
-            .try_reserve(data.coatings.len())
-            .map_err(|_| MaterialError::Capacity)?;
+        if !in_place {
+            self.cells
+                .try_reserve(data.cells.len())
+                .map_err(|_| MaterialError::Capacity)?;
+            self.packets
+                .try_reserve(data.packets.len())
+                .map_err(|_| MaterialError::Capacity)?;
+            self.coverage
+                .try_reserve(data.coverage.len())
+                .map_err(|_| MaterialError::Capacity)?;
+        }
         let first_coating = self
             .coatings
             .partition_point(|entry| entry.pixel < pixel as u32);
         let end_coating = self
             .coatings
             .partition_point(|entry| entry.pixel <= pixel as u32);
-        self.coatings.splice(
-            first_coating..end_coating,
-            data.coatings.into_iter().map(|coating| SparseCoating {
-                pixel: pixel as u32,
-                coating,
-            }),
-        );
-        self.cells.extend(data.cells);
-        self.packets.extend(data.packets.into_iter().map(|mut p| {
-            p.first_cell += a;
-            p
-        }));
-        self.coverage.extend(data.coverage);
+        self.coatings
+            .try_reserve(data.coatings.len().saturating_sub(end_coating - first_coating))
+            .map_err(|_| MaterialError::Capacity)?;
+        if data.coatings.len() == end_coating - first_coating {
+            for (entry, coating) in self.coatings[first_coating..end_coating]
+                .iter_mut().zip(data.coatings)
+            {
+                entry.coating = coating;
+            }
+        } else {
+            self.coatings.splice(
+                first_coating..end_coating,
+                data.coatings.into_iter().map(|coating| SparseCoating {
+                    pixel: pixel as u32,
+                    coating,
+                }),
+            );
+        }
+        if in_place {
+            self.cells[a as usize..a as usize + nc as usize].copy_from_slice(&data.cells);
+            for (target, mut packet) in self.packets[b as usize..b as usize + np as usize]
+                .iter_mut().zip(data.packets)
+            {
+                packet.first_cell += a;
+                *target = packet;
+            }
+            self.coverage[b as usize..b as usize + np as usize].copy_from_slice(&data.coverage);
+        } else {
+            self.cells.extend(data.cells);
+            self.packets.extend(data.packets.into_iter().map(|mut p| {
+                p.first_cell += a;
+                p
+            }));
+            self.coverage.extend(data.coverage);
+        }
+        self.live_cells = live_cells;
+        self.live_packets = live_packets;
         self.states[pixel] = data.state;
         self.columns[pixel] = Column {
             first_cell: a,
@@ -494,8 +535,8 @@ impl Tile {
     }
 
     pub(crate) fn compact(&mut self) -> Result<(), MaterialError> {
-        let nc: usize = self.columns.iter().map(|c| c.cell_count as usize).sum();
-        let np: usize = self.columns.iter().map(|c| c.packet_count as usize).sum();
+        let nc = self.live_cells;
+        let np = self.live_packets;
         let mut cells = Vec::new();
         let mut packets = Vec::new();
         let mut coverage = Vec::new();
@@ -530,8 +571,7 @@ impl Tile {
     }
 
     fn finish(&mut self) -> Result<(), MaterialError> {
-        let live: usize = self.columns.iter().map(|c| c.cell_count as usize).sum();
-        if self.cells.len() > live.saturating_mul(2).saturating_add(1024) {
+        if self.cells.len() > self.live_cells.saturating_mul(2).saturating_add(1024) {
             self.compact()?;
         }
         Ok(())
@@ -904,6 +944,15 @@ impl FilmStore {
         self.edit_tile(tile)?.with_column_mut(local, f)
     }
 
+    pub fn with_state_mut<R>(
+        &mut self,
+        pixel: usize,
+        f: impl FnOnce(&mut PixelState) -> Result<R, MaterialError>,
+    ) -> Result<R, MaterialError> {
+        let (tile, local) = self.locate(pixel)?;
+        self.edit_tile(tile)?.with_state_mut(local, f)
+    }
+
     pub fn take_top(
         &mut self,
         pixel: usize,
@@ -949,9 +998,9 @@ impl FilmStore {
             s.allocated_cells += t.cells.len();
             s.allocated_packets += t.packets.len();
             s.formulations += t.formulations.len();
-            for (i, c) in t.columns.iter().enumerate() {
-                s.live_cells += c.cell_count as usize;
-                s.live_packets += c.packet_count as usize;
+            s.live_cells += t.live_cells;
+            s.live_packets += t.live_packets;
+            for i in 0..t.columns.len() {
                 for cell in t.read(i).cells {
                     s.pigment += cell.pigment_um as f64 * self.pixel_area;
                     s.binder += cell.binder_um as f64 * self.pixel_area;
@@ -1014,6 +1063,20 @@ impl FilmEdit<'_> {
         Ok(result)
     }
 
+    pub fn with_state_mut<R>(
+        &mut self,
+        pixel: usize,
+        f: impl FnOnce(&mut PixelState) -> Result<R, MaterialError>,
+    ) -> Result<R, MaterialError> {
+        let column = self.read_column(pixel)?;
+        let mut state = column.state.clone();
+        let result = f(&mut state)?;
+        validate_view(&ColumnRef { state: &state, ..column }, self.tile.formulations.len())?;
+        self.tile.states[pixel] = state;
+        self.tile.generation = self.tile.generation.wrapping_add(1);
+        Ok(result)
+    }
+
     pub fn take_top(
         &mut self,
         pixel: usize,
@@ -1040,19 +1103,19 @@ impl FilmEdit<'_> {
             return Err(MaterialError::Invalid("invalid solvent removal"));
         }
         let area = self.pixel_area;
-        self.with_column_mut(pixel, |data, _| {
-            if !data.coatings.is_empty() {
-                return Err(MaterialError::Unsupported(
-                    "solvent transport through an inert coating",
-                ));
-            }
-            let before = data.state.free_solvent_um;
+        if !self.read_column(pixel)?.coatings.is_empty() {
+            return Err(MaterialError::Unsupported(
+                "solvent transport through an inert coating",
+            ));
+        }
+        self.with_state_mut(pixel, |state| {
+            let before = state.free_solvent_um;
             let after = before - before.min(amount_um);
             let free_solvent = (before as f64 - after as f64) * area;
             if !free_solvent.is_finite() {
                 return Err(MaterialError::Invalid("solvent inventory overflow"));
             }
-            data.state.free_solvent_um = after;
+            state.free_solvent_um = after;
             Ok(MaterialTransfer {
                 fragments: Vec::new(),
                 free_solvent,
@@ -1541,6 +1604,95 @@ pub(crate) mod tests {
                 (deposited.moment_n[axis] as f64 - expected_m[axis] as f64 * 4.0).abs() < 1e-10
             );
         }
+    }
+
+    #[test]
+    fn same_size_replacement_reuses_ranges_and_preserves_checkpoint_bytes() {
+        let mut s = FilmStore::new(2, 1, 1.0).unwrap();
+        s.deposit(0, paint(4.0, 1, 0.2), DepositMode::Cover).unwrap();
+        s.deposit(1, paint(6.0, 2, 0.3), DepositMode::Cover).unwrap();
+        let mut expected = s.clone();
+        let ranges = s.tiles[0].columns.clone();
+        let allocated = (s.tiles[0].cells.len(), s.tiles[0].packets.len(), s.tiles[0].coverage.len());
+        s.with_column_mut(1, |column, _| {
+            column.cells[0].network = 0.4;
+            column.packets[0].tension_n_m[0] = 0.25;
+            column.coverage[0] = 0.5;
+            column.state.stroke = 17;
+            Ok(())
+        }).unwrap();
+        let tile = Arc::make_mut(&mut expected.tiles[0]);
+        let column = tile.columns[1];
+        tile.cells[column.first_cell as usize].network = 0.4;
+        tile.packets[column.first_packet as usize].tension_n_m[0] = 0.25;
+        tile.coverage[column.first_packet as usize] = 0.5;
+        tile.states[1].stroke = 17;
+        tile.generation = tile.generation.wrapping_add(1);
+        assert_eq!(s.tiles[0].columns, ranges);
+        assert_eq!((s.tiles[0].cells.len(), s.tiles[0].packets.len(), s.tiles[0].coverage.len()), allocated);
+        let mut actual_bytes = Vec::new();
+        let mut expected_bytes = Vec::new();
+        s.write_to(&mut actual_bytes).unwrap();
+        expected.write_to(&mut expected_bytes).unwrap();
+        assert_eq!(actual_bytes, expected_bytes);
+        assert_eq!((s.tiles[0].live_cells, s.tiles[0].live_packets), (2, 2));
+    }
+
+    #[test]
+    fn state_only_edits_are_atomic_and_leave_material_arenas_unchanged() {
+        let mut s = FilmStore::new(1, 1, 1.0).unwrap();
+        s.deposit(0, paint(4.0, 1, 0.2), DepositMode::Cover).unwrap();
+        let before = s.read_column(0).unwrap().to_owned();
+        let allocated = (s.tiles[0].cells.len(), s.tiles[0].packets.len());
+        s.with_state_mut(0, |state| {
+            state.stroke = 9;
+            state.free_solvent_um = 2.0;
+            Ok(())
+        }).unwrap();
+        let generation = s.tiles[0].generation;
+        let mut bytes = Vec::new();
+        s.write_to(&mut bytes).unwrap();
+        assert!(s.with_state_mut(0, |state| {
+            state.stroke = 10;
+            Err::<(), _>(MaterialError::Invalid("failed state edit"))
+        }).is_err());
+        assert!(s.with_state_mut(0, |state| {
+            state.free_solvent_um = f32::NAN;
+            Ok(())
+        }).is_err());
+        let mut after_error = Vec::new();
+        s.write_to(&mut after_error).unwrap();
+        assert_eq!(after_error, bytes);
+        assert_eq!(s.tiles[0].generation, generation);
+        let removed = s.take_solvent(0, 1.0).unwrap();
+        assert_eq!(removed.free_solvent, 1.0);
+        assert_eq!((s.tiles[0].cells.len(), s.tiles[0].packets.len()), allocated);
+        let after = s.read_column(0).unwrap();
+        assert_eq!(after.cells, before.cells);
+        assert_eq!(after.packets.len(), before.packets.len());
+        assert_eq!(after.state.free_solvent_um, 1.0);
+        assert_eq!((s.tiles[0].live_cells, s.tiles[0].live_packets), (1, 1));
+    }
+
+    #[test]
+    fn live_counts_survive_growth_removal_compaction_and_load() {
+        let mut s = FilmStore::new(2, 1, 1.0).unwrap();
+        s.deposit(0, paint(4.0, 1, 0.2), DepositMode::Cover).unwrap();
+        s.deposit(0, paint(4.0, 2, 0.3), DepositMode::Cover).unwrap();
+        s.deposit(1, paint(4.0, 3, 0.4), DepositMode::Cover).unwrap();
+        assert_eq!((s.tiles[0].live_cells, s.tiles[0].live_packets), (3, 3));
+        s.take_top(0, coherent(4.0)).unwrap();
+        s.compact().unwrap();
+        assert_eq!((s.tiles[0].live_cells, s.tiles[0].live_packets), (2, 2));
+        let mut bytes = Vec::new();
+        s.write_to(&mut bytes).unwrap();
+        let mut restored = FilmStore::read_from(&mut bytes.as_slice(), super::super::checkpoint::LoadBudget {
+            max_raw_bytes: u64::MAX,
+            max_resident_bytes: u64::MAX,
+        }).unwrap();
+        assert_eq!((restored.tiles[0].live_cells, restored.tiles[0].live_packets), (2, 2));
+        restored.take_top(0, coherent(4.0)).unwrap();
+        assert_eq!((restored.tiles[0].live_cells, restored.tiles[0].live_packets), (1, 1));
     }
 
     #[test]

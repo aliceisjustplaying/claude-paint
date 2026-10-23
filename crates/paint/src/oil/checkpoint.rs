@@ -224,10 +224,8 @@ impl FilmStore {
         };
         for t in &self.tiles {
             c.coatings = add(c.coatings, t.coatings.len() as u64)?;
-            for col in &t.columns {
-                c.cells = add(c.cells, col.cell_count as u64)?;
-                c.packets = add(c.packets, col.packet_count as u64)?;
-            }
+            c.cells = add(c.cells, t.live_cells as u64)?;
+            c.packets = add(c.packets, t.live_packets as u64)?;
             c.formulations = add(c.formulations, t.formulations.len() as u64)?;
             for f in &t.formulations {
                 c.parts = add(c.parts, f.latent().parts.len() as u64)?;
@@ -275,8 +273,8 @@ impl FilmStore {
             put_u64(w, id as u64)?;
             put_u32(w, t.width)?;
             put_u32(w, t.height)?;
-            let nc = t.columns.iter().map(|c| c.cell_count as u64).sum::<u64>();
-            let np = t.columns.iter().map(|c| c.packet_count as u64).sum::<u64>();
+            let nc = t.live_cells as u64;
+            let np = t.live_packets as u64;
             for v in [nc, np, t.formulations.len() as u64] {
                 put_u64(w, v)?;
             }
@@ -549,6 +547,8 @@ impl FilmStore {
                 cells,
                 packets,
                 coverage,
+                live_cells: native(nc)?,
+                live_packets: native(np)?,
                 coatings,
                 formulations,
                 states,

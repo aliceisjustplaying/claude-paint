@@ -4,7 +4,9 @@
 # passes only if it exits 0 and prints what proves its tests ran: every named
 # Rust test's ok line, or a count of at least one. The registered rag
 # baseline mismatch (exit 4 with KNOWN_FAILURE: rag-historical-baseline-main)
-# and the isolated knife single-test failure are reported as known.
+# and the isolated knife single-test failure are reported as known. A check
+# that leaves an easel server running fails, and the gate kills what any
+# check left, also when the gate itself is killed (Linux).
 # Exit 0 if nothing else failed, 1 otherwise.
 #
 #   scripts/test          (CARGO_TARGET_DIR is honored; a failed run keeps its logs)
@@ -27,22 +29,84 @@ stop() {
 }
 trap stop INT TERM
 
+# The run's processes, found in /proc (Linux; elsewhere it finds none): a process belongs to a
+# check when it inherited the check's CLAUDE_PAINT_GATE or works in the check's temporary directory
+# (a harness client starts its easel with a bare environment, in a studio there), whatever session
+# it moved to. Only pids above 1 are ever signaled.
+#   perl -e "$procs" servers DIR   prints each easel server under DIR as "pid args"
+#   perl -e "$procs" kill DIR      kills every process under DIR, until none is left
+#   perl -e "$procs" watch DIR     moves to a session of its own, waits for the end of its stdin, then kills
+# shellcheck disable=SC2016 # perl's own variables
+procs='
+use POSIX ();
+my ($mode, $dir) = @ARGV;
+sub ours {
+  my @found;
+  for my $proc (glob "/proc/[1-9]*") {
+    my ($pid) = $proc =~ m{^/proc/([1-9][0-9]*)$} or next;
+    next if $pid <= 1 || $pid == $$;
+    my $cwd = readlink "$proc/cwd";
+    my $in = defined $cwd && index(($cwd =~ s/ \(deleted\)$//r) . "/", "$dir/") == 0;
+    if (!$in && open my $env, "<", "$proc/environ") {
+      local $/ = "\0";
+      while (my $var = <$env>) {
+        chomp $var;
+        if (index("$var/", "CLAUDE_PAINT_GATE=$dir/") == 0) { $in = 1; last }
+      }
+    }
+    next unless $in;
+    open my $cmd, "<", "$proc/cmdline" or next;
+    push @found, [$pid, split /\0/, do { local $/; <$cmd> // "" }];
+  }
+  @found;
+}
+if ($mode eq "watch") {
+  POSIX::setsid();
+  1 while <STDIN>;
+}
+if ($mode eq "servers") {
+  print "@$_\n" for grep { @$_ > 2 && $_->[1] =~ m{(^|/)easel$} && $_->[2] eq "serve" } ours();
+  exit;
+}
+for (1 .. 50) {
+  my @pids = map { $_->[0] } ours() or last;
+  kill "KILL", @pids;
+  select undef, undef, undef, 0.1;
+}
+'
+
+# The backstop: a watcher outside the gate's process group (woodpecker cancels or times out a step
+# by killing that group, so no trap runs) that kills whatever the run left running once the gate
+# has exited, however it exited. Only the gate holds the pipe's write end: its exit is the end of
+# the watcher's input.
+mkfifo "$work/alive"
+perl -e "$procs" watch "$work" <"$work/alive" >/dev/null 2>&1 &
+disown "$!"
+exec {alive}>"$work/alive"
+
 # launch NAME COMMAND: runs COMMAND in its own session (perl: macOS has no setsid), output in $work/NAME.log
 launch() {
   mkdir -p "$work/$1.tmp"
   echo "$EPOCHREALTIME" >"$work/$1.t0"
-  TMPDIR=$work/$1.tmp perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' bash -c "$2" >"$work/$1.log" 2>&1 </dev/null &
+  CLAUDE_PAINT_GATE=$work/$1.tmp TMPDIR=$work/$1.tmp perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' bash -c "$2" >"$work/$1.log" 2>&1 </dev/null {alive}>&- &
   name_of[$!]=$1
 }
 
-# reap: waits for one launched command, stops what it left running (a crashed test's easel
-# server) and records its exit and wall time
+# reap: waits for one launched command, records an easel server it left running (one that is
+# closing gets 5 s to go), stops whatever it left and records its exit and wall time
 reap() {
-  local pid rc name
+  local pid rc name left
   wait -n -p pid
   rc=$?
   name=${name_of[$pid]}
   unset "name_of[$pid]"
+  for _ in {1..50}; do
+    left=$(perl -e "$procs" servers "$work/$name.tmp")
+    [ -n "$left" ] || break
+    sleep 0.1
+  done
+  [ -z "$left" ] || echo "$left" >"$work/$name.left"
+  perl -e "$procs" kill "$work/$name.tmp"
   pkill -KILL -s "$pid"
   echo "$rc" >"$work/$name.rc"
   awk -v a="$(cat "$work/$name.t0")" -v b="$EPOCHREALTIME" 'BEGIN { printf "%.1f", b - a }' >"$work/$name.secs"
@@ -308,6 +372,13 @@ while [ "${#name_of[@]}" -gt 0 ]; do reap; done
 failed=() known=()
 for i in "${!names[@]}"; do
   name=${names[$i]} log=$work/${names[$i]}.log rc=$(cat "$work/${names[$i]}.rc") missing=
+  if [ -s "$work/$name.left" ]; then
+    failed+=("$name")
+    echo "gate: $name: FAILED (exit $rc; it left easel servers running, killed by the gate:)"
+    sed 's/^/  ! /' "$work/$name.left"
+    sed 's/^/  | /' "$log"
+    continue
+  fi
   if [ "$rc" = 101 ] && [ -n "${known_rust_tests[$name]:-}" ] &&
     grep -qxF "test ${known_rust_tests[$name]} ... FAILED" "$log" &&
     grep -qE '^test result: FAILED\. 0 passed; 1 failed; 0 ignored; 0 measured;' "$log"; then

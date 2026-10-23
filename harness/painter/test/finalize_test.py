@@ -53,8 +53,8 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         def run(*args):
             return F.command([easel, *args], cwd=self.studio, env=env)
 
-        run("open", "painting")
         try:
+            run("open", "painting")
             run("do", 'canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{"lead white",6},{"raw umber",1}}, um=50, apply="roller"}}}')
             run("do", 'b=brush("filbert",8); b:load(pile{{"cobalt blue",1}},0.9)')
             run("do", 'b:stroke({{100,100},{800,130}}, {pressure=0.8})')

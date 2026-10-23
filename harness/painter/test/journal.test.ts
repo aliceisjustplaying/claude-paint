@@ -70,10 +70,11 @@ try { reviseJournal(${JSON.stringify(s)}, ${JSON.stringify(old)}, ${JSON.stringi
 	assert.equal(readFileSync(join(s, REVISIONS), "utf8").trim().split("\n").length, 1);
 });
 
-test("a note and a revision wait for the journal's lock, and both are kept", async () => {
+test("a note and a revision wait for the journal's lock, and both are kept", async (t) => {
 	const s = studio(J);
 	const env = { EASEL_ROOT: s };
 	const easel = join(s, "bin", "easel");
+	t.after(() => spawnSync(easel, ["-s", "a", "close"], { cwd: s, env }));
 	assert.equal(spawnSync(easel, ["open", "a"], { cwd: s, env, encoding: "utf8" }).status, 0);
 	mkdirSync(join(s, "out/easel"), { recursive: true });
 	let lock: number | undefined = openSync(join(s, JOURNAL_LOCK), "a");
@@ -97,7 +98,6 @@ test("a note and a revision wait for the journal's lock, and both are kept", asy
 		assert.match(journal, /: the hill is next\n$/);
 	} finally {
 		if (lock !== undefined) closeSync(lock);
-		spawnSync(easel, ["-s", "a", "close"], { cwd: s, env });
 	}
 });
 

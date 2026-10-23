@@ -194,6 +194,8 @@ fn split(column: &ColumnData, refine: &[bool]) -> Result<ColumnData, MaterialErr
                 upper.network = (values[2] + delta[2]) as f32;
                 lower.inhibitor = (values[3] - delta[3]) as f32;
                 upper.inhibitor = (values[3] + delta[3]) as f32;
+                lower.clear_empty_oxygen();
+                upper.clear_empty_oxygen();
                 result.cells.extend([lower, upper]);
             } else {
                 result.cells.push(cell);
@@ -504,6 +506,7 @@ pub fn advance(
             cell.pigment_um *= coverage;
             cell.binder_um *= coverage;
             cell.solvent_um *= coverage;
+            cell.clear_empty_oxygen();
         }
     }
     *column = accepted;

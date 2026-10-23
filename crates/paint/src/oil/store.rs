@@ -1182,7 +1182,7 @@ impl FilmEdit<'_> {
                     u32::try_from(fragment.cells.len()).map_err(|_| MaterialError::Capacity)?;
                 for cell in &fragment.cells {
                     let recipe = self.tile.intern(cell.formulation.clone())?;
-                    let c = Cell {
+                    let mut c = Cell {
                         pigment_um: (cell.pigment / self.pixel_area) as f32,
                         binder_um: (cell.binder / self.pixel_area) as f32,
                         solvent_um: (cell.solvent / self.pixel_area) as f32,
@@ -1192,6 +1192,7 @@ impl FilmEdit<'_> {
                         inhibitor: cell.inhibitor,
                         recipe,
                     };
+                    c.clear_empty_oxygen();
                     if !validate_cell(&c, self.tile.formulations.len()) {
                         return Err(MaterialError::Invalid("deposition inventory overflow"));
                     }
@@ -1273,6 +1274,7 @@ fn take_data(
                 rest.pigment_um = (cell.pigment_um as f64 * (1.0 - fraction)) as f32;
                 rest.binder_um = (cell.binder_um as f64 * (1.0 - fraction)) as f32;
                 rest.solvent_um = (cell.solvent_um as f64 * (1.0 - fraction)) as f32;
+                rest.clear_empty_oxygen();
                 lifted.pigment = (cell.pigment_um as f64 - rest.pigment_um as f64) * area;
                 lifted.binder = (cell.binder_um as f64 - rest.binder_um as f64) * area;
                 lifted.solvent = (cell.solvent_um as f64 - rest.solvent_um as f64) * area;

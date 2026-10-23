@@ -14,6 +14,12 @@ pub struct Cell {
 }
 
 impl Cell {
+    pub(crate) fn clear_empty_oxygen(&mut self) {
+        if self.binder_um == 0.0 && self.solvent_um == 0.0 {
+            self.oxygen = 0.0;
+        }
+    }
+
     pub fn thickness_um(&self) -> f64 {
         self.pigment_um as f64 + self.binder_um as f64 + self.solvent_um as f64
     }
@@ -369,6 +375,7 @@ pub fn advance_column_with_scratch(
         cell.network = w.network.clamp(0.0, 1.0) as f32;
         cell.inhibitor = w.inhibitor.clamp(0.0, 1.0) as f32;
         cell.solvent_um = w.solvent as f32;
+        cell.clear_empty_oxygen();
         budget.final_oxygen += cell.oxygen_inventory(&kinetics[cell.recipe as usize]);
     }
     budget.rounding_delta = budget.final_oxygen - unrounded;
@@ -1188,5 +1195,20 @@ mod tests {
                 if closed { assert_eq!(budget.air_exchange, 0.0); }
             }
         }
+    }
+
+    #[test]
+    fn evaporating_last_stored_carrier_keeps_the_residue_valid() {
+        let kinetics = Kinetics { solvent_evaporation_rate_s: 1.0, ..inert() };
+        let mut cells = [Cell {
+            pigment_um: 1.0,
+            solvent_um: f32::from_bits(1),
+            oxygen: 0.5,
+            ..Cell::default()
+        }];
+        advance_column(&mut cells, &[kinetics], 10.0, 0.0).unwrap();
+        assert_eq!(cells[0].solvent_um, 0.0);
+        assert_eq!(cells[0].oxygen, 0.0);
+        advance_column(&mut cells, &[kinetics], 10.0, 0.0).unwrap();
     }
 }

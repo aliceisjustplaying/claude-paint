@@ -417,6 +417,29 @@ mod tests {
     }
 
     #[test]
+    fn exhausted_oxygen_carriers_leave_a_valid_pigment_residue() {
+        for drain in [false, true] {
+            let mut material = parcel(0.2, 0.4).material.unwrap();
+            let before = values(material.inventory());
+            let removed = if drain {
+                material.drain_binder(15.0, 0.0, 1.0)
+            } else {
+                material.remove_binder(15.0)
+            };
+            assert!(material.fragments.iter().all(|f| f.binder == 0.0 && f.oxygen == 0.0));
+            conserved(before, std::array::from_fn(|k| values(material.inventory())[k] + values(removed.inventory())[k]));
+        }
+        let mut material = parcel(0.2, 0.4).material.unwrap();
+        material.fragments[0].solvent = 5.0;
+        material.remove_binder(15.0);
+        assert_eq!(material.fragments[0].oxygen, 0.4);
+        let before = values(material.inventory());
+        let removed = material.remove_solvent(5.0);
+        assert_eq!(material.fragments[0].oxygen, 0.0);
+        conserved(before, std::array::from_fn(|k| values(material.inventory())[k] + values(removed.inventory())[k]));
+    }
+
+    #[test]
     fn rag_refold_retains_the_mobile_material_inside_the_cloth() {
         let mut rag = crate::rag::Rag::new(20.0, 7);
         rag.mobile.mm3 = 0.5;
@@ -794,6 +817,9 @@ impl MaterialPayload {
             out.binder = take;
             out.solvent = 0.0;
             fragment.binder -= take;
+            if fragment.oxygen_capacity() == 0.0 {
+                fragment.oxygen = 0.0;
+            }
             fragment.volume = (fragment.volume - out.volume).max(0.0);
             removed.fragments.push(out);
         }
@@ -829,6 +855,9 @@ impl MaterialPayload {
                 fragment.solvent -= take;
             } else {
                 fragment.binder -= take;
+            }
+            if fragment.oxygen_capacity() == 0.0 {
+                fragment.oxygen = 0.0;
             }
             removed.fragments.push(out);
             left -= take;

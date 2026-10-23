@@ -146,6 +146,10 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   tests::a_stroke_reaches_its_end tests::dry_is_idempotent_and_clears_wet tests::fixture_is_deterministic_across_thread_counts \
   tests::ground_drain_conserves_integrated_scattering tests::drained_deposition_keeps_its_pigment_when_wet_and_baked \
   bristle::skim_pigments::skimming_preserves_each_pigment_and_reveals_the_buried_paint \
+  bristle::skim_pigments::fallback_plough_keeps_inventory_when_the_last_skim_layer_is_lifted \
+  bristle::skim_pigments::retained_skims_break_up_only_the_contacted_packed_paint \
+  bristle::skim_pigments::retained_pickup_lifts_fluid_oil_before_packed_paint \
+  rag::tests::a_rag_lifts_fluid_oil_first_from_a_retained_layer \
   thinner::tests::drained_flow_conserves_integrated_scattering rag::tests::a_drained_rag_smear_conserves_integrated_scattering \
   bristle::kernel_traps::ploughing_films_at_the_threshold_leaves_the_recorded_cure \
   thinner::tests::the_sparse_flow_set_moves_only_the_liquid_above_packed_paint \

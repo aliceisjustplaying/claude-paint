@@ -88,7 +88,7 @@ impl Latent {
         (volume, lat, hide)
     }
 
-    pub(crate) fn split_top(&self, volume: f32, hide: Prop, take: f32) -> (Vec<Layer>, Vec<Layer>) {
+    pub(crate) fn split_top(&self, volume: f32, hide: Prop, take: f32, drain: bool) -> (Vec<Layer>, Vec<Layer>) {
         let mut below = self.layers(volume, hide);
         let mut top = Vec::new();
         let mut left = take.min(volume).max(0.0);
@@ -96,8 +96,13 @@ impl Latent {
             let Some(mut layer) = below.pop() else { break };
             let amount = left.min(layer.share);
             left -= amount;
+            let mut remaining = layer.hide;
+            if drain {
+                layer.hide = crate::bristle::take_from(&mut remaining, layer.share, amount);
+            }
             if amount < layer.share {
                 let mut rest = layer.clone();
+                rest.hide = remaining;
                 rest.share -= amount;
                 below.push(rest);
             }

@@ -3276,6 +3276,16 @@ mod skim_pigments {
                 assert_eq!(restored.wet.lat, c.wet.lat);
                 assert_eq!(restored.seen(), c.seen());
                 if skim {
+                    let mut worked = c.clone();
+                    let empty_knife = Knife::new(120.0);
+                    let mut pickup = Held::new(Tool::hog_flat(100.0), 23);
+                    let before = inventory(&worked, &empty_knife, Some(&pickup));
+                    worked.drag(&mut pickup, &Gesture::line((500.0, 350.0), (500.0, 650.0)).ramps(0.0, 0.0), None);
+                    let after = inventory(&worked, &empty_knife, Some(&pickup));
+                    for (a, b) in before.0.iter().zip(after.0).chain(before.1.iter().zip(after.1)) {
+                        assert!((a - b).abs() <= 1e-5 * a.abs().max(1.0), "pickup: {a} -> {b}");
+                    }
+                    assert!(pickup.carried_parts().iter().any(|&(p, v)| p == black && v > 0.0));
                     let sf = restored.surf();
                     let i = restored.wet.lat.iter().position(|l| l.layers.len() > 1 && l.layers[0].lat.parts == vec![(black, 1.0)]).unwrap();
                     let buried = restored.wet.vol[i] * restored.wet.lat[i].layers[0].share;

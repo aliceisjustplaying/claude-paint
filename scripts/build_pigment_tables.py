@@ -425,6 +425,13 @@ def build_researched():
         violations[mixture["name"]] = {"outside_endpoint_bands_nm": WAVELENGTHS[error > 1e-10].tolist(), "maximum_excess_reflectance": float(error.max())}
     metadata["bath_chromatic_validation"]["endpoint_range_check"] = violations
     metadata["bath_chromatic_validation"]["endpoint_range_meaning"] = "Positive opaque two-constant mixtures stay between both pure reflectance endpoints at every wavelength. Violations reject that preparation/model assumption without interpreting a failed fit as measured oil coefficients."
+    metadata["diagnostic_decimal_places"] = 10
+    for row in metadata["entries"].values():
+        for key, value in row.items():
+            if isinstance(value, float):
+                row[key] = round(value, metadata["diagnostic_decimal_places"]) or 0.0
+            elif isinstance(value, list):
+                row[key] = [round(v, metadata["diagnostic_decimal_places"]) or 0.0 for v in value]
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "researched.bin").write_bytes(binary)
     (OUT / "researched.json").write_text(json.dumps(metadata, separators=(",", ":"), ensure_ascii=False) + "\n")

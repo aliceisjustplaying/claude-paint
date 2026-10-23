@@ -32,7 +32,7 @@ pub const LAT: usize = crate::mixer::LATENT_SIZE;
 pub struct Latent {
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
-    #[cfg_attr(feature = "replay-effects", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(feature = "replay-effects", serde(skip))]
     pub(crate) layers: Vec<Layer>,
 }
 

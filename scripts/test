@@ -49,7 +49,7 @@ reap() {
 }
 
 t0=$EPOCHREALTIME
-launch build "cargo test --workspace --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
+launch build "cargo test --workspace --features easel/state-store --no-run --config profile.test.debug=0 --lib --bin easel --test smoke --test look --test session_integrity --test live_frames --test live_replay_checkpoint --test replay_frames_resume --test painter_signals --test studio_profiles --test checkpoint_paths --test save_confined --test ck7 --test thinner_physics --test thinner_pigments --message-format=json-render-diagnostics >$(printf %q "$work/build.json")"
 reap
 if [ "$(cat "$work/build.rc")" != 0 ]; then
   cat "$work/build.log"
@@ -103,6 +103,14 @@ rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py scripts/tests/golden_approve_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
+rust painting-store easel 'bin easel test' \
+  painting_store::tests::chunk_counter_exceeds_one_gib_without_state_allocation \
+  painting_store::tests::chunked_checkpoint_validates_counts_lengths_and_schema_limits \
+  painting_store::tests::chunked_checkpoint_stream_rejects_corruption_reordering_and_changed_writes \
+  painting_store::tests::store_preserves_schema_one_and_streams_schema_two_saves \
+  painting_store::tests::schema_one_engine_nine_is_readable_and_migrates_only_on_append \
+  painting_store::tests::chunked_publication_is_atomic_and_retains_two_revisions_within_budget \
+  save::tests::streaming_canvas_digest_preserves_fnv_bytes
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
   replay_checkpoint::tests::drying_omission_footer_reconstructs_from_checkpoint \

@@ -10,6 +10,10 @@ pub const DEFAULT_DISK_BYTES: u64 = 2 << 30;
 const MAX_STATE_BYTES: u64 = 1 << 30;
 const MAX_SOURCE_BYTES: u64 = 16 << 20;
 const MAX_MANIFEST_BYTES: u64 = 16 << 10;
+const CHECKPOINT_CHUNK_BYTES: u64 = 16 << 20;
+const MAX_CHUNKED_STATE_BYTES: u64 = 64 << 30;
+const MAX_CHECKPOINT_CHUNKS: usize = (MAX_CHUNKED_STATE_BYTES / CHECKPOINT_CHUNK_BYTES) as usize;
+const MAX_CHUNKED_MANIFEST_BYTES: u64 = 512 << 10;
 const RESERVE_BYTES: u64 = 64 << 10;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -21,6 +25,60 @@ pub struct Object {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ChunkedCheckpoint {
+    pub id: String,
+    pub bytes: u64,
+    pub chunks: Vec<Object>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Checkpoint {
+    Single(Object),
+    Chunked(ChunkedCheckpoint),
+}
+
+impl Checkpoint {
+    fn id(&self) -> &str {
+        match self { Self::Single(o) => &o.id, Self::Chunked(c) => &c.id }
+    }
+
+    fn objects(&self) -> &[Object] {
+        match self { Self::Single(o) => std::slice::from_ref(o), Self::Chunked(c) => &c.chunks }
+    }
+
+    fn bytes(&self) -> u64 {
+        match self { Self::Single(o) => o.bytes, Self::Chunked(c) => c.bytes }
+    }
+
+    fn validate(&self, schema: u32) -> io::Result<()> {
+        match self {
+            Self::Single(o) if schema == 1 && valid_id(&o.id) && o.bytes <= MAX_STATE_BYTES => Ok(()),
+            Self::Chunked(c) if schema == 2 => {
+                if !valid_id(&c.id) || c.bytes == 0 || c.bytes > MAX_CHUNKED_STATE_BYTES
+                    || c.chunks.is_empty() || c.chunks.len() > MAX_CHECKPOINT_CHUNKS
+                    || c.chunks.len() as u64 != c.bytes.div_ceil(CHECKPOINT_CHUNK_BYTES)
+                { return Err(invalid("invalid chunked checkpoint budget or count")); }
+                let mut total = 0u64;
+                for (i, o) in c.chunks.iter().enumerate() {
+                    let expected = if i + 1 == c.chunks.len() {
+                        c.bytes.checked_sub(total).ok_or_else(|| invalid("checkpoint length overflow"))?
+                    } else { CHECKPOINT_CHUNK_BYTES };
+                    if !valid_id(&o.id) || o.bytes == 0 || o.bytes > CHECKPOINT_CHUNK_BYTES || o.bytes != expected {
+                        return Err(invalid("invalid checkpoint chunk length"));
+                    }
+                    total = total.checked_add(o.bytes).ok_or_else(|| invalid("checkpoint length overflow"))?;
+                }
+                if total != c.bytes { return Err(invalid("checkpoint aggregate length mismatch")); }
+                Ok(())
+            }
+            _ => Err(invalid("checkpoint does not match its revision schema")),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub schema: u32,
     pub parent: Option<String>,
@@ -28,7 +86,7 @@ pub struct Manifest {
     pub source_sha256: String,
     pub source_bytes: u64,
     pub chunks: usize,
-    pub checkpoint: Option<Object>,
+    pub checkpoint: Option<Checkpoint>,
     pub state_schema: String,
     pub runtime_sha256: String,
     pub renderer: String,
@@ -101,22 +159,27 @@ fn manifest(dir: &Path, id: &str) -> io::Result<Manifest> {
     if !valid_id(id) {
         return Err(invalid("invalid manifest ID"));
     }
-    let bytes = bounded(&dir.join("revisions").join(format!("{id}.json")), MAX_MANIFEST_BYTES)?;
+    let bytes = bounded(&dir.join("revisions").join(format!("{id}.json")), MAX_CHUNKED_MANIFEST_BYTES)?;
     if digest("easel-revision/1", &bytes) != id {
         return Err(invalid("revision integrity check failed"));
     }
     let m: Manifest = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
-    if m.schema != 1 || m.state_schema != "easel-save-1" || m.renderer != "legacy-look-1" || m.resumable
+    let manifest_limit = match m.schema {
+        1 => MAX_MANIFEST_BYTES,
+        2 if m.engine >= 9 => MAX_CHUNKED_MANIFEST_BYTES,
+        _ => return Err(invalid("unsupported revision schema")),
+    };
+    if bytes.len() as u64 > manifest_limit || m.state_schema != "easel-save-1" || m.renderer != "legacy-look-1" || m.resumable
         || !valid_id(&m.source_sha256) || !valid_id(&m.runtime_sha256)
         || m.parent.as_ref().is_some_and(|s| !valid_id(s))
         || !valid_id(&m.source.id) || m.source.bytes > MAX_SOURCE_BYTES || m.source_bytes != m.source.bytes
-        || m.checkpoint.as_ref().is_some_and(|o| !valid_id(&o.id) || o.bytes > MAX_STATE_BYTES)
         || m.renderable != m.checkpoint.is_some() || m.finishable != m.renderable
         || m.window.is_some() != m.renderable || m.um_per_px_bits.is_some() != m.renderable
         || !(16..=9600).contains(&m.painting_width) || !paint::supported_engine(m.engine)
     {
         return Err(invalid("unsupported or inconsistent revision manifest"));
     }
+    if let Some(checkpoint) = &m.checkpoint { checkpoint.validate(m.schema)?; }
     Ok(m)
 }
 
@@ -128,20 +191,10 @@ fn verify_object(dir: &Path, object: &Object, kind: &str, limit: u64, collect: b
     if !valid_id(&object.id) || object.bytes > limit {
         return Err(invalid("invalid object ID or object budget"));
     }
-    let mut reader = zstd::stream::read::Decoder::new(File::open(object_path(dir, &object.id))?)?;
-    reader.window_log_max(23)?;
-    let mut hash = HashCount::new(kind, object.bytes);
+    let mut reader = ObjectReader::new(dir, object, kind)?;
     let mut result = Vec::new();
-    let mut buffer = [0; 65536];
-    loop {
-        let n = reader.read(&mut buffer)?;
-        if n == 0 { break }
-        hash.write_all(&buffer[..n])?;
-        if collect { result.extend_from_slice(&buffer[..n]); }
-    }
-    if hash.bytes != object.bytes || hash.id() != object.id {
-        return Err(invalid("object integrity check failed"));
-    }
+    if collect { io::copy(&mut reader, &mut result)?; }
+    else { io::copy(&mut reader, &mut io::sink())?; }
     Ok(result)
 }
 
@@ -151,10 +204,9 @@ fn verify_revision(dir: &Path, m: &Manifest) -> io::Result<String> {
         return Err(invalid("source prefix integrity check failed"));
     }
     if let Some(checkpoint) = &m.checkpoint {
-        verify_object(dir, checkpoint, "easel-checkpoint/1", MAX_STATE_BYTES, false)?;
-        let mut reader = zstd::stream::read::Decoder::new(File::open(object_path(dir, &checkpoint.id))?)?;
-        reader.window_log_max(23)?;
+        let mut reader = CheckpointReader::new(dir, checkpoint, m.schema)?;
         let header = paint::checkpoint::read_header(&mut reader)?;
+        io::copy(&mut reader, &mut io::sink())?;
         let mut lines = header.lines();
         if lines.next() != Some("easel save 1") { return Err(invalid("checkpoint has no finishable save envelope")); }
         let fields: std::collections::BTreeMap<_, _> = lines.filter_map(|l| l.split_once('=')).collect();
@@ -260,6 +312,155 @@ impl Write for HashCount {
     }
 
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+struct ChunkCounter {
+    aggregate: HashCount,
+    chunk: HashCount,
+    chunks: Vec<Object>,
+}
+
+impl ChunkCounter {
+    fn new() -> Self {
+        Self {
+            aggregate: HashCount::new("easel-checkpoint/2", MAX_CHUNKED_STATE_BYTES),
+            chunk: HashCount::new("easel-checkpoint-chunk/2", CHECKPOINT_CHUNK_BYTES),
+            chunks: Vec::new(),
+        }
+    }
+
+    fn end_chunk(&mut self) {
+        self.chunks.push(Object { id: self.chunk.id(), bytes: self.chunk.bytes });
+        self.chunk = HashCount::new("easel-checkpoint-chunk/2", CHECKPOINT_CHUNK_BYTES);
+    }
+
+    fn finish(mut self) -> ChunkedCheckpoint {
+        if self.chunk.bytes != 0 { self.end_chunk(); }
+        ChunkedCheckpoint { id: self.aggregate.id(), bytes: self.aggregate.bytes, chunks: self.chunks }
+    }
+}
+
+impl Write for ChunkCounter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let n = bytes.len().min((CHECKPOINT_CHUNK_BYTES - self.chunk.bytes) as usize);
+        self.aggregate.write_all(&bytes[..n])?;
+        self.chunk.write_all(&bytes[..n])?;
+        if self.chunk.bytes == CHECKPOINT_CHUNK_BYTES { self.end_chunk(); }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+struct ChunkWriter<'a> {
+    buffer: Vec<u8>,
+    write_chunk: &'a mut dyn FnMut(&[u8]) -> io::Result<()>,
+}
+
+impl<'a> ChunkWriter<'a> {
+    fn new(write_chunk: &'a mut dyn FnMut(&[u8]) -> io::Result<()>) -> Self {
+        Self { buffer: Vec::with_capacity(CHECKPOINT_CHUNK_BYTES as usize), write_chunk }
+    }
+
+    fn end_chunk(&mut self) -> io::Result<()> {
+        (self.write_chunk)(&self.buffer)?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    fn finish(mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() { self.end_chunk()?; }
+        Ok(())
+    }
+}
+
+impl Write for ChunkWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let n = bytes.len().min(CHECKPOINT_CHUNK_BYTES as usize - self.buffer.len());
+        self.buffer.extend_from_slice(&bytes[..n]);
+        if self.buffer.len() as u64 == CHECKPOINT_CHUNK_BYTES { self.end_chunk()?; }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+struct ObjectReader {
+    decoder: zstd::stream::read::Decoder<'static, io::BufReader<File>>,
+    hash: HashCount,
+    object: Object,
+    done: bool,
+}
+
+impl ObjectReader {
+    fn new(dir: &Path, object: &Object, kind: &str) -> io::Result<Self> {
+        let mut decoder = zstd::stream::read::Decoder::new(File::open(object_path(dir, &object.id))?)?;
+        decoder.window_log_max(23)?;
+        Ok(Self { decoder, hash: HashCount::new(kind, object.bytes), object: object.clone(), done: false })
+    }
+}
+
+impl Read for ObjectReader {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        if bytes.is_empty() || self.done { return Ok(0); }
+        let n = self.decoder.read(bytes)?;
+        self.hash.write_all(&bytes[..n])?;
+        if n == 0 {
+            if self.hash.bytes != self.object.bytes || self.hash.id() != self.object.id {
+                return Err(invalid("object integrity check failed"));
+            }
+            self.done = true;
+        }
+        Ok(n)
+    }
+}
+
+struct CheckpointReader {
+    dir: PathBuf,
+    checkpoint: Checkpoint,
+    next: usize,
+    reader: Option<ObjectReader>,
+    hash: Option<HashCount>,
+    done: bool,
+}
+
+impl CheckpointReader {
+    fn new(dir: &Path, checkpoint: &Checkpoint, schema: u32) -> io::Result<Self> {
+        checkpoint.validate(schema)?;
+        Ok(Self { dir: dir.into(), checkpoint: checkpoint.clone(), next: 0, reader: None,
+            hash: (schema == 2).then(|| HashCount::new("easel-checkpoint/2", checkpoint.bytes())), done: false })
+    }
+}
+
+impl Read for CheckpointReader {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        if bytes.is_empty() || self.done { return Ok(0); }
+        loop {
+            if let Some(reader) = &mut self.reader {
+                let n = reader.read(bytes)?;
+                if n != 0 {
+                    if let Some(hash) = &mut self.hash { hash.write_all(&bytes[..n])?; }
+                    return Ok(n);
+                }
+                self.reader = None;
+            }
+            let Some(object) = self.checkpoint.objects().get(self.next) else {
+                if let Some(hash) = &self.hash
+                    && (hash.bytes != self.checkpoint.bytes() || hash.id() != self.checkpoint.id())
+                {
+                    return Err(invalid("checkpoint aggregate integrity check failed"));
+                }
+                self.done = true;
+                return Ok(0);
+            };
+            let kind = match &self.checkpoint {
+                Checkpoint::Single(_) => "easel-checkpoint/1",
+                Checkpoint::Chunked(_) => "easel-checkpoint-chunk/2",
+            };
+            self.reader = Some(ObjectReader::new(&self.dir, object, kind)?);
+            self.next += 1;
+        }
+    }
 }
 
 struct LimitedFile {
@@ -383,17 +584,27 @@ impl PaintingStore {
         if root(&self.dir)? != self.current.as_ref().map(|(id, _)| id.clone()) { return Err(invalid("current revision changed unexpectedly")); }
         let previous = self.source()?;
         if previous.as_ref().is_some_and(|p| !source.starts_with(p)) { return Err(invalid("source would rewrite the accepted prefix")); }
-        let mut state_hash = HashCount::new("easel-checkpoint/1", MAX_STATE_BYTES);
-        let has_canvas = save::write_to(session, source, &mut state_hash)?;
-        let checkpoint = has_canvas.then(|| Object { id: state_hash.id(), bytes: state_hash.bytes });
         let source_object = Object { id: digest("easel-source/1", source.as_bytes()), bytes: source.len() as u64 };
+        let schema = if session.st.borrow().tubes.engine >= 9
+            && !self.current.as_ref().is_some_and(|(_, m)| m.schema == 1 && m.source.id == source_object.id)
+        { 2 } else { 1 };
+        let (has_canvas, checkpoint) = if schema == 1 {
+            let mut hash = HashCount::new("easel-checkpoint/1", MAX_STATE_BYTES);
+            let has_canvas = save::write_to(session, source, &mut hash)?;
+            (has_canvas, has_canvas.then(|| Checkpoint::Single(Object { id: hash.id(), bytes: hash.bytes })))
+        } else {
+            let mut counter = ChunkCounter::new();
+            let has_canvas = save::write_to(session, source, &mut counter)?;
+            (has_canvas, has_canvas.then(|| Checkpoint::Chunked(counter.finish())))
+        };
+        if let Some(checkpoint) = &checkpoint { checkpoint.validate(schema)?; }
         if let Some((_, old)) = &self.current && old.source.id == source_object.id {
-            if old.checkpoint.as_ref().map(|o| &o.id) != checkpoint.as_ref().map(|o| &o.id) { return Err(invalid("material changed without a journal transaction")); }
+            if old.checkpoint.as_ref().map(Checkpoint::id) != checkpoint.as_ref().map(Checkpoint::id) { return Err(invalid("material changed without a journal transaction")); }
             return Ok(());
         }
         let st = session.st.borrow();
         let m = Manifest {
-            schema: 1, parent: self.current.as_ref().map(|(id, _)| id.clone()),
+            schema, parent: self.current.as_ref().map(|(id, _)| id.clone()),
             source: source_object, source_sha256: format!("{:x}", Sha256::digest(source.as_bytes())), source_bytes: source.len() as u64,
             chunks: session.log.len(), checkpoint, state_schema: "easel-save-1".into(), runtime_sha256: self.runtime.clone(), renderer: "legacy-look-1".into(),
             engine: st.tubes.engine, pigment_box: st.tubes.name.into(), painting_width: st.width,
@@ -403,14 +614,31 @@ impl PaintingStore {
         };
         drop(st);
         let bytes = serde_json::to_vec(&m).map_err(|e| invalid(e.to_string()))?;
-        if bytes.len() as u64 > MAX_MANIFEST_BYTES { return Err(invalid("manifest exceeds its byte budget")); }
-        let required = zstd::zstd_safe::compress_bound(source.len()) as u64
-            + zstd::zstd_safe::compress_bound(state_hash.bytes as usize) as u64 + RESERVE_BYTES;
+        let manifest_limit = if schema == 1 { MAX_MANIFEST_BYTES } else { MAX_CHUNKED_MANIFEST_BYTES };
+        if bytes.len() as u64 > manifest_limit { return Err(invalid("manifest exceeds its byte budget")); }
+        let mut required = zstd::zstd_safe::compress_bound(source.len()) as u64 + RESERVE_BYTES;
+        if schema == 1 {
+            required += zstd::zstd_safe::compress_bound(m.checkpoint.as_ref().map_or(0, Checkpoint::bytes) as usize) as u64;
+        } else {
+            required += bytes.len() as u64;
+            if let Some(checkpoint) = &m.checkpoint {
+                for object in checkpoint.objects() {
+                    required = required.checked_add(zstd::zstd_safe::compress_bound(object.bytes as usize) as u64)
+                        .ok_or_else(|| invalid("transaction byte budget overflow"))?;
+                }
+            }
+        }
         if self.disk_bytes()?.checked_add(required).is_none_or(|n| n > self.budget) { return Err(invalid("insufficient transaction space in the store disk budget")); }
         let result = (|| {
             self.write_object(&m.source, "easel-source/1", "source.synced", step, |w| w.write_all(source.as_bytes()))?;
-            if let Some(object) = &m.checkpoint {
-                self.write_object(object, "easel-checkpoint/1", "checkpoint.synced", step, |w| save::write_to(session, source, w).map(|_| ()))?;
+            match &m.checkpoint {
+                Some(Checkpoint::Single(object)) => {
+                    self.write_object(object, "easel-checkpoint/1", "checkpoint.synced", step, |w| save::write_to(session, source, w).map(|_| ()))?;
+                }
+                Some(Checkpoint::Chunked(checkpoint)) => {
+                    self.write_chunks(checkpoint, step, |w| save::write_to(session, source, w).map(|_| ()))?;
+                }
+                None => {}
             }
             sync_dir(&self.dir.join("objects"))?;
             step("objects.synced")?;
@@ -442,6 +670,24 @@ impl PaintingStore {
             let _ = self.gate.unlock();
         }
         result
+    }
+
+    fn write_chunks(&self, checkpoint: &ChunkedCheckpoint, step: &mut dyn FnMut(&str) -> io::Result<()>, write: impl FnOnce(&mut ChunkWriter<'_>) -> io::Result<()>) -> io::Result<()> {
+        let mut next = 0;
+        let mut write_chunk = |bytes: &[u8]| {
+            let object = checkpoint.chunks.get(next).ok_or_else(|| invalid("state grew while its chunks were being written"))?;
+            if object.bytes != bytes.len() as u64 || object.id != digest("easel-checkpoint-chunk/2", bytes) {
+                return Err(invalid("state changed while its chunks were being written"));
+            }
+            self.write_object(object, "easel-checkpoint-chunk/2", "checkpoint.synced", step, |w| w.write_all(bytes))?;
+            next += 1;
+            Ok(())
+        };
+        let mut writer = ChunkWriter::new(&mut write_chunk);
+        write(&mut writer)?;
+        writer.finish()?;
+        if next != checkpoint.chunks.len() { return Err(invalid("state shrank while its chunks were being written")); }
+        Ok(())
     }
 
     fn write_object(&self, object: &Object, kind: &str, phase: &str, step: &mut dyn FnMut(&str) -> io::Result<()>, write: impl FnOnce(&mut CheckedEncoder<'_>) -> io::Result<()>) -> io::Result<()> {
@@ -496,7 +742,9 @@ impl PaintingStore {
             }
             for m in retained {
                 objects.insert(format!("{}.zst", m.source.id));
-                if let Some(c) = m.checkpoint { objects.insert(format!("{}.zst", c.id)); }
+                if let Some(c) = m.checkpoint {
+                    for object in c.objects() { objects.insert(format!("{}.zst", object.id)); }
+                }
             }
         }
         for (name, retained, extension) in [("objects", objects, ".zst"), ("revisions", revisions, ".json")] {
@@ -545,7 +793,253 @@ impl ReadRevision {
         Ok(Self { dir, _gate: gate, id, manifest, source })
     }
 
-    pub fn checkpoint(&self) -> io::Result<PathBuf> {
-        self.manifest.checkpoint.as_ref().map(|c| object_path(&self.dir, &c.id)).ok_or_else(|| invalid("committed revision has no canvas yet"))
+    pub fn checkpoint(&self) -> io::Result<impl Read + '_> {
+        let checkpoint = self.manifest.checkpoint.as_ref().ok_or_else(|| invalid("committed revision has no canvas yet"))?;
+        CheckpointReader::new(&self.dir, checkpoint, self.manifest.schema)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open_store(dir: &Path) -> PaintingStore {
+        PaintingStore::open(dir.into(), DEFAULT_DISK_BYTES, "a".repeat(64)).unwrap()
+    }
+
+    fn session(engine: u32) -> Session {
+        let tubes = crate::session::box_for(Some(&format!("--@ engine {engine}\n"))).unwrap();
+        let mut session = Session::replay_with(16, tubes).unwrap();
+        session.run(r#"canvas{size=100,aspect=1,linen=16,ground={{pile={{"lead white",1}},um=50,apply="knife"}}}"#).unwrap();
+        session
+    }
+
+    fn specimen(writer: &mut impl Write) -> io::Result<()> {
+        for value in [17, 34] {
+            let block = [value; 65536];
+            for _ in 0..CHECKPOINT_CHUNK_BYTES / block.len() as u64 { writer.write_all(&block)?; }
+        }
+        writer.write_all(&[51; 13])
+    }
+
+    fn check_stream(dir: &Path, checkpoint: &ChunkedCheckpoint) -> io::Result<u64> {
+        io::copy(&mut CheckpointReader::new(dir, &Checkpoint::Chunked(checkpoint.clone()), 2)?, &mut io::sink())
+    }
+
+    #[test]
+    fn chunk_counter_exceeds_one_gib_without_state_allocation() {
+        let mut counter = ChunkCounter::new();
+        let block = [0; 65536];
+        for _ in 0..MAX_STATE_BYTES / block.len() as u64 { counter.write_all(&block).unwrap(); }
+        counter.write_all(b"beyond").unwrap();
+        let checkpoint = counter.finish();
+        assert_eq!(checkpoint.bytes, MAX_STATE_BYTES + 6);
+        assert_eq!(checkpoint.chunks.len(), 65);
+        assert_eq!(checkpoint.chunks.last().unwrap().bytes, 6);
+        Checkpoint::Chunked(checkpoint).validate(2).unwrap();
+        let mut legacy = HashCount::new("easel-checkpoint/1", MAX_STATE_BYTES);
+        legacy.bytes = MAX_STATE_BYTES;
+        assert!(legacy.write_all(b"x").is_err());
+        let mut counter = ChunkCounter::new();
+        counter.aggregate.bytes = MAX_CHUNKED_STATE_BYTES - 1;
+        assert!(counter.write_all(b"xx").is_err());
+    }
+
+    #[test]
+    fn chunked_checkpoint_validates_counts_lengths_and_schema_limits() {
+        let object = Object { id: "a".repeat(64), bytes: CHECKPOINT_CHUNK_BYTES };
+        let maximum = ChunkedCheckpoint { id: "b".repeat(64), bytes: MAX_CHUNKED_STATE_BYTES, chunks: vec![object; MAX_CHECKPOINT_CHUNKS] };
+        Checkpoint::Chunked(maximum.clone()).validate(2).unwrap();
+        assert!(serde_json::to_vec(&maximum).unwrap().len() < MAX_CHUNKED_MANIFEST_BYTES as usize - 4096);
+        for change in 0..7 {
+            let mut bad = maximum.clone();
+            match change {
+                0 => bad.bytes += 1,
+                1 => bad.chunks.push(bad.chunks[0].clone()),
+                2 => { bad.chunks.pop(); }
+                3 => bad.chunks[0].bytes -= 1,
+                4 => bad.chunks.last_mut().unwrap().bytes = 0,
+                5 => bad.chunks[0].id = "../escape".into(),
+                _ => bad.bytes = 0,
+            }
+            assert!(Checkpoint::Chunked(bad).validate(2).is_err(), "change {change}");
+        }
+        assert!(Checkpoint::Chunked(maximum).validate(1).is_err());
+        let legacy = Checkpoint::Single(Object { id: "c".repeat(64), bytes: MAX_STATE_BYTES });
+        legacy.validate(1).unwrap();
+        assert!(legacy.validate(2).is_err());
+        assert!(Checkpoint::Single(Object { id: "c".repeat(64), bytes: MAX_STATE_BYTES + 1 }).validate(1).is_err());
+    }
+
+    #[test]
+    fn chunked_checkpoint_stream_rejects_corruption_reordering_and_changed_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = open_store(dir.path());
+        let mut counter = ChunkCounter::new();
+        specimen(&mut counter).unwrap();
+        let checkpoint = counter.finish();
+        let mut synced = 0;
+        assert!(store.write_chunks(&checkpoint, &mut |_| {
+            synced += 1;
+            if synced == 2 { return Err(io::Error::other("injected chunk failure")); }
+            Ok(())
+        }, |w| specimen(w)).is_err());
+        assert!(object_path(dir.path(), &checkpoint.chunks[0].id).exists());
+        assert!(!object_path(dir.path(), &checkpoint.chunks[1].id).exists());
+        assert_eq!(root(dir.path()).unwrap(), None);
+        drop(store);
+        let store = open_store(dir.path());
+        assert_eq!(std::fs::read_dir(dir.path().join("objects")).unwrap().count(), 0);
+        store.write_chunks(&checkpoint, &mut |_| Ok(()), |w| specimen(w)).unwrap();
+        assert_eq!(check_stream(dir.path(), &checkpoint).unwrap(), checkpoint.bytes);
+        let mut reordered = checkpoint.clone();
+        reordered.chunks.swap(0, 1);
+        assert!(check_stream(dir.path(), &reordered).is_err());
+        let mut wrong_hash = checkpoint.clone();
+        wrong_hash.id = "0".repeat(64);
+        assert!(check_stream(dir.path(), &wrong_hash).is_err());
+        let last = object_path(dir.path(), &checkpoint.chunks.last().unwrap().id);
+        let saved = std::fs::read(&last).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&last, std::fs::Permissions::from_mode(0o600)).unwrap();
+        for raw in [&[51; 12][..], &[51; 14][..], &[52; 13][..]] {
+            std::fs::write(&last, zstd::stream::encode_all(raw, 1).unwrap()).unwrap();
+            assert!(check_stream(dir.path(), &checkpoint).is_err());
+        }
+        std::fs::write(&last, &saved[..saved.len() - 1]).unwrap();
+        assert!(check_stream(dir.path(), &checkpoint).is_err());
+        std::fs::write(&last, saved).unwrap();
+        std::fs::remove_file(&last).unwrap();
+        assert!(check_stream(dir.path(), &checkpoint).is_err());
+        assert!(store.write_chunks(&checkpoint, &mut |_| Ok(()), |w| {
+            let block = [34; 65536];
+            for _ in 0..CHECKPOINT_CHUNK_BYTES / block.len() as u64 { w.write_all(&block)?; }
+            Ok(())
+        }).is_err());
+        assert_eq!(root(dir.path()).unwrap(), None);
+    }
+
+    #[test]
+    fn store_preserves_schema_one_and_streams_schema_two_saves() {
+        for engine in [8, 9] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut store = open_store(dir.path());
+            let session = session(engine);
+            let source = session.program("test");
+            store.publish(&session, &source).unwrap();
+            let id = store.current.as_ref().unwrap().0.clone();
+            assert_eq!(store.current.as_ref().unwrap().1.schema, if engine == 8 { 1 } else { 2 });
+            store.publish(&session, &source).unwrap();
+            assert_eq!(store.current.as_ref().unwrap().0, id);
+            drop(store);
+            let revision = ReadRevision::open(dir.path().into()).unwrap();
+            let restored = save::read_from(revision.checkpoint().unwrap(), dir.path()).unwrap();
+            assert_eq!(restored.log_fnv, save::fnv1a(source.as_bytes()));
+            assert_eq!(restored.chunks, session.log.len());
+            assert_eq!(crate::state_digest_line(&restored.session, 1, 0.0).split(" brushes=").next(), crate::state_digest_line(&session, 1, 0.0).split(" brushes=").next());
+            let output = tempfile::tempdir().unwrap();
+            let png = output.path().join("state.png");
+            crate::render_state(&[dir.path().display().to_string(), png.display().to_string(), "--mode".into(), "color".into(), "--look".into()]).unwrap();
+            assert!(std::fs::read(png).unwrap().starts_with(b"\x89PNG"));
+            #[cfg(feature = "render-snapshot")]
+            {
+                let view = output.path().join("state.view");
+                crate::optical::export(&[dir.path().display().to_string(), view.display().to_string()]).unwrap();
+                assert!(view.exists());
+            }
+            if engine == 8 {
+                let bytes = serde_json::to_value(&revision.manifest).unwrap();
+                assert!(bytes["checkpoint"].get("chunks").is_none());
+                assert_eq!(bytes["checkpoint"].as_object().unwrap().len(), 2);
+                let mut oversized = serde_json::to_vec(&revision.manifest).unwrap();
+                oversized.resize(MAX_MANIFEST_BYTES as usize + 1, b' ');
+                let id = digest("easel-revision/1", &oversized);
+                std::fs::write(dir.path().join("revisions").join(format!("{id}.json")), oversized).unwrap();
+                assert!(manifest(dir.path(), &id).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn schema_one_engine_nine_is_readable_and_migrates_only_on_append() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = open_store(dir.path());
+        let mut session = session(9);
+        let source = session.program("test");
+        store.publish(&session, &source).unwrap();
+        let mut legacy = store.current.as_ref().unwrap().1.clone();
+        let mut raw = Vec::new();
+        save::write_to(&session, &source, &mut raw).unwrap();
+        let object = Object { id: digest("easel-checkpoint/1", &raw), bytes: raw.len() as u64 };
+        store.write_object(&object, "easel-checkpoint/1", "checkpoint.synced", &mut |_| Ok(()), |w| w.write_all(&raw)).unwrap();
+        legacy.schema = 1;
+        legacy.checkpoint = Some(Checkpoint::Single(object));
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        let id = digest("easel-revision/1", &bytes);
+        store.install(&dir.path().join("revisions").join(format!("{id}.json")), &bytes, "manifest.synced", &mut |_| Ok(())).unwrap();
+        std::fs::write(dir.path().join("CURRENT"), format!("{id}\n")).unwrap();
+        drop(store);
+        let revision = ReadRevision::open(dir.path().into()).unwrap();
+        assert_eq!(revision.manifest.schema, 1);
+        assert_eq!(save::read_from(revision.checkpoint().unwrap(), dir.path()).unwrap().chunks, 1);
+        drop(revision);
+        let mut store = open_store(dir.path());
+        store.publish(&session, &source).unwrap();
+        assert_eq!(store.current.as_ref().unwrap().0, id);
+        session.run("wait(1)").unwrap();
+        store.publish(&session, &session.program("test")).unwrap();
+        let (_, current) = store.current.as_ref().unwrap();
+        assert_eq!(current.schema, 2);
+        assert_eq!(current.parent.as_ref(), Some(&id));
+        assert!(matches!(manifest(dir.path(), &id).unwrap().checkpoint, Some(Checkpoint::Single(_))));
+        drop(store);
+        assert_eq!(ReadRevision::open(dir.path().into()).unwrap().manifest.schema, 2);
+    }
+
+    #[test]
+    fn chunked_publication_is_atomic_and_retains_two_revisions_within_budget() {
+        let phases = ["source.synced", "checkpoint.synced", "objects.synced", "manifest.synced", "manifest.installed", "pointer.synced", "pointer.installed", "pointer.directory.synced"];
+        for phase in phases {
+            let dir = tempfile::tempdir().unwrap();
+            let mut store = open_store(dir.path());
+            let mut session = session(9);
+            let old_source = session.program("test");
+            store.publish(&session, &old_source).unwrap();
+            session.run("wait(1)").unwrap();
+            let new_source = session.program("test");
+            let mut reached = false;
+            assert!(store.publish_observed(&session, &new_source, &mut |step| {
+                if step == phase { reached = true; return Err(io::Error::other("injected failure")); }
+                Ok(())
+            }).is_err());
+            assert!(reached, "{phase}");
+            drop(store);
+            let store = open_store(dir.path());
+            let committed = if phase.starts_with("pointer.") && phase != "pointer.synced" { &new_source } else { &old_source };
+            assert_eq!(store.source().unwrap().as_ref(), Some(committed));
+            drop(store);
+            let revision = ReadRevision::open(dir.path().into()).unwrap();
+            assert_eq!(&revision.source, committed);
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = open_store(dir.path());
+        let mut session = session(9);
+        for _ in 0..3 {
+            store.publish(&session, &session.program("test")).unwrap();
+            session.run("wait(1)").unwrap();
+        }
+        assert_eq!(std::fs::read_dir(dir.path().join("revisions")).unwrap().count(), 2);
+        let mut expected = BTreeSet::new();
+        let (_, current) = store.current.as_ref().unwrap();
+        for m in [current.clone(), manifest(dir.path(), current.parent.as_ref().unwrap()).unwrap()] {
+            expected.insert(m.source.id);
+            for o in m.checkpoint.unwrap().objects() { expected.insert(o.id.clone()); }
+        }
+        assert_eq!(std::fs::read_dir(dir.path().join("objects")).unwrap().count(), expected.len());
+        let pointer = std::fs::read(dir.path().join("CURRENT")).unwrap();
+        store.budget = store.disk_bytes().unwrap() + RESERVE_BYTES;
+        assert!(store.publish(&session, &session.program("test")).is_err());
+        assert_eq!(std::fs::read(dir.path().join("CURRENT")).unwrap(), pointer);
+        assert!(store.disk_bytes().unwrap() <= store.budget);
     }
 }

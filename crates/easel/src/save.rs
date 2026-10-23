@@ -25,12 +25,28 @@ const MAGIC: &str = "easel save 1";
 
 /// FNV-1a, 64 bit.
 pub fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+    let mut writer = Fnv1a::new();
+    writer.write_all(bytes).expect("hashing bytes");
+    writer.finish()
+}
+
+pub struct Fnv1a(u64);
+
+impl Fnv1a {
+    pub fn new() -> Self { Self(0xcbf29ce484222325) }
+    pub fn finish(&self) -> u64 { self.0 }
+}
+
+impl Write for Fnv1a {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        for &b in bytes {
+            self.0 ^= b as u64;
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+        Ok(bytes.len())
     }
-    h
+
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 /// The header: the studio fields, then what ties the save to its log.
@@ -162,14 +178,18 @@ fn hex64(h: &std::collections::BTreeMap<&str, &str>, k: &str) -> Result<u64, Str
 /// session left them. Its next chunk runs as chunk `chunks + 1`, as it would at the end of
 /// the log.
 pub fn read(path: &std::path::Path) -> Result<Restored, String> {
-    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
-    use std::rc::Rc;
     let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let input: Box<dyn std::io::Read> = if path.extension().is_some_and(|e| e == "zst") {
         Box::new(zstd::stream::read::Decoder::new(f).map_err(|e| format!("{}: {e}", path.display()))?)
     } else {
         Box::new(f)
     };
+    read_from(input, path)
+}
+
+pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Restored, String> {
+    use crate::session::{BOX_MARK, DRAIN_MARK, ENGINE_MARK, PAPER_MARK};
+    use std::rc::Rc;
     let mut r = std::io::BufReader::with_capacity(1 << 20, input);
     let (canvas, head) = paint::Canvas::read_state(&mut r).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut extra = [0];
@@ -258,4 +278,24 @@ pub fn read(path: &std::path::Path) -> Result<Restored, String> {
     let chunks: usize = parse(&h, "chunks")?;
     s.chunks_before = chunks;
     Ok(Restored { session: s, chunks, log_fnv: hex64(&h, "log_fnv")? })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streaming_canvas_digest_preserves_fnv_bytes() {
+        assert_eq!(fnv1a(b"hello"), 0xa430d84680aabd0b);
+        for engine in [1, 8, 9] {
+            let canvas = paint::Canvas::new_window(16, 1.0, [0.8; 3], None).with_engine(engine);
+            let mut bytes = Vec::new();
+            canvas.write_state(&mut bytes, "").unwrap();
+            let expected = bytes.iter().fold(0xcbf29ce484222325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+            let mut hash = Fnv1a::new();
+            canvas.write_state(&mut hash, "").unwrap();
+            assert_eq!(hash.finish(), expected);
+            assert_eq!(fnv1a(&bytes), expected);
+        }
+    }
 }

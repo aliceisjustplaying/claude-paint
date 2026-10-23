@@ -2497,6 +2497,10 @@ fn run(args: &[String]) -> Result<(), String> {
 const RENDER_CHECKPOINT_USAGE: &str = "render-checkpoint <save.ckpt[.zst]> <out.png> [--mode color|gallery|relief] [--look] [--log painting.lua]";
 
 fn render_checkpoint(args: &[String]) -> Result<(), String> {
+    render_checkpoint_from(args, |path| save::read(path))
+}
+
+fn render_checkpoint_from(args: &[String], read: impl FnOnce(&Path) -> Result<save::Restored, String>) -> Result<(), String> {
     let (mut files, mut mode, mut log, mut bounded) = (Vec::new(), "gallery".to_string(), None::<String>, false);
     let mut i = 0;
     while i < args.len() {
@@ -2529,7 +2533,7 @@ fn render_checkpoint(args: &[String]) -> Result<(), String> {
         o => return Err(format!("--mode {o}: color, gallery, relief")),
     };
     let t0 = Instant::now();
-    let r = save::read(Path::new(checkpoint))?;
+    let r = read(Path::new(checkpoint))?;
     if let Some(l) = log {
         let text = std::fs::read_to_string(&l).map_err(|e| format!("{l}: {e}"))?;
         if save::fnv1a(text.as_bytes()) != r.log_fnv || parse_program(&text).len() != r.chunks {
@@ -2559,12 +2563,11 @@ fn render_state(args: &[String]) -> Result<(), String> {
             return Err("render-state output must differ from the source log".into());
         }
     }
-    let checkpoint = revision.checkpoint().map_err(|e| e.to_string())?;
-    let mut render = vec![checkpoint.to_string_lossy().into_owned()];
+    let mut render = vec![dir.clone()];
     render.extend_from_slice(&args[1..]);
     painting_store::atomic_output(Path::new(out), |part| {
         render[1] = part.to_string_lossy().into_owned();
-        render_checkpoint(&render)
+        render_checkpoint_from(&render, |path| save::read_from(revision.checkpoint().map_err(|e| e.to_string())?, path))
     })?;
     eprintln!("committed revision {} ({} source bytes)", revision.id, revision.source.len());
     Ok(())
@@ -2677,9 +2680,9 @@ fn state_digest_line(s: &Session, n: usize, secs: f64) -> String {
     let mut st = s.st.borrow_mut();
     let canvas = match st.canvas.as_ref() {
         Some(c) => {
-            let mut buf = Vec::new();
-            c.write_state(&mut buf, "").expect("checkpoint to memory");
-            fnv1a(&buf)
+            let mut hash = save::Fnv1a::new();
+            c.write_state(&mut hash, "").expect("checkpoint hashing");
+            hash.finish()
         }
         None => 0,
     };

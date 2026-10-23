@@ -436,8 +436,6 @@ read -r _ < waiting`);
 	const saved = WAIT_MS.do;
 	WAIT_MS.do = 300;
 	let finished = false;
-	const rejected = assert.rejects(atEasel(studio, ["do", "-"], "x = 1", controller.signal), /the chunk isn't in the log: it changed nothing/);
-	const result = rejected.finally(() => { finished = true; });
 	let started: () => void;
 	const command = new Promise<void>(resolve => { started = resolve; });
 	let admitted: () => void;
@@ -446,6 +444,8 @@ read -r _ < waiting`);
 		if (calls(studio).includes("status")) admitted();
 		if (calls(studio).includes("do")) started();
 	});
+	const rejected = assert.rejects(atEasel(studio, ["do", "-"], "x = 1", controller.signal), /the chunk isn't in the log: it changed nothing/);
+	const result = rejected.finally(() => { finished = true; });
 	try {
 		await Promise.race([status, result]);
 		await new Promise(resolve => realSetTimeout(resolve, 400));

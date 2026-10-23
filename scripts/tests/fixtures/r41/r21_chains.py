@@ -94,9 +94,40 @@ SITTING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
                    "names passages. Record your reflections in your journal before you end that sitting.")
 
 
+FINISHING_MESSAGE = ("You're back at the easel. The painting is as you left it. "
+                     "Your brief is in BRIEF.md and your journal in notes/journal.md. "
+                     "The critic looked at the painting after your last sitting and thinks it is finished; "
+                     "its notes are above. Look at the whole canvas and a detail crop in normal color and "
+                     "decide whether you agree. If you do, make no marks: record your reflections in your "
+                     "journal, with `Open passages: none` or the passages you accept as they are, and end the "
+                     "sitting. That finishes the painting. If you don't, say in your journal what you would "
+                     "still change and why, then paint it one campaign at a time, and end the sitting with an "
+                     "updated handoff as usual.")
+CRITIC_SITTING_HEADER = "From the critic's visit at the end of a sitting:"
+VERDICT = re.compile(r"verdict\s*:\s*(finished|not\s+finished)", re.I)
+
+
+def critic_verdict(d, since):
+    """The verdict line opening the critic's end-of-sitting notes (notes/critic.md) written since `since`:
+    "finished", "not finished" or None (no such notes, an asked visit, or no verdict line first). The line may
+    carry markdown emphasis or backticks, surrounding whitespace and trailing punctuation."""
+    f = d / "notes/critic.md"
+    if not f.exists() or f.stat().st_mtime < since:
+        return None
+    text = f.read_text(errors="replace")
+    if not text.startswith(CRITIC_SITTING_HEADER):
+        return None
+    first = next((line for line in text[len(CRITIC_SITTING_HEADER):].splitlines() if line.strip()), "")
+    m = VERDICT.fullmatch(re.sub(r"[*_`]", "", first).strip().rstrip(".!?;:,").strip())
+    return " ".join(m[1].lower().split()) if m else None
+
+
 def return_message(sittings):
-    """Carry painter-owned observations verbatim; do not infer lessons from prose."""
-    message = SITTING_MESSAGE
+    """Carry painter-owned observations verbatim; do not infer lessons from prose. After a sitting that added
+    painting and that the critic's end-of-sitting visit called finished, the sitting opens with FINISHING_MESSAGE."""
+    done = [s for s in sittings if s.get("status") == "completed"]
+    finishing = done and added_painting(done[-1]) and done[-1].get("critic_verdict") == "finished"
+    message = FINISHING_MESSAGE if finishing else SITTING_MESSAGE
     final = next((s.get("final") for s in reversed(sittings)
                   if s.get("status") == "completed" and s.get("final")), None)
     if final:
@@ -516,11 +547,11 @@ def painter_cmd(m, message=PAINTER_MSG, session=None):
 
 
 def painter_env(m, message):
-    """The painter's environment: a later sitting (SITTING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
+    """The painter's environment: a later sitting (SITTING_MESSAGE or FINISHING_MESSAGE) gets PAINTER_SITTING_RECOVERY=1,
     so painter.ts opens it with what a compaction summary holds (brief, journal, globals, clock)
     and a fresh look at the canvas, and PAINTER_OPEN_PASSAGES=1, so the passages to take up come first."""
     later = {"PAINTER_SITTING_RECOVERY": "1", "PAINTER_OPEN_PASSAGES": "1"}
-    return {**(m["env"] or {}), **(later if message.startswith(SITTING_MESSAGE) else {})}
+    return {**(m["env"] or {}), **(later if message.startswith((SITTING_MESSAGE, FINISHING_MESSAGE)) else {})}
 
 
 def probe_cmd(m):
@@ -1008,6 +1039,7 @@ def paint(name, n, d, rd):
                    sessions=[str(f) for f in new], error=why[-4000:] if crashed else None,
                    worked=session_worked(new), final=final_reply)
         rec["reviewed"] = session_reviewed(new, painted=added_painting(rec))
+        rec["critic_verdict"] = critic_verdict(d, t0) if rec["status"] == "completed" else None
         save_sittings(rd, n, sittings)
         log(f"{tag}: sitting {k} ended (exit {rc}{', USAGE LIMIT' if limited else ', CRASHED' if crashed else ''}) after {(time.time() - t0) / 60:.0f} min: "
             f"chunks {rec['chunks_before']} -> {rec['chunks_after']} "

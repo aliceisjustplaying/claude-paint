@@ -56,7 +56,7 @@ fn public_palette_engine_changes_and_clones_keep_the_universal_cache() {
             let tube = &p.tubes[i];
             let strength = if engine >= PIGMENT_MIXER { mixer::tube_strength9(tube.name).unwrap_or(tube.strength) } else { tube.strength };
             let weight = fraction * strength;
-            let latent = mixer::tube(tube.name).unwrap_or_else(|| {
+            let latent = (if engine >= PIGMENT_MIXER { mixer::tube9(tube.name) } else { mixer::tube(tube.name) }).unwrap_or_else(|| {
                 if engine >= PIGMENT_MIXER { mixer::encode_tube9(&tube.color, tube.hiding) } else { mixer::encode(&tube.color) }
             });
             for k in 0..mixer::LATENT_SIZE { expected[k] += latent[k] * weight; }

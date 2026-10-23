@@ -1,5 +1,74 @@
 use crate::color::{Rgb, luminance, to_oklab};
 
+pub(super) fn tube(name: &str) -> Option<[f32; super::LATENT_SIZE]> {
+    let names = ["yellow ochre", "raw umber"];
+    let index = names.iter().position(|&n| n == name)?;
+    static FITS: std::sync::OnceLock<[[f32; super::LATENT_SIZE]; 2]> = std::sync::OnceLock::new();
+    Some(FITS.get_or_init(|| {
+        let catalog = crate::palette::catalog();
+        std::array::from_fn(|i| {
+            let tube = catalog.iter().find(|t| t.name == names[i]).unwrap();
+            fit(tube.color, tube.hiding)
+        })
+    })[index])
+}
+
+fn fit(rgb: Rgb, hiding: f32) -> [f32; super::LATENT_SIZE] {
+    let old = super::encode(&rgb);
+    let white = super::tube("lead white").unwrap();
+    let strength = super::tube_strength("lead white").unwrap();
+    let fractions = [0.01, 0.05, 0.1, 0.25, 0.5];
+    let targets = fractions.map(|f| {
+        let latent = std::array::from_fn(|k| white[k] * strength * (1.0 - f) + old[k] * f);
+        to_oklab(super::decode(&super::normalized9(&latent)))
+    });
+    let residual = |mut latent: [f32; super::LATENT_SIZE]| {
+        for k in 0..3 { latent[super::PIGMENTS + k] = 0.0; }
+        let base = super::decode9(&latent);
+        for k in 0..3 { latent[super::PIGMENTS + k] = rgb[k] - base[k]; }
+        latent
+    };
+    let target = to_oklab(rgb);
+    let error = |shape: [f32; super::LATENT_SIZE], amount: f32| {
+        let latent = shape.map(|v| v * amount);
+        let tints = fractions.iter().zip(targets).map(|(&f, target)| {
+            let mix = std::array::from_fn(|k| white[k] * (1.0 - f) + latent[k] * f);
+            let color = to_oklab(super::decode9(&mix));
+            (0..3).map(|k| (color[k] - target[k]).powi(2)).sum::<f32>()
+        }).sum::<f32>();
+        let scatter = super::scattering9(&latent);
+        let opaque = to_oklab(super::over9(&latent, scatter, [0.01; 3], 4.0));
+        let black = luminance(super::over9(&latent, scatter, [0.0; 3], 1.0));
+        let white = luminance(super::over9(&latent, scatter, [1.0; 3], 1.0));
+        tints + (0..3).map(|k| (opaque[k] - target[k]).powi(2)).sum::<f32>()
+            + (black / white.max(1e-6) - hiding).powi(2)
+    };
+    let mut best = residual(old);
+    let mut amount = 1.0 / strength;
+    let mut distance = error(best, amount);
+    for _ in 0..40 {
+        let start = best;
+        let start_amount = amount;
+        for i in 0..super::PIGMENTS {
+            for t in [0.00390625, 0.015625, 0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0] {
+                let mut shape = start.map(|v| v * (1.0 - t));
+                shape[i] += t;
+                let shape = residual(shape);
+                for scale in [0.75, 0.95, 1.0, 1.05, 1.3333333] {
+                    let candidate_amount = start_amount * scale;
+                    let d = error(shape, candidate_amount);
+                    if d < distance {
+                        best = shape;
+                        amount = candidate_amount;
+                        distance = d;
+                    }
+                }
+            }
+        }
+    }
+    best.map(|v| v * amount)
+}
+
 pub(super) fn encode(rgb: Rgb, hiding: f32) -> [f32; super::LATENT_SIZE] {
     static CACHE: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashMap<[u32; 4], [f32; super::LATENT_SIZE]>>,
@@ -89,6 +158,45 @@ pub(super) fn encode(rgb: Rgb, hiding: f32) -> [f32; super::LATENT_SIZE] {
 #[cfg(test)]
 mod tests {
     use crate::color::{luminance, to_oklab};
+
+    #[test]
+    fn joint_earth_fits_keep_the_frozen_white_tint_ladders() {
+        let mut palette = crate::Palette::new("earth tint study", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let mut legacy = palette.clone();
+        legacy.engine = 5;
+        let at = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let white = at("lead white");
+        let distance = |a, b| {
+            let (a, b) = (to_oklab(a), to_oklab(b));
+            (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt()
+        };
+        let legacy_white = legacy.pile(vec![(white, 1.0)]).color;
+        for (name, ladder, mid, lightness) in [
+            ("yellow ochre", [0.047, 0.103, 0.137, 0.193, 0.245], 0.1947, 0.806),
+            ("raw umber", [0.055, 0.145, 0.204, 0.301, 0.394], 0.1824, 0.688),
+        ] {
+            let tube = at(name);
+            for (fraction, expected_distance) in [0.01, 0.05, 0.1, 0.25, 0.5].into_iter().zip(ladder) {
+                let parts = vec![(white, 1.0 - fraction), (tube, fraction)];
+                let expected = legacy.pile(parts.clone()).color;
+                assert!((distance(expected, legacy_white) - expected_distance).abs() < 0.0015, "{name}, {fraction}: frozen STIL-271 ladder");
+                let mixture = palette.pile(parts);
+                let delta = distance(mixture.color, expected);
+                assert!(delta < 0.015, "{name}, {fraction}: palette tint delta {delta}");
+                let delta = distance(mixture.paint(0.0).over([0.85; 3], 4.8), expected);
+                assert!(delta < 0.015, "{name}, {fraction}: 120 um film tint delta {delta}");
+            }
+            let color = palette.pile(vec![(white, 1.0 - mid), (tube, mid)]).color;
+            assert!((to_oklab(color)[0] - lightness).abs() < 0.015, "{name}: mid-tint lightness");
+            let latent = super::tube(name).unwrap();
+            let scatter = crate::mixer::scattering9(&latent);
+            let black = luminance(crate::mixer::over9(&latent, scatter, [0.0; 3], 1.0));
+            let white = luminance(crate::mixer::over9(&latent, scatter, [1.0; 3], 1.0));
+            assert!((black / white - 0.8).abs() < 0.01, "{name}: estimated 25 um hiding");
+        }
+    }
 
     #[test]
     fn cadmium_covers_dark_paint_and_green_earth_keeps_backing_contrast() {

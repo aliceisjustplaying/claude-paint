@@ -101,13 +101,15 @@ pub fn identity9() -> u64 {
     let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
-    hash.update(b"opacity-constrained-rgb-tube-proxies/v2");
+    hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/v3");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 
 pub fn encode9(rgb: &Rgb) -> [f32; LATENT_SIZE] { encode(rgb) }
 
 pub fn encode_tube9(rgb: &Rgb, hiding: f32) -> [f32; LATENT_SIZE] { proxy::encode(*rgb, hiding) }
+
+pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> { tube(name).or_else(|| proxy::tube(name)) }
 
 pub fn tube_strength9(name: &str) -> Option<f32> { tube_pigment(name).map(|_| 1.0) }
 

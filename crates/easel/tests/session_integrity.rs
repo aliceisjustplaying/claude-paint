@@ -412,10 +412,13 @@ fn serve_waits_for_a_closing_servers_lock() {
     assert_eq!(&request, b"7\nstatus\n");
     std::fs::remove_file(&sock).unwrap();
     drop(listener);
-    drop(conn);
     drop(lock);
     loop {
-        assert!(server.0.try_wait().unwrap().is_none(), "serve exited at startup");
+        if let Some(status) = server.0.try_wait().unwrap() {
+            let mut error = String::new();
+            server.0.stderr.as_mut().unwrap().read_to_string(&mut error).unwrap();
+            panic!("serve exited at startup: {status}: {error}");
+        }
         if let Ok(reply) = status_with_timeout(name)
             && reply.starts_with("ok\n1 chunks")
         {
@@ -424,6 +427,7 @@ fn serve_waits_for_a_closing_servers_lock() {
         assert!(Instant::now() < deadline, "serve never started after the lock was released");
         std::thread::sleep(Duration::from_millis(1));
     }
+    drop(conn);
     assert!(status_with_timeout(name).unwrap().starts_with("ok\n1 chunks"));
     ok(&["-s", name, "do", "assert(x == 1)"]);
     ok(&["-s", name, "close"]);

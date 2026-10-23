@@ -81,7 +81,7 @@
   #codepane { position:fixed; z-index:6; top:60px; bottom:120px; left:12px; width:min(720px, calc(100vw - 24px)); min-width:0;
               background:var(--panel); border:1px solid #33333d; border-radius:10px; box-shadow:0 16px 48px rgba(0,0,0,.65) }
   #codepane > h4 { flex-wrap:wrap } #codepane #file { flex:1; min-width:0 }
-  #codepane #codeformat { flex:none; font:11px -apple-system,system-ui,sans-serif }
+  #codepane :is(#codeformat, #codestate) { flex:none; font:11px -apple-system,system-ui,sans-serif }
   #codeclose { padding:2px 9px }
   #code { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; margin:0; padding:4px 0 12px; font:13px/1.6 var(--mono); color:#d0d0d6; white-space:normal; tab-size:4 }
   #code > .code-line { content-visibility:auto; contain-intrinsic-size:auto 20.8px; display:grid; grid-template-columns:var(--gutter, 4ch) minmax(0,1fr); padding-right:12px }
@@ -271,7 +271,7 @@
   <div id="clockbox"><span id="pclock" hidden><span class="pl">on the painting's own clock</span><b></b></span><span id="realclock"><span id="clocklbl">painting for</span><span id="clock">0:00:00</span></span></div>
 </header>
 <main>
-  <section class="pane" id="codepane" role="dialog" aria-label="Painter code" aria-hidden="true" inert><h4>code <span id="file"></span><span id="codeformat"></span><button id="codeclose" type="button" aria-label="Close code">✕</button></h4><pre id="code"></pre></section>
+  <section class="pane" id="codepane" role="dialog" aria-label="Painter code" aria-hidden="true" inert><h4>code <span id="file"></span><span id="codeformat"></span><span id="codestate" role="status"></span><button id="codeclose" type="button" aria-label="Close code">✕</button></h4><pre id="code"></pre></section>
   <section class="pane" id="viewpane">
     <div id="lighting" role="group" aria-label="Painting display"></div>
     <div id="view">
@@ -302,7 +302,7 @@
   <div class="pkhead"><b>Painters</b><span>working now first, then the newest</span><span class="sp"></span>
     <label id="allwrap" title="also show sessions that aren't painters (judges, tests, work on the project)"><input type="checkbox" id="all"> all sessions</label>
     <button id="pkclose" type="button" aria-label="close">✕</button></div>
-  <div id="pklist"></div>
+  <p id="pkerror" role="status" hidden></p><div id="pklist"></div>
 </div>
 <div id="zoom" role="dialog" aria-modal="true" aria-label="Enlarged picture"><img id="zimg" alt=""><button id="zclose" type="button" aria-label="Close the enlarged picture">✕</button></div>
 <div id="intro" hidden role="dialog" aria-label="About the studio">
@@ -491,7 +491,7 @@ function displayPic(im, e, caption, label) {
   const describe = () => {
     if (im === $('img') && im.getAttribute('src') && im.dataset.loadedWant !== urls[0]) return;
     const actual = DISPLAY_LIGHTS[im.dataset.light || 'color'];
-    const light = actual.image ? actual.label : '';
+    const light = eligible && preset.image && e.display_failed && !actual.image ? `${preset.label} unavailable, shown in Color` : actual.image ? actual.label : '';
     caption.textContent = [label, light].filter(Boolean).join(' · ');
   };
   describe();
@@ -526,7 +526,17 @@ $('picker').addEventListener('focusout', e => {
 });
 async function loadSessions() {
   if (HOSTED) { await poll(); return; }
-  allSessions = await (await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-cache'} : {})).json();
+  try {
+    const r = await fetch(STATIC ? 'data/sessions.json' : '/api/sessions', STATIC ? {cache: 'no-cache'} : {});
+    if (!r.ok) throw Error('sessions unavailable');
+    const ss = await r.json(); if (!Array.isArray(ss)) throw Error('invalid sessions');
+    allSessions = ss; $('pkerror').hidden = true;
+    if ($('nopic').innerHTML === LIST_ERROR) $('nopic').hidden = true;
+  } catch (e) {
+    $('pkerror').innerHTML = LIST_ERROR; $('pkerror').hidden = false;
+    if (!Q) { $('nopic').innerHTML = LIST_ERROR; $('nopic').hidden = false; }
+    throw e;
+  }
   sessionsLoaded = true;
   const u = new URLSearchParams(location.search), ps = allSessions.filter(s => $('all').checked || s.painter && listed(s));  // (only painters the list shows)
   const livest = ps.filter(s => isLive(s) && s.look != null).sort((a, b) => b.look - a.look)[0], cur = currentSession();
@@ -547,7 +557,8 @@ async function loadSessions() {
 }
 $('all').onchange = () => { try { localStorage.setItem('studio.all', $('all').checked ? '1' : '0'); } catch (e) {} renderPicker(); };
 let gen = 0, busy = false, disconnected = false;  // one poll at a time; a reset (new painter, rebuilt stream) makes in-flight polls stale
-function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
+function reset() { gen++; busy = false; staticV = null; liveRevision = null; stop(); events = []; nUpd = 0; epoch = null; cwd = ''; liveText = null; liveCodeFailed = false; typed = -1; sitStarts = []; nSittings = 0; hasLooks = false; $('strip').innerHTML = ''; $('ticks').innerHTML = ''; clearCode(); noPicture(); }
+const LIST_ERROR = "Can't load the painters right now.<br>Still trying, and they'll show here when the connection returns.";
 const NOPIC = "No picture yet: the painter hasn't looked at its canvas.<br>Its first look will show here.";
 function noPainting() { $('nopic').innerHTML = NOPIC; $('nopic').hidden = !events.length; clearPic($('img')); $('cap').textContent = ''; viewI = -1; }  // the painting's place, empty
 function noPicture() { noPainting(); second(-1); palette(-1); $('zimg').removeAttribute('src'); $('zoom').style.display = 'none'; }
@@ -561,7 +572,7 @@ async function poll() {
           const m = await get('manifest.json');
           const objectPath = path => typeof path === 'string' && /^objects\/[a-f0-9]{64}(?:\.[a-z0-9]+)?$/.test(path);
           if (m.version !== 1 || !/^[a-f0-9]{64}$/.test(m.revision) || !objectPath(m.snapshot)) throw Error('invalid live manifest');
-          if (m.revision === liveRevision) return;
+          if (m.revision === liveRevision) { if (live && liveCodeFailed) refreshLiveCode(); return; }
           const snapshot = await get(m.snapshot), files = snapshot.files;
           if (!files || Object.values(files).some(path => !objectPath(path))) throw Error('invalid live snapshot');
           const ss = await get(files['data/sessions.json']);
@@ -577,12 +588,12 @@ async function poll() {
         const a = await fetch(STATIC ? `data/${encodeURIComponent(P())}/events.json` : `/api/events?${Q}&since=${events.length}${epoch === null ? '' : '&epoch=' + epoch + '&u=' + nUpd}`, STATIC ? {cache: 'no-cache'} : {});
         if (!a.ok) throw Error('live data unavailable');
         const v = STATIC && a.ok && [a.headers.get('etag'), a.headers.get('last-modified')].join();
-        if (v && v !== ',' && v === staticV && g === gen && epoch !== null) { lastStatic = Date.now(); return; }
+        if (v && v !== ',' && v === staticV && g === gen && epoch !== null) { lastStatic = Date.now(); if (live && liveCodeFailed) refreshLiveCode(); return; }
         r = await a.json(); if (g === gen) staticV = v;
         } }
   catch (e) {  // a painter the viewer has no record of yet is waited for; any other failed request is a lost connection
     failed = true;
-    if (g === gen && !events.length) { $('nopic').innerHTML = allSessions.some(s => qOf(s) === Q) ? "Can't reach this painter's studio right now.<br>Still trying, and the canvas will appear when the connection returns." : "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
+    if (g === gen && !events.length) { $('nopic').innerHTML = HOSTED ? "Can't reach the studio's data right now.<br>Still trying, and the canvas will appear when it's back." : allSessions.some(s => qOf(s) === Q) ? "Can't reach this painter's studio right now.<br>Still trying, and the canvas will appear when the connection returns." : "This painter hasn't started yet.<br>Its canvas will show here when it does."; $('nopic').hidden = false; $('clockbox').hidden = true;
       $('badge').textContent = ''; $('badge').className = ''; for (const x of $('doing').children) x.textContent = ''; }
     return; }
   finally { if (g === gen) { busy = false; disconnected = failed; } }
@@ -836,14 +847,28 @@ function source(path, upto) {
   if (touched) s.value = { text, before, changed, known };
   return s.value;
 }
-let liveText = null, liveTextPath = null, liveTextRequest = 0;
+let liveText = null, liveTextPath = null, liveTextRequest = 0, liveCodeFailed = false;
+function codeState() {
+  const stale = live && pos === events.length - 1 && liveCodeFailed;
+  $('codestate').textContent = stale ? 'out of date' : '';
+  $('codestate').title = stale ? "Couldn't fetch the latest copy of this file. Showing the last one that loaded while it keeps trying." : '';
+}
 // Prepare the current view even while closed. Opening only reveals already laid-out code.
 const codeShown = () => !document.body.classList.contains('nocode');
 async function refreshLiveCode() {
   const p = paintingFile(events.length - 1); if (!p || !cwd) return;
   const rel = p.startsWith(cwd + '/') ? p.slice(cwd.length + 1) : p;
-  const request = ++liveTextRequest, q = Q, g = gen, revision = liveRevision, r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`); if (!r.ok || request !== liveTextRequest || q !== Q || g !== gen || HOSTED && revision !== liveRevision) return;
-  const t = await r.text(); if (request !== liveTextRequest || q !== Q || g !== gen || HOSTED && revision !== liveRevision || p !== paintingFile(events.length - 1)) return; const old = liveTextPath === p ? liveText : null; if (t !== old) { liveText = t; liveTextPath = p; if (live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old); }
+  const request = ++liveTextRequest, q = Q, g = gen, revision = liveRevision;
+  const current = () => request === liveTextRequest && q === Q && g === gen && (!HOSTED || revision === liveRevision) && p === paintingFile(events.length - 1);
+  try {
+    const r = await fetch(STATIC ? HOSTED ? dataURL(`data/${P()}/file/${rel}`) : `data/${encodeURIComponent(P())}/file/${rel.split('/').map(encodeURIComponent).join('/')}?t=${Date.now()}` : `/api/file?${q}&f=${encodeURIComponent(rel)}`);
+    if (!r.ok) throw Error('source unavailable');
+    const t = await r.text(); if (!current()) return;
+    const old = liveTextPath === p ? liveText : null;
+    liveText = t; liveTextPath = p; liveCodeFailed = false;
+    if (t !== old && live && pos === events.length - 1) renderCode(p, t, diffLines(old, t), old);
+  } catch (e) { if (!current()) return; liveCodeFailed = true; }
+  codeState();
 }
 const { diffLines, lineHTML } = CodeDisplay;
 let codeWorker = null, codeRequest = 0, codeCache = null, codeBatch = null, codeSelection = null;
@@ -854,7 +879,7 @@ function queueCodeBatch(batch) { codeBatch = batch; codeChannel.port2.postMessag
 function clearCode() {
   ++codeRequest; codeCache = null; codeSelection = null;
   if (codeWorker) codeWorker.postMessage({ cancel:true });
-  codeBatch = null; $('code').replaceChildren(); $('file').textContent = ''; $('codeformat').textContent = '';
+  codeBatch = null; $('code').replaceChildren(); $('file').textContent = ''; $('codeformat').textContent = ''; $('codestate').textContent = ''; $('codestate').title = '';
   $('togglecode').disabled = true; $('togglecode').title = 'preparing code';
 }
 const codeFormatAllowed = stepping => !playing && (codeShown() || stepping);
@@ -923,6 +948,7 @@ function unknownCode(path) {
   $('togglecode').disabled = false; $('togglecode').title = 'show/hide code  c';
 }
 function codeAt(i, stepping = false) {
+  codeState();
   const p = paintingFile(i); if (!p) return renderCode('', '', new Set());
   const atLive = live && i === events.length - 1, fetched = liveTextPath === p ? liveText : null;
   if (atLive && fetched != null) return renderCode(p, fetched, new Set(), null, stepping);
@@ -985,7 +1011,7 @@ function journal(i, scroll) {
   // Keep only the visible window's prepared prose and nodes, including during backward seeks.
   for (const k of journalItems.keys()) if (k < from || k > i) journalItems.delete(k);
   if (!blocks.length) blocks.push({ key:'empty', tag:'p', cls:'jempty', html:'The painter has just begun.<br>What it thinks and does will show here.' });
-  const wantsTyping = lastThink >= 0 && live && lastThink === events.length - 1;
+  const wantsTyping = !matchMedia('(prefers-reduced-motion: reduce)').matches && lastThink >= 0 && live && lastThink === events.length - 1;
   const keepTyping = wantsTyping && typingThought?.k === lastThink && typingThought.gen === gen && typingThought.text === events[lastThink].text.trim();
   if (!keepTyping) { clearInterval(typer); typingThought = null; }
   const startTyping = wantsTyping && lastThink !== typed;
@@ -1429,7 +1455,11 @@ $('img3').onclick = () => openZoom(viewI3 >= 0 ? imgURL(viewI3) : $('img3').src,
 $('zoom').onclick = closeZoom;
 document.onkeydown = e => {
   const t = e.target, k = e.key;
-  if (k === 'Tab' && zoomShown()) { e.preventDefault(); $('zclose').focus(); return; }
+  if (zoomShown()) {
+    if (k === 'Tab') { e.preventDefault(); $('zclose').focus(); }
+    else if (k === 'Escape') { e.preventDefault(); closeZoom(); }
+    return;
+  }
   if (t.closest && t.closest('#picker') || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
   if (t.tagName === 'BUTTON' && t.id !== 'play' && (k === ' ' || k === 'Enter')) return;  // the focused button's own action
   if (t.getAttribute('role') === 'button' && (k === ' ' || k === 'Enter')) { e.preventDefault(); t.click(); return; }

@@ -476,6 +476,8 @@ def _parse(path):
     for idx, (event, display_path) in list(c["display"].items()):
         status = display_status(c["cwd"], display_path)
         if status == b"failed\n":
+            c["events"][event].update(display_pending=False, display_failed=True)
+            c["changed"].append(event)
             del c["display"][idx]
             continue
         paths = {light: display_companion_path(c["cwd"], display_path, light) for light in DISPLAY_LIGHTS}
@@ -768,7 +770,7 @@ def _glance_file(path):
         size = stat.st_size
         stamp = (stat.st_dev, stat.st_ino, stat.st_mtime_ns)
         if not g or size < g["offset"] or stamp[:2] != g["stamp"][:2] or size <= g["size"] and stamp != g["stamp"]:
-            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "cwd": "", "worked": False, "concepts": False}
+            g = _glances[path] = {"offset": 0, "calls": {}, "n": 0, "whole": None, "last": None, "whole_version": None, "last_version": None, "pending": [], "say": "", "last_kind": None, "cwd": "", "worked": False, "concepts": False}
         g.update(stamp=stamp, size=size)
         with open(path, "rb") as fh:
             fh.seek(g["offset"])
@@ -783,18 +785,31 @@ def _glance_file(path):
                     continue
                 if d.get("type") == "session":
                     g["cwd"] = d.get("cwd", "")
+                    g["last_kind"] = "start"
+                elif d.get("type") == "model_change":
+                    g["last_kind"] = "note"
+                elif d.get("type") == "compaction" and summary_clock(d.get("summary", "")):
+                    g["last_kind"] = "clock"
                 m = (d.get("message") or {}) if d.get("type") == "message" else {}
                 content = m.get("content")
-                if m.get("role") == "user" and "Use write_concepts" in _text(content or []):
-                    g["concepts"] = True
+                if m.get("role") == "user":
+                    text = _text(content or [])
+                    if text.strip():
+                        g["last_kind"] = "user"
+                    if "Use write_concepts" in text:
+                        g["concepts"] = True
                 if not isinstance(content, list):
                     continue
                 if m.get("role") == "assistant":
                     for x in content:
                         if x.get("type") == "text" and x.get("text", "").strip():
                             g["say"] = x["text"]
+                            g["last_kind"] = "say"
                             g["worked"] = True
+                        elif x.get("type") == "thinking" and x.get("thinking", "").strip():
+                            g["last_kind"] = "think"
                         elif x.get("type") == "toolCall":  # a look's request; REFERENCE for a read from reference/
+                            g["last_kind"] = "tool"
                             if x.get("name") == "write_concepts":
                                 g["concepts"] = True
                             if x.get("name") and x["name"] not in ("look", "read", "status", "log"):
@@ -808,6 +823,7 @@ def _glance_file(path):
                     paths = re.findall(r"^(.+\.png)(?: \(.*)?$", _text(content), re.MULTILINE)
                     for x in content:
                         if x.get("type") == "image" and x.get("data"):
+                            g["last_kind"] = "image"
                             field = "last" if look is None else "whole" if look is not REFERENCE and is_whole(look) else None
                             if field:
                                 version = hashlib.sha256(x["data"].encode()).hexdigest()
@@ -822,11 +838,9 @@ def _glance_file(path):
         for pending in list(g["pending"]):
             field, candidate, version, display_path = pending
             status = display_status(g["cwd"], display_path)
-            if status == b"ready\n" and all(display_companion_path(g["cwd"], display_path, light) for light in DISPLAY_LIGHTS):
+            if status == b"failed\n" or status == b"ready\n" and all(display_companion_path(g["cwd"], display_path, light) for light in DISPLAY_LIGHTS):
                 if g[field] is None or candidate[0] > g[field][0]:
                     g[field], g[field + "_version"] = candidate, version
-                g["pending"].remove(pending)
-            elif status == b"failed\n":
                 g["pending"].remove(pending)
         if g["concepts"]:
             g["worked"] = False
@@ -862,7 +876,8 @@ def glance(files):
     if look is None:
         look, src = last, lsrc
         version = last_version
-    return {"look": look, "title": title, "src": src, "version": version}
+    said = next((g["last_kind"] == "say" for g in reversed(gs) if g["last_kind"] is not None), False)
+    return {"look": look, "title": title, "src": src, "version": version, "said": said}
 
 
 def glance_image(src):
@@ -1072,7 +1087,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 s["epoch"] = STREAM_EPOCH
                 if s.get("painter") and (_warm is None or _warm.is_set()):  # (until the first scan is done, without)  # the picker's picture and title (the static export has them in sessions.json)
                     g = glance(s["files"])
-                    s.update(look=g["look"], title=g["title"] or runner_title(s["p"]), thumb_version=g["version"])
+                    s.update(look=g["look"], title=g["title"] or runner_title(s["p"]), thumb_version=g["version"], said=g["said"])
             if PUBLIC:
                 ss = [{k: v for k, v in s.items() if k != "files"} for s in ss if s.get("painter")]
             return self._send(200, json.dumps(ss).encode(), "application/json")

@@ -23,6 +23,20 @@ const server = http.createServer((req, res) => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ channel:'chrome', headless:true });
   try {
+    for (const failure of ['http', 'network']) {
+      const failed = await browser.newPage();
+      await failed.route('**/api/sessions', route => failure === 'http' ? route.fulfill({ status:503, json:[] }) : route.abort());
+      await failed.goto(`http://127.0.0.1:${server.address().port}/`);
+      await failed.click('#who');
+      await failed.waitForFunction(() => document.querySelector('#pkerror').textContent.includes("Can't load the painters"));
+      assert.match(await failed.locator('#nopic').textContent(), /Can't load the painters/);
+      await failed.unroute('**/api/sessions');
+      await failed.evaluate(() => loadSessions());
+      assert.equal(await failed.locator('#pklist button').count(), 0);
+      assert.equal(await failed.locator('#pkerror').isVisible(), false);
+      assert.equal(await failed.locator('#nopic').isVisible(), false);
+      await failed.close();
+    }
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(String(error)));

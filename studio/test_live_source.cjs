@@ -29,6 +29,40 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type':type }); res.end(body);
 });
 
+const failureErrors = [];
+async function failureFixture(browser, hosted, failure = '') {
+  const page = await browser.newPage();
+  page.on('pageerror', error => failureErrors.push(String(error)));
+  page.setDefaultTimeout(4000);
+  const state = { revision:'a', events:structuredClone(events), source:'local old=1', failure, requests:0 };
+  const object = key => 'objects/' + key.repeat(64) + '.json';
+  await page.addInitScript(() => localStorage.setItem('studio.intro', '1'));
+  const now = new Date();
+  await page.clock.install({ time:now });
+  await page.clock.pauseAt(now);
+  await page.route('**/*', async route => {
+    const u = new URL(route.request().url()), rel = u.pathname.slice(1);
+    if (rel === '') {
+      const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+      return route.fulfill({ contentType:'text/html', body:hosted ? html.replace('<script src="code-display.js">', '<script>window.STUDIO_STATIC=true;window.STUDIO_LIVE=true;</script><script src="code-display.js">') : html });
+    }
+    if (rel === 'manifest.json') return route.fulfill({ status:state.failure === 'manifest' ? 503 : 200, json:{ version:1, revision:state.revision.repeat(64), snapshot:object('c') } });
+    if (rel === object('c')) return route.fulfill({ status:state.failure === 'snapshot' ? 503 : 200, json:{ files:{
+      'data/sessions.json':object('d'), 'data/fixture/events.json':object('e'), 'data/fixture/file/paintings/lua/painting.lua':object('f'),
+    } } });
+    if (rel === object('d') || rel === 'api/sessions') return route.fulfill({ json:[{ p:'fixture', folder:'fixture', painter:true, active:true, mtime:Date.now() / 1000, title:'Fixture' }] });
+    if (rel === object('e') || rel === 'api/events') return route.fulfill({ json:{ epoch:0, sittings:1, events:state.events.slice(hosted ? 0 : +(u.searchParams.get('since') || 0)), updates:[], nupdates:0, total:state.events.length } });
+    if (rel === object('f') || rel === 'api/file') {
+      state.requests++;
+      if (state.failure === 'network') return route.abort();
+      return route.fulfill({ status:state.failure === 'source' ? 503 : 200, contentType:'text/plain', body:state.source });
+    }
+    return route.continue();
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?p=fixture`);
+  return { page, state };
+}
+
 (async () => {
   let browser;
   try {
@@ -80,6 +114,65 @@ const server = http.createServer((req, res) => {
       console.log('ok   superseded same-path source rejected after ' + boundary);
     }
     assert.deepEqual(errors, []);
+    const failures = [];
+    const check = async (name, fn) => {
+      try { await fn(); console.log('ok   ' + name); }
+      catch (error) { failures.push(name + ': ' + error.message); console.error('FAIL ' + name + ': ' + error.message); }
+    };
+    for (const outage of ['manifest', 'snapshot']) await check('hosted initial ' + outage + ' outage is unavailable, not unstarted', async () => {
+      const { page, state } = await failureFixture(browser, true, outage);
+      try {
+        await page.waitForFunction(() => disconnected);
+        assert.match(await page.locator('#nopic').textContent(), /Can't reach the studio's data/);
+        assert.doesNotMatch(await page.locator('#nopic').textContent(), /hasn't started/);
+        state.failure = '';
+        await page.clock.runFor(2001);
+        await page.waitForFunction(() => events.length > 0 && !disconnected);
+        assert.doesNotMatch(await page.locator('#nopic').textContent(), /Can't reach/);
+      } finally { await page.close(); }
+    });
+    for (const failure of ['source', 'network']) await check('hosted unchanged revision retries ' + failure + ' failure', async () => {
+      const { page, state } = await failureFixture(browser, true, failure);
+      try {
+        await page.waitForFunction(() => events.length === 2 && codeBatch === null);
+        assert.equal(state.requests, 1);
+        state.failure = ''; state.source = 'local recovered=3';
+        await page.clock.runFor(12001);
+        await page.waitForFunction(() => liveText === 'local recovered=3');
+        assert(state.requests > 1);
+        assert.equal(await page.locator('#codestate').textContent(), '');
+        const recovered = state.requests;
+        await page.clock.runFor(2001);
+        assert.equal(state.requests, recovered, 'an unchanged successful source is not fetched again');
+      } finally { await page.close(); }
+    });
+    for (const hosted of [false, true]) await check((hosted ? 'hosted' : 'local') + ' cached source stays visible and labeled after failed refresh', async () => {
+      const { page, state } = await failureFixture(browser, hosted);
+      try {
+        await page.waitForFunction(() => liveText === 'local old=1' && codeBatch === null);
+        state.events.push({ kind:'paint', ts:new Date().toISOString(), code:'local newer=2', out:'ok' });
+        state.revision = 'b'; state.failure = 'source';
+        await page.clock.runFor(2001);
+        await page.waitForFunction(() => events.length === 3 && !busy && codeBatch === null);
+        assert.match(await page.locator('#code').textContent(), /old/);
+        assert.equal(await page.locator('#codestate').textContent(), 'out of date');
+        await page.evaluate(() => { live = false; show(1, true); });
+        assert.equal(await page.locator('#codestate').textContent(), '');
+        await page.evaluate(() => goLive());
+        assert.equal(await page.locator('#codestate').textContent(), 'out of date');
+        state.failure = '';
+        await page.clock.runFor(2001);
+        await page.waitForFunction(() => !liveCodeFailed);
+        assert.equal(await page.locator('#codestate').textContent(), '', 'an identical recovered file clears the warning');
+        state.revision = 'a'; state.source = 'local old=1\nlocal newer=2';
+        await page.clock.runFor(2001);
+        await page.waitForFunction(() => liveText.includes('newer') && codeBatch === null);
+        assert.match(await page.locator('#code').textContent(), /newer/);
+        assert.equal(await page.locator('#codestate').textContent(), '');
+      } finally { await page.close(); }
+    });
+    assert.deepEqual(failureErrors, []);
+    assert.deepEqual(failures, []);
   } finally {
     if (browser) await browser.close();
     server.close();

@@ -50,6 +50,37 @@ const check = async (name, fn) => {
   };
   const active = page => page.evaluate(() => document.activeElement.id || document.activeElement.tagName);
 
+  await check('enlargement blocks event and code shortcuts until it closes', async () => {
+    const { context, page } = await open(1440, 1000);
+    await page.locator('#strip > *').first().click();
+    await page.locator('#img').click();
+    const before = await page.evaluate(() => [pos, live, codeShown(), $('zimg').src]);
+    for (const key of ['ArrowRight', 'ArrowLeft', '[', ']', 'l', 'c']) {
+      await page.keyboard.press(key);
+      assert.deepEqual(await page.evaluate(() => [pos, live, codeShown(), $('zimg').src]), before, key);
+      assert.equal(await page.locator('#zoom').isVisible(), true);
+    }
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await active(page), 'zclose');
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('#zoom').isVisible(), false);
+    assert.equal(await active(page), 'img');
+    await context.close();
+  });
+
+  await check('reduced motion shows a new live thought immediately', async () => {
+    const context = await browser.newContext({ viewport:{ width:1440, height:1000 }, reducedMotion:'reduce' });
+    const page = await context.newPage();
+    const text = 'A recorded thought about the next marks. '.repeat(100);
+    const history = [...events, e('think', { text })];
+    await page.route('**/api/events?*', route => route.fulfill({ json:{ epoch:0, sittings:1, events:history, updates:[], nupdates:0, total:history.length } }));
+    await page.goto(`${origin}/?p=fixture-a`);
+    await page.waitForFunction(() => events.length === 8);
+    assert.equal((await page.locator('#jbody .th').last().textContent()).trim(), text.trim());
+    assert.equal(await page.locator('#jbody .cursor').count(), 0);
+    await context.close();
+  });
+
   await check('the painting opens from the keyboard, and its enlargement keeps focus until it closes', async () => {
     const { context, page } = await open(1440, 1000);
     for (let n = 0; n < 40 && await active(page) !== 'img'; n++) await page.keyboard.press('Tab');

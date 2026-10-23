@@ -8,6 +8,7 @@ import functools
 from datetime import datetime, timezone
 import http.server
 import json
+import os
 import threading
 import urllib.parse
 
@@ -16,7 +17,7 @@ sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
 
 import export_static as E
 import studio as S
-from test_studio import PAINTER, call, export, home, line, look, png_of, result, say, start
+from test_studio import PAINTER, call, export, home, line, look, png_of, result, say, server, start
 
 OTHER = "paint-studio-def456"
 TITLE = 'Barn & "Sky" <west>'
@@ -215,6 +216,28 @@ def test_static_header_says_live_only_when_the_picker_card_is_working(browser, s
     page.clock.run_for(1000)
     assert ("painting now" in page.locator("#pklist .pks").first.text_content()) == active
     assert (page.locator("#badge").inner_text() == "LIVE") == active
+    page.close()
+
+
+def test_local_closing_speech_pauses_both_header_and_picker(browser, home, server, monkeypatch):
+    _, studio, log = home
+    monkeypatch.setattr(S, "lanes", dict)
+    now = datetime(2026, 10, 23, 10, 0, tzinfo=timezone.utc)
+    old = now.timestamp() - 300
+    timestamp = datetime.fromtimestamp(old, timezone.utc).isoformat()
+    log.write_text((start(str(studio)) + look("l1", png_of("blue")) + say("**Blue Pond**\n\nDone.")).replace(
+        "2026-09-29T10:00:00.000Z", timestamp))
+    os.utime(log, (old, old))
+    page = browser.new_page()
+    page.set_default_timeout(5000)
+    page.clock.install(time=now)
+    page.goto(server.base + f"/?p={PAINTER}")
+    page.wait_for_function("() => events.length > 0 && sessionsLoaded")
+    assert page.locator("#badge").inner_text() == "Paused"
+    page.locator("#who").click()
+    card = page.locator("#pklist .pk.on")
+    assert card.count() == 1
+    assert "painting now" not in card.inner_text()
     page.close()
 
 

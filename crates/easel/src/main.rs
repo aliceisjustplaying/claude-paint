@@ -871,50 +871,50 @@ fn serve(args: &[String]) -> Result<(), String> {
                     eprintln!("check 0.00s err");
                 }
             }
-            continue;
-        }
-        let t0 = Instant::now();
-        let r = if cmd == "do" {
-            // while the chunk runs, `status` answers how far it has got; other requests wait
-            session::PROGRESS.clear();
-            let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
-            // once the chunk is kept, the log on disk has grown past `written`: `report` says so
-            let status = || {
-                if session::PROGRESS.kept() == 0 {
-                    validate_log(&name, &written)?;
-                }
-                Ok(session::PROGRESS.report(t0.elapsed()))
-            };
-            match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
-                Ok((r, waiting)) => {
-                    pending.extend(waiting);
-                    r
-                }
-                Err(e) => Err(e),
-            }
         } else {
-            srv.handle(&cmd, &args, payload)
-        };
-        let reply = match &r {
-            Ok(b) => format!("ok\n{b}"),
-            Err(e) => format!("err\n{e}\n"),
-        };
-        let _ = conn.write_all(reply.as_bytes());
-        eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
-        #[cfg(feature = "state-store")]
-        if srv.state_failed {
-            let _ = std::fs::remove_file(&sock);
-            return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
-        }
-        if cmd == "close" && r.is_ok() {
-            if let Some(j) = checking.take() {
-                j.stop();
+            let t0 = Instant::now();
+            let r = if cmd == "do" {
+                // while the chunk runs, `status` answers how far it has got; other requests wait
+                session::PROGRESS.clear();
+                let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
+                // once the chunk is kept, the log on disk has grown past `written`: `report` says so
+                let status = || {
+                    if session::PROGRESS.kept() == 0 {
+                        validate_log(&name, &written)?;
+                    }
+                    Ok(session::PROGRESS.report(t0.elapsed()))
+                };
+                match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
+                    Ok((r, waiting)) => {
+                        pending.extend(waiting);
+                        r
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                srv.handle(&cmd, &args, payload)
+            };
+            let reply = match &r {
+                Ok(b) => format!("ok\n{b}"),
+                Err(e) => format!("err\n{e}\n"),
+            };
+            let _ = conn.write_all(reply.as_bytes());
+            eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
+            #[cfg(feature = "state-store")]
+            if srv.state_failed {
+                let _ = std::fs::remove_file(&sock);
+                return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
             }
-            for (mut conn, _) in pending.drain(..) {
-                let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+            if cmd == "close" && r.is_ok() {
+                if let Some(j) = checking.take() {
+                    j.stop();
+                }
+                for (mut conn, _) in pending.drain(..) {
+                    let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+                }
+                let _ = std::fs::remove_file(&sock);
+                break;
             }
-            let _ = std::fs::remove_file(&sock);
-            break;
         }
         // the same for the scratch canvas, at once (its log is short)
         if let Some(sc) = srv.scratch.as_mut()
@@ -925,8 +925,9 @@ fn serve(args: &[String]) -> Result<(), String> {
                 srv.scratch = None;
             }
         }
-        // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
-        // after the reply; status stays available and other requests are refused until done
+        // a failed chunk left the state inexact, or a resting canvas couldn't be brought back
+        // (session.rs `stale`): rebuild it from the log after the reply, whatever the request
+        // was; status stays available and other requests are refused until done
         if srv.s.stale {
             drop(conn);
             let t0 = Instant::now();

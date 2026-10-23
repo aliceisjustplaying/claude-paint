@@ -554,6 +554,11 @@ impl Canvas {
     /// `stiff` 0..1 is its body (fluid chalk-glue ≈ 0.2, oil lead white ≈ 0.6);
     /// `texture` 0..1 roughens it before it levels (a roller or scraped knife).
     pub fn prime(&mut self, color: Rgb, hiding: f32, um: f32, stiff: f32, texture: f32, seed: u64) {
+        self.prime_paint(&crate::Paint::new(color, hiding, stiff), um, texture, seed);
+    }
+
+    /// Prepare a ground with the paint's retained film optics (engine 9).
+    pub fn prime_paint(&mut self, paint: &crate::Paint, um: f32, texture: f32, seed: u64) {
         self.dry();
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);
@@ -566,10 +571,14 @@ impl Canvas {
                 um * (1.0 + texture * 1.4 * n).max(0.0)
             })
             .collect();
-        let sv = vec![stiff; w * h];
+        let sv = vec![paint.stiff; w * h];
         let t = self.settle((0, 0, w, h), &add, &sv);
-        let pig = Pigment::masstone_hiding(color, hiding);
-        self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
+        if self.engine >= crate::PIGMENT_MIXER && paint.spectral_films {
+            self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = paint.over(*p, ti / COAT_UM));
+        } else {
+            let pig = paint.pigment();
+            self.px.par_iter_mut().zip(&t).for_each(|(p, &ti)| *p = pig.over(*p, ti / COAT_UM));
+        }
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
         self.ground_um += um;
     }

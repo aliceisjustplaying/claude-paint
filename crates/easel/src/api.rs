@@ -2627,7 +2627,7 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
         if absorbent > 0.0 && tubes.engine < 4 {
             return err(format!("canvas: a ground layer's absorbent= needs engine 4; this painting is painted with engine {} (its log says so), where a ground absorbs nothing", tubes.engine));
         }
-        out.push(Ground { color: m.color, hiding: m.hiding, um, stiff: m.stiff, apply, absorbent });
+        out.push(Ground { color: m.color, hiding: m.hiding, paint: (tubes.engine >= paint::PIGMENT_MIXER).then(|| m.paint(0.0)), um, stiff: m.stiff, apply, absorbent });
     }
     if out.is_empty() {
         return err(format!("canvas: ground= needs at least one layer\n{CANVAS_HELP}"));

@@ -130,6 +130,8 @@ check studio-pictures 'node --test --test-reporter=tap studio/test_pictures.cjs'
 check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
+  style::ground_optics_tests::grounds_keep_the_same_paint_thickness_and_backing_optics \
+  style::ground_optics_tests::cached_grounds_track_retained_paint_stiffness_only_from_engine_9 \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
   mixer::tests::palette_previews_follow_canvas_film_optics \

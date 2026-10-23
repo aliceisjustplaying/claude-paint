@@ -128,6 +128,12 @@ impl MaterialTransfer {
     }
 
     pub fn validate(&self) -> Result<(), MaterialError> {
+        if self.fragments.iter().any(|f| !f.reference_area.is_finite() || f.reference_area <= 0.0) {
+            return Err(MaterialError::Invalid("invalid material transfer reference area"));
+        }
+        if self.fragments.iter().any(|f| f.cells.iter().any(|c| !c.valid())) {
+            return Err(MaterialError::Invalid("invalid material transfer cell"));
+        }
         if self.fragments.iter().all(Fragment::valid)
             && self.free_solvent.is_finite()
             && self.free_solvent >= 0.0

@@ -5,6 +5,7 @@ pub mod constitutive;
 pub mod depth;
 pub mod exchange;
 pub mod knife;
+pub mod mixture;
 pub(crate) mod native;
 pub mod recipes;
 pub mod store;

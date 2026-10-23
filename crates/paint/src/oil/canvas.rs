@@ -243,6 +243,12 @@ impl Canvas {
             let color = cell.reflectance();
             let reflectance = crate::spectral::from_rgb(color);
             let projected = crate::spectral::to_rgb(&reflectance);
+            if cell.a == 1.0 {
+                backing.reflectance = reflectance;
+                backing.residual = std::array::from_fn(|k| color[k] - projected[k]);
+                backing.color = color;
+                return;
+            }
             for w in 0..crate::spectral::N {
                 backing.reflectance[w] += cell.a * (reflectance[w] - backing.reflectance[w]);
             }
@@ -392,7 +398,7 @@ mod tests {
             &Lead::chalk(),
             &Mark {
                 pts: vec![(100.0, 500.0), (900.0, 500.0)],
-                pressure: vec![0.8],
+                pressure: vec![0.8; 2],
             },
             0.0,
             7,

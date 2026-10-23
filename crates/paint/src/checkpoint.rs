@@ -419,7 +419,7 @@ impl Canvas {
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
         let material = self.material.is_some();
-        if !crate::supported_material_revision(self.engine, self.material_revision) || material != (self.material_revision == 1) {
+        if (self.material_revision != 0 && !crate::supported_material_revision(self.engine, self.material_revision)) || material != (self.material_revision == 1) {
             return Err(bad("invalid material backend identity"));
         }
         if material && !self.wet.vol.is_empty() {

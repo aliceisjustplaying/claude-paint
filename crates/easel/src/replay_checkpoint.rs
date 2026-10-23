@@ -662,8 +662,11 @@ mod tests {
     fn material_tool_envelope_preserves_recipes_histories_and_binder_fractions() {
         let directory = Temp::new();
         let path = directory.0.join("material.ck");
-        let source = "canvas{size=50,aspect=1,ground={}} p=pile{{'lead white',1},oil='walnut'} b=brush{kind='round',width=80} b:load(p,0.8) b:stroke({{100,500},{900,500}})";
-        let mut session = Session::new(16).unwrap();
+        let source = "canvas{size=50,aspect=1,linen=15,ground={{pile={{'lead white',1}},um=20,apply='knife'}}} p=pile{{'lead white',1},oil='walnut'} b=brush{kind='round',width=80} b:load(p,0.8) b:stroke({{100,500},{900,500}})";
+        let mut palette = paint::Palette::tube_box();
+        palette.engine = 9;
+        palette.material_revision = 1;
+        let mut session = Session::with_box(16, palette).unwrap();
         session.run(source).unwrap();
         let identity = Identity::new(source, 16).unwrap();
         write_checkpoint(&path, &session, &identity, 1, &None, 0.0).unwrap();

@@ -79,6 +79,22 @@ mod tests {
     }
 
     #[test]
+    fn a_small_calibrated_brush_keeps_valid_transfer_geometry() {
+        let mut palette = crate::Palette::tube_box();
+        palette.engine = 9;
+        palette.material_revision = 1;
+        palette.glaze_film = true;
+        let white = palette.tubes.iter().position(|tube| tube.name == "lead white").unwrap();
+        let blue = palette.tubes.iter().position(|tube| tube.name == "cobalt blue").unwrap();
+        let paint = palette.pile(vec![(white, 6.0), (blue, 1.0)]).paint(0.0);
+        let mut canvas = Canvas::new_window_with_material(32, 5.0, [0.8; 3], None, 9, 1).with_size_mm(300.0).with_glaze_film(true).with_brush_skim(true).with_drain(true);
+        let mut held = Held::new(Tool::filbert(8.0), 4).with_engine(9);
+        held.load(paint, 0.9);
+        canvas.drag(&mut held, &Gesture::line((100.0, 100.0), (800.0, 130.0)), None);
+        assert!(canvas.material_store().unwrap().statistics().live_cells > 0);
+    }
+
+    #[test]
     fn native_work_does_not_expose_a_slow_base_through_a_set_cover() {
         let mut canvas = canvas(8);
         let fresh = paint();

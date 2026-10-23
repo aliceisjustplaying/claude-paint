@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn repeated_actual_mixing_coalesces_only_compatible_constituents() {
-        let mut mixed = parcel(0.8, 0.2).material.unwrap();
+        let mut mixed = parcel(0.08, 0.2).material.unwrap();
         let fresh = parcel(0.1, 0.2).material.unwrap();
         let before = values(mixed.inventory());
         let incoming = values(fresh.inventory());
@@ -212,7 +212,7 @@ mod tests {
             values(mixed.inventory()),
         );
         assert_eq!(mixed.fragments.len(), 1);
-        assert!((mixed.fragments[0].network - 0.275).abs() < 1e-14);
+        assert!((mixed.fragments[0].network - 0.095).abs() < 1e-14);
         let expected = values(mixed.inventory());
         for _ in 0..128 {
             let same = mixed.clone();
@@ -229,6 +229,9 @@ mod tests {
         assert_eq!(ordered.fragments.len(), 2);
         assert_eq!(ordered.fragments[0].network, 0.8);
         assert_eq!(ordered.fragments[1].network, 0.1);
+        ordered.mix_in(&fresh, 1.0);
+        assert_eq!(ordered.fragments[0].network, 0.8);
+        assert_eq!(ordered.fragments.len(), 2);
     }
 
     #[test]
@@ -591,13 +594,28 @@ impl MaterialPayload {
         for source in &other.fragments {
             let mut fragment = source.clone();
             fragment.scale(factor);
+            let gel = super::constitutive::Parameters::default().gel_network;
             let compatible = self.fragments.iter_mut().find(|f| {
-                f.recipe == fragment.recipe
-                    && f.history == fragment.history
+                f.history == fragment.history
                     && f.history.tension_n_m == [0.0; 3]
                     && f.history.moment_n == [0.0; 3]
+                    && ((f.binder > 0.0 && fragment.binder > 0.0
+                        && f.network <= gel && fragment.network <= gel)
+                        || (f.recipe == fragment.recipe
+                            && f.oxygen == fragment.oxygen
+                            && f.oxidation == fragment.oxidation
+                            && f.network == fragment.network
+                            && f.inhibitor == fragment.inhibitor))
             });
             if let Some(existing) = compatible {
+                if existing.recipe != fragment.recipe {
+                    *existing = super::mixture::mix_mobile(
+                        &[existing.clone(), fragment],
+                        1.0,
+                        existing.history,
+                    ).expect("unsupported homogeneous material mixture");
+                    continue;
+                }
                 let weighted = |a: f64, b: f64, wa: f64, wb: f64| {
                     if wa + wb > 0.0 {
                         (a * wa + b * wb) / (wa + wb)

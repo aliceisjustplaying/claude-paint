@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { atEasel, directoryListing, easel, logFind, lookArgs, probeArgs, WAIT_MS, WIDE_WAIT_MS, wideStudio, studioPath, tail, toolWords, paintReply, renameLooks } from "../easel-client.ts";
 
 const shellPath = "'" + (process.env.PATH ?? "/usr/bin:/bin").replaceAll("'", "'\\''") + "'";
+const realSetTimeout = globalThis.setTimeout;
 
 test("painting headers set the waits before the new-painting width", async () => {
 	const studio = stubStudio(`if [ "$1" = status ] && [ ! -f polled ]; then
@@ -415,6 +416,53 @@ read -r _ < waiting`);
 		}
 	} finally {
 		WAIT_MS.do = doWait;
+	}
+});
+
+test("delayed admission leaves the simulated chunk timeout unspent until do starts", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+	const studio = stubStudio(`if [ "$1" = status ]; then
+ [ -f asked ] && { echo '1 chunks · 2400px · no canvas yet'; exit 0; }
+ touch asked
+ while [ ! -f release ]; do sleep 0.01; done
+ echo '1 chunks · 2400px · no canvas yet'; exit 0
+fi
+mkfifo waiting
+read -r _ < waiting`);
+	mkdirSync(join(studio, "paintings", "lua"), { recursive: true });
+	writeFileSync(join(studio, "paintings", "lua", "painting.lua"), "--@ chunk 1\nx = 0\n");
+	writeFileSync(join(studio, "calls"), "");
+	const controller = new AbortController();
+	const saved = WAIT_MS.do;
+	WAIT_MS.do = 300;
+	let finished = false;
+	const rejected = assert.rejects(atEasel(studio, ["do", "-"], "x = 1", controller.signal), /the chunk isn't in the log: it changed nothing/);
+	const result = rejected.finally(() => { finished = true; });
+	let started: () => void;
+	const command = new Promise<void>(resolve => { started = resolve; });
+	let admitted: () => void;
+	const status = new Promise<void>(resolve => { admitted = resolve; });
+	const watcher = watch(join(studio, "calls"), () => {
+		if (calls(studio).includes("status")) admitted();
+		if (calls(studio).includes("do")) started();
+	});
+	try {
+		await Promise.race([status, result]);
+		await new Promise(resolve => realSetTimeout(resolve, 400));
+		assert.equal(finished, false);
+		assert.deepEqual(calls(studio), ["status"]);
+		writeFileSync(join(studio, "release"), "");
+		await Promise.race([command, result]);
+		assert.deepEqual(calls(studio), ["status", "do"]);
+		t.mock.timers.tick(WAIT_MS.do);
+		await result;
+		assert.deepEqual(calls(studio), ["status", "do", "status"]);
+	} finally {
+		controller.abort();
+		watcher.close();
+		WAIT_MS.do = saved;
+		try { await result; }
+		finally { rmSync(studio, { recursive: true, force: true }); }
 	}
 });
 

@@ -1,5 +1,5 @@
 eval(File.read(File.join(__dir__,'root.rb')).split("n='views';")[0])
-def kill(n);pid=File.read(ROOT+"/out/easel/#{n}/lock").to_i;Process.kill('TERM',pid);sleep 0.2;end
+def kill(n);pid=Integer(File.read(ROOT+"/out/easel/#{n}/lock"),10);raise 'invalid owned pid' unless (2..2147483647).cover?(pid);Process.kill('TERM',pid);sleep 0.2;end
 # Empty setup request lifecycle: all faults at whole submitted chunk boundary.
 n='setup';ok(n,'open',n);c=cpu(n);a=req(n,'do',SLOW+'blocker=true');ob=observe(n,a,c);b=req(n,'do',SETUP);b.close;a.read;a.close;rec('setup-queued-abort',{observation:ob,status:cli(n,'status')})
 c=cpu(n);a=req(n,'do',SETUP+';'+SLOW+'setupfinished=true');ob=observe(n,a,c);b=req(n,'do',SETUP.sub('size=100','size=200').sub('aspect=5','aspect=2').sub('linen=12','linen=20'));pending=!IO.select([b],nil,nil,0);a.close;br=b.read;b.close;rec('setup-running-disconnect',{observation:ob,second_pending:pending,second:br,status:cli(n,'status'),check:cli(n,'do','assert(setupfinished);print(W,H)')});ok(n,'close')

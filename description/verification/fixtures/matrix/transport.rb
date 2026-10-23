@@ -28,7 +28,7 @@ def observe(name,s,before)
  end
 end
 def kill_server(name)
- pid=File.read(ROOT+'/out/easel/'+name+'/lock').to_i;raise 'invalid owned pid' unless pid>1
+ pid=Integer(File.read(ROOT+'/out/easel/'+name+'/lock'),10);raise 'invalid owned pid' unless (2..2147483647).cover?(pid)
  Process.kill('TERM',pid);50.times{break unless File.exist?("/proc/#{pid}") || system('/bin/kill','-0',pid.to_s,out:File::NULL,err:File::NULL);sleep 0.02}
 end
 SETUP='canvas{size=100,aspect=5,linen=12,ground={{pile={{"lead white",1}},um=40,apply="knife"}}}; p=pile{{"red earth",1}}; b=brush("round",4);b:load(p,0.8);h=pencil("HB");r=rag{width=20};r:dip(0.5);m=rect(100,40,80,80)'

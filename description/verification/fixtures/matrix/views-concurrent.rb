@@ -14,6 +14,6 @@ attempt('look-integrity-during') do
  c=cpu(n);a=req(n,'look --size 2000');obs=observe(n,a,c);File.write(log,original+"-- concurrent edit\n");reply=a.read;a.close;rec('look-integrity-during',{observation:obs,reply:reply,next:cli(n,'status')});File.binwrite(log,original)
 end
 attempt('kill-render') do
- c=cpu(n);a=req(n,'look --size 2000');obs=observe(n,a,c);pid=File.read(ROOT+"/out/easel/#{n}/lock").to_i;Process.kill('TERM',pid);reply=a.read;a.close;sleep 0.2;rec('kill-render',{observation:obs,reply:reply,log_equal:File.binread(log)==original,reopen:cli(n,'open',n)})
+ c=cpu(n);a=req(n,'look --size 2000');obs=observe(n,a,c);pid=Integer(File.read(ROOT+"/out/easel/#{n}/lock"),10);raise 'invalid owned pid' unless (2..2147483647).cover?(pid);Process.kill('TERM',pid);reply=a.read;a.close;sleep 0.2;rec('kill-render',{observation:obs,reply:reply,log_equal:File.binread(log)==original,reopen:cli(n,'open',n)})
 end
 ok(n,'close')

@@ -21,7 +21,8 @@ threads=%w[stalled progressing].map do |name|
      now=Process.clock_gettime(Process::CLOCK_MONOTONIC);raise 'timer fixture exceeded bound' if now>deadline
      break unless w.alive?
      text=File.read(dir+'/server.log') rescue ''
-     server=(File.read(dir+'/lock').to_i rescue 0)
+     server=(Integer(File.read(dir+'/lock'),10) rescue 0)
+     server=0 unless (2..2147483647).cover?(server)
      if !stopped && text.include?("resuming chunk #{nextchunk}/") && server>0
       Process.kill('STOP',server);stopped=true
       record[:pauses]<<{chunk:nextchunk,at_seconds:(now-t).round(3)};record[:status]='server paused';update(name,Marshal.load(Marshal.dump(record)))

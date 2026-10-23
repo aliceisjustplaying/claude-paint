@@ -87,6 +87,7 @@ export async function stopServer(dir: string): Promise<void> {
   let pid: number;
   try {
     pid = Number(readFileSync(join(dir, "out/easel/painting/lock"), "utf8").trim());
+    if (!Number.isSafeInteger(pid) || pid <= 1 || pid > 2147483647) return;
     if (!readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(join(dir, "bin/easel"))) return;
     process.kill(pid, "SIGTERM");
   } catch { return; }

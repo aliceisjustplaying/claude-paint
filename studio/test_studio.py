@@ -632,6 +632,44 @@ def test_a_painter_working_elsewhere_exports_as_live(home, monkeypatch):
         assert session["active"] is active
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_export_repairs_0600_to_0644_with_unchanged_content(home, monkeypatch, cached):
+    import export_static as E
+    root, studio, log = home
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setattr(S, "SESSIONS", str(root / ".pi/agent/sessions"))
+    monkeypatch.setattr(S, "RUNS", str(root / "run/studios.json"))
+    monkeypatch.setattr(S, "_lanes", {"at": 0.0, "map": {}})
+    monkeypatch.setattr(E, "EXPORTED", {})
+    log.write_text(start(str(studio)) + call("c1", "canvas{}") + result("c1", "ok · chunk 1")
+                   + look("l1", png_of("blue")))
+    out = root / "export"
+    E.export(str(out))
+    files = [out / rel for rel in E.owned(str(out))] + [out / E.MARKER]
+    before = {path: path.read_bytes() for path in files}
+    view = out / "data" / PAINTER / "v/0.jpg"
+    view_mtime = view.stat().st_mtime_ns
+    for path in files:
+        path.chmod(0o600)
+    unowned = out / "keep.txt"
+    unowned.write_bytes(b"not exported")
+    unowned.chmod(0o600)
+    if not cached:
+        E.EXPORTED.clear()
+    previous_umask = os.umask(0o077)
+    try:
+        E.export(str(out))
+    finally:
+        os.umask(previous_umask)
+    for path, data in before.items():
+        assert path.read_bytes() == data
+        assert path.stat().st_mode & 0o7777 == 0o644, path
+    if cached:
+        assert view.stat().st_mtime_ns == view_mtime
+    assert unowned.read_bytes() == b"not exported"
+    assert unowned.stat().st_mode & 0o7777 == 0o600
+
+
 def test_a_second_export_in_one_process_skips_unchanged_looks(home, monkeypatch):
     import export_static as E
     root, studio, log = home

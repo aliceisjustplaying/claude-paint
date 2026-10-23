@@ -347,9 +347,12 @@ impl Canvas {
     /// sheet, where it lies, is that much higher, with its own pores.
     #[inline]
     pub(crate) fn surface_point(&self, i: usize) -> (f32, f32, f32) {
+        let height = if self.material_exchange_needed() && !self.drawing_projection {
+            self.material_store().unwrap().sample(i).unwrap().height_um
+        } else { self.height[i] };
         match &self.sheet {
-            Some(s) if s.over[i] => (self.height[i] + s.caliper_um, s.micro_um, self.give_mpa_per_um(i)),
-            _ => (self.height[i], self.micro_um(i), self.give_mpa_per_um(i)),
+            Some(s) if s.over[i] => (height + s.caliper_um, s.micro_um, self.give_mpa_per_um(i)),
+            _ => (height, self.micro_um(i), self.give_mpa_per_um(i)),
         }
     }
 
@@ -473,6 +476,7 @@ impl Canvas {
     /// wear law of steel on bound pastel is known). Not under a sheet, paint
     /// or wet paint. On paper. Returns the volume taken, mm³.
     pub fn scrape_pastel(&mut self, width: f32, edge_um: f32, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>) -> f32 {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.scrape_pastel(width, edge_um, pts, pressure, angle)); }
         let Some(paper) = self.paper else { return 0.0 };
         if pts.is_empty() || self.drawing.is_none() || !(width.is_finite() && width >= 1.0) {
             return 0.0;
@@ -631,6 +635,7 @@ impl Canvas {
     /// bristles, mm³, hand time s): what is pushed ahead and lifted again is
     /// counted once, where it ends.
     pub fn dust_pastel(&mut self, width: f32, tip_um: f32, pts: &[(f32, f32)], held_mg: &mut f32, cap_mg: f32) -> (f32, f32) {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.dust_pastel(width, tip_um, pts, held_mg, cap_mg)); }
         if pts.is_empty() || self.drawing.is_none() || !(width.is_finite() && width > 0.0) {
             return (0.0, 0.0);
         }
@@ -741,6 +746,7 @@ impl Canvas {
     /// on the paper mask goes with it; what falls on wet paint is lost in it,
     /// on the picture).
     pub fn blow_pastel(&mut self, x: f32, y: f32, h_mm: f32, u: f32, d_mm: f32) -> f32 {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.blow_pastel(x, y, h_mm, u, d_mm)); }
         if self.drawing.is_none() || !(h_mm > 0.0 && u > 0.0 && d_mm > 0.0) {
             return 0.0;
         }
@@ -1065,6 +1071,7 @@ impl Canvas {
     /// in the pores never go. Tapping a board edge gives some 50–400 g; an
     /// upright sheet, 1 g. Returns the volume shed, mm³.
     pub fn tap_pastel(&mut self, g: f32) -> f32 {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.tap_pastel(g)); }
         if self.drawing.is_none() || !(g > 0.0) {
             return 0.0;
         }

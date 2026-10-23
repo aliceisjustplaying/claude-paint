@@ -661,6 +661,7 @@ impl Canvas {
     /// (`touch`). The line also goes into the drawing's guide (see
     /// `drawing_guide`), over the whole canvas even in a crop render.
     pub fn draw(&mut self, lead: &Lead, mark: &Mark, worn_mm: f32, seed: u64) -> f32 {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.draw(lead, mark, worn_mm, seed)); }
         let pts = &mark.pts;
         if pts.len() < 2 {
             return 0.0;
@@ -777,6 +778,7 @@ impl Canvas {
     /// doesn't reach under a sheet laid on the picture. It lifts the guide
     /// too (see `drawing_guide`), wherever it goes.
     pub fn erase(&mut self, m: &Mask, strength: f32) {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.erase(m, strength)); }
         self.check_mask(m);
         let f = self.f;
         let Some(d) = self.drawing.as_mut() else { return };
@@ -837,6 +839,7 @@ impl Canvas {
     /// Fixative over `m` (or all): binds the loose drawing so an eraser no
     /// longer lifts it.
     pub fn fix_drawing(&mut self, m: Option<&Mask>) {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.fix_drawing(m)); }
         if let Some(m) = m {
             self.check_mask(m);
         }

@@ -27,14 +27,11 @@ use crate::pigment::{Pigment, hiding_of, scatter_for};
 
 pub const LAT: usize = crate::mixer::LATENT_SIZE;
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "replay-effects", derive(serde::Deserialize))]
 #[repr(C)]
 pub struct Latent {
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
-    #[cfg_attr(feature = "replay-effects", serde(skip))]
     pub material: Option<crate::oil::exchange::MaterialPayload>,
-    #[cfg_attr(feature = "replay-effects", serde(skip))]
     pub(crate) layers: Vec<Layer>,
 }
 
@@ -56,13 +53,39 @@ impl std::fmt::Debug for Latent {
 impl serde::Serialize for Latent {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        if self.material.is_some() {
+        let material = crate::oil::wire::material_schema();
+        if self.material.is_some() && !material {
             return Err(serde::ser::Error::custom("chemical tool material requires a versioned replay envelope"));
         }
-        let mut state = serializer.serialize_struct("Latent", 2)?;
+        let mut state = serializer.serialize_struct("Latent", if material { 3 } else { 2 })?;
         state.serialize_field("color", &self.color)?;
         state.serialize_field("parts", &self.parts)?;
+        if material {
+            state.serialize_field("material", &self.material)?;
+        }
         state.end()
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+impl<'de> serde::Deserialize<'de> for Latent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Legacy { color: [f32; LAT], parts: Vec<(usize, f32)> }
+        #[derive(serde::Deserialize)]
+        struct Columns { legacy: Legacy, material: Option<crate::oil::exchange::MaterialPayload> }
+        if crate::oil::wire::material_schema() {
+            let columns = Columns::deserialize(deserializer)?;
+            let layers = columns.material.as_ref().map(|material| material.fragments.iter().filter(|f| f.volume > 0.0).map(|fragment| {
+                let mut lat = Latent::from_color(fragment.recipe.color);
+                lat.parts = fragment.recipe.parts.clone();
+                Layer { share: fragment.volume as f32, lat, hide: fragment.properties() }
+            }).collect()).unwrap_or_default();
+            Ok(Self { color: columns.legacy.color, parts: columns.legacy.parts, material: columns.material, layers })
+        } else {
+            let legacy = Legacy::deserialize(deserializer)?;
+            Ok(Self { color: legacy.color, parts: legacy.parts, material: None, layers: Vec::new() })
+        }
     }
 }
 
@@ -134,6 +157,15 @@ impl Latent {
         for layer in &layers {
             mix_into(&mut volume, &mut lat, &mut hide, layer.share, &layer.lat, layer.hide);
         }
+        if lat.material.is_some() {
+            let mut ordered = crate::oil::exchange::MaterialPayload::default();
+            for layer in &layers {
+                if let Some(material) = &layer.lat.material {
+                    ordered.append(material, layer.share as f64 / volume as f64);
+                }
+            }
+            lat.material = Some(ordered);
+        }
         if layers.len() > 1 {
             for layer in &mut layers { layer.share /= volume; }
             lat.layers = layers;
@@ -175,7 +207,7 @@ impl Latent {
 
     pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {
         if let Some(material) = &other.material {
-            self.material.get_or_insert_with(Default::default).append(material, weight as f64);
+            self.material.get_or_insert_with(Default::default).mix_in(material, weight as f64);
         }
         for &(i, f) in &other.parts {
             match self.parts.iter_mut().find(|p| p.0 == i) {
@@ -244,6 +276,7 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
 #[derive(Clone, Debug)]
 pub struct Paint {
+    pub material_recipe: Option<crate::oil::exchange::Recipe>,
     pub pigment_latent: Option<[f32; LAT]>,
     pub spectral_films: bool,
     pub parts: Vec<(usize, f32)>,
@@ -299,11 +332,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { material_recipe: None, pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { material_recipe: None, pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -340,7 +373,24 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), material: None, layers: Vec::new() }
+        let mut latent = Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), material: None, layers: Vec::new() };
+        if let Some(recipe) = &self.material_recipe {
+            let mut recipe = recipe.clone();
+            recipe.properties = self.prop();
+            recipe.color = latent.color;
+            recipe.parts = latent.parts.clone();
+            let q = self.oil_volume as f64;
+            let pigment_fraction = (1.0 - q) / (1.0 - q + q * self.oil as f64);
+            let body = (1.0 - self.solvent.clamp(0.0, 0.95)) as f64 * crate::COAT_UM as f64;
+            latent.material = Some(crate::oil::exchange::MaterialPayload { fragments: vec![crate::oil::exchange::Fragment {
+                reference_area: 1.0,
+                volume: 1.0, pigment: body * pigment_fraction, binder: body * (1.0 - pigment_fraction),
+                solvent: crate::COAT_UM as f64 * (self.solvent as f64 + self.thinner as f64 / (1.0 - self.thinner as f64)),
+                oxygen: 0.0, oxidation: 0.0, network: 0.0, inhibitor: 1.0,
+                recipe, history: Default::default(),
+            }] });
+        }
+        latent
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -362,6 +412,7 @@ impl Paint {
 #[derive(Clone)]
 pub(crate) struct Wet {
     pub(crate) material_sinks: Vec<Vec<crate::oil::exchange::MaterialSink>>,
+    pub(crate) material_changed: Vec<u8>,
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
     /// [scattering, stiffness, drying rate, solvent, oil] of the wet paint.
@@ -399,7 +450,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { material_sinks: Vec::new(), vol: vec![0.0; n], lat: vec![Latent::default(); n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+        Wet { material_sinks: Vec::new(), material_changed: Vec::new(), vol: vec![0.0; n], lat: vec![Latent::default(); n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is
@@ -526,22 +577,18 @@ impl Canvas {
     /// The visible color at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
     pub(crate) fn look_px(&self, i: usize) -> Rgb {
+        if self.material_exchange_needed() { return self.material_look_px(i); }
         let v = self.wet.vol[i];
         if v < 1e-5 {
             return self.px[i];
         }
-        let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
-        if self.spectral_films() {
-            return self.backing.get(i).copied().unwrap_or_default().under(self.px[i])
-                .over_wet(&self.wet.lat[i], self.wet.hide[i][0], v, cover).color;
-        }
-        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, cover, false)
+        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0), self.spectral_films())
     }
 
     /// The visible colors, pixel by pixel over the window: the dry
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
-        if self.material_revision == 1 { return self.material_seen(); }
+        if self.material_exchange_needed() { return self.material_seen(); }
         use rayon::prelude::*;
         if self.engine >= 4 {
             // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
@@ -567,7 +614,7 @@ impl Canvas {
     /// dry picture plus wet paint, averaged in linear light: the underlayer a
     /// new mark there will sit on.
     pub fn under(&self, x: f32, y: f32, r: f32) -> Rgb {
-        if self.material_revision == 1 { return self.material_under(x, y, r); }
+        if self.material_exchange_needed() { return self.material_under(x, y, r); }
         let f = self.f;
         let n = if r * f.scale < 1.5 { 0 } else { 2 };
         let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
@@ -597,23 +644,30 @@ impl Canvas {
 
     /// Wet paint film at a point (units), µm: 0 where the paint is dry.
     pub fn wet_um(&self, x: f32, y: f32) -> f32 {
+        if self.material_exchange_needed() { return self.material_wet_coats()[self.f.index(x, y)] * crate::COAT_UM; }
         self.wet.vol[self.f.index(x, y)] * crate::surface::COAT_UM
     }
 
     /// Total wet paint on the canvas (for tests / debugging).
     pub fn wet_total(&self) -> f64 {
+        if self.material_exchange_needed() { return self.material_wet_coats().iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64); }
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)
     }
 
     /// Solvent in the open film at a point (units), µm: 0 where there is
     /// none (`crate::thinner`). `wet_um` is the paint alone.
     pub fn solvent_um(&self, x: f32, y: f32) -> f32 {
+        if self.material_exchange_needed() {
+            let column = self.material_store().unwrap().read_column(self.f.index(x, y)).expect("material pixel");
+            return column.state.free_solvent_um + column.cells.iter().map(|cell| cell.solvent_um).sum::<f32>();
+        }
         self.wet.solv.get(self.f.index(x, y)).copied().unwrap_or(0.0)
     }
 
     /// Total solvent on the canvas, in `wet_total`'s units (coats × square
     /// units).
     pub fn solvent_total(&self) -> f64 {
+        if self.material_exchange_needed() { return self.material_store().unwrap().statistics().solvent / self.material_store().unwrap().pixel_area() / crate::COAT_UM as f64 / (self.f.scale as f64 * self.f.scale as f64); }
         self.wet.solv.iter().map(|&v| v as f64).sum::<f64>() / crate::surface::COAT_UM as f64 / (self.f.scale as f64 * self.f.scale as f64)
     }
 }

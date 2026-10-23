@@ -1,12 +1,18 @@
 mod canvas;
 pub mod checkpoint;
 pub mod chemistry;
+pub mod constitutive;
+pub mod depth;
 pub mod exchange;
+pub mod knife;
+pub(crate) mod native;
 pub mod recipes;
 pub mod store;
 pub mod transfer;
+#[cfg(feature = "replay-effects")]
+pub mod wire;
 
-use chemistry::{ObservationModel, Scratch, advance_column_with_scratch, observe};
+use chemistry::{Scratch, observe};
 use store::{ClockState, FilmStore, MaterialError};
 
 const INTERVAL_SECONDS: f64 = 600.0;
@@ -32,7 +38,11 @@ impl Material {
         clock.pending_seconds = clock.seconds;
     }
 
-    pub(crate) fn advance_to(&mut self, seconds: f64) -> Result<(), MaterialError> {
+    pub(crate) fn advance_to_with(
+        &mut self,
+        seconds: f64,
+        mut transport: impl FnMut(&mut FilmStore, f64) -> Result<(), MaterialError>,
+    ) -> Result<(), MaterialError> {
         if !seconds.is_finite() || seconds < self.store.clock.seconds {
             return Err(MaterialError::Invalid("invalid material clock target"));
         }
@@ -48,6 +58,7 @@ impl Material {
             let end = seconds.min(boundary);
             let mut trial = start.clone();
             advance_store(&mut trial, end - t0, &mut scratch)?;
+            transport(&mut trial, end - t0)?;
             trial.clock = ClockState {
                 seconds: end,
                 committed_seconds: if end == boundary { end } else { t0 },
@@ -89,60 +100,8 @@ fn advance_store(
             if edit.read_column(pixel)?.cells.is_empty() {
                 continue;
             }
-            edit.with_column_mut(pixel, |column, _| {
-                let old = std::mem::take(&mut column.cells);
-                for (packet, &coverage) in column.packets.iter_mut().zip(&column.coverage) {
-                    let a = packet.first_cell as usize;
-                    let b = a + packet.cell_count as usize;
-                    packet.first_cell =
-                        u32::try_from(column.cells.len()).map_err(|_| MaterialError::Capacity)?;
-                    for cell in &old[a..b] {
-                        let physical_um = cell.thickness_um() / coverage as f64;
-                        let parts = (physical_um / 2.5).ceil().max(1.0);
-                        if parts > u32::MAX as f64 {
-                            return Err(MaterialError::Capacity);
-                        }
-                        let parts = parts as u32;
-                        column
-                            .cells
-                            .try_reserve(parts as usize)
-                            .map_err(|_| MaterialError::Capacity)?;
-                        let mut left = *cell;
-                        for part in 0..parts {
-                            let mut split = *cell;
-                            if part + 1 == parts {
-                                split.pigment_um = left.pigment_um;
-                                split.binder_um = left.binder_um;
-                                split.solvent_um = left.solvent_um;
-                            } else {
-                                split.pigment_um = left.pigment_um / (parts - part) as f32;
-                                split.binder_um = left.binder_um / (parts - part) as f32;
-                                split.solvent_um = left.solvent_um / (parts - part) as f32;
-                                left.pigment_um -= split.pigment_um;
-                                left.binder_um -= split.binder_um;
-                                left.solvent_um -= split.solvent_um;
-                            }
-                            split.pigment_um /= coverage;
-                            split.binder_um /= coverage;
-                            split.solvent_um /= coverage;
-                            column.cells.push(split);
-                        }
-                    }
-                    packet.cell_count =
-                        u32::try_from(column.cells.len() - packet.first_cell as usize)
-                            .map_err(|_| MaterialError::Capacity)?;
-                }
-                advance_column_with_scratch(&mut column.cells, &kinetics, seconds, air, scratch)
-                    .map_err(|_| MaterialError::Invalid("material chemistry step failed"))?;
-                for (packet, &coverage) in column.packets.iter().zip(&column.coverage) {
-                    let a = packet.first_cell as usize;
-                    for cell in &mut column.cells[a..a + packet.cell_count as usize] {
-                        cell.pigment_um *= coverage;
-                        cell.binder_um *= coverage;
-                        cell.solvent_um *= coverage;
-                    }
-                }
-                Ok(())
+            edit.with_column_mut(pixel, |column, formulations| {
+                depth::advance(column, formulations, &kinetics, seconds, air, scratch, None)
             })?;
         }
     }
@@ -151,7 +110,13 @@ fn advance_store(
 
 pub(crate) fn stage(column: &store::ColumnRef<'_>) -> crate::drying::Stage {
     use crate::drying::Stage;
-    let model = column.cells.last().map(|cell| recipes::observations_for(&column.formulations[cell.recipe as usize].kinetics())).unwrap_or_default();
+    let model = column
+        .cells
+        .last()
+        .map(|cell| {
+            recipes::observations_for(&column.formulations[cell.recipe as usize].kinetics())
+        })
+        .unwrap_or_default();
     let mut cells = Vec::with_capacity(column.cells.len());
     for (packet, &coverage) in column.packets.iter().zip(column.coverage) {
         let a = (packet.first_cell - column.first_cell) as usize;
@@ -386,12 +351,23 @@ mod tests {
         let mut encoded = Vec::new();
         c.write_state(&mut encoded, "").unwrap();
         for budget in [
-            checkpoint::LoadBudget { max_raw_bytes: u64::MAX, max_resident_bytes: current_resident.max(start_resident) },
-            checkpoint::LoadBudget { max_raw_bytes: current_counts.raw_bytes.max(start_counts.raw_bytes), max_resident_bytes: u64::MAX },
+            checkpoint::LoadBudget {
+                max_raw_bytes: u64::MAX,
+                max_resident_bytes: current_resident.max(start_resident),
+            },
+            checkpoint::LoadBudget {
+                max_raw_bytes: current_counts.raw_bytes.max(start_counts.raw_bytes),
+                max_resident_bytes: u64::MAX,
+            },
         ] {
-            assert!(Canvas::read_state_with_material_budget(&mut encoded.as_slice(), budget).is_err());
+            assert!(
+                Canvas::read_state_with_material_budget(&mut encoded.as_slice(), budget).is_err()
+            );
         }
-        let budget = checkpoint::LoadBudget { max_raw_bytes: current_counts.raw_bytes + start_counts.raw_bytes, max_resident_bytes: current_resident + start_resident };
+        let budget = checkpoint::LoadBudget {
+            max_raw_bytes: current_counts.raw_bytes + start_counts.raw_bytes,
+            max_resident_bytes: current_resident + start_resident,
+        };
         assert!(Canvas::read_state_with_material_budget(&mut encoded.as_slice(), budget).is_ok());
         encoded[40..48].copy_from_slice(&2u64.to_le_bytes());
         assert!(Canvas::read_state(&mut encoded.as_slice()).is_err());

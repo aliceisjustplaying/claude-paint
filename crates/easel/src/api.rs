@@ -1078,6 +1078,7 @@ pub(crate) fn resolve(st: &S, p: PileU) -> PileU {
     let mut mix = s.tubes.pile(fr);
     mix.solvent = solvent;
     mix.oil_rate = oil_rate;
+    mix.binders = h.binders;
     PileU { mix, medium, parts, thinner: p.thinner.map(|_| thinner), ..p }
 }
 
@@ -1715,6 +1716,7 @@ fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes
                     let mut mix = tubes.pile(heap.fractions());
                     mix.solvent = heap.solvent;
                     mix.oil_rate = heap.oil_rate;
+                    mix.binders = heap.binders;
                     (mix, heap.medium, heap.thinner)
                 }
                 _ => (original.clone(), *medium, *thinner),
@@ -1727,7 +1729,11 @@ fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes
         } else {
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut medium, mut thinner, mut solvent, mut oil_rate) = (0.0, 0.0, 0.0, 0.0);
+            let mut binders = [0.0; 5];
+            let mut binder_total = 0.0;
             for (mix, md, th, weight) in resolved {
+                let binder = weight as f64 * mix.binder_volume(md);
+                binder_total += binder;
                 let sum = mix.parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
                 for (i, fraction) in mix.parts {
                     match parts.iter_mut().find(|p| p.0 == i) {
@@ -1739,10 +1745,12 @@ fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes
                 thinner += weight * th;
                 solvent += weight * mix.solvent;
                 oil_rate += weight * mix.oil_rate;
+                for k in 0..5 { binders[k] += binder * mix.binders[k]; }
             }
             let mut mix = tubes.pile(parts);
             mix.solvent = solvent;
             mix.oil_rate = oil_rate;
+            mix.binders = binders.map(|amount| amount / binder_total);
             (mix, medium, thinner)
         };
         thinned(tubes.remix(&mix, jitter, &mut Rng::new(seed)).laid(medium), thinner)
@@ -2154,10 +2162,10 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 None
             };
             // oil=: what the paint is ground in, "linseed" (as the tubes come), "walnut" or "poppy"
-            let oil_rate = match t.get::<Option<String>>("oil")?.as_deref() {
-                None | Some("linseed") => 1.0,
-                Some("walnut") => 0.8,
-                Some("poppy") => 0.6,
+            let (oil_rate, binder) = match t.get::<Option<String>>("oil")?.as_deref() {
+                None | Some("linseed") => (1.0, 0),
+                Some("walnut") => (0.8, 2),
+                Some("poppy") => (0.6, 3),
                 Some(o) => return err(format!("pile: oil {o:?}: \"linseed\", \"walnut\" or \"poppy\"")),
             };
             let tubes = st.borrow().tubes.clone();
@@ -2165,6 +2173,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = turps;
             mix.oil_rate = oil_rate;
+            mix.binders = [0.0; 5];
+            mix.binders[binder] = 1.0;
             if st.borrow().canvas.is_none() {
                 return Err(no_canvas());
             }
@@ -2173,6 +2183,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let given_sum: f32 = given.iter().map(|g| g.1).sum();
             let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts.clone(), given_sum, medium, turps, oil_rate, name, "pile")?;
+            st.borrow_mut().board.heap_mut(heap).unwrap().binders = mix.binders;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner.unwrap_or(0.0);
             // knifing it takes the hand a while
             time::knife(&st, mix.color);
@@ -2192,6 +2203,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             }
             let mut parts: Vec<(usize, f32)> = Vec::new();
             let (mut wsum, mut medium, mut solvent, mut thinner, mut oil) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
+            let mut binders = [0.0; 5];
+            let mut binder_total = 0.0;
             for e in t.sequence_values::<Table>() {
                 let e = e?;
                 let p = pile_of(&e.get::<Value>(1)?, "mix")?;
@@ -2211,6 +2224,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 solvent += p.mix.solvent * w;
                 thinner += p.thinner() * w;
                 oil += p.mix.oil_rate * w;
+                let binder = p.mix.binder_volume(p.medium) * w as f64;
+                binder_total += binder;
+                for k in 0..5 { binders[k] += p.mix.binders[k] * binder; }
                 wsum += w;
             }
             if wsum <= 0.0 {
@@ -2223,9 +2239,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let mut mix = tubes.pile(parts.clone());
             mix.solvent = solvent;
             mix.oil_rate = oil;
+            mix.binders = binders.map(|amount| amount / binder_total);
             let name = t.get::<Option<String>>("name")?;
             let medium = mix.effective_medium(medium);
             let heap = knife(&st, parts, wsum, medium, solvent, oil, name, "mix")?;
+            st.borrow_mut().board.heap_mut(heap).unwrap().binders = mix.binders;
             st.borrow_mut().board.heap_mut(heap).unwrap().thinner = thinner;
             time::knife(&st, mix.color);
             Ok(PileU { mix, medium, thinner: Some(thinner), parts: given, heap, st: Some(st.clone()) })

@@ -2,15 +2,24 @@ use super::chemistry::Kinetics;
 use crate::wet::{LAT, Prop};
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "replay-effects",
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct Recipe {
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
     pub properties: Prop,
+    #[cfg_attr(feature = "replay-effects", serde(with = "super::wire::kinetics"))]
     pub kinetics: Kinetics,
     pub binders: [f64; 5],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "replay-effects",
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct MechanicalHistory {
     pub tension_n_m: [f32; 3],
     pub moment_n: [f32; 3],
@@ -32,6 +41,10 @@ impl Default for MechanicalHistory {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "replay-effects",
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct Fragment {
     pub reference_area: f64,
     pub volume: f64,
@@ -68,6 +81,7 @@ mod tests {
                 network,
                 inhibitor: 0.15,
                 recipe: Recipe {
+                    binders: [1.0, 0.0, 0.0, 0.0, 0.0],
                     color: latent.color,
                     parts: vec![(0, 1.0)],
                     properties: paint.prop(),
@@ -90,7 +104,6 @@ mod tests {
                         provenance_code: 1,
                         revision: 1,
                     },
-                    binders: [1.0, 0.0, 0.0, 0.0, 0.0],
                 },
                 history: MechanicalHistory::default(),
             }],
@@ -185,6 +198,37 @@ mod tests {
                 inventory(&exposed, v as f64)[k] + inventory(&removed, t as f64)[k]
             }),
         );
+    }
+
+    #[test]
+    fn repeated_actual_mixing_coalesces_only_compatible_constituents() {
+        let mut mixed = parcel(0.8, 0.2).material.unwrap();
+        let fresh = parcel(0.1, 0.2).material.unwrap();
+        let before = values(mixed.inventory());
+        let incoming = values(fresh.inventory());
+        mixed.mix_in(&fresh, 3.0);
+        conserved(
+            std::array::from_fn(|k| before[k] + 3.0 * incoming[k]),
+            values(mixed.inventory()),
+        );
+        assert_eq!(mixed.fragments.len(), 1);
+        assert!((mixed.fragments[0].network - 0.275).abs() < 1e-14);
+        let expected = values(mixed.inventory());
+        for _ in 0..128 {
+            let same = mixed.clone();
+            mixed.blend(&same, 0.37);
+            assert_eq!(mixed.fragments.len(), 1);
+        }
+        conserved(expected, values(mixed.inventory()));
+        let mut stressed = fresh.clone();
+        stressed.fragments[0].history.tension_n_m[0] = 1.0;
+        mixed.mix_in(&stressed, 1.0);
+        assert_eq!(mixed.fragments.len(), 2);
+        let mut ordered = parcel(0.8, 0.2).material.unwrap();
+        ordered.append(&fresh, 1.0);
+        assert_eq!(ordered.fragments.len(), 2);
+        assert_eq!(ordered.fragments[0].network, 0.8);
+        assert_eq!(ordered.fragments[1].network, 0.1);
     }
 
     #[test]
@@ -323,6 +367,17 @@ mod tests {
 }
 
 impl Fragment {
+    pub(crate) fn properties(&self) -> Prop {
+        let mut prop = self.recipe.properties;
+        let q = prop[8] as f64;
+        if self.pigment > 0.0 && q > 0.0 && q < 1.0 {
+            prop[4] = (self.binder / self.pigment * (1.0 - q) / q) as f32;
+            let reference = (1.0 - q) / (1.0 - q + q * self.recipe.properties[4] as f64);
+            prop[0] *= (self.pigment / (self.pigment + self.binder) / reference) as f32;
+        }
+        prop
+    }
+
     pub fn scale(&mut self, factor: f64) {
         self.reference_area *= factor;
         self.volume *= factor;
@@ -357,8 +412,74 @@ impl Fragment {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "replay-effects", derive(serde::Serialize))]
 pub struct MaterialPayload {
     pub fragments: Vec<Fragment>,
+}
+
+#[cfg(feature = "replay-effects")]
+impl<'de> serde::Deserialize<'de> for MaterialPayload {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            fragments: Vec<Fragment>,
+        }
+        let material = Wire::deserialize(deserializer)?;
+        for fragment in &material.fragments {
+            let history = fragment.history;
+            if !fragment.reference_area.is_finite()
+                || fragment.reference_area <= 0.0
+                || [
+                    fragment.volume,
+                    fragment.pigment,
+                    fragment.binder,
+                    fragment.solvent,
+                ]
+                .iter()
+                .any(|v| !v.is_finite() || *v < 0.0)
+                || [
+                    fragment.oxygen,
+                    fragment.oxidation,
+                    fragment.network,
+                    fragment.inhibitor,
+                ]
+                .iter()
+                .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+                || history
+                    .tension_n_m
+                    .iter()
+                    .chain(&history.moment_n)
+                    .any(|v| !v.is_finite())
+                || !history.coverage.is_finite()
+                || !(0.0..=1.0).contains(&history.coverage)
+                || history.coverage == 0.0
+                || !history.interface_damage.is_finite()
+                || !(0.0..=1.0).contains(&history.interface_damage)
+                || fragment
+                    .recipe
+                    .color
+                    .iter()
+                    .chain(&fragment.recipe.properties)
+                    .any(|v| !v.is_finite())
+                || fragment
+                    .recipe
+                    .parts
+                    .iter()
+                    .any(|p| !p.1.is_finite() || p.1 < 0.0)
+                || fragment
+                    .recipe
+                    .binders
+                    .iter()
+                    .any(|v| !v.is_finite() || *v < 0.0)
+                || (fragment.recipe.binders.iter().sum::<f64>() - 1.0).abs() > 1e-12
+            {
+                return Err(serde::de::Error::custom("invalid chemical tool payload"));
+            }
+        }
+        Ok(Self {
+            fragments: material.fragments,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -423,16 +544,100 @@ impl MaterialPayload {
         if factor <= 0.0 {
             return;
         }
-        self.fragments
-            .extend(other.fragments.iter().cloned().map(|mut f| {
-                f.scale(factor);
-                f
-            }));
+        for source in &other.fragments {
+            let mut fragment = source.clone();
+            fragment.scale(factor);
+            if let Some(last) = self.fragments.last_mut() {
+                let proportional = |a: f64, b: f64| {
+                    let left = a * fragment.volume;
+                    let right = b * last.volume;
+                    (left - right).abs() <= 4.0 * f64::EPSILON * (left.abs() + right.abs())
+                };
+                if last.volume > 0.0
+                    && fragment.volume > 0.0
+                    && last.recipe == fragment.recipe
+                    && last.history == fragment.history
+                    && last.history.tension_n_m == [0.0; 3]
+                    && last.history.moment_n == [0.0; 3]
+                    && last.oxygen == fragment.oxygen
+                    && last.oxidation == fragment.oxidation
+                    && last.network == fragment.network
+                    && last.inhibitor == fragment.inhibitor
+                    && proportional(last.pigment, fragment.pigment)
+                    && proportional(last.binder, fragment.binder)
+                    && proportional(last.solvent, fragment.solvent)
+                {
+                    last.reference_area += fragment.reference_area;
+                    last.volume += fragment.volume;
+                    last.pigment += fragment.pigment;
+                    last.binder += fragment.binder;
+                    last.solvent += fragment.solvent;
+                    continue;
+                }
+            }
+            self.fragments.push(fragment);
+        }
     }
 
     pub fn blend(&mut self, other: &Self, weight: f64) {
         self.scale(1.0 - weight);
-        self.append(other, weight);
+        self.mix_in(other, weight);
+    }
+
+    pub fn mix_in(&mut self, other: &Self, factor: f64) {
+        if factor <= 0.0 {
+            return;
+        }
+        for source in &other.fragments {
+            let mut fragment = source.clone();
+            fragment.scale(factor);
+            let compatible = self.fragments.iter_mut().find(|f| {
+                f.recipe == fragment.recipe
+                    && f.history == fragment.history
+                    && f.history.tension_n_m == [0.0; 3]
+                    && f.history.moment_n == [0.0; 3]
+            });
+            if let Some(existing) = compatible {
+                let weighted = |a: f64, b: f64, wa: f64, wb: f64| {
+                    if wa + wb > 0.0 {
+                        (a * wa + b * wb) / (wa + wb)
+                    } else {
+                        a
+                    }
+                };
+                existing.oxygen = weighted(
+                    existing.oxygen,
+                    fragment.oxygen,
+                    existing.oxygen_capacity(),
+                    fragment.oxygen_capacity(),
+                );
+                existing.oxidation = weighted(
+                    existing.oxidation,
+                    fragment.oxidation,
+                    existing.binder,
+                    fragment.binder,
+                );
+                existing.network = weighted(
+                    existing.network,
+                    fragment.network,
+                    existing.binder,
+                    fragment.binder,
+                );
+                existing.inhibitor = weighted(
+                    existing.inhibitor,
+                    fragment.inhibitor,
+                    existing.binder,
+                    fragment.binder,
+                );
+                existing.reference_area += fragment.reference_area;
+                existing.volume += fragment.volume;
+                existing.pigment += fragment.pigment;
+                existing.binder += fragment.binder;
+                existing.solvent += fragment.solvent;
+            } else {
+                self.fragments.push(fragment);
+            }
+        }
     }
 
     pub fn split_top(&self, fraction: f64) -> (Self, Self) {
@@ -464,12 +669,16 @@ impl MaterialPayload {
                     fragment.history = fragment.sliced_history(boundary, 1.0, geometry);
                 }
                 rest.scale(boundary);
-                if um_per_volume.is_some() { rest.reference_area = fragment.reference_area; }
+                if um_per_volume.is_some() {
+                    rest.reference_area = fragment.reference_area;
+                }
                 below.fragments.push(rest);
             }
             let reference_area = fragment.reference_area;
             fragment.scale(take / fragment.volume);
-            if um_per_volume.is_some() { fragment.reference_area = reference_area; }
+            if um_per_volume.is_some() {
+                fragment.reference_area = reference_area;
+            }
             top.fragments.push(fragment);
         }
         top.fragments.reverse();

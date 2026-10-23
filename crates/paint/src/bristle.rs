@@ -549,7 +549,7 @@ impl Held {
 
     pub fn load_material(&mut self, paint: Paint, amount: f32, material: Option<crate::oil::exchange::MaterialPayload>) {
         let mut lat = paint.latent();
-        lat.material = material;
+        if material.is_some() { lat.material = material; }
         let full = self.full();
         let scatter = paint.scatter();
         let t = paint.thinner;
@@ -582,7 +582,7 @@ impl Held {
 
     pub fn load_part_material(&mut self, paint: Paint, amount: f32, part: &Part, material: Option<crate::oil::exchange::MaterialPayload>) {
         let mut lat = paint.latent();
-        lat.material = material;
+        if material.is_some() { lat.material = material; }
         let full = self.full();
         let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
@@ -807,6 +807,7 @@ pub(crate) struct Surf {
     pub(crate) vol: *mut f32,
     pub(crate) lat: *mut Latent,
     pub(crate) material_sinks: *mut Vec<crate::oil::exchange::MaterialSink>,
+    pub(crate) material_changed: *mut u8,
     pub(crate) hide: *mut Prop,
     pub(crate) stroke: *mut u32,
     pub(crate) touched: *mut u32,
@@ -880,6 +881,10 @@ impl Surf {
             unsafe { (*self.material_sinks.add(i)).push(sink); }
         }
     }
+
+    pub(crate) unsafe fn mark_material(&self, i: usize) {
+        if !self.material_changed.is_null() { unsafe { *self.material_changed.add(i) = 1; } }
+    }
     /// Lay `v` coats of paint of cure `cure` (0: fresh) at pixel `i`: it
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
@@ -889,6 +894,7 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
+            self.mark_material(i);
             // engine 4: the solvent in the paint evaporates as it is laid
             // (in minutes: before anything else can work it), leaving a film
             // of the paint's own body that much thinner
@@ -1021,6 +1027,7 @@ impl Surf {
     #[inline]
     pub(crate) unsafe fn take(&self, i: usize, v: f32) -> Prop {
         unsafe {
+            if v > 0.0 { self.mark_material(i); }
             self.film_give(i, v);
             let vol = &mut *self.vol.add(i);
             if self.layers && !(*self.lat.add(i)).layers.is_empty() {
@@ -1132,6 +1139,7 @@ impl Canvas {
             vol: self.wet.vol.as_mut_ptr(),
             lat: self.wet.lat.as_mut_ptr(),
             material_sinks: if self.wet.material_sinks.len() == n { self.wet.material_sinks.as_mut_ptr() } else { std::ptr::null_mut() },
+            material_changed: if self.wet.material_changed.len() == n { self.wet.material_changed.as_mut_ptr() } else { std::ptr::null_mut() },
             hide: self.wet.hide.as_mut_ptr(),
             stroke: self.wet.stroke.as_mut_ptr(),
             touched: self.wet.touched.as_mut_ptr(),
@@ -1182,6 +1190,10 @@ impl Canvas {
     /// Panics if the brush holds solvent (a thinned load) and the canvas's
     /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        if self.material_exchange_needed() {
+            let rect = footprint(&held.tool, &g.pts, g.shake, self.f.scale, self.f.full_w, self.f.full_h);
+            return self.with_native_material_in(rect, |canvas| canvas.drag(held, g, clip));
+        }
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
@@ -2290,6 +2302,10 @@ impl Canvas {
     /// Panics if the brush holds solvent and the canvas's engine is before
     /// 3 (as `drag`).
     pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
+        if self.material_exchange_needed() {
+            let rect = touch_footprint(&held.tool, t, self.f.scale, self.f.full_w, self.f.full_h);
+            return self.with_native_material_in(rect, |canvas| canvas.touch(held, t, clip));
+        }
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::touch");
@@ -2457,6 +2473,7 @@ impl Canvas {
     /// Panics if a number in `sp` is not finite, or if the brush holds
     /// solvent and the canvas's engine is before 3 (as `drag`).
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
+        if self.material_exchange_needed() { return self.with_native_material(|canvas| canvas.spatter(held, sp, clip)); }
         held.tool.assert_valid();
         // (before any paint leaves the brush)
         sp.assert_valid();
@@ -2964,7 +2981,7 @@ impl Knife {
         }
         self.solvent += liquid * paint.thinner;
         let mut lat = paint.latent();
-        lat.material = material;
+        if material.is_some() { lat.material = material; }
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
         crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
     }
@@ -3066,6 +3083,10 @@ impl Canvas {
     /// canvas that skims (`with_knife_skim`) paint laid on wet paint stays
     /// on top of it, mixing with only the film where the two meet.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(pts, k.width + 4.0 / self.f.scale);
+            return self.with_native_material_in(rect, |canvas| canvas.knife(k, pts, pressure, angle, lay, lift));
+        }
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;

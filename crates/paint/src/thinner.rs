@@ -528,6 +528,7 @@ impl Canvas {
                     continue;
                 }
                 let i = index(k2);
+                if !self.wet.material_changed.is_empty() { self.wet.material_changed[i] = 1; }
                 if let Some(sink) = sink {
                     assert_eq!(self.wet.material_sinks.len(), self.wet.vol.len(), "chemical flow requires a sink ledger");
                     self.wet.material_sinks[i].push(sink);
@@ -585,6 +586,7 @@ impl Canvas {
     /// the gel point; 0 where there is no open film or it has never waited.
     pub fn cure_at(&self, x: f32, y: f32) -> f32 {
         let i = self.f.index(x, y);
+        if self.material_exchange_needed() { return self.material_store().unwrap().sample(i).expect("material pixel").network; }
         if self.wet.vol[i] < 1e-5 {
             return 0.0;
         }

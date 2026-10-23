@@ -20,6 +20,7 @@ use paint::Palette;
 /// Heaps the board holds. Beyond this a new heap is refused (`Board::refuses_full`: new
 /// paintings) or the oldest is scraped off (older paintings, which replay as they were painted).
 pub const LIVE: usize = 16;
+fn linseed() -> [f64; 5] { [1.0, 0.0, 0.0, 0.0, 0.0] }
 /// The most dirt a heap takes before it is all dirt the brush finds (share of its volume).
 const DIRT_CAP: f32 = 0.5;
 /// Paint a brush leaves in a heap on one visit, at `dirty = 1` (share of the heap).
@@ -30,7 +31,6 @@ const RESIDUE_FOLLOW: f32 = 0.12;
 const SEEP: f32 = 0.08;
 
 #[derive(Clone, Debug)]
-#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Heap {
     pub id: u64,
     pub name: Option<String>,
@@ -42,6 +42,7 @@ pub struct Heap {
     pub medium: f32,
     pub solvent: f32,
     pub oil_rate: f32,
+    pub binders: [f64; 5],
     pub thinner: f32,
     /// Paint other brushes left in it: (tube, volume).
     pub dirt: Vec<(usize, f32)>,
@@ -50,6 +51,43 @@ pub struct Heap {
     /// Knifed into (`p:add`) since it was knifed.
     pub added: bool,
     pub scraped: bool,
+}
+
+impl serde::Serialize for Heap {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let material = paint::oil::wire::material_schema();
+        let mut state = serializer.serialize_struct("Heap", if material { 13 } else { 12 })?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("parts", &self.parts)?;
+        state.serialize_field("given_sum", &self.given_sum)?;
+        state.serialize_field("medium", &self.medium)?;
+        state.serialize_field("solvent", &self.solvent)?;
+        state.serialize_field("oil_rate", &self.oil_rate)?;
+        state.serialize_field("thinner", &self.thinner)?;
+        state.serialize_field("dirt", &self.dirt)?;
+        state.serialize_field("changed", &self.changed)?;
+        state.serialize_field("added", &self.added)?;
+        state.serialize_field("scraped", &self.scraped)?;
+        if material { state.serialize_field("binders", &self.binders)?; }
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Heap {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Legacy { id: u64, name: Option<String>, parts: Vec<(usize, f32)>, given_sum: f32, medium: f32, solvent: f32, oil_rate: f32, thinner: f32, dirt: Vec<(usize, f32)>, changed: bool, added: bool, scraped: bool }
+        #[derive(serde::Deserialize)]
+        struct Columns { legacy: Legacy, binders: [f64; 5] }
+        let (legacy, binders) = if paint::oil::wire::material_schema() {
+            let columns = Columns::deserialize(deserializer)?;
+            if columns.binders.iter().any(|v| !v.is_finite() || *v < 0.0) || columns.binders.iter().sum::<f64>() <= 0.0 { return Err(serde::de::Error::custom("invalid heap binder recipe")); }
+            (columns.legacy, columns.binders)
+        } else { (Legacy::deserialize(deserializer)?, linseed()) };
+        Ok(Self { id: legacy.id, name: legacy.name, parts: legacy.parts, given_sum: legacy.given_sum, medium: legacy.medium, solvent: legacy.solvent, oil_rate: legacy.oil_rate, thinner: legacy.thinner, dirt: legacy.dirt, changed: legacy.changed, added: legacy.added, scraped: legacy.scraped, binders })
+    }
 }
 
 impl Heap {
@@ -126,7 +164,7 @@ impl Board {
         }
         self.next_id += 1;
         let id = self.next_id;
-        let mut h = Heap { id, name, parts, given_sum, medium, solvent, oil_rate, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
+        let mut h = Heap { binders: linseed(), id, name, parts, given_sum, medium, solvent, oil_rate, thinner: 0.0, dirt: Vec::new(), changed: false, added: false, scraped: false };
         if self.dirty > 0.0 && self.residue_amount > 0.0 {
             let v = SEEP * self.dirty * self.residue_amount;
             h.dirt = self.residue.iter().map(|&(i, f)| (i, f * v)).collect();
@@ -241,6 +279,9 @@ impl Board {
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
         let before_medium = tubes.pile(h.fractions()).effective_medium(h.medium);
+        let mut previous_mix = tubes.pile(h.fractions());
+        previous_mix.solvent = h.solvent;
+        let previous_binder = before as f64 * previous_mix.binder_volume(before_medium);
         // (amounts that overflow the heap, together or with it, would leave its proportions NaN)
         let more: f32 = add.iter().map(|&(_, v)| v * k).sum();
         if !(more.is_finite() && (before + more).is_finite()) {
@@ -257,9 +298,12 @@ impl Board {
         }
         h.medium = tubes.pile(h.fractions()).effective_medium((before_medium * before + medium * added) / (before + added).max(1e-9));
         let retained = before / (before + added).max(1e-9);
+        let added_binder = added as f64 * tubes.pile(add.to_vec()).binder_volume(medium);
+        let retained_binder = previous_binder / (previous_binder + added_binder).max(1e-30);
         h.solvent *= retained;
         h.thinner *= retained;
         h.oil_rate = h.oil_rate * retained + (1.0 - retained);
+        for k in 0..5 { h.binders[k] = h.binders[k] * retained_binder + if k == 0 { 1.0 - retained_binder } else { 0.0 }; }
         h.changed = true;
         h.added = true;
         h.scraped = false;

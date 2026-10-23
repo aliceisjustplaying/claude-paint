@@ -790,6 +790,7 @@ impl Session {
                     projected.mix = st.tubes.pile(h.fractions());
                     projected.mix.solvent = h.solvent;
                     projected.mix.oil_rate = h.oil_rate;
+                    projected.mix.binders = h.binders;
                     projected.medium = h.medium;
                     projected.thinner = projected.thinner.map(|_| h.thinner);
                 }

@@ -268,9 +268,7 @@ struct Seg {
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
 #[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "replay-effects", derive(serde::Deserialize))]
 pub struct Rag {
-    #[cfg_attr(feature = "replay-effects", serde(skip))]
     pub absorbed: Option<crate::oil::exchange::MaterialPayload>,
     pub width: f32,
     pub load: f32,
@@ -308,10 +306,11 @@ impl std::fmt::Debug for Rag {
 impl serde::Serialize for Rag {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
-        if self.absorbed.is_some() {
+        let material = crate::oil::wire::material_schema();
+        if self.absorbed.is_some() && !material {
             return Err(serde::ser::Error::custom("absorbed chemical material requires a versioned replay envelope"));
         }
-        let mut state = serializer.serialize_struct("Rag", 9)?;
+        let mut state = serializer.serialize_struct("Rag", if material { 10 } else { 9 })?;
         state.serialize_field("width", &self.width)?;
         state.serialize_field("load", &self.load)?;
         state.serialize_field("soaked", &self.soaked)?;
@@ -321,7 +320,23 @@ impl serde::Serialize for Rag {
         state.serialize_field("seed", &self.seed)?;
         state.serialize_field("solvent_mm3", &self.solvent_mm3)?;
         state.serialize_field("mobile", &self.mobile)?;
+        if material { state.serialize_field("absorbed", &self.absorbed)?; }
         state.end()
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+impl<'de> serde::Deserialize<'de> for Rag {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Legacy { width: f32, load: f32, soaked: f32, damp: f32, wet_at: f64, fold: u32, seed: u64, solvent_mm3: f64, mobile: Mobile }
+        #[derive(serde::Deserialize)]
+        struct Columns { legacy: Legacy, absorbed: Option<crate::oil::exchange::MaterialPayload> }
+        let (legacy, absorbed) = if crate::oil::wire::material_schema() {
+            let columns = Columns::deserialize(deserializer)?;
+            (columns.legacy, columns.absorbed)
+        } else { (Legacy::deserialize(deserializer)?, None) };
+        Ok(Self { width: legacy.width, load: legacy.load, soaked: legacy.soaked, damp: legacy.damp, wet_at: legacy.wet_at, fold: legacy.fold, seed: legacy.seed, solvent_mm3: legacy.solvent_mm3, mobile: legacy.mobile, absorbed })
     }
 }
 
@@ -545,6 +560,7 @@ impl Canvas {
     /// there; returns how much (coats; the canvas holds it in µm).
     #[inline]
     fn rag_take(&mut self, i: usize, take: f32) -> f32 {
+        if take > 0.0 && !self.wet.material_changed.is_empty() { self.wet.material_changed[i] = 1; }
         let v0 = self.wet.vol[i];
         let mut ts = 0.0;
         if let Some(s) = self.wet.solv.get_mut(i)
@@ -812,6 +828,7 @@ impl Canvas {
     /// `solv_um` µm of solvent at pixel `i`, mixing by volume as a brush's
     /// paint does (`bristle::Surf::add`).
     fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
+        if (v > 0.0 || solv_um > 0.0) && !self.wet.material_changed.is_empty() { self.wet.material_changed[i] = 1; }
         let t = self.wet.vol[i] + v;
         let a = v / t;
         let l = &mut self.wet.lat[i];
@@ -859,6 +876,10 @@ impl Canvas {
 
     /// `rag_wipe`, lifting only inside `clip` (by its value) when it is given.
     fn rag_wipe_in(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pressure: &[f32], seed: u64, clip: Option<&Mask>) -> f64 {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(pts, 1.2 * rag.width + 2.0);
+            return self.with_native_material_in(rect, |canvas| canvas.rag_wipe_in(rag, pts, pressure, seed, clip));
+        }
         if pts.is_empty() {
             return 0.0;
         }
@@ -1082,6 +1103,10 @@ impl Canvas {
     /// patch of contact about the pad's width. Counts the hand time; returns
     /// the volume lifted (mm³).
     pub fn rag_blot(&mut self, rag: &mut Rag, x: f32, y: f32, pressure: f32, seed: u64) -> f64 {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(&[(x, y)], 1.2 * rag.width + 2.0);
+            return self.with_native_material_in(rect, |canvas| canvas.rag_blot(rag, x, y, pressure, seed));
+        }
         self.tally.rag_blot();
         let cs = rag.cloth_seed(seed);
         let mmu = self.mm_per_unit;

@@ -718,11 +718,15 @@ impl Canvas {
             let uy = f.uy(y);
             for x in 0..f.w {
                 let i = y * f.w + x;
+                let (volume, stroke) = if let Some(store) = self.material_store() {
+                    let column = store.read_column(i).expect("material pixel");
+                    (column.cells.iter().map(|cell| cell.pigment_um + cell.binder_um).sum::<f32>() / crate::COAT_UM, column.state.stroke)
+                } else { (self.wet.vol[i], self.wet.stroke[i]) };
                 let laid = match film0 {
-                    None => self.wet.vol[i],
-                    Some(f0) => self.wet.vol[i] + (self.film[i] - f0[i]),
+                    None => volume,
+                    Some(f0) => volume + (self.film[i] - f0[i]),
                 };
-                let bare = self.wet.stroke[i] <= before || laid < FILL_BARE;
+                let bare = stroke <= before || laid < FILL_BARE;
                 if !bare {
                     continue;
                 }
@@ -798,8 +802,8 @@ impl Canvas {
         }
         if std::env::var_os("PAINT_DEBUG").is_some() {
             let n = f.w * f.h;
-            let a = (0..n).filter(|&i| self.wet.stroke[i] <= before).count();
-            let b = (0..n).filter(|&i| self.wet.vol[i] < FILL_BARE).count();
+            let a = (0..n).filter(|&i| self.material_store().map_or_else(|| self.wet.stroke[i], |store| store.read_column(i).unwrap().state.stroke) <= before).count();
+            let b = (0..n).filter(|&i| self.material_store().map_or_else(|| self.wet.vol[i], |store| store.sample(i).unwrap().inventory_um / crate::COAT_UM) < FILL_BARE).count();
             eprintln!("fill: {} strokes; of {n} px, {a} untouched by the pass, {b} thin", plans.len());
         }
         if !plans.is_empty() {
@@ -1060,8 +1064,10 @@ impl Canvas {
         let (w, h) = (self.f.w, self.f.h);
         let n = w * h;
         let px = &self.wet.clock.px;
+        let material_open = self.material_store().map(|_| (0..n).map(|i| self.material_mobile_coats_at(i)).collect::<Vec<_>>());
         let open: Vec<f32> = (0..n)
             .map(|i| {
+                if let Some(open) = &material_open { return crate::smoothstep(0.0, OPEN_COATS, open[i]); }
                 let fl = if px.len() == n { crate::drying::fluid(px[i].cure) } else { 1.0 };
                 fl * crate::smoothstep(0.0, OPEN_COATS, self.wet.vol[i])
             })

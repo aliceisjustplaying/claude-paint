@@ -242,6 +242,8 @@ pub struct Canvas {
     pub(crate) engine: u32,
     pub(crate) material_revision: u32,
     pub(crate) material: Option<crate::oil::Material>,
+    pub(crate) native_exchange: Option<crate::oil::native::NativeExchange>,
+    pub(crate) drawing_projection: bool,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
@@ -280,27 +282,33 @@ pub struct Canvas {
 
 impl Clone for Canvas {
     fn clone(&self) -> Self {
+        let (f, keep, px, height, film, gloss, absorb, receptive) = if let Some(exchange) = &self.native_exchange {
+            (exchange.frame, exchange.keep, exchange.px.clone(), exchange.height.clone(), exchange.film.clone(), exchange.gloss.clone(), exchange.absorb.clone(), exchange.receptive.clone())
+        } else {
+            (self.f, self.keep, self.px.clone(), self.height.clone(), self.film.clone(), self.gloss.clone(), self.absorb.clone(), self.receptive.clone())
+        };
         let wet = if self.material.is_some() {
             let mut wet = crate::wet::Wet::new(0);
-            wet.current = self.wet.current;
+            wet.current = self.native_exchange.as_ref().map_or(self.wet.current, |exchange| exchange.current);
             wet.clock.now = self.clock();
             wet
         } else {
             self.wet.clone()
         };
         Self {
-            f: self.f, keep: self.keep, px: self.px.clone(), backing: self.backing.clone(), height: self.height.clone(),
-            film: self.film.clone(), gloss: self.gloss.clone(), absorb: self.absorb.clone(),
+            f, keep, px, backing: self.backing.clone(), height,
+            film, gloss, absorb,
             absorb_any: self.absorb_any, ground_um: self.ground_um, linen: self.linen,
             paper: self.paper, micro: self.micro.clone(), mm_per_unit: self.mm_per_unit,
             wet, surf_gen: self.surf_gen, base: None, e7_contact: Default::default(),
             drawing: self.drawing.clone(), tally: self.tally.clone(), hand_slice: self.hand_slice,
-            engine: self.engine, material_revision: self.material_revision, material: self.material.clone(),
+            engine: self.engine, material_revision: self.material_revision,
+            material: self.native_exchange.as_ref().map(|e| e.before.clone()).or_else(|| self.material.clone()), native_exchange: None, drawing_projection: false,
             quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep,
             liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide,
             drawing_optics: self.drawing_optics, glaze_film: self.glaze_film, film_pass: self.film_pass,
             rag_lift: self.rag_lift, knife_skim: self.knife_skim, blend_feather: self.blend_feather,
-            brush_skim: self.brush_skim, receptive: self.receptive.clone(), soak: self.soak.clone(),
+            brush_skim: self.brush_skim, receptive, soak: self.soak.clone(),
             drain: self.drain, sheet: self.sheet.clone(),
         }
     }
@@ -361,6 +369,8 @@ impl Canvas {
             engine,
             material_revision,
             material: None,
+            native_exchange: None,
+            drawing_projection: false,
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
@@ -385,7 +395,7 @@ impl Canvas {
     /// paints as the version its painting was painted with.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
-        assert!(crate::supported_material_revision(v, self.material_revision), "invalid engine/material combination");
+        assert!(self.material_revision == 0 || crate::supported_material_revision(v, self.material_revision), "invalid engine/material combination");
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
         self.liquid_film_levels &= v >= 4;
@@ -550,6 +560,7 @@ impl Canvas {
     pub fn with_size_mm(mut self, width_mm: f32) -> Self {
         self.mm_per_unit = width_mm / Frame::WIDTH_UNITS;
         self.build_support();
+        self.sync_material_support();
         self
     }
 
@@ -568,6 +579,7 @@ impl Canvas {
         self.absorb_any = cap > 0.0;
         // bare paper is matte
         self.gloss.iter_mut().for_each(|v| *v = 0.05);
+        self.sync_material_support();
         self
     }
 
@@ -577,11 +589,13 @@ impl Canvas {
     /// 0.1 µm; a lean, matte one has its pigment standing proud, about
     /// 2 µm: notes/research/dry_pigment_optics.md §4, estimates).
     pub(crate) fn micro_um(&self, i: usize) -> f32 {
-        let paint = crate::lerp(2.0, 0.1, self.gloss[i].clamp(0.0, 1.0));
+        let material = self.material_exchange_needed();
+        let gloss = if material && !self.material_store().unwrap().read_column(i).unwrap().cells.is_empty() { 1.0 } else { self.gloss[i] };
+        let paint = crate::lerp(2.0, 0.1, gloss.clamp(0.0, 1.0));
         match self.micro.get(i) {
             // a film thinner than the pores leaves them open
             Some(&m) => {
-                let film_um = self.film[i] * crate::surface::COAT_UM;
+                let film_um = if material { self.material_film_at(i) } else { self.film[i] } * crate::surface::COAT_UM;
                 let t = (film_um / m.max(1e-3)).min(1.0);
                 crate::lerp(m, paint, t)
             }
@@ -624,6 +638,7 @@ impl Canvas {
 
     /// Prepare a ground with the paint's retained film optics (engine 9).
     pub fn prime_paint(&mut self, paint: &crate::Paint, um: f32, texture: f32, seed: u64) {
+        assert!(self.material_store().is_none_or(|store| store.statistics().live_cells == 0), "primer requires an unpainted material support");
         self.dry();
         let (w, h) = (self.f.w, self.f.h);
         let (ox, oy) = (self.f.x0, self.f.y0);
@@ -646,6 +661,7 @@ impl Canvas {
         }
         self.film.par_iter_mut().zip(&t).for_each(|(f, &ti)| *f += ti / COAT_UM);
         self.ground_um += um;
+        self.sync_material_support();
     }
 
     /// Total thickness of the ground layers primed on this canvas, µm.
@@ -802,6 +818,7 @@ impl Canvas {
         let g = crate::lerp(OIL_GROUND_GLOSS, 0.05, a);
         self.gloss.iter_mut().for_each(|v| *v = g);
         self.absorb_any = a > 0.0;
+        self.sync_material_support();
     }
 
     /// A varnish was laid over the whole picture: its surface is glossy, and
@@ -810,6 +827,7 @@ impl Canvas {
         self.gloss.iter_mut().for_each(|v| *v = 1.0);
         self.absorb.iter_mut().for_each(|v| *v = 0.0);
         self.absorb_any = false;
+        self.sync_material_support();
     }
 
     /// Light the surface relief (paint ridges + weave) from the upper left.

@@ -260,6 +260,7 @@ impl Canvas {
             self.height = s.height;
             self.micro = s.micro;
             self.surf_gen += 1;
+            self.sync_material_support();
             return;
         }
         let Some(l) = self.linen else { return };
@@ -283,6 +284,7 @@ impl Canvas {
         });
         let _ = h;
         self.surf_gen += 1;
+        self.sync_material_support();
     }
 
     /// A wet layer of thickness `add` (µm, per pixel of `rect`) and stiffness

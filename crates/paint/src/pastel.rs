@@ -395,6 +395,7 @@ impl Canvas {
     /// stick sinking into the tooth under each point's force, laying what
     /// it abrades and wearing. Returns what it laid and the hand time.
     pub fn stick_stroke(&mut self, stick: &mut Stick, pts: &[StrokePoint]) -> Laid {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.stick_stroke(stick, pts)); }
         let mut out = Laid::default();
         if pts.len() < 2 {
             return out;
@@ -697,6 +698,7 @@ impl Canvas {
     /// wetted (`wet` 0..1, 0.15 for a light spray) times what index matching
     /// takes (to about a fifth, for particles of n ≈ 2 in resin of n ≈ 1.5).
     pub fn fix_pastel(&mut self, m: Option<&crate::Mask>, wet: f32) {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.fix_pastel(m, wet)); }
         let f = self.f;
         let w = wet.clamp(0.0, 1.0);
         let Some(d) = self.drawing.as_mut() else { return };
@@ -737,6 +739,7 @@ impl Canvas {
     /// again, as fine grains pressed into the pores (they cover more for
     /// their volume). Bound pastel stays. Returns the hand time (s).
     pub fn rub(&mut self, path: &[(f32, f32)], force: f32, pad_mm2: Option<f32>, speed: f32) -> f32 {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.rub(path, force, pad_mm2, speed)); }
         if path.len() < 2 {
             return 0.0;
         }
@@ -786,6 +789,7 @@ impl Canvas {
     /// or the work is too large. Defaults and their sources: the `SMUDGE_*`,
     /// `FINGER_*` and `STUMP_*` constants (notes/research/pastel_blending.md).
     pub fn rub_area(&mut self, m: &crate::Mask, o: AreaRub) -> Result<Rubbed, String> {
+        if self.material_drawing_needed() { return self.with_material_drawing(|canvas| canvas.rub_area(m, o)); }
         let whole = self.f.whole();
         if m.f.w != whole.w || m.f.h != whole.h || m.data.len() != whole.w * whole.h {
             return Err("smudge: the mask is not this canvas's".into());
@@ -927,8 +931,10 @@ impl Canvas {
             return "off the canvas".into();
         }
         let i = gy as usize * f.w + gx as usize;
-        let paint = self.film[i] > 1e-3 || self.wet.vol[i] > 1e-5;
-        let mut out = if self.wet.vol[i] > 1e-5 {
+        let volume = if self.material_exchange_needed() { self.material_mobile_coats_at(i) } else { self.wet.vol[i] };
+        let film = if self.material_exchange_needed() { self.material_film_at(i) } else { self.film[i] };
+        let paint = film > 1e-3 || volume > 1e-5;
+        let mut out = if volume > 1e-5 {
             let stage = match self.drying_at(x, y) {
                 crate::Stage::Open => "open",
                 crate::Stage::Setting => "setting",
@@ -946,7 +952,7 @@ impl Canvas {
         if let Some(d) = &self.drawing {
             let c = &d.cells[i];
             let v = c.loose + c.bound;
-            if v > 0.0 && self.film[i] <= c.film + 1e-4 {
+            if v > 0.0 && film <= c.film + 1e-4 {
                 let mu = self.micro_um(i);
                 let full = v / mu.max(1e-3);
                 let tooth = if full >= 0.95 { "the tooth full" } else if full > 0.5 { "the tooth half full and more" } else if full > 0.2 { "the tooth taking it" } else { "a little in the tooth" };

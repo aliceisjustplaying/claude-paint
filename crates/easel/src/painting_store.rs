@@ -91,6 +91,8 @@ pub struct Manifest {
     pub runtime_sha256: String,
     pub renderer: String,
     pub engine: u32,
+    #[serde(default, skip_serializing_if = "material_zero")]
+    pub material_revision: u32,
     pub pigment_box: String,
     pub painting_width: usize,
     pub window: Option<[usize; 6]>,
@@ -99,6 +101,8 @@ pub struct Manifest {
     pub finishable: bool,
     pub resumable: bool,
 }
+
+fn material_zero(revision: &u32) -> bool { *revision == 0 }
 
 pub struct PaintingStore {
     dir: PathBuf,
@@ -175,7 +179,7 @@ fn manifest(dir: &Path, id: &str) -> io::Result<Manifest> {
         || !valid_id(&m.source.id) || m.source.bytes > MAX_SOURCE_BYTES || m.source_bytes != m.source.bytes
         || m.renderable != m.checkpoint.is_some() || m.finishable != m.renderable
         || m.window.is_some() != m.renderable || m.um_per_px_bits.is_some() != m.renderable
-        || !(16..=9600).contains(&m.painting_width) || !paint::supported_engine(m.engine)
+        || !(16..=9600).contains(&m.painting_width) || !paint::supported_material_revision(m.engine, m.material_revision)
     {
         return Err(invalid("unsupported or inconsistent revision manifest"));
     }
@@ -200,6 +204,8 @@ fn verify_object(dir: &Path, object: &Object, kind: &str, limit: u64, collect: b
 
 fn verify_revision(dir: &Path, m: &Manifest) -> io::Result<String> {
     let source = verify_object(dir, &m.source, "easel-source/1", MAX_SOURCE_BYTES, true)?;
+    let text = std::str::from_utf8(&source).map_err(|_| invalid("source isn't UTF-8"))?;
+    if crate::session::logged_material_revision(text).map_err(invalid)? != m.material_revision { return Err(invalid("source and manifest material revisions disagree")); }
     if format!("{:x}", Sha256::digest(&source)) != m.source_sha256 || crate::session::parse_program(std::str::from_utf8(&source).map_err(|_| invalid("source isn't UTF-8"))?).len() != m.chunks {
         return Err(invalid("source prefix integrity check failed"));
     }
@@ -213,6 +219,7 @@ fn verify_revision(dir: &Path, m: &Manifest) -> io::Result<String> {
         if fields.get("log_fnv").and_then(|v| u64::from_str_radix(v, 16).ok()) != Some(save::fnv1a(&source))
             || fields.get("chunks").and_then(|v| v.parse::<usize>().ok()) != Some(m.chunks)
             || fields.get("engine").and_then(|v| v.parse::<u32>().ok()) != Some(m.engine)
+            || fields.get("material").map(|v| v.parse::<u32>()).transpose().map_err(|_| invalid("invalid save material revision"))?.unwrap_or(0) != m.material_revision
             || fields.get("box").copied() != Some(m.pigment_box.as_str())
             || fields.get("width").and_then(|v| v.parse::<usize>().ok()) != Some(m.painting_width)
         { return Err(invalid("checkpoint and accepted source do not agree")); }
@@ -607,7 +614,7 @@ impl PaintingStore {
             schema, parent: self.current.as_ref().map(|(id, _)| id.clone()),
             source: source_object, source_sha256: format!("{:x}", Sha256::digest(source.as_bytes())), source_bytes: source.len() as u64,
             chunks: session.log.len(), checkpoint, state_schema: "easel-save-1".into(), runtime_sha256: self.runtime.clone(), renderer: "legacy-look-1".into(),
-            engine: st.tubes.engine, pigment_box: st.tubes.name.into(), painting_width: st.width,
+            engine: st.tubes.engine, material_revision: st.tubes.material_revision, pigment_box: st.tubes.name.into(), painting_width: st.width,
             window: st.canvas.as_ref().map(|c| { let f = c.window(); [f.w, f.h, f.x0, f.y0, f.full_w, f.full_h] }),
             um_per_px_bits: st.canvas.as_ref().map(|c| (c.px_mm() * 1000.0).to_bits()),
             renderable: has_canvas, finishable: has_canvas, resumable: false,

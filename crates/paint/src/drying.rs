@@ -402,10 +402,8 @@ impl Canvas {
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
-        if let Some(material) = &mut self.material {
-            material.advance_to(material.store.clock.seconds + dt as f64 * 60.0).expect("material clock advance");
-            self.wet.clock.now = material.store.clock.seconds / 60.0;
-            self.surf_gen += 1;
+        if self.material.is_some() {
+            self.advance_material_clock(self.clock() * 60.0 + dt as f64 * 60.0).expect("material clock advance");
             return;
         }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
@@ -665,7 +663,8 @@ impl Canvas {
     /// above.
     pub fn dry(&mut self) {
         if self.material.is_some() {
-            while self.stages().iter().any(|stage| *stage != Stage::Dry) {
+            while self.stages().iter().any(|stage| *stage != Stage::Dry)
+                || (0..self.f.w * self.f.h).any(|i| self.material_store().unwrap().read_column(i).unwrap().state.free_solvent_um > crate::thinner::SOLVENT_FLOOR) {
                 self.wait(10.0);
             }
             return;

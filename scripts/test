@@ -112,6 +112,13 @@ rust material-canvas paint 'lib paint test' \
   oil::tests::removing_only_binder_preserves_pigment_optical_depth \
   oil::tests::checkpoint_budget_counts_current_and_pending_stores_together
 rust material-identity easel 'bin easel test' session::tests::material_identity_is_explicit_and_legacy_logs_stay_legacy
+rust material-native paint 'lib paint test' \
+  oil::native::tests::native_brush_commits_fragments_and_releases_dense_material \
+  oil::native::tests::native_work_does_not_expose_a_slow_base_through_a_set_cover \
+  oil::native::tests::oversized_native_contact_and_rag_leave_only_authoritative_columns \
+  oil::native::tests::a_failed_native_kernel_restores_the_retained_interval \
+  oil::native::tests::native_projection_is_footprint_bounded_and_preserves_untouched_packets
+rust material-tools easel 'bin easel test' replay_checkpoint::tests::material_tool_envelope_preserves_recipes_histories_and_binder_fractions
 rust painting-store easel 'bin easel test' \
   painting_store::tests::chunk_counter_exceeds_one_gib_without_state_allocation \
   painting_store::tests::chunked_checkpoint_validates_counts_lengths_and_schema_limits \

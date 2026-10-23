@@ -5,6 +5,112 @@ use crate::color::Rgb;
 use crate::mixer::Backing;
 
 impl Canvas {
+    pub(crate) fn material_drawing_needed(&self) -> bool {
+        self.material_exchange_needed() && !self.drawing_projection
+    }
+
+    pub(crate) fn with_material_drawing<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+        if !self.material_drawing_needed() {
+            return work(self);
+        }
+        let projected_height = self.wet_surface();
+        let baseline = projected_height.clone();
+        let color: Vec<_> = (0..self.f.w * self.f.h)
+            .map(|i| self.material_look_px(i))
+            .collect();
+        let film: Vec<_> = (0..self.f.w * self.f.h)
+            .map(|i| self.material_film_at(i))
+            .collect();
+        let px = std::mem::replace(&mut self.px, color);
+        let height = std::mem::replace(&mut self.height, projected_height);
+        let film = std::mem::replace(&mut self.film, film);
+        self.wet.vol = self.material_wet_coats();
+        self.drawing_projection = true;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(self)));
+        self.drawing_projection = false;
+        let changed_height = std::mem::replace(&mut self.height, height);
+        self.px = px;
+        self.film = film;
+        self.wet.vol.clear();
+        self.wet.vol.shrink_to_fit();
+        if result.is_ok() && changed_height != baseline {
+            self.edit_material(|store| {
+                for i in 0..changed_height.len() {
+                    let delta = changed_height[i] - baseline[i];
+                    if delta != 0.0 {
+                        store.with_column_mut(i, |column, _| {
+                            column.state.support_z_um += delta;
+                            Ok(())
+                        })?;
+                    }
+                }
+                Ok(())
+            })
+            .expect("drawing support relief");
+        }
+        match result {
+            Ok(result) => result,
+            Err(error) => std::panic::resume_unwind(error),
+        }
+    }
+
+    pub(crate) fn material_film_at(&self, i: usize) -> f32 {
+        let column = self
+            .material_store()
+            .expect("material backend")
+            .read_column(i)
+            .expect("material pixel");
+        column.state.film
+            + column
+                .cells
+                .iter()
+                .map(|cell| {
+                    let prop = column.formulations[cell.recipe as usize].prop();
+                    let fraction = (1.0 - prop[8]) / (1.0 - prop[8] + prop[8] * prop[4]);
+                    if fraction > 0.0 {
+                        cell.pigment_um / fraction / crate::COAT_UM
+                    } else {
+                        cell.binder_um / crate::COAT_UM
+                    }
+                })
+                .sum::<f32>()
+    }
+
+    pub(crate) fn sync_material_support(&mut self) {
+        let Some(mut material) = self.material.clone() else {
+            return;
+        };
+        material.commit();
+        material.store.pixel_area = self.px_mm() as f64 * self.px_mm() as f64;
+        for i in 0..self.f.w * self.f.h {
+            material
+                .store
+                .with_column_mut(i, |column, _| {
+                    let backing = self
+                        .backing
+                        .get(i)
+                        .copied()
+                        .unwrap_or(Backing {
+                            reflectance: column.state.reflectance,
+                            residual: column.state.residual,
+                            color: column.state.color,
+                        })
+                        .under(self.px[i]);
+                    column.state.reflectance = backing.reflectance;
+                    column.state.residual = backing.residual;
+                    column.state.color = backing.color;
+                    column.state.support_z_um = self.height[i];
+                    column.state.film = self.film[i];
+                    column.state.gloss = self.gloss[i];
+                    column.state.absorb = self.absorb[i];
+                    Ok(())
+                })
+                .expect("valid material support");
+        }
+        self.material = Some(material);
+        self.backing.clear();
+    }
+
     pub(crate) fn initialize_material(&mut self) {
         let mut store = FilmStore::new(
             self.f.w as u32,
@@ -126,6 +232,29 @@ impl Canvas {
             residual: column.state.residual,
             color: column.state.color,
         };
+        let drawing = self
+            .drawing
+            .as_ref()
+            .map(|drawing| &drawing.cells[i])
+            .filter(|cell| cell.a > 0.0 && cell.film >= 0.0);
+        let mut drawn = false;
+        let mut film = column.state.film;
+        let overlay = |backing: &mut Backing, cell: &crate::graphite::Cell| {
+            let color = cell.reflectance();
+            let reflectance = crate::spectral::from_rgb(color);
+            let projected = crate::spectral::to_rgb(&reflectance);
+            for w in 0..crate::spectral::N {
+                backing.reflectance[w] += cell.a * (reflectance[w] - backing.reflectance[w]);
+            }
+            for k in 0..3 {
+                backing.residual[k] += cell.a * (color[k] - projected[k] - backing.residual[k]);
+                backing.color[k] += cell.a * (color[k] - backing.color[k]);
+            }
+        };
+        if let Some(drawing) = drawing.filter(|drawing| drawing.film <= film + 1e-4) {
+            overlay(&mut backing, drawing);
+            drawn = true;
+        }
         for (packet, &coverage) in column.packets.iter().zip(column.coverage) {
             let under = backing;
             let a = (packet.first_cell - column.first_cell) as usize;
@@ -141,6 +270,11 @@ impl Canvas {
                         1.0,
                     );
                 }
+                film += if pigment_fraction > 0.0 {
+                    cell.pigment_um / pigment_fraction / crate::COAT_UM
+                } else {
+                    cell.binder_um / crate::COAT_UM
+                };
             }
             if coverage < 1.0 {
                 for k in 0..crate::spectral::N {
@@ -153,6 +287,10 @@ impl Canvas {
                     backing.color[k] =
                         under.color[k] + coverage * (backing.color[k] - under.color[k]);
                 }
+            }
+            if let Some(drawing) = drawing.filter(|drawing| !drawn && drawing.film <= film + 1e-4) {
+                overlay(&mut backing, drawing);
+                drawn = true;
             }
         }
         backing.color
@@ -207,20 +345,129 @@ impl Canvas {
     }
 
     pub(crate) fn material_wet_coats(&self) -> Vec<f32> {
-        let store = self.material_store().expect("material backend");
         (0..self.f.w * self.f.h)
-            .map(|i| {
-                let column = store.read_column(i).expect("material pixel");
-                if super::stage(&column) == crate::Stage::Dry {
-                    return 0.0;
-                }
-                column
-                    .cells
-                    .iter()
-                    .map(|cell| cell.pigment_um + cell.binder_um)
-                    .sum::<f32>()
-                    / crate::COAT_UM
-            })
+            .map(|i| self.material_mobile_coats_at(i))
             .collect()
+    }
+
+    pub(crate) fn material_mobile_coats_at(&self, i: usize) -> f32 {
+        let column = self
+            .material_store()
+            .expect("material backend")
+            .read_column(i)
+            .expect("material pixel");
+        let Some(top) = column.cells.last() else {
+            return 0.0;
+        };
+        let limit =
+            super::recipes::observations_for(&column.formulations[top.recipe as usize].kinetics())
+                .set_to_touch_network as f32;
+        column
+            .cells
+            .iter()
+            .rev()
+            .take_while(|cell| cell.network <= limit)
+            .map(|cell| cell.pigment_um + cell.binder_um)
+            .sum::<f32>()
+            / crate::COAT_UM
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graphite::{Lead, Mark};
+
+    #[test]
+    fn material_drawing_uses_existing_overlay_without_retaining_dense_paint() {
+        let mut canvas = Canvas::new_window_with_material(32, 1.0, [0.8; 3], None, 9, 1);
+        let support = canvas.px.clone();
+        let mut before = Vec::new();
+        canvas
+            .material_store()
+            .unwrap()
+            .write_to(&mut before)
+            .unwrap();
+        canvas.draw(
+            &Lead::chalk(),
+            &Mark {
+                pts: vec![(100.0, 500.0), (900.0, 500.0)],
+                pressure: vec![0.8],
+            },
+            0.0,
+            7,
+        );
+        assert!(
+            canvas
+                .drawing
+                .as_ref()
+                .unwrap()
+                .cells
+                .iter()
+                .any(|cell| cell.a > 0.0)
+        );
+        assert!(canvas.seen().iter().any(|color| color[0] > 0.8));
+        assert_eq!(canvas.px, support);
+        assert!(canvas.wet.vol.is_empty() && canvas.wet.lat.is_empty());
+        assert!(!canvas.drawing_projection);
+        let mut after = Vec::new();
+        canvas
+            .material_store()
+            .unwrap()
+            .write_to(&mut after)
+            .unwrap();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn material_drawing_keeps_its_position_between_reactive_packets() {
+        use crate::oil::{
+            chemistry::{Cell, Kinetics},
+            store::{DepositMode, Formulation},
+            transfer::{Fragment, MaterialTransfer, TransferCell},
+        };
+        use std::sync::Arc;
+        let mut canvas = Canvas::new_window_with_material(1, 1.0, [0.8; 3], None, 9, 1);
+        let red = [0.95, 0.02, 0.02];
+        let cell = &mut canvas.drawing_mut().cells[0];
+        cell.a = 1.0;
+        cell.r = red;
+        cell.film = 0.0;
+        cell.optics = None;
+        assert_eq!(canvas.material_look_px(0), red);
+        let paint = crate::Paint::body([0.02, 0.03, 0.9]);
+        let recipe =
+            Arc::new(Formulation::new(paint.latent(), paint.prop(), Kinetics::default()).unwrap());
+        canvas
+            .edit_material(|store| {
+                let area = store.pixel_area();
+                let mut fragment = Fragment::new(
+                    vec![TransferCell::from_cell(
+                        Cell {
+                            pigment_um: 2500.0,
+                            binder_um: 2500.0,
+                            network: 1.0,
+                            ..Cell::default()
+                        },
+                        recipe,
+                        area,
+                    )],
+                    1.0,
+                );
+                fragment.reference_area = area;
+                store.deposit(
+                    0,
+                    MaterialTransfer {
+                        fragments: vec![fragment],
+                        free_solvent: 0.0,
+                    },
+                    DepositMode::Cover,
+                )
+            })
+            .unwrap();
+        assert!(canvas.material_look_px(0)[2] > canvas.material_look_px(0)[0]);
+        let film = canvas.material_film_at(0);
+        canvas.drawing_mut().cells[0].film = film;
+        assert_eq!(canvas.material_look_px(0), red);
     }
 }

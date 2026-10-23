@@ -127,6 +127,7 @@ impl Film {
         let before = v;
         let v = v * p.keep;
         unsafe {
+            self.surf.mark_material(i);
             if let Some(mut sink) = p.evaporated.clone() {
                 sink.material.scale(before as f64);
                 self.surf.material_sink(i, Some(sink));

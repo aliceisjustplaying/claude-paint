@@ -951,7 +951,8 @@ impl FilmEdit<'_> {
                         .tension_n_m
                         .map(|n| (n as f64 * fragment.reference_area / self.pixel_area) as f32),
                     moment_n: fragment.moment_n.map(|m| {
-                        (m as f64 * (fragment.reference_area / self.pixel_area).powi(2)) as f32
+                        (m as f64 * fragment.reference_area / self.pixel_area
+                            * fragment.reference_area / self.pixel_area) as f32
                     }),
                     interface_damage: fragment.interface_damage,
                     provenance: fragment.provenance,
@@ -1164,6 +1165,17 @@ pub(crate) mod tests {
             assert_eq!(cell.network, 0.8);
         }
         near(s.statistics().pigment + s.statistics().binder, 300.0);
+    }
+
+    #[test]
+    fn unstressed_fragment_area_does_not_overflow_zero_moments() {
+        let mut store = FilmStore::new(1, 1, 0.25).unwrap();
+        let mut material = paint(1.0, 1, 0.0);
+        material.fragments[0].reference_area = 1e200;
+        store.deposit(0, material, DepositMode::Cover).unwrap();
+        let packet = store.read_column(0).unwrap().packets[0];
+        assert_eq!(packet.tension_n_m, [0.0; 3]);
+        assert_eq!(packet.moment_n, [0.0; 3]);
     }
 
     #[test]

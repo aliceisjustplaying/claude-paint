@@ -1062,6 +1062,14 @@ fn palette_look(s: &Session) -> Result<(usize, usize, Vec<u8>), String> {
     look::palette(&s.piles(), ground)
 }
 
+/// A point given to an observation of the canvas (`probe`, `look --hold`): on it, or past its far
+/// edges by up to half a pixel (a canvas's height in units is its pixels', which needn't be
+/// round), as the point at the edge.
+fn canvas_point(c: &Canvas, (x, y): (f32, f32)) -> Option<(f32, f32)> {
+    let (w, h, half) = (c.width(), c.height(), 0.5 / c.window().scale);
+    (x.is_finite() && y.is_finite() && x >= 0.0 && y >= 0.0 && x <= w + half && y <= h + half).then(|| (x.min(w), y.min(h)))
+}
+
 /// Half the side (units) of the passage a held knife is seen against, when no crop is given.
 const HOLD_HALF: f32 = 120.0;
 
@@ -1084,9 +1092,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (paint, blade, full) = s.held(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     let (wu, hu) = (c.width(), c.height());
-    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
-        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
-    }
+    let at = canvas_point(&c, at).ok_or_else(|| format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1))?;
     let crop = v.crop.unwrap_or([(at.0 - HOLD_HALF).max(0.0), (at.1 - HOLD_HALF).max(0.0), (at.0 + HOLD_HALF).min(wu), (at.1 + HOLD_HALF).min(hu)]);
     if !(crop[0] <= at.0 && at.0 <= crop[2] && crop[1] <= at.1 && at.1 <= crop[3]) {
         return Err(format!("look --hold: --at {},{} lies outside the --crop", at.0, at.1));
@@ -1143,15 +1149,13 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
 /// nothing in the log, the canvas and its wear untouched.
 fn stick_hold_look(s: &Session, name: &str, at: (f32, f32), pose: [f32; 4], v: &look::View) -> Result<(usize, usize, Vec<u8>, String), String> {
     use image::ImageEncoder;
-    if v.size.is_some() || v.grid.is_some() || v.mirror || v.palette {
+    if v.size.is_some() || v.grid.is_some() || v.mirror || v.edges || v.palette {
         return Err("look --hold takes --at, --pose or --side, --crop, --mask, --mode value, squint, relief or gallery and --light, nothing else".into());
     }
     let (stick, turned) = s.held_stick(name)?;
     let c = s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
     let (wu, hu) = (c.width(), c.height());
-    if !(at.0.is_finite() && at.1.is_finite() && (0.0..=wu).contains(&at.0) && (0.0..=hu).contains(&at.1)) {
-        return Err(format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1));
-    }
+    let at = canvas_point(&c, at).ok_or_else(|| format!("look --hold: --at {},{} is not on the canvas ({wu} x {hu} units)", at.0, at.1))?;
     let half = 60.0f32;
     let crop = v.crop.unwrap_or([(at.0 - half).max(0.0), (at.1 - half).max(0.0), (at.0 + half).min(wu), (at.1 + half).min(hu)]);
     // (as `hold_look`: the point in the passage shown)
@@ -1746,9 +1750,8 @@ impl Server {
         };
         let c = self.s.canvas().ok_or("no canvas yet: the first chunk is canvas{...}")?;
         let f = c.window();
-        // (to half a pixel: a canvas's height in units is its pixels', which needn't be round)
         let (w, h) = (c.width(), c.height());
-        if x0 < 0.0 || y0 < 0.0 || x1 > w + 0.5 / f.scale || y1 > h + 0.5 / f.scale {
+        if canvas_point(&c, (x0, y0)).is_none() || canvas_point(&c, (x1, y1)).is_none() {
             let round = |v: f32| (v * 100.0).round() / 100.0;
             return Err(format!("probe: {place} is outside the canvas (0,0 to {},{})", round(w), round(h)));
         }
@@ -2802,6 +2805,25 @@ mod tests {
         assert!(s.held_stick("nope").unwrap_err().contains("holds no pastel stick"));
         assert!(stick_hold_look(&s, "P.glow", (1400.0, 400.0), [1.5, 60.0, 45.0, 0.0], &plain).unwrap_err().contains("not on the canvas"));
         assert!(stick_hold_look(&s, "P.glow", at, [1.5, 60.0, 45.0, 0.0], &look::View { mirror: true, ..look::View::default() }).is_err());
+    }
+
+    /// A held stick refuses the edges mode, as a held knife does, and both take the points
+    /// probe takes: the canvas's far edges to half a pixel (H is 199.99998 units here).
+    #[test]
+    fn a_held_stick_or_knife_takes_probes_points_and_no_edges() {
+        let mut s = Session::new(2400).unwrap().with_paper(true).unwrap();
+        s.run(r#"canvas{size=300, aspect=5, paper={}, seed=9}"#).unwrap();
+        s.run(r#"P = {glow = pastel(pile{{"vermilion", 1}}, {kind="soft"})}; q = pile{{"lead white", 1}}"#).unwrap();
+        let pose = [1.5, 60.0, 45.0, 0.0];
+        let edges = look::View::parse(&["--mode".to_string(), "edges".to_string()]).unwrap();
+        assert!(stick_hold_look(&s, "P.glow", (500.0, 100.0), pose, &edges).is_err());
+        assert!(hold_look(&s, "q", (500.0, 100.0), &edges).is_err());
+        let plain = look::View::default();
+        assert!(s.canvas().unwrap().height() < 200.0);
+        stick_hold_look(&s, "P.glow", (500.0, 200.0), pose, &plain).unwrap();
+        hold_look(&s, "q", (500.0, 200.0), &plain).unwrap();
+        assert!(stick_hold_look(&s, "P.glow", (500.0, 201.0), pose, &plain).unwrap_err().contains("not on the canvas"));
+        assert!(hold_look(&s, "q", (1001.0, 100.0), &plain).unwrap_err().contains("not on the canvas"));
     }
 
     #[test]

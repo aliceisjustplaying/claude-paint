@@ -23,16 +23,16 @@ fn no_canvas() -> mlua::Error {
     mlua::Error::runtime("no canvas yet: call canvas{} first")
 }
 
-/// What the chunk's reply says when a wipe ran on a full face (`FULL`), with
-/// the rag lift switch: `strokes` is how many of a mask wipe's strokes began
-/// on one, of how many (None: a wipe along a path that began on one).
-fn full_note(r: &Rag, strokes: Option<(usize, usize)>) -> String {
+/// What the chunk's reply says when a wipe or a blot ran on a full face (`FULL`),
+/// with the rag lift switch: `strokes` is how many of a mask wipe's strokes began
+/// on one, of how many (None: a wipe along a path or a blot, `verb`, that began on one).
+fn full_note(r: &Rag, strokes: Option<(usize, usize)>, verb: &str) -> String {
     let cloth = r.soaked >= FULL;
     match (strokes, cloth) {
         (Some((full, n)), false) => format!("rag: the face in use is full: {full} of {n} strokes began on it and lifted almost nothing (load {:.2}). A refold (r:refold(), or refold= in the wipe) turns out a cleaner face.\n", r.load),
         (Some((full, n)), true) => format!("rag: the whole cloth is full: {full} of {n} strokes lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
-        (None, false) => format!("rag: the face in use was full when this wipe began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.\n", r.load),
-        (None, true) => format!("rag: the whole cloth is full, so this wipe lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
+        (None, false) => format!("rag: the face in use was full when this {verb} began, so it lifted almost nothing (load {:.2}). r:refold() turns out a cleaner face.\n", r.load),
+        (None, true) => format!("rag: the whole cloth is full, so this {verb} lifted almost nothing (load {:.2}, soaked {:.2}). rag() takes a fresh one.\n", r.load, r.soaked),
     }
 }
 
@@ -130,7 +130,7 @@ impl UserData for RagU {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                         let (n, full) = c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
                         if c.rag_lift() && full > 0 {
-                            s.out.push_str(&full_note(&u.rag.borrow(), Some((full, n))));
+                            s.out.push_str(&full_note(&u.rag.borrow(), Some((full, n)), "wipe"));
                         }
                         Ok(())
                     })
@@ -153,7 +153,7 @@ impl UserData for RagU {
                         let full = u.rag.borrow().load >= FULL;
                         c.rag_wipe(&mut u.rag.borrow_mut(), &pts, &pr, sd);
                         if c.rag_lift() && full {
-                            s.out.push_str(&full_note(&u.rag.borrow(), None));
+                            s.out.push_str(&full_note(&u.rag.borrow(), None, "wipe"));
                         }
                         Ok(())
                     })
@@ -176,7 +176,11 @@ impl UserData for RagU {
             let sd = seed(&u.st, lua, o.as_ref())?;
             time::verb(&u.st, Verb::Marks, |s| {
                 let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+                let full = u.rag.borrow().load >= FULL;
                 c.rag_blot(&mut u.rag.borrow_mut(), x, y, pr[0], sd);
+                if c.rag_lift() && full {
+                    s.out.push_str(&full_note(&u.rag.borrow(), None, "blot"));
+                }
                 Ok(())
             })
         });
@@ -312,5 +316,22 @@ r:wipe({{100, 300}, {900, 300}})"#;
         run(&mut new, CANVAS);
         let out = run(&mut new, src);
         assert!(out.contains("rag: the face in use is full: ") && out.contains("rag: the face in use was full when this wipe began"), "{out}");
+    }
+
+    /// A blot on a full face says so too, as a wipe does.
+    #[test]
+    fn a_blot_on_a_full_face_says_so() {
+        let mut tubes = paint::Palette::tube_box();
+        tubes.engine = paint::engine7::ENGINE;
+        tubes.rag_lift = true;
+        let mut s = Session::with_box(W, tubes).unwrap();
+        run(&mut s, CANVAS);
+        let out = run(&mut s, r#"work(rect(0, 0, 1000, 600), {hand="broad", pile=pile{{"bone black", 1}}, coverage=2, fill=true, seed=1})
+r = rag{width=30}
+r:wipe(rect(0, 0, 1000, 600), {pressure=0.6})
+local load = r.load
+r:blot(500, 300)
+assert(r.load == load)"#);
+        assert!(out.contains("rag: the face in use was full when this blot began, so it lifted almost nothing"), "{out}");
     }
 }

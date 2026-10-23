@@ -108,14 +108,14 @@
 //! (some 100 µm rms of relief at the brush marks' spacing); a 1 mm one
 //! whose skin forms faster, 0.15.
 //!
-//! **The clock.** Fronts, skins and wrinkles step at every whole hour of
-//! the painting's clock (`TICK_MIN`), never at a wait's own ends: a wait
+//! **The clock.** Fronts, skins and wrinkles step every six hours of the
+//! painting's clock (`TICK_MIN`), never at a wait's own ends: a wait
 //! split into any parts leaves the same relief as the whole. A tick draws
 //! wrinkles only when a wavelength's worth of skin asks for `GROW` of
-//! slope or more, and a pass settles what asked, so the slow creep of a
-//! skin that has long since wrinkled costs a pass over the packets, not
-//! the blurs: a 45-day wait over a 2400-px canvas of thick paint draws
-//! some twenty passes, not a thousand.
+//! slope or more, and a pass settles every wavelength that asks, so the
+//! slow creep of a skin that has long since wrinkled costs a pass over
+//! the packets, not the blurs: a wait of months draws its wrinkles in a
+//! handful of passes.
 //!
 //! Engines 1 to 8 and engine-9 logs without `--@ material` have no
 //! packets and paint as they did. The coefficients below are estimates
@@ -171,8 +171,11 @@ const EXPAND_MIN: f32 = 2.0 * 24.0 * 60.0;
 /// yields at a few percent strain (3–10% for yield-stress fluids), so its
 /// modulus is 10–30 times its yield stress. 20.
 pub const MODULUS_PER_YIELD: f32 = 20.0;
-/// The clock the fronts and wrinkles step on: every whole hour.
-pub const TICK_MIN: f64 = 60.0;
+/// The clock the fronts and wrinkles step on: every six hours of the
+/// painting's clock. A front moves a fraction of a micrometer an hour
+/// and a skin's compression builds over days, so the step loses nothing
+/// the picture shows; a 90-day wait is 360 steps over the packets.
+pub const TICK_MIN: f64 = 360.0;
 /// Bulk thinner than this, µm, is cured through.
 const DRY_UM: f32 = 0.05;
 /// Depth of bulk, in wavenumbers (`q H`), past which the gel under a skin
@@ -188,11 +191,12 @@ const BAND_LAMBDA: f32 = 5.3;
 /// picture; skins on soft bulk don't get there).
 const BAND_MAX: usize = 16;
 /// The least growth of a wrinkle's rms slope, were it starting from
-/// level, that is drawn in one tick (3°, some 20 µm of amplitude at a
+/// level, that is drawn in one tick (6°, some 35 µm of amplitude at a
 /// 2 mm wavelength); slower growth is saved up for a tick that has this
-/// much, so a skin that creeps costs a pass over its packets, not the
-/// blurs.
-const GROW: f32 = 0.05;
+/// much, and a pass settles every wavelength that asks at all, so a skin
+/// that creeps costs a pass over its packets, not the blurs, and a wait
+/// of months draws its wrinkles in a handful of passes.
+const GROW: f32 = 0.1;
 /// Micro-roughness every surface has, µm, at the wrinkle's own wavelength,
 /// so a skin cured over a perfectly level film still has an imperfection
 /// to buckle from (a deterministic noise, so a replay is a replay).
@@ -750,15 +754,10 @@ impl Canvas {
             let mut bands: Vec<u8> = site.iter().filter(|s| s.at != NONE).map(|s| s.band).collect();
             bands.sort_unstable();
             bands.dedup();
-            // (and a wrinkle is at least a wavelength of skin asking: fewer
-            // pixels than a wavelength squared are peaks in a skin whose
-            // asking, as a whole, hasn't reached GROW yet)
             let asks = bands.iter().any(|&band| {
                 crate::surface::box_blur_into(need, pw, ph, 2 * band as usize, tmp);
                 crate::surface::box_blur_into(tmp, pw, ph, 2 * band as usize, avg);
-                let wavelength = BAND_LAMBDA * band as f32;
-                let n = site.iter().enumerate().filter(|(k, s)| s.at != NONE && s.band == band && avg[padded(*k)] >= GROW * GROW).count();
-                n as f32 >= wavelength * wavelength
+                site.iter().enumerate().any(|(k, s)| s.at != NONE && s.band == band && avg[padded(k)] >= GROW * GROW)
             });
             give(scratch);
             if asks {

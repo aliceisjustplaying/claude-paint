@@ -10,7 +10,7 @@ const HERE = join(import.meta.dirname, "..");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 /** A studio whose bin/easel answers status, globals and look (a 1-pixel PNG), with a brief and a journal. */
-function studio(): { dir: string; studio: string } {
+function studio(unreadable = false): { dir: string; studio: string } {
 	const tmp = process.env.TMPDIR;
 	assert.ok(tmp, "set TMPDIR to a scratch directory");
 	const dir = mkdtempSync(join(tmp, "recovery-test-"));
@@ -20,13 +20,18 @@ function studio(): { dir: string; studio: string } {
 	writeFileSync(join(s, "notes/journal.md"), "- day 1, 09:00: began\n");
 	writeFileSync(join(s, "paintings/lua/painting.lua"), "--@ chunk 1\ncanvas{}\n");
 	writeFileSync(join(s, "out/easel/painting/fresh.png"), Buffer.from(PNG, "base64"));
-	writeFileSync(join(s, "bin/easel"), `#!/bin/sh
-case "$1" in
-  status) echo '1 chunks · 2400px';;
-  globals) printf '1\\tsky\\ttable with 2 entries\\n';;
-  look) cp out/easel/painting/fresh.png out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png (1x1, 0.01s)';;
-  *) echo "no $1" >&2; exit 1;;
-esac
+	writeFileSync(join(s, "bin/easel"), `#!${process.execPath}
+const { chmodSync, copyFileSync } = require('node:fs');
+switch (process.argv[2]) {
+  case 'status': console.log('1 chunks · 2400px'); break;
+  case 'globals': console.log('1\\tsky\\ttable with 2 entries'); break;
+  case 'look':
+    copyFileSync('out/easel/painting/fresh.png', 'out/easel/painting/look-0007.png');
+    if (${unreadable}) chmodSync('out/easel/painting/look-0007.png', 0o000);
+    console.log('out/easel/painting/look-0007.png (1x1, 0.01s)');
+    break;
+  default: console.error('no ' + process.argv[2]); process.exit(1);
+}
 `, { mode: 0o755 });
 	return { dir, studio: s };
 }
@@ -63,9 +68,7 @@ test("a first sitting's message is left as it is", () => {
 });
 
 test("failed recovery and compaction attachments are reported and retried until an image is loaded", () => {
-	const at = studio();
-	const easel = join(at.studio, "bin/easel");
-	writeFileSync(easel, readFileSync(easel, "utf8").replace("echo 'out/easel/painting/look-0007.png", "chmod 000 out/easel/painting/look-0007.png; echo 'out/easel/painting/look-0007.png"));
+	const at = studio(true);
 	run({}, "Test recovery hooks.", at, ["-e", join(HERE, "test/fixtures/recovery-hooks.ts")]);
 	assert.equal(readFileSync(join(at.studio, "recovery-hooks-ok"), "utf8"), "passed");
 });

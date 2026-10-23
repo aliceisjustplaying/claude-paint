@@ -40,10 +40,15 @@ pub struct Vertex {
     pub fixed: [bool; 3],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VelocityDof {
+    Translation { vertex: usize, component: usize },
+    NormalSlope { vertices: [usize; 2] },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VelocityTerm {
-    pub vertex: usize,
-    pub component: usize,
+    pub dof: VelocityDof,
     pub coefficient: f64,
 }
 
@@ -172,6 +177,14 @@ pub trait ConservativeRemap {
         source: PatchView<'_>,
         trial: &MechanicsTrial,
     ) -> Result<RemappedPatch, MechanicsError>;
+}
+
+pub fn coherent_trace_constraints(
+    patch: PatchView<'_>,
+    triangles: &[[usize; 3]],
+    samples: &[(usize, usize)],
+) -> Result<Vec<VertexConstraint>, MechanicsError> {
+    variational::coherent_trace_constraints(patch, triangles, samples)
 }
 
 #[derive(Clone, Copy, Debug)]

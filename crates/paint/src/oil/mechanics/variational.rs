@@ -208,19 +208,45 @@ fn prepare_constraints(patch: PatchView<'_>, w: &mut Work) -> Result<(), Mechani
         return Err(MechanicsError::InvalidMesh);
     }
     w.lift = (0..w.velocity.len()).map(|i| vec![(i, 1.0)]).collect();
+    let rotations: BTreeMap<_, _> = w
+        .rotations
+        .iter()
+        .map(|(mode, i, length)| {
+            (
+                (
+                    mode.vertices[0].min(mode.vertices[1]),
+                    mode.vertices[0].max(mode.vertices[1]),
+                ),
+                (*i, *length),
+            )
+        })
+        .collect();
     for c in patch.constraints {
         for a in 0..3 {
             let mut row = Vec::new();
             for term in &c.components[a] {
-                if term.vertex >= patch.vertices.len()
-                    || term.component >= 3
-                    || !term.coefficient.is_finite()
-                    || targets.contains(&term.vertex)
-                {
+                if !term.coefficient.is_finite() {
                     return Err(MechanicsError::InvalidMesh);
                 }
-                if term.coefficient != 0.0 {
-                    row.push((3 * term.vertex + term.component, term.coefficient));
+                let (index, coefficient) = match term.dof {
+                    VelocityDof::Translation { vertex, component } => {
+                        if vertex >= patch.vertices.len()
+                            || component >= 3
+                            || targets.contains(&vertex)
+                        {
+                            return Err(MechanicsError::InvalidMesh);
+                        }
+                        (3 * vertex + component, term.coefficient)
+                    }
+                    VelocityDof::NormalSlope { vertices: [a, b] } => {
+                        let &(index, length) = rotations
+                            .get(&(a.min(b), a.max(b)))
+                            .ok_or(MechanicsError::InvalidMesh)?;
+                        (index, term.coefficient / length)
+                    }
+                };
+                if coefficient != 0.0 {
+                    row.push((index, coefficient));
                 }
             }
             compress(&mut row);
@@ -618,6 +644,157 @@ pub(super) fn triangle(
     })
 }
 
+fn morley_interpolant(
+    patch: PatchView<'_>,
+    vertices: [usize; 3],
+) -> Result<([[f64; 6]; 6], f64, [[usize; 2]; 3]), MechanicsError> {
+    if vertices.iter().any(|&i| i >= patch.vertices.len()) {
+        return Err(MechanicsError::InvalidMesh);
+    }
+    let p = vertices.map(|v| patch.vertices[v].position_m);
+    let length = triangle(vertices, patch)?.area.sqrt();
+    let mut matrix = [[0.0; 6]; 6];
+    let mut edges = [[0; 2]; 3];
+    for j in 0..3 {
+        let x = (p[j][0] - p[0][0]) / length;
+        let y = (p[j][1] - p[0][1]) / length;
+        matrix[j] = [1.0, x, y, 0.5 * x * x, x * y, 0.5 * y * y];
+        let a = vertices[(j + 1) % 3].min(vertices[(j + 2) % 3]);
+        let b = vertices[(j + 1) % 3].max(vertices[(j + 2) % 3]);
+        edges[j] = [a, b];
+        let pa = patch.vertices[a].position_m;
+        let pb = patch.vertices[b].position_m;
+        let edge_length = (pb[0] - pa[0]).hypot(pb[1] - pa[1]);
+        let normal = [
+            (pb[1] - pa[1]) / edge_length,
+            -(pb[0] - pa[0]) / edge_length,
+        ];
+        let x = (0.5 * (pa[0] + pb[0]) - p[0][0]) / length;
+        let y = (0.5 * (pa[1] + pb[1]) - p[0][1]) / length;
+        let scale = edge_length / length;
+        matrix[j + 3] = [
+            0.0,
+            scale * normal[0],
+            scale * normal[1],
+            scale * x * normal[0],
+            scale * (y * normal[0] + x * normal[1]),
+            scale * y * normal[1],
+        ];
+    }
+    Ok((invert(matrix)?, length, edges))
+}
+
+pub(super) fn coherent_trace_constraints(
+    patch: PatchView<'_>,
+    triangles: &[[usize; 3]],
+    samples: &[(usize, usize)],
+) -> Result<Vec<VertexConstraint>, MechanicsError> {
+    let mut derivatives = BTreeMap::<usize, ([BTreeMap<VelocityDof, f64>; 4], f64)>::new();
+    let mut seen = BTreeSet::new();
+    for &vertices in triangles {
+        if !seen.insert(key(vertices)) {
+            continue;
+        }
+        let t = triangle(vertices, patch)?;
+        let (inverse, length, edges) = morley_interpolant(patch, vertices)?;
+        let p = vertices.map(|v| patch.vertices[v].position_m);
+        for i in 0..3 {
+            let entry = derivatives
+                .entry(vertices[i])
+                .or_insert_with(|| (std::array::from_fn(|_| BTreeMap::new()), 0.0));
+            entry.1 += t.area;
+            let x = (p[i][0] - p[0][0]) / length;
+            let y = (p[i][1] - p[0][1]) / length;
+            for j in 0..6 {
+                let (dof, scale) = if j < 3 {
+                    (
+                        VelocityDof::Translation {
+                            vertex: vertices[j],
+                            component: 2,
+                        },
+                        1.0,
+                    )
+                } else {
+                    let [a, b] = edges[j - 3];
+                    let pa = patch.vertices[a].position_m;
+                    let pb = patch.vertices[b].position_m;
+                    (
+                        VelocityDof::NormalSlope { vertices: [a, b] },
+                        (pb[0] - pa[0]).hypot(pb[1] - pa[1]),
+                    )
+                };
+                let gradient = [
+                    (inverse[1][j] + x * inverse[3][j] + y * inverse[4][j]) / length,
+                    (inverse[2][j] + x * inverse[4][j] + y * inverse[5][j]) / length,
+                    (inverse[3][j] + inverse[5][j]) / (length * length),
+                ];
+                for a in 0..3 {
+                    *entry.0[a].entry(dof).or_default() += t.area * scale * gradient[a];
+                }
+            }
+            for j in 0..3 {
+                for a in 0..2 {
+                    *entry.0[3]
+                        .entry(VelocityDof::Translation {
+                            vertex: vertices[j],
+                            component: a,
+                        })
+                        .or_default() += t.area * t.gradient[j][a];
+                }
+            }
+        }
+    }
+    let mut result = Vec::with_capacity(samples.len());
+    for &(slave, master) in samples {
+        let a = patch
+            .vertices
+            .get(slave)
+            .ok_or(MechanicsError::InvalidMesh)?
+            .position_m;
+        let b = patch
+            .vertices
+            .get(master)
+            .ok_or(MechanicsError::InvalidMesh)?
+            .position_m;
+        if slave == master || a[0] != b[0] || a[1] != b[1] {
+            return Err(MechanicsError::InvalidMesh);
+        }
+        let (rows, area) = derivatives
+            .get(&master)
+            .ok_or(MechanicsError::InvalidMesh)?;
+        let z = a[2] - b[2];
+        let mut components: [BTreeMap<VelocityDof, f64>; 3] = std::array::from_fn(|component| {
+            BTreeMap::from([(
+                VelocityDof::Translation {
+                    vertex: master,
+                    component,
+                },
+                1.0,
+            )])
+        });
+        for component in 0..2 {
+            for (&dof, &value) in &rows[component] {
+                *components[component].entry(dof).or_default() -= z * value / area;
+            }
+        }
+        for (&dof, &value) in &rows[3] {
+            *components[2].entry(dof).or_default() -= z * value / area;
+        }
+        for (&dof, &value) in &rows[2] {
+            *components[2].entry(dof).or_default() += 0.5 * z * z * value / area;
+        }
+        result.push(VertexConstraint {
+            vertex: slave,
+            components: components.map(|row| {
+                row.into_iter()
+                    .map(|(dof, coefficient)| VelocityTerm { dof, coefficient })
+                    .collect()
+            }),
+        });
+    }
+    Ok(result)
+}
+
 fn gauss(order: usize) -> Vec<(f64, f64)> {
     let mut out = Vec::with_capacity(order);
     for i in 0..order {
@@ -801,7 +978,12 @@ fn assemble(
     let linked_masters: BTreeSet<_> = patch
         .constraints
         .iter()
-        .flat_map(|c| c.components.iter().flatten().map(|t| t.vertex))
+        .flat_map(|c| {
+            c.components.iter().flatten().filter_map(|t| match t.dof {
+                VelocityDof::Translation { vertex, .. } => Some(vertex),
+                VelocityDof::NormalSlope { .. } => None,
+            })
+        })
         .collect();
     for (i, c) in patch.cells.iter().enumerate() {
         let p = c.vertices.map(|j| patch.vertices[j].position_m);
@@ -1105,40 +1287,13 @@ fn assemble(
         w.rotations.push((mode, dof, edge_length));
     }
     for (i, s) in patch.skins.iter().enumerate() {
-        let p = s.vertices.map(|v| patch.vertices[v].position_m);
-        let length = w.skins[i].area.sqrt();
-        let mut matrix = [[0.0; 6]; 6];
+        let (inverse, length, edges) = morley_interpolant(patch, s.vertices)?;
         let mut local = [0; 6];
         for j in 0..3 {
-            let x = (p[j][0] - p[0][0]) / length;
-            let y = (p[j][1] - p[0][1]) / length;
-            matrix[j] = [1.0, x, y, 0.5 * x * x, x * y, 0.5 * y * y];
             local[j] = 3 * s.vertices[j] + 2;
-        }
-        for j in 0..3 {
-            let a = s.vertices[(j + 1) % 3].min(s.vertices[(j + 2) % 3]);
-            let b = s.vertices[(j + 1) % 3].max(s.vertices[(j + 2) % 3]);
-            let pa = patch.vertices[a].position_m;
-            let pb = patch.vertices[b].position_m;
-            let edge_length = (pb[0] - pa[0]).hypot(pb[1] - pa[1]);
-            let normal = [
-                (pb[1] - pa[1]) / edge_length,
-                -(pb[0] - pa[0]) / edge_length,
-            ];
-            let x = (0.5 * (pa[0] + pb[0]) - p[0][0]) / length;
-            let y = (0.5 * (pa[1] + pb[1]) - p[0][1]) / length;
-            let scale = edge_length / length;
-            matrix[j + 3] = [
-                0.0,
-                scale * normal[0],
-                scale * normal[1],
-                scale * x * normal[0],
-                scale * (y * normal[0] + x * normal[1]),
-                scale * y * normal[1],
-            ];
+            let [a, b] = edges[j];
             local[j + 3] = rotations[&(s.packet_id, a, b)];
         }
-        let inverse = invert(matrix)?;
         for j in 0..6 {
             w.skins[i].curvature[0].push((local[j], inverse[3][j] / (length * length)));
             w.skins[i].curvature[1].push((local[j], inverse[5][j] / (length * length)));
@@ -2119,7 +2274,7 @@ fn remap_checked(
                             || a.components[i]
                                 .iter()
                                 .zip(&b.components[i])
-                                .any(|(x, y)| x.vertex != y.vertex || x.component != y.component)
+                                .any(|(x, y)| x.dof != y.dof)
                     })
             })
     {
@@ -2398,6 +2553,50 @@ mod numerical_tests {
     use super::*;
 
     #[test]
+    fn oil_mechanics_kirchhoff_trace_reproduces_quadratic() {
+        let mut patch = RemappedPatch::default();
+        for z in [0.0, 0.2] {
+            for [x, y] in [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]] {
+                patch.vertices.push(Vertex {
+                    position_m: [x, y, z],
+                    fixed: [false; 3],
+                });
+            }
+        }
+        let constraints =
+            coherent_trace_constraints(patch.view(), &[[0, 1, 2]], &[(3, 0), (4, 1), (5, 2)])
+                .unwrap();
+        let value = |dof| match dof {
+            VelocityDof::Translation { vertex, component } => {
+                let [x, y, _] = patch.vertices[vertex].position_m;
+                [2.0 * x + 3.0 * y, -y, 0.5 * x * x + x * y + y * y][component]
+            }
+            VelocityDof::NormalSlope { vertices: [a, b] } => {
+                let pa = patch.vertices[a].position_m;
+                let pb = patch.vertices[b].position_m;
+                let length = (pb[0] - pa[0]).hypot(pb[1] - pa[1]);
+                let x = 0.5 * (pa[0] + pb[0]);
+                let y = 0.5 * (pa[1] + pb[1]);
+                ((x + y) * (pb[1] - pa[1]) - (x + 2.0 * y) * (pb[0] - pa[0])) / length
+            }
+        };
+        for c in constraints {
+            let [x, y, z] = patch.vertices[c.vertex].position_m;
+            let actual: [f64; 3] = c
+                .components
+                .map(|row| row.iter().map(|t| t.coefficient * value(t.dof)).sum());
+            let expected = [
+                2.0 * x + 3.0 * y - z * (x + y),
+                -y - z * (x + 2.0 * y),
+                0.5 * x * x + x * y + y * y - z + 1.5 * z * z,
+            ];
+            for i in 0..3 {
+                assert!((actual[i] - expected[i]).abs() < 1.0e-13);
+            }
+        }
+    }
+
+    #[test]
     fn oil_mechanics_trace_constraint_virtual_work() {
         let vertices = vec![
             Vertex {
@@ -2460,8 +2659,10 @@ mod numerical_tests {
             vertex: 3,
             components: std::array::from_fn(|component| {
                 vec![VelocityTerm {
-                    vertex: 4,
-                    component,
+                    dof: VelocityDof::Translation {
+                        vertex: 4,
+                        component,
+                    },
                     coefficient: 1.0,
                 }]
             }),

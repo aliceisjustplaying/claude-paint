@@ -1,14 +1,18 @@
-// node --test harness/painter/test/journal.test.ts  (TMPDIR: a scratch directory)
+// node --test harness/painter/test/journal.test.ts  (TMPDIR: a scratch directory; EASEL_BIN: the easel)
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { JOURNAL, openPassages, REVISIONS, reviseJournal } from "../journal.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+import { JOURNAL, JOURNAL_LOCK, openPassages, REVISIONS, reviseJournal } from "../journal.ts";
 
 function studio(journal?: string): string {
 	assert.ok(process.env.TMPDIR, "set TMPDIR to a scratch directory");
+	assert.ok(process.env.EASEL_BIN, "set EASEL_BIN to the easel");
 	const s = mkdtempSync(join(process.env.TMPDIR, "journal-test-"));
+	mkdirSync(join(s, "bin"));
+	symlinkSync(process.env.EASEL_BIN, join(s, "bin", "easel"));
 	if (journal !== undefined) {
 		mkdirSync(join(s, "notes"));
 		writeFileSync(join(s, JOURNAL), journal);
@@ -64,6 +68,37 @@ try { reviseJournal(${JSON.stringify(s)}, ${JSON.stringify(old)}, ${JSON.stringi
 	assert.match(child.stdout, /changed while this revision was being written/);
 	assert.equal(readFileSync(join(s, JOURNAL), "utf8"), revised + "- day 4, 09:00: another\n");
 	assert.equal(readFileSync(join(s, REVISIONS), "utf8").trim().split("\n").length, 1);
+});
+
+test("a note and a revision wait for the journal's lock, and both are kept", async () => {
+	const s = studio(J);
+	const env = { EASEL_ROOT: s };
+	const easel = join(s, "bin", "easel");
+	assert.equal(spawnSync(easel, ["open", "a"], { cwd: s, env, encoding: "utf8" }).status, 0);
+	mkdirSync(join(s, "out/easel"), { recursive: true });
+	let lock: number | undefined = openSync(join(s, JOURNAL_LOCK), "a");
+	try {
+		assert.equal(spawnSync(easel, ["lock-journal"], { cwd: s, env, stdio: [lock, "ignore", "inherit"] }).status, 0);
+		const exited = (c: ChildProcess) => new Promise<number | null>((done) => c.on("exit", done));
+		const note = spawn(easel, ["-s", "a", "note", "the hill is next"], { cwd: s, env, stdio: ["ignore", "ignore", "inherit"] });
+		const revision = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e",
+			`const {reviseJournal} = await import(${JSON.stringify(new URL("../journal.ts", import.meta.url).href)}); reviseJournal(${JSON.stringify(s)}, "the sky is finished", "the sky needs a second pass");`], { stdio: "inherit" });
+		const [noted, revised] = [exited(note), exited(revision)];
+		await sleep(500);
+		assert.equal(note.exitCode, null);
+		assert.equal(revision.exitCode, null);
+		assert.equal(readFileSync(join(s, JOURNAL), "utf8"), J);
+		closeSync(lock);
+		lock = undefined;
+		assert.equal(await noted, 0);
+		assert.equal(await revised, 0);
+		const journal = readFileSync(join(s, JOURNAL), "utf8");
+		assert.ok(journal.startsWith(J.replace("the sky is finished", "the sky needs a second pass")), journal);
+		assert.match(journal, /: the hill is next\n$/);
+	} finally {
+		if (lock !== undefined) closeSync(lock);
+		spawnSync(easel, ["-s", "a", "close"], { cwd: s, env });
+	}
 });
 
 test("the latest Open passages list comes out of the journal as the painter wrote it", () => {

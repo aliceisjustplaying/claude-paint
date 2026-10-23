@@ -194,6 +194,7 @@ fn main() -> ExitCode {
         "snapshot-companions" => optical::companions(&rest),
         "finish" => finish_cmd(&rest),
         "note" => note(&rest, name),
+        "lock-journal" => lock_journal(),
         "tubes" => tubes(&rest),
         "hash-probe" => {
             println!("{}", session::hash_probe());
@@ -370,6 +371,24 @@ fn note(args: &[String], name: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+fn journal_lock_path() -> PathBuf {
+    root().join("out/easel/journal.lock")
+}
+
+/// `easel lock-journal`, for a journal revision (harness/painter/journal.ts): stdin is the
+/// journal's lock file, and the lock taken on it stays with that open file after this
+/// exits, until the revision closes it.
+fn lock_journal() -> Result<(), String> {
+    use std::os::{fd::AsFd, unix::fs::MetadataExt};
+    let p = journal_lock_path();
+    let f = std::fs::File::from(std::io::stdin().as_fd().try_clone_to_owned().map_err(|e| e.to_string())?);
+    let (held, want) = (f.metadata().map_err(|e| e.to_string())?, std::fs::metadata(&p).map_err(|e| format!("{}: {e}", p.display()))?);
+    if (held.dev(), held.ino()) != (want.dev(), want.ino()) {
+        return Err(format!("lock-journal: stdin isn't {}", p.display()));
+    }
+    f.lock().map_err(|e| format!("{}: {e}", p.display()))
+}
+
 fn append_note(clock: f64, text: &str) -> Result<String, String> {
     if text.trim().is_empty() {
         return Err("note: empty".into());
@@ -377,9 +396,10 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
     let p = journal_path();
     let dir = p.parent().unwrap();
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    // every session notes into the one journal: its lock is held from the read to the
-    // rename, so a note never replaces an entry another session has just written
-    let lock = root().join("out/easel/journal.lock");
+    // every session notes into the one journal, and a revision (`lock_journal`) replaces it:
+    // its lock is held from the read to the rename, so a note never replaces an entry or a
+    // revision another writer has just made
+    let lock = journal_lock_path();
     std::fs::create_dir_all(lock.parent().unwrap()).map_err(|e| e.to_string())?;
     let held = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&lock).map_err(|e| format!("{}: {e}", lock.display()))?;
     held.lock().map_err(|e| format!("{}: {e}", lock.display()))?;

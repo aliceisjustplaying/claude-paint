@@ -6,6 +6,7 @@
 import argparse
 import asyncio
 import base64
+import fcntl
 import json
 import math
 import os
@@ -385,19 +386,23 @@ class Easel:
         path = self.studio / "notes/journal.md"
         if not old.strip():
             raise ValueError("note: `replaces` is empty; give the exact text of the passage to replace")
-        if not path.exists():
-            raise ValueError("note: notes/journal.md has no entries yet")
-        before = path.read_bytes().decode()
-        at = before.find(old)
-        if at < 0:
-            raise ValueError("note: the passage given in `replaces` isn't in notes/journal.md (it has to match exactly)")
-        if before.find(old, at + 1) >= 0:
-            raise ValueError("note: the passage given in `replaces` is in notes/journal.md more than once; give more of it")
-        log = self.studio / "out/easel/journal-revisions.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with log.open("a") as file:
-            file.write(json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), "replaced": old, "with": text, "before": before}, ensure_ascii=False) + "\n")
-        path.write_bytes((before[:at] + text + before[at + len(old):]).encode())
+        # the easel's notes take this lock too (main.rs `append_note`)
+        lock = self.studio / "out/easel/journal.lock"
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        with lock.open("a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            if not path.exists():
+                raise ValueError("note: notes/journal.md has no entries yet")
+            before = path.read_bytes().decode()
+            at = before.find(old)
+            if at < 0:
+                raise ValueError("note: the passage given in `replaces` isn't in notes/journal.md (it has to match exactly)")
+            if before.find(old, at + 1) >= 0:
+                raise ValueError("note: the passage given in `replaces` is in notes/journal.md more than once; give more of it")
+            log = self.studio / "out/easel/journal-revisions.jsonl"
+            with log.open("a") as file:
+                file.write(json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), "replaced": old, "with": text, "before": before}, ensure_ascii=False) + "\n")
+            path.write_bytes((before[:at] + text + before[at + len(old):]).encode())
         return f"revised in {path}\n"
 
     async def call(self, name, params):

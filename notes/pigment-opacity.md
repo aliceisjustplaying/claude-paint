@@ -6,9 +6,13 @@ uses both inputs to choose a spectral surrogate; engines 8 and earlier keep
 their original RGB reconstruction.
 
 The surrogate is a nonnegative blend of the existing Revigo basis paints.
-Its mean scattering matches the catalog's estimated scattering, within the
+Its initial shape's mean scattering matches the catalog's estimated scattering, within the
 available basis range. Among blends with that scattering, a bounded search
-chooses a close reference color, then retains the linear RGB residual. The
+chooses a close reference color, then retains the linear RGB residual. A
+one-dimensional optical-depth solve makes the reconstructed paint's 25 µm
+black/white contrast match the estimated hiding input before tinting strength
+is applied. This keeps opacity meaningful even when calibrated basis spectra
+change. The
 residual fades with transmission as it does for other reconstructed colors.
 The surrogate's coefficients, not just its reference RGB, survive palette and
 tool mixing. The fitted blend is a stand-in: it does not identify the tube's

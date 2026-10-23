@@ -67,6 +67,21 @@ pub(super) fn encode(rgb: Rgb, hiding: f32) -> [f32; super::LATENT_SIZE] {
     for k in 0..3 {
         best[super::PIGMENTS + k] = rgb[k] - base[k];
     }
+    let scatter = super::scattering9(&best);
+    let (mut lo, mut hi) = (-9.0f32, 9.0f32);
+    for _ in 0..40 {
+        let mid = 0.5 * (lo + hi);
+        let scatter = scatter * mid.exp();
+        let black = luminance(super::over9(&best, scatter, [0.0; 3], 1.0));
+        let white = luminance(super::over9(&best, scatter, [1.0; 3], 1.0));
+        if black / white.max(1e-6) < hiding.clamp(1e-4, 0.9995) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    let amount = (0.5 * (lo + hi)).exp();
+    best.iter_mut().for_each(|c| *c *= amount);
     cache.lock().unwrap().insert(key, best);
     best
 }

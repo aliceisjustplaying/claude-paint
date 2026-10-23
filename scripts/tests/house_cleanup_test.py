@@ -1,7 +1,9 @@
+import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -24,6 +26,12 @@ class HouseCleanupTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
+        prepare = runpy.run_path(str(REPO / "scripts/prepare_friedrich_studio"))
+        self.runners = list(RUNNERS)
+        for i, path in enumerate(RUNNERS[:-1]):
+            generated = self.root / f"generated-{i}.py"
+            generated.write_text(prepare["corrected_runner"](path.read_text()))
+            self.runners.append(generated)
         self.studio = self.root / "studio"
         self.events = self.root / "events.jsonl"
         self.bin = self.root / "bin"
@@ -46,13 +54,15 @@ class HouseCleanupTests(unittest.TestCase):
     def runner(self, path):
         spec = importlib.util.spec_from_file_location("house_cleanup_runner", path)
         runner = importlib.util.module_from_spec(spec)
-        with patch.object(sys, "path", [str(REPO / "notes/round29/runner"), *sys.path]):
+        with patch.dict(sys.modules), \
+             patch.object(sys, "path", [str(path.parent), str(REPO / "notes/round29/runner"), *sys.path]):
+            sys.modules.pop("painting_chunks", None)
             spec.loader.exec_module(runner)
         return runner
 
     def test_stop_leftovers_uses_ps_from_path(self):
-        for path in RUNNERS:
-            with self.subTest(runner=str(path.relative_to(REPO))):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
                 self.events.write_text("")
                 runner = self.runner(path)
                 with patch.object(runner, "log"):
@@ -61,128 +71,214 @@ class HouseCleanupTests(unittest.TestCase):
                                  [["ps", "-Ao", "pid=,command="], ["kill", "424242"]])
 
     def test_round29_close_failure_keeps_server_and_retries_only_finalization(self):
-        runner = self.runner(RUNNERS[-1])
-        rd = self.root / "run/OPUS"
-        rd.mkdir(parents=True)
-        final = rd / "sitting-final.txt"
-        final.write_text("A finished painting")
-        sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
-                         painting_before=1, painting_after=1, final_file=str(final))]
-        runner.save_sittings(rd, 1, sittings)
-        self.studio.joinpath("bin").mkdir(parents=True)
-        self.studio.joinpath("bin/easel").touch()
-        reason = runner.next_step(sittings)[1]
-        outcome_path = rd / "p1_outcome.json"
-        with patch.object(runner, "log"), \
-             patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
-             patch.object(runner, "open_easel") as opened, \
-             patch.object(runner, "run") as painter, \
-             patch.object(runner, "stop_leftovers") as cleanup, \
-             patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "checkpoint disk full")):
-            self.assertIsNone(runner.paint("OPUS", 1, self.studio, rd))
-            cleanup.assert_not_called()
-            outcome = json.loads(outcome_path.read_text())
-            self.assertEqual(outcome["status"], "finalization_failed")
-            self.assertEqual(outcome["reason"], reason)
-            self.assertIn("checkpoint disk full", outcome["error"])
-            self.assertIsInstance(outcome["finished_at"], (int, float))
-            self.assertFalse((rd / "p1.painted").exists())
-            outcome["finished_at"] = 1792656000.0
-            outcome_path.write_text(json.dumps(outcome))
-            replace = os.replace
-            published = []
+        for i, path in enumerate(self.runners):
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                rd = self.root / f"run-{i}/OPUS"
+                rd.mkdir(parents=True)
+                final = rd / "sitting-final.txt"
+                final.write_text("A finished painting")
+                sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
+                                 painting_before=1, painting_after=1, final_file=str(final))]
+                runner.save_sittings(rd, 1, sittings)
+                self.studio.joinpath("bin").mkdir(parents=True, exist_ok=True)
+                self.studio.joinpath("bin/easel").touch()
+                reason = runner.next_step(sittings)[1]
+                outcome_path = rd / "p1_outcome.json"
+                with patch.object(runner, "log"), \
+                     patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner, "open_easel") as opened, \
+                     patch.object(runner, "run") as painter, \
+                     patch.object(runner, "stop_leftovers") as cleanup, \
+                     patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "checkpoint disk full")):
+                    self.assertIsNone(runner.paint("OPUS", 1, self.studio, rd))
+                    cleanup.assert_not_called()
+                    outcome = json.loads(outcome_path.read_text())
+                    self.assertEqual(outcome["status"], "finalization_failed")
+                    self.assertEqual(outcome["reason"], reason)
+                    self.assertIn("checkpoint disk full", outcome["error"])
+                    self.assertIsInstance(outcome["finished_at"], (int, float))
+                    self.assertFalse((rd / "p1.painted").exists())
+                    outcome["finished_at"] = 1792656000.0
+                    outcome_path.write_text(json.dumps(outcome))
+                    replace = os.replace
+                    published = []
 
-            def publish(source, target):
-                if Path(target) == outcome_path:
-                    self.assertEqual(json.loads(Path(target).read_text()), published[-1] if published else outcome)
-                    value = json.loads(Path(source).read_text())
-                    self.assertEqual(value["finished_at"], outcome["finished_at"])
-                    published.append(value)
-                replace(source, target)
+                    def publish(source, target):
+                        if Path(target) == outcome_path:
+                            self.assertEqual(json.loads(Path(target).read_text()), published[-1] if published else outcome)
+                            value = json.loads(Path(source).read_text())
+                            self.assertEqual(value["finished_at"], outcome["finished_at"])
+                            published.append(value)
+                        replace(source, target)
 
-            with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "closed", "")), \
-                 patch.object(runner.os, "replace", side_effect=publish) as replaced, \
-                 patch.object(runner.os, "fsync", wraps=os.fsync) as synced:
-                self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
-            self.assertEqual(sum(Path(call.args[1]) == outcome_path for call in replaced.call_args_list), 2)
-            self.assertEqual([value["status"] for value in published], ["finalization_failed", "finished"])
-            self.assertEqual(published[0]["error"], "final save pending")
-            self.assertGreaterEqual(synced.call_count, 4)
-            self.assertFalse(list(rd.glob(".p1_outcome.*.tmp")))
-            cleanup.assert_called_once_with(self.studio)
-            opened.assert_not_called()
-            painter.assert_not_called()
-        recovered = json.loads(outcome_path.read_text())
-        self.assertEqual(recovered["status"], "finished")
-        self.assertEqual(recovered["reason"], reason)
-        self.assertIsNone(recovered["error"])
-        self.assertEqual(recovered["finished_at"], outcome["finished_at"])
-        self.assertTrue((rd / "p1.painted").exists())
+                    with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "closed", "")), \
+                         patch.object(runner.os, "replace", side_effect=publish) as replaced, \
+                         patch.object(runner.os, "fsync", wraps=os.fsync) as synced:
+                        self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                    self.assertEqual(sum(Path(call.args[1]) == outcome_path for call in replaced.call_args_list), 2)
+                    self.assertEqual([value["status"] for value in published], ["finalization_failed", "finished"])
+                    self.assertEqual(published[0]["error"], "final save pending")
+                    self.assertGreaterEqual(synced.call_count, 4)
+                    self.assertFalse(list(rd.glob(".p1_outcome.*.tmp")))
+                    cleanup.assert_called_once_with(self.studio)
+                    opened.assert_not_called()
+                    painter.assert_not_called()
+                recovered = json.loads(outcome_path.read_text())
+                self.assertEqual(recovered["status"], "finished")
+                self.assertEqual(recovered["reason"], reason)
+                self.assertIsNone(recovered["error"])
+                self.assertEqual(recovered["finished_at"], outcome["finished_at"])
+                self.assertTrue((rd / "p1.painted").exists())
 
     def test_round29_finished_rerun_preserves_verified_outcome_without_close(self):
-        runner = self.runner(RUNNERS[-1])
-        rd = self.root / "run/OPUS"
-        rd.mkdir(parents=True)
-        final = rd / "sitting-final.txt"
-        final.write_text("A finished painting")
-        sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
-                         painting_before=1, painting_after=1, final_file=str(final))]
-        runner.save_sittings(rd, 1, sittings)
-        outcome_path = rd / "p1_outcome.json"
-        outcome = dict(status="finished", reason=runner.next_step(sittings)[1],
-                       error=None, finished_at=1792656000.0)
-        runner.write_outcome(rd, 1, outcome)
-        (rd / "p1.painted").write_text("verified finish\n")
-        with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
-             patch.object(runner, "log"), \
-             patch.object(runner, "close_easel", return_value="no painting open") as close, \
-             patch.object(runner, "open_easel") as opened, \
-             patch.object(runner, "run") as painter:
-            self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
-        close.assert_not_called()
-        opened.assert_not_called()
-        painter.assert_not_called()
-        self.assertEqual(json.loads(outcome_path.read_text()), outcome)
-        self.assertEqual((rd / "p1.painted").read_text(), "verified finish\n")
+        for i, path in enumerate(self.runners):
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                rd = self.root / f"run-{i}/OPUS"
+                rd.mkdir(parents=True)
+                final = rd / "sitting-final.txt"
+                final.write_text("A finished painting")
+                sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
+                                 painting_before=1, painting_after=1, final_file=str(final))]
+                runner.save_sittings(rd, 1, sittings)
+                outcome_path = rd / "p1_outcome.json"
+                outcome = dict(status="finished", reason=runner.next_step(sittings)[1],
+                               error=None, finished_at=1792656000.0)
+                runner.write_outcome(rd, 1, outcome)
+                (rd / "p1.painted").write_text("verified finish\n")
+                with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner, "log"), \
+                     patch.object(runner, "close_easel", return_value="no painting open") as close, \
+                     patch.object(runner, "open_easel") as opened, \
+                     patch.object(runner, "run") as painter:
+                    self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                close.assert_not_called()
+                opened.assert_not_called()
+                painter.assert_not_called()
+                self.assertEqual(json.loads(outcome_path.read_text()), outcome)
+                self.assertEqual((rd / "p1.painted").read_text(), "verified finish\n")
+
+    def test_close_exit_42_does_not_certify_a_saved_painting(self):
+        self.tool("timeout", "import os\nos.execv(sys.argv[2], sys.argv[2:])")
+        for i, path in enumerate(self.runners):
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                rd = self.root / f"run-{i}/OPUS"
+                rd.mkdir(parents=True)
+                final = rd / "final.txt"
+                final.write_text("A finished painting")
+                runner.save_sittings(rd, 1, [dict(sitting=1, status="completed", reviewed=True,
+                                                chunks_before=1, chunks_after=1, final_file=str(final))])
+                easel = self.studio / "bin/easel"
+                easel.parent.mkdir(parents=True, exist_ok=True)
+                easel.write_text(f"#!{sys.executable}\nimport sys\nsys.stderr.write('checkpoint disk full')\nsys.exit(42)\n")
+                easel.chmod(0o755)
+                with patch.object(runner, "log"), \
+                     patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner, "stop_leftovers") as cleanup, \
+                     patch.object(runner, "open_easel") as opened, \
+                     patch.object(runner, "run") as painter:
+                    self.assertIsNone(runner.paint("OPUS", 1, self.studio, rd))
+                outcome = json.loads((rd / "p1_outcome.json").read_text())
+                self.assertEqual(outcome["status"], "finalization_failed")
+                self.assertIn("42", outcome["error"])
+                self.assertIn("checkpoint disk full", outcome["error"])
+                self.assertFalse((rd / "p1.painted").exists())
+                cleanup.assert_not_called()
+                opened.assert_not_called()
+                painter.assert_not_called()
 
     def test_round29_interrupted_close_leaves_a_durable_finalization_trigger(self):
-        runner = self.runner(RUNNERS[-1])
-        rd = self.root / "run/OPUS"
-        rd.mkdir(parents=True)
-        sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
-                         painting_before=1, painting_after=1)]
-        runner.save_sittings(rd, 1, sittings)
-        with patch.object(runner, "log"), \
-             patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
-             patch.object(runner.time, "time", return_value=1792656000.0), \
-             patch.object(runner, "close_easel", side_effect=KeyboardInterrupt), \
-             patch.object(runner, "open_easel") as opened, \
-             patch.object(runner, "run") as painter, \
-             patch.object(runner, "stop_leftovers") as cleanup, \
-             self.assertRaises(KeyboardInterrupt):
-            runner.paint("OPUS", 1, self.studio, rd)
-        self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()),
-                         dict(status="finalization_failed", reason=runner.next_step(sittings)[1],
-                              error="final save pending", finished_at=1792656000.0))
-        self.assertFalse((rd / "p1.painted").exists())
-        opened.assert_not_called()
-        painter.assert_not_called()
-        cleanup.assert_not_called()
-
-    def test_round29_close_missing_binary_and_timeout_do_not_kill_server(self):
-        runner = self.runner(RUNNERS[-1])
-        for failure in [FileNotFoundError("missing easel"), subprocess.TimeoutExpired("easel close", 60)]:
-            with self.subTest(failure=str(failure)), \
-                 patch.object(runner.subprocess, "run", side_effect=failure), \
-                 patch.object(runner, "stop_leftovers") as cleanup:
-                self.assertIsInstance(runner.close_easel(self.studio), str)
+        for i, path in enumerate(self.runners):
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                rd = self.root / f"run-{i}/OPUS"
+                rd.mkdir(parents=True)
+                sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
+                                 painting_before=1, painting_after=1)]
+                runner.save_sittings(rd, 1, sittings)
+                with patch.object(runner, "log"), \
+                     patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                     patch.object(runner.time, "time", return_value=1792656000.0), \
+                     patch.object(runner, "close_easel", side_effect=KeyboardInterrupt), \
+                     patch.object(runner, "open_easel") as opened, \
+                     patch.object(runner, "run") as painter, \
+                     patch.object(runner, "stop_leftovers") as cleanup, \
+                     self.assertRaises(KeyboardInterrupt):
+                    runner.paint("OPUS", 1, self.studio, rd)
+                self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()),
+                                 dict(status="finalization_failed", reason=runner.next_step(sittings)[1],
+                                      error="final save pending", finished_at=1792656000.0))
+                self.assertFalse((rd / "p1.painted").exists())
+                opened.assert_not_called()
+                painter.assert_not_called()
                 cleanup.assert_not_called()
 
+    def test_round29_close_missing_binary_and_timeout_do_not_kill_server(self):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                for failure in [FileNotFoundError("missing easel"), subprocess.TimeoutExpired("easel close", 60)]:
+                    with self.subTest(failure=str(failure)), \
+                         patch.object(runner.subprocess, "run", side_effect=failure), \
+                         patch.object(runner, "stop_leftovers") as cleanup:
+                        self.assertIsInstance(runner.close_easel(self.studio), str)
+                        cleanup.assert_not_called()
+
+    def test_executed_effects_not_source_tokens_decide_whether_to_continue(self):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
+                runner = self.runner(path)
+                chunks = ['canvas{}', 'b=brush("round",4)']
+                before = self.effects(runner, chunks, [1, 0])
+                chunks.append('function possible_mark() b:touch(850,100) end')
+                after = self.effects(runner, chunks, [1, 0, 0])
+                self.assertEqual(before, after)
+                sitting = dict(sitting=1, status="completed", reviewed=True,
+                               chunks_before=2, chunks_after=3, effects_before=before, effects_after=after)
+                self.assertIsNone(runner.next_step([sitting])[0])
+                chunks.append('b["touch"](b,850,100)')
+                marked = self.effects(runner, chunks, [1, 0, 0, 1])
+                self.assertEqual(marked, after + 1)
+                self.assertEqual(runner.next_step([dict(sitting, sitting=2, chunks_before=3, chunks_after=4,
+                                                        effects_before=after, effects_after=marked)]), ("new", 3))
+
+    def effects(self, runner, chunks, counts):
+        source = "".join(f"--@ chunk {i}\n{chunk}\n" for i, chunk in enumerate(chunks, 1))
+        lua = self.studio / "paintings/lua/painting.lua"
+        lua.parent.mkdir(parents=True, exist_ok=True)
+        lua.write_text(source)
+        evidence = self.studio / "out/easel/painting/painting-effects.json"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(json.dumps(dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),
+                                           mark_effects=counts)))
+        return runner.count_painting(self.studio)
+
+    def test_unavailable_effects_fall_back_to_chunks_not_classified_painting(self):
+        for path in self.runners:
+            for invalid in ("missing", "stale"):
+                with self.subTest(runner=str(path), evidence=invalid):
+                    runner = self.runner(path)
+                    self.effects(runner, ['canvas{}', 'b["touch"](b,850,100)'], [1, 1])
+                    evidence = self.studio / "out/easel/painting/painting-effects.json"
+                    if invalid == "missing":
+                        evidence.unlink()
+                    else:
+                        with (self.studio / "paintings/lua/painting.lua").open("a") as source:
+                            source.write("-- stale evidence\n")
+                    self.assertIsNone(runner.count_painting(self.studio))
+                    for before, after in ((1, None), (None, 2), (None, None)):
+                        sitting = dict(sitting=1, status="completed", reviewed=True,
+                                       chunks_before=1, chunks_after=2, painting_before=1, painting_after=1,
+                                       effects_before=before, effects_after=after)
+                        self.assertEqual(runner.next_step([sitting]), ("new", 2))
+
     def test_stop_leftovers_matches_only_the_studio_executable(self):
-        for path in RUNNERS:
+        for path in self.runners:
             for keep_server in (False, True):
                 for name in ("paint-studio-ab12", "paint studio-ab12"):
-                    with self.subTest(runner=str(path.relative_to(REPO)), keep_server=keep_server, studio=name):
+                    with self.subTest(runner=str(path), keep_server=keep_server, studio=name):
                         runner = self.runner(path)
                         studio = self.root / name
                         easel = studio / "bin/easel"
@@ -223,8 +319,8 @@ class HouseCleanupTests(unittest.TestCase):
         self.assertIsNotNone(self.ps)
         self.assertIsNotNone(self.sleep)
         sleep_args = ["--coreutils-prog=sleep", "60"] if Path(self.sleep).resolve().name == "coreutils" else ["60"]
-        for path in RUNNERS:
-            with self.subTest(runner=str(path.relative_to(REPO))):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
                 studio = self.root / "paint-studio-ab12"
                 commands = ([str(studio / "bin/easel"), *sleep_args],
                             [str(self.root / "paint-studio-ab123/bin/easel"), *sleep_args],
@@ -259,8 +355,8 @@ class HouseCleanupTests(unittest.TestCase):
                         child.wait(timeout=5)
 
     def test_watchdog_uses_ps_from_path(self):
-        for path in RUNNERS:
-            with self.subTest(runner=str(path.relative_to(REPO))):
+        for path in self.runners:
+            with self.subTest(runner=str(path)):
                 self.events.write_text("")
                 runner = self.runner(path)
                 stop = threading.Event()

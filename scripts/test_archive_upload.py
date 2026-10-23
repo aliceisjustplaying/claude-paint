@@ -194,6 +194,40 @@ class ReconstructionCLI(unittest.TestCase):
         self.assertNotIn(str(self.home / 'tmp/stillwet-private'), roots)
         self.assertNotIn(str(self.home / '.pi/agent/sessions/--unrelated-private--'), roots)
 
+    def test_discovery_rejects_symlinked_ancestors_even_with_allowlisted_targets(self):
+        for target in ('private', 'tmp/stillwet-target'):
+            with self.subTest(target=target):
+                label = Path(target).name
+                selected = self.home / ('tmp/stillwet-unread-' + label)
+                index = self.write(target + '/records/studios.json', json.dumps({'studio': str(selected)}))
+                self.write(str(selected.relative_to(self.home) / 'notes.txt'), 'Not selected')
+                link = self.home / ('tmp/stillwet-link-' + label)
+                link.symlink_to(index.parent.parent, target_is_directory=True)
+                references = [link / 'records', link / 'records/studios.json']
+                self.write('src/a/claude-paint/run-config.json', json.dumps({'paths': list(map(str, references))}))
+                self.plan = self.root / ('scope-' + label + '.json')
+                data = self.plan_scope()
+                roots = {x['path'] for x in data['roots']}
+                for path in references + [selected]:
+                    self.assertNotIn(str(path), roots)
+
+    def test_prepare_rejects_symlinked_ancestors_in_reviewed_roots(self):
+        index = self.write('private/records/studios.json', '{"private": "Do not archive"}')
+        link = self.home / 'tmp/stillwet-link'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(index.parent.parent, target_is_directory=True)
+        for relative in ('records', 'records/studios.json'):
+            with self.subTest(relative=relative):
+                self.plan = self.root / ('scope-' + Path(relative).name)
+                self.candidate = self.root / ('candidate-' + Path(relative).name)
+                data = self.plan_scope()
+                data['roots'].append({'path': str(link / relative), 'reasons': ['Reviewed reference'], 'engine': False})
+                self.plan.write_text(json.dumps(data))
+                result = self.cli('prepare', self.plan, self.candidate,
+                                  '--scope-sha256', sha(self.plan), success=False)
+                self.assertIn('Scope contains a broad or unrelated private root', result.stderr)
+                self.assertFalse(self.candidate.exists())
+
     def test_current_full_sessions_preservation_and_portable_restore(self):
         """Uncommitted files, every sitting/entry and vanished data survive in a usable layout."""
         current = self.write('src/a/claude-paint/uncommitted.txt', str(self.home) + '/src/a/paint-studio-new\n')

@@ -34,13 +34,16 @@ def excluded(path, *, engine=False, runtime=False):
 
 
 def selected_path(path, home):
-    """Reject broad home/config/session roots even in an edited private plan."""
+    """Reject private roots and paths beneath symlinks, even in an edited plan."""
+    path = Path(path).absolute()
     try:
-        rel = Path(path).absolute().relative_to(home)
+        rel = path.relative_to(home)
     except ValueError:
         return False
     parts = rel.parts
     if '..' in parts or not parts:
+        return False
+    if any(parent.is_symlink() for parent in path.parents if parent.is_relative_to(home)):
         return False
     if parts[:3] == ('.pi', 'agent', 'sessions'):
         return len(parts) >= 4 and bool(PROJECT.search(parts[3]))
@@ -155,7 +158,8 @@ def discover(home, project):
         for root in set(roots) - scanned:
             scanned.add(root)
             path = Path(root)
-            if '.pi' in path.parts:
+            if ('.pi' in path.parts or path.is_symlink() or not selected_path(path, home)
+                or not selected_path(path.resolve(), home)):
                 continue
             for p in walk(path):
                 if (p.name in {'manifest.json', 'studios.json', 'run-config.json'} or p.name.endswith('_sittings.json')) and not (
@@ -167,7 +171,8 @@ def discover(home, project):
             break
         path = min(pending)
         processed.add(path)
-        if not path.is_file():
+        if (path.is_symlink() or not selected_path(path, home)
+            or not selected_path(path.resolve(), home) or not path.is_file()):
             continue
         try:
             data = json.loads(path.read_text())

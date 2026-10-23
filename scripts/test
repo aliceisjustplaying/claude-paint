@@ -115,6 +115,7 @@ rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::exclusive_temporary_collisions_never_delete_existing_files \
   replay_checkpoint::tests::unrelated_non_utf8_environment_is_ignored \
   replay_checkpoint::tests::live_checkpoint_cadence_and_failed_writes_preserve_last_success \
+  replay_checkpoint::tests::the_first_checkpoint_is_retried_after_a_failed_write \
   replay_checkpoint::tests::live_resume_accepts_appended_chunks_and_keeps_recording \
   replay_checkpoint::tests::live_checkpoint_reconstructs_temporary_tools_across_gc_schedules \
   replay_checkpoint::tests::live_resume_rejects_missing_and_changed_prefix_before_reconstruction \

@@ -51,7 +51,7 @@ fn edited_or_truncated_logs_cannot_reopen() {
     }
     std::fs::write(&log, original).unwrap();
     let reopened = ok(&["open", "reopen"]);
-    assert!(reopened.contains("resumed chunk 1/1"), "{reopened}");
+    assert!(reopened.contains("reconstructed 1 chunks"), "{reopened}");
     assert!(reopened.contains("resumed 1 chunks"), "{reopened}");
     ok(&["-s", "reopen", "close"]);
 }
@@ -94,10 +94,14 @@ fn replay_failure_is_fatal() {
     std::fs::create_dir_all(&dir).unwrap();
     let logs = root().join("paintings/lua");
     std::fs::create_dir_all(&logs).unwrap();
-    let text = "--@ chunk 1\nx = 1\n--@ chunk 2\nerror('cannot replay')\n--@ chunk 3\nx = 3\n";
-    std::fs::write(logs.join("bad-replay.lua"), text).unwrap();
+    ok(&["open", name]);
+    ok(&["-s", name, "do", "x = 1"]);
+    ok(&["-s", name, "close"]);
+    let text = std::fs::read_to_string(logs.join("bad-replay.lua")).unwrap()
+        + "\n--@ chunk 2\nerror('cannot replay')\n\n--@ chunk 3\nx = 3\n";
+    std::fs::write(logs.join("bad-replay.lua"), &text).unwrap();
     // Matching local witness isolates replay failure from edit detection.
-    std::fs::write(dir.join("committed.lua"), text).unwrap();
+    std::fs::write(dir.join("committed.lua"), &text).unwrap();
     let o = cmd(&["open", name]);
     assert!(!o.status.success(), "partial replay was accepted");
     assert!(String::from_utf8_lossy(&o.stderr).contains("replay failed at chunk 2"), "open: {o:?}");

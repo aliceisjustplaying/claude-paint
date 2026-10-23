@@ -1012,6 +1012,14 @@ impl Canvas {
         };
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
+        if spectral && self.backing.is_empty() {
+            self.backing.resize(self.px.len(), Default::default());
+        }
+        let backing_rows = if spectral {
+            rayon::iter::Either::Left(self.backing[ex.1 * w..ex.3 * w].par_chunks_mut(w).map(Some))
+        } else {
+            rayon::iter::Either::Right((ex.1..ex.3).into_par_iter().map(|_| None))
+        };
         let wet = &mut self.wet;
         let (lat, hide) = (&wet.lat, &wet.hide);
         let add = &add;
@@ -1020,8 +1028,9 @@ impl Canvas {
             .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(wet.cover[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(backing_rows)
             .enumerate()
-            .for_each(|(j, (((px, vv), ff), cv))| {
+            .for_each(|(j, ((((px, vv), ff), cv), mut backing))| {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     let k = j * ew + x - ex.0;
@@ -1037,7 +1046,13 @@ impl Canvas {
                     }
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
-                    px[x] = crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um), spectral);
+                    let cover = crate::wet::bead_cover(cover[k], ti, px_um);
+                    px[x] = if let Some(backing) = backing.as_deref_mut() {
+                        backing[x] = backing[x].under(px[x]).over_wet(&lat[i], hide[i][0], ti, cover);
+                        backing[x].color
+                    } else {
+                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false)
+                    };
                     ff[x] += ti;
                     vv[x] = 0.0;
                     cv[x] = 1.0;

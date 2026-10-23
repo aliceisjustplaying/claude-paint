@@ -25,6 +25,9 @@
 //! Older files containing wet paint are refused because their latent vectors
 //! cannot be decoded by this mixer. Empty older files can still be read.
 //! Versions 7–18 store seven latent floats per pixel, not the current width.
+//! Retained wet layers use version 20. A retained spectral dry backing uses
+//! version 21: a wet-layer presence flag, those layers if present, then
+//! 38 reflectances, three residuals and three cached RGB values per pixel.
 //!
 //! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
@@ -131,6 +134,7 @@ const MAGIC17: &[u8; 8] = b"PAINTC17";
 const MAGIC18: &[u8; 8] = b"PAINTC18";
 const MAGIC19: &[u8; 8] = b"PAINTC19";
 const MAGIC20: &[u8; 8] = b"PAINTC20";
+const MAGIC21: &[u8; 8] = b"PAINTC21";
 const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
@@ -390,6 +394,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC18 => 18,
         m if m == MAGIC19 => 19,
         m if m == MAGIC20 => 20,
+        m if m == MAGIC21 => 21,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -416,6 +421,7 @@ impl Canvas {
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
         let layers = self.wet.lat.iter().any(|p| !p.layers.is_empty());
         let pigments = layers || self.wet.lat.iter().any(|p| !p.parts.is_empty());
+        let backing = self.spectral_films() && !self.backing.is_empty();
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
@@ -444,7 +450,7 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(if layers { MAGIC20 } else { MAGIC19 })?;
+        w.write_all(if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
@@ -576,6 +582,9 @@ impl Canvas {
                 }
             }
         }
+        if backing {
+            put_u64(w, u64::from(layers))?;
+        }
         if layers {
             for pixel in &self.wet.lat {
                 put_u64(w, pixel.layers.len() as u64)?;
@@ -591,13 +600,17 @@ impl Canvas {
                 }
             }
         }
+        if backing {
+            put_all(w, self.backing.iter().flat_map(|b| b.reflectance.into_iter().chain(b.residual).chain(b.color)))?;
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
-        let layers = version == 20;
+        let mut layers = version == 20;
+        let spectral_backing = version == 21;
         let own_mixer = version >= 19;
         let identity = if own_mixer { get_u64(r)? } else { 0 };
         if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::film_identity() {
@@ -826,7 +839,7 @@ impl Canvas {
                     h[5..].copy_from_slice(k);
                 }
                 c.drain = true;
-                if !raw && version == 14 && !pigments && r.read(&mut [0u8; 1])? != 0 {
+                if !raw && version == 14 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
@@ -839,7 +852,7 @@ impl Canvas {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
             c.soak = Some(Box::new(read_soak(r, n)?));
-            if version != 17 && !pigments && r.read(&mut [0u8; 1])? != 0 {
+            if version != 17 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -848,7 +861,7 @@ impl Canvas {
             let (p, micro) = read_paper(r, n)?;
             c.paper = Some(p);
             c.micro = micro;
-            if !pigments && r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -872,7 +885,7 @@ impl Canvas {
                 return Err(bad("checkpoint sheet mark is wrong"));
             }
             c.sheet = Some(read_sheet_body(r, n)?);
-            if !pigments && r.read(&mut [0u8; 1])? != 0 {
+            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -891,9 +904,16 @@ impl Canvas {
                     pixel.parts.push((i, amount));
                 }
             }
-            if !layers && r.read(&mut [0u8; 1])? != 0 {
+            if !layers && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
+        }
+        if spectral_backing {
+            layers = match get_u64(r)? {
+                0 => false,
+                1 => true,
+                _ => return Err(bad("checkpoint spectral backing layer flag is invalid")),
+            };
         }
         if layers {
             if c.engine < crate::PIGMENT_MIXER || !pigments { return Err(bad("checkpoint layers need engine 9 pigment storage")); }
@@ -918,6 +938,25 @@ impl Canvas {
                 }
                 let sum: f32 = pixel.layers.iter().map(|l| l.share).sum();
                 if count > 0 && (sum - 1.0).abs() > 1e-4 { return Err(bad("checkpoint layer shares are invalid")); }
+            }
+            if !spectral_backing && r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
+        }
+        if spectral_backing {
+            if !c.spectral_films() {
+                return Err(bad("checkpoint spectral backing requires spectral film optics"));
+            }
+            c.backing.reserve_exact(n);
+            let mut bytes = [0; (crate::spectral::N + 6) * 4];
+            for _ in 0..n {
+                r.read_exact(&mut bytes)?;
+                let mut b = crate::mixer::Backing::default();
+                for (v, bytes) in b.reflectance.iter_mut().chain(&mut b.residual).chain(&mut b.color).zip(bytes.chunks_exact(4)) {
+                    *v = f32::from_le_bytes(bytes.try_into().unwrap());
+                    if !v.is_finite() {
+                        return Err(bad("checkpoint spectral backing is invalid"));
+                    }
+                }
+                c.backing.push(b);
             }
             if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }

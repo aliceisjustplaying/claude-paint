@@ -196,6 +196,7 @@ pub struct Canvas {
     pub(crate) keep: (usize, usize, usize, usize),
     /// Linear RGB reflectance, row major.
     pub(crate) px: Vec<Rgb>,
+    pub(crate) backing: Vec<crate::mixer::Backing>,
     /// Physical surface height, µm: woven linen, ground layers, paint films.
     pub(crate) height: Vec<f32>,
     /// Accumulated paint film in coats (bookkeeping).
@@ -305,6 +306,7 @@ impl Canvas {
             f,
             keep,
             px: vec![ground; n],
+            backing: Vec::new(),
             height: vec![0.0; n],
             film: vec![0.0; n],
             gloss: vec![OIL_GROUND_GLOSS; n],

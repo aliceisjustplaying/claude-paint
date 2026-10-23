@@ -463,7 +463,12 @@ impl Canvas {
         if v < 1e-5 {
             return self.px[i];
         }
-        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0), self.spectral_films())
+        let cover = bead_cover(self.wet.cover[i], v, self.px_mm() * 1000.0);
+        if self.spectral_films() {
+            return self.backing.get(i).copied().unwrap_or_default().under(self.px[i])
+                .over_wet(&self.wet.lat[i], self.wet.hide[i][0], v, cover).color;
+        }
+        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, cover, false)
     }
 
     /// The visible colors, pixel by pixel over the window: the dry

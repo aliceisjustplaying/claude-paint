@@ -78,7 +78,7 @@ pub fn film_identity() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
-    hash.update(b"film25um/spectral-dry/transmitted-residual/v1");
+    hash.update(b"film25um/spectral-backing/transmitted-residual/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 
@@ -145,6 +145,80 @@ fn outside(r: f32) -> f32 {
 
 fn inside(r: f32) -> f32 {
     r / ((1.0 - 0.04) * (1.0 - 0.49) + 0.49 * r)
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Backing {
+    pub reflectance: crate::spectral::Spectrum,
+    pub residual: Rgb,
+    pub color: Rgb,
+}
+
+impl Default for Backing {
+    fn default() -> Self {
+        Self { reflectance: [0.0; crate::spectral::N], residual: [0.0; 3], color: [-1.0; 3] }
+    }
+}
+
+impl Backing {
+    pub fn under(self, color: Rgb) -> Self {
+        if self.color == color {
+            return self;
+        }
+        Self { reflectance: crate::spectral::from_rgb(color), residual: [0.0; 3], color }
+    }
+
+    pub fn over(mut self, lat: &[f32; LATENT_SIZE], scatter: f32, coats: f32, cover: f32) -> Self {
+        if coats <= 0.0 || scatter <= 0.0 || cover.is_nan() || cover <= 0.0 {
+            return self;
+        }
+        let cover = cover.min(1.0);
+        let p = pigment(lat);
+        let mean_s = p.s.iter().sum::<f32>() / crate::spectral::N as f32;
+        let x = (coats / cover).min(1e4) * scatter / mean_s.max(1e-12);
+        let mut transmission = [0.0; crate::spectral::N];
+        for w in 0..crate::spectral::N {
+            let sub = inside(self.reflectance[w]);
+            let (r, t) = crate::pigment::layer1(p.k[w], p.s[w], x);
+            transmission[w] = t * t;
+            let reflectance = outside(r + t * t * sub / (1.0 - r * sub).max(1e-6));
+            self.reflectance[w] += cover * (reflectance - self.reflectance[w]);
+        }
+        let transmitted = crate::spectral::to_rgb(&transmission);
+        for k in 0..3 {
+            let opacity = cover * (1.0 - transmitted[k]).clamp(0.0, 1.0);
+            self.residual[k] += opacity * (lat[PIGMENTS + k] - self.residual[k]);
+        }
+        let rgb = crate::spectral::to_rgb(&self.reflectance);
+        self.color = std::array::from_fn(|k| (rgb[k] + self.residual[k]).clamp(0.0, 1.0));
+        self
+    }
+
+    pub fn over_wet(self, lat: &crate::wet::Latent, scatter: f32, coats: f32, cover: f32) -> Self {
+        if lat.layers.is_empty() {
+            return self.over(lat, scatter, coats, cover);
+        }
+        if coats <= 0.0 || scatter <= 0.0 || cover.is_nan() || cover <= 0.0 {
+            return self;
+        }
+        let cover = cover.min(1.0);
+        let mean: f32 = lat.layers.iter().map(|l| l.share * l.hide[0]).sum();
+        let scale = if mean > 0.0 { scatter / mean } else { 1.0 };
+        let mut over = lat.layers.iter().fold(self, |backing, layer| {
+            backing.over(&layer.lat, layer.hide[0] * scale, (coats * layer.share / cover).min(1e4), 1.0)
+        });
+        if cover < 1.0 {
+            for w in 0..crate::spectral::N {
+                over.reflectance[w] = self.reflectance[w] + cover * (over.reflectance[w] - self.reflectance[w]);
+            }
+            for k in 0..3 {
+                over.residual[k] = self.residual[k] + cover * (over.residual[k] - self.residual[k]);
+            }
+            let rgb = crate::spectral::to_rgb(&over.reflectance);
+            over.color = std::array::from_fn(|k| (rgb[k] + over.residual[k]).clamp(0.0, 1.0));
+        }
+        over
+    }
 }
 
 /// Mean scattering per engine coat (25 µm), carried with the wet paint.
@@ -215,6 +289,71 @@ fn inverse(at: [f32; 3]) -> [f32; PRIMARIES - 1] {
 mod tests {
     use super::*;
     use crate::color::{hex, to_oklab};
+
+    #[test]
+    fn splitting_measured_films_preserves_the_backing_spectrum() {
+        let mut palette = crate::Palette::new("repeated film study", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let index = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let yellow = index("chrome yellow");
+        let white = index("lead white");
+        for (parts, under, total) in [
+            (vec![(yellow, 1.0)], [0.85; 3], 0.2),
+            (vec![(yellow, 0.05), (white, 0.95)], [0.5; 3], 1.0),
+        ] {
+            let paint = palette.pile(parts).paint(0.0);
+            let expected = paint.over(under, total);
+            for n in [1, 4, 100] {
+                let mut canvas = crate::Canvas::new_window(4, 1.0, under, None)
+                    .with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+                for coat in 0..n {
+                    canvas.wet.vol.fill(total / n as f32);
+                    canvas.wet.lat.fill(paint.latent());
+                    canvas.wet.hide.fill(paint.prop());
+                    canvas.wet.dirty = Some((0, 0, canvas.f.w, canvas.f.h));
+                    let wet = canvas.look_px(0);
+                    canvas.dry();
+                    assert_eq!(wet, canvas.px[0]);
+                    if coat == n / 2 {
+                        let mut bytes = Vec::new();
+                        canvas.write_state(&mut bytes, "repeated film").unwrap();
+                        let (restored, _) = crate::Canvas::read_state(&mut &bytes[..]).unwrap();
+                        let mut rebuilt = Vec::new();
+                        restored.write_state(&mut rebuilt, "repeated film").unwrap();
+                        assert_eq!(bytes, rebuilt);
+                        canvas = restored;
+                    }
+                }
+                let actual = canvas.px[0];
+                let a = to_oklab(actual);
+                let b = to_oklab(expected);
+                let delta = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt();
+                eprintln!("{n} coats: {actual:?}, one {expected:?}, delta {delta:.9}");
+                assert!(delta < 2e-6, "{n} coats changed the film: {actual:?} != {expected:?}, delta {delta}");
+                if n == 4 {
+                    let mut latent = paint.latent();
+                    latent.layers = (0..4).map(|_| crate::wet::Layer { share: 0.25, lat: paint.latent(), hide: paint.prop() }).collect();
+                    canvas.wet.vol.fill(total);
+                    canvas.wet.lat.fill(latent);
+                    canvas.wet.hide.fill(paint.prop());
+                    canvas.wet.dirty = Some((0, 0, canvas.f.w, canvas.f.h));
+                    let mut bytes = Vec::new();
+                    canvas.write_state(&mut bytes, "retained wet and dry films").unwrap();
+                    assert_eq!(&bytes[..8], b"PAINTC21");
+                    let (mut restored, _) = crate::Canvas::read_state(&mut &bytes[..]).unwrap();
+                    let expected = paint.over(under, total * 2.0);
+                    let wet = restored.look_px(0);
+                    restored.dry();
+                    assert_eq!(wet, restored.px[0]);
+                    let a = to_oklab(restored.px[0]);
+                    let b = to_oklab(expected);
+                    let delta = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt();
+                    assert!(delta < 2e-6, "retained wet layers changed the backing: {:?} != {expected:?}, delta {delta}", restored.px[0]);
+                }
+            }
+        }
+    }
 
     #[test]
     fn films_keep_measured_coefficients_thickness_and_medium() {

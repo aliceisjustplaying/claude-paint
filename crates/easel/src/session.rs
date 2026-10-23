@@ -216,10 +216,48 @@ pub struct Chunk {
     pub mark_effects: u64,
 }
 
+/// The canvas as it was before a chunk, to put back if the chunk fails: its
+/// state packed (`Canvas::pack`) and compressed into an anonymous temporary
+/// file, not a copy of the canvas in memory. A copy of a painted 2400 px
+/// engine-9 canvas is some 4 GiB beside the canvas itself; packed and
+/// compressed it is a few hundred MiB, in the page cache, which the kernel
+/// writes out under memory pressure instead of swapping the painting.
+struct CanvasSnapshot {
+    file: std::fs::File,
+    aside: paint::checkpoint::Aside,
+}
+
+impl CanvasSnapshot {
+    fn take(canvas: &Canvas) -> std::io::Result<Self> {
+        let t0 = Instant::now();
+        let mut packer = zstd::stream::write::Encoder::new(tempfile::tempfile()?, 1)?;
+        let aside = canvas.pack(&mut packer)?;
+        let file = packer.finish()?;
+        if std::env::var_os("EASEL_SNAPSHOT_TIMING").is_some() {
+            let packed = t0.elapsed().as_secs_f64();
+            let t1 = Instant::now();
+            canvas.write_state(&mut std::io::sink(), "")?;
+            eprintln!("snapshot: {} bytes, {packed:.3}s packed ({:.3}s of it write_state)", file.metadata()?.len(), t1.elapsed().as_secs_f64());
+        }
+        Ok(Self { file, aside })
+    }
+
+    fn restore(mut self) -> std::io::Result<Canvas> {
+        use std::io::Seek;
+        let t0 = Instant::now();
+        self.file.rewind()?;
+        let c = Canvas::unpack(&mut zstd::stream::read::Decoder::new(&self.file)?, self.aside)?;
+        if std::env::var_os("EASEL_SNAPSHOT_TIMING").is_some() {
+            eprintln!("snapshot: restored in {:.3}s", t0.elapsed().as_secs_f64());
+        }
+        Ok(c)
+    }
+}
+
 /// Everything a failed chunk could have changed, taken before it runs.
 struct Snap {
     recording_ground: u64,
-    canvas: Option<Canvas>,
+    canvas: Option<CanvasSnapshot>,
     style: Option<Rc<Style>>,
     setup: Option<String>,
     canvas_src: Option<String>,
@@ -447,12 +485,13 @@ impl Session {
             let v = r.borrow().clone();
             (r, v)
         }).collect();
-        Ok(Snap { recording_ground: s.recording_ground, canvas: s.canvas.clone(), style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
+        let canvas = s.canvas.as_ref().map(CanvasSnapshot::take).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put aside before the chunk: {e}")))?;
+        Ok(Snap { recording_ground: s.recording_ground, canvas, style: s.style.clone(), setup: s.setup.clone(), canvas_src: s.canvas_src.clone(), seed: s.seed, clock: s.clock, clock0: s.clock0, hand: s.hand.clone(), board: s.board.clone(), view: s.view.clone(), heap, brushes, knives, rags })
     }
 
     /// Put everything back as it was at `snap`. Returns how many Lua tables
     /// still differ in contents, traversal order or raw length after restoration (see `stale`).
-    fn restore(&mut self, snap: &Snap) -> mlua::Result<usize> {
+    fn restore(&mut self, snap: Snap) -> mlua::Result<usize> {
         let (_, restore_f) = self.heap.as_ref().unwrap();
         // not marking: what restore makes is the painting's again
         self._serials.uncapped.set(true);
@@ -469,17 +508,19 @@ impl Session {
             *r.borrow_mut() = v.clone();
         }
         let mut s = self.st.borrow_mut();
-        s.canvas = snap.canvas.clone();
-        s.style = snap.style.clone();
-        s.setup = snap.setup.clone();
-        s.canvas_src = snap.canvas_src.clone();
+        // the failed chunk's canvas goes before the snapshot's is unpacked: one canvas in memory, not two
+        s.canvas = None;
+        s.canvas = snap.canvas.map(CanvasSnapshot::restore).transpose().map_err(|e| mlua::Error::runtime(format!("the canvas couldn't be put back from where it was put aside: {e}")))?;
+        s.style = snap.style;
+        s.setup = snap.setup;
+        s.canvas_src = snap.canvas_src;
         s.recording_ground = snap.recording_ground;
         s.seed = snap.seed;
         s.clock = snap.clock;
         s.clock0 = snap.clock0;
-        s.hand = snap.hand.clone();
-        s.board = snap.board.clone();
-        s.view = snap.view.clone();
+        s.hand = snap.hand;
+        s.board = snap.board;
+        s.view = snap.view;
         Ok(mismatches)
     }
 
@@ -585,7 +626,7 @@ impl Session {
             // A rollback that fails may have left anything half put back: the state is
             // no longer one the log gives, so it is rebuilt from the log (`stale`) before
             // anything paints on it.
-            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.restore(&snap))) {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.restore(snap))) {
                 Ok(Ok(mismatches)) => self.stale = mismatches > 0,
                 r => {
                     self.stale = true;
@@ -1683,6 +1724,57 @@ mod tests {
         assert_eq!(s.log.iter().map(|c| c.mark_effects).collect::<Vec<_>>(), before);
         s.run("print('jobs[1]()')").unwrap();
         assert_eq!(s.log.last().unwrap().mark_effects, 0);
+    }
+
+    /// A failed chunk's rollback puts the canvas back from its packed snapshot
+    /// (`CanvasSnapshot`), not from a copy: afterwards the painting that failed the
+    /// chunk and the painting that never ran it are the same bits, through the
+    /// strokes, the knife, the rag, the waits and the drying that follow, for every
+    /// engine (a canvas without the drain switch keeps its paint properties aside).
+    #[test]
+    fn a_rollback_from_the_packed_canvas_leaves_the_same_bits() {
+        let head = Session::new(96).unwrap().program("p");
+        let head: Vec<&str> = head.lines().take_while(|l| !l.starts_with(MARK)).collect();
+        let chunks = [
+            "canvas{size=440, aspect=1.5, linen=15, seed=2, ground={{pile={{\"lead white\", 3}, {\"red earth\", 1}}, um=60, apply=\"knife\"}}}",
+            "b = brush(\"flat\", 24)\nb:load(pile{{\"raw umber\", 1}}, 0.8)\nb:stroke({{100, 200}, {900, 200}})\nwait(30)",
+            "work(rect(100, 100, 800, 500), {hand=\"body\", pile=pile{{\"bone black\", 1}, {\"lead white\", 0.3}}, coverage=1, fill=true, seed=5})\nwait(5)",
+        ];
+        let failing = "b:load(pile{{\"lead white\", 1}}, 0.9)\nb:stroke({{100, 400}, {900, 380}})\nwork(rect(200, 150, 600, 400), {hand=\"body\", pile=pile{{\"yellow ochre\", 1}}, coverage=1, fill=true, seed=9})\nif knife then k = knife{width=8} k:load(pile{{\"vermilion\", 1}}) k:scrape({{300, 300}, {600, 320}}, {pressure=1, angle=0}) end\nwait(60)\nif rag then r = rag() r:wipe({{150, 150}, {850, 160}}) end\nerror('rollback')";
+        let after = [
+            "b:load(pile{{\"vermilion\", 1}, {\"lead white\", 2}}, 0.7)\nb:stroke({{120, 300}, {880, 330}})\nwait(20)",
+            "wait(24 * 60)\nwork(rect(100, 100, 800, 500), {hand=\"scumble\", pile=pile{{\"lead white\", 2}, {\"yellow ochre\", 0.4}}, coverage=0.5, angle=0.2, seed=41})",
+        ];
+        let bits = |s: &Session| {
+            let c = s.canvas().unwrap();
+            let mut bytes = Vec::new();
+            c.write_state(&mut bytes, "").unwrap();
+            (bytes, c.seen(), c.surface_um().to_vec())
+        };
+        for engine in [1, 3, 4, 5, paint::engine7::ENGINE, paint::PIGMENT_MIXER] {
+            let log: String = head.iter().filter(|l| {
+                let l = l.trim();
+                l.starts_with(BOX_MARK) || (engine >= 5 && l == DRAIN_MARK) || (engine >= 7 && !l.starts_with(ENGINE_MARK) && l != PAPER_MARK)
+            }).map(|l| format!("{l}\n")).chain([format!("{ENGINE_MARK} {engine}\n")]).collect();
+            let tubes = box_for(Some(&log)).unwrap();
+            assert_eq!(tubes.engine, engine);
+            let mut failed = Session::with_box(96, tubes.clone()).unwrap();
+            let mut clean = Session::with_box(96, tubes).unwrap();
+            for chunk in chunks {
+                failed.run(chunk).unwrap();
+                clean.run(chunk).unwrap();
+            }
+            let e = failed.run(failing).unwrap_err();
+            assert!(e.contains("rollback"), "engine {engine}: {e}");
+            assert!(!failed.stale && !failed.unrestored, "engine {engine}: the rollback left the session to a rebuild");
+            assert!(bits(&failed) == bits(&clean), "engine {engine}: the canvas differs after the rollback");
+            for chunk in after {
+                failed.run(chunk).unwrap();
+                clean.run(chunk).unwrap();
+                assert!(bits(&failed) == bits(&clean), "engine {engine}: the painting differs after the rollback at {chunk:?}");
+            }
+            assert_eq!(failed.program("p"), clean.program("p"));
+        }
     }
 
     fn assert_canvas_close(actual: &Canvas, expected: &Canvas) {

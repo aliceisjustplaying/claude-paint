@@ -974,6 +974,82 @@ impl Canvas {
         }
         Ok((c, header))
     }
+
+    /// Write the canvas state to `w` (`write_state`) and keep aside what it
+    /// leaves out: `unpack` of the two gives this canvas back bit for bit,
+    /// as a copy would, in far less memory. A copy of a painted canvas is
+    /// the pixels' latents, pigment lists and skim layers over again; the
+    /// written state is dense, mostly zero lanes, and compresses well.
+    pub fn pack(&self, w: &mut impl Write) -> io::Result<Aside> {
+        self.write_state(w, "")?;
+        let wet = &self.wet;
+        Ok(Aside {
+            absorb_any: self.absorb_any,
+            ground_um: self.ground_um,
+            hand_slice: self.hand_slice,
+            film_pass: self.film_pass,
+            receptive: self.receptive.clone(),
+            floor: wet.floor.clone(),
+            solv: wet.solv.clone(),
+            laid: wet.laid.clone(),
+            laid_id: wet.laid_id.clone(),
+            hide: (!self.drain).then(|| wet.hide.clone()),
+            drawing: self.drawing.clone(),
+            soak: self.soak.clone(),
+            paper: self.paper,
+            micro: self.micro.clone(),
+            sheet: self.sheet.clone(),
+        })
+    }
+
+    /// The canvas `pack` wrote to `r` and kept `aside`, bit for bit. The
+    /// brushes' contact level is not kept: it is rebuilt from the relief
+    /// to the same bits (`engine7::contact_cache`).
+    pub fn unpack(r: &mut impl Read, aside: Aside) -> io::Result<Canvas> {
+        let (mut c, _) = Canvas::read_state(r)?;
+        c.absorb_any = aside.absorb_any;
+        c.ground_um = aside.ground_um;
+        c.hand_slice = aside.hand_slice;
+        c.film_pass = aside.film_pass;
+        c.receptive = aside.receptive;
+        c.wet.floor = aside.floor;
+        c.wet.solv = aside.solv;
+        c.wet.laid = aside.laid;
+        c.wet.laid_id = aside.laid_id;
+        if let Some(hide) = aside.hide {
+            c.wet.hide = hide;
+        }
+        c.drawing = aside.drawing;
+        c.soak = aside.soak;
+        c.paper = aside.paper;
+        c.micro = aside.micro;
+        c.sheet = aside.sheet;
+        Ok(c)
+    }
+}
+
+/// What `write_state` leaves out of a canvas, or reads back sanitized,
+/// kept beside the written state by `Canvas::pack`: the film floors and
+/// ceilings only the stroke that set them reads, the solvent buffers as
+/// allocated, the five packing lanes of the paint's properties that only
+/// the drain section writes, the values `read_state` clamps, a pass under
+/// way, and the drawing, cloth, paper and sheet, which are cheap to copy.
+pub struct Aside {
+    absorb_any: bool,
+    ground_um: f32,
+    hand_slice: Option<f32>,
+    film_pass: Option<(f32, u32)>,
+    receptive: Option<Vec<f32>>,
+    floor: Vec<f32>,
+    solv: Vec<f32>,
+    laid: Vec<f32>,
+    laid_id: Vec<u32>,
+    hide: Option<Vec<crate::wet::Prop>>,
+    drawing: Option<Box<crate::graphite::Drawing>>,
+    soak: Option<Box<crate::soak::Soak>>,
+    paper: Option<crate::paper::Paper>,
+    micro: Vec<f32>,
+    sheet: Option<crate::sheet::Sheet>,
 }
 
 #[cfg(test)]

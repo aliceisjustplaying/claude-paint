@@ -38,6 +38,7 @@ import argparse
 import hashlib
 import math
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -93,7 +94,14 @@ def changes(d: Path, ms):
         out.append(known[key][0])
         prev_f = f
     if new:
-        cache.write_text("".join(f"{a}\t{b}\t{c:.5f}\t{ha}\t{hb}\n" for (a, b), (c, ha, hb) in known.items()))
+        with tempfile.NamedTemporaryFile(mode="w", dir=d, delete=False) as target:
+            temporary = Path(target.name)
+            try:
+                target.write("".join(f"{a}\t{b}\t{c:.5f}\t{ha}\t{hb}\n" for (a, b), (c, ha, hb) in known.items()))
+                target.close()
+                temporary.replace(cache)
+            finally:
+                temporary.unlink(missing_ok=True)
     return np.array(out)
 
 
@@ -169,6 +177,7 @@ def evenness(c, secs):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir", type=Path)
+    ap.add_argument("--out", type=Path)
     ap.add_argument("--length", type=float, default=50)
     ap.add_argument("--max-hold", type=float, default=1.0)
     ap.add_argument("--hold", type=float, default=3.0)
@@ -188,9 +197,11 @@ def main():
         sys.exit(f"replay_pace: --length must exceed the {a.hold} s final hold plus the {a.open_hold} s opening hold")
     opening = round(a.open_hold * a.fps)
     ms = moments(a.dir)
+    c = changes(a.dir, ms)
+    if a.out:
+        ms = [(str(a.dir.resolve() / f), h) for f, h in ms]
     process = ms[:-1] if len(ms) > 1 or not a.painted_input else ms
     h = np.array([x[1] for x in ms])
-    c = changes(a.dir, ms)
     # the moments shown, each held at most --max-hold (in whole video frames),
     # may not fill --length
     m = int((schedule(c, h, a) > 0).sum())
@@ -230,7 +241,7 @@ def main():
     # (less the two frames after it), then a one-frame repeat, then the frame
     # again (a frame)
     lines.append(f"{last}duration {a.hold - 2 / a.fps:.5f}\n{last}duration {1 / a.fps:.5f}\n{last}")
-    (a.dir / "concat.txt").write_text("".join(lines))
+    (a.out or a.dir / "concat.txt").write_text("".join(lines))
     total = sum(fr) / a.fps + a.hold
     print(f"{len(ms)} moments, {shown + 1} shown, {h[-1] / 60:.1f} min of hand time, pace dynamic (floor {a.floor}, gamma {a.gamma}): about {total:.1f} s of clip", file=sys.stderr)
     if a.eval:

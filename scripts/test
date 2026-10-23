@@ -258,6 +258,7 @@ check replay-batch 'uv run --no-project python -m unittest scripts/tests/replay_
 check cargo-test-executables 'uv run --no-project python -m unittest scripts/tests/cargo_test_executables_test.py -v' "$unittest"
 check replay-clip 'uv run --no-project python -m unittest scripts/tests/replay_clip_test.py -v' "$unittest"
 check export-painting 'uv run --script scripts/tests/export_painting_test.py -v' "$unittest"
+check delivery-regressions "EASEL_BIN=$easel uv run --script scripts/tests/delivery_regressions_test.py -v" "$unittest"
 check replay-pace 'uv run --script scripts/tests/replay_pace_test.py -v' "$unittest"
 check reference-tools 'uv run --no-project --script harness/easel_mcp/test_references.py -v' "$unittest"
 rust checkpoint-paths easel 'test checkpoint_paths test'

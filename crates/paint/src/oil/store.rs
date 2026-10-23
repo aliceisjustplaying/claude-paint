@@ -17,6 +17,7 @@ pub struct Formulation {
 impl Formulation {
     pub fn new(mut latent: Latent, prop: Prop, kinetics: Kinetics) -> Result<Self, MaterialError> {
         latent.layers.clear();
+        latent.material = None;
         latent
             .parts
             .sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
@@ -60,6 +61,7 @@ impl Formulation {
 
     pub(crate) fn valid(&self) -> bool {
         self.latent.layers.is_empty()
+            && self.latent.material.is_none()
             && self
                 .latent
                 .color

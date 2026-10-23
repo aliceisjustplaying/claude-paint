@@ -62,7 +62,7 @@ fn raw_size(pixels: u64, c: StoreCounts) -> io::Result<u64> {
     Ok(result)
 }
 
-fn resident_size(pixels: u64, c: StoreCounts) -> io::Result<u64> {
+pub fn resident_size(pixels: u64, c: StoreCounts) -> io::Result<u64> {
     let mut result = size_of::<FilmStore>() as u64;
     for (n, stride) in [
         (

@@ -184,7 +184,7 @@ pub fn exchange_kj() -> (f32, f32) {
 /// constant. A power of two, so quarter minutes fall on it exactly.
 pub const FLOW_TICKS: u32 = 64;
 
-type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32, f32);
+type FlowCell = (f32, f32, crate::wet::Latent, crate::wet::Prop, f32, bool, f32, f32, f32, Option<crate::oil::exchange::MaterialSink>);
 
 #[derive(Default)]
 struct FlowScratch {
@@ -236,6 +236,7 @@ impl Canvas {
     pub(crate) fn evaporate_indices(&mut self, dt: f32, solvent: &mut Vec<usize>) {
         solvent.retain(|&i| {
             let s = &mut self.wet.solv[i];
+            let before = *s;
             if *s > 0.0 {
                 let h = self.wet.vol[i] * COAT_UM;
                 *s = (*s as f64 * (-(dt as f64) / evaporation_tau_min(h)).exp()) as f32;
@@ -245,6 +246,14 @@ impl Canvas {
                 // not a measured evaporation law; earlier engines keep 1e-8.
                 let floor = if self.engine >= 5 { SOLVENT_FLOOR.max(1e-5 * (h + THIN_FILM_UM)) } else { SOLVENT_FLOOR };
                 if *s < floor { *s = 0.0; }
+            }
+            if *s < before && let Some(material) = &mut self.wet.lat[i].material {
+                let volume = self.wet.vol[i] as f64;
+                material.scale(volume);
+                let removed = material.remove_solvent((before - *s) as f64);
+                material.scale(if volume > 0.0 { 1.0 / volume } else { 0.0 });
+                assert_eq!(self.wet.material_sinks.len(), self.wet.vol.len(), "chemical evaporation requires a sink ledger");
+                self.wet.material_sinks[i].push(crate::oil::exchange::MaterialSink { kind: crate::oil::exchange::SinkKind::Evaporated, material: removed });
             }
             *s > 0.0
         });
@@ -401,6 +410,20 @@ impl Canvas {
                 // level: the rest of the time moves nothing either
                 break;
             }
+            let material_flow: Vec<_> = if wet.material_sinks.is_empty() { Vec::new() } else {
+                (0..len).map(|k2| {
+                    let i = index(k2);
+                    let material = wet.lat[i].material.as_ref()?;
+                    let v = wet.vol[i];
+                    let flowing = v * (1.0 - packed(wet, i));
+                    let liquid = flowing + wet.solv[i] / COAT_UM;
+                    let gone = if liquid > 0.0 { out[k2].iter().sum::<f32>() * flowing / liquid } else { 0.0 };
+                    let (mut below, mut top) = material.split_top_with_geometry(if v > 0.0 { gone as f64 / v as f64 } else { 0.0 }, v as f64 * COAT_UM as f64);
+                    below.scale(if v > gone { v as f64 / (v - gone) as f64 } else { 0.0 });
+                    top.scale(if gone > 0.0 { v as f64 / gone as f64 } else { 0.0 });
+                    Some((below, top))
+                }).collect()
+            };
             used += 1;
             left -= sub;
             // pass 2: each pixel keeps what didn't leave and gathers what came
@@ -420,6 +443,7 @@ impl Canvas {
                     let gone: f32 = out[k2].iter().sum();
                     let keep = if l > 0.0 { ((l - gone) / l).max(0.0) } else { 0.0 };
                     let (mut pv, mut ps, mut lat, mut hide, mut cure) = (v * keep, s * keep, wet.lat[i].clone(), wet.hide[i], cure_of(i));
+                    if let Some(Some((below, _))) = material_flow.get(k2) { lat.material = Some(below.clone()); }
                     let pk = packed(wet, i);
                     if pk > 0.0 && gone > 0.0 {
                         // the liquid left from above the packed paint, which
@@ -460,7 +484,14 @@ impl Canvas {
                             cure = if pv + qp > 0.0 { cure + (cure_of(j) - cure) * qp / (pv + qp) } else { cure };
                             let hj = wet.hide[j];
                             let hj = if drain { let mut h = crate::bristle::fluid_of(hj); h[4] = crate::bristle::surface_oil(&hj); h } else { hj };
-                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, &wet.lat[j], hj);
+                            let mut incoming;
+                            let source = if let Some(Some((_, top))) = material_flow.get(k) {
+                                incoming = wet.lat[j].clone();
+                                incoming.material = Some(top.clone());
+                                incoming.layers.clear();
+                                &incoming
+                            } else { &wet.lat[j] };
+                            crate::wet::mix_into(&mut pv, &mut lat, &mut hide, qp, source, hj);
                         }
                         ps += qs;
                         changed = true;
@@ -469,15 +500,19 @@ impl Canvas {
                     // paint came into, as `Surf::add` does; what is left of
                     // its pores goes back with the rest)
                     let mut cap = if soaks { absorb[i] } else { 0.0 };
+                    let mut sink = None;
                     if soaks && qin > 0.0 {
-                        pv = crate::bristle::ground_drain(&mut cap, pv, &mut hide);
+                        let before = pv;
+                        let packed = hide[7];
+                        pv = crate::bristle::ground_drain(&mut cap, before, &mut hide);
+                        if pv < before { sink = lat.drain_material(before, pv, packed, hide[7]); }
                     }
                     let cure = if pv <= 0.0 { 0.0 } else { cure };
                     // (the drying thickness a bare pixel takes, by amount)
                     let own = th_of(i);
                     let th_in = if qin <= 0.0 { own } else if own > 0.0 && v * keep > 0.0 { (own * v * keep + thin) / (v * keep + qin) } else { thin / qin };
                     let flowing = if drain { pv * (1.0 - hide[7].clamp(0.0, 1.0)) } else { pv };
-                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in, cap)
+                    (pv, ps, lat, hide, cure, changed, mob_of(flowing, ps, cure), th_in, cap, sink)
                 })
                 .collect_into_vec(&mut next);
             // the largest mobility now: every pixel that has any is in the
@@ -488,11 +523,15 @@ impl Canvas {
             active.extend(next.iter().enumerate().filter_map(|(k, c)| (c.6 > 0.0).then(|| index(k))));
             // write back
             let px_ok = timed;
-            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap)) in next.iter().cloned().enumerate() {
+            for (k2, (pv, ps, lat, hide, cure, changed, _, th_in, cap, sink)) in next.iter().cloned().enumerate() {
                 if !changed {
                     continue;
                 }
                 let i = index(k2);
+                if let Some(sink) = sink {
+                    assert_eq!(self.wet.material_sinks.len(), self.wet.vol.len(), "chemical flow requires a sink ledger");
+                    self.wet.material_sinks[i].push(sink);
+                }
                 let (x, y) = (i % w, i / w);
                 moved = Some(match moved {
                     None => (x, y, x + 1, y + 1),

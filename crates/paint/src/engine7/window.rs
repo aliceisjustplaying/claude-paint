@@ -98,6 +98,8 @@ impl Window {
             self.stamp[c] = self.generation;
             let cell = &mut self.cells[c];
             cell.parts.parts.clear();
+            cell.parts.material = None;
+            cell.parts.layers.clear();
             cell.j = j;
             cell.k = k();
             cell.a.fill(0.0);

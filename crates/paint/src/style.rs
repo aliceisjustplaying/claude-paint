@@ -21,6 +21,7 @@ use crate::handling::Handling;
 use crate::mask::Mask;
 use crate::palette::Palette;
 use crate::surface::Linen;
+use rayon::prelude::*;
 
 /// Mean thickness (µm) a brushed ground (`brush_ground`) lays for a load of
 /// the priming brush: about `BRUSHED_UM_AT_FULL * load^BRUSHED_EXP`
@@ -47,10 +48,12 @@ pub enum Apply {
 }
 
 /// One preparation layer.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Ground {
     pub color: Rgb,
     pub hiding: f32,
+    /// The retained tube paint for engine-9 film optics, if supplied.
+    pub paint: Option<crate::Paint>,
     /// Thickness, µm.
     pub um: f32,
     /// Stiffness of the priming paste (0 fluid .. 1 stiff).
@@ -120,9 +123,9 @@ impl Style {
             linen: Linen { warp_per_cm: 15.0, weft_per_cm: 13.0, ..Linen::fine(1) },
             raw: hex("#a8966f"),
             ground: vec![
-                Ground { color: hex("#9a5a36"), hiding: 0.8, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
-                Ground { color: hex("#b08457"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
-                Ground { color: hex("#a9785a"), hiding: 0.8, um: 60.0, stiff: 0.35, apply: Apply::Brush, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#9a5a36"), hiding: 0.8, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#b08457"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#a9785a"), hiding: 0.8, um: 60.0, stiff: 0.35, apply: Apply::Brush, absorbent: 0.0 },
             ],
             broad: Tool { lay: 0.55, push: 0.03, ragged: 0.4, ..Tool::filbert(22.0) },
             body: Tool { lay: 0.7, push: 0.06, ..Tool::filbert(9.0) },
@@ -148,9 +151,9 @@ impl Style {
             width_mm: 1714.0,
             linen: Linen { warp_per_cm: 12.0, weft_per_cm: 11.0, ..Linen::fine(1) },
             ground: vec![
-                Ground { color: hex("#b0583a"), hiding: 0.85, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
-                Ground { color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
-                Ground { color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#b0583a"), hiding: 0.85, um: 110.0, stiff: 0.25, apply: Apply::Knife { texture: 0.35 }, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#c9ad8a"), hiding: 0.8, um: 70.0, stiff: 0.3, apply: Apply::Knife { texture: 0.3 }, absorbent: 0.0 },
+                Ground { paint: None, color: hex("#d8c7ab"), hiding: 0.8, um: 30.0, stiff: 0.5, apply: Apply::Roller, absorbent: 0.0 },
             ],
             palette: Palette::smalt_box(),
             ..Self::oil()
@@ -205,6 +208,16 @@ impl Style {
             for g in &self.ground {
                 for f in [g.color[0], g.color[1], g.color[2], g.hiding, g.um, g.stiff, g.absorbent] {
                     key.update(f.to_bits().to_le_bytes());
+                }
+                if c.engine >= crate::PIGMENT_MIXER {
+                    key.update([g.paint.is_some() as u8]);
+                    if let Some(paint) = &g.paint {
+                        key.update([paint.spectral_films as u8]);
+                        key.update(paint.scatter.to_bits().to_le_bytes());
+                        for f in paint.latent().color {
+                            key.update(f.to_bits().to_le_bytes());
+                        }
+                    }
                 }
                 let (kind, texture) = match g.apply { Apply::Knife { texture } => (0u8, texture), Apply::Roller => (1, 0.0), Apply::Brush => (2, 0.0) };
                 key.update([kind]);
@@ -267,17 +280,29 @@ impl Style {
         // the canvas is prepared alike in every engine: engine 4's stiffer
         // films and clumping hair are the painting's, not the primer's
         let engine = c.engine;
-        c.engine = engine.min(3);
+        c.engine = if engine >= crate::PIGMENT_MIXER { engine } else { engine.min(3) };
         for (k, g) in self.ground.iter().enumerate() {
             if g.um <= 0.0 {
                 continue;
             }
             let s = seed * 31 + k as u64;
             match g.apply {
-                Apply::Knife { texture } => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
-                Apply::Roller => c.prime(g.color, g.hiding, g.um, g.stiff, 0.8, s),
+                Apply::Knife { .. } | Apply::Roller => {
+                    let texture = match g.apply { Apply::Knife { texture } => texture, _ => 0.8 };
+                    match &g.paint {
+                        Some(paint) if engine >= crate::PIGMENT_MIXER && paint.spectral_films => c.prime_paint(paint, g.um, texture, s),
+                        _ => c.prime(g.color, g.hiding, g.um, g.stiff, texture, s),
+                    }
+                }
                 Apply::Brush => {
+                    let before = g.paint.as_ref().filter(|p| engine >= crate::PIGMENT_MIXER && p.spectral_films).map(|_| (c.px.clone(), c.film.clone()));
+                    c.engine = engine.min(3);
                     brush_ground(&mut c, g, s);
+                    c.engine = if engine >= crate::PIGMENT_MIXER { engine } else { engine.min(3) };
+                    if let Some((px, film)) = before {
+                        let paint = g.paint.as_ref().unwrap();
+                        c.px.par_iter_mut().zip(&c.film).zip(px).zip(film).for_each(|(((p, &f), under), f0)| *p = paint.over(under, f - f0));
+                    }
                     // (`prime` counts its own layers)
                     c.ground_um += g.um;
                 }
@@ -286,6 +311,53 @@ impl Style {
         }
         c.engine = engine;
         c
+    }
+}
+
+#[cfg(test)]
+mod ground_optics_tests {
+    use super::*;
+
+    #[test]
+    fn grounds_keep_the_same_paint_thickness_and_backing_optics() {
+        let data = include_str!("../../../scripts/pigment_data/revigo/revigo-aggregated-palette-spectral-data.txt");
+        let sample = |id: &str| {
+            let row = data.lines().find(|l| l.split('\t').next() == Some(id)).unwrap();
+            let values: Vec<f32> = row.split('\t').skip(1).map(|v| v.parse::<f32>().unwrap() / 100.0).collect();
+            crate::spectral::to_rgb(&std::array::from_fn(|w: usize| values[w.saturating_sub(2).min(30)] - 0.04)).map(|v| v.clamp(0.0, 1.0))
+        };
+        let mut palette = Palette::new("ground optics", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        for (name, backing) in [("Prussian blue", "13A_w"), ("lead white", "08A_b")] {
+            let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let pile = palette.pile(vec![(i, 1.0)]);
+            let paint = pile.paint(0.0);
+            let under = sample(backing);
+            for um in [5.0, 25.0, 100.0, 400.0] {
+                let mut direct = Canvas::new(8, 1.0, under).with_engine(crate::PIGMENT_MIXER);
+                direct.prime_paint(&paint, um, 0.0, 7);
+                for &pixel in direct.pixels() {
+                    let expected = paint.over(under, um / crate::COAT_UM);
+                    assert!((0..3).all(|k| (pixel[k] - expected[k]).abs() < 2e-6), "{name}, {um} µm: {pixel:?} != {expected:?}");
+                }
+                if name == "lead white" && um == 100.0 {
+                    let actual = crate::color::to_oklab(direct.pixels()[32]);
+                    let measured = crate::color::to_oklab(sample("08A_ob"));
+                    let error = (0..3).map(|k| (actual[k] - measured[k]).powi(2)).sum::<f32>().sqrt();
+                    assert!(error < 0.0061, "lead white measured-film error: {error}");
+                }
+                for apply in [Apply::Knife { texture: 0.0 }, Apply::Roller, Apply::Brush] {
+                    let mut style = Style::oil_with(palette.clone());
+                    style.ground = vec![Ground { color: pile.color, hiding: pile.hiding, paint: Some(paint.clone()), stiff: pile.stiff, um, apply, absorbent: 0.0 }];
+                    let canvas = style.prepare_on(Canvas::new(8, 1.0, under), 7);
+                    for (i, &pixel) in canvas.pixels().iter().enumerate() {
+                        let expected = paint.over(under, canvas.film[i]);
+                        assert!((0..3).all(|k| (pixel[k] - expected[k]).abs() < 2e-6), "{name}, {um} µm, {apply:?}, pixel {i}: {pixel:?} != {expected:?}");
+                    }
+                }
+            }
+        }
     }
 }
 

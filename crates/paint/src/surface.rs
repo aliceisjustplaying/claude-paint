@@ -344,6 +344,10 @@ impl Canvas {
     /// pixel ends below its packed layer, and the film returned is the two's.
     /// Where nothing has packed (`fluid` 1) it is as without `fluid`.
     pub(crate) fn settle_for(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool, fluid: Option<&[f32]>) -> Vec<f32> {
+        self.settle_with_transport(rect, add, stiff, sets, bridge, fluid, None)
+    }
+
+    pub(crate) fn settle_with_transport(&mut self, rect: (usize, usize, usize, usize), add: &[f32], stiff: &[f32], sets: &[f32], bridge: bool, fluid: Option<&[f32]>, transport: Option<&mut Vec<(usize, usize, f32)>>) -> Vec<f32> {
         // far below any film is nothing at all (see ADD_EPS_UM): zero it so
         // float residue can't pose as paint in the ratios below
         let clean: Vec<f32>;
@@ -437,6 +441,37 @@ impl Canvas {
             }
         });
         conserve_total(liq, &mut out, |_| f32::NEG_INFINITY, |_| f32::INFINITY);
+        if let Some(transport) = transport {
+            let target = out;
+            out = liq.to_vec();
+            for vertical in [false, true] {
+                let (lines, len) = if vertical { (rw, rh) } else { (rh, rw) };
+                for line in 0..lines {
+                    let index = |p| if vertical { p * rw + line } else { line * rw + p };
+                    let donors: Vec<_> = (0..len).filter(|&p| out[index(p)] > target[index(p)]).collect();
+                    let receivers: Vec<_> = (0..len).filter(|&p| out[index(p)] < target[index(p)]).collect();
+                    let (mut d, mut r) = (0, 0);
+                    while d < donors.len() && r < receivers.len() {
+                        let (from, to) = (donors[d], receivers[r]);
+                        if from.abs_diff(to) > 2 * r2 || (from.min(to)..from.max(to)).any(|p| liq[index(p)] <= 0.0) {
+                            if from < to { d += 1; } else { r += 1; }
+                            continue;
+                        }
+                        let (i, j) = (index(from), index(to));
+                        let give = out[i] - target[i];
+                        let need = target[j] - out[j];
+                        let moved = give.min(need);
+                        if moved > 0.0 {
+                            out[i] -= moved;
+                            out[j] += moved;
+                            transport.push((i, j, moved));
+                        }
+                        if give <= need { d += 1; }
+                        if need <= give { r += 1; }
+                    }
+                }
+            }
+        }
         // (the drain switch: the liquid, which bridges the relief, and the
         // film, the packed layer under it plus the liquid)
         let liquid = under.map(|p| {

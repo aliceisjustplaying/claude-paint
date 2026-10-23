@@ -766,6 +766,44 @@ impl Canvas {
         BAKE_SCRATCH.with(|s| self.bake_with_scratch(all, &mut s.borrow_mut()));
     }
 
+    fn transport_settled(&mut self, ex: (usize, usize, usize, usize), add: &[f32], t: &[f32], transport: &[(usize, usize, f32)], oil: &mut [f32]) {
+        let (w, ew, eh) = (self.f.w, ex.2 - ex.0, ex.3 - ex.1);
+        let mut volumes = add.to_vec();
+        let packed: Vec<_> = add.iter().enumerate().map(|(k, &a)| a * self.wet.hide[(ex.1 + k / ew) * w + ex.0 + k % ew][7]).collect();
+        for &(from, to, amount) in transport {
+            let i = (ex.1 + from / ew) * w + ex.0 + from % ew;
+            let j = (ex.1 + to / ew) * w + ex.0 + to % ew;
+            let source = self.wet.lat[i].clone();
+            let prop = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], volumes[from], amount) } else { crate::bristle::fluid_of(self.wet.hide[i]) };
+            let latent = &mut self.wet.lat[j];
+            let hide = &mut self.wet.hide[j];
+            let a = volumes[to] * hide[0] / crate::mixer::scattering(latent).max(1e-9);
+            let b = amount * prop[0] / crate::mixer::scattering(&source).max(1e-9);
+            let volume = volumes[to] + amount;
+            let weight = if a + b > 0.0 { b / (a + b) } else { amount / volume };
+            for k in 0..crate::wet::LAT {
+                latent[k] += (source[k] - latent[k]) * weight;
+            }
+            latent.blend_parts(&source, amount / volume);
+            for k in 0..hide.len() {
+                hide[k] += (prop[k] - hide[k]) * (amount / volume);
+            }
+            hide[0] = crate::mixer::scattering(latent) * (a + b) / volume;
+            volumes[from] -= amount;
+            volumes[to] = volume;
+        }
+        for y in 0..eh {
+            for x in 0..ew {
+                let k = y * ew + x;
+                if t[k] <= 0.0 { continue; }
+                let i = (ex.1 + y) * w + ex.0 + x;
+                let hd = &mut self.wet.hide[i];
+                hd[7] = packed[k] / t[k];
+                oil[k] = if self.drain { crate::bristle::surface_oil(hd) * crate::wet::PACKED_OIL / hd[5].max(0.05) } else { hd[4] };
+            }
+        }
+    }
+
     fn bake_with_scratch(&mut self, all: bool, scratch: &mut [Vec<f32>; 8]) {
         let Some((x0, y0, x1, y1)) = self.wet.dirty else { return };
         let (w, h) = (self.f.w, self.f.h);
@@ -845,7 +883,15 @@ impl Canvas {
             }
             return;
         }
-        let t = self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4, drain.then_some(&fluid[..]));
+        let mut transport = Vec::new();
+        let t = if self.engine >= 9 {
+            self.settle_with_transport(ex, &add, &stiff, &sets, true, drain.then_some(&fluid[..]), Some(&mut transport))
+        } else {
+            self.settle_for(ex, &add, &stiff, &sets, self.engine >= 4, drain.then_some(&fluid[..]))
+        };
+        if !transport.is_empty() {
+            self.transport_settled(ex, &add, &t, &transport, oil);
+        }
         // engine 4: the film's surface is as glossy as it is rich in oil (a
         // thin one shows the surface under it through), and dry paint seals
         // an absorbent ground's pores
@@ -984,6 +1030,101 @@ mod tests {
 
     fn lead_white() -> Paint {
         Paint::body(hex("#e8e4d8")).with_drying(drier::LEAD_WHITE)
+    }
+
+    #[test]
+    fn settling_transfers_surface_oil_and_keeps_the_packed_layer() {
+        let mut c = Canvas::new(3, 1.0, [1.0; 3]).with_engine(9).with_drain(true);
+        let paint = Paint::body(hex("#405070"));
+        let add = [20.0, 10.0, 10.0];
+        for (i, oil, packed) in [(0, 0.8, 0.5), (1, 0.7, 0.0), (2, 0.9, 0.5)] {
+            c.wet.lat[i] = paint.latent();
+            c.wet.hide[i] = paint.prop();
+            c.wet.hide[i][4] = oil;
+            c.wet.hide[i][5] = crate::wet::PACKED_OIL;
+            c.wet.hide[i][6] = 0.6;
+            c.wet.hide[i][7] = packed;
+        }
+        let mut oil = [0.0; 3];
+        c.transport_settled((0, 0, 3, 1), &add, &[15.0, 15.0, 10.0], &[(0, 1, 5.0)], &mut oil);
+        for (i, bulk, top, packed) in [(0, 11.0 / 15.0, 1.0, 10.0), (1, 0.8, 0.8, 0.0), (2, 0.9, 1.2, 5.0)] {
+            let hd = &c.wet.hide[i];
+            assert!((hd[4] - bulk).abs() < 1e-6, "bulk oil at {i}: {}", hd[4]);
+            assert!((oil[i] - top).abs() < 1e-6, "surface oil at {i}: {}", oil[i]);
+            assert!((hd[7] * [15.0, 15.0, 10.0][i] - packed).abs() < 1e-6, "packed paint at {i}");
+        }
+
+        let t = [14.0, 15.0, 11.0];
+        c.transport_settled((0, 0, 3, 1), &[15.0, 15.0, 10.0], &t, &[(0, 2, 3.0), (2, 0, 2.0)], &mut oil);
+        for (i, bulk, top, packed) in [(0, 10.25 / 14.0, 1.0625, 10.0), (1, 0.8, 0.8, 0.0), (2, 9.75 / 11.0, 1.125, 5.0)] {
+            let hd = &c.wet.hide[i];
+            assert!((hd[4] - bulk).abs() < 1e-6, "bulk oil at {i}: {}", hd[4]);
+            assert!((oil[i] - top).abs() < 1e-6, "surface oil at {i}: {}", oil[i]);
+            assert!((hd[7] * t[i] - packed).abs() < 1e-6, "packed paint at {i}");
+        }
+        let total: f32 = t.iter().enumerate().map(|(i, v)| v * c.wet.hide[i][4]).sum();
+        assert!((total - 32.0).abs() < 1e-5, "total oil: {total}");
+    }
+
+    #[test]
+    fn settling_conserves_each_colorant_in_overlapping_knife_marks() {
+        let mut p = crate::Palette::new("drying", crate::palette::catalog());
+        p.engine = 9;
+        p.glaze_film = true;
+        p.carried_paint = true;
+        let tube = |name| p.tubes.iter().position(|t| t.name == name).unwrap();
+        let mut c = Canvas::new(400, 1.0, [1.0; 3]).with_engine(9).with_drain(true).with_glaze_film(true);
+        let mut k = crate::Knife::new(200.0);
+        k.load(p.pile(vec![(tube("Prussian blue"), 1.0)]).paint(0.9), 1.0);
+        c.knife(&mut k, &[(420.0, 250.0), (420.0, 750.0)], (0.45, 0.45), Some(0.0), true, 0.1);
+        k.wipe();
+        k.load(p.pile(vec![(tube("lead white"), 1.0)]).paint(0.9), 1.0);
+        c.knife(&mut k, &[(580.0, 350.0), (580.0, 650.0)], (0.9, 0.9), Some(0.0), true, 0.9);
+        let inventory = |c: &Canvas, coats: &[f32]| {
+            let mut values = (0..crate::wet::LAT).map(|pig| coats.iter().enumerate().map(|(i, &v)| {
+                v as f64 * c.wet.lat[i][pig] as f64 * c.wet.hide[i][0] as f64
+                    / crate::mixer::scattering(&c.wet.lat[i]).max(1e-9) as f64
+            }).sum::<f64>()).collect::<Vec<_>>();
+            values.extend((0..p.tubes.len()).map(|tube| coats.iter().enumerate().map(|(i, &v)| {
+                v as f64 * c.wet.lat[i].parts.iter().filter(|p| p.0 == tube).map(|p| p.1 as f64).sum::<f64>()
+            }).sum::<f64>()));
+            values
+        };
+        let before = inventory(&c, &c.wet.vol);
+        let volume = c.wet.vol.iter().map(|&v| v as f64).sum::<f64>();
+        let old = c.film.clone();
+        c.dry();
+        let film: Vec<_> = c.film.iter().zip(old).map(|(a, b)| a - b).collect();
+        let after = inventory(&c, &film);
+        for (pig, (&a, &b)) in before.iter().zip(&after).enumerate() {
+            assert!((a - b).abs() <= a.abs() * 1e-5 + 1e-6, "colorant {pig}: {a:.8} -> {b:.8}");
+        }
+        let baked = film.iter().map(|&v| v as f64).sum::<f64>();
+        assert!((volume - baked).abs() <= volume * 1e-6, "volume: {volume} -> {baked}");
+
+        let mut c = Canvas::new(3, 1.0, [1.0; 3]).with_engine(9).with_drain(true);
+        let mut add = vec![0.0; 9];
+        for (i, name, depth) in [(0, "Prussian blue", 20.0), (1, "lead white", 10.0), (3, "vermilion", 20.0)] {
+            let paint = p.pile(vec![(tube(name), 1.0)]).paint(0.9);
+            c.wet.vol[i] = depth / COAT_UM;
+            c.wet.lat[i] = paint.latent();
+            c.wet.hide[i] = paint.prop();
+            c.wet.hide[i][7] = 0.2;
+            add[i] = depth;
+        }
+        let before = inventory(&c, &c.wet.vol);
+        let mut t = add.clone();
+        t[0] = 15.0;
+        t[1] = 20.0;
+        t[3] = 15.0;
+        c.transport_settled((0, 0, 3, 3), &add, &t, &[(0, 1, 10.0), (3, 0, 5.0)], &mut [0.0; 9]);
+        let after = inventory(&c, &t.iter().map(|t| t / COAT_UM).collect::<Vec<_>>());
+        for (pig, (&a, &b)) in before.iter().zip(&after).enumerate() {
+            assert!((a - b).abs() <= a.abs() * 1e-5 + 1e-6, "2D colorant {pig}: {a:.8} -> {b:.8}");
+        }
+        for i in [0, 1, 3] {
+            assert!((t[i] * c.wet.hide[i][7] - add[i] * 0.2).abs() < 1e-6, "packed paint at {i}");
+        }
     }
 
     #[test]

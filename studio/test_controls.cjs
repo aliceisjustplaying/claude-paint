@@ -131,6 +131,39 @@ const check = async (name, fn) => {
     }
   });
 
+  await check('the first-visit explanation keeps focus inside and closes on Escape', async () => {
+    const context = await browser.newContext({ viewport:{ width:1440, height:1000 } });
+    const page = await context.newPage();
+    await page.route(origin + '/?*', async route => route.fulfill({ contentType:'text/html',
+      body:fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace('<script src="code-display.js">', '<script>window.STUDIO_STATIC=true;</script><script src="code-display.js">') }));
+    await page.goto(`${origin}/?p=fixture-a`);
+    assert.equal(await page.locator('#intro').isVisible(), true);
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => !!document.activeElement.closest('#intro')), true, `Tab ${i + 1} left the explanation`);
+    }
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#intro').isVisible(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('studio.intro')), '1');
+    await context.close();
+  });
+
+  await check('a message over the picture keeps its own background', async () => {
+    const { context, page } = await open(1440, 1000);
+    const colors = await page.evaluate(() => {
+      const note = document.getElementById('nopic');
+      note.textContent = "Can't reach this painter's studio right now."; note.hidden = false;
+      const style = getComputedStyle(note);
+      return [style.color, style.backgroundColor].map(c => c.match(/[\d.]+/g).map(Number));
+    });
+    const [text, back] = colors;
+    assert.equal(back.length === 3 || back[3] === 1, true, 'background is not opaque');
+    const lum = c => { const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const [hi, lo] = [lum(text), lum(back)].sort((a, b) => b - a);
+    assert.equal((hi + 0.05) / (lo + 0.05) >= 4.5, true, 'text contrast below 4.5');
+    await context.close();
+  });
+
   server.close();
   await browser.close();
   assert.deepEqual(errors, [], 'page errors');

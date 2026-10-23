@@ -33,8 +33,9 @@
   /* the public copy (static): a way back to the gallery, and a word for someone who has never seen this */
   #home { display:none; flex:none; color:var(--fg); text-decoration:none; font:19px/1 "Iowan Old Style", Palatino, Georgia, serif; letter-spacing:.02em; padding-right:4px }
   #home:hover { color:var(--acc) } body.static #home { display:block }
-  #intro { position:fixed; z-index:8; top:58px; left:50%; transform:translateX(-50%); width:min(600px, calc(100vw - 24px)); background:#1d1d24; border:1px solid #33333d;
+  #intro { position:fixed; inset:58px 0 auto; margin:0 auto; width:min(600px, calc(100vw - 24px)); max-width:none; background:#1d1d24; border:1px solid #33333d;
            border-radius:10px; padding:14px 16px; box-shadow:0 16px 48px rgba(0,0,0,.6); font-size:14.5px; line-height:1.55; color:var(--soft) }
+  #intro::backdrop { background:rgba(0,0,0,.4) }
   #intro b { color:var(--fg); font-weight:600 } #intro .live { color:var(--live); font-weight:700 }
   #intro .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:10px }
   #intro .row a { color:var(--dim); font-size:13.5px } #intro button { color:#111; background:var(--acc); border-color:var(--acc); font-weight:600 }
@@ -136,7 +137,7 @@
   #cropbox { position:absolute; border:2px solid #dcb8ea; box-shadow:0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.6); pointer-events:none; border-radius:1px }
   #finished { position:absolute; top:8px; right:12px; z-index:2; font-size:13px; color:var(--acc); background:rgba(11,11,13,.8); border:1px solid #3a3226; border-radius:6px; padding:3px 10px; text-decoration:none }
   #finished:hover { color:var(--fg) }
-  #nopic { position:absolute; inset:0; margin:0; padding:0 8%; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--dim); font-size:15px; line-height:1.6 }
+  #nopic { position:absolute; inset:50% auto auto 50%; translate:-50% -50%; inline-size:max-content; max-inline-size:84%; margin:0; padding:10px 16px; border-radius:8px; background:var(--panel); text-align:center; color:var(--dim); font-size:15px; line-height:1.6 }
   /* a reference picture the painter is studying (read from its studio's reference/): someone else's painting, never this painter's. Its own color, and a tag on the picture itself */
   #other.ref #cap2 b { color:var(--ref) } #reftag { position:absolute; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#0b0b0d; background:var(--ref); padding:2px 8px; border-radius:0 0 4px 0; pointer-events:none; white-space:nowrap }
   #journal { background:var(--panel2); border-right:none }
@@ -305,13 +306,13 @@
   <p id="pkerror" role="status" hidden></p><div id="pklist"></div>
 </div>
 <div id="zoom" role="dialog" aria-modal="true" aria-label="Enlarged picture"><img id="zimg" alt=""><button id="zclose" type="button" aria-label="Close the enlarged picture">✕</button></div>
-<div id="intro" hidden role="dialog" aria-label="About the studio">
+<dialog id="intro" aria-label="About the studio">
   <b>You're watching an AI model paint.</b> It writes every brushstroke as code, and a simulation of bristles, wet paint and linen carries it out.
   The big picture is the painting as it last saw it whole; when it studies a detail up close, squints or checks the picture in grays, that view shows below it.
   Its thinking runs beside the picture. <span class="live">LIVE</span> means it's working right now.
   Press <b>▶ Replay</b> to watch the painting grow, or tap the painter's name at the top to choose another.
-  <div class="row"><a href="/">See the finished paintings</a><button id="introok">Got it</button></div>
-</div>
+  <div class="row"><a href="/">See the finished paintings</a><button id="introok" autofocus>Got it</button></div>
+</dialog>
 <script src="code-display.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -1459,6 +1460,7 @@ $('img3').onclick = () => openZoom(viewI3 >= 0 ? imgURL(viewI3) : $('img3').src,
 $('zoom').onclick = closeZoom;
 document.onkeydown = e => {
   const t = e.target, k = e.key;
+  if ($('intro').open) return;
   if (zoomShown()) {
     if (k === 'Tab') { e.preventDefault(); $('zclose').focus(); }
     else if (k === 'Escape') { e.preventDefault(); closeZoom(); }
@@ -1491,8 +1493,10 @@ if (STATIC) {
   document.body.classList.add('static');
   let introSeen = null;
   try { introSeen = localStorage.getItem('studio.intro'); } catch (e) {}
-  if (!introSeen && !STREAM) $('intro').hidden = false;  // (not over a livestream)
-  $('introok').onclick = () => { $('intro').hidden = true; try { localStorage.setItem('studio.intro', '1'); } catch (e) {} };
+  if (!introSeen && !STREAM) $('intro').showModal();  // (not over a livestream)
+  $('intro').onclose = () => { try { localStorage.setItem('studio.intro', '1'); } catch (e) {} };
+  $('introok').onclick = () => $('intro').close();
+  $('intro').onkeydown = e => { if (e.key !== 'Tab') return; e.preventDefault(); const [link, ok] = $('intro').querySelectorAll('a, button'); (document.activeElement === link ? ok : link).focus(); };
 }
 </script>
 </body></html>

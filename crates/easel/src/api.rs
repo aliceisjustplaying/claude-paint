@@ -36,6 +36,7 @@ pub const FIELD_STEP: f32 = 2.0;
 pub struct Studio {
     #[cfg(test)]
     pub(crate) pass_feedback_disabled: bool,
+    pub(crate) drying_feedback: crate::pass_feedback::DryingFeedback,
     pub width: usize,
     /// The paper-and-pastel switch (session.rs `PAPER_MARK`): `canvas{paper=}`.
     pub paper: bool,
@@ -84,6 +85,7 @@ impl Studio {
         Studio {
             #[cfg(test)]
             pass_feedback_disabled: false,
+            drying_feedback: Default::default(),
             width, paper: false, canvas: None, recording_ground: 0, style: None, setup: None, canvas_src: None, seed: 1, chunk: 0, calls: 0, mark_effects: 0, clock: 0.0, clock0: 0.0, rng: Rng::new(1), brushes: Vec::new(), knives: Vec::new(), rags: Vec::new(), out: String::new(), field_secs: 0.0, view: None, hand: crate::time::Hand::default(), board: crate::board::Board { refuses_full: tubes.full_palette_refuses, ..Default::default() }, tubes: Rc::new(tubes), live: false
         }
     }
@@ -94,6 +96,7 @@ impl Studio {
         self.mark_effects = 0;
         self.rng = Rng::new(mixseed(self.seed, n, 0xC0FFEE));
         self.out.clear();
+        self.drying_feedback.begin();
         self.field_secs = 0.0;
     }
 
@@ -162,8 +165,12 @@ impl<const N: usize> Grid<N> {
 
 /// Box (units) a field is needed in: the mask's support grown by `pad`.
 pub(crate) fn support(m: Option<&Mask>, f: Frame, pad: f32) -> (f32, f32, f32, f32) {
+    support_with_pixels(m, f, pad).0
+}
+
+pub(crate) fn support_with_pixels(m: Option<&Mask>, f: Frame, pad: f32) -> ((f32, f32, f32, f32), (usize, usize, usize, usize)) {
     let (w, h) = (f.width(), f.height());
-    let Some(m) = m else { return (0.0, 0.0, w, h) };
+    let Some(m) = m else { return ((0.0, 0.0, w, h), (0, 0, f.w, f.h)) };
     let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
     for (i, &v) in m.data.iter().enumerate() {
         if v > 0.0 {
@@ -175,10 +182,10 @@ pub(crate) fn support(m: Option<&Mask>, f: Frame, pad: f32) -> (f32, f32, f32, f
         }
     }
     if x0 == usize::MAX {
-        return (0.0, 0.0, 0.0, 0.0);
+        return ((0.0, 0.0, 0.0, 0.0), (0, 0, 0, 0));
     }
     let s = f.scale;
-    (((x0 as f32) / s - pad).max(0.0), ((y0 as f32) / s - pad).max(0.0), ((x1 + 1) as f32 / s + pad).min(w), ((y1 + 1) as f32 / s + pad).min(h))
+    ((((x0 as f32) / s - pad).max(0.0), ((y0 as f32) / s - pad).max(0.0), ((x1 + 1) as f32 / s + pad).min(w), ((y1 + 1) as f32 / s + pad).min(h)), (x0, y0, x1 + 1, y1 + 1))
 }
 
 pub(crate) fn sample<const N: usize>(st: &S, fun: &Function, b: (f32, f32, f32, f32), conv: impl Fn(Value) -> Result<[f32; N]>) -> Result<Grid<N>> {
@@ -1477,7 +1484,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h = h.length(a, b);
     }
     let pad = h.length.1.max(len) + h.tool.width * 2.0;
-    let b = support(Some(&mask), f, pad);
+    let (b, feedback_bounds) = support_with_pixels(Some(&mask), f, pad);
     if let Some(c) = num(&o, "coverage")? {
         h = h.coverage(c);
     }
@@ -1669,6 +1676,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     let (options, feedback_clip) = feedback_options(&o)?;
     // (dipping into the piles on the palette)
     time::verb(st, Verb::Pass, |s| {
+        crate::pass_feedback::drying_pass(s, &mask, feedback_clip.as_deref(), feedback_bounds, if preset == Some("blend") { "blend" } else { "work" });
         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
         let before = c.tally();
         c.work_with(&mut s.hand.piles, &mask, &h, seed);
@@ -1809,7 +1817,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
         Some(t) => tool_of(&t)?,
         None => Tool::stippler(num(&o, "width")?.unwrap_or(2.0)),
     };
-    let b = support(Some(&mask), f, tool.width * 2.0 + 4.0);
+    let (b, feedback_bounds) = support_with_pixels(Some(&mask), f, tool.width * 2.0 + 4.0);
     let tubes = st.borrow().tubes.clone();
     // a legacy canvas stipples colors (legacy.rs)
     let legacy = o.get::<Value>("pile")?.is_nil() && crate::legacy::on(st);
@@ -1869,6 +1877,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     }
     let (options, feedback_clip) = feedback_options(&o)?;
     time::verb(st, Verb::Pass, |s| {
+        crate::pass_feedback::drying_pass(s, &mask, feedback_clip.as_deref(), feedback_bounds, "stipple");
         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
         let before = c.tally();
         c.stipple_with(&mut s.hand.piles, &mask, &sp, seed);
@@ -2474,7 +2483,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let st1 = st.clone();
         g.set("drying", lua.create_function(move |_, (x, y): (f32, f32)| {
             time::verb(&st1, Verb::Query, |s| {
-                Ok(match s.canvas.as_ref().ok_or_else(no_canvas)?.drying_at(x, y) {
+                let stage = s.canvas.as_ref().ok_or_else(no_canvas)?.drying_at(x, y);
+                s.drying_feedback.queried(x, y, stage);
+                Ok(match stage {
                     paint::Stage::Open => "open",
                     paint::Stage::Setting => "setting",
                     paint::Stage::Tacky => "tacky",

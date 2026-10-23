@@ -105,6 +105,7 @@ check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scri
 rust replay-frames-resume easel 'test replay_frames_resume test'
 rust replay-checkpoints easel 'bin easel test' \
   replay_checkpoint::tests::checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock \
+  replay_checkpoint::tests::drying_omission_footer_reconstructs_from_checkpoint \
   replay_checkpoint::tests::checkpoint_budget_is_per_record_not_per_history \
   replay_checkpoint::tests::pastel_checkpoints_reconstruct_stick_wear_and_dry_tools \
   replay_checkpoint::tests::corrupt_and_mismatched_checkpoints_are_refused \
@@ -170,6 +171,9 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::mask_coverage_tests::distance_clip_is_coverage_from_engine9 \
   pass_feedback::tests::selection_notices_only_change_feedback \
   pass_feedback::tests::pile_shares_keep_the_given_parts_and_paint \
+  pass_feedback::tests::drying_notices_only_change_feedback \
+  pass_feedback::tests::drying_feedback_respects_weights_masks_and_query_age \
+  pass_feedback::tests::drying_queries_keep_first_notice_order_and_latest_stage \
   replay_checkpoint::tests::obsolete_tool_snapshot_representation_is_refused_explicitly \
   replay_checkpoint::tests::a_changed_mixer_refuses_canvas_free_tool_snapshots \
   session::tests::accepted_chunks_count_executed_mark_effects_not_lua_names \

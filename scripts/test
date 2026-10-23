@@ -139,6 +139,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
   mixer::tests::splitting_measured_films_preserves_the_backing_spectrum \
   mixer::tests::measured_tube_volumes_keep_their_calibrated_coefficients \
+  drying::tests::settling_conserves_extensive_pigments_at_different_dilutions \
   mixer::tests::palette_previews_follow_canvas_film_optics \
   mixer::tests::measured_films_report_errors_over_both_revigo_fields \
   mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \

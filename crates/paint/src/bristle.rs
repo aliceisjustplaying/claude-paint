@@ -3465,7 +3465,7 @@ mod skim_pigments {
                         sf.take(i, take);
                     }
                     assert_eq!(restored.wet.lat[i].parts, vec![(black, 1.0)]);
-                    let expected = crate::wet::over_latent(&dark.latent(), dark.scatter, restored.px[i], restored.wet.vol[i], crate::wet::bead_cover(restored.wet.cover[i], restored.wet.vol[i], restored.px_mm() * 1000.0), true);
+                    let expected = crate::wet::over_latent(&dark.latent(), dark.scatter, restored.px[i], restored.wet.vol[i], crate::wet::bead_cover(restored.wet.cover[i], restored.wet.vol[i], restored.px_mm() * 1000.0), true, true);
                     assert_eq!(restored.look_px(i), expected);
                 }
             }

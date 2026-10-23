@@ -116,6 +116,10 @@ impl Latent {
     pub(crate) fn concentrate(&mut self, factor: f32) {
         for c in &mut self.color { *c *= factor; }
         self.scale_parts(factor);
+        for layer in &mut self.layers {
+            layer.lat.concentrate(factor);
+            layer.hide[0] *= factor;
+        }
     }
 
     pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {

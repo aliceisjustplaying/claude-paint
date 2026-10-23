@@ -21,7 +21,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
     let rows = heaps.len().div_ceil(COLS);
     let aspect = 1000.0 / (rows as f32 * CELL_H);
     // a light, neutral board, so colors are judged against no color
-    let mut c = Canvas::new(1600, aspect, hex("#d6d1c7")).with_size_mm(420.0).with_engine(tubes.engine).with_drain(tubes.drain);
+    let mut c = Canvas::new(1600, aspect, hex("#d6d1c7")).with_size_mm(420.0).with_engine(tubes.engine).with_drain(tubes.drain).with_glaze_film(tubes.engine >= paint::PIGMENT_MIXER && tubes.glaze_film);
     // the dark stripes, laid and dried first
     let dark = Paint::body(hex("#0d0c0c"));
     for n in 0..heaps.len() {

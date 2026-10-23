@@ -170,6 +170,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   paper::tests::fiber_bounds_reject_only_empty_cropped_bands
 rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_before \
   api::mask_coverage_tests::distance_clip_is_coverage_from_engine9 \
+  tests::palette_and_held_knife_previews_keep_the_paintings_film_optics \
   pass_feedback::tests::selection_notices_only_change_feedback \
   pass_feedback::tests::pile_shares_keep_the_given_parts_and_paint \
   pass_feedback::tests::drying_notices_only_change_feedback \

@@ -1101,7 +1101,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let f = c.frame();
     let (len, wide) = (2.0 * blade, blade + 12.0);
     let board_h = wide + 20.0;
-    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain());
+    let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain()).with_glaze_film(c.engine() >= paint::PIGMENT_MIXER && c.glaze_film());
     let mut knife = paint::Knife::new(blade);
     knife.load(paint, full);
     let cy = board_h / 2.0;
@@ -2708,6 +2708,62 @@ mod tests {
         assert_eq!(back.dimensions(), (16, 12));
     }
     use super::*;
+
+    #[test]
+    fn palette_and_held_knife_previews_keep_the_paintings_film_optics() {
+        for (engine, film) in [(8, false), (8, true), (9, false), (9, true)] {
+            let mut tubes = paint::Palette::new("preview study", paint::palette::catalog());
+            tubes.engine = engine;
+            tubes.glaze_film = film;
+            tubes.drain = true;
+            let blue = tubes.tubes.iter().position(|t| t.name == "Prussian blue").unwrap();
+            let paint = tubes.pile(vec![(blue, 1.0)]).laid(0.8);
+            let mut s = Session::replay_with(1000, tubes).unwrap();
+            s.run(r#"canvas{size=440, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",1}},um=120,apply="knife"}}}; p=pile{{"Prussian blue",1},medium=0.8}; k=knife{width=30}; k:load(p,0.55)"#).unwrap();
+            let before = (state_digest_line(&s, 1, 0.0), s.program("t"), s.st.borrow().clock);
+            let held = s.held("k").unwrap().0;
+            assert_eq!(held.spectral_films, engine >= paint::PIGMENT_MIXER && film);
+            for (a, b) in held.over([1.0; 3], 0.05).into_iter().zip(paint.over([1.0; 3], 0.05)) {
+                assert!((a - b).abs() < 2e-6, "engine {engine}, film {film}: the knife changed thin Prussian");
+            }
+            let spectral = engine >= paint::PIGMENT_MIXER && film;
+            let mut board = Canvas::new(1600, 1000.0 / 230.0, paint::hex("#d6d1c7"))
+                .with_size_mm(420.0).with_engine(engine).with_drain(true).with_glaze_film(spectral);
+            for _ in 0..3 {
+                let mut knife = paint::Knife::new(34.0);
+                knife.load(paint::Paint::body(paint::hex("#0d0c0c")), 1.0);
+                board.knife(&mut knife, &[(100.0, 140.0), (240.0, 140.0)], (0.3, 0.3), Some(std::f32::consts::FRAC_PI_2), true, 0.0);
+            }
+            board.dry();
+            let mut knife = paint::Knife::new(46.0);
+            knife.load(paint.clone(), 1.0);
+            board.knife(&mut knife, &[(40.0, 70.0), (70.0, 76.0)], (0.12, 0.08), None, true, 0.25);
+            let mut smear = paint::Knife::new(30.0);
+            smear.load(paint.clone(), 0.55);
+            board.knife(&mut smear, &[(120.0, 60.0), (165.0, 130.0), (215.0, 205.0)], (0.35, 1.0), None, true, 0.05);
+            let gallery = look::View { light: Some(GALLERY_LIGHT), ..Default::default() };
+            let expected = image::load_from_memory(&look::render(&board, &gallery).unwrap().2).unwrap().to_rgb8();
+            let actual = {
+                let st = s.st.borrow();
+                palette_look::render(&st.board, &st.tubes).unwrap().2
+            };
+            let actual = image::load_from_memory(&actual).unwrap().to_rgb8();
+            assert!(image::imageops::crop_imm(&actual, 100, 40, 140, 160).to_image() == image::imageops::crop_imm(&expected, 100, 40, 140, 160).to_image(), "engine {engine}, film {film}: palette smear");
+            let c = s.canvas().unwrap();
+            let mut blade = Canvas::new(1000, 1000.0 / 62.0, paint::hex("#9aa0a6"))
+                .with_size_mm(1000.0 * c.mm_per_unit()).with_engine(engine).with_drain(true).with_glaze_film(spectral);
+            drop(c);
+            let mut knife = paint::Knife::new(30.0);
+            knife.load(paint, 0.55);
+            blade.knife(&mut knife, &[(10.0, 31.0), (110.0, 31.0)], (0.15, 0.1), None, true, 0.25);
+            let expected = look::render(&blade, &look::View { crop: Some([30.0, 10.0, 90.0, 52.0]), ..Default::default() }).unwrap();
+            let expected = image::load_from_memory(&expected.2).unwrap().to_rgb8();
+            let actual = hold_look(&s, "k", (500.0, 500.0), &look::View::default()).unwrap();
+            let actual = image::load_from_memory(&actual.2).unwrap().to_rgb8();
+            assert!(image::imageops::crop_imm(&actual, 120, 99, 60, 42).to_image() == expected, "engine {engine}, film {film}: held knife");
+            assert_eq!(before, (state_digest_line(&s, 1, 0.0), s.program("t"), s.st.borrow().clock));
+        }
+    }
 
     /// A pastel stick held up (with the paper-and-pastel switch) only reads, as the held
     /// knife: the state digest, the log and the clock are as they were, and the stick's

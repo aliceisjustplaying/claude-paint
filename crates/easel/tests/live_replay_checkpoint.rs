@@ -230,18 +230,18 @@ fn a_missing_checkpoint_never_authorizes_a_chunk_zero_replay() {
 #[test]
 fn live_open_refuses_obsolete_pigment_checkpoints_without_replaying() {
     use sha2::{Digest, Sha256};
-    for format in 0..3 {
+    for format in 0..4 {
         let mut studio = Studio::new(&format!("obsolete-pigment-{format}"), false);
         studio.start();
         for _ in 0..10 { studio.ok(&["do", "x = (x or 0) + 1"]); }
         studio.close();
-        let obsolete = if format < 2 {
-            let mut bytes = [b"EASLRP01", b"EASLRP02"][format].to_vec();
+        let obsolete = if format < 3 {
+            let mut bytes = [b"EASLRP01", b"EASLRP02", b"EASLRP03"][format].to_vec();
             bytes.extend([0; 32]);
             bytes
         } else {
             let bytes = studio.bytes("replay.ckpt");
-            assert_eq!(&bytes[..8], b"EASLRP03");
+            assert_eq!(&bytes[..8], b"EASLRP04");
             let mut payload = zstd::stream::decode_all(&bytes[48..]).unwrap();
             payload[..8].copy_from_slice(&(paint::mixer::identity() ^ 1).to_le_bytes());
             let mut changed = bytes[..48].to_vec();

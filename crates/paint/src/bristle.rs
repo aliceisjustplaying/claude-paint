@@ -2798,6 +2798,7 @@ pub struct Knife {
     /// On a canvas that drains (`Canvas::with_drain`): its `Debug` gives the
     /// paint's packing too (`with_packing`). Not printed itself.
     shows_packing: bool,
+    spectral_films: bool,
 }
 
 /// As derived, but the paint's properties without the pigment's packing
@@ -2832,7 +2833,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false }
     }
     /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
     /// its `Debug` gives the paint's packing too.
@@ -2853,6 +2854,9 @@ impl Knife {
         }
         let liquid = amount * self.full();
         let v = liquid * (1.0 - paint.thinner);
+        if v > 0.0 {
+            self.spectral_films = (self.vol > 1e-9 && self.spectral_films) || paint.spectral_films;
+        }
         self.solvent += liquid * paint.thinner;
         let lat = paint.latent();
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
@@ -2866,12 +2870,13 @@ impl Knife {
         }
         let color = crate::mixer::decode(&self.lat);
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { pigment_latent: Some(self.lat.color), parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
         self.vol = 0.0;
         self.solvent = 0.0;
+        self.spectral_films = false;
     }
     /// Paint on the blade, relative to a full load.
     pub fn fullness(&self) -> f32 {
@@ -2953,6 +2958,7 @@ impl Canvas {
             return;
         }
         self.assert_thinner_supported(k.solvent > 0.0, "Canvas::knife");
+        k.spectral_films = self.spectral_films();
         self.tally.stroke(&Tool::hog_flat(k.width), pts, self.mm_per_unit);
         let id = self.next_stroke_ids(1);
         // engine 5: knife-laid paint tears where it parts from the blade:

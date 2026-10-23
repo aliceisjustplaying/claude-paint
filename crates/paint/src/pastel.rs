@@ -1364,19 +1364,7 @@ fn area_lanes(m: &crate::Mask, p: &Plan, down: impl Fn(f32) -> bool) -> Result<(
 mod tests {
     use super::*;
     use crate::paper::Paper;
-
-    fn sheet(width: usize) -> Canvas {
-        static SMALL: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
-        static LARGE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
-        let prototype = match width {
-            160 => &SMALL,
-            600 => &LARGE,
-            _ => panic!("unsupported test sheet width: {width}"),
-        };
-        prototype.get_or_init(|| {
-            Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
-        }).clone()
-    }
+    use crate::tests::drawing_paper as sheet;
 
     #[test]
     fn reused_sheets_match_fresh_paper_and_mutate_independently() {

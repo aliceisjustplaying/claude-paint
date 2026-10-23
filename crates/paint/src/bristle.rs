@@ -2842,6 +2842,11 @@ mod volume_mixing {
             for bristle in &held.bristles {
                 assert_eq!(bristle.lat.color, encode(&a.color), "engine {engine}");
             }
+            let mut hand = crate::hand::Hand::new((0.0, 0.0), 100.0, 17).with_engine(engine);
+            let taken = hand.take(Tool::hog_flat, 0.2, a.clone(), 0.5);
+            for bristle in &taken.bristles {
+                assert_eq!(bristle.lat.color, encode(&a.color), "hand engine {engine}");
+            }
             held.load_part(b.clone(), 0.5, &Part::ALL);
             for bristle in &held.bristles {
                 assert!((0..LAT).all(|k| (bristle.lat[k] - expected[k]).abs() < 2e-6), "engine {engine}");

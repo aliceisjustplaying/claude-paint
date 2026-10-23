@@ -17,6 +17,7 @@ pub struct Hand {
     /// Tremor: random offset of each control point, in local units.
     pub tremor: f32,
     pub rng: Rng,
+    engine: Option<u32>,
 }
 
 /// One gesture in local coordinates: `u` across (+ right), `v` up.
@@ -30,7 +31,12 @@ pub struct Mark<'a> {
 
 impl Hand {
     pub fn new(at: (f32, f32), size: f32, seed: u64) -> Self {
-        Hand { at, size, tremor: 0.004, rng: Rng::new(seed) }
+        Hand { at, size, tremor: 0.004, rng: Rng::new(seed), engine: None }
+    }
+
+    pub fn with_engine(mut self, engine: u32) -> Self {
+        self.engine = Some(engine);
+        self
     }
 
     /// Local (u, v) to canvas units.
@@ -41,6 +47,7 @@ impl Hand {
     /// Pick up a brush of `width` local units, loaded with `paint`.
     pub fn take(&mut self, tool: fn(f32) -> Tool, width: f32, paint: Paint, load: f32) -> Held {
         let mut h = Held::new(tool(width * self.size), self.rng.next_u64());
+        if let Some(engine) = self.engine { h = h.with_engine(engine); }
         h.load(paint, load);
         h
     }

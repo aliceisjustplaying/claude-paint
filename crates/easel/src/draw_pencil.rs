@@ -9,7 +9,7 @@
 //! heap: a failed chunk restores it with everything else, and a replay
 //! blunts it the same way.
 
-use crate::api::{S, check_keys, err, frame, mask_of, num, points, seed_of, wrap};
+use crate::api::{S, check_keys, err, frame, num, paint_mask_of, points, seed_of, wrap};
 use mlua::{Lua, Result, Table, Value};
 use paint::graphite::{self, Lead, Mark};
 use paint::{Canvas, Mask, Shape};
@@ -371,7 +371,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if let Some(o) = &o {
                 check_keys(o, if st1.borrow().paper { &["angle", "spacing", "length", "pressure", "graded", "seed"] } else { HATCH_KEYS }, "hatch")?;
             }
-            let m = mask_of(&m)?;
+            let m = paint_mask_of(&st1, &m)?;
             let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
             let mmu = {
                 let s = st1.borrow();
@@ -484,7 +484,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             let strength = get("strength")?.unwrap_or(0.9);
             let f = frame(&st1)?;
             let m = match &a {
-                Value::UserData(_) => (*mask_of(&a)?).clone(),
+                Value::UserData(_) => (*paint_mask_of(&st1, &a)?).clone(),
                 Value::Table(_) => {
                     let pts = points(&a)?;
                     let mmu = {
@@ -513,7 +513,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("fix", lua.create_function(move |_, a: Value| {
             let m = match &a {
                 Value::Nil => None,
-                v => Some(mask_of(v)?),
+                v => Some(paint_mask_of(&st1, v)?),
             };
             let mut s = st1.borrow_mut();
             let paper = s.paper;
@@ -764,7 +764,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
                     })
                 }
                 Value::UserData(_) => {
-                    let m = mask_of(&a)?;
+                    let m = paint_mask_of(&st1, &a)?;
                     if angle.is_some_and(|v| !(v.is_finite() && (-360.0..=360.0).contains(&v))) {
                         return err("smudge: angle is the lanes' direction in degrees, -360 to 360");
                     }
@@ -811,7 +811,7 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             if let Some(o) = &o {
                 check_keys(o, &["grammage", "tone"], "lay_sheet")?;
             }
-            let m = mask_of(&a)?;
+            let m = paint_mask_of(&st1, &a)?;
             let grammage = o.as_ref().map(|o| num(o, "grammage")).transpose()?.flatten().unwrap_or(120.0);
             if !(40.0..=400.0).contains(&grammage) {
                 return err("lay_sheet: grammage is g/m² (40 to 400; a mask is usually 80–160)");

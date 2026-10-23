@@ -456,8 +456,10 @@ strokes.
 
 ## Masks and geometry
 
-Masks are coverage maps (0..1) of the whole canvas. Operations return new
-masks.
+Masks are maps of the whole canvas, and operations return new masks. Shapes
+and `mask(fn)` give coverage (0..1). `m:distance()` gives signed distance in
+units (positive inside the edge, negative outside), and `m:map(fn)` keeps
+whatever `fn` returns, so both can run past 0..1.
 
 ```lua
 everywhere()   rect(x, y, w, h)   ellipse(cx, cy, rx, ry)
@@ -471,6 +473,15 @@ m:roughen(units, period, seed, edge)   m:soften(units)   m:blur(units)
 m:grow(units)   m:shrink(units)   m:offset(units)   m:rim(width, soft)
 m:distance()   m:band(lo, hi, soft)   m:times(fn or mask)   m:map(function(v) return v * v end)
 m:at(x, y)   m:area()
+```
+
+To turn a field back into coverage, band it, clamp it or ramp it:
+
+```lua
+d = m:distance()
+d:band(0, 40, 4)                                       -- the 40 units just inside the edge
+d:map(function(v) return clamp(v / 40, 0, 1) end)      -- 0 at the edge, 1 from 40 units in
+d:map(function(v) return smoothstep(-20, 20, v) end)   -- a soft edge 40 units wide
 ```
 
 `m:soften(units)` gives a hard edge a ramp that many units wide and leaves

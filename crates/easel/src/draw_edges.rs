@@ -24,7 +24,7 @@ type Planned = (Vec<(f32, f32)>, (f32, f32), (f32, f32));
 const KEYS: &[&str] = &["pile", "where", "tool", "reach", "load", "pressure", "angle", "every", "seed"];
 
 fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
-    let region = crate::api::mask_of(&m)?;
+    let region = crate::api::paint_mask_of(st, &m)?;
     let o = match o {
         Some(t) => t,
         None => lua.create_table()?,

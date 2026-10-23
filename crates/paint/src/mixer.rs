@@ -98,13 +98,13 @@ pub fn identity9() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
-    hash.update(b"extensive-pigment-and-residual/volume-strength/v1");
+    hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 
 pub fn encode9(rgb: &Rgb) -> [f32; LATENT_SIZE] { encode(rgb) }
 
-pub fn tube_strength9(name: &str) -> Option<f32> { tube_strength(name) }
+pub fn tube_strength9(name: &str) -> Option<f32> { tube_pigment(name).map(|_| 1.0) }
 
 fn normalized9(lat: &[f32; LATENT_SIZE]) -> [f32; LATENT_SIZE] {
     let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>();
@@ -391,6 +391,25 @@ mod tests {
                     let b = to_oklab(expected);
                     let delta = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt();
                     assert!(delta < 2e-6, "retained wet layers changed the backing: {:?} != {expected:?}, delta {delta}", restored.px[0]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn measured_tube_volumes_keep_their_calibrated_coefficients() {
+        let mut palette = crate::Palette::new("measured tube volumes", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        for (i, tube) in palette.tubes.iter().enumerate() {
+            let Some(latent) = super::tube(tube.name) else { continue };
+            let measured = pigment(&latent);
+            for medium in [0.0, 0.8] {
+                let paint = palette.pile(vec![(i, 1.0)]).paint(medium);
+                let actual = pigment9(&paint.latent());
+                for w in 0..crate::spectral::N {
+                    assert!((actual.k[w] - measured.k[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
+                    assert!((actual.s[w] - measured.s[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
                 }
             }
         }

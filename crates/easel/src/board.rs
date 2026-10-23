@@ -196,20 +196,29 @@ impl Board {
     }
 
     pub fn visit_with(&mut self, id: u64, carry: f32, parts: &[(usize, f32)]) -> Result<(), Full> {
+        self.visit_parts(id, carry, parts, false)
+    }
+
+    pub fn visit_with9(&mut self, id: u64, carry: f32, parts: &[(usize, f32)]) -> Result<(), Full> {
+        self.visit_parts(id, carry, parts, true)
+    }
+
+    fn visit_parts(&mut self, id: u64, carry: f32, parts: &[(usize, f32)], extensive: bool) -> Result<(), Full> {
         self.reknife(id)?;
         if self.dirty <= 0.0 {
             return Ok(());
         }
         let dirty = self.dirty;
         let Some(h) = self.heap_mut(id) else { return Ok(()) };
-        if !parts.is_empty() {
+        let concentration = if extensive { parts.iter().map(|p| p.1).sum() } else { 1.0 };
+        if !parts.is_empty() && concentration > 0.0 {
             let lp = parts;
             let own = h.fractions();
             // what differs from the heap is what dirties it
-            let differs: f32 = lp.iter().map(|&(i, f)| (f - own.iter().find(|p| p.0 == i).map(|p| p.1).unwrap_or(0.0)).max(0.0)).sum();
+            let differs: f32 = lp.iter().map(|&(i, f)| (f / concentration - own.iter().find(|p| p.0 == i).map(|p| p.1).unwrap_or(0.0)).max(0.0)).sum();
             if differs > 0.01 {
                 let room = (DIRT_CAP * h.volume() - h.dirt_volume()).max(0.0);
-                let v = (VISIT * dirty * carry.clamp(0.0, 1.0) * h.volume()).min(room);
+                let v = (VISIT * dirty * carry.clamp(0.0, 1.0) * h.volume()).min(room / concentration);
                 if v > 0.0 {
                     for &(i, f) in lp {
                         match h.dirt.iter_mut().find(|p| p.0 == i) {

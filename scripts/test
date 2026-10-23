@@ -138,6 +138,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
   mixer::tests::splitting_measured_films_preserves_the_backing_spectrum \
+  mixer::tests::measured_tube_volumes_keep_their_calibrated_coefficients \
   mixer::tests::palette_previews_follow_canvas_film_optics \
   mixer::tests::measured_films_report_errors_over_both_revigo_fields \
   mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \
@@ -217,6 +218,8 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them \
   api::tests::math_random_keeps_old_draws_and_refuses_empty_ranges api::draw_rag::tests::an_older_log_sees_the_globals_it_saw \
   api::carried_palette_tests::a_dip_brings_the_arriving_brushs_paint_not_another_brushs_history \
+  api::carried_palette_tests::engine9_dirty_dips_compare_composition_and_cap_concentrated_dirt \
+  api::carried_palette_tests::engine9_internal_dips_compare_normalized_carried_pigments \
   api::carried_palette_tests::graded_dips_preserve_palette_tint_strength_at_negligible_dirt \
   api::carried_palette_tests::every_internal_dip_carries_the_paint_retained_from_the_canvas \
   api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded \

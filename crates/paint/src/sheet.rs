@@ -1127,13 +1127,7 @@ mod tests {
     use crate::mask::Mask;
     use crate::paper::Paper;
     use crate::pastel::{PARTICLE_UM, Pose, Stick, StrokePoint};
-
-    fn drawing_paper() -> Canvas {
-        static PROTOTYPE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
-        PROTOTYPE.get_or_init(|| {
-            Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4))
-        }).clone()
-    }
+    use crate::tests::drawing_paper;
 
     #[test]
     fn reused_drawing_paper_matches_fresh_paper_and_mutates_independently() {
@@ -1144,8 +1138,8 @@ mod tests {
         };
         let fresh = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
         let expected = state(&fresh);
-        let mut changed = drawing_paper();
-        let untouched = drawing_paper();
+        let mut changed = drawing_paper(160);
+        let untouched = drawing_paper(160);
         assert_eq!(state(&changed), expected);
         assert_eq!(state(&untouched), expected);
         band(&mut changed, &mut Stick::round([0.02; 3], 0.8, 12.0), 500.0, 501.0, 3.0);
@@ -1155,7 +1149,7 @@ mod tests {
         changed.wet.vol[0] = 1.0;
         assert_ne!(state(&changed), expected);
         assert_eq!(state(&untouched), expected);
-        assert_eq!(state(&drawing_paper()), expected);
+        assert_eq!(state(&drawing_paper(160)), expected);
     }
 
     fn graphite_under_colored_pastel(optics: bool) -> (Canvas, Canvas) {
@@ -1319,7 +1313,7 @@ mod tests {
 
     #[test]
     fn a_fine_dry_brush_keeps_fixed_graphite_beneath_loose_pastel() {
-        let mut c = Canvas::new_window(160, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(Paper::drawing(4));
+        let mut c = drawing_paper(160);
         let line = hand_line(&[(100.0, 500.0), (900.0, 500.0)], &[0.6], false, true, 0.0, 5);
         c.draw(&Lead::pencil("2B").unwrap(), &line, 0.0, 9);
         c.fix_drawing(None);
@@ -1458,7 +1452,7 @@ mod tests {
     /// it as it was, and the sheet keeps what fell on it; lifted, it is gone.
     #[test]
     fn a_sheet_keeps_what_it_covers_clean() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let before = c.pixels().to_vec();
         let m = left_half(&c);
         c.lay_sheet(&m, 150.0, 8.0, [0.85; 3]).unwrap();
@@ -1494,7 +1488,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_dry_brush_lifts_what_its_tips_reach"]
     fn a_dry_brush_lifts_what_its_tips_reach() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 200.0, 400.0);
         dense(&mut c, &mut st, 600.0, 800.0);
@@ -1537,7 +1531,7 @@ mod tests {
     /// passage evens out rather than cleans (why pastels are not brushed).
     #[test]
     fn a_dry_brush_smears_a_speckled_passage() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         band(&mut c, &mut st, 200.0, 400.0, 1.0);
         let before = dark(&c, 300.0, 700.0, 230.0, 370.0);
@@ -1555,7 +1549,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_knife_takes_the_loose_pastel_and_burnishes_the_paper"]
     fn a_knife_takes_the_loose_pastel_and_burnishes_the_paper() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 200.0, 400.0);
         dense(&mut c, &mut st, 600.0, 800.0);
@@ -1592,7 +1586,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about 4 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth"]
     fn a_puff_moves_the_heap_and_a_hard_one_takes_the_top_of_the_tooth() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 100.0, 900.0);
         let mut hard = c.clone();
@@ -1619,7 +1613,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about 3 minutes: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_tap_sheds_crumbs_not_the_tooth"]
     fn a_tap_sheds_crumbs_not_the_tooth() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 200.0, 800.0);
         let mut upright = c.clone();
@@ -1649,7 +1643,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about 2 minutes: hundreds of stick strokes first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_scalpel_cuts_a_knife_does_not"]
     fn a_scalpel_cuts_a_knife_does_not() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 300.0, 700.0);
         c.fix_pastel(None, 0.15);
@@ -1704,7 +1698,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::a_blow_accounts_for_every_crumb"]
     fn a_blow_accounts_for_every_crumb() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 420.0, 580.0);
         // (summed in f64: a million cells' f32 sum drifts by about a percent of this)
@@ -1742,7 +1736,7 @@ mod tests {
     #[test]
     #[ignore = "slow (about a minute: stick strokes or puffs over a dense passage first); run with cargo test -p paint --lib -- --ignored sheet::tests::blown_crumbs_settle_in_a_ring"]
     fn blown_crumbs_settle_in_a_ring() {
-        let mut c = drawing_paper();
+        let mut c = drawing_paper(160);
         let mut st = Stick::round([0.02; 3], 0.8, 12.0);
         dense(&mut c, &mut st, 420.0, 580.0);
         let before = c.pixels().to_vec();
@@ -1760,7 +1754,7 @@ mod tests {
     /// The hold's contact is where a stroke from there lays.
     #[test]
     fn the_hold_shows_where_a_stroke_lays() {
-        let c = drawing_paper();
+        let c = drawing_paper(160);
         let st = Stick::round([0.02; 3], 0.8, 12.0);
         let cells = c.stick_contact(&st, 500.0, 500.0, pose(2.0, 60.0));
         let touch: Vec<usize> = cells.iter().filter(|c| c.1 == 2).map(|c| c.0).collect();

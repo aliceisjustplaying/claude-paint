@@ -17,6 +17,19 @@ use crate::pigment::Pigment;
 use crate::style::Style;
 use crate::wet::Paint;
 
+pub(crate) fn drawing_paper(width: usize) -> Canvas {
+    static SMALL: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+    static LARGE: std::sync::OnceLock<Canvas> = std::sync::OnceLock::new();
+    let prototype = match width {
+        160 => &SMALL,
+        600 => &LARGE,
+        _ => panic!("unsupported test sheet width: {width}"),
+    };
+    prototype.get_or_init(|| {
+        Canvas::new_window(width, 1.0, [0.55; 3], None).with_size_mm(150.0).with_paper(crate::paper::Paper::drawing(4))
+    }).clone()
+}
+
 fn brush_volume(h: &Held) -> f64 {
     h.bristles.iter().map(|b| b.vol as f64).sum()
 }

@@ -774,8 +774,7 @@ impl Canvas {
             let i = (ex.1 + from / ew) * w + ex.0 + from % ew;
             let j = (ex.1 + to / ew) * w + ex.0 + to % ew;
             let source = self.wet.lat[i].clone();
-            let mut prop = self.wet.hide[i];
-            prop[7] = 0.0;
+            let prop = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], volumes[from], amount) } else { crate::bristle::fluid_of(self.wet.hide[i]) };
             let latent = &mut self.wet.lat[j];
             let hide = &mut self.wet.hide[j];
             let a = volumes[to] * hide[0] / crate::mixer::scattering(latent).max(1e-9);
@@ -1031,6 +1030,40 @@ mod tests {
 
     fn lead_white() -> Paint {
         Paint::body(hex("#e8e4d8")).with_drying(drier::LEAD_WHITE)
+    }
+
+    #[test]
+    fn settling_transfers_surface_oil_and_keeps_the_packed_layer() {
+        let mut c = Canvas::new(3, 1.0, [1.0; 3]).with_engine(9).with_drain(true);
+        let paint = Paint::body(hex("#405070"));
+        let add = [20.0, 10.0, 10.0];
+        for (i, oil, packed) in [(0, 0.8, 0.5), (1, 0.7, 0.0), (2, 0.9, 0.5)] {
+            c.wet.lat[i] = paint.latent();
+            c.wet.hide[i] = paint.prop();
+            c.wet.hide[i][4] = oil;
+            c.wet.hide[i][5] = crate::wet::PACKED_OIL;
+            c.wet.hide[i][6] = 0.6;
+            c.wet.hide[i][7] = packed;
+        }
+        let mut oil = [0.0; 3];
+        c.transport_settled((0, 0, 3, 1), &add, &[15.0, 15.0, 10.0], &[(0, 1, 5.0)], &mut oil);
+        for (i, bulk, top, packed) in [(0, 11.0 / 15.0, 1.0, 10.0), (1, 0.8, 0.8, 0.0), (2, 0.9, 1.2, 5.0)] {
+            let hd = &c.wet.hide[i];
+            assert!((hd[4] - bulk).abs() < 1e-6, "bulk oil at {i}: {}", hd[4]);
+            assert!((oil[i] - top).abs() < 1e-6, "surface oil at {i}: {}", oil[i]);
+            assert!((hd[7] * [15.0, 15.0, 10.0][i] - packed).abs() < 1e-6, "packed paint at {i}");
+        }
+
+        let t = [14.0, 15.0, 11.0];
+        c.transport_settled((0, 0, 3, 1), &[15.0, 15.0, 10.0], &t, &[(0, 2, 3.0), (2, 0, 2.0)], &mut oil);
+        for (i, bulk, top, packed) in [(0, 10.25 / 14.0, 1.0625, 10.0), (1, 0.8, 0.8, 0.0), (2, 9.75 / 11.0, 1.125, 5.0)] {
+            let hd = &c.wet.hide[i];
+            assert!((hd[4] - bulk).abs() < 1e-6, "bulk oil at {i}: {}", hd[4]);
+            assert!((oil[i] - top).abs() < 1e-6, "surface oil at {i}: {}", oil[i]);
+            assert!((hd[7] * t[i] - packed).abs() < 1e-6, "packed paint at {i}");
+        }
+        let total: f32 = t.iter().enumerate().map(|(i, v)| v * c.wet.hide[i][4]).sum();
+        assert!((total - 32.0).abs() < 1e-5, "total oil: {total}");
     }
 
     #[test]

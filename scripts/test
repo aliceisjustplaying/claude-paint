@@ -156,7 +156,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   prepared_optics::tests::row_preparation_preserves_material_lighting_within_tolerance_in_whole_and_cropped_frames \
   tests::image_tolerance::tests::two_levels_pass_in_every_channel_and_three_fail \
   tests::image_tolerance::tests::numeric_fields_accept_rounding_and_reject_regressions_and_nonfinite_values \
-  drying::tests::checkpoint_mid_drying_resumes_exactly drying::tests::settling_conserves_each_colorant_in_overlapping_knife_marks noise::tests::worley_finds_the_true_nearest_features \
+  drying::tests::checkpoint_mid_drying_resumes_exactly drying::tests::settling_conserves_each_colorant_in_overlapping_knife_marks \
+  drying::tests::settling_transfers_surface_oil_and_keeps_the_packed_layer noise::tests::worley_finds_the_true_nearest_features \
   drying::tests::a_scraped_nan_film_can_wait_without_a_thickness_buffer \
   handling::wet_edges::a_blend_feathers_a_wet_edge_onto_dry_paint_and_stops \
   handling::wet_edges::a_thin_stroke_on_wet_paint_keeps_its_value_under_a_gentle_blend \

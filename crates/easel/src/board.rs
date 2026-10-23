@@ -238,22 +238,32 @@ impl Board {
         // An add re-knifes a scraped heap fresh, at the newest position.
         self.reknife(id).map_err(|Full| self.full(tubes, "p:add: that pile was scraped off, and knifing it again needs room"))?;
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
+        let conserved = tubes.engine >= paint::PIGMENT_MIXER;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
         let before_medium = tubes.pile(h.fractions()).effective_medium(h.medium);
         // (amounts that overflow the heap, together or with it, would leave its proportions NaN)
-        let more: f32 = add.iter().map(|&(_, v)| v * k).sum();
+        let more: f32 = add.iter().map(|&(_, v)| if conserved { v / h.given_sum } else { v * k }).sum();
         if !(more.is_finite() && (before + more).is_finite()) {
             return Err("p:add: more paint than the heap can count".into());
         }
+        if conserved {
+            let concentration = (1.0 - before_medium).clamp(0.0, 1.5).max(1e-3);
+            for p in h.parts.iter_mut().chain(&mut h.dirt) { p.1 *= concentration; }
+        }
         let mut added = 0.0;
         for &(i, v) in add {
-            let v = v * k;
+            let v = if conserved { v / h.given_sum } else { v * k };
             added += v;
+            let v = v * if conserved { (1.0 - medium).clamp(0.0, 1.5).max(1e-3) } else { 1.0 };
             match h.parts.iter_mut().find(|p| p.0 == i) {
                 Some(p) => p.1 += v,
                 None => h.parts.push((i, v)),
             }
+        }
+        if conserved {
+            let scale = (before + added) / h.volume();
+            for p in h.parts.iter_mut().chain(&mut h.dirt) { p.1 *= scale; }
         }
         h.medium = tubes.pile(h.fractions()).effective_medium((before_medium * before + medium * added) / (before + added).max(1e-9));
         let retained = before / (before + added).max(1e-9);

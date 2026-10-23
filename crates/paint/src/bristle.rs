@@ -828,6 +828,7 @@ pub(crate) struct Surf {
     pub(crate) skim: f32,
     /// Engine 7 (`crate::engine7`): brushes exchange paint with its kernel.
     pub(crate) e7: bool,
+    pub(crate) volume_latent: bool,
     /// Engine 8 (`crate::REACH_END`): a stroke's mark reaches its path's
     /// end (`drag_on`).
     pub(crate) reach_end: bool,
@@ -896,7 +897,9 @@ impl Surf {
             // With the drain switch it drains the film as its pigment packs,
             // from the ground up (`ground_drain`)
             if !self.absorb.is_null() {
+                let scatter = hd[0];
                 *vol = if self.drain { ground_drain(&mut *self.absorb.add(i), t, hd) } else { ground_draw(&mut *self.absorb.add(i), v, t, hd) };
+                if self.volume_latent && scatter > 0.0 { l.concentrate(hd[0] / scatter); }
             }
         }
     }
@@ -1096,6 +1099,7 @@ impl Canvas {
             receptive: self.receptive.as_ref().map_or(std::ptr::null(), |r| r.as_ptr()),
             skim: if self.brush_skim { BRUSH_SKIM_COATS } else { 0.0 },
             e7: crate::engine7::active(self.engine),
+            volume_latent: self.engine >= crate::PIGMENT_MIXER,
             reach_end: self.engine >= crate::REACH_END,
             layers: self.engine >= crate::PIGMENT_MIXER,
         }
@@ -2817,6 +2821,65 @@ const PRESS_IN_UM: f32 = 60.0;
 /// it; finer hollows than that it bridges (`Canvas::knife`).
 const FLEX_MM: f32 = 4.0;
 
+#[cfg(test)]
+mod volume_mixing {
+    use super::*;
+
+    #[test]
+    fn palette_tools_and_wet_exchange_keep_the_same_extensive_pigments() {
+        let mut palette = crate::Palette::new("mixing", crate::palette::catalog());
+        palette.engine = 9;
+        palette.glaze_film = true;
+        palette.carried_paint = true;
+        for (a, b, medium) in [("green earth", "magenta", 0.0), ("Prussian blue", "lead white", 0.9)] {
+            let a = palette.tubes.iter().position(|t| t.name == a).unwrap();
+            let b = palette.tubes.iter().position(|t| t.name == b).unwrap();
+            let pa = palette.pile(vec![(a, 1.0)]).paint(medium);
+            let pb = palette.pile(vec![(b, 1.0)]).paint(0.0);
+            let total = 2.0 - medium;
+            let expected = palette.pile(vec![(a, (1.0 - medium) / total), (b, 1.0 / total)]).paint(medium * 0.5);
+            let check = |lat: &Latent, hide: Prop| {
+                for k in 0..LAT {
+                    assert!((lat[k] - expected.latent()[k]).abs() < 2e-6, "channel {k}: {} != {}", lat[k], expected.latent()[k]);
+                }
+                assert!((hide[0] - expected.scatter).abs() < 2e-6);
+                for &(i, f) in &lat.parts {
+                    let want = expected.parts.iter().find(|p| p.0 == i).unwrap().1;
+                    assert!((f - want).abs() < 2e-6);
+                }
+                let pigment = crate::mixer::pigment9(lat);
+                let p = crate::mixer::pigment9(&pa.latent());
+                let q = crate::mixer::pigment9(&pb.latent());
+                for w in 0..crate::spectral::N {
+                    for (got, want) in [(pigment.k[w], (p.k[w] + q.k[w]) * 0.5), (pigment.s[w], (p.s[w] + q.s[w]) * 0.5)] {
+                        assert!((got - want).abs() < 2e-5 * want.abs().max(1.0));
+                    }
+                }
+            };
+            let mut knife = Knife::new(20.0);
+            knife.load(pa.clone(), 0.5);
+            knife.load(pb.clone(), 0.5);
+            let mixed = knife.paint().unwrap();
+            check(&mixed.latent(), mixed.prop());
+            for k in 0..3 { assert!((mixed.color[k] - expected.color[k]).abs() < 2e-6); }
+            let mut held = Held::new(Tool::hog_flat(20.0), 17);
+            held.load(pa.clone(), 0.5);
+            held.load(pb.clone(), 0.5);
+            for bristle in &held.bristles { check(&bristle.lat, bristle.hide); }
+            let mut canvas = Canvas::new(2, 1.0, [0.8; 3]).with_engine(9).with_glaze_film(true);
+            let sf = canvas.surf();
+            unsafe {
+                sf.add(0, 0.5, &pa.latent(), pa.prop(), 0.0);
+                sf.add(0, 0.5, &pb.latent(), pb.prop(), 0.0);
+                let film = crate::engine7::add::Film::of(&sf);
+                film.add(1, 0.5, &crate::engine7::add::Paint7::new(false, false, &pa.latent(), pa.prop(), 0.0));
+                film.add(1, 0.5, &crate::engine7::add::Paint7::new(false, false, &pb.latent(), pb.prop(), 0.0));
+            }
+            for i in 0..2 { check(&canvas.wet.lat[i], canvas.wet.hide[i]); }
+        }
+    }
+}
+
 /// How deep (coats; about 6 µm) a knife's paint laid on wet paint mixes into
 /// it when the canvas skims (`Canvas::knife`): the blade slides the paint on
 /// without stirring it in, so only the film where the two meet blends.
@@ -2839,6 +2902,7 @@ pub struct Knife {
     /// paint's packing too (`with_packing`). Not printed itself.
     shows_packing: bool,
     spectral_films: bool,
+    volume_latent: bool,
 }
 
 /// As derived, but the paint's properties without the pigment's packing
@@ -2873,7 +2937,7 @@ impl Knife {
     }
 
     pub fn new(width: f32) -> Self {
-        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false }
+        Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false, volume_latent: false }
     }
     /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
     /// its `Debug` gives the paint's packing too.
@@ -2893,6 +2957,7 @@ impl Knife {
             return;
         }
         let liquid = amount * self.full();
+        self.volume_latent = paint.volume_latent;
         let v = liquid * (1.0 - paint.thinner);
         if v > 0.0 {
             self.spectral_films = (self.vol > 1e-9 && self.spectral_films) || paint.spectral_films;
@@ -2908,9 +2973,9 @@ impl Knife {
         if self.vol <= 1e-9 {
             return None;
         }
-        let color = crate::mixer::decode(&self.lat);
+        let color = if self.volume_latent { crate::mixer::decode9(&self.lat) } else { crate::mixer::decode(&self.lat) };
         let p = Paint::km(color, self.hide[0], self.hide[1].clamp(0.0, 1.0)).with_drying(self.hide[2]);
-        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
+        Some(Paint { pigment_latent: Some(self.lat.color), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: self.lat.parts.clone(), solvent: self.hide[3], oil: self.hide[4], packed: self.hide[5], floor: self.hide[6], oil_volume: self.hide[8], thinner: self.solvent / (self.vol + self.solvent), ..p })
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
@@ -2993,6 +3058,7 @@ impl Canvas {
     /// canvas that skims (`with_knife_skim`) paint laid on wet paint stays
     /// on top of it, mixing with only the film where the two meet.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
+        k.volume_latent = self.engine >= crate::PIGMENT_MIXER;
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;

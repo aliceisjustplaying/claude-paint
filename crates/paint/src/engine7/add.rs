@@ -142,7 +142,9 @@ impl Film {
             // (the ground's draw, or with the drain switch its drain, as
             // `Surf::add` has them)
             let (cap, hd) = (&mut *self.absorb.add(i), &mut *self.hide.add(i));
+            let scatter = hd[0];
             *vol = if self.drain { ground_drain(cap, t, hd) } else { ground_draw(cap, v, t, hd) };
+            if self.surf.volume_latent && scatter > 0.0 { (*self.lat.add(i)).concentrate(hd[0] / scatter); }
         }
     }
 }

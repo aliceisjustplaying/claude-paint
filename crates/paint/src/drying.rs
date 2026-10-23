@@ -1012,6 +1012,7 @@ impl Canvas {
         };
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
+        let volume_latent = self.engine >= crate::PIGMENT_MIXER;
         if spectral && self.backing.is_empty() {
             self.backing.resize(self.px.len(), Default::default());
         }
@@ -1051,7 +1052,7 @@ impl Canvas {
                         backing[x] = backing[x].under(px[x]).over_wet(&lat[i], hide[i][0], ti, cover);
                         backing[x].color
                     } else {
-                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false)
+                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false, volume_latent)
                     };
                     ff[x] += ti;
                     vv[x] = 0.0;

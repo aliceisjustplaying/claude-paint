@@ -644,6 +644,7 @@ fn pick(names: &[&str]) -> Vec<Tube> {
 pub struct Mixture {
     pub pigment_latent: [f32; crate::mixer::LATENT_SIZE],
     pub spectral_films: bool,
+    pub volume_latent: bool,
     /// (tube index, fraction by volume), fractions sum to 1.
     pub parts: Vec<(usize, f32)>,
     /// Masstone of the mixture (pigment mix of the tubes' masstones, weighted
@@ -971,7 +972,8 @@ impl Palette {
         let mut lat = [0.0f32; crate::mixer::LATENT_SIZE];
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
-            let w = f * self.tubes[i].strength;
+            let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
+            let w = f * strength;
             for k in 0..crate::mixer::LATENT_SIZE {
                 lat[k] += self.lat[i][k] * w;
             }
@@ -979,11 +981,13 @@ impl Palette {
             sct += self.scat[i] * f;
             stf += self.tubes[i].stiff * f;
         }
-        for v in lat.iter_mut() {
-            *v /= wsum.max(1e-9);
+        if self.engine < crate::PIGMENT_MIXER {
+            for v in lat.iter_mut() {
+                *v /= wsum.max(1e-9);
+            }
         }
         if self.engine >= crate::PIGMENT_MIXER && self.glaze_film {
-            sct = crate::mixer::scattering(&lat);
+            sct = crate::mixer::scattering9(&lat);
         }
         (lat, sct, stf)
     }
@@ -997,7 +1001,7 @@ impl Palette {
 
     fn mixture(&self, parts: Vec<(usize, f32)>) -> Mixture {
         let (pigment_latent, scatter, stiff) = self.eval(&parts);
-        let color = crate::mixer::decode(&pigment_latent);
+        let color = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::decode9(&pigment_latent) } else { crate::mixer::decode(&pigment_latent) };
         let drying = parts.iter().map(|&(i, f)| self.drying_of(&self.tubes[i]) * f).sum::<f32>() / parts.iter().map(|p| p.1).sum::<f32>().max(1e-9);
         // each tube's share of the pile's oil: its volume times its oil share
         let (mut oil, mut packed, mut floor) = (0.0, 0.0, 0.0);
@@ -1010,7 +1014,7 @@ impl Palette {
         let (packed, floor) = if oil > 1e-9 { (packed / oil, floor / oil) } else { (PACKED_OIL, DRAINED_FLOOR) };
         let total: f32 = parts.iter().map(|p| p.1).sum();
         let oil_volume = if total > 1e-9 && oil > 1e-9 { oil / total } else { OIL_VOLUME };
-        Mixture { pigment_latent, spectral_films: self.engine >= crate::PIGMENT_MIXER && self.glaze_film, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
+        Mixture { pigment_latent, spectral_films: self.engine >= crate::PIGMENT_MIXER && self.glaze_film, volume_latent: self.engine >= crate::PIGMENT_MIXER, hiding: hiding_of(luminance(color), scatter), parts, color, scatter, stiff, drying, solvent: 0.0, oil_rate: 1.0, packed, floor, oil_volume, drain: self.drain, carried_paint: self.carried_paint }
     }
 
     /// How the parts (tube index, fraction by volume) look dry, out of oil
@@ -1092,7 +1096,7 @@ impl Mixture {
         // that share of it out (blot 0.5 leaves half)
         // (packed and drained oil stay the pigment's: medium and blotting
         // change only how much more or less the paint holds)
-        Paint { pigment_latent: Some(self.pigment_latent), spectral_films: self.spectral_films, parts: if self.carried_paint { self.parts.clone() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
+        Paint { pigment_latent: Some(if self.volume_latent { self.pigment_latent.map(|v| v * k.max(1e-3)) } else { self.pigment_latent }), spectral_films: self.spectral_films, volume_latent: self.volume_latent, parts: if self.carried_paint { self.parts.iter().map(|&(i, f)| (i, f * if self.volume_latent { k.max(1e-3) } else { 1.0 })).collect() } else { Vec::new() }, solvent: self.solvent, oil: if medium < 0.0 { (1.0 + medium).max(0.1) } else { 1.0 + 1.5 * medium }, packed: self.packed, floor: self.floor, oil_volume: self.oil_volume, ..p }
     }
 
     /// This pile as paint on the brush, thinned with `medium` (0..1), drying

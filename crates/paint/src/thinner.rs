@@ -470,7 +470,9 @@ impl Canvas {
                     // its pores goes back with the rest)
                     let mut cap = if soaks { absorb[i] } else { 0.0 };
                     if soaks && qin > 0.0 {
+                        let scatter = hide[0];
                         pv = crate::bristle::ground_drain(&mut cap, pv, &mut hide);
+                        if self.engine >= crate::PIGMENT_MIXER && scatter > 0.0 { lat.concentrate(hide[0] / scatter); }
                     }
                     let cure = if pv <= 0.0 { 0.0 } else { cure };
                     // (the drying thickness a bare pixel takes, by amount)

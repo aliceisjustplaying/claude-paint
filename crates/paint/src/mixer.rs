@@ -77,7 +77,7 @@ pub fn identity() -> u64 {
 pub fn film_identity() -> u64 {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
-    hash.update(identity().to_le_bytes());
+    hash.update(identity9().to_le_bytes());
     hash.update(b"film25um/spectral-backing/transmitted-residual/v2");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
@@ -92,6 +92,44 @@ pub fn encode(rgb: &Rgb) -> [f32; LATENT_SIZE] {
         lat[PIGMENTS + k] = rgb[k] - base[k];
     }
     lat
+}
+
+pub fn identity9() -> u64 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(identity().to_le_bytes());
+    hash.update(b"extensive-pigment-and-residual/volume-strength/v1");
+    u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
+}
+
+pub fn encode9(rgb: &Rgb) -> [f32; LATENT_SIZE] { encode(rgb) }
+
+pub fn tube_strength9(name: &str) -> Option<f32> { tube_strength(name) }
+
+fn normalized9(lat: &[f32; LATENT_SIZE]) -> [f32; LATENT_SIZE] {
+    let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>();
+    if total <= 0.0 { return [0.0; LATENT_SIZE]; }
+    lat.map(|c| c / total)
+}
+
+pub fn decode9(lat: &[f32; LATENT_SIZE]) -> Rgb { decode(&normalized9(lat)) }
+
+pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
+    let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>();
+    let mut p = pigment(lat);
+    for w in 0..crate::spectral::N {
+        p.k[w] *= total;
+        p.s[w] *= total;
+    }
+    p
+}
+
+pub fn scattering9(lat: &[f32; LATENT_SIZE]) -> f32 {
+    pigment9(lat).s.iter().sum::<f32>() / crate::spectral::N as f32 * crate::COAT_UM / 100.0
+}
+
+pub fn over9(lat: &[f32; LATENT_SIZE], scatter: f32, under: Rgb, coats: f32) -> Rgb {
+    over(&normalized9(lat), scatter, under, coats)
 }
 
 pub fn decode(lat: &[f32; LATENT_SIZE]) -> Rgb {
@@ -200,7 +238,7 @@ impl Backing {
 
     pub fn over_wet(self, lat: &crate::wet::Latent, scatter: f32, coats: f32, cover: f32) -> Self {
         if lat.layers.is_empty() {
-            return self.over(lat, scatter, coats, cover);
+            return self.over(&normalized9(lat), scatter, coats, cover);
         }
         if coats <= 0.0 || scatter <= 0.0 || cover.is_nan() || cover <= 0.0 {
             return self;
@@ -209,7 +247,7 @@ impl Backing {
         let mean: f32 = lat.layers.iter().map(|l| l.share * l.hide[0]).sum();
         let scale = if mean > 0.0 { scatter / mean } else { 1.0 };
         let mut over = lat.layers.iter().fold(self, |backing, layer| {
-            backing.over(&layer.lat, layer.hide[0] * scale, (coats * layer.share / cover).min(1e4), 1.0)
+            backing.over(&normalized9(&layer.lat), layer.hide[0] * scale, (coats * layer.share / cover).min(1e4), 1.0)
         });
         if cover < 1.0 {
             for w in 0..crate::spectral::N {

@@ -2201,10 +2201,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(w > 0.0 && w.is_finite()) {
                     return err("mix: each heap's share is > 0");
                 }
+                let pigment_weight = w * if st.borrow().tubes.engine >= paint::PIGMENT_MIXER { (1.0 - p.medium).clamp(0.0, 1.5).max(1e-3) } else { 1.0 };
                 for &(i, f) in &p.mix.parts {
                     match parts.iter_mut().find(|q| q.0 == i) {
-                        Some(q) => q.1 += f * w,
-                        None => parts.push((i, f * w)),
+                        Some(q) => q.1 += f * pigment_weight,
+                        None => parts.push((i, f * pigment_weight)),
                     }
                 }
                 medium += p.medium * w;
@@ -2216,7 +2217,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if wsum <= 0.0 {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
             }
-            parts.iter_mut().for_each(|q| q.1 /= wsum);
+            let part_sum = if st.borrow().tubes.engine >= paint::PIGMENT_MIXER { parts.iter().map(|q| q.1).sum() } else { wsum };
+            parts.iter_mut().for_each(|q| q.1 /= part_sum);
             let (medium, solvent, thinner, oil) = (medium / wsum, solvent / wsum, thinner / wsum, oil / wsum);
             let tubes = st.borrow().tubes.clone();
             let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v * wsum)).collect();
@@ -2786,6 +2788,40 @@ mod carried_palette_tests {
 #[cfg(test)]
 mod tests {
     use crate::session::Session;
+
+    #[test]
+    fn differently_diluted_heaps_conserve_tube_paint_and_medium() {
+        for engine in [8, 9] {
+            let log = format!("--@ engine {engine}\n--@ box every\n--@ glaze-film\n");
+            let mut s = Session::replay_with(16, crate::session::box_for(Some(&log)).unwrap()).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, raw="cotton duck"}
+                blue = pile{{"Prussian blue", 1}, medium=0.9}
+                white = pile{{"lead white", 1}}
+                mixed = mix{{blue, 1}, {white, 1}, name="mixed"}
+                blue:add{{"lead white", 1}}"#).unwrap();
+            let st = s.st.borrow();
+            let blue = st.tubes.tubes.iter().position(|t| t.name == "Prussian blue").unwrap();
+            for h in st.board.heaps.iter().filter(|h| h.name.as_deref() == Some("mixed") || h.added) {
+                let share = h.fractions().into_iter().find(|p| p.0 == blue).unwrap().1;
+                let expected = if engine >= 9 { 1.0 / 11.0 } else { 0.5 };
+                assert!((share - expected).abs() < 1e-6, "engine {engine}: {share}");
+                assert!((h.medium - 0.45).abs() < 1e-6, "engine {engine}: {}", h.medium);
+            }
+        }
+    }
+
+    #[test]
+    fn pile_additions_do_not_depend_on_part_units() {
+        let mut s = Session::replay_with(16, crate::session::box_for(Some("--@ engine 9\n--@ box every\n")).unwrap()).unwrap();
+        s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, raw="cotton duck"}
+            for _, scale in ipairs{1, 1e-10, 1e-30} do
+                local p = pile{{"lead white", scale}}
+                p:add{{"Prussian blue", scale}}
+            end"#).unwrap();
+        for h in &s.st.borrow().board.heaps {
+            for (_, f) in h.fractions() { assert!((f - 0.5).abs() < 1e-6, "{f}"); }
+        }
+    }
 
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)

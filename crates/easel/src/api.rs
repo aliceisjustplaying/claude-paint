@@ -1060,7 +1060,9 @@ fn visit(st: &S, p: &PileU, carry: f32, what: &str, parts: &[(usize, f32)]) -> R
         return Ok(());
     }
     let s = &mut *st.borrow_mut();
-    if s.tubes.carried_paint { s.board.visit_with(p.heap, carry, parts) } else { s.board.visit(p.heap, carry) }.map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
+    if s.tubes.carried_paint {
+        if s.tubes.engine >= paint::PIGMENT_MIXER { s.board.visit_with9(p.heap, carry, parts) } else { s.board.visit_with(p.heap, carry, parts) }
+    } else { s.board.visit(p.heap, carry) }.map_err(|crate::board::Full| mlua::Error::runtime(s.board.full(&s.tubes, &format!("{what}: that pile was scraped off, and knifing it again needs room"))))
 }
 
 /// The pile as its heap is on the board now.
@@ -1709,7 +1711,7 @@ fn pass_dips(board: std::sync::Arc<std::sync::Mutex<crate::board::Board>>, tubes
         let mut resolved = Vec::new();
         for &(source, weight) in weights {
             let (id, original, medium, thinner) = &sources[source];
-            board.visit_with(*id, held.fullness().min(1.0), &carry).expect("pass heaps were prepared before painting");
+            if tubes.engine >= paint::PIGMENT_MIXER { board.visit_with9(*id, held.fullness().min(1.0), &carry) } else { board.visit_with(*id, held.fullness().min(1.0), &carry) }.expect("pass heaps were prepared before painting");
             let (mix, medium, thinner) = match board.heap(*id) {
                 Some(heap) if heap.changed => {
                     let mut mix = tubes.pile(heap.fractions());
@@ -2201,10 +2203,11 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 if !(w > 0.0 && w.is_finite()) {
                     return err("mix: each heap's share is > 0");
                 }
+                let pigment_weight = w * if st.borrow().tubes.engine >= paint::PIGMENT_MIXER { (1.0 - p.medium).clamp(0.0, 1.5).max(1e-3) } else { 1.0 };
                 for &(i, f) in &p.mix.parts {
                     match parts.iter_mut().find(|q| q.0 == i) {
-                        Some(q) => q.1 += f * w,
-                        None => parts.push((i, f * w)),
+                        Some(q) => q.1 += f * pigment_weight,
+                        None => parts.push((i, f * pigment_weight)),
                     }
                 }
                 medium += p.medium * w;
@@ -2216,7 +2219,8 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if wsum <= 0.0 {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
             }
-            parts.iter_mut().for_each(|q| q.1 /= wsum);
+            let part_sum = if st.borrow().tubes.engine >= paint::PIGMENT_MIXER { parts.iter().map(|q| q.1).sum() } else { wsum };
+            parts.iter_mut().for_each(|q| q.1 /= part_sum);
             let (medium, solvent, thinner, oil) = (medium / wsum, solvent / wsum, thinner / wsum, oil / wsum);
             let tubes = st.borrow().tubes.clone();
             let given = parts.iter().map(|&(i, v)| (tubes.tubes[i].name.to_string(), v * wsum)).collect();
@@ -2716,6 +2720,65 @@ mod carried_palette_tests {
     }
 
     #[test]
+    fn engine9_dirty_dips_compare_composition_and_cap_concentrated_dirt() {
+        for medium in [0.9, -0.3] {
+            let dilution = if medium > 0.0 { format!("medium={medium}") } else { format!("blot={}", -medium) };
+            for (tool, carry) in [("brush('flat',12)", 1.0), ("knife{width=12}", 0.5)] {
+                for near_cap in [false, true] {
+                    let log = format!("--@ engine 9\n{CARRIED_PAINT_MARK}\n");
+                    let mut s = Session::replay_with(16, box_for(Some(&log)).unwrap()).unwrap();
+                    s.run(&format!(r#"canvas{{size=100,aspect=1,linen=15,seed=1,raw="cotton duck"}}
+                        white=pile{{{{"lead white",1}},{dilution},name="white"}}
+                        mixed=pile{{{{"lead white",1}},{{"cobalt blue",1}},name="mixed"}}
+                        b={tool}; b:load(white,1)
+                        palette{{dirty=1}}; b:load(white,1)"#)).unwrap();
+                    assert_eq!(dirt(&s, "white", "lead white"), 0.0, "{tool}, medium={medium}");
+                    if near_cap {
+                        let mut st = s.st.borrow_mut();
+                        let white = st.tubes.tubes.iter().position(|t| t.name == "lead white").unwrap();
+                        st.board.heaps.iter_mut().find(|h| h.name.as_deref() == Some("mixed")).unwrap().dirt = vec![(white, 0.4999)];
+                    }
+                    s.run("b:load(mixed,1)").unwrap();
+                    let expected = if near_cap { 0.5 } else { 0.03 * carry * (1.0 - medium) };
+                    let got = dirt(&s, "mixed", "lead white");
+                    assert!((got - expected).abs() < 1e-6, "{tool}, medium={medium}, near_cap={near_cap}: {got} != {expected}");
+                    assert_eq!(dirt(&s, "mixed", "cobalt blue"), 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn engine9_internal_dips_compare_normalized_carried_pigments() {
+        for medium in [0.9, -0.3] {
+            let dilution = if medium > 0.0 { format!("medium={medium}") } else { format!("blot={}", -medium) };
+            let log = format!("--@ engine 9\n{CARRIED_PAINT_MARK}\n");
+            let mut s = Session::replay_with(16, box_for(Some(&log)).unwrap()).unwrap();
+            s.run(&format!(r#"canvas{{size=100,aspect=1,linen=15,seed=1,raw="cotton duck"}}
+                white=pile{{{{"lead white",1}},{dilution},name="white"}}
+                mixed=pile{{{{"lead white",1}},{{"cobalt blue",1}},name="mixed"}}
+                b=brush('flat',12); b:load(white,1); palette{{dirty=1}}"#)).unwrap();
+            let brush = s.lua.globals().get::<mlua::AnyUserData>("b").unwrap();
+            let held = brush.borrow::<super::Brush>().unwrap().held.clone();
+            let piles = ["white", "mixed"].map(|name| s.lua.globals().get::<mlua::AnyUserData>(name).unwrap().borrow::<super::PileU>().unwrap().clone());
+            let (board, tubes) = {
+                let st = s.st.borrow();
+                (std::sync::Arc::new(std::sync::Mutex::new(st.board.clone())), (*st.tubes).clone())
+            };
+            let dip = super::pass_dips(board.clone(), tubes, piles.into(), 0.0);
+            dip(&held.borrow(), &[(0, 1.0)], 1);
+            let board = {
+                dip(&held.borrow(), &[(1, 1.0)], 1);
+                board.lock().unwrap()
+            };
+            assert_eq!(board.heaps[0].dirt_volume(), 0.0, "medium={medium}");
+            let expected = 0.03 * held.borrow().fullness().min(1.0) * (1.0 - medium);
+            let got = board.heaps[1].dirt_volume();
+            assert!((got - expected).abs() < 1e-6, "medium={medium}: {got} != {expected}");
+        }
+    }
+
+    #[test]
     fn a_dip_brings_the_arriving_brushs_paint_not_another_brushs_history() {
         for carried in [false, true] {
             let mut s = painting(carried);
@@ -2786,6 +2849,40 @@ mod carried_palette_tests {
 #[cfg(test)]
 mod tests {
     use crate::session::Session;
+
+    #[test]
+    fn differently_diluted_heaps_conserve_tube_paint_and_medium() {
+        for engine in [8, 9] {
+            let log = format!("--@ engine {engine}\n--@ box every\n--@ glaze-film\n");
+            let mut s = Session::replay_with(16, crate::session::box_for(Some(&log)).unwrap()).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, raw="cotton duck"}
+                blue = pile{{"Prussian blue", 1}, medium=0.9}
+                white = pile{{"lead white", 1}}
+                mixed = mix{{blue, 1}, {white, 1}, name="mixed"}
+                blue:add{{"lead white", 1}}"#).unwrap();
+            let st = s.st.borrow();
+            let blue = st.tubes.tubes.iter().position(|t| t.name == "Prussian blue").unwrap();
+            for h in st.board.heaps.iter().filter(|h| h.name.as_deref() == Some("mixed") || h.added) {
+                let share = h.fractions().into_iter().find(|p| p.0 == blue).unwrap().1;
+                let expected = if engine >= 9 { 1.0 / 11.0 } else { 0.5 };
+                assert!((share - expected).abs() < 1e-6, "engine {engine}: {share}");
+                assert!((h.medium - 0.45).abs() < 1e-6, "engine {engine}: {}", h.medium);
+            }
+        }
+    }
+
+    #[test]
+    fn pile_additions_do_not_depend_on_part_units() {
+        let mut s = Session::replay_with(16, crate::session::box_for(Some("--@ engine 9\n--@ box every\n")).unwrap()).unwrap();
+        s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, raw="cotton duck"}
+            for _, scale in ipairs{1, 1e-10, 1e-30} do
+                local p = pile{{"lead white", scale}}
+                p:add{{"Prussian blue", scale}}
+            end"#).unwrap();
+        for h in &s.st.borrow().board.heaps {
+            for (_, f) in h.fractions() { assert!((f - 0.5).abs() < 1e-6, "{f}"); }
+        }
+    }
 
     fn run(src: &str) -> Result<String, String> {
         Session::replay(200).unwrap().run(src).map(|r| r.out)

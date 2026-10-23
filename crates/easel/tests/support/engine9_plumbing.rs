@@ -53,13 +53,16 @@ fn public_palette_engine_changes_and_clones_keep_the_universal_cache() {
         let mut expected = [0.0; mixer::LATENT_SIZE];
         let mut total = 0.0;
         for &(i, fraction) in &parts {
-            let weight = fraction * p.tubes[i].strength;
-            let latent = mixer::tube(p.tubes[i].name).unwrap_or_else(|| mixer::encode(&p.tubes[i].color));
+            let strength = if engine >= PIGMENT_MIXER { mixer::tube_strength9(p.tubes[i].name).unwrap_or(p.tubes[i].strength) } else { p.tubes[i].strength };
+            let weight = fraction * strength;
+            let latent = mixer::tube(p.tubes[i].name).unwrap_or_else(|| if engine >= PIGMENT_MIXER { mixer::encode9(&p.tubes[i].color) } else { mixer::encode(&p.tubes[i].color) });
             for k in 0..mixer::LATENT_SIZE { expected[k] += latent[k] * weight; }
             total += weight;
         }
-        for value in &mut expected { *value /= total; }
-        let expected = mixer::decode(&expected);
+        if engine < PIGMENT_MIXER {
+            for value in &mut expected { *value /= total; }
+        }
+        let expected = if engine >= PIGMENT_MIXER { mixer::decode9(&expected) } else { mixer::decode(&expected) };
         assert_eq!(p.pile(parts.clone()).color, expected);
         assert_eq!(p.clone().pile(parts.clone()).color, expected);
     }

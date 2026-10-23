@@ -788,7 +788,9 @@ impl Canvas {
         // drains paint a brush lays (`bristle::ground_drain`)
         if self.drain && self.absorb_any {
             let hd = &mut self.wet.hide[i];
+            let scatter = hd[0];
             self.wet.vol[i] = crate::bristle::ground_drain(&mut self.absorb[i], t, hd);
+            if self.engine >= crate::PIGMENT_MIXER && scatter > 0.0 { self.wet.lat[i].concentrate(hd[0] / scatter); }
         }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)

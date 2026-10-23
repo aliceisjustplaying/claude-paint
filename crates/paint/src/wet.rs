@@ -113,6 +113,15 @@ impl Latent {
         (below, top)
     }
 
+    pub(crate) fn concentrate(&mut self, factor: f32) {
+        for c in &mut self.color { *c *= factor; }
+        self.scale_parts(factor);
+        for layer in &mut self.layers {
+            layer.lat.concentrate(factor);
+            layer.hide[0] *= factor;
+        }
+    }
+
     pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {
         for &(i, f) in &other.parts {
             match self.parts.iter_mut().find(|p| p.0 == i) {
@@ -180,6 +189,7 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 pub struct Paint {
     pub pigment_latent: Option<[f32; LAT]>,
     pub spectral_films: bool,
+    pub volume_latent: bool,
     pub parts: Vec<(usize, f32)>,
     /// Masstone, linear RGB: the paint's color laid thick (and over itself).
     pub color: Rgb,
@@ -233,11 +243,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, spectral_films: false, volume_latent: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { pigment_latent: None, spectral_films: false, volume_latent: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -274,7 +284,7 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), layers: Vec::new() }
+        Latent { color: self.pigment_latent.unwrap_or_else(|| if self.volume_latent { crate::mixer::encode9(&self.color) } else { crate::mixer::encode(&self.color) }), parts: self.parts.clone(), layers: Vec::new() }
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -287,6 +297,7 @@ impl Paint {
     /// What `coats` of this paint look like laid over `under`.
     pub fn over(&self, under: Rgb, coats: f32) -> Rgb {
         if self.spectral_films {
+            if self.volume_latent { return crate::mixer::over9(&self.latent(), self.scatter, under, coats); }
             return crate::mixer::over(&self.latent(), self.scatter, under, coats);
         }
         self.pigment().over(under, coats)
@@ -410,22 +421,28 @@ pub(crate) fn over_share(pig: Pigment, under: Rgb, coats: f32, cover: f32) -> Rg
     [under[0] + (o[0] - under[0]) * c, under[1] + (o[1] - under[1]) * c, under[2] + (o[2] - under[2]) * c]
 }
 
-pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, spectral: bool) -> Rgb {
+pub(crate) fn over_latent(lat: &Latent, scatter: f32, under: Rgb, coats: f32, cover: f32, spectral: bool, volume_latent: bool) -> Rgb {
     if !spectral && lat.layers.is_empty() {
-        return over_share(Pigment::masstone(crate::mixer::decode(lat), scatter), under, coats, cover);
+        let color = if volume_latent { crate::mixer::decode9(lat) } else { crate::mixer::decode(lat) };
+        return over_share(Pigment::masstone(color, scatter), under, coats, cover);
     }
     if cover.is_nan() || cover <= 0.0 {
         return under;
     }
     let cover = cover.min(1.0);
     let over = if lat.layers.is_empty() {
-        crate::mixer::over(lat, scatter, under, (coats / cover).min(1e4))
+        if volume_latent { crate::mixer::over9(lat, scatter, under, (coats / cover).min(1e4)) } else { crate::mixer::over(lat, scatter, under, (coats / cover).min(1e4)) }
     } else {
         let mean: f32 = lat.layers.iter().map(|l| l.share * l.hide[0]).sum();
         let scale = if mean > 0.0 { scatter / mean } else { 1.0 };
         lat.layers.iter().fold(under, |rgb, l| {
             let thickness = (coats * l.share / cover).min(1e4);
-            if spectral { crate::mixer::over(&l.lat, l.hide[0] * scale, rgb, thickness) } else { Pigment::masstone(crate::mixer::decode(&l.lat), l.hide[0] * scale).over(rgb, thickness) }
+            if spectral {
+                if volume_latent { crate::mixer::over9(&l.lat, l.hide[0] * scale, rgb, thickness) } else { crate::mixer::over(&l.lat, l.hide[0] * scale, rgb, thickness) }
+            } else {
+                let color = if volume_latent { crate::mixer::decode9(&l.lat) } else { crate::mixer::decode(&l.lat) };
+                Pigment::masstone(color, l.hide[0] * scale).over(rgb, thickness)
+            }
         })
     };
     std::array::from_fn(|k| under[k] + (over[k] - under[k]) * cover)
@@ -468,7 +485,7 @@ impl Canvas {
             return self.backing.get(i).copied().unwrap_or_default().under(self.px[i])
                 .over_wet(&self.wet.lat[i], self.wet.hide[i][0], v, cover).color;
         }
-        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, cover, false)
+        over_latent(&self.wet.lat[i], self.wet.hide[i][0], self.px[i], v, cover, false, self.engine >= crate::PIGMENT_MIXER)
     }
 
     /// The visible colors, pixel by pixel over the window: the dry

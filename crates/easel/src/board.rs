@@ -196,20 +196,29 @@ impl Board {
     }
 
     pub fn visit_with(&mut self, id: u64, carry: f32, parts: &[(usize, f32)]) -> Result<(), Full> {
+        self.visit_parts(id, carry, parts, false)
+    }
+
+    pub fn visit_with9(&mut self, id: u64, carry: f32, parts: &[(usize, f32)]) -> Result<(), Full> {
+        self.visit_parts(id, carry, parts, true)
+    }
+
+    fn visit_parts(&mut self, id: u64, carry: f32, parts: &[(usize, f32)], extensive: bool) -> Result<(), Full> {
         self.reknife(id)?;
         if self.dirty <= 0.0 {
             return Ok(());
         }
         let dirty = self.dirty;
         let Some(h) = self.heap_mut(id) else { return Ok(()) };
-        if !parts.is_empty() {
+        let concentration = if extensive { parts.iter().map(|p| p.1).sum() } else { 1.0 };
+        if !parts.is_empty() && concentration > 0.0 {
             let lp = parts;
             let own = h.fractions();
             // what differs from the heap is what dirties it
-            let differs: f32 = lp.iter().map(|&(i, f)| (f - own.iter().find(|p| p.0 == i).map(|p| p.1).unwrap_or(0.0)).max(0.0)).sum();
+            let differs: f32 = lp.iter().map(|&(i, f)| (f / concentration - own.iter().find(|p| p.0 == i).map(|p| p.1).unwrap_or(0.0)).max(0.0)).sum();
             if differs > 0.01 {
                 let room = (DIRT_CAP * h.volume() - h.dirt_volume()).max(0.0);
-                let v = (VISIT * dirty * carry.clamp(0.0, 1.0) * h.volume()).min(room);
+                let v = (VISIT * dirty * carry.clamp(0.0, 1.0) * h.volume()).min(room / concentration);
                 if v > 0.0 {
                     for &(i, f) in lp {
                         match h.dirt.iter_mut().find(|p| p.0 == i) {
@@ -238,22 +247,32 @@ impl Board {
         // An add re-knifes a scraped heap fresh, at the newest position.
         self.reknife(id).map_err(|Full| self.full(tubes, "p:add: that pile was scraped off, and knifing it again needs room"))?;
         let h = self.heap_mut(id).ok_or("p:add: that pile is no longer on the palette")?;
+        let conserved = tubes.engine >= paint::PIGMENT_MIXER;
         let k = 1.0 / h.given_sum.max(1e-9);
         let before = h.volume();
         let before_medium = tubes.pile(h.fractions()).effective_medium(h.medium);
         // (amounts that overflow the heap, together or with it, would leave its proportions NaN)
-        let more: f32 = add.iter().map(|&(_, v)| v * k).sum();
+        let more: f32 = add.iter().map(|&(_, v)| if conserved { v / h.given_sum } else { v * k }).sum();
         if !(more.is_finite() && (before + more).is_finite()) {
             return Err("p:add: more paint than the heap can count".into());
         }
+        if conserved {
+            let concentration = (1.0 - before_medium).clamp(0.0, 1.5).max(1e-3);
+            for p in h.parts.iter_mut().chain(&mut h.dirt) { p.1 *= concentration; }
+        }
         let mut added = 0.0;
         for &(i, v) in add {
-            let v = v * k;
+            let v = if conserved { v / h.given_sum } else { v * k };
             added += v;
+            let v = v * if conserved { (1.0 - medium).clamp(0.0, 1.5).max(1e-3) } else { 1.0 };
             match h.parts.iter_mut().find(|p| p.0 == i) {
                 Some(p) => p.1 += v,
                 None => h.parts.push((i, v)),
             }
+        }
+        if conserved {
+            let scale = (before + added) / h.volume();
+            for p in h.parts.iter_mut().chain(&mut h.dirt) { p.1 *= scale; }
         }
         h.medium = tubes.pile(h.fractions()).effective_medium((before_medium * before + medium * added) / (before + added).max(1e-9));
         let retained = before / (before + added).max(1e-9);

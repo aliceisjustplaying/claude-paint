@@ -453,7 +453,7 @@ impl Canvas {
         w.write_all(if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
-        put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
+        put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else if self.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
         let f = self.f;
@@ -613,7 +613,7 @@ impl Canvas {
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
         let identity = if own_mixer { get_u64(r)? } else { 0 };
-        if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::film_identity() {
+        if own_mixer && identity != crate::mixer::identity() && identity != crate::mixer::identity9() && identity != crate::mixer::film_identity() {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
         let mut pigments = version == 18;
@@ -778,7 +778,7 @@ impl Canvas {
         if c.drawing.as_ref().is_some_and(|d| (d.layout() == 4) != c.drawing_optics) {
             return Err(bad("checkpoint drawing optics do not match its layout"));
         }
-        if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() } {
+        if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else if c.engine >= crate::PIGMENT_MIXER { crate::mixer::identity9() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
         if version >= 11 {

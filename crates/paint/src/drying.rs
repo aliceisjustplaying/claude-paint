@@ -843,15 +843,13 @@ impl Canvas {
             let prop = if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], volumes[from], amount) } else { crate::bristle::fluid_of(self.wet.hide[i]) };
             let latent = &mut self.wet.lat[j];
             let hide = &mut self.wet.hide[j];
-            let a = volumes[to] * hide[0] / crate::mixer::scattering(latent).max(1e-9);
-            let b = amount * prop[0] / crate::mixer::scattering(&source).max(1e-9);
             let volume = volumes[to] + amount;
             if self.wet.clock.px.len() == self.f.w * self.f.h {
                 let cure = self.wet.clock.px[i].cure;
                 let receiver = &mut self.wet.clock.px[j];
                 receiver.cure += (cure - receiver.cure) * (amount / volume);
             }
-            let weight = if a + b > 0.0 { b / (a + b) } else { amount / volume };
+            let weight = amount / volume;
             for k in 0..crate::wet::LAT {
                 latent[k] += (source[k] - latent[k]) * weight;
             }
@@ -859,7 +857,6 @@ impl Canvas {
             for k in 0..hide.len() {
                 hide[k] += (prop[k] - hide[k]) * (amount / volume);
             }
-            hide[0] = crate::mixer::scattering(latent) * (a + b) / volume;
             volumes[from] -= amount;
             volumes[to] = volume;
         }
@@ -1012,6 +1009,7 @@ impl Canvas {
         };
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
+        let volume_latent = self.engine >= crate::PIGMENT_MIXER;
         if spectral && self.backing.is_empty() {
             self.backing.resize(self.px.len(), Default::default());
         }
@@ -1051,7 +1049,7 @@ impl Canvas {
                         backing[x] = backing[x].under(px[x]).over_wet(&lat[i], hide[i][0], ti, cover);
                         backing[x].color
                     } else {
-                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false)
+                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false, volume_latent)
                     };
                     ff[x] += ti;
                     vv[x] = 0.0;
@@ -1195,6 +1193,32 @@ mod tests {
         c.transport_settled((0, 0, 3, 1), &[20.0, 10.0, 10.0], &[15.0, 10.0, 15.0], &[(0, 1, 5.0), (1, 2, 5.0)], &mut [0.0; 3]);
         for (i, cure) in [(0, 0.12), (1, 0.04), (2, 1.0 / 30.0)] {
             assert!((c.wet.clock.px[i].cure - cure).abs() < 1e-6, "cure at {i}: {}", c.wet.clock.px[i].cure);
+        }
+    }
+
+    #[test]
+    fn settling_conserves_extensive_pigments_at_different_dilutions() {
+        let mut palette = crate::Palette::new("settling dilutions", crate::palette::catalog());
+        palette.engine = 9;
+        palette.glaze_film = true;
+        palette.carried_paint = true;
+        let mut c = Canvas::new(3, 1.0, [1.0; 3]).with_engine(9);
+        for (i, name, medium) in [(0, "Prussian blue", 0.9), (1, "lead white", 0.0)] {
+            let tube = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            let paint = palette.pile(vec![(tube, 1.0)]).paint(medium);
+            c.wet.lat[i] = paint.latent();
+            c.wet.hide[i] = paint.prop();
+        }
+        let inventory = |c: &Canvas, volumes: &[f32; 9]| {
+            let mut values = (0..crate::wet::LAT).map(|k| (0..9).map(|i| volumes[i] as f64 * c.wet.lat[i][k] as f64).sum::<f64>()).collect::<Vec<_>>();
+            values.extend((0..palette.tubes.len()).map(|tube| (0..9).map(|i| volumes[i] as f64 * c.wet.lat[i].parts.iter().filter(|p| p.0 == tube).map(|p| p.1 as f64).sum::<f64>()).sum::<f64>()));
+            values
+        };
+        let before = inventory(&c, &[20.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let after_volumes = [15.0, 15.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        c.transport_settled((0, 0, 3, 3), &[20.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], &after_volumes, &[(0, 1, 5.0)], &mut [0.0; 9]);
+        for (a, b) in before.iter().zip(inventory(&c, &after_volumes)) {
+            assert!((a - b).abs() < 1e-6 * a.abs().max(1.0), "{a} -> {b}");
         }
     }
 

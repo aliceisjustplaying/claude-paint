@@ -315,6 +315,12 @@ impl Paint {
     pub fn scumble(color: Rgb) -> Self {
         Paint::new(color, 0.5, 0.6)
     }
+    pub fn with_engine(mut self, engine: u32) -> Self {
+        if self.pigment_latent.is_none() {
+            self.volume_latent = engine >= crate::PIGMENT_MIXER;
+        }
+        self
+    }
     /// This paint with its scattering set so one coat hides `hiding`
     /// (the masstone, stiffness and drying rate stay).
     pub fn with_hiding(self, hiding: f32) -> Self {

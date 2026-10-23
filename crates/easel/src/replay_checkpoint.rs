@@ -47,7 +47,7 @@ impl State {
         if (brushes.len(), knives.len(), rags.len()) != (self.brushes.len(), self.knives.len(), self.rags.len()) {
             return Err("replay checkpoint: tool registry differs; refusing reconstruction".into());
         }
-        for (b, value) in brushes.iter().zip(self.brushes) { *b.borrow_mut() = value; }
+        for (b, value) in brushes.iter().zip(self.brushes) { *b.borrow_mut() = value.with_engine(s.tubes.engine); }
         for (b, value) in knives.iter().zip(self.knives) { *b.borrow_mut() = value; }
         for (b, value) in rags.iter().zip(self.rags) { *b.borrow_mut() = value; }
         s.seed = self.seed;

@@ -1030,7 +1030,13 @@ impl Palette {
     /// tube's masstone, scattering in oil and refractive index.
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
         if self.engine >= crate::PIGMENT_MIXER {
-            let pigment = |i: usize| crate::mixer::tube9(self.tubes[i].name).map_or_else(
+            let originals = catalog();
+            let pigment = |i: usize| crate::mixer::tube(self.tubes[i].name).or_else(|| {
+                let t = &self.tubes[i];
+                originals.iter().find(|original| original.name == t.name)
+                    .filter(|original| original.color == t.color && original.hiding == t.hiding)
+                    .and_then(|_| crate::mixer::tube9(t.name))
+            }).map_or_else(
                 || crate::spectral::SpectralPigment::masstone(self.tubes[i].color, self.scat[i]),
                 |lat| crate::mixer::pigment9(&lat).scaled(crate::COAT_UM / 100.0),
             );
@@ -1117,6 +1123,24 @@ impl Mixture {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn customized_researched_tubes_keep_their_rgb_dry_color() {
+        for name in ["yellow ochre", "raw umber", "cadmium red"] {
+            let original = super::catalog().into_iter().find(|t| t.name == name).unwrap();
+            for change_color in [false, true] {
+                let mut tube = original.clone();
+                if change_color { tube.color = [0.02, 0.1, 0.3]; }
+                else { tube.hiding *= 0.5; }
+                let mut palette = super::Palette::new("custom dry", vec![tube.clone()]);
+                palette.engine = crate::PIGMENT_MIXER;
+                let pigment = crate::spectral::SpectralPigment::masstone(tube.color, palette.scat[0]);
+                let white = crate::mixer::pigment9(&crate::mixer::tube9("lead white").unwrap()).s.map(|s| s * crate::COAT_UM / 100.0);
+                let expected = crate::dry::spectral_color(&[(pigment, crate::dry::refractive_index(name), 1.0)], &white);
+                assert_eq!(palette.dry_color(&[(0, 1.0)]), expected, "{name}, color changed {change_color}");
+            }
+        }
+    }
+
     use super::*;
 
     /// Each box's tubes hold their own oil: the default box's lead white is

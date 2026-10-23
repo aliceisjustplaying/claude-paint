@@ -155,6 +155,8 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   mixer::calibration::measured_dark_recipes_include_black_and_match_the_source \
   mixer::calibration::source_mass_and_palette_volumes_describe_the_same_13g_film \
   bristle::volume_mixing::palette_tools_and_wet_exchange_keep_the_same_extensive_pigments \
+  bristle::volume_mixing::raw_rgb_loads_use_the_tools_engine_before_mixing \
+  palette::tests::customized_researched_tubes_keep_their_rgb_dry_color \
   mixer::proxy::tests::customized_earth_inputs_rebuild_their_optics_through_clones \
   mixer::proxy::tests::cadmium_covers_dark_paint_and_green_earth_keeps_backing_contrast \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \

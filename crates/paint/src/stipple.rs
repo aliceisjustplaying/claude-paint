@@ -448,8 +448,9 @@ impl Canvas {
         let ids = plans.iter().map(|t| t.len() as u32).collect();
         let slice = self.covering_slice_secs(self.hand_slice_secs(), plans.iter().flatten().filter_map(|p| p.dip.clone()), &tile_secs);
         let pass = crate::sched::Pass { grid: (tw, th), order: crate::sched::TileOrder::Default(order), rects, secs: tile_secs, ids, slice };
+        let engine = self.engine;
         self.paint_pass(pass, sp.dip_with.is_some(), |surf, ti, first_id| {
-            let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+            let mut held = Held::new(sp.tool.clone(), seed ^ 0x5717 ^ (ti as u64).wrapping_mul(0x9E37_79B9)).with_engine(engine);
             let mut scratch = Vec::new();
             let mut b: Bounds = None;
             for (k, p) in plans[ti].iter().enumerate() {

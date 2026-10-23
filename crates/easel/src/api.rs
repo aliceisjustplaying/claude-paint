@@ -2447,7 +2447,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
             if !(2.0..=200.0).contains(&width) {
                 return err("knife{width=}: the blade's length in units, 2 to 200");
             }
-            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_packing(st1.borrow().tubes.drain)));
+            let k = Rc::new(RefCell::new(paint::Knife::new(width).with_engine(st1.borrow().tubes.engine).with_packing(st1.borrow().tubes.drain)));
             st1.borrow_mut().knives.push(Rc::downgrade(&k));
             crate::replay_checkpoint::hold_tools(&st1);
             Ok(KnifeU { k, st: st1.clone() })

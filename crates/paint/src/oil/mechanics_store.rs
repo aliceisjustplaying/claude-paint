@@ -136,9 +136,9 @@ pub struct Cohort {
     pub id: u64,
     pub formulation: Arc<Formulation>,
     pub inventory: Inventory,
-    pub force_area_n_m3: Tensor,
+    pub force_area_n_m: Tensor,
     pub central_moment_area_n_m2: Tensor,
-    pub chemical_force_area_n_m3: Tensor,
+    pub chemical_force_area_n_m: Tensor,
     pub chemical_central_moment_area_n_m2: Tensor,
 }
 
@@ -148,9 +148,9 @@ impl Cohort {
             id: self.id,
             formulation: self.formulation.clone(),
             inventory: self.inventory.scaled(fraction),
-            force_area_n_m3: self.force_area_n_m3.map(|x| x * fraction),
+            force_area_n_m: self.force_area_n_m.map(|x| x * fraction),
             central_moment_area_n_m2: self.central_moment_area_n_m2.map(|x| x * fraction),
-            chemical_force_area_n_m3: self.chemical_force_area_n_m3.map(|x| x * fraction),
+            chemical_force_area_n_m: self.chemical_force_area_n_m.map(|x| x * fraction),
             chemical_central_moment_area_n_m2: self
                 .chemical_central_moment_area_n_m2
                 .map(|x| x * fraction),
@@ -163,9 +163,9 @@ impl Cohort {
         }
         self.inventory.add(other.inventory);
         for a in 0..3 {
-            self.force_area_n_m3[a] += other.force_area_n_m3[a];
+            self.force_area_n_m[a] += other.force_area_n_m[a];
             self.central_moment_area_n_m2[a] += other.central_moment_area_n_m2[a];
-            self.chemical_force_area_n_m3[a] += other.chemical_force_area_n_m3[a];
+            self.chemical_force_area_n_m[a] += other.chemical_force_area_n_m[a];
             self.chemical_central_moment_area_n_m2[a] += other.chemical_central_moment_area_n_m2[a];
         }
         Ok(())
@@ -177,6 +177,7 @@ pub struct MaterialCell {
     pub id: u32,
     pub native_column: usize,
     pub native_depth: usize,
+    pub layer: usize,
     pub packet: usize,
     pub lower_vertices: [usize; 3],
     pub upper_vertices: [usize; 3],
@@ -280,6 +281,152 @@ fn material_phase(cell: &MaterialCell, parameters: &Parameters) -> Result<bool, 
     coherent.ok_or(AdapterError::InvalidInventory)
 }
 
+#[derive(Clone, Copy)]
+struct AlignedLayer {
+    source_depth: usize,
+    packet: usize,
+    low: f64,
+    high: f64,
+    thickness_m: f64,
+}
+
+fn align_columns(
+    native: &[NativeColumn],
+    parameters: &Parameters,
+) -> Result<(Vec<Vec<AlignedLayer>>, Vec<bool>, Vec<Vec<bool>>), AdapterError> {
+    let mut phases = Vec::new();
+    let mut packet_maps = Vec::new();
+    let mut runs = Vec::<Vec<(bool, usize, usize, f64)>>::new();
+    let addresses: BTreeSet<_> = native.iter().map(|c| c.address).collect();
+    if addresses.len() != native.len() {
+        return Err(AdapterError::InvalidNativeLayout);
+    }
+    for input in native {
+        let data = &input.data;
+        if data.cells.is_empty()
+            || data.coverage.len() != data.packets.len()
+            || data.state.free_solvent_um != 0.0
+            || data.coatings.iter().any(|c| c.before_packet != 0)
+        {
+            return Err(AdapterError::InvalidNativeLayout);
+        }
+        let mut packets = vec![usize::MAX; data.cells.len()];
+        for (packet, p) in data.packets.iter().enumerate() {
+            if data.coverage[packet] != 1.0 {
+                return Err(AdapterError::OccupancyRequired {
+                    column: input.address,
+                    packet,
+                    coverage: data.coverage[packet],
+                });
+            }
+            if p.interface_damage != 0.0 {
+                return Err(AdapterError::UnsupportedInterface {
+                    column: input.address,
+                    packet,
+                });
+            }
+            let start = p.first_cell as usize;
+            let end = start
+                .checked_add(p.cell_count as usize)
+                .ok_or(AdapterError::InvalidNativeLayout)?;
+            if start == end || end > packets.len() {
+                return Err(AdapterError::InvalidNativeLayout);
+            }
+            for slot in &mut packets[start..end] {
+                if *slot != usize::MAX {
+                    return Err(AdapterError::InvalidNativeLayout);
+                }
+                *slot = packet;
+            }
+        }
+        if packets.contains(&usize::MAX) {
+            return Err(AdapterError::InvalidNativeLayout);
+        }
+        let mut phase = Vec::new();
+        for cell in &data.cells {
+            let recipe = input
+                .formulations
+                .get(cell.recipe as usize)
+                .ok_or(AdapterError::InvalidInventory)?;
+            let m = constitutive::evaluate(cell, recipe, parameters)
+                .map_err(|_| AdapterError::InvalidInventory)?;
+            if cell.thickness_um() <= 0.0 {
+                return Err(AdapterError::InvalidInventory);
+            }
+            phase.push(m.young_pa > 0.0);
+        }
+        let mut bands = Vec::new();
+        let mut start = 0;
+        while start < phase.len() {
+            let mut end = start + 1;
+            while end < phase.len() && phase[end] == phase[start] {
+                end += 1;
+            }
+            let h = data.cells[start..end]
+                .iter()
+                .map(|c| c.thickness_um() * 1.0e-6)
+                .sum();
+            bands.push((phase[start], start, end, h));
+            start = end;
+        }
+        if let Some(first) = runs.first() {
+            if first.len() != bands.len() || first.iter().zip(&bands).any(|(a, b)| a.0 != b.0) {
+                return Err(AdapterError::RefineTopology {
+                    column: input.address,
+                    depth: 0,
+                });
+            }
+        }
+        runs.push(bands);
+        phases.push(phase);
+        packet_maps.push(packets);
+    }
+    let mut result = vec![Vec::new(); native.len()];
+    let mut common_phase = Vec::new();
+    for band in 0..runs[0].len() {
+        let mut cuts = vec![0.0, 1.0];
+        for (column, input) in native.iter().enumerate() {
+            let (_, start, end, h) = runs[column][band];
+            let mut position = 0.0;
+            for cell in &input.data.cells[start..end - 1] {
+                position += cell.thickness_um() * 1.0e-6;
+                cuts.push(position / h);
+            }
+        }
+        cuts.sort_by(f64::total_cmp);
+        cuts.dedup();
+        for pair in cuts.windows(2) {
+            common_phase.push(runs[0][band].0);
+            for (column, input) in native.iter().enumerate() {
+                let (_, start, end, h) = runs[column][band];
+                let midpoint = 0.5 * (pair[0] + pair[1]) * h;
+                let mut source = start;
+                let mut base = 0.0;
+                while source + 1 < end
+                    && base + input.data.cells[source].thickness_um() * 1.0e-6 < midpoint
+                {
+                    base += input.data.cells[source].thickness_um() * 1.0e-6;
+                    source += 1;
+                }
+                let source_h = input.data.cells[source].thickness_um() * 1.0e-6;
+                let low = ((pair[0] * h - base) / source_h).clamp(0.0, 1.0);
+                let high = ((pair[1] * h - base) / source_h).clamp(0.0, 1.0);
+                if high <= low {
+                    return Err(AdapterError::Mechanics(MechanicsError::RefineMesh));
+                }
+                result[column].push(AlignedLayer {
+                    source_depth: source,
+                    packet: packet_maps[column][source],
+                    low,
+                    high,
+                    thickness_m: source_h * (high - low),
+                });
+            }
+        }
+    }
+    Ok((result, common_phase, phases))
+}
+
 impl PatchCheckpoint {
     pub fn from_full_coverage(
         native: Vec<NativeColumn>,
@@ -300,75 +447,8 @@ impl PatchCheckpoint {
         {
             return Err(AdapterError::InvalidNativeLayout);
         }
-        let first = &native[0].data;
-        let layers = first.cells.len();
-        if layers == 0 {
-            return Err(AdapterError::InvalidNativeLayout);
-        }
-        let mut packets = vec![usize::MAX; layers];
-        for (packet, p) in first.packets.iter().enumerate() {
-            for depth in p.first_cell as usize..(p.first_cell as usize + p.cell_count as usize) {
-                if depth >= layers || packets[depth] != usize::MAX {
-                    return Err(AdapterError::InvalidNativeLayout);
-                }
-                packets[depth] = packet;
-            }
-        }
-        if packets.contains(&usize::MAX) {
-            return Err(AdapterError::InvalidNativeLayout);
-        }
-        let mut phase = vec![false; layers];
-        for (column, input) in native.iter().enumerate() {
-            let data = &input.data;
-            if data.cells.len() != layers
-                || data.packets.len() != first.packets.len()
-                || data.coverage.len() != data.packets.len()
-                || data.state.free_solvent_um != 0.0
-                || data.coatings.iter().any(|c| c.before_packet != 0)
-            {
-                return Err(AdapterError::InvalidNativeLayout);
-            }
-            for (packet, p) in data.packets.iter().enumerate() {
-                if data.coverage[packet] != 1.0 {
-                    return Err(AdapterError::OccupancyRequired {
-                        column: input.address,
-                        packet,
-                        coverage: data.coverage[packet],
-                    });
-                }
-                if p.interface_damage != 0.0 {
-                    return Err(AdapterError::UnsupportedInterface {
-                        column: input.address,
-                        packet,
-                    });
-                }
-                if p.first_cell != first.packets[packet].first_cell
-                    || p.cell_count != first.packets[packet].cell_count
-                {
-                    return Err(AdapterError::InvalidNativeLayout);
-                }
-            }
-            for (depth, cell) in data.cells.iter().enumerate() {
-                let recipe = input
-                    .formulations
-                    .get(cell.recipe as usize)
-                    .ok_or(AdapterError::InvalidInventory)?;
-                let m = constitutive::evaluate(cell, recipe, &parameters)
-                    .map_err(|_| AdapterError::InvalidInventory)?;
-                if cell.thickness_um() <= 0.0 {
-                    return Err(AdapterError::InvalidInventory);
-                }
-                let value = m.young_pa > 0.0;
-                if column == 0 {
-                    phase[depth] = value;
-                } else if phase[depth] != value {
-                    return Err(AdapterError::RefineTopology {
-                        column: input.address,
-                        depth,
-                    });
-                }
-            }
-        }
+        let (aligned, phase, native_phase) = align_columns(&native, &parameters)?;
+        let layers = phase.len();
         let corners = (nx + 1) * (ny + 1);
         let nxy = corners + native.len();
         let mut xy = Vec::with_capacity(nxy);
@@ -433,7 +513,8 @@ impl PatchCheckpoint {
         for depth in 0..layers {
             let h: Vec<_> = native
                 .iter()
-                .map(|c| c.data.cells[depth].thickness_um() * 1.0e-6)
+                .enumerate()
+                .map(|(column, _)| aligned[column][depth].thickness_m)
                 .collect();
             let h = reconstruct(&h)?;
             if h.iter().any(|x| *x <= 0.0) {
@@ -562,40 +643,53 @@ impl PatchCheckpoint {
                 let (area, _) = triangle_geometry(lower, &geometry)?;
                 let h = mean_height(upper, &geometry) - mean_height(lower, &geometry);
                 let input = &native[column];
-                let cell = input.data.cells[depth];
+                let alignment = aligned[column][depth];
+                let cell = input.data.cells[alignment.source_depth];
                 let recipe = input.formulations[cell.recipe as usize].clone();
                 let mut inventory = Inventory::from_cell(cell, &recipe, area);
                 inventory = inventory.scaled(h / (cell.thickness_um() * 1.0e-6));
-                let packet = packets[depth];
+                let packet = alignment.packet;
                 let p = input.data.packets[packet];
                 let mut force = [0.0; 3];
                 let mut moment = [0.0; 3];
                 if p.tension_n_m.iter().chain(&p.moment_n).any(|x| *x != 0.0) {
                     let start = p.first_cell as usize;
                     let end = start + p.cell_count as usize;
-                    if (start..end).filter(|&d| phase[d]).count() != 1 {
+                    if (start..end).filter(|&d| native_phase[column][d]).count() != 1 {
                         return Err(AdapterError::MissingCohortHistory {
                             column: input.address,
                             packet,
                         });
                     }
                     if phase[depth] {
-                        let packet_mid = 0.5
-                            * (mean_height(triangle.map(|v| start * nxy + v), &geometry)
-                                + mean_height(triangle.map(|v| end * nxy + v), &geometry));
-                        let mid =
-                            0.5 * (mean_height(lower, &geometry) + mean_height(upper, &geometry));
-                        force = p.tension_n_m.map(|x| x as f64 * area);
-                        moment = std::array::from_fn(|a| {
-                            (p.moment_n[a] as f64 + (packet_mid - mid) * p.tension_n_m[a] as f64)
-                                * area
-                        });
+                        let prefix = |limit: usize| {
+                            input.data.cells[..limit]
+                                .iter()
+                                .map(|c| c.thickness_um() * 1.0e-6)
+                                .sum::<f64>()
+                        };
+                        let packet_mid = 0.5 * (prefix(start) + prefix(end));
+                        let source_h = cell.thickness_um() * 1.0e-6;
+                        let source_mid = prefix(alignment.source_depth) + 0.5 * source_h;
+                        let fraction = alignment.high - alignment.low;
+                        let offset = (0.5 * (alignment.low + alignment.high) - 0.5) * source_h;
+                        for axis in 0..3 {
+                            let tension = p.tension_n_m[axis] as f64;
+                            let central_moment =
+                                p.moment_n[axis] as f64 + (packet_mid - source_mid) * tension;
+                            force[axis] = area
+                                * (fraction * tension
+                                    + 12.0 * central_moment * fraction * offset
+                                        / (source_h * source_h));
+                            moment[axis] = area * central_moment * fraction.powi(3);
+                        }
                     }
                 }
                 material.push(MaterialCell {
                     id: material.len() as u32,
                     native_column: column,
-                    native_depth: depth,
+                    native_depth: alignment.source_depth,
+                    layer: depth,
                     packet,
                     lower_vertices: lower,
                     upper_vertices: upper,
@@ -606,9 +700,9 @@ impl PatchCheckpoint {
                         id: cohort_ids[column][depth],
                         formulation: recipe,
                         inventory,
-                        force_area_n_m3: force,
+                        force_area_n_m: force,
                         central_moment_area_n_m2: moment,
-                        chemical_force_area_n_m3: [0.0; 3],
+                        chemical_force_area_n_m: [0.0; 3],
                         chemical_central_moment_area_n_m2: [0.0; 3],
                     }],
                 });
@@ -676,16 +770,16 @@ impl PatchCheckpoint {
                         thickness_m: hi - lo,
                         tangent,
                         history: PlateHistory {
-                            tension_n_m: c.force_area_n_m3.map(|x| x / area),
+                            tension_n_m: c.force_area_n_m.map(|x| x / area),
                             moment_n: std::array::from_fn(|a| {
-                                (c.central_moment_area_n_m2[a] + center * c.force_area_n_m3[a])
+                                (c.central_moment_area_n_m2[a] + center * c.force_area_n_m[a])
                                     / area
                             }),
                         },
-                        chemical_force_increment_n_m: c.chemical_force_area_n_m3.map(|x| x / area),
+                        chemical_force_increment_n_m: c.chemical_force_area_n_m.map(|x| x / area),
                         chemical_moment_increment_n: std::array::from_fn(|a| {
                             (c.chemical_central_moment_area_n_m2[a]
-                                + center * c.chemical_force_area_n_m3[a])
+                                + center * c.chemical_force_area_n_m[a])
                                 / area
                         }),
                         relaxation_s: m.relaxation_seconds,
@@ -696,7 +790,7 @@ impl PatchCheckpoint {
                 let mut eta = 0.0;
                 let mut yield_pa = 0.0;
                 for c in &cell.cohorts {
-                    if c.force_area_n_m3
+                    if c.force_area_n_m
                         .iter()
                         .chain(&c.central_moment_area_n_m2)
                         .any(|x| *x != 0.0)
@@ -776,15 +870,15 @@ impl PatchCheckpoint {
                     let a = sheet[(opposite + 1) % 3].min(sheet[(opposite + 2) % 3]);
                     let b = sheet[(opposite + 1) % 3].max(sheet[(opposite + 2) % 3]);
                     edges
-                        .entry((cell.native_depth, a, b))
+                        .entry((cell.layer, a, b))
                         .or_default()
                         .push((cell.id, opposite));
                 }
             }
-            if cell.native_depth == 0 {
+            if cell.layer == 0 {
                 self.geometry.support_surfaces.push(cell.lower_vertices);
             }
-            if cell.native_depth + 1 == layers {
+            if cell.layer + 1 == layers {
                 self.geometry.exposed_surfaces.push(cell.upper_vertices);
             }
         }
@@ -944,6 +1038,35 @@ impl ProvisionalRemap {
         {
             return Err(AdapterError::UnknownGeneration);
         }
+        if trial.vertex_displacement_m.iter().all(|d| *d == [0.0; 3])
+            && trial.transfers.iter().all(|f| f.volume_m3 == 0.0)
+            && trial.skin_transfers.iter().all(|f| f.volume_m3 == 0.0)
+            && trial.bending_modes == source.bending_modes
+            && trial
+                .history
+                .iter()
+                .zip(source.skins)
+                .all(|(h, s)| *h == s.history)
+            && source.skins.len() == before.geometry.skins.len()
+            && source
+                .skins
+                .iter()
+                .zip(&before.geometry.skins)
+                .all(|(a, b)| {
+                    a.chemical_force_increment_n_m == b.chemical_force_increment_n_m
+                        && a.chemical_moment_increment_n == b.chemical_moment_increment_n
+                })
+        {
+            let mut unchanged = before.clone();
+            unchanged.geometry.generation = self.next_generation;
+            self.next_generation = self
+                .next_generation
+                .checked_add(1)
+                .ok_or(AdapterError::UnknownGeneration)?;
+            let mapped = unchanged.geometry.clone();
+            self.states.insert(mapped.generation, unchanged);
+            return Ok(mapped);
+        }
         let mut after = before.clone();
         after.geometry.vertices = source.vertices.to_vec();
         move_geometry(source, trial, &mut after.geometry)?;
@@ -1013,14 +1136,14 @@ impl ProvisionalRemap {
                             .changed_packets
                             .insert((cell.native_column, cell.packet));
                     }
-                    c.force_area_n_m3 = rotate_tensor(h.tension_n_m.map(|x| x * area), angle);
+                    c.force_area_n_m = rotate_tensor(h.tension_n_m.map(|x| x * area), angle);
                     c.central_moment_area_n_m2 = rotate_tensor(
                         std::array::from_fn(|a| {
                             (h.moment_n[a] + (reference + dz) * h.tension_n_m[a]) * area
                         }),
                         angle,
                     );
-                    c.chemical_force_area_n_m3 = rotate_tensor(
+                    c.chemical_force_area_n_m = rotate_tensor(
                         source.skins[i]
                             .chemical_force_increment_n_m
                             .map(|x| x * area),
@@ -1039,9 +1162,9 @@ impl ProvisionalRemap {
             } else {
                 for c in &mut cell.cohorts {
                     for a in 0..3 {
-                        c.central_moment_area_n_m2[a] += old_mid * c.force_area_n_m3[a];
+                        c.central_moment_area_n_m2[a] += old_mid * c.force_area_n_m[a];
                         c.chemical_central_moment_area_n_m2[a] +=
-                            old_mid * c.chemical_force_area_n_m3[a];
+                            old_mid * c.chemical_force_area_n_m[a];
                     }
                 }
             }
@@ -1132,8 +1255,8 @@ impl ProvisionalRemap {
                     + mean_height(cell.upper_vertices, &after.geometry));
             for c in &mut cell.cohorts {
                 for a in 0..3 {
-                    c.central_moment_area_n_m2[a] -= mid * c.force_area_n_m3[a];
-                    c.chemical_central_moment_area_n_m2[a] -= mid * c.chemical_force_area_n_m3[a];
+                    c.central_moment_area_n_m2[a] -= mid * c.force_area_n_m[a];
+                    c.chemical_central_moment_area_n_m2[a] -= mid * c.chemical_force_area_n_m[a];
                 }
             }
             if let Some(transport) = cell.transport_vertices {
@@ -1294,6 +1417,20 @@ pub fn attempt_patch(
                 .states
                 .remove(&accepted.remapped.generation)
                 .ok_or(AdapterError::UnknownGeneration)?;
+            for cell in &state.material {
+                let (area, _) = triangle_geometry(cell.lower_vertices, &state.geometry)?;
+                let geometric = area
+                    * (mean_height(cell.upper_vertices, &state.geometry)
+                        - mean_height(cell.lower_vertices, &state.geometry));
+                let actual = cell
+                    .cohorts
+                    .iter()
+                    .map(|c| c.inventory.volume_m3())
+                    .sum::<f64>();
+                if (actual - geometric).abs() / area > accuracy.absolute_displacement_error_m {
+                    return Err(AdapterError::Mechanics(MechanicsError::RefineMesh));
+                }
+            }
             Ok(PatchAttempt::Accepted(AcceptedPatch {
                 state,
                 trial: accepted.trial,
@@ -1301,5 +1438,252 @@ pub fn attempt_patch(
             }))
         }
         StepAttempt::Subdivide(reason) => Ok(PatchAttempt::Subdivide(reason, cost)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::store::{DepositMode, FilmStore};
+    use super::*;
+
+    fn native(profiles: &[&[(f64, f32, u32)]]) -> (Vec<NativeColumn>, NativeGrid) {
+        let mut store = FilmStore::new(profiles.len() as u32, 1, 1.0).unwrap();
+        for (pixel, profile) in profiles.iter().enumerate() {
+            for &(h, network, code) in *profile {
+                let mut paint = super::super::store::tests::paint(h, code, network);
+                paint.fragments[0].coverage = 1.0;
+                store.deposit(pixel, paint, DepositMode::Cover).unwrap();
+            }
+        }
+        (
+            (0..profiles.len())
+                .map(|p| NativeColumn::read(p as u64, store.read_column(p).unwrap()))
+                .collect(),
+            NativeGrid {
+                shape: [profiles.len(), 1],
+                origin_m: [0.0; 2],
+                pixel_m: [50.0e-6; 2],
+                physical_walls: [true; 4],
+                surface_tension_n_m: 0.03,
+            },
+        )
+    }
+
+    #[test]
+    fn oil_mechanics_store_aligns_adaptive_native_profiles() {
+        let (native, grid) = native(&[
+            &[(100.0, 0.0, 1), (25.0, 0.8, 1)],
+            &[
+                (20.0, 0.0, 2),
+                (30.0, 0.0, 2),
+                (50.0, 0.0, 2),
+                (10.0, 0.8, 2),
+                (15.0, 0.8, 2),
+            ],
+        ]);
+        let mut expected = Inventory::default();
+        for column in &native {
+            for cell in &column.data.cells {
+                expected.add(Inventory::from_cell(
+                    *cell,
+                    &column.formulations[cell.recipe as usize],
+                    grid.pixel_m[0] * grid.pixel_m[1],
+                ));
+            }
+        }
+        let state =
+            PatchCheckpoint::from_full_coverage(native, grid, Parameters::default()).unwrap();
+        assert_eq!(state.material.len(), 40);
+        for (a, b) in state
+            .inventory()
+            .values()
+            .into_iter()
+            .zip(expected.values())
+        {
+            assert!((a - b).abs() <= 64.0 * f64::EPSILON * a.abs().max(b.abs()));
+        }
+        let accepted = attempt_patch(
+            &state,
+            StepInterval {
+                start_s: 0.0,
+                end_s: 0.001,
+            },
+            &mechanics::controls::proposed_accuracy(),
+            &mut MechanicsScratch::default(),
+        )
+        .unwrap();
+        let PatchAttempt::Accepted(accepted) = accepted else {
+            panic!("flat native patch subdivided");
+        };
+        assert!(accepted.trial.diagnostics.arrested);
+        assert!(accepted.state.changed_packets.is_empty());
+        assert_eq!(accepted.cost.active_patches, 1);
+        assert_eq!(state.geometry.generation, 0);
+    }
+
+    #[test]
+    fn oil_mechanics_store_gathers_species_and_shifts_moment_reference() {
+        let (mut native, grid) = native(&[
+            &[(100.0, 0.0, 1), (25.0, 0.8, 1)],
+            &[(100.0, 0.0, 2), (25.0, 0.8, 2)],
+        ]);
+        native[1].data.state.support_z_um = 2.0;
+        let mut state =
+            PatchCheckpoint::from_full_coverage(native, grid, Parameters::default()).unwrap();
+        for cell in &mut state.material {
+            if cell.sheet_vertices.is_some() {
+                let area = triangle_geometry(cell.lower_vertices, &state.geometry)
+                    .unwrap()
+                    .0;
+                cell.cohorts[0].force_area_n_m = [-0.1 * area, 0.2 * area, 0.03 * area];
+                cell.cohorts[0].central_moment_area_n_m2 =
+                    [2.0e-8 * area, -3.0e-8 * area, 1.0e-8 * area];
+            }
+        }
+        state.rebuild_material().unwrap();
+        let initial = state.inventory();
+        let moments = |state: &PatchCheckpoint| -> Tensor {
+            let mut result = [0.0; 3];
+            for cell in &state.material {
+                let z = 0.5
+                    * (mean_height(cell.lower_vertices, &state.geometry)
+                        + mean_height(cell.upper_vertices, &state.geometry));
+                for c in &cell.cohorts {
+                    for a in 0..3 {
+                        result[a] += c.central_moment_area_n_m2[a] + z * c.force_area_n_m[a];
+                    }
+                }
+            }
+            result
+        };
+        let before = moments(&state);
+        let face = state
+            .geometry
+            .skin_faces
+            .iter()
+            .enumerate()
+            .find(|(_, f)| {
+                f.high_cell.is_some_and(|h| {
+                    state.material[f.low_cell as usize].native_column
+                        != state.material[h as usize].native_column
+                })
+            })
+            .unwrap();
+        let volume = state.material[face.1.low_cell as usize].cohorts[0]
+            .inventory
+            .volume_m3()
+            * 0.05;
+        let trial = MechanicsTrial {
+            input_generation: 0,
+            duration_s: 0.001,
+            transfers: Vec::new(),
+            skin_transfers: vec![SkinTransfer {
+                face: face.0,
+                low_cell: face.1.low_cell,
+                high_cell: face.1.high_cell.unwrap(),
+                volume_m3: volume,
+            }],
+            history: state.geometry.skins.iter().map(|s| s.history).collect(),
+            bending_modes: state.geometry.bending_modes.clone(),
+            vertex_displacement_m: vec![[0.0; 3]; state.geometry.vertices.len()],
+            end_cell_volumes_m3: Vec::new(),
+            end_skin_volumes_m3: Vec::new(),
+            diagnostics: StepDiagnostics::default(),
+        };
+        let mut remap = ProvisionalRemap {
+            states: BTreeMap::from([(0, state.clone())]),
+            next_generation: 1,
+            failure: None,
+        };
+        let mapped = remap.map(state.geometry.view(), &trial).unwrap();
+        let result = &remap.states[&mapped.generation];
+        for (a, b) in result
+            .inventory()
+            .values()
+            .into_iter()
+            .zip(initial.values())
+        {
+            assert!((a - b).abs() <= 64.0 * f64::EPSILON * a.abs().max(b.abs()));
+        }
+        let after = moments(result);
+        for a in 0..3 {
+            assert!((after[a] - before[a]).abs() < 256.0 * f64::EPSILON * before[a].abs());
+        }
+        assert!(result.material.iter().any(|c| c.cohorts.len() == 2));
+        assert_eq!(state.inventory(), initial);
+    }
+
+    #[test]
+    fn oil_mechanics_store_actual_chemistry_through_coherent_thin_film() {
+        use super::super::chemistry::{self, FixtureId};
+        use super::super::transfer::{Fragment, MaterialTransfer, TransferCell};
+        let mut fixture = FixtureId::S3Lwlo450.fixture();
+        fixture.thickness_um = 12.0;
+        let mut cells = fixture.column(16).unwrap();
+        chemistry::advance_column(&mut cells, &[fixture.kinetics], 172800.0, 1.0).unwrap();
+        assert!(
+            cells
+                .iter()
+                .all(|c| c.network as f64 > Parameters::default().gel_network)
+        );
+        let recipe = Arc::new(
+            Formulation::new(
+                crate::wet::Latent::from_color([0.4; crate::wet::LAT]),
+                [0.5; 10],
+                fixture.kinetics,
+            )
+            .unwrap(),
+        );
+        let mut store = FilmStore::new(1, 1, 1.0).unwrap();
+        store
+            .deposit(
+                0,
+                MaterialTransfer {
+                    fragments: vec![Fragment::new(
+                        cells
+                            .iter()
+                            .map(|c| TransferCell::from_cell(*c, recipe.clone(), 1.0))
+                            .collect(),
+                        1.0,
+                    )],
+                    free_solvent: 0.0,
+                },
+                DepositMode::Cover,
+            )
+            .unwrap();
+        let native = NativeColumn::read(0, store.read_column(0).unwrap());
+        let grid = NativeGrid {
+            shape: [1, 1],
+            origin_m: [0.0; 2],
+            pixel_m: [50.0e-6; 2],
+            physical_walls: [true; 4],
+            surface_tension_n_m: 0.03,
+        };
+        let state =
+            PatchCheckpoint::from_full_coverage(vec![native], grid, Parameters::default()).unwrap();
+        assert!(state.geometry.cells.is_empty());
+        assert_eq!(state.geometry.skin_material.len(), 64);
+        let accepted = attempt_patch(
+            &state,
+            StepInterval {
+                start_s: 172800.0,
+                end_s: 172801.0,
+            },
+            &mechanics::controls::proposed_accuracy(),
+            &mut MechanicsScratch::default(),
+        )
+        .unwrap();
+        let PatchAttempt::Accepted(accepted) = accepted else {
+            panic!("through-coherent native film subdivided");
+        };
+        assert!(accepted.trial.diagnostics.arrested);
+        assert!(
+            accepted
+                .trial
+                .vertex_displacement_m
+                .iter()
+                .all(|d| *d == [0.0; 3])
+        );
+        assert_eq!(accepted.state.inventory(), state.inventory());
     }
 }

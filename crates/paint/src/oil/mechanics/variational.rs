@@ -871,7 +871,16 @@ fn check(
     for c in patch.constraints {
         if c.vertex >= patch.vertices.len()
             || c.components.iter().flatten().any(|t| {
-                t.vertex >= patch.vertices.len() || t.component >= 3 || !t.coefficient.is_finite()
+                !t.coefficient.is_finite()
+                    || match t.dof {
+                        VelocityDof::Translation { vertex, component } => {
+                            vertex >= patch.vertices.len() || component >= 3
+                        }
+                        VelocityDof::NormalSlope { vertices } => {
+                            vertices.iter().any(|&v| v >= patch.vertices.len())
+                                || vertices[0] == vertices[1]
+                        }
+                    }
             })
         {
             return Err(MechanicsError::InvalidMesh);

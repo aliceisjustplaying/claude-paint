@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildSummary, fallbackSummary, latestClockInMessages, latestJournalStamp } from "../summary.ts";
+import { buildSummary, CARRIES_OVER, fallbackSummary, HEADER, latestClockInMessages, latestJournalStamp } from "../summary.ts";
 
 /** A studio with a log whose column-0 lines look like globals, and a bin/easel that runs `body`. */
 function studio(body: string): string {
@@ -16,6 +16,15 @@ function studio(body: string): string {
 }
 
 const section = (summary: string) => summary.split("## Your globals\n\n")[1].split("\n\n## ")[0];
+
+test("the carry-over explanation names every included note file", async () => {
+	const s = studio(`[ "$1" = globals ] && exit 0`);
+	writeFileSync(join(s, "notebook.md"), "A notebook passage.\n");
+	const { summary } = await buildSummary(s, [], undefined, `${HEADER}\n\n${CARRIES_OVER}`);
+	const explanation = summary.split("\n\n## BRIEF.md")[0];
+	for (const file of ["BRIEF.md", "notes/journal.md", "notebook.md"]) assert.ok(explanation.includes(file), file);
+	assert.match(summary, /## Your notebook/);
+});
 
 test("the summary lists the globals the easel reports, not names read off the log", async () => {
 	const s = studio(`[ "$1" = globals ] && printf '1\\tOB\\ttable with 2 entries\\n2\\ttree\\tfunction (chunk 2, line 9)\\n'`);

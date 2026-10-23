@@ -7,7 +7,7 @@ import { setImmediate } from "node:timers/promises";
 const hooks = registerHooks({
 	resolve(specifier, context, nextResolve) {
 		const source = specifier === "@earendil-works/pi-ai" ? "export const Type = {};"
-			: specifier === "@earendil-works/pi-coding-agent" ? "export const createReadToolDefinition = () => ({}); export const defineTool = x => x;"
+			: specifier === "@earendil-works/pi-coding-agent" ? "export class AgentSession {} export const createReadToolDefinition = () => ({}); export const defineTool = x => x;"
 			: specifier === "./easel-tools.ts" ? "export const registerEaselTools = () => {};" : undefined;
 		return source ? { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true } : nextResolve(specifier, context);
 	},
@@ -15,8 +15,18 @@ const hooks = registerHooks({
 const { default: painter } = await import("../painter.ts");
 hooks.deregister();
 
+test("already canceled recovery handles input without querying the easel", async (t) => {
+	for (const key of Object.keys(process.env).filter((key) => key.startsWith("PAINTER_"))) t.mock.env(key, undefined);
+	process.env.PAINTER_SITTING_RECOVERY = "1";
+	const handlers: Record<string, (...args: any[]) => any> = {};
+	painter({ on: (name, handler) => { handlers[name] = handler; }, registerTool() {} } as never);
+	const controller = new AbortController();
+	controller.abort();
+	assert.deepEqual(await handlers.input({ text: "Back." }, { signal: controller.signal }), { action: "handled" });
+});
+
 test("the token pacing context wait respects host cancellation", async (t) => {
-	for (const mode of ["abort during wait", "already aborted", "timer completes", "no signal"]) {
+	for (const mode of ["abort during wait", "already aborted", "timer completes", "no signal", "shutdown"]) {
 		await t.test(mode, async (t) => {
 			for (const key of Object.keys(process.env).filter((key) => key.startsWith("PAINTER_"))) t.mock.env(key, undefined);
 			process.env.PAINTER_INPUT_TPM = "100";
@@ -25,7 +35,7 @@ test("the token pacing context wait respects host cancellation", async (t) => {
 			painter({ on: (name, handler) => { handlers[name] = handler; }, appendEntry: () => {} } as never);
 			handlers.message_end({ message: { role: "assistant", usage: { input: 100 } } });
 			const controller = new AbortController();
-			const signal = mode === "no signal" ? undefined : controller.signal;
+			const signal = mode === "no signal" || mode === "shutdown" ? undefined : controller.signal;
 			const timer = {} as ReturnType<typeof setTimeout>;
 			let fire: (() => void) | undefined;
 			const schedule = t.mock.method(globalThis, "setTimeout", (callback: () => void) => { fire = callback; return timer; });
@@ -40,6 +50,7 @@ test("the token pacing context wait respects host cancellation", async (t) => {
 				assert.equal(settled, false);
 				if (signal) assert.equal(getEventListeners(signal, "abort").length, 1);
 				if (mode === "abort during wait") controller.abort();
+				else if (mode === "shutdown") handlers.session_shutdown();
 				else fire();
 			}
 			await setImmediate();
@@ -50,6 +61,35 @@ test("the token pacing context wait respects host cancellation", async (t) => {
 			if (signal) assert.equal(getEventListeners(signal, "abort").length, 0);
 		});
 	}
+});
+
+test("only an intentional new turn resets the continuous usage-limit deadline", async (t) => {
+	for (const newTurn of [false, true]) await t.test(newTurn ? "new intentional turn" : "continuous retry", async (t) => {
+		for (const key of Object.keys(process.env).filter((key) => key.startsWith("PAINTER_"))) t.mock.env(key, undefined);
+		t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+		const handlers: Record<string, (...args: any[]) => any> = {};
+		painter({ on: (name, handler) => { handlers[name] = handler; } } as never);
+		const message = { role: "assistant", stopReason: "error", errorMessage: "Usage limit reached" };
+		const event = { context: { contextEntries: [{ sourceEntry: { type: "message", id: "limit", message } }] } };
+		const controller = new AbortController();
+		handlers.message_end({ message });
+		const first = handlers.agent_before_settle(event, { signal: controller.signal });
+		if (newTurn) controller.abort();
+		else t.mock.timers.tick(30 * 60_000);
+		await first;
+		if (newTurn) handlers.agent_settled();
+		t.mock.timers.setTime(24 * 3_600_000);
+		if (newTurn) handlers.before_agent_start({ systemPromptOptions: {} });
+		handlers.message_end({ message });
+		const schedule = t.mock.method(globalThis, "setTimeout");
+		const second = handlers.agent_before_settle(event, {});
+		assert.equal(schedule.mock.callCount(), newTurn ? 1 : 0);
+		if (newTurn) {
+			assert.equal(schedule.mock.calls[0].arguments[1], 30 * 60_000);
+			handlers.session_shutdown();
+		}
+		assert.equal(await second, undefined);
+	});
 });
 
 test("the usage-limit settle wait respects host cancellation", async (t) => {

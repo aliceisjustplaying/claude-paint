@@ -66,3 +66,21 @@ test("a missing library or escaping symlink is not read", () => {
 	assert.throws(() => reference(root, { query: "anything" }), /no reference library/);
 	assert.throws(() => referenceList(root, {}), /no reference library/);
 });
+
+test("incomplete entries fail at listing, search and read with the entry and field named", () => {
+	const root = studio();
+	const path = join(root, "notes/reference-library.json");
+	const valid = { id: "a", title: "A", keywords: [], text: "A passage." };
+	for (const [field, value] of [["keywords", undefined], ["keywords", [7]], ["text", undefined], ["text", null], ["title", 2], ["id", ""]]) {
+		writeFileSync(path, JSON.stringify([{ ...valid, [field as string]: value }]));
+		for (const call of [() => referenceList(root, {}), () => reference(root, { query: "A" }), () => reference(root, { id: "a" })]) {
+			assert.throws(call, (error: Error) => error.message.includes(String(field)) && /"a"|entry 1/.test(error.message));
+		}
+	}
+	for (const data of [null, {}, [null], [7], "not a list"]) {
+		writeFileSync(path, JSON.stringify(data));
+		assert.throws(() => referenceList(root, {}), /reference:.*reference-library.json/);
+	}
+	writeFileSync(path, "{");
+	assert.throws(() => referenceList(root, {}), /reference:.*reference-library.json/);
+});

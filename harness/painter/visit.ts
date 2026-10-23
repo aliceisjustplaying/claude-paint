@@ -12,10 +12,11 @@
  * critic's sessions, a copy of every visit's notes and of every note the painter left, and its log.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { studioPath } from "./easel-client.ts";
 import { JOURNAL, OPEN_PASSAGES, openPassages } from "./journal.ts";
+import { publishNotes } from "./note-publication.ts";
 import { quote } from "./summary.ts";
 
 export const CRITIQUE = "notes/critic.md";
@@ -48,7 +49,7 @@ export function criticReadable(studio: string, path: string): string | undefined
 	const real = studioPath(studio, path);
 	if (!real) return undefined;
 	const rel = relative(realpathSync(studio), real).split(sep).join("/");
-	return rel === JOURNAL || rel === TO_CRITIC || (rel.startsWith("out/easel/") && rel.endsWith(".png")) ? real : undefined;
+	return real === studioPath(studio, JOURNAL) || real === studioPath(studio, TO_CRITIC) || (rel.startsWith("out/easel/") && rel.endsWith(".png")) ? real : undefined;
 }
 
 /** The journal's latest list of open passages (journal.ts), or undefined. */
@@ -132,8 +133,11 @@ export function sessionReply(sessions: string): string | undefined {
 /** Keep the painter's note to the critic (ask_critic's note) for this and later visits. */
 export function leaveNote(studio: string, critic: Critic, note: string): void {
 	mkdirSync(critic.dir, { recursive: true });
-	writeFileSync(join(studio, TO_CRITIC), note.trimEnd() + "\n");
-	appendFileSync(join(critic.dir, "notes-to-critic.jsonl"), JSON.stringify({ at: new Date().toISOString(), note }) + "\n");
+	const history = join(critic.dir, "notes-to-critic.jsonl");
+	publishNotes(studio, "to-critic", "ask_critic", [
+		{ path: join(studio, TO_CRITIC), slot: "current", text: note.trimEnd() + "\n" },
+		{ path: history, root: critic.dir, slot: "history", text: (existsSync(history) ? readFileSync(history, "utf8") : "") + JSON.stringify({ at: new Date().toISOString(), note }) + "\n", independent: true },
+	]);
 }
 
 /** Run one visit; what the critic wrote, as notes/critic.md now holds it. Throws when the critic wrote nothing. */
@@ -176,8 +180,10 @@ export async function visit(studio: string, critic: Critic, occasion: Occasion, 
 	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: ${failure ? `failed: ${failure}` : `exit ${code}`}, ${out.trim().length} characters\n${err}`);
 	if (failure) throw new Error(failure);
 	const notes = `${HEADER[occasion]}\n\n${reply}\n`;
-	writeFileSync(join(studio, CRITIQUE), notes);
-	writeFileSync(join(critic.dir, `${started}-${occasion}.md`), notes);
+	publishNotes(studio, "critic", "ask_critic", [
+		{ path: join(studio, CRITIQUE), slot: "current", text: notes },
+		{ path: join(critic.dir, `${started}-${occasion}.md`), root: critic.dir, slot: `${started}-${occasion}.md`, text: notes, independent: true },
+	], signal);
 	return notes;
 }
 

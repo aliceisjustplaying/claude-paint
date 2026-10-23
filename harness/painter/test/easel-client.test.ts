@@ -221,6 +221,7 @@ test("paint, look, note and status at a real easel", { skip: !bin || !existsSync
 	mkdirSync(join(studio, "bin"));
 	mkdirSync(join(studio, "notes"));
 	copyFileSync(bin!, join(studio, "bin", "easel"));
+	writeFileSync(join(studio, "bin", "studio"), "painter none\n");
 	try {
 		// no session yet: the first call opens one
 		const ok = await atEasel(studio, ["do", "-"], 'canvas{size=400, aspect=1.25, linen=15, ground={{pile={{"lead white", 1}}, um=100, apply="knife"}}}\nprint("hi")');

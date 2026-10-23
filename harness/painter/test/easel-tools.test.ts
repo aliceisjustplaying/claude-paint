@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +14,26 @@ const hooks = registerHooks({
 });
 const { registerEaselTools } = await import("../easel-tools.ts");
 hooks.deregister();
+
+test("appending a journal note refuses an escaping alias before reaching the easel", async () => {
+	const root = mkdtempSync(join(tmpdir(), "note-alias-"));
+	const studio = join(root, "studio");
+	mkdirSync(join(studio, "bin"), { recursive: true });
+	mkdirSync(join(studio, "notes"));
+	writeFileSync(join(root, "outside.md"), "old passage\n");
+	symlinkSync(join(root, "outside.md"), join(studio, "notes/journal.md"));
+	writeFileSync(join(studio, "bin/easel"), `#!${process.execPath}
+const fs = require('node:fs');
+fs.appendFileSync('calls', process.argv[2] + '\\n');
+if (process.argv[2] === 'status') console.log('ready');
+else if (process.argv[2] === 'note') fs.appendFileSync('notes/journal.md', fs.readFileSync(0));
+`, { mode: 0o755 });
+	const tools: Record<string, { execute: (...args: unknown[]) => Promise<unknown> }> = {};
+	registerEaselTools({ registerTool: (tool: { name: string }) => { tools[tool.name] = tool as never; } } as never, studio, {} as never);
+	await assert.rejects(tools.note.execute("id", { text: "new passage" }), /your journal is outside the studio, so nothing was written/);
+	assert.equal(readFileSync(join(root, "outside.md"), "utf8"), "old passage\n");
+	assert.equal(existsSync(join(studio, "calls")), false);
+});
 
 test("every reply from the painting or the scratch canvas says which canvas it came from", async () => {
 	const studio = mkdtempSync(join(tmpdir(), "studio-"));

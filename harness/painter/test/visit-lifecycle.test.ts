@@ -172,7 +172,7 @@ test("boundary visits use sitting cancellation and aren't suppressed by a rememb
 	const hooks = registerHooks({
 		resolve(specifier, context, nextResolve) {
 			if (specifier === "@earendil-works/pi-ai") return { url: "data:text/javascript,export const Type = Object.fromEntries(['Object', 'Optional', 'String', 'Boolean', 'Integer', 'Number', 'Union'].map(k => [k, x => x]));", shortCircuit: true };
-			if (specifier === "@earendil-works/pi-coding-agent") return { url: "data:text/javascript,export const defineTool = x => x; export const createReadToolDefinition = () => ({});", shortCircuit: true };
+			if (specifier === "@earendil-works/pi-coding-agent") return { url: "data:text/javascript,export class AgentSession {} export const defineTool = x => x; export const createReadToolDefinition = () => ({});", shortCircuit: true };
 			return nextResolve(specifier, context);
 		},
 	});

@@ -892,6 +892,9 @@ def paint(name, n, d, rd):
     outcome_path = rd / f"p{n}_outcome.json"
     previous = json.loads(outcome_path.read_text()) if outcome_path.exists() else {}
     if previous.get("status") == "finished":
+        shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
+        if not (rd / f"p{n}.painted").exists():
+            (rd / f"p{n}.painted").write_text(f"{previous['finished_at']} {len(sittings)} record(s): {previous['reason']}\n")
         return sittings
     for s in sittings:
         if s.get("status") == "running":      # the runner stopped during this sitting
@@ -995,13 +998,20 @@ def paint(name, n, d, rd):
     if painter_finished:
         write_outcome(rd, n, outcome)
     error = close_easel(d)
+    if error and previous.get("status") == "finalization_failed" and (
+            "no painting open" in error or "no easel session" in error):
+        error = close_easel(d) if open_easel(d, tag) else "easel reopen failed during finalization"
     outcome.update(status=("finalization_failed" if error else "finished") if painter_finished else "crash_limit_reached", error=error)
-    write_outcome(rd, n, outcome)
+    if outcome["status"] != "finished":
+        write_outcome(rd, n, outcome)
     if error:
         log(f"{tag}: FINALIZATION FAILED: {error}; the easel was not stopped")
     shutil.copy(sittings[-1]["final_file"], rd / f"p{n}_final.txt")
+    with (rd / f"p{n}_final.txt").open("rb") as final:
+        os.fsync(final.fileno())
     if outcome["status"] != "finished":
         return None
+    write_outcome(rd, n, outcome)
     (rd / f"p{n}.painted").write_text(f"{finished_at} {len(sittings)} record(s): {why_done}\n")
     return sittings
 

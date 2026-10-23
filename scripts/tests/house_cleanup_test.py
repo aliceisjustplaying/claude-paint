@@ -226,6 +226,129 @@ class HouseCleanupTests(unittest.TestCase):
                         self.assertIsInstance(runner.close_easel(self.studio), str)
                         cleanup.assert_not_called()
 
+    def finalization_case(self, path, name):
+        runner = self.runner(path)
+        rd = self.root / name
+        rd.mkdir(parents=True)
+        final = rd / "sitting-final.txt"
+        final.write_text("A finished painting")
+        sittings = [dict(sitting=1, status="completed", exit=0, reviewed=True,
+                         painting_before=1, painting_after=1, final_file=str(final))]
+        runner.save_sittings(rd, 1, sittings)
+        return runner, rd, sittings
+
+    def test_finalization_recovers_after_close_succeeded_without_publishing_success(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            for failure in ("interrupted", "timeout"):
+                with self.subTest(runner=str(path), failure=failure):
+                    runner, rd, sittings = self.finalization_case(path, f"recovery-{i}-{failure}")
+                    state = rd / "server"
+                    state.write_text("open")
+                    self.studio.joinpath("bin").mkdir(parents=True, exist_ok=True)
+                    easel = self.studio / "bin/easel"
+                    easel.write_text(f"#!{sys.executable}\nfrom pathlib import Path\nimport sys\n"
+                                     f"state = Path({str(state)!r})\n"
+                                     f"with open({str(self.events)!r}, 'a') as events:\n"
+                                     "    events.write(sys.argv[1] + '\\n')\n"
+                                     "if sys.argv[1] == 'open':\n    state.write_text('open')\n"
+                                     "elif state.read_text() == 'open':\n    state.write_text('closed')\n"
+                                     "else:\n    sys.stderr.write('no painting open: easel open')\n    sys.exit(1)\n")
+                    easel.chmod(0o755)
+                    self.events.write_text("")
+                    write_outcome = runner.write_outcome
+                    subprocess_run = subprocess.run
+
+                    def interrupted_publish(rd, n, outcome):
+                        if outcome["status"] == "finished":
+                            raise KeyboardInterrupt
+                        write_outcome(rd, n, outcome)
+
+                    def timed_out_close(command, **options):
+                        result = subprocess_run(command, **options)
+                        if command[-1] == "close" and result.returncode == 0:
+                            raise subprocess.TimeoutExpired(command, 60)
+                        return result
+
+                    with patch.object(runner, "log"), \
+                         patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                         patch.object(runner, "run") as painter, \
+                         patch.object(runner, "stop_leftovers"):
+                        if failure == "interrupted":
+                            with patch.object(runner, "write_outcome", side_effect=interrupted_publish), \
+                                 self.assertRaises(KeyboardInterrupt):
+                                runner.paint("OPUS", 1, self.studio, rd)
+                        else:
+                            with patch.object(runner.subprocess, "run", side_effect=timed_out_close):
+                                self.assertIsNone(runner.paint("OPUS", 1, self.studio, rd))
+                        self.assertEqual(state.read_text(), "closed")
+                        pending = json.loads((rd / "p1_outcome.json").read_text())
+                        self.assertEqual(pending["status"], "finalization_failed")
+                        self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                        painter.assert_not_called()
+                    self.assertEqual(self.events.read_text().splitlines(), ["close", "close", "open", "close"])
+                    self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()),
+                                     dict(pending, status="finished", error=None))
+                    self.assertEqual((rd / "p1_final.txt").read_text(), "A finished painting")
+
+    def test_final_reply_failure_cannot_publish_success_and_retry_repairs_it(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            for failure in (OSError, KeyboardInterrupt):
+                with self.subTest(runner=str(path), failure=failure.__name__):
+                    runner, rd, sittings = self.finalization_case(path, f"reply-{i}-{failure.__name__}")
+                    write_outcome = runner.write_outcome
+
+                    def failed_copy(source, target):
+                        Path(target).write_text("A partial reply")
+                        raise failure("final reply publication failed")
+
+                    def publish(rd, n, outcome):
+                        if outcome["status"] == "finished":
+                            self.assertEqual((rd / "p1_final.txt").read_text(), "A finished painting")
+                            self.assertFalse((rd / "p1.painted").exists())
+                        write_outcome(rd, n, outcome)
+
+                    with patch.object(runner, "log"), \
+                         patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                         patch.object(runner, "close_easel", side_effect=[None, "no painting open", None]) as close, \
+                         patch.object(runner, "open_easel", return_value=True) as opened, \
+                         patch.object(runner, "run") as painter, \
+                         patch.object(runner, "write_outcome", side_effect=publish):
+                        with patch.object(runner.shutil, "copy", side_effect=failed_copy), \
+                             self.assertRaises(failure):
+                            runner.paint("OPUS", 1, self.studio, rd)
+                        pending = json.loads((rd / "p1_outcome.json").read_text())
+                        self.assertEqual(pending["status"], "finalization_failed")
+                        self.assertFalse((rd / "p1.painted").exists())
+                        self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                        self.assertEqual(close.call_count, 3)
+                        opened.assert_called_once_with(self.studio, "OPUS1")
+                        painter.assert_not_called()
+                    self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()),
+                                     dict(pending, status="finished", error=None))
+
+    def test_finished_rerun_repairs_a_missing_or_partial_final_reply(self):
+        for i, path in enumerate(p for p in self.runners if p != RUNNERS[-1]):
+            runner, rd, sittings = self.finalization_case(path, f"finished-{i}")
+            outcome = dict(status="finished", reason=runner.next_step(sittings)[1],
+                           error=None, finished_at=1792656000.0)
+            runner.write_outcome(rd, 1, outcome)
+            for partial in (False, True):
+                with self.subTest(runner=str(path), partial=partial):
+                    if partial:
+                        (rd / "p1_final.txt").write_text("A partial reply")
+                    with patch.object(runner, "LANES", {"OPUS": {"model": {}}}), \
+                         patch.object(runner, "close_easel") as close, \
+                         patch.object(runner, "open_easel") as opened, \
+                         patch.object(runner, "run") as painter:
+                        self.assertEqual(runner.paint("OPUS", 1, self.studio, rd), sittings)
+                    self.assertEqual((rd / "p1_final.txt").read_text(), "A finished painting")
+                    self.assertEqual(json.loads((rd / "p1_outcome.json").read_text()), outcome)
+                    self.assertEqual((rd / "p1.painted").read_text(),
+                                     f"{outcome['finished_at']} {len(sittings)} record(s): {outcome['reason']}\n")
+                    close.assert_not_called()
+                    opened.assert_not_called()
+                    painter.assert_not_called()
+
     def test_executed_effects_not_source_tokens_decide_whether_to_continue(self):
         for path in self.runners:
             with self.subTest(runner=str(path)):

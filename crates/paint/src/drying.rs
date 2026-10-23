@@ -384,6 +384,9 @@ fn union(a: Option<(usize, usize, usize, usize)>, b: (usize, usize, usize, usize
 impl Canvas {
     /// Minutes on the painting's clock (advanced by `wait` and `dry`).
     pub fn clock(&self) -> f64 {
+        if let Some(material) = &self.material {
+            return material.store.clock.seconds / 60.0;
+        }
         self.wet.clock.now
     }
 
@@ -399,12 +402,25 @@ impl Canvas {
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
+        if self.material.is_some() {
+            self.try_wait(minutes).expect("material clock advance");
+            return;
+        }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_on_grid(dt);
             return;
         }
         self.age(dt);
         self.wet.clock.now += dt as f64;
+    }
+
+    pub fn try_wait(&mut self, minutes: f32) -> Result<(), crate::oil::store::MaterialError> {
+        if self.material.is_none() { self.wait(minutes); return Ok(()); }
+        let dt = minutes.max(0.0);
+        if !dt.is_finite() { return Err(crate::oil::store::MaterialError::Invalid("nonfinite material wait")); }
+        if dt == 0.0 { return Ok(()); }
+        self.material_store().unwrap().check_clock_advance()?;
+        self.advance_material_clock(self.clock() * 60.0 + dt as f64 * 60.0)
     }
 
     /// Wait `dt` minutes with solvent in the paint (engine 3,
@@ -630,6 +646,9 @@ impl Canvas {
     /// The stage at pixel `i` of the buffer: open or setting where wet paint
     /// lies (by its cure), else tacky or dry (by the set film's).
     fn stage_at_index(&self, i: usize) -> Stage {
+        if let Some(material) = &self.material {
+            return crate::oil::stage(&material.store.read_column(i).expect("material pixel"));
+        }
         let p = self.wet.clock.px.get(i).copied().unwrap_or(Px::FRESH);
         if self.wet.vol[i] >= 1e-3 {
             if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }
@@ -652,6 +671,13 @@ impl Canvas {
     /// have waiting; then the rest of the way to touch-dry is the shortcut
     /// above.
     pub fn dry(&mut self) {
+        if self.material.is_some() {
+            while self.stages().iter().any(|stage| *stage != Stage::Dry)
+                || (0..self.f.w * self.f.h).any(|i| self.material_store().unwrap().read_column(i).unwrap().state.free_solvent_um > crate::thinner::SOLVENT_FLOOR) {
+                self.wait(10.0);
+            }
+            return;
+        }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_out_solvent();
         }
@@ -1012,6 +1038,14 @@ impl Canvas {
         };
         let px_um = self.px_mm() * 1000.0;
         let spectral = self.spectral_films();
+        if spectral && self.backing.is_empty() {
+            self.backing.resize(self.px.len(), Default::default());
+        }
+        let backing_rows = if spectral {
+            rayon::iter::Either::Left(self.backing[ex.1 * w..ex.3 * w].par_chunks_mut(w).map(Some))
+        } else {
+            rayon::iter::Either::Right((ex.1..ex.3).into_par_iter().map(|_| None))
+        };
         let wet = &mut self.wet;
         let (lat, hide) = (&wet.lat, &wet.hide);
         let add = &add;
@@ -1020,8 +1054,9 @@ impl Canvas {
             .zip(wet.vol[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(self.film[ex.1 * w..ex.3 * w].par_chunks_mut(w))
             .zip(wet.cover[ex.1 * w..ex.3 * w].par_chunks_mut(w))
+            .zip(backing_rows)
             .enumerate()
-            .for_each(|(j, (((px, vv), ff), cv))| {
+            .for_each(|(j, ((((px, vv), ff), cv), mut backing))| {
                 let y = ex.1 + j;
                 for x in ex.0..ex.2 {
                     let k = j * ew + x - ex.0;
@@ -1037,7 +1072,13 @@ impl Canvas {
                     }
                     let ti = t[k] / COAT_UM;
                     let i = y * w + x;
-                    px[x] = crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, crate::wet::bead_cover(cover[k], ti, px_um), spectral);
+                    let cover = crate::wet::bead_cover(cover[k], ti, px_um);
+                    px[x] = if let Some(backing) = backing.as_deref_mut() {
+                        backing[x] = backing[x].under(px[x]).over_wet(&lat[i], hide[i][0], ti, cover);
+                        backing[x].color
+                    } else {
+                        crate::wet::over_latent(&lat[i], hide[i][0], px[x], ti, cover, false)
+                    };
                     ff[x] += ti;
                     vv[x] = 0.0;
                     cv[x] = 1.0;

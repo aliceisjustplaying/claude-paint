@@ -40,6 +40,7 @@ pub fn render(board: &Board, tubes: &Palette) -> Result<(usize, usize, Vec<u8>),
         let mut mix = tubes.pile(h.fractions());
         mix.solvent = h.solvent;
         mix.oil_rate = h.oil_rate;
+        mix.binders = h.binders;
         let paint = mix.laid(h.medium);
         let paint = if h.thinner > 0.0 { paint.with_thinner(h.thinner) } else { paint };
         // the heap: a thick slab, the bead left standing where the knife lifts

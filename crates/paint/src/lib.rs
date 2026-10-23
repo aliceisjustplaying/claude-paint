@@ -15,6 +15,7 @@ pub mod drying;
 pub mod mask;
 pub mod mixer;
 pub mod noise;
+pub mod oil;
 pub mod path;
 pub mod edge;
 pub mod fence;
@@ -133,6 +134,10 @@ pub const PIGMENT_MIXER: u32 = 9;
 pub const SUPPORTED_ENGINES: [u32; 8] = [1, 2, 3, 4, 5, engine7::ENGINE, REACH_END, PIGMENT_MIXER];
 
 /// Whether engine version `v` is one this crate paints with.
+pub fn supported_material_revision(engine: u32, revision: u32) -> bool {
+    supported_engine(engine) && (revision == 0 || (engine >= 9 && revision == 1))
+}
+
 pub fn supported_engine(v: u32) -> bool {
     SUPPORTED_ENGINES.contains(&v)
 }

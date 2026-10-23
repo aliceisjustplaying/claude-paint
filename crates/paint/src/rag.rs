@@ -267,9 +267,9 @@ struct Seg {
 /// 1 dipped well, as of `wet_at`; refolding preserves this dampness, and
 /// spirits evaporate, `DAMP_HALF_MIN`), the fold in use, and its own
 /// randomness (the cloth's creases).
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, PartialEq)]
 pub struct Rag {
+    pub absorbed: Option<crate::oil::exchange::MaterialPayload>,
     pub width: f32,
     pub load: f32,
     pub soaked: f32,
@@ -289,10 +289,62 @@ pub struct Rag {
     pub mobile: Mobile,
 }
 
+impl std::fmt::Debug for Rag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut state = f.debug_struct("Rag");
+        state.field("width", &self.width).field("load", &self.load)
+            .field("soaked", &self.soaked).field("damp", &self.damp)
+            .field("wet_at", &self.wet_at).field("fold", &self.fold)
+            .field("seed", &self.seed).field("solvent_mm3", &self.solvent_mm3)
+            .field("mobile", &self.mobile);
+        if let Some(material) = &self.absorbed { state.field("absorbed", material); }
+        state.finish()
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+impl serde::Serialize for Rag {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let material = crate::oil::wire::material_schema();
+        if self.absorbed.is_some() && !material {
+            return Err(serde::ser::Error::custom("absorbed chemical material requires a versioned replay envelope"));
+        }
+        let mut state = serializer.serialize_struct("Rag", if material { 10 } else { 9 })?;
+        state.serialize_field("width", &self.width)?;
+        state.serialize_field("load", &self.load)?;
+        state.serialize_field("soaked", &self.soaked)?;
+        state.serialize_field("damp", &self.damp)?;
+        state.serialize_field("wet_at", &self.wet_at)?;
+        state.serialize_field("fold", &self.fold)?;
+        state.serialize_field("seed", &self.seed)?;
+        state.serialize_field("solvent_mm3", &self.solvent_mm3)?;
+        state.serialize_field("mobile", &self.mobile)?;
+        if material { state.serialize_field("absorbed", &self.absorbed)?; }
+        state.end()
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+impl<'de> serde::Deserialize<'de> for Rag {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Legacy { width: f32, load: f32, soaked: f32, damp: f32, wet_at: f64, fold: u32, seed: u64, solvent_mm3: f64, mobile: Mobile }
+        #[derive(serde::Deserialize)]
+        struct Columns { legacy: Legacy, absorbed: Option<crate::oil::exchange::MaterialPayload> }
+        use serde::Deserialize;
+        let (legacy, absorbed) = if crate::oil::wire::material_schema() {
+            let columns = Columns::deserialize(deserializer)?;
+            (columns.legacy, columns.absorbed)
+        } else { (Legacy::deserialize(deserializer)?, None) };
+        Ok(Self { width: legacy.width, load: legacy.load, soaked: legacy.soaked, damp: legacy.damp, wet_at: legacy.wet_at, fold: legacy.fold, seed: legacy.seed, solvent_mm3: legacy.solvent_mm3, mobile: legacy.mobile, absorbed })
+    }
+}
+
 impl Rag {
     /// A clean rag bunched to a pad `width` units across.
     pub fn new(width: f32, seed: u64) -> Self {
-        Rag { width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default() }
+        Rag { absorbed: None, width: width.max(0.1), load: 0.0, soaked: 0.0, damp: 0.0, wet_at: 0.0, fold: 0, seed, solvent_mm3: 0.0, mobile: Mobile::default() }
     }
 
     /// Turn a cleaner face outward, retaining the cloth's dampness.
@@ -304,6 +356,9 @@ impl Rag {
         self.load = self.soaked.clamp(0.0, 1.0);
         // (what was wet at the old face's surface is folded inside, in
         // `soaked`)
+        if let Some(material) = &self.mobile.lat.material {
+            self.absorbed.get_or_insert_with(Default::default).append(material, self.mobile.mm3 as f64);
+        }
         self.mobile = Mobile::default();
         t.secs += pace::REFOLD;
     }
@@ -506,6 +561,7 @@ impl Canvas {
     /// there; returns how much (coats; the canvas holds it in µm).
     #[inline]
     fn rag_take(&mut self, i: usize, take: f32) -> f32 {
+        if take > 0.0 && !self.wet.material_changed.is_empty() { self.wet.material_changed[i] = 1; }
         let v0 = self.wet.vol[i];
         let mut ts = 0.0;
         if let Some(s) = self.wet.solv.get_mut(i)
@@ -641,13 +697,16 @@ impl Canvas {
                 if take > 0.0 {
                     // (the drain switch: the rag lifts from the top down,
                     // `bristle::take_from`)
-                    let layers = if self.engine >= crate::PIGMENT_MIXER && !self.wet.lat[i].layers.is_empty() {
+                    let layers = if (self.engine >= crate::PIGMENT_MIXER && !self.wet.lat[i].layers.is_empty()) || self.wet.lat[i].material.is_some() {
                         let (below, top) = self.wet.lat[i].split_top(self.wet.vol[i], self.wet.hide[i], take, self.drain);
                         Some((Latent::from_layers(below), Latent::from_layers(top)))
                     } else { None };
                     let h = if let Some((_, (_, _, h))) = &layers {
                         if self.drain { crate::bristle::fluid_of(*h) } else { *h }
                     } else if self.drain { crate::bristle::take_from(&mut self.wet.hide[i], self.wet.vol[i], take) } else { self.wet.hide[i] };
+                    if !pooled && let Some((_, (_, lat, _))) = &layers && let Some(material) = &lat.material {
+                        rag.absorbed.get_or_insert_with(Default::default).append(material, take as f64 * unit);
+                    }
                     if pooled {
                         let l = layers.as_ref().map_or(&self.wet.lat[i], |(_, (_, lat, _))| lat);
                         got.lat.add_parts(l, take);
@@ -680,7 +739,7 @@ impl Canvas {
             k0 = k1;
         }
         if let Some(pl) = pool.as_deref_mut() {
-            let (laid, laid_s) = self.rag_smear(pl, &got, (x0, y0, x1, y1), touch, 0.25 * w_mm as f32, &expo);
+            let (laid, laid_s) = self.rag_smear(pl, &got, (x0, y0, x1, y1), touch, 0.25 * w_mm as f32, &expo, rag);
             lifted -= laid;
             lifted_s -= laid_s;
         }
@@ -707,7 +766,7 @@ impl Canvas {
     /// width long (`quarter_mm`) at `pace::RAG_MM_S`: a contact smears by
     /// how far it slides and soaks by how long it lasts (`touch`), so a
     /// shorter step does less of each.
-    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), touch: Touch, quarter_mm: f32, expo: &impl Fn(f32, f32) -> (f32, f32, f32, f32)) -> (f64, f64) {
+    fn rag_smear(&mut self, pl: &mut Pool, got: &Pool, px: (usize, usize, usize, usize), touch: Touch, quarter_mm: f32, expo: &impl Fn(f32, f32) -> (f32, f32, f32, f32), rag: &mut Rag) -> (f64, f64) {
         let f = self.f;
         let (x0, y0, x1, y1) = px;
         let quarter = quarter_mm.max(1e-6);
@@ -740,6 +799,10 @@ impl Canvas {
         let laid_s = if pl.vol > 1e-9 { out * pl.solv / pl.vol } else { 0.0 };
         pl.solv -= laid_s;
         pl.vol -= out;
+        if let Some(material) = &pl.lat.material {
+            let unit = self.px_mm().powi(2) * (COAT_UM / 1000.0);
+            rag.absorbed.get_or_insert_with(Default::default).append(material, (pl.vol.max(0.0) * (1.0 - left) * unit) as f64);
+        }
         // what is left soaks in a little more; this step's lift joins it
         let v0 = pl.vol.max(0.0) * left;
         let t = v0 + got.vol;
@@ -754,6 +817,8 @@ impl Canvas {
                 pl.hide[q] = (pl.hide[q] * v0 + got.hide[q]) / t;
             }
             pl.cure = (pl.cure * v0 + got.cure) / t;
+        } else {
+            pl.lat.material = None;
         }
         pl.vol = t;
         pl.solv = pl.solv.max(0.0) * left + got.solv;
@@ -764,6 +829,7 @@ impl Canvas {
     /// `solv_um` µm of solvent at pixel `i`, mixing by volume as a brush's
     /// paint does (`bristle::Surf::add`).
     fn rag_lay(&mut self, i: usize, v: f32, pl: &Pool, solv_um: f32) {
+        if (v > 0.0 || solv_um > 0.0) && !self.wet.material_changed.is_empty() { self.wet.material_changed[i] = 1; }
         let t = self.wet.vol[i] + v;
         let a = v / t;
         let l = &mut self.wet.lat[i];
@@ -788,7 +854,12 @@ impl Canvas {
         // drains paint a brush lays (`bristle::ground_drain`)
         if self.drain && self.absorb_any {
             let hd = &mut self.wet.hide[i];
+            let packed = hd[7];
             self.wet.vol[i] = crate::bristle::ground_drain(&mut self.absorb[i], t, hd);
+            if self.wet.vol[i] < t && let Some(sink) = self.wet.lat[i].drain_material(t, self.wet.vol[i], packed, hd[7]) {
+                assert_eq!(self.wet.material_sinks.len(), self.wet.vol.len(), "chemical smear requires a sink ledger");
+                self.wet.material_sinks[i].push(sink);
+            }
         }
         if solv_um > 0.0
             && let Some(sv) = self.wet.solv.get_mut(i)
@@ -806,6 +877,10 @@ impl Canvas {
 
     /// `rag_wipe`, lifting only inside `clip` (by its value) when it is given.
     fn rag_wipe_in(&mut self, rag: &mut Rag, pts: &[(f32, f32)], pressure: &[f32], seed: u64, clip: Option<&Mask>) -> f64 {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(pts, 1.2 * rag.width + 2.0);
+            return self.with_native_material_in(rect, |canvas| canvas.rag_wipe_in(rag, pts, pressure, seed, clip));
+        }
         if pts.is_empty() {
             return 0.0;
         }
@@ -885,7 +960,7 @@ impl Canvas {
     /// soaked by the time since it was last brought up to date, less
     /// `busy_s` (the hand time of the contact about to begin, which the
     /// tally already counts).
-    fn rag_pool(&self, rag: &Rag, busy_s: f64) -> Pool {
+    fn rag_pool(&self, rag: &mut Rag, busy_s: f64) -> Pool {
         let m = rag.mobile.clone();
         if m.mm3 <= 0.0 {
             return Pool::default();
@@ -898,6 +973,9 @@ impl Canvas {
         let dt = (dt - busy_s).max(0.0) as f32;
         let quarter = 0.25 * rag.width * self.mm_per_unit;
         let left = (1.0 - SOAK).powf(dt * pace::RAG_MM_S as f32 / quarter.max(1e-6));
+        if let Some(material) = &m.lat.material {
+            rag.absorbed.get_or_insert_with(Default::default).append(material, (m.mm3 * (1.0 - left)) as f64);
+        }
         let unit = self.px_mm().powi(2) * (COAT_UM / 1000.0);
         let sunit = self.px_mm().powi(2) / 1000.0;
         Pool { vol: m.mm3 * left / unit, lat: m.lat, hide: m.hide, cure: m.cure, solv: m.solv_mm3 * left / sunit }
@@ -1026,6 +1104,10 @@ impl Canvas {
     /// patch of contact about the pad's width. Counts the hand time; returns
     /// the volume lifted (mm³).
     pub fn rag_blot(&mut self, rag: &mut Rag, x: f32, y: f32, pressure: f32, seed: u64) -> f64 {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(&[(x, y)], 1.2 * rag.width + 2.0);
+            return self.with_native_material_in(rect, |canvas| canvas.rag_blot(rag, x, y, pressure, seed));
+        }
         self.tally.rag_blot();
         let cs = rag.cloth_seed(seed);
         let mmu = self.mm_per_unit;

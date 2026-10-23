@@ -27,12 +27,11 @@ use crate::pigment::{Pigment, hiding_of, scatter_for};
 
 pub const LAT: usize = crate::mixer::LATENT_SIZE;
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Latent {
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
-    #[cfg_attr(feature = "replay-effects", serde(skip))]
+    pub material: Option<crate::oil::exchange::MaterialPayload>,
     pub(crate) layers: Vec<Layer>,
 }
 
@@ -50,6 +49,47 @@ impl std::fmt::Debug for Latent {
     }
 }
 
+#[cfg(feature = "replay-effects")]
+impl serde::Serialize for Latent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let material = crate::oil::wire::material_schema();
+        if self.material.is_some() && !material {
+            return Err(serde::ser::Error::custom("chemical tool material requires a versioned replay envelope"));
+        }
+        let mut state = serializer.serialize_struct("Latent", if material { 3 } else { 2 })?;
+        state.serialize_field("color", &self.color)?;
+        state.serialize_field("parts", &self.parts)?;
+        if material {
+            state.serialize_field("material", &self.material)?;
+        }
+        state.end()
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+impl<'de> serde::Deserialize<'de> for Latent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Legacy { color: [f32; LAT], parts: Vec<(usize, f32)> }
+        #[derive(serde::Deserialize)]
+        struct Columns { legacy: Legacy, material: Option<crate::oil::exchange::MaterialPayload> }
+        use serde::Deserialize;
+        if crate::oil::wire::material_schema() {
+            let columns = Columns::deserialize(deserializer)?;
+            let layers = columns.material.as_ref().map(|material| material.fragments.iter().filter(|f| f.volume > 0.0).map(|fragment| {
+                let mut lat = Latent::from_color(fragment.recipe.color);
+                lat.parts = fragment.recipe.parts.clone();
+                Layer { share: fragment.volume as f32, lat, hide: fragment.properties() }
+            }).collect()).unwrap_or_default();
+            Ok(Self { color: columns.legacy.color, parts: columns.legacy.parts, material: columns.material, layers })
+        } else {
+            let legacy = Legacy::deserialize(deserializer)?;
+            Ok(Self { color: legacy.color, parts: legacy.parts, material: None, layers: Vec::new() })
+        }
+    }
+}
+
 impl std::ops::Deref for Latent {
     type Target = [f32; LAT];
     fn deref(&self) -> &Self::Target { &self.color }
@@ -60,7 +100,36 @@ impl std::ops::DerefMut for Latent {
 }
 
 impl Latent {
-    pub fn from_color(color: [f32; LAT]) -> Self { Self { color, parts: Vec::new(), layers: Vec::new() } }
+    pub fn from_color(color: [f32; LAT]) -> Self { Self { color, parts: Vec::new(), material: None, layers: Vec::new() } }
+
+    pub(crate) fn remove_species(&mut self, before: f32, after: f32, solvent: bool) -> Option<crate::oil::exchange::MaterialSink> {
+        use crate::oil::exchange::{MaterialSink, SinkKind};
+        let material = self.material.as_mut()?;
+        material.scale(before as f64);
+        let inventory: Vec<f64> = material.fragments.iter().map(|f| if solvent { f.solvent } else { f.binder }).collect();
+        let amount = (before - after).max(0.0) as f64 * crate::surface::COAT_UM as f64;
+        let mut removed = if solvent { material.remove_solvent(amount) } else { material.remove_binder(amount) };
+        for (fragment, old) in material.fragments.iter_mut().zip(inventory) {
+            let lost = old - if solvent { fragment.solvent } else { fragment.binder };
+            fragment.volume = (fragment.volume - lost / crate::surface::COAT_UM as f64).max(0.0);
+        }
+        for fragment in &mut removed.fragments {
+            fragment.volume = (fragment.binder + fragment.solvent) / crate::surface::COAT_UM as f64;
+        }
+        material.scale(if after > 0.0 { 1.0 / after as f64 } else { 0.0 });
+        Some(MaterialSink { kind: if solvent { SinkKind::Evaporated } else { SinkKind::Ground }, material: removed })
+    }
+
+    pub(crate) fn drain_material(&mut self, before: f32, after: f32, packed_before: f32, packed_after: f32) -> Option<crate::oil::exchange::MaterialSink> {
+        let material = self.material.as_mut()?;
+        material.scale(before as f64);
+        let lost = (before - after).max(0.0) as f64;
+        let start = before as f64 * packed_before as f64;
+        let reached = (after as f64 * packed_after as f64 - start + lost).max(0.0);
+        let removed = material.drain_binder(lost * crate::surface::COAT_UM as f64, start, reached);
+        material.scale(if after > 0.0 { 1.0 / after as f64 } else { 0.0 });
+        Some(crate::oil::exchange::MaterialSink { kind: crate::oil::exchange::SinkKind::Ground, material: removed })
+    }
 
     pub(crate) fn layers(&self, volume: f32, hide: Prop) -> Vec<Layer> {
         if self.layers.is_empty() {
@@ -68,7 +137,15 @@ impl Latent {
         }
         let scatter: f32 = self.layers.iter().map(|l| l.share * l.hide[0]).sum();
         let scale = if scatter > 0.0 { hide[0] / scatter } else { 1.0 };
+        let mut depth = 0.0;
         self.layers.iter().cloned().map(|mut l| {
+            if let Some(material) = &self.material {
+                let (through, _) = material.split_top_with_geometry((1.0 - depth - l.share as f64).max(0.0), volume as f64 * crate::surface::COAT_UM as f64);
+                let (_, mut slice) = through.split_top_with_geometry(l.share as f64, volume as f64 * crate::surface::COAT_UM as f64);
+                slice.scale(1.0 / l.share as f64);
+                l.lat.material = Some(slice);
+            }
+            depth += l.share as f64;
             l.share *= volume;
             l.hide[0] *= scale;
             l
@@ -104,6 +181,13 @@ impl Latent {
                 let mut rest = layer.clone();
                 rest.hide = remaining;
                 rest.share -= amount;
+                if let Some(material) = &layer.lat.material {
+                    let (mut below_material, mut top_material) = material.split_top_with_geometry(amount as f64 / layer.share as f64, layer.share as f64 * crate::surface::COAT_UM as f64);
+                    below_material.scale(layer.share as f64 / rest.share as f64);
+                    top_material.scale(layer.share as f64 / amount as f64);
+                    rest.lat.material = Some(below_material);
+                    layer.lat.material = Some(top_material);
+                }
                 below.push(rest);
             }
             layer.share = amount;
@@ -114,6 +198,9 @@ impl Latent {
     }
 
     pub(crate) fn add_parts(&mut self, other: &Self, weight: f32) {
+        if let Some(material) = &other.material {
+            self.material.get_or_insert_with(Default::default).append(material, weight as f64);
+        }
         for &(i, f) in &other.parts {
             match self.parts.iter_mut().find(|p| p.0 == i) {
                 Some(p) => p.1 += f * weight,
@@ -123,12 +210,15 @@ impl Latent {
     }
 
     pub(crate) fn scale_parts(&mut self, weight: f32) {
+        if weight <= 0.0 { self.material = None; }
+        else if let Some(material) = &mut self.material { material.scale(weight as f64); }
         for p in &mut self.parts { p.1 *= weight; }
     }
 
     pub(crate) fn blend_parts(&mut self, other: &Self, weight: f32) {
         self.layers.clear();
-        if self.parts.is_empty() && other.parts.is_empty() { return; }
+        assert!(weight <= 0.0 || weight >= 1.0 || self.material.is_some() == other.material.is_some(), "mixing chemical paint requires resolved material on both sources");
+        if self.parts.is_empty() && other.parts.is_empty() && self.material.is_none() && other.material.is_none() { return; }
         self.scale_parts(1.0 - weight);
         self.add_parts(other, weight);
         self.parts.retain(|p| p.1 > 0.0);
@@ -178,6 +268,8 @@ fn lerp_prop(p: &mut Prop, q: Prop, a: f32) {
 /// hiding with `Paint::new`/`with_hiding`; `hiding()` reports it back.
 #[derive(Clone, Debug)]
 pub struct Paint {
+    #[cfg_attr(feature = "replay-effects", serde(skip))]
+    pub material_recipe: Option<crate::oil::exchange::Recipe>,
     pub pigment_latent: Option<[f32; LAT]>,
     pub spectral_films: bool,
     pub parts: Vec<(usize, f32)>,
@@ -233,11 +325,11 @@ impl Paint {
     /// ratio: over black ÷ over white; 0.05 = glaze, 0.5 = scumble,
     /// 0.92 = body).
     pub fn new(color: Rgb, hiding: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { material_recipe: None, pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter: scatter_for(luminance(color), hiding), stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     /// A paint of masstone `color` that scatters `scatter` per coat.
     pub fn km(color: Rgb, scatter: f32, stiff: f32) -> Self {
-        Paint { pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
+        Paint { material_recipe: None, pigment_latent: None, spectral_films: false, parts: Vec::new(), color, scatter, stiff, drying: 1.0, thinner: 0.0, solvent: 0.0, oil: 1.0, packed: PACKED_OIL, floor: DRAINED_FLOOR, oil_volume: OIL_VOLUME }
     }
     pub fn body(color: Rgb) -> Self {
         Paint::new(color, 0.92, 1.0)
@@ -274,7 +366,24 @@ impl Paint {
         hiding_of(luminance(self.color), self.scatter)
     }
     pub fn latent(&self) -> Latent {
-        Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), layers: Vec::new() }
+        let mut latent = Latent { color: self.pigment_latent.unwrap_or_else(|| crate::mixer::encode(&self.color)), parts: self.parts.clone(), material: None, layers: Vec::new() };
+        if let Some(recipe) = &self.material_recipe {
+            let mut recipe = recipe.clone();
+            recipe.properties = self.prop();
+            recipe.color = latent.color;
+            recipe.parts = latent.parts.clone();
+            let q = self.oil_volume as f64;
+            let pigment_fraction = (1.0 - q) / (1.0 - q + q * self.oil as f64);
+            let body = (1.0 - self.solvent.clamp(0.0, 0.95)) as f64 * crate::COAT_UM as f64;
+            latent.material = Some(crate::oil::exchange::MaterialPayload { fragments: vec![crate::oil::exchange::Fragment {
+                reference_area: 1.0,
+                volume: 1.0, pigment: body * pigment_fraction, binder: body * (1.0 - pigment_fraction),
+                solvent: crate::COAT_UM as f64 * (self.solvent as f64 + self.thinner as f64 / (1.0 - self.thinner as f64)),
+                oxygen: 0.0, oxidation: 0.0, network: 0.0, inhibitor: 1.0,
+                recipe, history: Default::default(),
+            }] });
+        }
+        latent
     }
     /// Kubelka–Munk scattering per coat (the `scatter` field).
     pub fn scatter(&self) -> f32 {
@@ -295,6 +404,8 @@ impl Paint {
 
 #[derive(Clone)]
 pub(crate) struct Wet {
+    pub(crate) material_sinks: Vec<Vec<crate::oil::exchange::MaterialSink>>,
+    pub(crate) material_changed: Vec<u8>,
     pub(crate) vol: Vec<f32>,
     pub(crate) lat: Vec<Latent>,
     /// [scattering, stiffness, drying rate, solvent, oil] of the wet paint.
@@ -332,7 +443,7 @@ pub(crate) struct Wet {
 
 impl Wet {
     pub fn new(n: usize) -> Self {
-        Wet { vol: vec![0.0; n], lat: vec![Latent::default(); n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
+        Wet { material_changed: Vec::new(), material_sinks: Vec::new(), vol: vec![0.0; n], lat: vec![Latent::default(); n], hide: vec![[0.0, 0.5, 1.0, 0.0, 1.0, PACKED_OIL, DRAINED_FLOOR, 0.0, OIL_VOLUME, 0.0]; n], stroke: vec![0; n], touched: vec![0; n], floor: vec![0.0; n], cover: vec![1.0; n], current: 0, dirty: None, clock: Default::default(), solv: Vec::new(), laid: Vec::new(), laid_id: Vec::new() }
     }
 
     /// Allocate the solvent and the strokes' ceilings (a thinned paint is
@@ -459,6 +570,7 @@ impl Canvas {
     /// The visible color at pixel `i`: the dry picture with any wet paint
     /// on it (at its laid thickness, before it levels).
     pub(crate) fn look_px(&self, i: usize) -> Rgb {
+        if self.material_exchange_needed() { return self.material_look_px(i); }
         let v = self.wet.vol[i];
         if v < 1e-5 {
             return self.px[i];
@@ -469,6 +581,7 @@ impl Canvas {
     /// The visible colors, pixel by pixel over the window: the dry
     /// picture with any wet paint on it (at its laid thickness).
     pub fn seen(&self) -> Vec<Rgb> {
+        if self.material_exchange_needed() { return self.material_seen(); }
         use rayon::prelude::*;
         if self.engine >= 4 {
             // engine 4: a matte surface veils its colors (wet paint is oily, glossy)
@@ -494,6 +607,7 @@ impl Canvas {
     /// dry picture plus wet paint, averaged in linear light: the underlayer a
     /// new mark there will sit on.
     pub fn under(&self, x: f32, y: f32, r: f32) -> Rgb {
+        if self.material_exchange_needed() { return self.material_under(x, y, r); }
         let f = self.f;
         let n = if r * f.scale < 1.5 { 0 } else { 2 };
         let (mut acc, mut k) = ([0.0f32; 3], 0.0f32);
@@ -523,23 +637,30 @@ impl Canvas {
 
     /// Wet paint film at a point (units), µm: 0 where the paint is dry.
     pub fn wet_um(&self, x: f32, y: f32) -> f32 {
+        if self.material_exchange_needed() { return self.material_mobile_coats_at(self.f.index(x, y)) * crate::COAT_UM; }
         self.wet.vol[self.f.index(x, y)] * crate::surface::COAT_UM
     }
 
     /// Total wet paint on the canvas (for tests / debugging).
     pub fn wet_total(&self) -> f64 {
+        if self.material_exchange_needed() { return self.material_wet_coats().iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64); }
         self.wet.vol.iter().map(|&v| v as f64).sum::<f64>() / (self.f.scale as f64 * self.f.scale as f64)
     }
 
     /// Solvent in the open film at a point (units), µm: 0 where there is
     /// none (`crate::thinner`). `wet_um` is the paint alone.
     pub fn solvent_um(&self, x: f32, y: f32) -> f32 {
+        if self.material_exchange_needed() {
+            let column = self.material_store().unwrap().read_column(self.f.index(x, y)).expect("material pixel");
+            return column.state.free_solvent_um + column.cells.iter().map(|cell| cell.solvent_um).sum::<f32>();
+        }
         self.wet.solv.get(self.f.index(x, y)).copied().unwrap_or(0.0)
     }
 
     /// Total solvent on the canvas, in `wet_total`'s units (coats × square
     /// units).
     pub fn solvent_total(&self) -> f64 {
+        if self.material_exchange_needed() { return self.material_store().unwrap().statistics().solvent / self.material_store().unwrap().pixel_area() / crate::COAT_UM as f64 / (self.f.scale as f64 * self.f.scale as f64); }
         self.wet.solv.iter().map(|&v| v as f64).sum::<f64>() / crate::surface::COAT_UM as f64 / (self.f.scale as f64 * self.f.scale as f64)
     }
 }

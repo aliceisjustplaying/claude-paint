@@ -35,6 +35,8 @@ pub(crate) struct Film {
 #[derive(Clone)]
 pub(crate) struct Paint7<'a> {
     parts: &'a Latent,
+    material: Option<Latent>,
+    evaporated: Option<crate::oil::exchange::MaterialSink>,
     hide: [[f32; 4]; 3],
     /// Share of the laid volume left once the solvent is gone.
     keep: f32,
@@ -52,13 +54,19 @@ impl<'a> Paint7<'a> {
             (1.0, hide)
         };
         let hide = if drain { fluid_of(hide) } else { hide };
+        let mut material = (lat.material.is_some() && keep < 1.0).then(|| lat.clone());
+        let evaporated = material.as_mut().and_then(|l| l.remove_species(1.0, keep, true));
         Paint7 {
             parts: lat,
+            material,
+            evaporated,
             hide: [[hide[0], hide[1], hide[2], hide[3]], [hide[3], hide[4], hide[5], hide[6]], [hide[6], hide[7], hide[8], hide[9]]],
             keep,
             cure,
         }
     }
+
+    fn source(&self) -> &Latent { self.material.as_ref().unwrap_or(self.parts) }
 }
 
 #[inline(always)]
@@ -87,9 +95,13 @@ impl Film {
             if skim <= 0.0 {
                 return self.add(i, v, p);
             }
-            if self.surf.layers && *self.vol.add(i) > skim {
+            if (self.surf.layers || (*self.lat.add(i)).material.is_some()) && *self.vol.add(i) > skim {
                 let hide = [p.hide[0][0], p.hide[0][1], p.hide[0][2], p.hide[0][3], p.hide[1][1], p.hide[1][2], p.hide[1][3], p.hide[2][1], p.hide[2][2], p.hide[2][3]];
-                return self.surf.lay_layers(i, v * p.keep, p.parts, hide, p.cure, skim);
+                if let Some(mut sink) = p.evaporated.clone() {
+                    sink.material.scale(v as f64);
+                    self.surf.material_sink(i, Some(sink));
+                }
+                return self.surf.lay_layers(i, v * p.keep, p.source(), hide, p.cure, skim);
             }
             let buried = (*self.vol.add(i) - skim).max(0.0);
             let below = (self.drain && buried > 0.0).then(|| skim_top(&mut *self.hide.add(i), *self.vol.add(i), buried));
@@ -112,8 +124,14 @@ impl Film {
         if v <= 0.0 {
             return;
         }
+        let before = v;
         let v = v * p.keep;
         unsafe {
+            self.surf.mark_material(i);
+            if let Some(mut sink) = p.evaporated.clone() {
+                sink.material.scale(before as f64);
+                self.surf.material_sink(i, Some(sink));
+            }
             let vol = &mut *self.vol.add(i);
             let t = *vol + v;
             let a = v / t;
@@ -124,7 +142,7 @@ impl Film {
             for k in 0..crate::wet::LAT {
                 l[k] += (p.parts[k] - l[k]) * a;
             }
-            (*self.lat.add(i)).blend_parts(p.parts, a);
+            (*self.lat.add(i)).blend_parts(p.source(), a);
             let h = self.hide.add(i).cast::<f32>();
             let (h0, h1, h2) = (h.cast::<[f32; 4]>().read_unaligned(), h.add(3).cast::<[f32; 4]>().read_unaligned(), h.add(6).cast::<[f32; 4]>().read_unaligned());
             h.cast::<[f32; 4]>().write_unaligned(lerp4(h0, p.hide[0], a));
@@ -142,7 +160,13 @@ impl Film {
             // (the ground's draw, or with the drain switch its drain, as
             // `Surf::add` has them)
             let (cap, hd) = (&mut *self.absorb.add(i), &mut *self.hide.add(i));
+            let packed = hd[7];
             *vol = if self.drain { ground_drain(cap, t, hd) } else { ground_draw(cap, v, t, hd) };
+            if *vol < t {
+                let lat = &mut *self.lat.add(i);
+                let sink = if self.drain { lat.drain_material(t, *vol, packed, hd[7]) } else { lat.remove_species(t, *vol, false) };
+                self.surf.material_sink(i, sink);
+            }
         }
     }
 }

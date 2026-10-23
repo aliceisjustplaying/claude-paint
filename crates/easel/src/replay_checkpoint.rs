@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const MAGIC: &[u8; 8] = b"EASLRP04";
+const MATERIAL_MAGIC: &[u8; 8] = b"EASLRP05";
 
 #[derive(Serialize, Deserialize)]
 struct State {
@@ -254,6 +255,11 @@ pub fn read<R: Serialize + DeserializeOwned>(tag: &str, f: impl FnOnce() -> mlua
 }
 
 fn invoke<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl FnOnce() -> mlua::Result<R>) -> mlua::Result<R> {
+    let material = st.is_some_and(|state| state.borrow().tubes.material_revision == 1);
+    paint::oil::wire::with_material_schema(material, || invoke_inner(st, tag, f))
+}
+
+fn invoke_inner<R: Serialize + DeserializeOwned>(st: Option<&S>, tag: &str, f: impl FnOnce() -> mlua::Result<R>) -> mlua::Result<R> {
     let active = TRACE.with(|t| { let t = t.borrow(); t.enabled && !t.nested });
     if !active { return f(); }
     check()?;
@@ -357,17 +363,18 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
     let started = Instant::now();
     check().map_err(|e| e.to_string())?;
     let state = State::capture(&s.st);
+    let material = s.st.borrow().tubes.material_revision == 1;
     let mut bytes = 0;
     atomic(path, |f| {
-        f.write_all(MAGIC).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
+        f.write_all(if material { MATERIAL_MAGIC } else { MAGIC }).and_then(|_| f.write_all(&[0; 40])).map_err(|e| e.to_string())?;
         {
             let mut writer = zstd::stream::write::Encoder::new(&mut *f, 1).map_err(|e| e.to_string())?;
             writer.write_all(&paint::mixer::film_identity().to_le_bytes()).map_err(|e| e.to_string())?;
-            TRACE.with(|t| {
+            paint::oil::wire::with_material_schema(material, || TRACE.with(|t| {
                 #[derive(Serialize)]
                 struct SavedRef<'a> { identity: &'a Identity, done: usize, events: &'a Events, state: &'a State, digests: &'a Option<Vec<String>> }
                 bincode::serialize_into(&mut writer, &SavedRef { identity, done, events: &t.borrow().events, state: &state, digests }).map_err(|e| e.to_string())
-            })?;
+            }))?;
             bincode::serialize_into(&mut writer, &s.canvas().is_some()).map_err(|e| e.to_string())?;
             if let Some(c) = s.canvas() { c.write_state(&mut writer, "").map_err(|e| e.to_string())?; }
             writer.finish().map_err(|e| e.to_string())?;
@@ -383,6 +390,12 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
 }
 
 fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Option<paint::Canvas>, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+    if let Some(canvas) = &canvas {
+        let state = s.st.borrow();
+        if canvas.engine() != state.tubes.engine || canvas.material_revision() != state.tubes.material_revision {
+            return Err("replay checkpoint: engine or material revision differs; refusing reconstruction".into());
+        }
+    }
     TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, playback: true, events: std::mem::take(&mut saved.events), ..Trace::default() });
     for (i, chunk) in chunks.iter().take(saved.done).enumerate() {
         s.run(chunk).map_err(|e| format!("replay checkpoint: prefix chunk {} failed: {e}", i + 1))?;
@@ -390,7 +403,9 @@ fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Op
     }
     check().map_err(|e| e.to_string())?;
     let complete = TRACE.with(|t| { let t = t.borrow(); t.at == t.events.len() });
-    if !complete || encode(&State::capture(&s.st))? != encode(&saved.state)? {
+    let material = s.st.borrow().tubes.material_revision == 1;
+    let same_state = paint::oil::wire::with_material_schema(material, || Ok::<_, String>(encode(&State::capture(&s.st))? == encode(&saved.state)?))?;
+    if !complete || !same_state {
         return Err("replay checkpoint: incomplete or divergent reconstructed state".into());
     }
     if s.canvas().is_some() != canvas.is_some() {
@@ -614,7 +629,7 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         let mut digest = [0; 32];
         f.read_exact(&mut magic).and_then(|_| f.read_exact(&mut digest)).map_err(|e| e.to_string())?;
         if matches!(&magic, b"EASLRP01" | b"EASLRP02" | b"EASLRP03") { return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into()); }
-        if &magic != MAGIC { return Err("not a resumable replay checkpoint (unsupported format)".into()); }
+        if &magic != MAGIC && &magic != MATERIAL_MAGIC { return Err("not a resumable replay checkpoint (unsupported format)".into()); }
         if hash_reader(&mut f)? != digest { return Err("checkpoint checksum mismatch".into()); }
         f.seek(SeekFrom::Start(40)).map_err(|e| e.to_string())?;
         let mut elapsed = [0; 8];
@@ -625,12 +640,13 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
         if u64::from_le_bytes(mixer) != paint::mixer::film_identity() {
             return Err("replay checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build".into());
         }
-        let saved = read_saved(&mut reader, 4 << 30)?;
+        let saved = paint::oil::wire::with_material_schema(&magic == MATERIAL_MAGIC, || read_saved(&mut reader, 4 << 30))?;
         let has_canvas: bool = bincode::deserialize_from(&mut reader).map_err(|e| e.to_string())?;
         let (canvas, header) = if has_canvas {
             let (canvas, header) = paint::Canvas::read_state(&mut reader).map_err(|e| e.to_string())?;
             (Some(canvas), header)
         } else { (None, String::new()) };
+        if canvas.as_ref().is_some_and(|canvas| (canvas.material_revision() == 1) != (&magic == MATERIAL_MAGIC)) { return Err("checkpoint tool and canvas material schemas disagree".into()); }
         let mut extra = [0];
         if !header.is_empty() || reader.read(&mut extra).map_err(|e| e.to_string())? != 0 { return Err("trailing or unexpected checkpoint data".into()); }
         Ok((saved, canvas, f64::from_le_bytes(elapsed)))
@@ -641,6 +657,23 @@ fn load(path: &Path) -> Result<(Saved, Option<paint::Canvas>, f64), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn material_tool_envelope_preserves_recipes_histories_and_binder_fractions() {
+        let directory = Temp::new();
+        let path = directory.0.join("material.ck");
+        let source = "canvas{size=16,aspect=1,ground={}} p=pile{{'lead white',1},oil='walnut'} b=brush{kind='round',width=80} b:load(p,0.8) b:stroke({{100,500},{900,500}})";
+        let mut session = Session::new(16).unwrap();
+        session.run(source).unwrap();
+        let identity = Identity::new(source, 16).unwrap();
+        write_checkpoint(&path, &session, &identity, 1, &None, 0.0).unwrap();
+        assert_eq!(&std::fs::read(&path).unwrap()[..8], MATERIAL_MAGIC);
+        let (saved, canvas, _) = load(&path).unwrap();
+        assert_eq!(canvas.unwrap().material_revision(), 1);
+        let same = paint::oil::wire::with_material_schema(true, || encode(&saved.state).unwrap() == encode(&State::capture(&session.st)).unwrap());
+        assert!(same);
+        assert_eq!(saved.state.board.heaps[0].binders, [0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
 
     const SOURCE: &str = r#"--@ box every
 --@ engine 8

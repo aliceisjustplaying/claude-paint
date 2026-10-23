@@ -544,7 +544,12 @@ impl Held {
     /// canvas of engine 3 takes it: `Canvas::drag` and `touch` panic before
     /// drawing otherwise.
     pub fn load(&mut self, paint: Paint, amount: f32) {
-        let lat = paint.latent();
+        self.load_material(paint, amount, None);
+    }
+
+    pub fn load_material(&mut self, paint: Paint, amount: f32, material: Option<crate::oil::exchange::MaterialPayload>) {
+        let mut lat = paint.latent();
+        if material.is_some() { lat.material = material; }
         let full = self.full();
         let scatter = paint.scatter();
         let t = paint.thinner;
@@ -572,7 +577,12 @@ impl Held {
     /// colors then come off side by side within one stroke and mingle as they
     /// go. With `Part::ALL` this is `load`.
     pub fn load_part(&mut self, paint: Paint, amount: f32, part: &Part) {
-        let lat = paint.latent();
+        self.load_part_material(paint, amount, part, None);
+    }
+
+    pub fn load_part_material(&mut self, paint: Paint, amount: f32, part: &Part, material: Option<crate::oil::exchange::MaterialPayload>) {
+        let mut lat = paint.latent();
+        if material.is_some() { lat.material = material; }
         let full = self.full();
         let scatter = paint.scatter();
         for (i, b) in self.bristles.iter_mut().enumerate() {
@@ -598,17 +608,31 @@ impl Held {
     /// Wipe the brush on a rag: remove `frac` of the paint in it (and of the
     /// dry pastel it holds).
     pub fn wipe(&mut self, frac: f32) {
+        self.wipe_material(frac);
+    }
+
+    pub fn wipe_material(&mut self, frac: f32) -> crate::oil::exchange::MaterialPayload {
+        let mut removed = crate::oil::exchange::MaterialPayload::default();
         self.pastel_mg *= 1.0 - frac.clamp(0.0, 1.0);
         for b in &mut self.bristles {
+            if let Some(material) = &b.lat.material { removed.append(material, (b.vol * frac.clamp(0.0, 1.0)) as f64); }
             b.vol *= 1.0 - frac.clamp(0.0, 1.0);
             b.solvent *= 1.0 - frac.clamp(0.0, 1.0);
+            if b.vol <= 0.0 { b.lat.material = None; }
         }
+        removed
     }
 
     /// Wipe thoroughly and load fresh paint.
     pub fn reload(&mut self, paint: Paint, amount: f32) {
         self.wipe(0.85);
         self.load(paint, amount);
+    }
+
+    pub fn reload_material(&mut self, paint: Paint, amount: f32, material: crate::oil::exchange::MaterialPayload) -> crate::oil::exchange::MaterialPayload {
+        let removed = self.wipe_material(0.85);
+        self.load_material(paint, amount, Some(material));
+        removed
     }
 
     /// Paint (with any solvent in it) left in the brush, relative to a full
@@ -782,6 +806,8 @@ pub(crate) struct Surf {
     pub(crate) scale: f32,
     pub(crate) vol: *mut f32,
     pub(crate) lat: *mut Latent,
+    pub(crate) material_sinks: *mut Vec<crate::oil::exchange::MaterialSink>,
+    pub(crate) material_changed: *mut u8,
     pub(crate) hide: *mut Prop,
     pub(crate) stroke: *mut u32,
     pub(crate) touched: *mut u32,
@@ -849,6 +875,16 @@ pub(crate) fn grow(b: &mut Bounds, x0: usize, y0: usize, x1: usize, y1: usize) {
 }
 
 impl Surf {
+    pub(crate) unsafe fn material_sink(&self, i: usize, sink: Option<crate::oil::exchange::MaterialSink>) {
+        if let Some(sink) = sink {
+            assert!(!self.material_sinks.is_null(), "chemical transfer requires a material sink ledger");
+            unsafe { (*self.material_sinks.add(i)).push(sink); }
+        }
+    }
+
+    pub(crate) unsafe fn mark_material(&self, i: usize) {
+        if !self.material_changed.is_null() { unsafe { *self.material_changed.add(i) = 1; } }
+    }
     /// Lay `v` coats of paint of cure `cure` (0: fresh) at pixel `i`: it
     /// mixes by volume into the color and into the film's cure, so the next
     /// bristle feels the film as it now is, not as it was at the last wait.
@@ -858,9 +894,11 @@ impl Surf {
             if v <= 0.0 {
                 return;
             }
+            self.mark_material(i);
             // engine 4: the solvent in the paint evaporates as it is laid
             // (in minutes: before anything else can work it), leaving a film
             // of the paint's own body that much thinner
+            let before = v;
             let (v, hide) = if self.lean && hide[3] > 0.0 {
                 let mut h = hide;
                 h[3] = 0.0;
@@ -868,6 +906,12 @@ impl Surf {
             } else {
                 (v, hide)
             };
+            let mut evaporated;
+            let lat = if lat.material.is_some() && v < before {
+                evaporated = lat.clone();
+                self.material_sink(i, evaporated.remove_species(before, v, true));
+                &evaporated
+            } else { lat };
             let vol = &mut *self.vol.add(i);
             let l = &mut *self.lat.add(i);
             let hd = &mut *self.hide.add(i);
@@ -896,7 +940,12 @@ impl Surf {
             // With the drain switch it drains the film as its pigment packs,
             // from the ground up (`ground_drain`)
             if !self.absorb.is_null() {
+                let packed = hd[7];
                 *vol = if self.drain { ground_drain(&mut *self.absorb.add(i), t, hd) } else { ground_draw(&mut *self.absorb.add(i), v, t, hd) };
+                if *vol < t {
+                    let sink = if self.drain { l.drain_material(t, *vol, packed, hd[7]) } else { l.remove_species(t, *vol, false) };
+                    self.material_sink(i, sink);
+                }
             }
         }
     }
@@ -913,7 +962,7 @@ impl Surf {
             return unsafe { self.add(i, v, lat, hide, cure) };
         }
         unsafe {
-            if self.layers && *self.vol.add(i) > self.skim {
+            if (self.layers || (*self.lat.add(i)).material.is_some()) && *self.vol.add(i) > self.skim {
                 return self.lay_layers(i, v, lat, hide, cure, self.skim);
             }
             let buried = (*self.vol.add(i) - self.skim).max(0.0);
@@ -948,6 +997,14 @@ impl Surf {
 
     pub(crate) unsafe fn pickup_lat(&self, i: usize, v: f32) -> Option<Latent> {
         unsafe {
+            if (!self.layers || (*self.lat.add(i)).layers.is_empty()) && (*self.lat.add(i)).material.is_some() {
+                let mut lat = (*self.lat.add(i)).clone();
+                let (_, mut top) = lat.material.as_ref().unwrap().split_top_with_geometry(v as f64 / *self.vol.add(i) as f64, *self.vol.add(i) as f64 * COAT_UM as f64);
+                top.scale(*self.vol.add(i) as f64 / v as f64);
+                lat.material = Some(top);
+                lat.layers.clear();
+                return Some(lat);
+            }
             if !self.layers || (*self.lat.add(i)).layers.is_empty() { return None; }
             let (_, top) = (*self.lat.add(i)).split_top(*self.vol.add(i), *self.hide.add(i), v, self.drain);
             let (_, mut lat, _) = Latent::from_layers(top);
@@ -970,6 +1027,7 @@ impl Surf {
     #[inline]
     pub(crate) unsafe fn take(&self, i: usize, v: f32) -> Prop {
         unsafe {
+            if v > 0.0 { self.mark_material(i); }
             self.film_give(i, v);
             let vol = &mut *self.vol.add(i);
             if self.layers && !(*self.lat.add(i)).layers.is_empty() {
@@ -983,6 +1041,11 @@ impl Surf {
                 return if self.drain { fluid_of(got) } else { got };
             }
             let got = if self.drain { take_from(&mut *self.hide.add(i), *vol, v) } else { *self.hide.add(i) };
+            if let Some(material) = &mut (*self.lat.add(i)).material {
+                let (mut below, _) = material.split_top_with_geometry(v as f64 / *vol as f64, *vol as f64 * COAT_UM as f64);
+                below.scale(if *vol > v { *vol as f64 / (*vol - v) as f64 } else { 0.0 });
+                *material = below;
+            }
             *vol -= v;
             if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
                 (*self.dry.add(i)).cure = 0.0;
@@ -1075,6 +1138,8 @@ impl Canvas {
             scale: self.f.scale,
             vol: self.wet.vol.as_mut_ptr(),
             lat: self.wet.lat.as_mut_ptr(),
+            material_sinks: if self.wet.material_sinks.len() == n { self.wet.material_sinks.as_mut_ptr() } else { std::ptr::null_mut() },
+            material_changed: if self.wet.material_changed.len() == n { self.wet.material_changed.as_mut_ptr() } else { std::ptr::null_mut() },
             hide: self.wet.hide.as_mut_ptr(),
             stroke: self.wet.stroke.as_mut_ptr(),
             touched: self.wet.touched.as_mut_ptr(),
@@ -1125,6 +1190,10 @@ impl Canvas {
     /// Panics if the brush holds solvent (a thinned load) and the canvas's
     /// engine is before 3.
     pub fn drag(&mut self, held: &mut Held, g: &Gesture, clip: Option<&Mask>) {
+        if self.material_exchange_needed() {
+            let rect = footprint(&held.tool, &g.pts, g.shake, self.f.scale, self.f.full_w, self.f.full_h);
+            return self.with_native_material_in(rect, |canvas| canvas.drag(held, g, clip));
+        }
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::drag");
@@ -1709,12 +1778,14 @@ pub(crate) unsafe fn exchange(
                 let f = if l > 0.0 { left / l } else { 0.0 };
                 br.vol *= f;
                 br.solvent *= f;
+                if br.vol <= 0.0 { br.lat.material = None; }
                 return;
             }
             br.vol = match dep {
                 None => br.vol * (1.0 - (1.0 - (-travel / tool.run).exp()) * GHOST_TOUCH),
                 Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
             };
+            if br.vol <= 0.0 { br.lat.material = None; }
             return;
         }
         // never outside the stroke's footprint: the scheduler runs strokes
@@ -2112,6 +2183,7 @@ pub(crate) unsafe fn exchange(
             br.cure = mix_cure(br.cure, br.vol, got_c / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
+        if br.vol <= 0.0 { br.lat.material = None; }
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
     }
@@ -2230,6 +2302,10 @@ impl Canvas {
     /// Panics if the brush holds solvent and the canvas's engine is before
     /// 3 (as `drag`).
     pub fn touch(&mut self, held: &mut Held, t: &Touch, clip: Option<&Mask>) {
+        if self.material_exchange_needed() {
+            let rect = touch_footprint(&held.tool, t, self.f.scale, self.f.full_w, self.f.full_h);
+            return self.with_native_material_in(rect, |canvas| canvas.touch(held, t, clip));
+        }
         held.tool.assert_valid();
         if self.engine < 3 {
             self.assert_thinner_supported(held.holds_solvent(), "Canvas::touch");
@@ -2397,6 +2473,7 @@ impl Canvas {
     /// Panics if a number in `sp` is not finite, or if the brush holds
     /// solvent and the canvas's engine is before 3 (as `drag`).
     pub fn spatter(&mut self, held: &mut Held, sp: &Spatter, clip: Option<&Mask>) -> usize {
+        if self.material_exchange_needed() { return self.with_native_material(|canvas| canvas.spatter(held, sp, clip)); }
         held.tool.assert_valid();
         // (before any paint leaves the brush)
         sp.assert_valid();
@@ -2488,6 +2565,7 @@ impl Canvas {
             let (x0, x1) = ((px - ext).floor() as i64, (px + ext).ceil() as i64);
             let (y0, y1) = ((py - ext).floor() as i64, (py + ext).ceil() as i64);
             let lat = b.lat.clone();
+            if b.vol <= 0.0 { b.lat.material = None; }
             let hide = b.hide;
             let cure = b.cure;
             // dome-shaped: thickest in the middle; weights normalised so the droplet's volume lands
@@ -2888,6 +2966,10 @@ impl Knife {
     }
     /// Pick up `amount` (0..1 of a full load) of `paint` onto the blade.
     pub fn load(&mut self, paint: Paint, amount: f32) {
+        self.load_material(paint, amount, None);
+    }
+
+    pub fn load_material(&mut self, paint: Paint, amount: f32, material: Option<crate::oil::exchange::MaterialPayload>) {
         // (no amount that is not a number: it would leave the blade's paint NaN)
         if !(0.0..=1.0).contains(&amount) || !self.width.is_finite() || !(1.0..=1000.0).contains(&self.width) {
             return;
@@ -2898,7 +2980,8 @@ impl Knife {
             self.spectral_films = (self.vol > 1e-9 && self.spectral_films) || paint.spectral_films;
         }
         self.solvent += liquid * paint.thinner;
-        let lat = paint.latent();
+        let mut lat = paint.latent();
+        if material.is_some() { lat.material = material; }
         self.cure = mix_cure(self.cure, self.vol, 0.0, v);
         crate::wet::mix_into(&mut self.vol, &mut self.lat, &mut self.hide, v, &lat, paint.prop());
     }
@@ -2914,9 +2997,16 @@ impl Knife {
     }
     /// Wipe the blade clean on the rag.
     pub fn wipe(&mut self) {
+        self.wipe_material();
+    }
+
+    pub fn wipe_material(&mut self) -> crate::oil::exchange::MaterialPayload {
+        let removed = self.lat.material.take().map_or_else(Default::default, |material| material.scaled(self.vol as f64));
         self.vol = 0.0;
         self.solvent = 0.0;
+        self.lat.material = None;
         self.spectral_films = false;
+        removed
     }
     /// Paint on the blade, relative to a full load.
     pub fn fullness(&self) -> f32 {
@@ -2993,6 +3083,10 @@ impl Canvas {
     /// canvas that skims (`with_knife_skim`) paint laid on wet paint stays
     /// on top of it, mixing with only the film where the two meet.
     pub fn knife(&mut self, k: &mut Knife, pts: &[(f32, f32)], pressure: (f32, f32), angle: Option<f32>, lay: bool, lift: f32) {
+        if self.material_exchange_needed() {
+            let rect = self.material_rect(pts, k.width + 4.0 / self.f.scale);
+            return self.with_native_material_in(rect, |canvas| canvas.knife(k, pts, pressure, angle, lay, lift));
+        }
         // (the blade's length is a public field: nothing to pull with one that is no length)
         if Knife::check_path(pts, self.f.scale).is_err() || !pressure.0.is_finite() || !pressure.1.is_finite() || angle.is_some_and(|a| !a.is_finite()) || !lift.is_finite() || !(k.width.is_finite() && (1.0..=1000.0).contains(&k.width)) {
             return;
@@ -3008,6 +3102,7 @@ impl Canvas {
         let skim = self.knife_skim;
         // (the paint the tears held back under the blade: back on it at the end)
         let (mut held, mut held_solvent) = (0.0f32, 0.0f32);
+        let mut held_material = crate::oil::exchange::MaterialPayload::default();
         let tseed = (id as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x7EA2;
         let height: *const f32 = self.height.as_ptr();
         let sf = self.surf();
@@ -3145,6 +3240,7 @@ impl Canvas {
                             k.solvent -= solvent;
                             held_solvent += solvent;
                             let hold = hold - solvent;
+                            if let Some(material) = &k.lat.material { held_material.append(material, hold as f64); }
                             k.vol -= hold;
                             held += hold;
                         }
@@ -3210,8 +3306,15 @@ impl Canvas {
                 k.solvent = (k.solvent - leave * phi).max(0.0);
             }
         }
+        if !held_material.fragments.is_empty() {
+            let total = k.vol + held;
+            let material = k.lat.material.get_or_insert_with(Default::default);
+            material.scale(k.vol as f64 / total as f64);
+            material.append(&held_material, 1.0 / total as f64);
+        }
         k.vol += held;
         k.solvent += held_solvent;
+        if k.vol <= 0.0 { k.lat.material = None; }
         // (the window's own pixels, as a brush's bounds: a crop's start at its corner)
         if let Some((x0, y0, x1, y1)) = bounds.map(|(x0, y0, x1, y1)| (x0 - sf.ox, y0 - sf.oy, x1 - sf.ox, y1 - sf.oy)) {
             self.wet.touch(x0, y0, x1, y1);

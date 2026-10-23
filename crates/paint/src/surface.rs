@@ -260,6 +260,7 @@ impl Canvas {
             self.height = s.height;
             self.micro = s.micro;
             self.surf_gen += 1;
+            self.sync_material_support();
             return;
         }
         let Some(l) = self.linen else { return };
@@ -283,6 +284,7 @@ impl Canvas {
         });
         let _ = h;
         self.surf_gen += 1;
+        self.sync_material_support();
     }
 
     /// A wet layer of thickness `add` (µm, per pixel of `rect`) and stiffness
@@ -303,6 +305,9 @@ impl Canvas {
     /// With the drain switch only the paint still liquid bridges it: a
     /// packed layer follows the relief (`settle_for`).
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
+        if let Some(store) = self.material_store() {
+            return (0..self.f.w * self.f.h).map(|i| store.surface_height(i).expect("material pixel")).collect();
+        }
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
         // (the drain switch: the paint still liquid, above a packed layer)

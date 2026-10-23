@@ -183,7 +183,7 @@ impl Style {
     fn prepare_cached_on(&self, c: Canvas, seed: u64, cache: Option<(&std::path::Path, &str)>) -> Canvas {
         use sha2::{Digest, Sha256};
         let c = c
-            .with_engine(self.palette.engine).with_material_revision(self.palette.material_revision)
+            .with_engine(self.palette.engine)
             .with_adaptive_sweep(self.palette.adaptive_sweep)
             .with_size_mm(self.width_mm)
             .with_linen(Linen { seed, ..self.linen });
@@ -197,7 +197,10 @@ impl Style {
             }
             key.update(seed.to_le_bytes());
             key.update(c.engine.to_le_bytes());
-            if c.material_revision != 0 { key.update(c.material_revision.to_le_bytes()); }
+            if self.palette.material_revision != 0 {
+                key.update(b"material-revision\0");
+                key.update(self.palette.material_revision.to_le_bytes());
+            }
             key.update(c.engine.min(3).to_le_bytes());
             if c.adaptive_sweep {
                 key.update(b"adaptive-sweep");
@@ -232,7 +235,7 @@ impl Style {
             if let Ok(bytes) = std::fs::read(path) {
                 if bytes.len() >= 32 && Sha256::digest(&bytes[32..]).as_slice() == &bytes[..32] {
                     if let Ok((cached, header)) = Canvas::read_state(&mut &bytes[32..]) {
-                        if header == *key {
+                        if header == *key && cached.engine() == self.palette.engine && cached.material_revision() == self.palette.material_revision {
                             // (written with the drain switch on to keep the
                             // paint's packing, below; prepared, it is off)
                             return cached.with_drain(false).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim);
@@ -241,7 +244,7 @@ impl Style {
                 }
             }
         }
-        let mut c = self.ground_on(c, seed);
+        let mut c = self.ground_on(c, seed).with_material_revision(self.palette.material_revision);
         if let Some((path, key)) = cache {
             // the cache keeps the paint's packing (`wet::Prop`'s last five),
             // which only a draining canvas's checkpoint holds (version 14), so
@@ -273,8 +276,8 @@ impl Style {
     /// any) laid on it. Never from the ground cache (`prepare_cached`),
     /// whose key describes a linen support: a sheet is laid afresh.
     pub fn prepare_paper(&self, width_px: usize, aspect: f32, seed: u64, paper: crate::paper::Paper) -> Canvas {
-        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_material_revision(self.palette.material_revision).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
-        self.ground_on(c, seed).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
+        let c = Canvas::new(width_px, aspect, self.raw).with_engine(self.palette.engine).with_adaptive_sweep(self.palette.adaptive_sweep).with_size_mm(self.width_mm).with_paper(paper);
+        self.ground_on(c, seed).with_material_revision(self.palette.material_revision).with_quarter_tiles(self.palette.quarter_tiles).with_glaze_film(self.palette.glaze_film).with_liquid_film_levels(self.palette.liquid_film_levels).with_sealed_drawing_guide(self.palette.sealed_drawing_guide).with_drawing_optics(self.palette.drawing_optics).with_rag_lift(self.palette.rag_lift).with_knife_skim(self.palette.knife_skim).with_blend_feather(self.palette.blend_feather).with_brush_skim(self.palette.brush_skim)
     }
 
     /// This style's ground layers laid on `c`, bottom first.
@@ -288,6 +291,7 @@ impl Style {
                 continue;
             }
             let s = seed * 31 + k as u64;
+            let material_support = (self.palette.material_revision == 1).then(|| (c.px.clone(), c.film.clone()));
             match g.apply {
                 Apply::Knife { .. } | Apply::Roller => {
                     let texture = match g.apply { Apply::Knife { texture } => texture, _ => 0.8 };
@@ -307,6 +311,16 @@ impl Style {
                     }
                     // (`prime` counts its own layers)
                     c.ground_um += g.um;
+                }
+            }
+            if let Some((under, film)) = material_support {
+                c.backing.resize(c.px.len(), Default::default());
+                let fallback = crate::Paint::new(g.color, g.hiding, g.stiff);
+                let paint = g.paint.as_ref().unwrap_or(&fallback);
+                let latent = paint.latent();
+                for i in 0..c.px.len() {
+                    c.backing[i] = c.backing[i].under(under[i]).over(&latent.color, paint.scatter(), c.film[i] - film[i], 1.0);
+                    c.px[i] = c.backing[i].color;
                 }
             }
             c.ground_finish(g.absorbent);

@@ -96,7 +96,7 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         time::verb(&st1, Verb::Pass, |s| {
             let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
-            c.glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y));
+            c.try_glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y)).map_err(mlua::Error::external)?;
             // (a varnished surface is glossy: engine 4 shows no matte veil;
             // no coats, no varnish, and from engine 4 not the hand's time for
             // brushing it: an older log keeps the time it always had)

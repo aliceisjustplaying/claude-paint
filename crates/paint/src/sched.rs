@@ -220,7 +220,8 @@ impl Canvas {
             if std::env::var_os("PAINT_DEBUG").is_some() {
                 eprintln!("  {} tiles", order.len());
             }
-            let surf = self.surf();
+            self.with_native_material(|canvas| {
+            let surf = canvas.surf();
             // tiles run in parallel wherever that can't change the result: a
             // tile starts once every earlier tile (in `order`) it overlaps is
             // done
@@ -234,9 +235,8 @@ impl Canvas {
             if let Some(st) = &stats {
                 st.print(order.len(), t0.elapsed().as_secs_f64());
             }
-            if let Some((x0, y0, x1, y1)) = dirty {
-                self.wet.touch(x0, y0, x1, y1);
-            }
+            if let Some((x0, y0, x1, y1)) = dirty { canvas.wet.touch(x0, y0, x1, y1); }
+            });
             if bi + 1 < n_batches {
                 self.hand_pass(bsecs);
             }

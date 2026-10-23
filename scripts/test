@@ -103,6 +103,30 @@ rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py scripts/tests/golden_approve_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
+rust material-canvas paint 'lib paint test' \
+  oil::tests::idle_columns_allocate_no_legacy_material_planes \
+  oil::tests::touch_dry_surface_retains_and_advances_slow_buried_film \
+  oil::tests::dry_stops_at_surface_touch_without_hardening_the_base \
+  oil::tests::split_observations_keep_the_canonical_interval \
+  oil::tests::explicit_revision_roundtrip_keeps_pending_clock_and_rollback \
+  oil::tests::removing_only_binder_preserves_pigment_optical_depth \
+  oil::tests::checkpoint_budget_counts_current_and_pending_stores_together
+rust material-identity easel 'bin easel test' session::tests::material_identity_is_explicit_and_legacy_logs_stay_legacy
+rust material-inert paint 'lib paint test' \
+  oil::inert::tests::inert_glaze_preserves_exact_coefficients_geometry_and_buried_history \
+  oil::inert::tests::inert_coating_stays_below_later_cover_deposits \
+  oil::inert::tests::inert_checkpoint_roundtrip_and_aggregate_bounds_include_sparse_entries \
+  oil::inert::tests::inert_coated_contact_transport_and_clock_fail_without_mutating_history
+rust material-native paint 'lib paint test' \
+  oil::native::tests::native_brush_commits_fragments_and_releases_dense_material \
+  oil::native::tests::native_work_does_not_expose_a_slow_base_through_a_set_cover \
+  oil::native::tests::oversized_native_contact_and_rag_leave_only_authoritative_columns \
+  oil::native::tests::a_failed_native_kernel_restores_the_retained_interval \
+  oil::native::tests::native_projection_is_footprint_bounded_and_preserves_untouched_packets
+rust material-knife paint 'lib paint test' \
+  oil::native::knife_tests::admitted_native_knife_take_maps_the_window_and_cannot_restore_removed_history \
+  oil::native::knife_tests::failed_native_knife_take_restores_the_retained_base_and_history
+rust material-tools easel 'bin easel test' replay_checkpoint::tests::material_tool_envelope_preserves_recipes_histories_and_binder_fractions
 rust painting-store easel 'bin easel test' \
   painting_store::tests::chunk_counter_exceeds_one_gib_without_state_allocation \
   painting_store::tests::chunked_checkpoint_validates_counts_lengths_and_schema_limits \
@@ -144,6 +168,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   style::ground_optics_tests::cached_grounds_track_retained_paint_stiffness_only_from_engine_9 \
   mixer::tests::round_trips_colors_and_keeps_linear_latents mixer::tests::blue_and_yellow_make_green_including_the_palette_case \
   mixer::tests::films_keep_measured_coefficients_thickness_and_medium \
+  mixer::tests::splitting_measured_films_preserves_the_backing_spectrum \
   mixer::tests::palette_previews_follow_canvas_film_optics \
   mixer::tests::measured_films_report_errors_over_both_revigo_fields \
   mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \

@@ -972,7 +972,7 @@ impl Palette {
         let mut lat = [0.0f32; crate::mixer::LATENT_SIZE];
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
-            let strength = if self.engine >= crate::PIGMENT_MIXER && self.glaze_film { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
+            let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
             let w = f * strength;
             for k in 0..crate::mixer::LATENT_SIZE {
                 lat[k] += self.lat[i][k] * w;

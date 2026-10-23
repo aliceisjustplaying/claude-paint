@@ -400,16 +400,18 @@ mod tests {
     fn measured_tube_volumes_keep_their_calibrated_coefficients() {
         let mut palette = crate::Palette::new("measured tube volumes", crate::palette::catalog());
         palette.engine = crate::PIGMENT_MIXER;
-        palette.glaze_film = true;
-        for (i, tube) in palette.tubes.iter().enumerate() {
-            let Some(latent) = super::tube(tube.name) else { continue };
-            let measured = pigment(&latent);
-            for medium in [0.0, 0.8] {
-                let paint = palette.pile(vec![(i, 1.0)]).paint(medium);
-                let actual = pigment9(&paint.latent());
-                for w in 0..crate::spectral::N {
-                    assert!((actual.k[w] - measured.k[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
-                    assert!((actual.s[w] - measured.s[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
+        for spectral in [false, true] {
+            palette.glaze_film = spectral;
+            for (i, tube) in palette.tubes.iter().enumerate() {
+                let Some(latent) = super::tube(tube.name) else { continue };
+                let measured = pigment(&latent);
+                for medium in [0.0, 0.8] {
+                    let paint = palette.pile(vec![(i, 1.0)]).paint(medium);
+                    let actual = pigment9(&paint.latent());
+                    for w in 0..crate::spectral::N {
+                        assert!((actual.k[w] - measured.k[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
+                        assert!((actual.s[w] - measured.s[w] * (1.0 - medium)).abs() < 1e-6, "{}, medium={medium}, wavelength={w}", tube.name);
+                    }
                 }
             }
         }

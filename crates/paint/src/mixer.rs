@@ -405,7 +405,7 @@ mod tests {
             let i = palette.tubes.iter().position(|t| t.name == name).unwrap();
             let pile = palette.pile(vec![(i, 1.0)]);
             let lat = &pile.pigment_latent;
-            let p = pigment(lat);
+            let p = pigment9(lat);
             for medium in [0.0, 0.8] {
                 let paint = pile.paint(medium);
                 for under in [[0.0; 3], [0.8; 3]] {
@@ -434,8 +434,9 @@ mod tests {
             let pile = palette.pile(vec![(i, 1.0)]);
             for medium in [0.0, 0.8] {
                 let paint = pile.laid(medium);
-                assert_eq!(paint.pigment_latent, Some(pile.pigment_latent));
-                assert_eq!(paint.latent().color, pile.pigment_latent);
+                let expected_latent = if engine >= crate::PIGMENT_MIXER { pile.pigment_latent.map(|c| c * (1.0 - medium)) } else { pile.pigment_latent };
+                assert_eq!(paint.pigment_latent, Some(expected_latent));
+                assert_eq!(paint.latent().color, expected_latent);
                 let mut optics_difference = 0.0f32;
                 for under in [[0.01; 3], [0.85; 3]] {
                     for coats in [0.16, 0.48, 8.0] {

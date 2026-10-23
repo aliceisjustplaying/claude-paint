@@ -1071,7 +1071,7 @@ fn recover_publication(name: &str) -> Result<Option<String>, String> {
     if next == log {
         std::fs::rename(&pending, &wp).map_err(|e| format!("{}: {e}", wp.display()))?;
         sync_dir(&wp)?;
-        return Ok(Some("warning: the last chunk's publication was interrupted after its log held it whole; the chunk is kept".into()));
+        return Ok(Some("warning: saving the last chunk was interrupted after the log held all of it; the chunk is kept".into()));
     }
     if !next.starts_with(&log) || witness.as_ref().is_some_and(|w| !log.starts_with(w)) {
         return Ok(None);
@@ -1085,7 +1085,7 @@ fn recover_publication(name: &str) -> Result<Option<String>, String> {
     }
     std::fs::remove_file(&pending).map_err(|e| format!("{}: {e}", pending.display()))?;
     sync_dir(&lp)?;
-    Ok(Some("warning: the last chunk's publication was interrupted before its log held it whole; the painting goes on from the chunk before it".into()))
+    Ok(Some("warning: saving the last chunk was interrupted before the log held all of it; the painting goes on from the chunk before it".into()))
 }
 
 /// The log and the committed record on disk both hold `expected`.
@@ -1479,8 +1479,8 @@ impl Server {
             self.s.log.pop();
             self.s.stale = true;
             return Err(match undone {
-                Ok(()) => format!("the chunk ran, but the easel couldn't write it to the log ({e}), so it isn't kept: the painting goes on from the chunk before it. The easel rebuilds it from the log now; status reports progress and other commands must retry after that"),
-                Err(u) => format!("the chunk ran, but the easel couldn't write it to the log ({e}) nor take it back out ({u}): reopen the painting, which goes on from the last chunk the log holds whole"),
+                Ok(()) => format!("the chunk ran, but the easel couldn't write it to the log ({e}), so it isn't kept: the painting goes on from the chunk before it; the easel rebuilds the painting from its log now; status reports the rebuild's progress and other commands must retry after it"),
+                Err(u) => format!("the chunk ran, but the easel couldn't write it to the log ({e}) or take it back out ({u}): reopen the painting, which goes on from the last chunk the log holds whole"),
             });
         }
         self.written = Some(text);

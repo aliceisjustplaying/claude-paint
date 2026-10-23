@@ -141,7 +141,7 @@ current generator uses the CC0 measurements.
 
 ## Checkpoints and licensing
 
-`PAINTC19` and `EASLRP03` check the mixer fingerprint before interpreting
+`PAINTC19` and `EASLRP04` check the mixer fingerprint before interpreting
 latents or tool snapshots. It covers the decoder schema, K/S and constant
 weights, reference substrate and inverse bytes. Old identities are refused;
 Lua logs remain replayable. State dumps preserve their producing identity.

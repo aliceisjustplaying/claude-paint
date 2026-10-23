@@ -238,7 +238,7 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   session::tests::a_scumble_at_half_coverage_leaves_gaps \
   session::tests::a_glaze_tints_the_drawing_under_it_and_keeps_it_legible \
   session::tests::new_paintings_record_the_rag_lift_and_older_logs_replay_without_it \
-  api::draw_rag::tests::a_wipe_on_a_full_face_says_so \
+  api::draw_rag::tests::a_wipe_on_a_full_face_says_so api::draw_rag::tests::a_blot_on_a_full_face_says_so \
   session::tests::a_gesture_keeps_its_width_to_its_last_point \
   session::tests::new_paintings_record_the_knife_skim_and_older_logs_replay_without_it \
   session::tests::new_paintings_record_the_blend_feather_and_brush_skim_and_older_logs_replay_without_them \

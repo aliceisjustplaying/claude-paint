@@ -12,15 +12,16 @@
  * critic's sessions, a copy of every visit's notes and of every note the painter left, and its log.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import { studioPath } from "./easel-client.ts";
 import { JOURNAL, OPEN_PASSAGES, openPassages } from "./journal.ts";
-import { publishNotes } from "./note-publication.ts";
+import { notePath, publishNotes } from "./note-publication.ts";
 import { quote } from "./summary.ts";
 
 export const CRITIQUE = "notes/critic.md";
 export const TO_CRITIC = "notes/to_critic.md";
+const VISIT_FAILED = "out/easel/critic-visit.failed";
 
 export interface Critic {
 	args: string[];
@@ -150,49 +151,55 @@ export function leaveNote(studio: string, critic: Critic, note: string): void {
 
 /** Run one visit; what the critic wrote, as notes/critic.md now holds it. Throws when the critic wrote nothing. */
 export async function visit(studio: string, critic: Critic, occasion: Occasion, signal?: AbortSignal, pi = "pi"): Promise<string> {
+	if (signal?.aborted) throw new Error("Operation aborted");
 	mkdirSync(critic.dir, { recursive: true });
 	const started = stamp();
 	const sessions = join(critic.dir, "sessions", started);
 	let timedOut = false;
-	const { code, out, err, reply } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
-		if (signal?.aborted) return fail(new Error("Operation aborted"));
-		const p = spawn("node", [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
-			{ cwd: studio, stdio: ["pipe", "pipe", "pipe"], detached: true });
-		const kill = () => p.stdin.end();
-		const timeout = setTimeout(() => {
-			timedOut = true;
-			kill();
-		}, 20 * 60_000);
-		const cleanup = () => {
-			clearTimeout(timeout);
-			signal?.removeEventListener("abort", kill);
-		};
-		signal?.addEventListener("abort", kill, { once: true });
-		p.stdin.on("error", () => {});
-		let out = "";
-		let err = "";
-		p.stdout.on("data", (d) => (out += d));
-		p.stderr.on("data", (d) => (err += d));
-		p.on("error", (e) => (cleanup(), fail(e)));
-		p.on("close", (code) => (cleanup(), done({ code, out, err })));
-	}).then((result) => ({
-		...result,
-		reply: (result.code === 0 ? sessionReply(sessions) : undefined) ?? result.out.trim(),
-	})).catch((error) => {
-		if (!signal?.aborted) appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: failed: ${error.message}\n`);
+	try {
+		const { code, out, err, reply } = await new Promise<{ code: number | null; out: string; err: string }>((done, fail) => {
+			const p = spawn("node", [join(import.meta.dirname, "visit-process.ts"), pi, ...criticArgs(studio, critic, occasion, sessions)],
+				{ cwd: studio, stdio: ["pipe", "pipe", "pipe"], detached: true });
+			const kill = () => p.stdin.end();
+			const timeout = setTimeout(() => {
+				timedOut = true;
+				kill();
+			}, 20 * 60_000);
+			const cleanup = () => {
+				clearTimeout(timeout);
+				signal?.removeEventListener("abort", kill);
+			};
+			signal?.addEventListener("abort", kill, { once: true });
+			p.stdin.on("error", () => {});
+			let out = "";
+			let err = "";
+			p.stdout.on("data", (d) => (out += d));
+			p.stderr.on("data", (d) => (err += d));
+			p.on("error", (e) => (cleanup(), fail(e)));
+			p.on("close", (code) => (cleanup(), done({ code, out, err })));
+		}).then((result) => ({
+			...result,
+			reply: (result.code === 0 ? sessionReply(sessions) : undefined) ?? result.out.trim(),
+		}));
+		const failure = signal?.aborted ? "Operation aborted"
+			: timedOut ? "critic timed out after 20 minutes and was stopped"
+			: code !== 0 || !reply ? `the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}` : undefined;
+		if (failure) throw new Error(failure);
+		const notes = `${HEADER[occasion]}\n\n${reply}\n`;
+		rmSync(notePath(studio, VISIT_FAILED, "ask_critic"), { force: true });
+		publishNotes(studio, "critic", "ask_critic", [
+			{ path: join(studio, CRITIQUE), slot: "current", text: notes },
+			{ path: join(critic.dir, `${started}-${occasion}.md`), root: critic.dir, slot: `${started}-${occasion}.md`, text: notes, independent: true },
+		], signal);
+		appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: exit ${code}, ${out.trim().length} characters\n${err}`);
+		return notes;
+	} catch (error) {
+		appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: failed: ${(error as Error).message}\n`);
+		const path = notePath(studio, VISIT_FAILED, "ask_critic");
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, "");
 		throw error;
-	});
-	const failure = signal?.aborted ? "Operation aborted"
-		: timedOut ? "critic timed out after 20 minutes and was stopped"
-		: code !== 0 || !reply ? `the critic couldn't visit: ${err.trim().split("\n").at(-1) || `exit ${code}`}` : undefined;
-	appendFileSync(join(critic.dir, "visits.log"), `${started} ${occasion}: ${failure ? `failed: ${failure}` : `exit ${code}`}, ${out.trim().length} characters\n${err}`);
-	if (failure) throw new Error(failure);
-	const notes = `${HEADER[occasion]}\n\n${reply}\n`;
-	publishNotes(studio, "critic", "ask_critic", [
-		{ path: join(studio, CRITIQUE), slot: "current", text: notes },
-		{ path: join(critic.dir, `${started}-${occasion}.md`), root: critic.dir, slot: `${started}-${occasion}.md`, text: notes, independent: true },
-	], signal);
-	return notes;
+	}
 }
 
 /**
@@ -206,12 +213,17 @@ export function passagesToTakeUp(studio: string, critic: boolean): string {
 		? `Your open passages, from your journal handoff (${JOURNAL}), quoted as you wrote them. They are what you noted last time, not the order of work: weigh each against the picture as a whole.\n\n${quote(passages)}`
 		: `Your journal has no \`${OPEN_PASSAGES}\` list yet. Any passages your last handoff left open are in your journal, quoted below under "Your journal".`);
 	const path = join(studio, CRITIQUE);
+	const failed = critic && existsSync(join(studio, VISIT_FAILED));
 	if (critic && existsSync(path)) {
-		parts.push("## The critic's last visit", `The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. They are its view of the ` +
+		parts.push("## The critic's last visit", (failed
+			? `The critic's last visit failed, so it left no new notes. Its notes from an earlier visit (${CRITIQUE}) are below, quoted as the critic wrote them. They don't cover anything you've painted since that visit. `
+			: `The critic's notes from its last visit (${CRITIQUE}), quoted as the critic wrote them. `) + "They are its view of the " +
 			"picture, not your list. Weigh each point against what you see, take up the ones that would make the picture better, and say in your " +
 			"journal which you leave and why. A point isn't first just because it is named: it competes with whatever would do most for the picture now. It doesn't see your code, masks or mixtures, so a method it suggests is one way to try, at the " +
 			"passage's real scale. When it says the picture is finished and you agree, end this sitting without marks." +
 			`\n\n${quote(readFileSync(path, "utf8").trimEnd())}`);
+	} else if (failed) {
+		parts.push("## The critic's last visit", "The critic's last visit failed, so it left no notes.");
 	}
 	return parts.join("\n\n");
 }
@@ -219,6 +231,9 @@ export function passagesToTakeUp(studio: string, critic: boolean): string {
 /** What a later sitting's opening adds after the summary: the critic's latest notes, if there are any. */
 export function sittingCritique(studio: string): string {
 	const path = join(studio, CRITIQUE);
-	if (!existsSync(path)) return "";
-	return `\n\n## The critic's notes (${CRITIQUE})\n\nQuoted as the critic wrote them:\n\n${quote(readFileSync(path, "utf8").trimEnd())}`;
+	const failed = existsSync(join(studio, VISIT_FAILED));
+	if (!existsSync(path)) return failed ? "\n\n## The critic's notes\n\nThe critic's last visit failed, so it left no notes." : "";
+	return `\n\n## The critic's notes (${CRITIQUE})\n\n` + (failed
+		? "The critic's last visit failed, so it left no new notes. These are from an earlier visit and don't cover anything you've painted since. Quoted as the critic wrote them:"
+		: "Quoted as the critic wrote them:") + `\n\n${quote(readFileSync(path, "utf8").trimEnd())}`;
 }

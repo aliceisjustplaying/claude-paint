@@ -10,6 +10,8 @@ import runpy
 import tempfile
 import unittest
 from unittest.mock import patch
+import subprocess
+import sys
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -99,6 +101,54 @@ class CriticPrepareTests(unittest.TestCase):
         self.prepare({"PAINTER_CRITIC": CRITIC})
         for name, text in self.originals.items():
             self.assertEqual((self.studio / name).read_bytes(), text)
+
+    def test_recording_collision_leaves_no_configuration_and_allows_retry(self):
+        collision = self.studio / ".agents/recording.json"
+        collision.mkdir(parents=True)
+        command = [sys.executable, str(REPO / "scripts/prepare_agy_studio"), str(self.studio),
+                   "--sessions-root", str(Path(self.temp.name) / "sessions")]
+        failed = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(failed.returncode, 2, failed.stderr)
+        self.assertFalse((self.studio / ".agents/mcp_config.json").exists())
+        self.assertFalse((self.studio / ".agents/agents/easel-painter.md").exists())
+        self.assertTrue(collision.is_dir())
+        collision.rmdir()
+        retried = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(retried.returncode, 0, retried.stderr)
+        self.assertTrue(collision.is_file())
+
+    def test_late_publication_failure_rolls_back_and_allows_retry(self):
+        runtime = self.studio / "bin/mcp/server.py"
+        runtime.parent.mkdir()
+        runtime.write_bytes(b"existing runtime\n")
+        runtime.chmod(0o640)
+        self.originals["bin/mcp/server.py"] = runtime.read_bytes()
+        (self.studio / "LAUNCH.md").write_bytes(b"existing launch notes\n")
+        self.originals["LAUNCH.md"] = b"existing launch notes\n"
+        replace = os.replace
+        link = os.link
+        collision = self.studio / ".agents/recording.json"
+        def fail_recording(source, destination):
+            if Path(destination) == collision:
+                raise OSError("recording write failed")
+            return replace(source, destination)
+        def fail_recording_link(source, destination):
+            if Path(destination) == collision:
+                raise OSError("recording write failed")
+            return link(source, destination)
+        with patch.dict(os.environ, {"PAINTER_CRITIC": CRITIC}, clear=True), \
+                patch.object(PREPARE["shutil"], "which", return_value="/synthetic/bin/uv"), \
+                patch.object(os, "replace", side_effect=fail_recording), \
+                patch.object(os, "link", side_effect=fail_recording_link), self.assertRaises(OSError):
+            PREPARE["prepare"](self.studio, Path(self.temp.name) / "sessions")
+        self.assertFalse((self.studio / ".agents/mcp_config.json").exists())
+        self.assertFalse((self.studio / ".agents/agents/easel-painter.md").exists())
+        for name, text in self.originals.items():
+            self.assertEqual((self.studio / name).read_bytes(), text)
+        self.assertEqual(runtime.stat().st_mode & 0o777, 0o640)
+        del self.originals["LAUNCH.md"]
+        del self.originals["bin/mcp/server.py"]
+        self.prepare({"PAINTER_CRITIC": CRITIC})
 
 
 if __name__ == "__main__":

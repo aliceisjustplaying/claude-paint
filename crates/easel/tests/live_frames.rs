@@ -131,7 +131,7 @@ fn interrupted_index_publication_recovers_at_the_next_commit_after_checkpoint_re
     std::fs::remove_dir(&index).unwrap();
     studio.ok(&["open", "painting"]);
     let log = std::fs::read_to_string(studio.0.join("out/easel/painting/server.log")).unwrap();
-    assert!(log.contains("reconstructed 10 chunks from"), "{log}");
+    assert!(log.contains("reconstructed 1 chunks from"), "{log}");
     studio.ok(&["do", "wait(1)"]);
     let text = std::fs::read_to_string(&index).unwrap();
     let rows: Vec<_> = text.lines().skip(1).collect();

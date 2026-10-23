@@ -16,6 +16,7 @@ linear two-constant KM (K and S add by normalized constant-weight concentration)
 """
 
 import ast
+import gzip
 import hashlib
 import json
 import os
@@ -333,7 +334,8 @@ def build_researched():
     for directory in ("hyperspectral-pigments", "bath00183"):
         for filename, expected in json.loads((data / directory / "SHA256SUMS.json").read_text()).items():
             path = data / directory / filename
-            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            contents = gzip.decompress(path.with_suffix(path.suffix + ".gz").read_bytes()) if directory == "bath00183" and filename.startswith("raw/") else path.read_bytes()
+            actual = hashlib.sha256(contents).hexdigest()
             if actual != expected:
                 raise ValueError(f"source checksum mismatch: {directory}/{filename}")
             source_hashes[f"{directory}/{filename}"] = actual
@@ -352,7 +354,7 @@ def build_researched():
     matrix = spectral_array("XYZ_RGB") @ spectral_array("CMF")
 
     def bath(sample):
-        paths = sorted((data / "bath00183/raw").glob(sample + "_Spectrum*.txt"))
+        paths = sorted((data / "bath00183/raw").glob(sample + "_Spectrum*.txt.gz"))
         if len(paths) != 3:
             raise ValueError(f"expected all three Bath spots: {sample}")
         observations = np.array([np.loadtxt(path, skiprows=1) for path in paths])
@@ -364,7 +366,7 @@ def build_researched():
             "name": sample,
             "source_nm": observations[0, band, 0].tolist(),
             "source_reflectance": values.mean(axis=0).tolist(),
-            "source_files": [str(path.relative_to(data)) for path in paths],
+            "source_files": [str(path.with_suffix("").relative_to(data)) for path in paths],
             "spot_range_rms": float(np.sqrt(np.mean(np.ptp(values, axis=0) ** 2))),
             "spot_min": values.min(axis=0).tolist(),
             "spot_max": values.max(axis=0).tolist(),
@@ -425,7 +427,7 @@ def build_researched():
     metadata["bath_chromatic_validation"]["endpoint_range_meaning"] = "Positive opaque two-constant mixtures stay between both pure reflectance endpoints at every wavelength. Violations reject that preparation/model assumption without interpreting a failed fit as measured oil coefficients."
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "researched.bin").write_bytes(binary)
-    (OUT / "researched.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
+    (OUT / "researched.json").write_text(json.dumps(metadata, separators=(",", ":"), ensure_ascii=False) + "\n")
     rust = f"pub(super) const RESEARCHED_TUBES: [&str; {len(order)}] = [\n"
     rust += "".join(f"    {json.dumps(name)},\n" for name in order) + "];\n"
     (OUT / "researched.rs").write_text(rust)

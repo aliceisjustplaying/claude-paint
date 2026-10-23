@@ -1,2 +1,0 @@
-scripts/pigment_data/bath00183/raw/*.txt -diff
-crates/paint/src/mixer/researched.json -diff

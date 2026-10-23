@@ -1,4 +1,6 @@
 from contextlib import redirect_stdout
+import gzip
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -210,6 +212,15 @@ class ResearchedPigmentsTests(unittest.TestCase):
 
 
 class ResearchedGenerationTests(unittest.TestCase):
+    def test_compressed_bath_sources_preserve_original_bytes(self):
+        directory = gen.ROOT / "scripts/pigment_data/bath00183"
+        hashes = json.loads((directory / "SHA256SUMS.json").read_text())
+        sources = sorted((directory / "raw").glob("*.txt.gz"))
+        self.assertEqual(len(sources), 24)
+        for path in sources:
+            original = str(path.with_suffix("").relative_to(directory))
+            self.assertEqual(hashlib.sha256(gzip.decompress(path.read_bytes())).hexdigest(), hashes[original], original)
+
     def test_real_sources_regenerate_deterministically_without_legacy_writes(self):
         committed = gen.ROOT / "crates/paint/src/mixer"
         generated_names = ["researched.bin", "researched.json", "researched.rs"]

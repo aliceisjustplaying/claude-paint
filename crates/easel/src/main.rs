@@ -51,6 +51,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+/// A painted canvas is millions of small pigment lists and skim layers that
+/// come and go as the paint is worked; glibc's malloc leaves their holes in
+/// its arenas (2 GiB of free, unreturnable heap by the 30th chunk of a
+/// 2400 px engine-9 painting). mimalloc keeps such allocations in size
+/// classes and gives freed pages back to the system.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// The width a painting is painted, replayed and delivered at (px) unless it
 /// names another (`session::WIDTH_MARK`, configured when it began: `configured_width`).
 const LIVE_WIDTH: usize = 2400;
@@ -863,50 +871,50 @@ fn serve(args: &[String]) -> Result<(), String> {
                     eprintln!("check 0.00s err");
                 }
             }
-            continue;
-        }
-        let t0 = Instant::now();
-        let r = if cmd == "do" {
-            // while the chunk runs, `status` answers how far it has got; other requests wait
-            session::PROGRESS.clear();
-            let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
-            // once the chunk is kept, the log on disk has grown past `written`: `report` says so
-            let status = || {
-                if session::PROGRESS.kept() == 0 {
-                    validate_log(&name, &written)?;
-                }
-                Ok(session::PROGRESS.report(t0.elapsed()))
-            };
-            match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
-                Ok((r, waiting)) => {
-                    pending.extend(waiting);
-                    r
-                }
-                Err(e) => Err(e),
-            }
         } else {
-            srv.handle(&cmd, &args, payload)
-        };
-        let reply = match &r {
-            Ok(b) => format!("ok\n{b}"),
-            Err(e) => format!("err\n{e}\n"),
-        };
-        let _ = conn.write_all(reply.as_bytes());
-        eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
-        #[cfg(feature = "state-store")]
-        if srv.state_failed {
-            let _ = std::fs::remove_file(&sock);
-            return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
-        }
-        if cmd == "close" && r.is_ok() {
-            if let Some(j) = checking.take() {
-                j.stop();
+            let t0 = Instant::now();
+            let r = if cmd == "do" {
+                // while the chunk runs, `status` answers how far it has got; other requests wait
+                session::PROGRESS.clear();
+                let (name, written) = (srv.name.clone(), srv.written.clone().unwrap_or_default());
+                // once the chunk is kept, the log on disk has grown past `written`: `report` says so
+                let status = || {
+                    if session::PROGRESS.kept() == 0 {
+                        validate_log(&name, &written)?;
+                    }
+                    Ok(session::PROGRESS.report(t0.elapsed()))
+                };
+                match serving_status(&l, status, None, || srv.handle(&cmd, &args, payload)) {
+                    Ok((r, waiting)) => {
+                        pending.extend(waiting);
+                        r
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                srv.handle(&cmd, &args, payload)
+            };
+            let reply = match &r {
+                Ok(b) => format!("ok\n{b}"),
+                Err(e) => format!("err\n{e}\n"),
+            };
+            let _ = conn.write_all(reply.as_bytes());
+            eprintln!("{cmd} {:.2}s {}", t0.elapsed().as_secs_f64(), if r.is_ok() { "ok" } else { "err" });
+            #[cfg(feature = "state-store")]
+            if srv.state_failed {
+                let _ = std::fs::remove_file(&sock);
+                return Err("easel: fatal: state publication or journal export failed; reopen and inspect the accepted chunk count before retrying".into());
             }
-            for (mut conn, _) in pending.drain(..) {
-                let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+            if cmd == "close" && r.is_ok() {
+                if let Some(j) = checking.take() {
+                    j.stop();
+                }
+                for (mut conn, _) in pending.drain(..) {
+                    let _ = conn.write_all(b"err\nthe easel closed before this request ran\n");
+                }
+                let _ = std::fs::remove_file(&sock);
+                break;
             }
-            let _ = std::fs::remove_file(&sock);
-            break;
         }
         // the same for the scratch canvas, at once (its log is short)
         if let Some(sc) = srv.scratch.as_mut()
@@ -917,8 +925,9 @@ fn serve(args: &[String]) -> Result<(), String> {
                 srv.scratch = None;
             }
         }
-        // a failed chunk left the state inexact (session.rs `stale`): rebuild it from the log
-        // after the reply; status stays available and other requests are refused until done
+        // a failed chunk left the state inexact, or a resting canvas couldn't be brought back
+        // (session.rs `stale`): rebuild it from the log after the reply, whatever the request
+        // was; status stays available and other requests are refused until done
         if srv.s.stale {
             drop(conn);
             let t0 = Instant::now();
@@ -2005,8 +2014,9 @@ impl Server {
     }
 
     /// What `check` replays and compares with (check.rs runs it on its own thread).
-    fn check_input(&self) -> Result<check::Input, String> {
+    fn check_input(&mut self) -> Result<check::Input, String> {
         self.ready()?;
+        self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
         Ok(check::Input {
             width: self.s.st.borrow().width,
             paper: self.s.st.borrow().paper,
@@ -2026,12 +2036,19 @@ impl Server {
             return Err("--new starts a fresh scratch canvas: do --scratch --new".into());
         }
         if !scratch {
+            // one canvas at a time is in memory: the scratch canvas rests while the
+            // painting is used, and the painting while the scratch canvas is
+            if let Some(sc) = self.scratch.as_mut() {
+                sc.s.rest().map_err(|e| format!("the scratch canvas couldn't be put aside: {e}"))?;
+            }
+            self.s.wake().map_err(|e| format!("the painting couldn't be brought back: {e}"))?;
             return self.serve_cmd(cmd, &args, payload);
         }
         if !matches!(cmd, "do" | "look" | "probe" | "status" | "log" | "globals" | "save") {
             return Err(format!("{cmd} is the painting's: it takes no --scratch"));
         }
         self.ready()?;
+        self.s.rest().map_err(|e| format!("the painting couldn't be put aside: {e}"))?;
         let mut out = String::new();
         // reopened when first asked for, so it never holds up the painting's reopen
         if self.scratch.is_none() && !new {
@@ -2046,6 +2063,7 @@ impl Server {
             self.scratch = None;
             return Err(format!("{out}{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));
         }
+        sc.s.wake().map_err(|e| format!("{out}the scratch canvas couldn't be brought back: {e}"))?;
         let reply = sc.serve_cmd(cmd, &args, payload).map_err(|e| format!("{out}{e}"))?;
         out += &reply;
         Ok(out)

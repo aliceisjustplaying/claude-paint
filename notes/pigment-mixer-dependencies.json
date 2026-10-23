@@ -1027,6 +1027,16 @@
   },
   {
     "ecosystem": "Rust engine",
+    "component": "libmimalloc-sys",
+    "version": "0.1.49",
+    "license": "MIT",
+    "where": "https://docs.rs/crate/libmimalloc-sys/0.1.49/source/Cargo.toml",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "evidence": "cargo metadata --format-version 1 --locked: packages[].license",
+    "action": "Commercial use permitted; retain required license texts and notices (the bundled mimalloc C sources are MIT)."
+  },
+  {
+    "ecosystem": "Rust engine",
     "component": "lock_api",
     "version": "0.4.14",
     "license": "MIT OR Apache-2.0",
@@ -1074,6 +1084,16 @@
     "source": "registry+https://github.com/rust-lang/crates.io-index",
     "evidence": "cargo metadata --format-version 1 --locked: packages[].license",
     "action": "Commercial use permitted; retain required license texts and notices. Select a permissive OR alternative."
+  },
+  {
+    "ecosystem": "Rust engine",
+    "component": "mimalloc",
+    "version": "0.1.52",
+    "license": "MIT",
+    "where": "https://docs.rs/crate/mimalloc/0.1.52/source/Cargo.toml",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "evidence": "cargo metadata --format-version 1 --locked: packages[].license",
+    "action": "Commercial use permitted; retain required license texts and notices."
   },
   {
     "ecosystem": "Rust engine",

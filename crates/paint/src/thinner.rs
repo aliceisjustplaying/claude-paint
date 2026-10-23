@@ -505,7 +505,7 @@ impl Canvas {
                 if ps > 0.0 && self.wet.solv[i] <= 0.0 { solvent.push(i); }
                 self.wet.solv[i] = ps * COAT_UM;
                 self.wet.lat[i] = lat;
-                self.wet.lat[i].layers.clear();
+                self.wet.lat[i].layers = Vec::new();
                 self.wet.hide[i] = hide;
                 if soaks {
                     self.absorb[i] = cap;

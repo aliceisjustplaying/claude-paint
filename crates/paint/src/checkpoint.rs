@@ -197,10 +197,27 @@ fn put_all(w: &mut impl Write, v: impl Iterator<Item = f32>) -> io::Result<()> {
     w.write_all(&buf)
 }
 
+/// `n` floats, read through a small buffer: the only allocation is the result
+/// (a 2400 px canvas's latents are close to a gigabyte, and a canvas is read
+/// back beside the live one when a chunk is rolled back).
 fn get_all(r: &mut impl Read, n: usize) -> io::Result<Vec<f32>> {
-    let mut bytes = vec![0u8; n * 4];
-    r.read_exact(&mut bytes)?;
-    Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
+    let mut v = Vec::with_capacity(n);
+    get_into(r, n, |x| v.push(x))?;
+    Ok(v)
+}
+
+fn get_into(r: &mut impl Read, n: usize, mut put: impl FnMut(f32)) -> io::Result<()> {
+    let mut buf = [0u8; 1 << 16];
+    let mut left = n * 4;
+    while left > 0 {
+        let take = left.min(buf.len());
+        r.read_exact(&mut buf[..take])?;
+        for b in buf[..take].as_chunks::<4>().0 {
+            put(f32::from_le_bytes(*b));
+        }
+        left -= take;
+    }
+    Ok(())
 }
 
 fn bad(msg: &str) -> io::Error {
@@ -692,16 +709,28 @@ impl Canvas {
         c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
         c.film = get_all(r, n)?;
-        let mut wet = crate::wet::Wet::new(n);
+        // every per-pixel field is read below (the floor is not stored), so none is
+        // allocated twice: a 2400 px canvas's latents alone are close to a gigabyte
+        let mut wet = crate::wet::Wet::new(0);
+        wet.floor = vec![0.0; n];
         wet.vol = get_all(r, n)?;
         let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
-        let lat = get_all(r, n * width)?;
         if own_mixer {
-            wet.lat = lat.chunks_exact(width).map(|stored| {
-                let mut color = [0.0; LAT];
-                color[..width].copy_from_slice(stored);
-                crate::wet::Latent::from_color(color)
-            }).collect();
+            // the stored latents go straight into the pixels' (no copy of them all as floats)
+            let mut lat = Vec::with_capacity(n);
+            let (mut color, mut k) = ([0.0; LAT], 0);
+            get_into(r, n * width, |x| {
+                color[k] = x;
+                k += 1;
+                if k == width {
+                    lat.push(crate::wet::Latent::from_color(color));
+                    (color, k) = ([0.0; LAT], 0);
+                }
+            })?;
+            wet.lat = lat;
+        } else {
+            get_into(r, n * width, |_| {})?;
+            wet.lat = vec![crate::wet::Latent::default(); n];
         }
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')
@@ -974,6 +1003,82 @@ impl Canvas {
         }
         Ok((c, header))
     }
+
+    /// Write the canvas state to `w` (`write_state`) and keep aside what it
+    /// leaves out: `unpack` of the two gives this canvas back bit for bit,
+    /// as a copy would, in far less memory. A copy of a painted canvas is
+    /// the pixels' latents, pigment lists and skim layers over again; the
+    /// written state is dense, mostly zero lanes, and compresses well.
+    pub fn pack(&self, w: &mut impl Write) -> io::Result<Aside> {
+        self.write_state(w, "")?;
+        let wet = &self.wet;
+        Ok(Aside {
+            absorb_any: self.absorb_any,
+            ground_um: self.ground_um,
+            hand_slice: self.hand_slice,
+            film_pass: self.film_pass,
+            receptive: self.receptive.clone(),
+            floor: wet.floor.clone(),
+            solv: wet.solv.clone(),
+            laid: wet.laid.clone(),
+            laid_id: wet.laid_id.clone(),
+            hide: (!self.drain).then(|| wet.hide.clone()),
+            drawing: self.drawing.clone(),
+            soak: self.soak.clone(),
+            paper: self.paper,
+            micro: self.micro.clone(),
+            sheet: self.sheet.clone(),
+        })
+    }
+
+    /// The canvas `pack` wrote to `r` and kept `aside`, bit for bit. The
+    /// brushes' contact level is not kept: it is rebuilt from the relief
+    /// to the same bits (`engine7::contact_cache`).
+    pub fn unpack(r: &mut impl Read, aside: Aside) -> io::Result<Canvas> {
+        let (mut c, _) = Canvas::read_state(r)?;
+        c.absorb_any = aside.absorb_any;
+        c.ground_um = aside.ground_um;
+        c.hand_slice = aside.hand_slice;
+        c.film_pass = aside.film_pass;
+        c.receptive = aside.receptive;
+        c.wet.floor = aside.floor;
+        c.wet.solv = aside.solv;
+        c.wet.laid = aside.laid;
+        c.wet.laid_id = aside.laid_id;
+        if let Some(hide) = aside.hide {
+            c.wet.hide = hide;
+        }
+        c.drawing = aside.drawing;
+        c.soak = aside.soak;
+        c.paper = aside.paper;
+        c.micro = aside.micro;
+        c.sheet = aside.sheet;
+        Ok(c)
+    }
+}
+
+/// What `write_state` leaves out of a canvas, or reads back sanitized,
+/// kept beside the written state by `Canvas::pack`: the film floors and
+/// ceilings only the stroke that set them reads, the solvent buffers as
+/// allocated, the five packing lanes of the paint's properties that only
+/// the drain section writes, the values `read_state` clamps, a pass under
+/// way, and the drawing, cloth, paper and sheet, which are cheap to copy.
+pub struct Aside {
+    absorb_any: bool,
+    ground_um: f32,
+    hand_slice: Option<f32>,
+    film_pass: Option<(f32, u32)>,
+    receptive: Option<Vec<f32>>,
+    floor: Vec<f32>,
+    solv: Vec<f32>,
+    laid: Vec<f32>,
+    laid_id: Vec<u32>,
+    hide: Option<Vec<crate::wet::Prop>>,
+    drawing: Option<Box<crate::graphite::Drawing>>,
+    soak: Option<Box<crate::soak::Soak>>,
+    paper: Option<crate::paper::Paper>,
+    micro: Vec<f32>,
+    sheet: Option<crate::sheet::Sheet>,
 }
 
 #[cfg(test)]

@@ -524,7 +524,7 @@ impl Canvas {
                     } else if th_in > 0.0 {
                         p.th = th_in;
                         if pv >= 1e-5 {
-                            (p.seen, p.lev) = (pv, crate::surface::SET_TIME * crate::drying::fluid(cure));
+                            (p.seen, p.lev) = (pv, if self.engine >= 9 { 0.0 } else { crate::surface::SET_TIME * crate::drying::fluid(cure) });
                         }
                     }
                 }

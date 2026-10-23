@@ -436,6 +436,14 @@ impl Canvas {
     /// steps fall (a wait split off the grid) doesn't change it.
     fn wait_on_grid(&mut self, dt: f32) {
         const TICKS: f64 = crate::thinner::FLOW_TICKS as f64;
+        if self.engine >= 9 && dt > 0.0 {
+            let n = self.f.w * self.f.h;
+            if self.wet.clock.px.len() != n {
+                self.wet.clock.px = vec![Px::FRESH; n];
+            }
+            self.absorb_with(true);
+            self.level_open();
+        }
         let start = self.wet.clock.now;
         let end = start + dt as f64;
         let mut t = start;
@@ -838,6 +846,11 @@ impl Canvas {
             let a = volumes[to] * hide[0] / crate::mixer::scattering(latent).max(1e-9);
             let b = amount * prop[0] / crate::mixer::scattering(&source).max(1e-9);
             let volume = volumes[to] + amount;
+            if self.wet.clock.px.len() == self.f.w * self.f.h {
+                let cure = self.wet.clock.px[i].cure;
+                let receiver = &mut self.wet.clock.px[j];
+                receiver.cure += (cure - receiver.cure) * (amount / volume);
+            }
             let weight = if a + b > 0.0 { b / (a + b) } else { amount / volume };
             for k in 0..crate::wet::LAT {
                 latent[k] += (source[k] - latent[k]) * weight;
@@ -1090,6 +1103,84 @@ mod tests {
 
     fn lead_white() -> Paint {
         Paint::body(hex("#e8e4d8")).with_drying(drier::LEAD_WHITE)
+    }
+
+    #[test]
+    fn solvent_wet_settling_does_not_depend_on_wait_partition() {
+        let mut c = Canvas::new(32, 1.0, [1.0; 3]).with_engine(9).with_size_mm(4.0);
+        let paint = Paint::new([0.4; 3], 0.9, 0.1).with_drying(0.01);
+        c.wet.solv = vec![0.0; 32 * 32];
+        for y in 8..24 {
+            for x in 8..24 {
+                let i = y * 32 + x;
+                c.wet.vol[i] = if x < 16 { 4.0 } else { 0.5 };
+                c.wet.lat[i] = paint.latent();
+                c.wet.hide[i] = paint.prop();
+                c.wet.solv[i] = 20.0;
+                c.wet.cover[i] = 1.0;
+            }
+        }
+        c.wet.dirty = Some((8, 8, 24, 24));
+        let mut single = c.clone();
+        single.wait(1.0);
+        for parts in [4, crate::thinner::FLOW_TICKS] {
+            let mut split = c.clone();
+            for _ in 0..parts {
+                split.wait(1.0 / parts as f32);
+            }
+            for (i, (&a, &b)) in single.wet.vol.iter().zip(&split.wet.vol).enumerate() {
+                assert!((a - b).abs() * COAT_UM <= 1e-3, "{parts} waits, pixel {i}: {a} vs {b}");
+            }
+            assert!(split.wet.clock.px.iter().zip(&split.wet.vol).all(|(p, &v)| v < 1e-5 || p.lev == 0.0));
+            let mut baked = single.clone();
+            baked.dry();
+            split.dry();
+            for (i, (&a, &b)) in baked.height.iter().zip(&split.height).enumerate() {
+                assert!((a - b).abs() <= 1e-3, "dry, {parts} waits, pixel {i}: {a} vs {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn settling_carries_cure_before_the_receiving_film_ages() {
+        let mut c = Canvas::new(16, 1.0, [1.0; 3]).with_engine(9).with_size_mm(2.0);
+        let paint = Paint::new([0.4; 3], 0.9, 0.1);
+        for i in 0..256 {
+            c.wet.vol[i] = if i % 16 < 8 { 4.0 } else { 0.5 };
+            c.wet.lat[i] = paint.latent();
+            c.wet.hide[i] = paint.prop();
+            c.wet.cover[i] = 1.0;
+        }
+        c.wet.dirty = Some((0, 0, 16, 16));
+        c.wait(0.0);
+        for (i, p) in c.wet.clock.px.iter_mut().enumerate() {
+            p.cure = if i % 16 < 8 { 0.0 } else { GEL - 1e-6 };
+            p.lev = SET_TIME * fluid(p.cure);
+        }
+        let inventory = |c: &Canvas| c.wet.vol.iter().zip(&c.wet.clock.px).map(|(&v, p)| v as f64 * p.cure as f64).sum::<f64>();
+        let before = inventory(&c);
+        c.level_open();
+        let after = inventory(&c);
+        assert!((before - after).abs() < 1e-5, "cure inventory: {before} -> {after}");
+        let receiver = 8 * 16 + 8;
+        let v = c.wet.vol[receiver];
+        assert!(v > 0.5, "fresh paint must enter the old film: {v}");
+        assert!((c.wet.clock.px[receiver].cure - (GEL - 1e-6) * 0.5 / v).abs() < 1e-6);
+        c.wait(0.1);
+        assert_eq!(c.wet.vol[receiver], v);
+        assert_eq!(c.film[receiver], 0.0);
+
+        let mut c = Canvas::new(3, 1.0, [1.0; 3]).with_engine(9);
+        c.wet.clock.px = vec![Px::FRESH; 9];
+        for (i, cure) in [(0, 0.12), (1, 0.0), (2, 0.03)] {
+            c.wet.hide[i] = paint.prop();
+            c.wet.lat[i] = paint.latent();
+            c.wet.clock.px[i].cure = cure;
+        }
+        c.transport_settled((0, 0, 3, 1), &[20.0, 10.0, 10.0], &[15.0, 10.0, 15.0], &[(0, 1, 5.0), (1, 2, 5.0)], &mut [0.0; 3]);
+        for (i, cure) in [(0, 0.12), (1, 0.04), (2, 1.0 / 30.0)] {
+            assert!((c.wet.clock.px[i].cure - cure).abs() < 1e-6, "cure at {i}: {}", c.wet.clock.px[i].cure);
+        }
     }
 
     #[test]

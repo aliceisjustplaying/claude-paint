@@ -41,6 +41,19 @@ pub struct Vertex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VelocityTerm {
+    pub vertex: usize,
+    pub component: usize,
+    pub coefficient: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VertexConstraint {
+    pub vertex: usize,
+    pub components: [Vec<VelocityTerm>; 3],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FlowCell {
     pub vertices: [usize; 4],
     pub material_cell: u32,
@@ -61,6 +74,21 @@ pub enum BoundaryKind {
 pub struct BoundaryFace {
     pub vertices: [usize; 3],
     pub kind: BoundaryKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkinFace {
+    pub low_cell: u32,
+    pub high_cell: Option<u32>,
+    pub velocity_vertices: [usize; 2],
+    pub thickness_m: [f64; 2],
+    pub normal_xy: [f64; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkinMaterial {
+    pub cell: u32,
+    pub volume_m3: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,6 +113,12 @@ pub struct PatchView<'a> {
     pub boundary: &'a [BoundaryFace],
     pub skins: &'a [PlateTriangle],
     pub bending_modes: &'a [BendingMode],
+    pub constraints: &'a [VertexConstraint],
+    pub collar_vertices: &'a [usize],
+    pub skin_faces: &'a [SkinFace],
+    pub skin_material: &'a [SkinMaterial],
+    pub exposed_surfaces: &'a [[usize; 3]],
+    pub support_surfaces: &'a [[usize; 3]],
     pub surface_tension_n_m: f64,
 }
 
@@ -103,6 +137,12 @@ pub struct RemappedPatch {
     pub boundary: Vec<BoundaryFace>,
     pub skins: Vec<PlateTriangle>,
     pub bending_modes: Vec<BendingMode>,
+    pub constraints: Vec<VertexConstraint>,
+    pub collar_vertices: Vec<usize>,
+    pub skin_faces: Vec<SkinFace>,
+    pub skin_material: Vec<SkinMaterial>,
+    pub exposed_surfaces: Vec<[usize; 3]>,
+    pub support_surfaces: Vec<[usize; 3]>,
     pub surface_tension_n_m: f64,
 }
 
@@ -115,6 +155,12 @@ impl RemappedPatch {
             boundary: &self.boundary,
             skins: &self.skins,
             bending_modes: &self.bending_modes,
+            constraints: &self.constraints,
+            collar_vertices: &self.collar_vertices,
+            skin_faces: &self.skin_faces,
+            skin_material: &self.skin_material,
+            exposed_surfaces: &self.exposed_surfaces,
+            support_surfaces: &self.support_surfaces,
             surface_tension_n_m: self.surface_tension_n_m,
         }
     }
@@ -179,8 +225,9 @@ pub struct FaceTransfer {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SkinTransfer {
-    pub low_skin: usize,
-    pub high_skin: usize,
+    pub face: usize,
+    pub low_cell: u32,
+    pub high_cell: u32,
     pub volume_m3: f64,
 }
 
@@ -214,12 +261,14 @@ pub struct StepDiagnostics {
 #[derive(Clone, Debug)]
 pub struct MechanicsTrial {
     pub input_generation: u64,
+    pub duration_s: f64,
     pub transfers: Vec<FaceTransfer>,
     pub skin_transfers: Vec<SkinTransfer>,
     pub history: Vec<PlateHistory>,
     pub bending_modes: Vec<BendingMode>,
     pub vertex_displacement_m: Vec<[f64; 3]>,
     pub end_cell_volumes_m3: Vec<(u32, f64)>,
+    pub end_skin_volumes_m3: Vec<(u32, f64)>,
     pub diagnostics: StepDiagnostics,
 }
 

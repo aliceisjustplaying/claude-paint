@@ -1,4 +1,5 @@
 use super::*;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Row = Vec<(usize, f64)>;
@@ -162,12 +163,126 @@ pub(super) struct Work {
     preconditioner_fallbacks: usize,
     inner_residual_pa: f64,
     divergence_ratio: f64,
+    lift: Vec<Row>,
     pub(super) last_diagnostics: Option<StepDiagnostics>,
 }
 
 enum TrialAttempt {
     Solved(MechanicsTrial),
     Subdivide(SubdivisionReason),
+}
+
+impl Work {
+    fn physical_velocity<'a>(&self, velocity: &'a [f64]) -> Cow<'a, [f64]> {
+        if self.lift.is_empty() {
+            Cow::Borrowed(velocity)
+        } else {
+            Cow::Owned(self.lift.iter().map(|r| row_value(r, velocity)).collect())
+        }
+    }
+
+    fn pull_row(&self, row: &Row) -> Row {
+        if self.lift.is_empty() {
+            return row.clone();
+        }
+        let mut result = Vec::new();
+        for &(i, a) in row {
+            for &(j, b) in &self.lift[i] {
+                result.push((j, a * b));
+            }
+        }
+        compress(&mut result);
+        result
+    }
+}
+
+fn prepare_constraints(patch: PatchView<'_>, w: &mut Work) -> Result<(), MechanicsError> {
+    w.lift.clear();
+    if patch.constraints.is_empty() {
+        return Ok(());
+    }
+    let targets: BTreeSet<_> = patch.constraints.iter().map(|c| c.vertex).collect();
+    if targets.len() != patch.constraints.len()
+        || targets.iter().any(|&v| v >= patch.vertices.len())
+    {
+        return Err(MechanicsError::InvalidMesh);
+    }
+    w.lift = (0..w.velocity.len()).map(|i| vec![(i, 1.0)]).collect();
+    for c in patch.constraints {
+        for a in 0..3 {
+            let mut row = Vec::new();
+            for term in &c.components[a] {
+                if term.vertex >= patch.vertices.len()
+                    || term.component >= 3
+                    || !term.coefficient.is_finite()
+                    || targets.contains(&term.vertex)
+                {
+                    return Err(MechanicsError::InvalidMesh);
+                }
+                if term.coefficient != 0.0 {
+                    row.push((3 * term.vertex + term.component, term.coefficient));
+                }
+            }
+            compress(&mut row);
+            if patch.vertices[c.vertex].fixed[a] && row.iter().any(|&(j, _)| !w.fixed[j]) {
+                return Err(MechanicsError::InvalidMesh);
+            }
+            let slave = 3 * c.vertex + a;
+            let area = w.area_scale[slave];
+            w.area_scale[slave] = 0.0;
+            for &(j, b) in &row {
+                w.area_scale[j] += area * b.abs();
+            }
+            w.fixed[slave] = true;
+            w.lift[slave] = row;
+        }
+    }
+    for f in patch.skin_faces {
+        if f.velocity_vertices
+            .iter()
+            .any(|&v| v >= patch.vertices.len())
+            || f.thickness_m.iter().any(|h| !h.is_finite() || *h < 0.0)
+            || f.normal_xy.iter().any(|x| !x.is_finite())
+            || f.normal_xy[0].hypot(f.normal_xy[1]) == 0.0
+        {
+            return Err(MechanicsError::InvalidMesh);
+        }
+    }
+    if patch
+        .skin_material
+        .iter()
+        .any(|s| !s.volume_m3.is_finite() || s.volume_m3 < 0.0)
+        || patch
+            .exposed_surfaces
+            .iter()
+            .flatten()
+            .any(|&v| v >= patch.vertices.len())
+    {
+        return Err(MechanicsError::InvalidMesh);
+    }
+    for q in &mut w.quadrature {
+        for row in q.rows.iter_mut().chain(std::iter::once(&mut q.divergence)) {
+            let mut result = Vec::new();
+            for &(i, a) in row.iter() {
+                for &(j, b) in &w.lift[i] {
+                    result.push((j, a * b));
+                }
+            }
+            compress(&mut result);
+            *row = result;
+        }
+    }
+    for row in &mut w.divergence {
+        let mut result = Vec::new();
+        for &(i, a) in row.iter() {
+            for &(j, b) in &w.lift[i] {
+                result.push((j, a * b));
+            }
+        }
+        compress(&mut result);
+        *row = result;
+    }
+    Ok(())
 }
 
 fn dot(a: &[f64], b: &[f64]) -> f64 {
@@ -340,6 +455,12 @@ fn constant_operator(w: &Work) -> SparseMatrix {
             .flat_map(|&i| [3 * i, 3 * i + 1, 3 * i + 2])
             .collect();
         indices.extend(t.curvature.iter().flat_map(|r| r.iter().map(|x| x.0)));
+        if !w.lift.is_empty() {
+            indices = indices
+                .iter()
+                .flat_map(|&i| w.lift[i].iter().map(|x| x.0))
+                .collect();
+        }
         indices.sort();
         indices.dedup();
         for &i in &indices {
@@ -351,7 +472,13 @@ fn constant_operator(w: &Work) -> SparseMatrix {
     for t in &w.exposed {
         for &i in &t.vertices {
             for &j in &t.vertices {
-                rows[3 * i + 2].entry(3 * j + 2).or_default();
+                let ri = w.pull_row(&vec![(3 * i + 2, 1.0)]);
+                let rj = w.pull_row(&vec![(3 * j + 2, 1.0)]);
+                for &(a, _) in &ri {
+                    for &(b, _) in &rj {
+                        rows[a].entry(b).or_default();
+                    }
+                }
             }
         }
     }
@@ -374,8 +501,11 @@ fn update_newton(patch: PatchView<'_>, w: &mut Work, dt: f64, rho: f64) {
     for (a, b) in w.newton.values.iter_mut().zip(&w.fluid.values) {
         *a = dt * rho * b;
     }
+    let physical = w.physical_velocity(&w.velocity);
     for (s, t) in patch.skins.iter().zip(&w.skins) {
-        let (e, k, _, jac) = strains(t, &w.velocity, dt);
+        let (e, k, _, raw_jac) = strains(t, &physical, dt);
+        let jac = raw_jac.map(|row| w.pull_row(&row));
+        let curvature = t.curvature.clone().map(|row| w.pull_row(&row));
         for a in 0..3 {
             for b in 0..3 {
                 for &(i, x) in &jac[a] {
@@ -384,14 +514,14 @@ fn update_newton(patch: PatchView<'_>, w: &mut Work, dt: f64, rho: f64) {
                     }
                 }
                 for &(i, x) in &jac[a] {
-                    for &(j, y) in &t.curvature[b] {
+                    for &(j, y) in &curvature[b] {
                         let v = dt * t.area * s.tangent.b[a][b] * x * y;
                         w.newton.add(i, j, v);
                         w.newton.add(j, i, v);
                     }
                 }
-                for &(i, x) in &t.curvature[a] {
-                    for &(j, y) in &t.curvature[b] {
+                for &(i, x) in &curvature[a] {
+                    for &(j, y) in &curvature[b] {
                         w.newton
                             .add(i, j, dt * dt * t.area * s.tangent.d[a][b] * x * y);
                     }
@@ -403,30 +533,35 @@ fn update_newton(patch: PatchView<'_>, w: &mut Work, dt: f64, rho: f64) {
             for j in 0..3 {
                 let [ix, iy] = t.gradient[i];
                 let [jx, jy] = t.gradient[j];
-                w.newton.add(
-                    3 * t.vertices[i] + 2,
-                    3 * t.vertices[j] + 2,
-                    dt * dt
-                        * t.area
-                        * (force[0] * ix * jx
-                            + force[1] * iy * jy
-                            + force[2] * (ix * jy + iy * jx)),
-                );
+                let value = dt
+                    * dt
+                    * t.area
+                    * (force[0] * ix * jx + force[1] * iy * jy + force[2] * (ix * jy + iy * jx));
+                let ri = w.pull_row(&vec![(3 * t.vertices[i] + 2, 1.0)]);
+                let rj = w.pull_row(&vec![(3 * t.vertices[j] + 2, 1.0)]);
+                for &(a, x) in &ri {
+                    for &(b, y) in &rj {
+                        w.newton.add(a, b, value * x * y);
+                    }
+                }
             }
         }
     }
     for t in &w.exposed {
         for i in 0..3 {
             for j in 0..3 {
-                w.newton.add(
-                    3 * t.vertices[i] + 2,
-                    3 * t.vertices[j] + 2,
-                    dt * dt
-                        * t.area
-                        * patch.surface_tension_n_m
-                        * (t.gradient[i][0] * t.gradient[j][0]
-                            + t.gradient[i][1] * t.gradient[j][1]),
-                );
+                let value = dt
+                    * dt
+                    * t.area
+                    * patch.surface_tension_n_m
+                    * (t.gradient[i][0] * t.gradient[j][0] + t.gradient[i][1] * t.gradient[j][1]);
+                let ri = w.pull_row(&vec![(3 * t.vertices[i] + 2, 1.0)]);
+                let rj = w.pull_row(&vec![(3 * t.vertices[j] + 2, 1.0)]);
+                for &(a, x) in &ri {
+                    for &(b, y) in &rj {
+                        w.newton.add(a, b, value * x * y);
+                    }
+                }
             }
         }
     }
@@ -549,6 +684,22 @@ fn check(
             return Err(MechanicsError::NonFiniteState);
         }
     }
+    if patch
+        .collar_vertices
+        .iter()
+        .any(|&v| v >= patch.vertices.len())
+    {
+        return Err(MechanicsError::InvalidMesh);
+    }
+    for c in patch.constraints {
+        if c.vertex >= patch.vertices.len()
+            || c.components.iter().flatten().any(|t| {
+                t.vertex >= patch.vertices.len() || t.component >= 3 || !t.coefficient.is_finite()
+            })
+        {
+            return Err(MechanicsError::InvalidMesh);
+        }
+    }
     for c in patch.cells {
         if c.vertices.iter().any(|&i| i >= patch.vertices.len()) {
             return Err(MechanicsError::InvalidMesh);
@@ -646,6 +797,12 @@ fn assemble(
         }
     }
     let skin_faces: BTreeSet<_> = patch.skins.iter().map(|s| key(s.vertices)).collect();
+    let constrained_vertices: BTreeSet<_> = patch.constraints.iter().map(|c| c.vertex).collect();
+    let linked_masters: BTreeSet<_> = patch
+        .constraints
+        .iter()
+        .flat_map(|c| c.components.iter().flatten().map(|t| t.vertex))
+        .collect();
     for (i, c) in patch.cells.iter().enumerate() {
         let p = c.vertices.map(|j| patch.vertices[j].position_m);
         let (volume, _) = tetra_geometry(p)?;
@@ -701,7 +858,10 @@ fn assemble(
         if skin_faces.contains(&k) {
             f.kind = Some(BoundaryKind::Skin);
         }
-        if f.kind == Some(BoundaryKind::Skin) && !skin_faces.contains(&k) {
+        if f.kind == Some(BoundaryKind::Skin)
+            && !skin_faces.contains(&k)
+            && f.vertices.iter().any(|v| !constrained_vertices.contains(v))
+        {
             return Err(MechanicsError::InvalidMesh);
         }
         if f.adjacent.len() == 2 && f.kind.is_none() {
@@ -710,13 +870,30 @@ fn assemble(
         }
         if matches!(
             f.kind,
-            Some(BoundaryKind::Support | BoundaryKind::Wall | BoundaryKind::Artificial)
+            Some(BoundaryKind::Support | BoundaryKind::Artificial)
         ) && f
             .vertices
             .iter()
             .any(|&i| !patch.vertices[i].fixed.iter().all(|x| *x))
         {
             return Err(MechanicsError::InvalidMesh);
+        }
+        if f.kind == Some(BoundaryKind::Wall)
+            && f.vertices
+                .iter()
+                .any(|&v| !patch.vertices[v].fixed.iter().all(|x| *x))
+        {
+            let axis = (0..3)
+                .find(|&a| {
+                    f.vertices.iter().all(|&v| {
+                        patch.vertices[v].position_m[a]
+                            == patch.vertices[f.vertices[0]].position_m[a]
+                    })
+                })
+                .ok_or(MechanicsError::InvalidMesh)?;
+            if f.vertices.iter().any(|&v| !patch.vertices[v].fixed[axis]) {
+                return Err(MechanicsError::InvalidMesh);
+            }
         }
     }
     for k in boundaries.keys() {
@@ -726,9 +903,9 @@ fn assemble(
     }
     for s in patch.skins {
         if !faces.contains_key(&key(s.vertices))
-            && s.vertices
-                .iter()
-                .any(|&i| !patch.vertices[i].fixed.iter().all(|v| *v))
+            && s.vertices.iter().any(|&i| {
+                !patch.vertices[i].fixed.iter().all(|v| *v) && !linked_masters.contains(&i)
+            })
         {
             return Err(MechanicsError::InvalidMesh);
         }
@@ -990,6 +1167,11 @@ fn assemble(
             w.exposed.push(triangle(s.vertices, patch)?);
         }
     }
+    for &vertices in patch.exposed_surfaces {
+        if seen.insert(key(vertices)) {
+            w.exposed.push(triangle(vertices, patch)?);
+        }
+    }
     w.velocity.clear();
     w.velocity.resize(dofs, 0.0);
     w.split.clear();
@@ -1014,6 +1196,14 @@ fn assemble(
     ] {
         v.clear();
         v.resize(dofs, 0.0);
+    }
+    prepare_constraints(patch, w)?;
+    if patch
+        .collar_vertices
+        .iter()
+        .any(|&v| v >= patch.vertices.len())
+    {
+        return Err(MechanicsError::InvalidMesh);
     }
     if w.area_scale
         .iter()
@@ -1071,6 +1261,28 @@ fn history(s: &PlateTriangle, e: Tensor, k: Tensor, dt: f64) -> PlateHistory {
 }
 
 fn elastic(
+    patch: PatchView<'_>,
+    w: &Work,
+    velocity: &[f64],
+    dt: f64,
+    gradient: Option<&mut [f64]>,
+) -> f64 {
+    let physical = w.physical_velocity(velocity);
+    if w.lift.is_empty() {
+        return elastic_raw(patch, w, &physical, dt, gradient);
+    }
+    let Some(gradient) = gradient else {
+        return elastic_raw(patch, w, &physical, dt, None);
+    };
+    let mut raw = vec![0.0; velocity.len()];
+    let energy = elastic_raw(patch, w, &physical, dt, Some(&mut raw));
+    for (i, &value) in raw.iter().enumerate() {
+        scatter(&w.lift[i], value, gradient);
+    }
+    energy
+}
+
+fn elastic_raw(
     patch: PatchView<'_>,
     w: &Work,
     velocity: &[f64],
@@ -1160,6 +1372,7 @@ fn hessian_reference(
     rho: f64,
     out: &mut [f64],
 ) {
+    assert!(w.lift.is_empty());
     out.fill(0.0);
     for q in &w.quadrature {
         for row in &q.rows {
@@ -1234,13 +1447,15 @@ fn elastic_remainder(
     dt: f64,
     fraction: f64,
 ) -> f64 {
+    let physical = w.physical_velocity(&w.velocity);
+    let physical_direction = w.physical_velocity(direction);
     let mut remainder = 0.0;
     for (s, t) in patch.skins.iter().zip(&w.skins) {
-        let (e, k, _, jac) = strains(t, &w.velocity, dt);
+        let (e, k, _, jac) = strains(t, &physical, dt);
         let mut gw = [0.0; 2];
         for i in 0..3 {
             for a in 0..2 {
-                gw[a] += dt * t.gradient[i][a] * direction[3 * t.vertices[i] + 2];
+                gw[a] += dt * t.gradient[i][a] * physical_direction[3 * t.vertices[i] + 2];
             }
         }
         let nonlinear = [
@@ -1248,8 +1463,12 @@ fn elastic_remainder(
             0.5 * fraction * fraction * gw[1] * gw[1],
             fraction * fraction * gw[0] * gw[1],
         ];
-        let de = std::array::from_fn(|a| fraction * row_value(&jac[a], direction) + nonlinear[a]);
-        let dk = std::array::from_fn(|a| fraction * dt * row_value(&t.curvature[a], direction));
+        let de = std::array::from_fn(|a| {
+            fraction * row_value(&jac[a], &physical_direction) + nonlinear[a]
+        });
+        let dk = std::array::from_fn(|a| {
+            fraction * dt * row_value(&t.curvature[a], &physical_direction)
+        });
         let h = history(s, e, k, dt);
         let dh = advance_history(
             &s.tangent,
@@ -1269,7 +1488,7 @@ fn elastic_remainder(
         let mut gw = [0.0; 2];
         for i in 0..3 {
             for a in 0..2 {
-                gw[a] += dt * t.gradient[i][a] * direction[3 * t.vertices[i] + 2];
+                gw[a] += dt * t.gradient[i][a] * physical_direction[3 * t.vertices[i] + 2];
             }
         }
         remainder += 0.5
@@ -1394,6 +1613,7 @@ fn minimize(patch: PatchView<'_>, w: &mut Work, dt: f64, accuracy: &MechanicsAcc
 }
 
 fn diagnostics(patch: PatchView<'_>, w: &Work, dt: f64, rho: f64, exact: bool) -> StepDiagnostics {
+    let physical = w.physical_velocity(&w.velocity);
     let mut d = StepDiagnostics {
         energy_increment_j: elastic(patch, w, &w.velocity, dt, None),
         newton_iterations: w.newton_steps,
@@ -1483,7 +1703,7 @@ fn diagnostics(patch: PatchView<'_>, w: &Work, dt: f64, rho: f64, exact: bool) -
         }
     }
     for (s, t) in patch.skins.iter().zip(&w.skins) {
-        let (e, k, slope, _) = strains(t, &w.velocity, dt);
+        let (e, k, slope, _) = strains(t, &physical, dt);
         d.maximum_slope = d.maximum_slope.max(slope[0].hypot(slope[1]));
         d.maximum_strain = d
             .maximum_strain
@@ -1493,13 +1713,32 @@ fn diagnostics(patch: PatchView<'_>, w: &Work, dt: f64, rho: f64, exact: bool) -
             .max(elastic_strain(s, history(s, e, k, dt)));
     }
     for t in &w.exposed {
-        let (_, _, slope, _) = strains(t, &w.velocity, dt);
+        let (_, _, slope, _) = strains(t, &physical, dt);
         d.maximum_slope = d.maximum_slope.max(slope[0].hypot(slope[1]));
     }
     for &(mode, i, length) in &w.rotations {
         d.maximum_slope = d
             .maximum_slope
             .max((mode.normal_slope + dt * w.velocity[i] / length).abs());
+    }
+    for &v in patch.collar_vertices {
+        for a in 0..3 {
+            let row = w.pull_row(&vec![(3 * v + a, 1.0)]);
+            for &(i, _) in &row {
+                if w.fixed[i] && w.area_scale[i] > 0.0 {
+                    d.collar_traction_pa = d
+                        .collar_traction_pa
+                        .max(forces[i].abs() / (dt * w.area_scale[i]));
+                }
+            }
+        }
+        for &(mode, i, _) in &w.rotations {
+            if mode.vertices.contains(&v) && w.fixed[i] {
+                d.collar_traction_pa = d
+                    .collar_traction_pa
+                    .max(forces[i].abs() / (dt * w.area_scale[i]));
+            }
+        }
     }
     d.arrested = w.velocity.iter().all(|x| *x == 0.0);
     d
@@ -1608,6 +1847,7 @@ fn finish(
     w: &Work,
     mut diagnostics: StepDiagnostics,
 ) -> Result<TrialAttempt, MechanicsError> {
+    let physical = w.physical_velocity(&w.velocity);
     let mut transfers = Vec::new();
     let mut totals = volume_totals(patch, &w.volumes);
     let initial = totals.clone();
@@ -1621,12 +1861,8 @@ fn finish(
         if low == high {
             continue;
         }
-        let mean: [f64; 3] = std::array::from_fn(|a| {
-            f.vertices
-                .iter()
-                .map(|&v| w.velocity[3 * v + a] / 3.0)
-                .sum()
-        });
+        let mean: [f64; 3] =
+            std::array::from_fn(|a| f.vertices.iter().map(|&v| physical[3 * v + a] / 3.0).sum());
         let volume =
             dt * f.area * (dot3(mean, f.normal) + f.bubble.map(|i| w.velocity[i]).unwrap_or(0.0));
         if !volume.is_finite() {
@@ -1655,57 +1891,139 @@ fn finish(
         return Ok(TrialAttempt::Subdivide(SubdivisionReason::DonorDepletion));
     }
     let mut skin_transfers = Vec::new();
-    let mut edges = BTreeMap::<(u64, usize, usize), Vec<(usize, usize)>>::new();
-    for (i, s) in patch.skins.iter().enumerate() {
-        for opposite in 0..3 {
-            let (a, b) = (
-                s.vertices[(opposite + 1) % 3],
-                s.vertices[(opposite + 2) % 3],
-            );
-            edges
-                .entry((s.packet_id, a.min(b), a.max(b)))
-                .or_default()
-                .push((i, opposite));
-        }
-    }
-    let mut skin_out = vec![0.0; patch.skins.len()];
-    for ((_, a, b), adjacent) in edges {
-        let (i, opposite) = adjacent[0];
-        let t = &w.skins[i];
-        let pa = patch.vertices[a].position_m;
-        let pb = patch.vertices[b].position_m;
-        let length = (pa[0] - pb[0]).hypot(pa[1] - pb[1]);
-        let inward = t.gradient[opposite];
-        let norm = inward[0].hypot(inward[1]);
-        let speed = -0.5
-            * ((w.velocity[3 * a] + w.velocity[3 * b]) * inward[0]
-                + (w.velocity[3 * a + 1] + w.velocity[3 * b + 1]) * inward[1])
-            / norm;
-        if adjacent.len() == 1 {
-            if speed.abs() * dt > accuracy.absolute_displacement_error_m {
-                return Err(MechanicsError::ExpandDomain);
+    let mut skin_volumes: BTreeMap<u32, f64> = patch
+        .skin_material
+        .iter()
+        .map(|s| (s.cell, s.volume_m3))
+        .collect();
+    if patch.skin_faces.is_empty() {
+        let mut edges = BTreeMap::<(u64, usize, usize), Vec<(usize, usize)>>::new();
+        for (i, s) in patch.skins.iter().enumerate() {
+            for opposite in 0..3 {
+                let (a, b) = (
+                    s.vertices[(opposite + 1) % 3],
+                    s.vertices[(opposite + 2) % 3],
+                );
+                edges
+                    .entry((s.packet_id, a.min(b), a.max(b)))
+                    .or_default()
+                    .push((i, opposite));
             }
-            continue;
         }
-        let j = adjacent[1].0;
-        let donor = if speed >= 0.0 { i } else { j };
-        let volume = dt * length * speed * patch.skins[donor].thickness_m;
-        skin_out[donor] += volume.abs();
-        skin_transfers.push(SkinTransfer {
-            low_skin: i,
-            high_skin: j,
-            volume_m3: volume,
-        });
+        let mut skin_out = vec![0.0; patch.skins.len()];
+        for ((_, a, b), adjacent) in edges {
+            let (i, opposite) = adjacent[0];
+            let t = &w.skins[i];
+            let pa = patch.vertices[a].position_m;
+            let pb = patch.vertices[b].position_m;
+            let length = (pa[0] - pb[0]).hypot(pa[1] - pb[1]);
+            let inward = t.gradient[opposite];
+            let norm = inward[0].hypot(inward[1]);
+            let speed = -0.5
+                * ((physical[3 * a] + physical[3 * b]) * inward[0]
+                    + (physical[3 * a + 1] + physical[3 * b + 1]) * inward[1])
+                / norm;
+            if adjacent.len() == 1 {
+                if speed.abs() * dt > accuracy.absolute_displacement_error_m {
+                    return Err(MechanicsError::ExpandDomain);
+                }
+                continue;
+            }
+            let j = adjacent[1].0;
+            let donor = if speed >= 0.0 { i } else { j };
+            let volume = dt * length * speed * patch.skins[donor].thickness_m;
+            skin_out[donor] += volume.abs();
+            skin_transfers.push(SkinTransfer {
+                face: skin_transfers.len(),
+                low_cell: patch.skins[i].material_cell,
+                high_cell: patch.skins[j].material_cell,
+                volume_m3: volume,
+            });
+        }
+        for (i, volume) in skin_out.iter().enumerate() {
+            if patch.skin_material.is_empty() {
+                *skin_volumes
+                    .entry(patch.skins[i].material_cell)
+                    .or_default() += w.skins[i].area * patch.skins[i].thickness_m;
+            }
+            let fraction = volume / (w.skins[i].area * patch.skins[i].thickness_m);
+            diagnostics.maximum_donor_fraction = diagnostics.maximum_donor_fraction.max(fraction);
+            if fraction > accuracy.maximum_donor_fraction {
+                return Ok(TrialAttempt::Subdivide(SubdivisionReason::DonorDepletion));
+            }
+        }
+    } else {
+        if skin_volumes.len() != patch.skin_material.len() {
+            return Err(MechanicsError::InvalidMesh);
+        }
+        for (face, f) in patch.skin_faces.iter().enumerate() {
+            let [a, b] = f.velocity_vertices;
+            let pa = patch.vertices[a].position_m;
+            let pb = patch.vertices[b].position_m;
+            let length = (pa[0] - pb[0]).hypot(pa[1] - pb[1]);
+            let norm = f.normal_xy[0].hypot(f.normal_xy[1]);
+            let speed = |i: usize| {
+                (physical[3 * i] * f.normal_xy[0] + physical[3 * i + 1] * f.normal_xy[1]) / norm
+            };
+            let (u, v) = (speed(a), speed(b));
+            let [h, k] = f.thickness_m;
+            let volume = dt * length * (2.0 * h * u + h * v + k * u + 2.0 * k * v) / 6.0;
+            if !volume.is_finite() {
+                return Err(MechanicsError::NonFiniteState);
+            }
+            let Some(high_cell) = f.high_cell else {
+                if dt * u.abs().max(v.abs()) > accuracy.absolute_displacement_error_m {
+                    return Err(MechanicsError::ExpandDomain);
+                }
+                continue;
+            };
+            if high_cell == f.low_cell {
+                continue;
+            }
+            skin_transfers.push(SkinTransfer {
+                face,
+                low_cell: f.low_cell,
+                high_cell,
+                volume_m3: volume,
+            });
+        }
     }
-    for (i, volume) in skin_out.iter().enumerate() {
-        let fraction = volume / (w.skins[i].area * patch.skins[i].thickness_m);
+    let initial_skin = skin_volumes.clone();
+    let mut skin_outgoing = BTreeMap::<u32, f64>::new();
+    for f in &skin_transfers {
+        *skin_volumes
+            .get_mut(&f.low_cell)
+            .ok_or(MechanicsError::InvalidMesh)? -= f.volume_m3;
+        *skin_volumes
+            .get_mut(&f.high_cell)
+            .ok_or(MechanicsError::InvalidMesh)? += f.volume_m3;
+        *skin_outgoing
+            .entry(if f.volume_m3 >= 0.0 {
+                f.low_cell
+            } else {
+                f.high_cell
+            })
+            .or_default() += f.volume_m3.abs();
+    }
+    for (id, volume) in skin_outgoing {
+        let available = initial_skin[&id];
+        let fraction = if available > 0.0 {
+            volume / available
+        } else if volume == 0.0 {
+            0.0
+        } else {
+            f64::INFINITY
+        };
         diagnostics.maximum_donor_fraction = diagnostics.maximum_donor_fraction.max(fraction);
         if fraction > accuracy.maximum_donor_fraction {
             return Ok(TrialAttempt::Subdivide(SubdivisionReason::DonorDepletion));
         }
     }
+    if skin_volumes.values().any(|v| *v < 0.0) {
+        return Ok(TrialAttempt::Subdivide(SubdivisionReason::DonorDepletion));
+    }
     let displacements: Vec<[f64; 3]> = (0..patch.vertices.len())
-        .map(|i| std::array::from_fn(|a| dt * w.velocity[3 * i + a]))
+        .map(|i| std::array::from_fn(|a| dt * physical[3 * i + a]))
         .collect();
     for c in patch.cells {
         let p = c.vertices.map(|i| {
@@ -1715,18 +2033,20 @@ fn finish(
             return Ok(TrialAttempt::Subdivide(SubdivisionReason::Nonpenetration));
         }
     }
-    let support: Vec<_> = w
+    let mut support: Vec<_> = w
         .faces
         .iter()
         .filter(|f| f.kind == Some(BoundaryKind::Support))
+        .map(|f| f.vertices)
         .collect();
+    support.extend_from_slice(patch.support_surfaces);
     if support.is_empty() && !patch.cells.is_empty() {
         return Err(MechanicsError::InvalidMesh);
     }
     for (i, v) in patch.vertices.iter().enumerate() {
         let position: [f64; 3] = std::array::from_fn(|a| v.position_m[a] + displacements[i][a]);
         for f in &support {
-            let p = f.vertices.map(|j| patch.vertices[j].position_m);
+            let p = f.map(|j| patch.vertices[j].position_m);
             let det = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1])
                 - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
             if det == 0.0 {
@@ -1751,7 +2071,7 @@ fn finish(
         .iter()
         .zip(&w.skins)
         .map(|(s, t)| {
-            let (e, k, _, _) = strains(t, &w.velocity, dt);
+            let (e, k, _, _) = strains(t, &physical, dt);
             history(s, e, k, dt)
         })
         .collect();
@@ -1765,12 +2085,14 @@ fn finish(
         .collect();
     Ok(TrialAttempt::Solved(MechanicsTrial {
         input_generation: patch.generation,
+        duration_s: dt,
         transfers,
         skin_transfers,
         history,
         bending_modes,
         vertex_displacement_m: displacements,
         end_cell_volumes_m3: totals.into_iter().collect(),
+        end_skin_volumes_m3: skin_volumes.into_iter().collect(),
         diagnostics,
     }))
 }
@@ -1784,20 +2106,37 @@ fn remap_checked(
     let mapped = remap.remap(patch, trial)?;
     let next = mapped.view();
     check(next, 1.0, accuracy)?;
+    if next.collar_vertices != patch.collar_vertices
+        || next.constraints.len() != patch.constraints.len()
+        || next
+            .constraints
+            .iter()
+            .zip(patch.constraints)
+            .any(|(a, b)| {
+                a.vertex != b.vertex
+                    || (0..3).any(|i| {
+                        a.components[i].len() != b.components[i].len()
+                            || a.components[i]
+                                .iter()
+                                .zip(&b.components[i])
+                                .any(|(x, y)| x.vertex != y.vertex || x.component != y.component)
+                    })
+            })
+    {
+        return Err(MechanicsError::RefineMesh);
+    }
     let mode_keys = |modes: &[BendingMode]| {
         modes
             .iter()
             .map(|m| {
                 (
-                    m.packet_id,
                     m.vertices[0].min(m.vertices[1]),
                     m.vertices[0].max(m.vertices[1]),
                 )
             })
             .collect::<BTreeSet<_>>()
     };
-    if next.bending_modes.len() != trial.bending_modes.len()
-        || mode_keys(next.bending_modes) != mode_keys(&trial.bending_modes)
+    if mode_keys(next.bending_modes) != mode_keys(&trial.bending_modes)
         || next
             .bending_modes
             .iter()
@@ -1807,16 +2146,28 @@ fn remap_checked(
     }
     if next.vertices.len() != patch.vertices.len()
         || next.cells.len() != patch.cells.len()
-        || next.skins.len() != patch.skins.len()
         || next
             .cells
             .iter()
             .zip(patch.cells)
             .any(|(a, b)| a.vertices != b.vertices || a.material_cell != b.material_cell)
-        || next.skins.iter().zip(patch.skins).any(|(a, b)| {
-            a.vertices != b.vertices
-                || a.material_cell != b.material_cell
-                || a.packet_id != b.packet_id
+    {
+        return Err(MechanicsError::RefineMesh);
+    }
+    let skin_geometry = |skins: &[PlateTriangle]| {
+        skins
+            .iter()
+            .map(|s| (s.material_cell, key(s.vertices)))
+            .collect::<BTreeSet<_>>()
+    };
+    if skin_geometry(next.skins) != skin_geometry(patch.skins)
+        || next.exposed_surfaces != patch.exposed_surfaces
+        || next.support_surfaces != patch.support_surfaces
+        || next.skin_faces.len() != patch.skin_faces.len()
+        || next.skin_faces.iter().zip(patch.skin_faces).any(|(a, b)| {
+            a.low_cell != b.low_cell
+                || a.high_cell != b.high_cell
+                || a.velocity_vertices != b.velocity_vertices
         })
     {
         return Err(MechanicsError::RefineMesh);
@@ -1855,16 +2206,35 @@ fn remap_checked(
             return Err(MechanicsError::RefineMesh);
         }
     }
+    let skin_volumes: BTreeMap<_, _> = next
+        .skin_material
+        .iter()
+        .map(|s| (s.cell, s.volume_m3))
+        .collect();
+    if !patch.skin_material.is_empty() {
+        for &(id, expected) in &trial.end_skin_volumes_m3 {
+            let actual = *skin_volumes.get(&id).ok_or(MechanicsError::InvalidMesh)?;
+            if (actual - expected).abs() > 64.0 * f64::EPSILON * actual.abs().max(expected.abs()) {
+                return Err(MechanicsError::InvalidMesh);
+            }
+        }
+    }
     let mut slope_sum = vec![[0.0; 2]; patch.vertices.len()];
     let mut weights = vec![0.0; patch.vertices.len()];
     let mut seen = BTreeSet::new();
-    for vertices in patch.skins.iter().map(|s| s.vertices).chain(
-        patch
-            .boundary
-            .iter()
-            .filter(|b| b.kind == BoundaryKind::Exposed)
-            .map(|b| b.vertices),
-    ) {
+    for vertices in patch
+        .skins
+        .iter()
+        .map(|s| s.vertices)
+        .chain(
+            patch
+                .boundary
+                .iter()
+                .filter(|b| b.kind == BoundaryKind::Exposed)
+                .map(|b| b.vertices),
+        )
+        .chain(patch.exposed_surfaces.iter().copied())
+    {
         if !seen.insert(key(vertices)) {
             continue;
         }
@@ -1936,11 +2306,7 @@ pub(super) fn attempt_step(
         TrialAttempt::Solved(step) => step,
         TrialAttempt::Subdivide(reason) => return Ok(StepAttempt::Subdivide(reason)),
     };
-    let mut middle = remap_checked(half_patch, &mut first, accuracy, remap)?;
-    for (s, source) in middle.skins.iter_mut().zip(&half_skins) {
-        s.chemical_force_increment_n_m = source.chemical_force_increment_n_m;
-        s.chemical_moment_increment_n = source.chemical_moment_increment_n;
-    }
+    let middle = remap_checked(half_patch, &mut first, accuracy, remap)?;
     let mut second = match solve(middle.view(), 0.5 * dt, accuracy, comparison)? {
         TrialAttempt::Solved(step) => step,
         TrialAttempt::Subdivide(reason) => return Ok(StepAttempt::Subdivide(reason)),
@@ -1963,20 +2329,59 @@ pub(super) fn attempt_step(
     if maximum > accuracy.absolute_displacement_error_m + accuracy.relative_time_error * scale {
         return Ok(StepAttempt::Subdivide(SubdivisionReason::TimeAccuracy));
     }
-    for (f, h) in full_remapped.skins.iter().zip(&half_remapped.skins) {
+    let cohort_key = |s: &PlateTriangle| (s.packet_id, s.material_cell, key(s.vertices));
+    let full_cohorts: BTreeMap<_, _> = full_remapped
+        .skins
+        .iter()
+        .map(|s| (cohort_key(s), s))
+        .collect();
+    let half_cohorts: BTreeMap<_, _> = half_remapped
+        .skins
+        .iter()
+        .map(|s| (cohort_key(s), s))
+        .collect();
+    let keys: BTreeSet<_> = full_cohorts
+        .keys()
+        .chain(half_cohorts.keys())
+        .copied()
+        .collect();
+    let mut errors =
+        BTreeMap::<(u32, [usize; 3]), ([f64; 3], [f64; 3], [f64; 3], [f64; 3], f64)>::new();
+    for k in keys {
+        let f = full_cohorts.get(&k).copied();
+        let h = half_cohorts.get(&k).copied();
+        let reference = f.or(h).ok_or(MechanicsError::InvalidMesh)?;
+        let entry = errors.entry((k.1, k.2)).or_insert((
+            [0.0; 3],
+            [0.0; 3],
+            [0.0; 3],
+            [0.0; 3],
+            reference.thickness_m,
+        ));
         for a in 0..3 {
-            let force_error = (f.history.tension_n_m[a] - h.history.tension_n_m[a]).abs();
-            let moment_error = (f.history.moment_n[a] - h.history.moment_n[a]).abs();
+            let ft = f.map(|s| s.history.tension_n_m[a]).unwrap_or(0.0);
+            let ht = h.map(|s| s.history.tension_n_m[a]).unwrap_or(0.0);
+            let fm = f.map(|s| s.history.moment_n[a]).unwrap_or(0.0);
+            let hm = h.map(|s| s.history.moment_n[a]).unwrap_or(0.0);
+            entry.0[a] += (ft - ht).abs();
+            entry.1[a] += (fm - hm).abs();
+            entry.2[a] += ft.abs().max(ht.abs());
+            entry.3[a] += fm.abs().max(hm.abs());
+        }
+    }
+    for (_, (force_errors, moment_errors, forces, moments, thickness)) in errors {
+        for a in 0..3 {
+            let force_error = force_errors[a];
+            let moment_error = moment_errors[a];
             full.diagnostics.estimated_force_error_n_m =
                 full.diagnostics.estimated_force_error_n_m.max(force_error);
             full.diagnostics.estimated_moment_error_n =
                 full.diagnostics.estimated_moment_error_n.max(moment_error);
             if force_error
-                > accuracy.traction_error_pa * f.thickness_m
-                    + accuracy.relative_time_error * f.history.tension_n_m[a].abs()
+                > accuracy.traction_error_pa * thickness + accuracy.relative_time_error * forces[a]
                 || moment_error
-                    > accuracy.traction_error_pa * f.thickness_m * f.thickness_m
-                        + accuracy.relative_time_error * f.history.moment_n[a].abs()
+                    > accuracy.traction_error_pa * thickness * thickness
+                        + accuracy.relative_time_error * moments[a]
             {
                 return Ok(StepAttempt::Subdivide(SubdivisionReason::TimeAccuracy));
             }
@@ -1991,6 +2396,116 @@ pub(super) fn attempt_step(
 #[cfg(test)]
 mod numerical_tests {
     use super::*;
+
+    #[test]
+    fn oil_mechanics_trace_constraint_virtual_work() {
+        let vertices = vec![
+            Vertex {
+                position_m: [0.0, 0.0, 0.0],
+                fixed: [true; 3],
+            },
+            Vertex {
+                position_m: [1.0, 0.0, 0.0],
+                fixed: [true; 3],
+            },
+            Vertex {
+                position_m: [0.0, 1.0, 0.0],
+                fixed: [true; 3],
+            },
+            Vertex {
+                position_m: [0.0, 0.0, 1.0],
+                fixed: [true; 3],
+            },
+            Vertex {
+                position_m: [0.0, 0.0, 1.1],
+                fixed: [true; 3],
+            },
+        ];
+        let cells = [FlowCell {
+            vertices: [0, 1, 2, 3],
+            material_cell: 0,
+            eta_pa_s: 2.0,
+            yield_pa: 0.0,
+        }];
+        let boundary = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]].map(|vertices| BoundaryFace {
+            vertices,
+            kind: BoundaryKind::Wall,
+        });
+        let tangent = integrate_skin(
+            &[SkinCell {
+                z_lo_m: -0.01,
+                z_hi_m: 0.01,
+                young_pa: 100.0,
+                poisson: 0.3,
+            }],
+            0.0,
+        )
+        .unwrap();
+        let skins = [PlateTriangle {
+            vertices: [1, 2, 3],
+            packet_id: 1,
+            material_cell: 1,
+            thickness_m: 0.02,
+            tangent,
+            history: PlateHistory {
+                tension_n_m: [1.0, 2.0, 0.3],
+                moment_n: [0.0; 3],
+            },
+            chemical_force_increment_n_m: [0.0; 3],
+            chemical_moment_increment_n: [0.0; 3],
+            relaxation_s: f64::INFINITY,
+            exposed: true,
+        }];
+        let constraints = [VertexConstraint {
+            vertex: 3,
+            components: std::array::from_fn(|component| {
+                vec![VelocityTerm {
+                    vertex: 4,
+                    component,
+                    coefficient: 1.0,
+                }]
+            }),
+        }];
+        let mut patch = PatchView {
+            generation: 0,
+            vertices: &vertices,
+            cells: &cells,
+            boundary: &boundary,
+            skins: &skins,
+            bending_modes: &[],
+            constraints: &constraints,
+            collar_vertices: &[],
+            skin_faces: &[],
+            skin_material: &[],
+            exposed_surfaces: &[],
+            support_surfaces: &[],
+            surface_tension_n_m: 0.03,
+        };
+        let modes = controls::initialize_bending_modes(patch).unwrap();
+        patch.bending_modes = &modes;
+        let mut w = Work::default();
+        assemble(patch, &controls::proposed_accuracy(), &mut w).unwrap();
+        let mut v = vec![0.0; w.velocity.len()];
+        v[12] = 1.0e-5;
+        v[13] = -2.0e-5;
+        v[14] = 3.0e-5;
+        let physical = w.physical_velocity(&v);
+        assert_eq!(&physical[9..12], &v[12..15]);
+        let mut g = vec![0.0; v.len()];
+        augmented(patch, &w, &v, 0.01, 2.0, Some(&mut g));
+        assert_eq!(&g[9..12], &[0.0; 3]);
+        let epsilon = 1.0e-7;
+        for i in 12..15 {
+            let mut plus = v.clone();
+            let mut minus = v.clone();
+            plus[i] += epsilon;
+            minus[i] -= epsilon;
+            let derivative = (augmented(patch, &w, &plus, 0.01, 2.0, None)
+                - augmented(patch, &w, &minus, 0.01, 2.0, None))
+                / (2.0 * epsilon);
+            assert!((derivative - g[i]).abs() < 1.0e-7 * g[i].abs().max(1.0e-12));
+        }
+    }
 
     #[test]
     fn oil_mechanics_bonded_cohorts_share_bending_modes() {
@@ -2110,6 +2625,12 @@ mod numerical_tests {
             boundary: &boundary,
             skins: &[],
             bending_modes: &[],
+            constraints: &[],
+            collar_vertices: &[],
+            skin_faces: &[],
+            skin_material: &[],
+            exposed_surfaces: &[],
+            support_surfaces: &[],
             surface_tension_n_m: 0.0,
         };
         let mut w = Work::default();

@@ -289,6 +289,12 @@ impl ConservativeRemap for UniformFixtureRemap {
             boundary: source.boundary.to_vec(),
             skins: source.skins.to_vec(),
             bending_modes: trial.bending_modes.clone(),
+            constraints: source.constraints.to_vec(),
+            collar_vertices: source.collar_vertices.to_vec(),
+            skin_faces: source.skin_faces.to_vec(),
+            skin_material: source.skin_material.to_vec(),
+            exposed_surfaces: source.exposed_surfaces.to_vec(),
+            support_surfaces: source.support_surfaces.to_vec(),
             surface_tension_n_m: source.surface_tension_n_m,
         };
         let mut slopes = vec![[0.0; 2]; source.vertices.len()];
@@ -348,28 +354,36 @@ impl ConservativeRemap for UniformFixtureRemap {
             .map(|(h, a)| h.moment_n.map(|v| v * a))
             .collect();
         let mut touched = vec![false; source.skins.len()];
+        let skin_index: BTreeMap<_, _> = source
+            .skins
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.material_cell, i))
+            .collect();
         for f in &trial.skin_transfers {
             if f.volume_m3 == 0.0 {
                 continue;
             }
-            touched[f.low_skin] = true;
-            touched[f.high_skin] = true;
+            let low_skin = skin_index[&f.low_cell];
+            let high_skin = skin_index[&f.high_cell];
+            touched[low_skin] = true;
+            touched[high_skin] = true;
             let donor = if f.volume_m3 >= 0.0 {
-                f.low_skin
+                low_skin
             } else {
-                f.high_skin
+                high_skin
             };
-            volumes[f.low_skin] -= f.volume_m3;
-            volumes[f.high_skin] += f.volume_m3;
+            volumes[low_skin] -= f.volume_m3;
+            volumes[high_skin] += f.volume_m3;
             for a in 0..3 {
                 let force = f.volume_m3 * trial.history[donor].tension_n_m[a]
                     / source.skins[donor].thickness_m;
                 let moment = f.volume_m3 * trial.history[donor].moment_n[a]
                     / source.skins[donor].thickness_m;
-                forces[f.low_skin][a] -= force;
-                forces[f.high_skin][a] += force;
-                moments[f.low_skin][a] -= moment;
-                moments[f.high_skin][a] += moment;
+                forces[low_skin][a] -= force;
+                forces[high_skin][a] += force;
+                moments[low_skin][a] -= moment;
+                moments[high_skin][a] += moment;
             }
         }
         for i in 0..result.skins.len() {

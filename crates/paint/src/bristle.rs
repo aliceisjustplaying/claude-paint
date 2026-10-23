@@ -977,25 +977,31 @@ impl Surf {
     /// bare (as `wait` judges it) holds no film to have one.
     #[inline]
     pub(crate) unsafe fn take(&self, i: usize, v: f32) -> Prop {
+        unsafe { self.take_with_lat(i, v).0 }
+    }
+
+    #[inline]
+    pub(crate) unsafe fn take_with_lat(&self, i: usize, v: f32) -> (Prop, Option<Latent>) {
         unsafe {
             self.film_give(i, v);
             let vol = &mut *self.vol.add(i);
             if self.layers && !(*self.lat.add(i)).layers.is_empty() {
                 let (below, top) = (*self.lat.add(i)).split_top(*vol, *self.hide.add(i), v, self.drain);
-                let (_, _, got) = Latent::from_layers(top);
+                let (_, mut picked, got) = Latent::from_layers(top);
+                picked.layers.clear();
                 let (left, lat, hide) = Latent::from_layers(below);
                 *vol = left;
                 *self.lat.add(i) = lat;
                 *self.hide.add(i) = hide;
                 if self.cure_now && *vol < 1e-5 && !self.dry.is_null() { (*self.dry.add(i)).cure = 0.0; }
-                return if self.drain { fluid_of(got) } else { got };
+                return (if self.drain { fluid_of(got) } else { got }, Some(picked));
             }
             let got = if self.drain { take_from(&mut *self.hide.add(i), *vol, v) } else { *self.hide.add(i) };
             *vol -= v;
             if self.cure_now && *vol < 1e-5 && !self.dry.is_null() {
                 (*self.dry.add(i)).cure = 0.0;
             }
-            got
+            (got, None)
         }
     }
 

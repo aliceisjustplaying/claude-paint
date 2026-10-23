@@ -1,9 +1,11 @@
 use crate::api::Studio;
 use paint::{Mask, Stage};
+use std::collections::{HashMap, hash_map::Entry};
 
 #[derive(Default)]
 pub(crate) struct DryingFeedback {
     queries: Vec<(f32, f32, Stage)>,
+    query_index: HashMap<(u32, u32), usize>,
     lines: usize,
     omitted: usize,
     #[cfg(test)]
@@ -13,6 +15,7 @@ pub(crate) struct DryingFeedback {
 impl DryingFeedback {
     pub(crate) fn begin(&mut self) {
         self.queries.clear();
+        self.query_index.clear();
         self.lines = 0;
         self.omitted = 0;
     }
@@ -20,10 +23,17 @@ impl DryingFeedback {
     pub(crate) fn queried(&mut self, x: f32, y: f32, stage: Stage) {
         #[cfg(test)]
         if self.disabled { return; }
-        if let Some(q) = self.queries.iter_mut().find(|q| q.0 == x && q.1 == y) {
-            q.2 = stage;
-        } else {
+        if x.is_nan() || y.is_nan() {
             self.queries.push((x, y, stage));
+            return;
+        }
+        let key = (if x == 0.0 { 0 } else { x.to_bits() }, if y == 0.0 { 0 } else { y.to_bits() });
+        match self.query_index.entry(key) {
+            Entry::Occupied(entry) => self.queries[*entry.get()].2 = stage,
+            Entry::Vacant(entry) => {
+                entry.insert(self.queries.len());
+                self.queries.push((x, y, stage));
+            }
         }
     }
 }
@@ -117,6 +127,52 @@ mod tests {
         assert_eq!(a.st.borrow().calls, b.st.borrow().calls);
         assert_eq!(a.st.borrow().mark_effects, b.st.borrow().mark_effects);
         assert_eq!(a.st.borrow().clock, b.st.borrow().clock);
+    }
+
+    #[test]
+    fn drying_queries_keep_first_notice_order_and_latest_stage() {
+        let mut feedback = super::DryingFeedback::default();
+        feedback.queried(0.0, 3.0, paint::Stage::Open);
+        feedback.queried(2.0, 1.0, paint::Stage::Dry);
+        feedback.queried(-0.0, 3.0, paint::Stage::Tacky);
+        feedback.queried(2.0, 1.0, paint::Stage::Setting);
+        assert_eq!(feedback.queries, vec![(0.0, 3.0, paint::Stage::Tacky), (2.0, 1.0, paint::Stage::Setting)]);
+        feedback.queried(f32::NAN, 1.0, paint::Stage::Open);
+        feedback.queried(f32::NAN, 1.0, paint::Stage::Dry);
+        assert_eq!(feedback.queries.len(), 4);
+        assert_eq!(feedback.query_index.len(), 2);
+        feedback.begin();
+        feedback.queried(2.0, 1.0, paint::Stage::Open);
+        assert_eq!(feedback.queries, vec![(2.0, 1.0, paint::Stage::Open)]);
+    }
+
+    #[test]
+    #[ignore]
+    fn drying_full_canvas_mask_scales_linearly() {
+        let mut previous = None;
+        for width in [600, 1200, 2400] {
+            let mut times = Vec::new();
+            for _ in 0..3 {
+                let mut s = Session::with_box(width, box_for(None).unwrap()).unwrap();
+                s.run(CANVAS).unwrap();
+                let t0 = std::time::Instant::now();
+                s.run(r#"m=mask(function(x,y) return drying(x,y)=="dry" and 1 or 0 end)"#).unwrap();
+                times.push(t0.elapsed().as_secs_f64());
+                let st = s.st.borrow();
+                let f = st.canvas.as_ref().unwrap().frame();
+                assert_eq!(st.drying_feedback.queries.len(), f.w * f.h);
+                assert_eq!(st.drying_feedback.query_index.len(), f.w * f.h);
+            }
+            times.sort_by(f64::total_cmp);
+            let median = times[1];
+            eprintln!("DRYING_MASK width={width} median_seconds={median:.6} samples={times:?}");
+            if let Some(previous) = previous {
+                let ratio = median / previous;
+                eprintln!("DRYING_MASK four_times_pixels_ratio={ratio:.3}");
+                assert!(ratio < 8.0, "four times the pixels took {ratio:.3} times as long");
+            }
+            previous = Some(median);
+        }
     }
 
     #[test]

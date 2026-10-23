@@ -12,10 +12,28 @@ pub struct Formulation {
     latent: Latent,
     prop: Prop,
     kinetics: Kinetics,
+    binders: [f64; 5],
 }
 
 impl Formulation {
-    pub fn new(mut latent: Latent, prop: Prop, kinetics: Kinetics) -> Result<Self, MaterialError> {
+    pub fn new(latent: Latent, prop: Prop, kinetics: Kinetics) -> Result<Self, MaterialError> {
+        if kinetics.binder_code > 5 {
+            return Err(MaterialError::Invalid("mixed binders require explicit fractions"));
+        }
+        let mut binders = [0.0; 5];
+        binders[kinetics.binder_code.saturating_sub(1) as usize] = 1.0;
+        Self::new_with_binders(latent, prop, kinetics, binders)
+    }
+
+    pub fn new_with_binders(mut latent: Latent, prop: Prop, kinetics: Kinetics, mut binders: [f64; 5]) -> Result<Self, MaterialError> {
+        let total = binders.iter().sum::<f64>();
+        if !total.is_finite() || total <= 0.0 || binders.iter().any(|v| !v.is_finite() || *v < 0.0) {
+            return Err(MaterialError::Invalid("invalid binder fractions"));
+        }
+        for v in &mut binders {
+            if *v == 0.0 { *v = 0.0; }
+            else if (total - 1.0).abs() > 1e-12 { *v /= total; }
+        }
         latent.layers.clear();
         latent.material = None;
         latent
@@ -42,6 +60,7 @@ impl Formulation {
             latent,
             prop,
             kinetics,
+            binders,
         };
         if !result.valid() {
             return Err(MaterialError::Invalid("invalid formulation"));
@@ -59,9 +78,15 @@ impl Formulation {
         self.kinetics
     }
 
+    pub fn binders(&self) -> [f64; 5] {
+        self.binders
+    }
+
     pub(crate) fn valid(&self) -> bool {
         self.latent.layers.is_empty()
             && self.latent.material.is_none()
+            && self.binders.iter().all(|v| v.is_finite() && *v >= 0.0)
+            && (self.binders.iter().sum::<f64>() - 1.0).abs() <= 1e-12
             && self
                 .latent
                 .color
@@ -1055,7 +1080,7 @@ pub(crate) mod tests {
 
     pub(crate) fn recipe(code: u32) -> Arc<Formulation> {
         Arc::new(
-            Formulation::new(
+            Formulation::new_with_binders(
                 Latent::from_color([0.25; crate::wet::LAT]),
                 [0.5; 10],
                 Kinetics {
@@ -1077,6 +1102,7 @@ pub(crate) mod tests {
                     provenance_code: code,
                     revision: 1,
                 },
+                [1.0, 0.0, 0.0, 0.0, 0.0],
             )
             .unwrap(),
         )

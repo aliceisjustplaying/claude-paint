@@ -25,9 +25,6 @@
 //! Older files containing wet paint are refused because their latent vectors
 //! cannot be decoded by this mixer. Empty older files can still be read.
 //! Versions 7–18 store seven latent floats per pixel, not the current width.
-//! Retained wet layers use version 20. A retained spectral dry backing uses
-//! version 21: a wet-layer presence flag, those layers if present, then
-//! 38 reflectances, three residuals and three cached RGB values per pixel.
 //!
 //! The base format is version 8 (`MAGIC` is `PAINTCK8`) for engines 1 and 2 and
 //! version 9 (`PAINTCK9`) for engine 3, or version 10 for a raw canvas
@@ -135,6 +132,7 @@ const MAGIC18: &[u8; 8] = b"PAINTC18";
 const MAGIC19: &[u8; 8] = b"PAINTC19";
 const MAGIC20: &[u8; 8] = b"PAINTC20";
 const MAGIC21: &[u8; 8] = b"PAINTC21";
+const MAGIC22: &[u8; 8] = b"PAINTC22";
 const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
@@ -395,6 +393,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC19 => 19,
         m if m == MAGIC20 => 20,
         m if m == MAGIC21 => 21,
+        m if m == MAGIC22 => 22,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -419,9 +418,16 @@ impl Canvas {
     /// Write the complete canvas state (dries nothing: wet paint stays wet)
     /// after `header`.
     pub fn write_state(&self, w: &mut impl Write, header: &str) -> io::Result<()> {
-        let layers = self.wet.lat.iter().any(|p| !p.layers.is_empty());
-        let pigments = layers || self.wet.lat.iter().any(|p| !p.parts.is_empty());
-        let backing = self.spectral_films() && !self.backing.is_empty();
+        let material = self.material.is_some();
+        if !crate::supported_material_revision(self.engine, self.material_revision) || material != (self.material_revision == 1) {
+            return Err(bad("invalid material backend identity"));
+        }
+        if material && !self.wet.vol.is_empty() {
+            return Err(bad("cannot checkpoint an open material exchange"));
+        }
+        let layers = !material && self.wet.lat.iter().any(|p| !p.layers.is_empty());
+        let pigments = !material && (layers || self.wet.lat.iter().any(|p| !p.parts.is_empty()));
+        let backing = !material && self.spectral_films() && !self.backing.is_empty();
         // (a raw canvas is engine 3's: version 10 holds version 9's bytes)
         if self.soak.is_some() && self.engine < 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "a raw canvas is engine 3's: this one is set to an older engine"));
@@ -450,12 +456,15 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
+        w.write_all(if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
         put_u64(w, version)?;
         put_u64(w, u64::from(pigments))?;
+        if material {
+            put_u64(w, self.material_revision as u64)?;
+        }
         let f = self.f;
         for v in [f.w, f.h, f.x0, f.y0, f.full_w, f.full_h, self.keep.0, self.keep.1, self.keep.2, self.keep.3] {
             put_u64(w, v as u64)?;
@@ -484,6 +493,7 @@ impl Canvas {
                 }
             }
         }
+        if !material {
         put_all(w, self.px.iter().flat_map(|p| *p))?;
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
@@ -516,8 +526,9 @@ impl Canvas {
         if !ck.px.is_empty() {
             put_all(w, ck.px.iter().flat_map(|p| [p.cure, p.lev, p.seen, p.sub, p.srate, p.th]))?;
         }
+        }
         put_f32(w, self.ground_um)?;
-        put_all(w, wt.cover.iter().copied())?;
+        if !material { put_all(w, wt.cover.iter().copied())?; }
         match &self.drawing {
             None => put_u64(w, 0)?,
             Some(d) => {
@@ -540,12 +551,12 @@ impl Canvas {
         }
         put_u64(w, self.engine as u64 | if self.drawing_optics { DRAWING_OPTICS } else { 0 } | if self.sealed_drawing_guide { SEALED_DRAWING_GUIDE } else { 0 } | if self.liquid_film_levels { LIQUID_FILM_LEVELS } else { 0 } | if self.quarter_tiles { QUARTER_TILES } else { 0 } | if self.adaptive_sweep { ADAPTIVE_SWEEP } else { 0 } | if self.glaze_film { GLAZE_FILM } else { 0 } | if self.rag_lift { RAG_LIFT } else { 0 } | if self.knife_skim { KNIFE_SKIM } else { 0 } | if self.blend_feather { BLEND_FEATHER } else { 0 } | if self.brush_skim { BRUSH_SKIM } else { 0 })?;
         // engine 4's section (versions 11 and 12): gloss and absorbency per pixel
-        if version >= 11 {
+        if version >= 11 && !material {
             put_all(w, self.gloss.iter().copied())?;
             put_all(w, self.absorb.iter().copied())?;
         }
         // the thinner's section (version 9), last: the solvent per pixel
-        if self.engine >= 3 {
+        if self.engine >= 3 && !material {
             let n = self.f.w * self.f.h;
             if self.wet.solv.len() == n {
                 put_all(w, self.wet.solv.iter().copied())?;
@@ -559,7 +570,7 @@ impl Canvas {
             put_u64(w, DRAIN_MARK)?;
             put_u64(w, DRAIN_V)?;
             put_u64(w, u64::from(self.soak.is_some()))?;
-            put_all(w, wt.hide.iter().flat_map(|h| [h[5], h[6], h[7], h[8], h[9]]))?;
+            if !material { put_all(w, wt.hide.iter().flat_map(|h| [h[5], h[6], h[7], h[8], h[9]]))?; }
         }
         // a raw canvas's soak section (version 10), last
         if let Some(s) = &self.soak {
@@ -582,9 +593,7 @@ impl Canvas {
                 }
             }
         }
-        if backing {
-            put_u64(w, u64::from(layers))?;
-        }
+        if backing { put_u64(w, u64::from(layers))?; }
         if layers {
             for pixel in &self.wet.lat {
                 put_u64(w, pixel.layers.len() as u64)?;
@@ -603,12 +612,25 @@ impl Canvas {
         if backing {
             put_all(w, self.backing.iter().flat_map(|b| b.reflectance.into_iter().chain(b.residual).chain(b.color)))?;
         }
+        if let Some(material) = &self.material {
+            material.store.write_to(w)?;
+            put_u64(w, u64::from(material.interval_start.is_some()))?;
+            if let Some(start) = &material.interval_start { start.write_to(w)?; }
+        }
         Ok(())
     }
 
     /// Read a canvas written by `write_state`; returns it and the header.
     pub fn read_state(r: &mut impl Read) -> io::Result<(Canvas, String)> {
+        Self::read_state_with_material_budget(r, crate::oil::checkpoint::LoadBudget {
+            max_raw_bytes: 64 << 30,
+            max_resident_bytes: 8 << 30,
+        })
+    }
+
+    pub fn read_state_with_material_budget(r: &mut impl Read, budget: crate::oil::checkpoint::LoadBudget) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
+        let material = version == 22;
         let mut layers = version == 20;
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
@@ -629,6 +651,10 @@ impl Canvas {
             }
             version as u32
         } else { version };
+        let material_revision = if material {
+            if get_u64(r)? != 1 || pigments { return Err(bad("invalid material checkpoint identity")); }
+            1
+        } else { 0 };
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -687,6 +713,7 @@ impl Canvas {
         c.linen = linen;
         c.surf_gen = surf_gen;
         c.base = None;
+        if !material {
         let px = get_all(r, n * 3)?;
         c.px = px.as_chunks::<3>().0.to_vec();
         c.height = get_all(r, n)?;
@@ -733,10 +760,14 @@ impl Canvas {
             _ => get_all(r, n * 6)?.as_chunks::<6>().0.iter().map(|q| crate::drying::Px { cure: q[0], lev: q[1], seen: q[2], sub: q[3], srate: q[4], th: q[5] }).collect(),
         };
         wet.clock = crate::drying::Clock { now, px, mark, tacky };
+        c.wet = wet;
+        } else {
+            c.wet = crate::wet::Wet::new(0);
+            c.wet.current = current;
+        }
         let ground_um = get_f32(r)?;
         c.ground_um = if ground_um.is_finite() { ground_um.max(0.0) } else { 0.0 };
-        wet.cover = get_all(r, n)?;
-        c.wet = wet;
+        if !material { c.wet.cover = get_all(r, n)?; }
         c.drawing = match get_u64(r)? {
             0 => None,
             v @ (1 | 2 | 3 | 4) => {
@@ -781,7 +812,9 @@ impl Canvas {
         if own_mixer && identity != if c.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() } {
             return Err(bad("checkpoint uses an obsolete pigment representation; recreate the checkpoint with this build"));
         }
-        if version >= 11 {
+        if !crate::supported_material_revision(c.engine, material_revision) { return Err(bad("invalid material revision for checkpoint engine")); }
+        c.material_revision = material_revision;
+        if version >= 11 && !material {
             if c.engine < 4 {
                 return Err(bad("checkpoint material format holds a canvas of an engine before 4"));
             }
@@ -790,7 +823,7 @@ impl Canvas {
             if !c.gloss.iter().chain(&c.absorb).all(|v| v.is_finite() && *v >= 0.0) {
                 return Err(bad("checkpoint gloss or absorbency is invalid"));
             }
-        } else {
+        } else if !material {
             if c.engine >= 4 {
                 return Err(bad("an engine-4 canvas in an older format: this easel saves engine 4 and later as PAINTC11, PAINTC12 or PAINTC14"));
             }
@@ -799,7 +832,7 @@ impl Canvas {
             c.absorb = vec![0.0; n];
         }
         c.absorb_any = c.absorb.iter().any(|&a| a > 0.0);
-        match (version >= 9, c.engine >= 3) {
+        if !material { match (version >= 9, c.engine >= 3) {
             (false, true) => return Err(bad(OLD_ENGINE3)),
             (true, false) => return Err(bad(&format!("checkpoint version {version} holds an engine-1 or engine-2 canvas"))),
             (true, true) => {
@@ -812,7 +845,7 @@ impl Canvas {
                 c.wet.solv = s;
             }
             (false, false) => {}
-        }
+        } }
         // the drain section (version 14): the switch, the pigment's packing
         // per pixel, and whether a soak section follows
         let raw = match version {
@@ -830,7 +863,7 @@ impl Canvas {
                     1 => true,
                     _ => return Err(bad("checkpoint drain section's soak flag is invalid")),
                 };
-                let pack = get_all(r, n * 5)?;
+                let pack = if material { Vec::new() } else { get_all(r, n * 5)? };
                 // (the ground's drain would carry a non-finite one on)
                 if !pack.iter().all(|v| v.is_finite()) {
                     return Err(bad("checkpoint paint packing is invalid"));
@@ -839,7 +872,7 @@ impl Canvas {
                     h[5..].copy_from_slice(k);
                 }
                 c.drain = true;
-                if !raw && version == 14 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+                if !material && !raw && version == 14 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                     return Err(bad("checkpoint has trailing data"));
                 }
                 raw
@@ -852,7 +885,7 @@ impl Canvas {
                 return Err(bad("checkpoint soak is on a crop render"));
             }
             c.soak = Some(Box::new(read_soak(r, n)?));
-            if version != 17 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !material && version != 17 && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -861,7 +894,7 @@ impl Canvas {
             let (p, micro) = read_paper(r, n)?;
             c.paper = Some(p);
             c.micro = micro;
-            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !material && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -885,7 +918,7 @@ impl Canvas {
                 return Err(bad("checkpoint sheet mark is wrong"));
             }
             c.sheet = Some(read_sheet_body(r, n)?);
-            if !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
+            if !material && !pigments && !spectral_backing && r.read(&mut [0u8; 1])? != 0 {
                 return Err(bad("checkpoint has trailing data"));
             }
         }
@@ -942,22 +975,31 @@ impl Canvas {
             if !spectral_backing && r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }
         if spectral_backing {
-            if !c.spectral_films() {
-                return Err(bad("checkpoint spectral backing requires spectral film optics"));
-            }
+            if !c.spectral_films() { return Err(bad("checkpoint spectral backing requires spectral film optics")); }
             c.backing.reserve_exact(n);
             let mut bytes = [0; (crate::spectral::N + 6) * 4];
             for _ in 0..n {
                 r.read_exact(&mut bytes)?;
-                let mut b = crate::mixer::Backing::default();
-                for (v, bytes) in b.reflectance.iter_mut().chain(&mut b.residual).chain(&mut b.color).zip(bytes.chunks_exact(4)) {
-                    *v = f32::from_le_bytes(bytes.try_into().unwrap());
-                    if !v.is_finite() {
-                        return Err(bad("checkpoint spectral backing is invalid"));
-                    }
+                let mut backing = crate::mixer::Backing::default();
+                for (value, bytes) in backing.reflectance.iter_mut().chain(&mut backing.residual).chain(&mut backing.color).zip(bytes.chunks_exact(4)) {
+                    *value = f32::from_le_bytes(bytes.try_into().unwrap());
+                    if !value.is_finite() { return Err(bad("checkpoint spectral backing is invalid")); }
                 }
-                c.backing.push(b);
+                c.backing.push(backing);
             }
+            if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
+        }
+        if material {
+            let store = crate::oil::store::FilmStore::read_from(r, budget)?;
+            let mut remaining = budget;
+            remaining.max_raw_bytes = remaining.max_raw_bytes.checked_sub(store.checkpoint_counts()?.raw_bytes).ok_or_else(|| bad("material checkpoint exceeds raw budget"))?;
+            remaining.max_resident_bytes = remaining.max_resident_bytes.checked_sub(crate::oil::checkpoint::resident_size(store.width() as u64 * store.height() as u64, store.checkpoint_counts()?)?).ok_or_else(|| bad("material checkpoint exceeds resident budget"))?;
+            let interval_start = match get_u64(r)? {
+                0 => None,
+                1 => Some(crate::oil::store::FilmStore::read_from(r, remaining)?),
+                _ => return Err(bad("invalid material interval flag")),
+            };
+            c.install_material_state(crate::oil::Material { store, interval_start })?;
             if r.read(&mut [0u8; 1])? != 0 { return Err(bad("checkpoint has trailing data")); }
         }
         if !own_mixer {

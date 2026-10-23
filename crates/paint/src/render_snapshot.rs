@@ -5,6 +5,7 @@ use std::io::{self, Read, Write};
 pub const RENDERER: &str = "legacy-look-1";
 
 const MAGIC: &[u8; 8] = b"CPVIEW02";
+const MATERIAL_MAGIC: &[u8; 8] = b"CPVIEW03";
 const VERSION: u32 = 2;
 const RENDERER_VERSION: u32 = 1;
 const RENDERER_BYTES: &[u8; 16] = b"legacy-look-1\0\0\0";
@@ -18,6 +19,7 @@ pub struct RenderSnapshot {
     frame: Frame,
     keep: (usize, usize, usize, usize),
     engine: u32,
+    material_revision: u32,
     um_px: f32,
     revision: [u8; 32],
     runtime: [u8; 32],
@@ -89,11 +91,10 @@ impl RenderSnapshot {
         let n = validate_metadata(frame, canvas.keep, canvas.engine(), um_px)?;
         if canvas.px.len() != n
             || canvas.height.len() != n
-            || canvas.wet.vol.len() != n
-            || canvas.wet.lat.len() != n
-            || canvas.wet.hide.len() != n
-            || canvas.wet.cover.len() != n
+            || (canvas.material_store().is_none() && (canvas.wet.vol.len() != n
+                || canvas.wet.lat.len() != n || canvas.wet.hide.len() != n || canvas.wet.cover.len() != n))
             || (canvas.engine() >= 4 && canvas.gloss.len() != n)
+            || !crate::supported_material_revision(canvas.engine(), canvas.material_revision())
         {
             return Err(invalid("invalid canvas optical buffer lengths"));
         }
@@ -104,14 +105,15 @@ impl RenderSnapshot {
             frame,
             keep: canvas.keep,
             engine: canvas.engine(),
+            material_revision: canvas.material_revision(),
             um_px,
             revision,
             runtime,
             integrity: [0; 32],
             content_id: [0; 32],
-            color: canvas.seen(),
+            color: if canvas.material_store().is_some() { canvas.material_seen() } else { canvas.seen() },
             surface: canvas.wet_surface(),
-            wet: canvas.wet.vol.clone(),
+            wet: if canvas.material_store().is_some() { canvas.material_wet_coats() } else { canvas.wet.vol.clone() },
         };
         if snapshot
             .color
@@ -124,14 +126,14 @@ impl RenderSnapshot {
         }
         let metadata = snapshot.metadata();
         let mut integrity = Sha256::new();
-        integrity.update(metadata);
+        integrity.update(&metadata);
         snapshot.payload(|block| {
             integrity.update(block);
             Ok(())
         })?;
         snapshot.integrity = integrity.finalize().into();
         let mut content_id = Sha256::new();
-        content_id.update(metadata);
+        content_id.update(&metadata);
         content_id.update(snapshot.integrity);
         snapshot.payload(|block| {
             content_id.update(block);
@@ -141,10 +143,11 @@ impl RenderSnapshot {
         Ok(snapshot)
     }
 
-    fn metadata(&self) -> [u8; METADATA_LEN] {
-        let mut bytes = [0; METADATA_LEN];
-        bytes[..8].copy_from_slice(MAGIC);
-        bytes[8..12].copy_from_slice(&VERSION.to_le_bytes());
+    fn metadata(&self) -> Vec<u8> {
+        let material = self.material_revision != 0;
+        let mut bytes = vec![0; METADATA_LEN + usize::from(material) * 4];
+        bytes[..8].copy_from_slice(if material { MATERIAL_MAGIC } else { MAGIC });
+        bytes[8..12].copy_from_slice(&if material { 3u32 } else { VERSION }.to_le_bytes());
         bytes[12..16].copy_from_slice(&RENDERER_VERSION.to_le_bytes());
         bytes[16..32].copy_from_slice(RENDERER_BYTES);
         for (slot, value) in bytes[32..84].chunks_exact_mut(4).zip([
@@ -166,6 +169,7 @@ impl RenderSnapshot {
         }
         bytes[84..116].copy_from_slice(&self.revision);
         bytes[116..148].copy_from_slice(&self.runtime);
+        if material { bytes[148..152].copy_from_slice(&self.material_revision.to_le_bytes()); }
         bytes
     }
 
@@ -199,10 +203,16 @@ impl RenderSnapshot {
     }
 
     pub fn read(reader: &mut impl Read) -> io::Result<Self> {
-        let mut header = [0; HEADER_LEN];
+        let mut header = vec![0; HEADER_LEN];
         reader.read_exact(&mut header)?;
-        if &header[..8] != MAGIC || word(&header[8..12]) != VERSION {
+        let material = &header[..8] == MATERIAL_MAGIC && word(&header[8..12]) == 3;
+        if !material && (&header[..8] != MAGIC || word(&header[8..12]) != VERSION) {
             return Err(invalid("unsupported render snapshot version"));
+        }
+        let metadata_len = METADATA_LEN + usize::from(material) * 4;
+        if material {
+            header.resize(HEADER_LEN + 4, 0);
+            reader.read_exact(&mut header[HEADER_LEN..])?;
         }
         if word(&header[12..16]) != RENDERER_VERSION || &header[16..32] != RENDERER_BYTES {
             return Err(invalid("unsupported render snapshot renderer"));
@@ -223,15 +233,19 @@ impl RenderSnapshot {
             word(&header[72..76]) as usize,
         );
         let engine = word(&header[76..80]);
+        let material_revision = if material { word(&header[148..152]) } else { 0 };
+        if !crate::supported_material_revision(engine, material_revision) || (material && material_revision != 1) {
+            return Err(invalid("unsupported render snapshot material revision"));
+        }
         let um_px = f32::from_bits(word(&header[80..84]));
         let n = validate_metadata(frame, keep, engine, um_px)?;
         let mut color = reserved(n)?;
         let mut surface = reserved(n)?;
         let mut wet = reserved(n)?;
         let mut integrity = Sha256::new();
-        integrity.update(&header[..METADATA_LEN]);
+        integrity.update(&header[..metadata_len]);
         let mut content_id = Sha256::new();
-        content_id.update(header);
+        content_id.update(&header);
         let mut block = [0; BLOCK_SIZE];
         let mut position = 0;
         let mut rgb = [0.0; 3];
@@ -261,7 +275,7 @@ impl RenderSnapshot {
                 position += 1;
             }
         }
-        let expected: [u8; 32] = header[METADATA_LEN..].try_into().unwrap();
+        let expected: [u8; 32] = header[metadata_len..].try_into().unwrap();
         let actual: [u8; 32] = integrity.finalize().into();
         if actual != expected {
             return Err(invalid("render snapshot integrity mismatch"));
@@ -279,6 +293,7 @@ impl RenderSnapshot {
             frame,
             keep,
             engine,
+            material_revision,
             um_px,
             revision: header[84..116].try_into().unwrap(),
             runtime: header[116..148].try_into().unwrap(),
@@ -292,6 +307,10 @@ impl RenderSnapshot {
 
     pub fn revision(&self) -> [u8; 32] {
         self.revision
+    }
+
+    pub fn material_revision(&self) -> u32 {
+        self.material_revision
     }
 
     pub fn runtime(&self) -> [u8; 32] {

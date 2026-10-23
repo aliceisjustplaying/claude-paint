@@ -103,6 +103,15 @@ rust live-replay-checkpoint easel 'test live_replay_checkpoint test'
 check public-doc-compatibility 'uv run --no-project python -m unittest scripts/tests/launchd_install_test.py scripts/tests/export_materials_test.py scripts/tests/studio_guide_test.py scripts/tests/house_cleanup_test.py -v' "$unittest"
 check baseline-guards "$pytest scripts/tests/baseline_state_compare_test.py scripts/tests/known_rag_baseline_test.py scripts/tests/baseline_checkpoint_test.py scripts/tests/check_painting_test.py scripts/tests/golden_approve_test.py" "$passed"
 rust replay-frames-resume easel 'test replay_frames_resume test'
+rust material-canvas paint 'lib paint test' \
+  oil::tests::idle_columns_allocate_no_legacy_material_planes \
+  oil::tests::touch_dry_surface_retains_and_advances_slow_buried_film \
+  oil::tests::dry_stops_at_surface_touch_without_hardening_the_base \
+  oil::tests::split_observations_keep_the_canonical_interval \
+  oil::tests::explicit_revision_roundtrip_keeps_pending_clock_and_rollback \
+  oil::tests::removing_only_binder_preserves_pigment_optical_depth \
+  oil::tests::checkpoint_budget_counts_current_and_pending_stores_together
+rust material-identity easel 'bin easel test' session::tests::material_identity_is_explicit_and_legacy_logs_stay_legacy
 rust painting-store easel 'bin easel test' \
   painting_store::tests::chunk_counter_exceeds_one_gib_without_state_allocation \
   painting_store::tests::chunked_checkpoint_validates_counts_lengths_and_schema_limits \

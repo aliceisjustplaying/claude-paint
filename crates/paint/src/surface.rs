@@ -303,6 +303,9 @@ impl Canvas {
     /// With the drain switch only the paint still liquid bridges it: a
     /// packed layer follows the relief (`settle_for`).
     pub(crate) fn wet_surface(&self) -> Vec<f32> {
+        if let Some(store) = self.material_store() {
+            return (0..self.f.w * self.f.h).map(|i| store.sample(i).expect("material pixel").height_um).collect();
+        }
         let (w, h) = (self.f.w, self.f.h);
         let wet: Vec<f32> = self.wet.vol.par_iter().enumerate().map(|(i, v)| v * COAT_UM + self.wet.solv.get(i).copied().unwrap_or(0.0)).collect();
         // (the drain switch: the paint still liquid, above a packed layer)

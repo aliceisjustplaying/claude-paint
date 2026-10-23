@@ -224,7 +224,7 @@ pub fn advance_column_with_scratch(
         let rate = (material.oxidation_rate_s * (1.0 + material.autocatalysis))
             .max(material.inhibitor_rate_s)
             .max(material.network_rate_s)
-            .max(material.solvent_evaporation_rate_s);
+            .max(if cell.solvent_um > 0.0 { material.solvent_evaporation_rate_s } else { 0.0 });
         if rate > 0.0 {
             step_limit = step_limit.min(0.05 / rate);
         }
@@ -512,20 +512,27 @@ pub struct Fixture {
 
 impl FixtureId {
     pub fn fixture(self) -> Fixture {
-        let (h, pigment_mass, pigment_density, binder_code, provenance, oxidation, induction) =
+        let (h, pigment_mass, pigment_density, binder_code, provenance) =
             match self {
-                Self::S3Lwlo450 => (450.0, 0.66, 6.81, 1, 1, 0.00003, 0.00003),
-                Self::S3Ublo450 => (450.0, 0.61, 2.35, 1, 2, 0.00003, 0.000008),
-                Self::S3Lwso450 => (450.0, 0.77, 6.81, 2, 3, 0.00002, 0.00002),
-                Self::S3Ubso450 => (450.0, 0.49, 2.35, 2, 4, 0.00003, 0.000008),
-                Self::S2Golden76 => (76.2, 0.0, 1.0, 1, 5, 0.00004, 0.00004),
-                Self::S2Golden254 => (254.0, 0.0, 1.0, 1, 5, 0.00004, 0.00004),
+                Self::S3Lwlo450 => (450.0, 0.66, 6.81, 1, 1),
+                Self::S3Ublo450 => (450.0, 0.61, 2.35, 1, 2),
+                Self::S3Lwso450 => (450.0, 0.77, 6.81, 2, 3),
+                Self::S3Ubso450 => (450.0, 0.49, 2.35, 2, 4),
+                Self::S2Golden76 => (76.2, 0.0, 1.0, 1, 5),
+                Self::S2Golden254 => (254.0, 0.0, 1.0, 1, 5),
             };
         let oil = (1.0 - pigment_mass) / 0.93;
         let binder_volume_fraction = if pigment_mass > 0.0 {
             oil / (oil + pigment_mass / pigment_density)
         } else {
             0.65
+        };
+        let (fit, endpoints) = match self {
+            Self::S3Lwlo450 => ([4.306142155211445e-5, 2.025911623753712e-5, 8.796022631963491e-6, 95.61929404305099, 0.06856045066079364, 9.190589849379837, 2.768390985499804], [0.15187306555858643, 0.35523510332021857, 0.6522796714339786]),
+            Self::S3Ublo450 => ([1.4485206489848462e-5, 2.962892878743327e-6, 5.207092180596602e-6, 869.9592501011125, 1.4354844820983492, 16.487780016955842, 4.474785809855917], [0.15461218217387795, 0.3389227809384465, 0.6494597736746073]),
+            Self::S3Lwso450 => ([1.5071014856830334e-5, 6.9528774377365555e-6, 1.5082654585657824e-5, 277.4917035053666, 0.07276096051644453, 12.243391343452837, 4.416371811763764], [0.14292350225150585, 0.3710772218182683, 0.6446165964007378]),
+            Self::S3Ubso450 => ([7.816050765845935e-6, 2.7470804768659995e-6, 6.695107571826018e-6, 398.2989372249973, 0.40915139839049286, 15.975922002279807, 9.597091559423877], [0.16028567031025887, 0.32477723341435194, 0.6562748597934842]),
+            Self::S2Golden76 | Self::S2Golden254 => ([0.00015971157038422205, 8.238538109961529e-5, 8.434462438911919e-6, 4857.715032816826, 0.030165193668497542, 1.8136077753332913, 1.1225900793684678], [0.15, 0.35, 0.65]),
         };
         Fixture {
             id: self,
@@ -535,12 +542,23 @@ impl FixtureId {
                 binder_code,
                 drier_code: if pigment_density == 6.81 { 1 } else { 0 },
                 provenance_code: provenance,
-                oxidation_rate_s: oxidation,
-                inhibitor_rate_s: induction,
+                oxidation_rate_s: fit[0],
+                inhibitor_rate_s: fit[1],
+                network_rate_s: fit[2],
+                diffusivity_um2_s: fit[3],
+                air_transfer_um_s: fit[4],
+                inhibition_strength: fit[5],
+                autocatalysis: fit[6],
                 ..Kinetics::default()
             },
             initial_inhibitor: 1.0,
-            observations: ObservationModel::default(),
+            observations: ObservationModel {
+                set_to_touch_network: endpoints[0],
+                dry_to_touch_network: endpoints[1],
+                dry_hard_network: endpoints[2],
+                golden_touch_network: endpoints[1],
+                ..ObservationModel::default()
+            },
         }
     }
 }
@@ -1105,6 +1123,22 @@ mod tests {
         assert_eq!(CALENDAR_TARGETS[12].residual_hours(24.0), 0.0);
         assert_eq!(CALENDAR_TARGETS[13].residual_hours(120.0), 0.0);
         assert_eq!(CALENDAR_TARGETS[13].residual_hours(95.0), -1.0);
+    }
+
+    #[test]
+    fn calibrated_calendar_retains_distinct_source_endpoints() {
+        for id in FIXTURES {
+            let fixture = id.fixture();
+            let predicted = predict_calendar(&fixture, 96, 600.0, 400.0).unwrap();
+            for target in CALENDAR_TARGETS.iter().filter(|target| target.fixture == id) {
+                let value = predicted.at(target.endpoint).expect("source endpoint reached");
+                let residual = target.residual_hours(value).abs();
+                let sampling_hours = if matches!(id, FixtureId::S2Golden76 | FixtureId::S2Golden254) { 0.0 } else { 600.0 / 3600.0 };
+                assert!(residual <= sampling_hours + 1e-9, "{id:?} {:?}: {value} h", target.endpoint);
+            }
+            assert!(predicted.set_to_touch_hours < predicted.dry_to_touch_hours);
+            assert!(predicted.dry_to_touch_hours < predicted.dry_hard_hours);
+        }
     }
 
     #[test]

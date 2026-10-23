@@ -63,6 +63,9 @@ fn header(s: &Session, program: &str) -> String {
     kv("chunks", s.log.len().to_string());
     kv("box", st.tubes.name.to_string());
     kv("engine", st.tubes.engine.to_string());
+    if st.tubes.material_revision != 0 {
+        kv("material", st.tubes.material_revision.to_string());
+    }
     if st.tubes.carried_paint {
         kv("carried_paint", "1".to_string());
     }
@@ -203,6 +206,10 @@ pub fn read_from(input: impl std::io::Read, path: &std::path::Path) -> Result<Re
     let h: std::collections::BTreeMap<&str, &str> = lines.filter_map(|l| l.split_once('=')).collect();
     // the box and engine as a log's head names them, so the box is found as a replay finds it
     let (bx, engine): (String, u32) = (field(&h, "box")?.to_string(), parse(&h, "engine")?);
+    let material = h.get("material").map(|v| v.parse::<u32>()).transpose().map_err(|_| "invalid save material revision")?.unwrap_or(0);
+    if !paint::supported_material_revision(engine, material) || engine != canvas.engine() || material != canvas.material_revision() {
+        return Err("the save's header and canvas disagree on engine or material revision".into());
+    }
     let mut logged = String::new();
     if paint::palette::default_box() != Some(bx.as_str()) {
         logged.push_str(&format!("{BOX_MARK} {bx}\n"));

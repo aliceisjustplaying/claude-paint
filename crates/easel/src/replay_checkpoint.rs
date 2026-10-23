@@ -383,6 +383,12 @@ fn write_checkpoint(path: &Path, s: &Session, identity: &Identity, done: usize, 
 }
 
 fn reconstruct(s: &mut Session, chunks: &[String], saved: &mut Saved, canvas: Option<paint::Canvas>, progress: &dyn Fn(usize, usize)) -> Result<(), String> {
+    if let Some(canvas) = &canvas {
+        let state = s.st.borrow();
+        if canvas.engine() != state.tubes.engine || canvas.material_revision() != state.tubes.material_revision {
+            return Err("replay checkpoint: engine or material revision differs; refusing reconstruction".into());
+        }
+    }
     TRACE.with(|t| *t.borrow_mut() = Trace { enabled: true, playback: true, events: std::mem::take(&mut saved.events), ..Trace::default() });
     for (i, chunk) in chunks.iter().take(saved.done).enumerate() {
         s.run(chunk).map_err(|e| format!("replay checkpoint: prefix chunk {} failed: {e}", i + 1))?;

@@ -86,7 +86,7 @@ State is integrated in f64 scratch and rounded to f32 only on return. `rounding_
 
 ## Proposed coefficients and stable identities
 
-No coefficient below is currently calibrated. Provenance code identifies the **target observation source**, not a claim that the coefficient was measured there. Revision 1 is a proposed model family. Binder codes: 0 unspecified, 1 linseed, 2 safflower. Drier codes: 0 unspecified/no additional drier encoded, 1 native lead-white chemical action. These are serializable numeric identities, not concentrations. Provenance codes: 0 unsourced generic proposal, 1–4 S3 rows in table order, 5 S2 historical surrogate. Recipe indices align directly to the supplied kinetics slice and are independent of optical recipes.
+The generic `Kinetics::default` coefficients below remain proposed numerical reference values. Named fixtures instead use the fitted rows recorded below. A fitted coefficient is an effective model parameter, not a physical quantity measured by the source. Binder codes are 0 unspecified, 1 linseed, 2 safflower, 3 walnut, 4 poppy, 5 stand and 6 an explicit mixture; the formulation separately retains all five binder fractions. Drier codes distinguish the encoded native lead-white action from no such action, not measured catalyst concentrations. Provenance codes 1–4 identify the S3 rows in table order, 5 identifies the partial historical S2 reference and100 explicitly marks an extrapolated fresh recipe. Recipe indices align with the supplied kinetics table and are independent of optical recipe indices.
 
 | Field | Proposed default | Provenance/status |
 |---|---:|---|
@@ -104,7 +104,35 @@ No coefficient below is currently calibrated. Provenance code identifies the **t
 | network_rate_s | 2×10⁻⁵ | Proposed oxidation/network lag |
 | solvent_evaporation_rate_s | 0 | Deliberately disabled, no evaporation fit |
 
-Fixture oxidation/induction seeds in s⁻¹ are respectively LWLO 3×10⁻⁵/3×10⁻⁵, UBLO 3×10⁻⁵/8×10⁻⁶, LWSO 2×10⁻⁵/2×10⁻⁵, UBSO 3×10⁻⁵/8×10⁻⁶ and both Golden cases 4×10⁻⁵/4×10⁻⁵. All start with I=1, x=n=a=0. These differing seeds are search initialization, not a fitted binder comparison. The solver has no legacy stiffness input. Binder inventory changes storage, oxygen demand and transport independently; oxidation and network rates allow drier effects to differ. No monotonic real-dose drier response is asserted.
+All fixtures start with I=1 and x=n=a=0. The solver has no legacy stiffness input. Binder inventory changes storage, oxygen demand and transport independently; oxidation and network rates allow catalyst effects to differ. No monotonic real-dose drier response is asserted.
+
+## Fitted reference formulations, material revision 1
+
+The following effective parameters were fit jointly to the source endpoint observations with the actual transport/oxidation/network solver. S3 is Pizzimenti et al. (2021), §§2.2–2.3 and Tables1–2, DOI `10.1021/acsapm.0c01441`; S2 is Golden's historical 2011 study, “Film Thickness,” Figs.1 and4, with its 2023 formula correction. The two Golden thicknesses share one kinetic row. No fit changes the source observations, density assumptions or missing environmental data.
+
+| Source formulation | oxidation s⁻¹ | inhibitor s⁻¹ | network s⁻¹ | D µm²/s | air transfer µm/s | inhibition | autocatalysis |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| S3 LWLO,450 µm | 4.306142155211445e-5 | 2.025911623753712e-5 | 8.796022631963491e-6 | 95.61929404305099 | .06856045066079364 | 9.190589849379837 | 2.768390985499804 |
+| S3 UBLO,450 µm | 1.4485206489848462e-5 | 2.962892878743327e-6 | 5.207092180596602e-6 | 869.9592501011125 | 1.4354844820983492 | 16.487780016955842 | 4.474785809855917 |
+| S3 LWSO,450 µm | 1.5071014856830334e-5 | 6.9528774377365555e-6 | 1.5082654585657824e-5 | 277.4917035053666 | .07276096051644453 | 12.243391343452837 | 4.416371811763764 |
+| S3 UBSO,450 µm | 7.816050765845935e-6 | 2.7470804768659995e-6 | 6.695107571826018e-6 | 398.2989372249973 | .40915139839049286 | 15.975922002279807 | 9.597091559423877 |
+| S2 titanium/linseed,76.2 and254 µm | .00015971157038422205 | 8.238538109961529e-5 | 8.434462438911919e-6 | 4857.715032816826 | .030165193668497542 | 1.8136077753332913 | 1.1225900793684678 |
+
+The contact operators are also fitted model parameters. Network conversion at a transfer, rub or thumb-pressure endpoint was not measured by S3, so a universal conversion cutoff would be an additional unsupported assumption. After the joint kinetic fit, the surface/pressure averages at each source endpoint were evaluated on96 depth cells and used to refine these formulation-specific operators:
+
+| Source | set-to-touch surface n | dry-to-touch surface n | dry-hard pressure n |
+|---|---:|---:|---:|
+| S3 LWLO | .15187306555858643 | .35523510332021857 | .6522796714339786 |
+| S3 UBLO | .15461218217387795 | .3389227809384465 | .6494597736746073 |
+| S3 LWSO | .14292350225150585 | .3710772218182683 | .6446165964007378 |
+| S3 UBSO | .16028567031025887 | .32477723341435194 | .6562748597934842 |
+| S2 partial reference | .15 (not fit) | .35 | .65 (not fit) |
+
+The verification uses600-second observations on96 depth cells. All twelve S3 times are reproduced within that numerical observation interval; both Golden observations satisfy their unchanged bounds (≤48 h and96–144 h). These are fitted observations, not out-of-sample predictions. The degrees of freedom exceed the experimental information: induction, transport, reaction and observation response are not uniquely identified. Calendar agreement does not validate the proposed oxygen solubility, demand, young-skin modulus, expansion strain or knife-force law.
+
+Fresh named recipes use these parameter families without claiming that a current tube is the experimental recipe. Named pigment components are combined deterministically; effective coefficients are volume-weighted as an explicitly empirical mixture rule. Actual chemical inventories remain conserved separately. Unsupported pigment recipes and mixtures carry provenance100. Walnut/poppy activity estimates .8/.6 are inherited from the existing oil selector, not Pizzimenti measurements; only oxidation and induction are adjusted, not every endpoint by one clock multiplier. Stand oil has no fitted resolver and is refused there. Added drier dose response is not inferred from the ambiguous Golden product percentages.
+
+Fresh bound-solvent release uses the existing estimated two-minute thin-film scale (`thinner::TAU_MIN`) with the existing thickness correction. Its source basis is Jennings' turpentine purity observation and the qualitative diffusion argument already documented in `thinner.rs`, not an artist-oil solvent-release calibration. The dry reference fixtures contain no solvent. An inactive evaporation coefficient does not reduce the chemical timestep for a cell containing no solvent.
 
 S3 volume conversions use assumed pigment densities 6.81 g/cm³ for lead white and 2.35 for ultramarine from the existing `palette.rs` density table, with the existing oil reference density .93 g/cm³. These are **not S3 measurements**. Applying the same oil density to safflower is an additional proposal. Given pigment/oil mass fractions `w_p,w_b`, `f_b=(w_b/.93)/[(w_b/.93)+(w_p/ρ_p)]`. Derived binder fractions are approximately .790455, .617671, .686251 and .724519. Golden uses **assumed .65** binder volume fraction because composition is unknown. It is not a sourced titanium recipe.
 

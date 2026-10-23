@@ -1339,7 +1339,7 @@ pub fn logged_material_revision(text: &str) -> Result<u32, String> {
         }
     }
     let revision = found.unwrap_or(0);
-    if revision != 0 && logged_engine(text)? < 9 {
+    if !paint::supported_material_revision(logged_engine(text)?, revision) {
         return Err("invalid material revision for this engine".into());
     }
     Ok(revision)
@@ -1603,6 +1603,15 @@ mod image_tolerance;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn material_identity_is_explicit_and_legacy_logs_stay_legacy() {
+        assert_eq!(logged_material_revision("--@ engine 9\n").unwrap(), 0);
+        assert_eq!(logged_material_revision("--@ engine 9\n--@ material 1\n").unwrap(), 1);
+        for text in ["--@ material 1\n", "--@ engine 8\n--@ material 1\n", "--@ engine 9\n--@ material 2\n", "--@ engine 9\n--@ material 0\n--@ material 1\n"] {
+            assert!(logged_material_revision(text).is_err());
+        }
+    }
 
     fn checkpoint_base_format(bytes: &[u8]) -> u64 {
         assert_eq!(&bytes[..8], b"PAINTC19");

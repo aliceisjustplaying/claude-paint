@@ -10,11 +10,11 @@ use super::store::{
 };
 use crate::wet::{LAT, Latent};
 
-const MAGIC: &[u8; 8] = b"OILCOL01";
+const MAGIC: &[u8; 8] = b"OILCOL02";
 const HEADER_BYTES: u64 = 136;
 const TILE_BYTES: u64 = 88;
 const PIXEL_BYTES: u64 = 236;
-const RECIPE_BYTES: u64 = (LAT as u64 + 10) * 4 + 13 * 8 + 4 * 4 + 8;
+const RECIPE_BYTES: u64 = (LAT as u64 + 10) * 4 + 18 * 8 + 4 * 4 + 8;
 
 #[derive(Clone, Copy, Debug)]
 pub struct LoadBudget {
@@ -98,6 +98,10 @@ fn reserve<T>(n: u64) -> io::Result<Vec<T>> {
 }
 
 fn formulation_cmp(a: &Formulation, b: &Formulation) -> Ordering {
+    for (x, y) in a.binders().into_iter().zip(b.binders()) {
+        let order = x.total_cmp(&y);
+        if order != Ordering::Equal { return order; }
+    }
     for (x, y) in a
         .latent()
         .color
@@ -194,6 +198,7 @@ fn put_formulation(w: &mut impl Write, f: &Formulation) -> io::Result<()> {
     for v in [k.binder_code, k.drier_code, k.provenance_code, k.revision] {
         put_u32(w, v)?;
     }
+    for v in f.binders() { put_f64(w, v)?; }
     put_u64(w, f.latent().parts.len() as u64)?;
     for (id, amount) in &f.latent().parts {
         put_u64(w, *id as u64)?;
@@ -651,6 +656,11 @@ impl<R: Read> Decoder<'_, R> {
             provenance_code: self.u32()?,
             revision: self.u32()?,
         };
+        let mut binders = [0.0; 5];
+        for v in &mut binders { *v = self.f64()?; }
+        if binders.iter().any(|v| *v < 0.0) || (binders.iter().sum::<f64>() - 1.0).abs() > 1e-12 {
+            return Err(invalid("noncanonical binder fractions"));
+        }
         let n = self.u64()?;
         *total_parts = add(*total_parts, n)?;
         if *total_parts > max_parts || mul(n, 12)? > self.remaining {
@@ -667,7 +677,7 @@ impl<R: Read> Decoder<'_, R> {
         }
         let mut latent = Latent::from_color(color);
         latent.parts = parts;
-        Formulation::new(latent, prop, k).map_err(|_| invalid("invalid formulation parameters"))
+        Formulation::new_with_binders(latent, prop, k, binders).map_err(|_| invalid("invalid formulation parameters"))
     }
 }
 

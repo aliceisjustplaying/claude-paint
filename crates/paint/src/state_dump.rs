@@ -16,6 +16,7 @@ use crate::wet::LAT;
 
 /// A field's values, little-endian when written.
 pub enum Values {
+    U8(Vec<u8>),
     F32(Vec<f32>),
     F64(Vec<f64>),
     U32(Vec<u32>),
@@ -31,6 +32,7 @@ pub struct Field {
 impl Values {
     pub fn dtype(&self) -> &'static str {
         match self {
+            Values::U8(_) => "u8",
             Values::F32(_) => "f32",
             Values::F64(_) => "f64",
             Values::U32(_) => "u32",
@@ -39,6 +41,7 @@ impl Values {
     }
     pub fn le_bytes(&self) -> Vec<u8> {
         match self {
+            Values::U8(v) => v.clone(),
             Values::F32(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
             Values::F64(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
             Values::U32(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
@@ -57,6 +60,56 @@ fn boxed(b: Option<(usize, usize, usize, usize)>) -> Vec<u64> {
 impl Canvas {
     /// The canvas's state as named fields (see the module docs).
     pub fn state_fields(&self) -> Vec<Field> {
+        if let Some(material) = &self.material {
+            let store = &material.store;
+            let mut offsets = vec![0u64];
+            let mut cells = Vec::new();
+            let mut recipes = Vec::new();
+            let mut packet_offsets = vec![0u64];
+            let mut packets = Vec::new();
+            let mut packet_cells = Vec::new();
+            let mut recipe_offset = Vec::with_capacity(store.tile_count());
+            let mut recipe_count = 0u64;
+            for tile in &store.tiles {
+                recipe_offset.push(recipe_count);
+                recipe_count += tile.formulations.len() as u64;
+            }
+            for i in 0..self.f.w * self.f.h {
+                let column = store.read_column(i).expect("material pixel");
+                let (tile, _) = store.locate(i).expect("material pixel");
+                let start = recipes.len() as u64;
+                for cell in column.cells {
+                    cells.extend([cell.pigment_um, cell.binder_um, cell.solvent_um, cell.oxygen, cell.oxidation, cell.network, cell.inhibitor]);
+                    recipes.push(recipe_offset[tile] + cell.recipe as u64);
+                }
+                for (packet, &coverage) in column.packets.iter().zip(column.coverage) {
+                    packet_cells.extend([start + (packet.first_cell - column.first_cell) as u64, packet.cell_count as u64, packet.provenance as u64]);
+                    packets.extend(packet.tension_n_m.into_iter().chain(packet.moment_n).chain([packet.interface_damage, coverage]));
+                }
+                offsets.push(recipes.len() as u64);
+                packet_offsets.push((packet_cells.len() / 3) as u64);
+            }
+            let mut current = Vec::new();
+            store.write_to(&mut current).expect("valid material state dump");
+            let mut interval_start = Vec::new();
+            if let Some(start) = &material.interval_start { start.write_to(&mut interval_start).expect("valid material interval dump"); }
+            return vec![
+                Field { name: "material.revision", shape: vec![1], values: Values::U32(vec![self.material_revision]) },
+                Field { name: "engine", shape: vec![1], values: Values::U32(vec![self.engine]) },
+                Field { name: "clock.seconds", shape: vec![3], values: Values::F64(vec![store.clock.seconds, store.clock.committed_seconds, store.clock.pending_seconds]) },
+                Field { name: "clock.schedule", shape: vec![2], values: Values::U64(vec![store.clock.step, store.clock.seed]) },
+                Field { name: "color", shape: vec![self.f.h, self.f.w, 3], values: Values::F32(self.material_seen().into_iter().flatten().collect()) },
+                Field { name: "height", shape: vec![self.f.h, self.f.w, 1], values: Values::F32(self.wet_surface()) },
+                Field { name: "material.column.cells", shape: vec![offsets.len()], values: Values::U64(offsets) },
+                Field { name: "material.cells", shape: vec![recipes.len(), 7], values: Values::F32(cells) },
+                Field { name: "material.cell.recipe", shape: vec![recipes.len()], values: Values::U64(recipes) },
+                Field { name: "material.column.packets", shape: vec![packet_offsets.len()], values: Values::U64(packet_offsets) },
+                Field { name: "material.packet.cells", shape: vec![packet_cells.len() / 3, 3], values: Values::U64(packet_cells) },
+                Field { name: "material.packets", shape: vec![packets.len() / 8, 8], values: Values::F32(packets) },
+                Field { name: "material.store", shape: vec![current.len()], values: Values::U8(current) },
+                Field { name: "material.interval_start", shape: vec![interval_start.len()], values: Values::U8(interval_start) },
+            ];
+        }
         let f = self.f;
         let (h, w) = (f.h, f.w);
         let px = |k: usize| vec![h, w, k];

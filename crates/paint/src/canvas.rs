@@ -186,7 +186,6 @@ pub fn set_crop(crop: Option<Crop>) {
     *CROP.lock().unwrap() = crop;
 }
 
-#[derive(Clone)]
 pub struct Canvas {
     /// The pixels held: the whole canvas, or the window of a crop render.
     /// Masks are always whole (`frame()`).
@@ -242,6 +241,7 @@ pub struct Canvas {
     /// The engine version it is painted with (`crate::ENGINE`).
     pub(crate) engine: u32,
     pub(crate) material_revision: u32,
+    pub(crate) material: Option<crate::oil::Material>,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
@@ -278,6 +278,34 @@ pub struct Canvas {
     pub(crate) sheet: Option<crate::sheet::Sheet>,
 }
 
+impl Clone for Canvas {
+    fn clone(&self) -> Self {
+        let wet = if self.material.is_some() {
+            let mut wet = crate::wet::Wet::new(0);
+            wet.current = self.wet.current;
+            wet.clock.now = self.clock();
+            wet
+        } else {
+            self.wet.clone()
+        };
+        Self {
+            f: self.f, keep: self.keep, px: self.px.clone(), backing: self.backing.clone(), height: self.height.clone(),
+            film: self.film.clone(), gloss: self.gloss.clone(), absorb: self.absorb.clone(),
+            absorb_any: self.absorb_any, ground_um: self.ground_um, linen: self.linen,
+            paper: self.paper, micro: self.micro.clone(), mm_per_unit: self.mm_per_unit,
+            wet, surf_gen: self.surf_gen, base: None, e7_contact: Default::default(),
+            drawing: self.drawing.clone(), tally: self.tally.clone(), hand_slice: self.hand_slice,
+            engine: self.engine, material_revision: self.material_revision, material: self.material.clone(),
+            quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep,
+            liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide,
+            drawing_optics: self.drawing_optics, glaze_film: self.glaze_film, film_pass: self.film_pass,
+            rag_lift: self.rag_lift, knife_skim: self.knife_skim, blend_feather: self.blend_feather,
+            brush_skim: self.brush_skim, receptive: self.receptive.clone(), soak: self.soak.clone(),
+            drain: self.drain, sheet: self.sheet.clone(),
+        }
+    }
+}
+
 impl Canvas {
     /// `aspect` = width / height. A crop render if `set_crop` asked for one.
     pub fn new(width_px: usize, aspect: f32, ground: Rgb) -> Self {
@@ -287,6 +315,11 @@ impl Canvas {
 
     /// A canvas that holds only the window `crop` (see `Crop`), or all of it.
     pub fn new_window(width_px: usize, aspect: f32, ground: Rgb, crop: Option<Crop>) -> Self {
+        Self::new_window_with_material(width_px, aspect, ground, crop, crate::ENGINE, 0)
+    }
+
+    pub fn new_window_with_material(width_px: usize, aspect: f32, ground: Rgb, crop: Option<Crop>, engine: u32, material_revision: u32) -> Self {
+        assert!(crate::supported_material_revision(engine, material_revision), "invalid engine/material combination");
         let h = (width_px as f32 / aspect).round() as usize;
         let whole = Frame::new(width_px, h, width_px as f32 / Frame::WIDTH_UNITS);
         let (f, keep) = match crop {
@@ -303,7 +336,7 @@ impl Canvas {
             }
         };
         let n = f.w * f.h;
-        Canvas {
+        let mut canvas = Canvas {
             f,
             keep,
             px: vec![ground; n],
@@ -318,15 +351,16 @@ impl Canvas {
             paper: None,
             micro: Vec::new(),
             mm_per_unit: 0.7,
-            wet: crate::wet::Wet::new(n),
+            wet: crate::wet::Wet::new(if material_revision == 1 { 0 } else { n }),
             surf_gen: 0,
             base: None,
             e7_contact: Default::default(),
             drawing: None,
             tally: crate::tally::Tally::default(),
             hand_slice: None,
-            engine: crate::ENGINE,
-            material_revision: 0,
+            engine,
+            material_revision,
+            material: None,
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
@@ -342,14 +376,16 @@ impl Canvas {
             soak: None,
             drain: false,
             sheet: None,
-        }
+        };
+        if material_revision == 1 { canvas.initialize_material(); }
+        canvas
     }
 
     /// Paint with engine version `v` (see `crate::ENGINE`): a replay
     /// paints as the version its painting was painted with.
     pub fn with_engine(mut self, v: u32) -> Self {
         self.engine = v;
-        self.material_revision = u32::from(v >= 9);
+        assert!(crate::supported_material_revision(v, self.material_revision), "invalid engine/material combination");
         self.quarter_tiles &= v == 5;
         self.adaptive_sweep &= v == 5;
         self.liquid_film_levels &= v >= 4;
@@ -365,8 +401,22 @@ impl Canvas {
     }
 
     pub fn with_material_revision(mut self, revision: u32) -> Self {
-        assert!(revision <= 1 && (revision == 0 || self.engine >= 9));
+        assert!(crate::supported_material_revision(self.engine, revision), "invalid engine/material combination");
+        if revision == self.material_revision {
+            return self;
+        }
+        assert!(self.material.as_ref().is_none_or(|m| m.store.statistics().live_cells == 0)
+            && self.wet.vol.iter().all(|&v| v == 0.0)
+            && self.wet.solv.iter().all(|&v| v == 0.0), "cannot change a populated material backend");
         self.material_revision = revision;
+        if revision == 1 {
+            self.initialize_material();
+        } else {
+            self.material = None;
+            let now = self.wet.clock.now;
+            self.wet = crate::wet::Wet::new(self.f.w * self.f.h);
+            self.wet.clock.now = now;
+        }
         self
     }
 
@@ -816,12 +866,20 @@ impl Canvas {
     /// more of the room's light fills the shadows (a raking lamp in a dim
     /// room, or a gallery's light from above).
     pub fn seen_lit(&self, azimuth: f32, elevation: f32, strength: f32) -> Vec<Rgb> {
+        if self.material.is_some() {
+            return crate::prepared_optics::PreparedLighting::new(
+                &self.wet_surface(), self.f.w, self.f.h, self.px_mm() * 1000.0,
+            ).lit(&self.material_seen(), &self.material_wet_coats(), azimuth, elevation, strength);
+        }
         crate::prepared_optics::PreparedLighting::new(
             &self.wet_surface(), self.f.w, self.f.h, self.px_mm() * 1000.0,
         ).lit(&self.seen(), &self.wet.vol, azimuth, elevation, strength)
     }
 
     pub fn prepare_optics(&self) -> crate::PreparedOptics {
+        if self.material.is_some() {
+            return crate::PreparedOptics::new(self.f, self.px_mm() * 1000.0, self.material_seen(), &self.wet_surface(), self.material_wet_coats());
+        }
         crate::PreparedOptics::capture(self)
     }
 
@@ -835,10 +893,11 @@ impl Canvas {
         // dither by whole-canvas pixel, so a crop matches a whole render
         let (ox, oy) = (self.f.x0 + kx0, self.f.y0 + ky0);
         let mut buf = vec![0u8; w * h * 3];
+        let material_seen = self.material.as_ref().map(|_| self.material_seen());
         buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
             for x in 0..w {
                 let i = (y + ky0) * bw + x + kx0;
-                let p = if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
+                let p = if let Some(seen) = &material_seen { seen[i] } else if self.engine >= 4 { haze(self.px[i], self.gloss[i]) } else { self.px[i] };
                 let (gx, gy) = ((x + ox) as i64, (y + oy) as i64);
                 for c in 0..3 {
                     let d = hash2(gx, gy, c as u64 * 7 + 1) - hash2(gx, gy, c as u64 * 7 + 2);

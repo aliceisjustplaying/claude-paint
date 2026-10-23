@@ -7,6 +7,7 @@ pub struct Recipe {
     pub parts: Vec<(usize, f32)>,
     pub properties: Prop,
     pub kinetics: Kinetics,
+    pub binders: [f64; 5],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,6 +33,7 @@ impl Default for MechanicalHistory {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fragment {
+    pub reference_area: f64,
     pub volume: f64,
     pub pigment: f64,
     pub binder: f64,
@@ -56,6 +58,7 @@ mod tests {
         let mut latent = paint.latent();
         latent.material = Some(MaterialPayload {
             fragments: vec![Fragment {
+                reference_area: 1.0,
                 volume: 1.0,
                 pigment: 10.0,
                 binder: 15.0,
@@ -87,6 +90,7 @@ mod tests {
                         provenance_code: 1,
                         revision: 1,
                     },
+                    binders: [1.0, 0.0, 0.0, 0.0, 0.0],
                 },
                 history: MechanicalHistory::default(),
             }],
@@ -320,6 +324,7 @@ mod tests {
 
 impl Fragment {
     pub fn scale(&mut self, factor: f64) {
+        self.reference_area *= factor;
         self.volume *= factor;
         self.pigment *= factor;
         self.binder *= factor;
@@ -459,9 +464,12 @@ impl MaterialPayload {
                     fragment.history = fragment.sliced_history(boundary, 1.0, geometry);
                 }
                 rest.scale(boundary);
+                if um_per_volume.is_some() { rest.reference_area = fragment.reference_area; }
                 below.fragments.push(rest);
             }
+            let reference_area = fragment.reference_area;
             fragment.scale(take / fragment.volume);
+            if um_per_volume.is_some() { fragment.reference_area = reference_area; }
             top.fragments.push(fragment);
         }
         top.fragments.reverse();

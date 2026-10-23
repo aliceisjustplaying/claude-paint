@@ -138,6 +138,10 @@ pub fn supported_engine(v: u32) -> bool {
     SUPPORTED_ENGINES.contains(&v)
 }
 
+pub fn supported_material_revision(engine: u32, revision: u32) -> bool {
+    supported_engine(engine) && (revision == 0 || (engine >= 9 && revision == 1))
+}
+
 /// Hermite smoothstep.
 #[inline]
 pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {

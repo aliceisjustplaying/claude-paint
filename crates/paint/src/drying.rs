@@ -384,6 +384,9 @@ fn union(a: Option<(usize, usize, usize, usize)>, b: (usize, usize, usize, usize
 impl Canvas {
     /// Minutes on the painting's clock (advanced by `wait` and `dry`).
     pub fn clock(&self) -> f64 {
+        if let Some(material) = &self.material {
+            return material.store.clock.seconds / 60.0;
+        }
         self.wet.clock.now
     }
 
@@ -399,6 +402,12 @@ impl Canvas {
     pub fn wait(&mut self, minutes: f32) {
         let dt = minutes.max(0.0);
         assert!(dt.is_finite(), "Canvas::wait: minutes must be finite (got {minutes}); use dry() to wait until touch-dry");
+        if let Some(material) = &mut self.material {
+            material.advance_to(material.store.clock.seconds + dt as f64 * 60.0).expect("material clock advance");
+            self.wet.clock.now = material.store.clock.seconds / 60.0;
+            self.surf_gen += 1;
+            return;
+        }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_on_grid(dt);
             return;
@@ -630,6 +639,9 @@ impl Canvas {
     /// The stage at pixel `i` of the buffer: open or setting where wet paint
     /// lies (by its cure), else tacky or dry (by the set film's).
     fn stage_at_index(&self, i: usize) -> Stage {
+        if let Some(material) = &self.material {
+            return crate::oil::stage(&material.store.read_column(i).expect("material pixel"));
+        }
         let p = self.wet.clock.px.get(i).copied().unwrap_or(Px::FRESH);
         if self.wet.vol[i] >= 1e-3 {
             if p.cure < 0.5 * GEL { Stage::Open } else { Stage::Setting }
@@ -652,6 +664,12 @@ impl Canvas {
     /// have waiting; then the rest of the way to touch-dry is the shortcut
     /// above.
     pub fn dry(&mut self) {
+        if self.material.is_some() {
+            while self.stages().iter().any(|stage| *stage != Stage::Dry) {
+                self.wait(10.0);
+            }
+            return;
+        }
         if self.engine >= 3 && self.wet.has_solvent(self.f.w) {
             self.wait_out_solvent();
         }

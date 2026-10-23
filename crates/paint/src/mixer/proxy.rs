@@ -160,6 +160,33 @@ mod tests {
     use crate::color::{luminance, to_oklab};
 
     #[test]
+    fn customized_earth_inputs_rebuild_their_optics_through_clones() {
+        for name in ["yellow ochre", "raw umber"] {
+            let tube = crate::palette::catalog().into_iter().find(|t| t.name == name).unwrap();
+            let mut original = crate::Palette::new("custom earth", vec![tube]);
+            original.engine = crate::PIGMENT_MIXER;
+            original.glaze_film = true;
+            let mut ratios = Vec::new();
+            for hiding in [0.01, 0.99] {
+                original.tubes[0].hiding = hiding;
+                let cloned = original.clone();
+                let mut fresh = crate::Palette::new("custom earth", original.tubes.clone());
+                fresh.engine = crate::PIGMENT_MIXER;
+                fresh.glaze_film = true;
+                let paint = cloned.pile(vec![(0, 1.0)]).paint(0.0);
+                let expected = fresh.pile(vec![(0, 1.0)]).paint(0.0);
+                assert_eq!(paint.latent(), expected.latent());
+                assert_eq!(paint.scatter, expected.scatter);
+                ratios.push(luminance(paint.over([0.01; 3], 1.0)) / luminance(paint.over([0.85; 3], 1.0)));
+            }
+            assert!(ratios[1] > ratios[0] + 0.5, "{name}: supplied hiding controls {ratios:?}");
+            original.tubes[0].color = [0.02, 0.1, 0.3];
+            let color = original.clone().pile(vec![(0, 1.0)]).color;
+            assert!((0..3).all(|k| (color[k] - original.tubes[0].color[k]).abs() < 1e-6), "{name}: supplied RGB {color:?}");
+        }
+    }
+
+    #[test]
     fn joint_earth_fits_keep_the_frozen_white_tint_ladders() {
         let mut palette = crate::Palette::new("earth tint study", crate::palette::catalog());
         palette.engine = crate::PIGMENT_MIXER;

@@ -101,7 +101,7 @@ pub fn identity9() -> u64 {
     let mut hash = Sha256::new();
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
-    hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/v3");
+    hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/catalog-inputs/v4");
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 

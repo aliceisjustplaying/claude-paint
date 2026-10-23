@@ -36,6 +36,10 @@ The cadmium stand-in and its opacity regression remain unchanged here; a
 separate source-data layer owns its replacement and any source-based color
 change. No glaze bound or exact legacy baseline is changed.
 
+Named cached fits apply only when supplied RGB and hiding still match the
+catalog. Customized RGB-only tubes, including palettes rebuilt by cloning,
+retain the encoder driven by their actual supplied values.
+
 This corrects the reversed behavior of cadmium red and green earth. Natural
 Pigments describes [PR108 cadmium red as opaque](https://www.naturalpigments.com/cadmium-red-medium-oil-paint.html),
 including a 6 mil drawdown. Michael Harding describes

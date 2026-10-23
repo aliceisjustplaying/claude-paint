@@ -846,7 +846,12 @@ impl std::fmt::Debug for Palette {
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| crate::mixer::tube(t.name).unwrap_or_else(|| crate::mixer::encode(&t.color))).collect();
-        let lat9 = tubes.iter().map(|t| crate::mixer::tube9(t.name).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
+        let originals = catalog();
+        let lat9 = tubes.iter().map(|t| crate::mixer::tube(t.name).or_else(|| {
+            originals.iter().find(|original| original.name == t.name)
+                .filter(|original| original.color == t.color && original.hiding == t.hiding)
+                .and_then(|_| crate::mixer::tube9(t.name))
+        }).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
         Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, lat, lat9, scat, pack, stock: name }

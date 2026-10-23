@@ -233,12 +233,10 @@ impl CanvasSnapshot {
         let mut packer = zstd::stream::write::Encoder::new(tempfile::tempfile()?, 1)?;
         let aside = canvas.pack(&mut packer)?;
         let file = packer.finish()?;
-        if std::env::var_os("EASEL_SNAPSHOT_TIMING").is_some() {
-            let packed = t0.elapsed().as_secs_f64();
-            let t1 = Instant::now();
-            canvas.write_state(&mut std::io::sink(), "")?;
-            eprintln!("snapshot: {} bytes, {packed:.3}s packed ({:.3}s of it write_state)", file.metadata()?.len(), t1.elapsed().as_secs_f64());
-        }
+        let packed = t0.elapsed().as_secs_f64();
+        let t1 = Instant::now();
+        canvas.write_state(&mut std::io::sink(), "")?;
+        eprintln!("snapshot: {} bytes, {packed:.3}s packed ({:.3}s of it write_state)", file.metadata()?.len(), t1.elapsed().as_secs_f64());
         Ok(Self { file, aside })
     }
 
@@ -247,9 +245,7 @@ impl CanvasSnapshot {
         let t0 = Instant::now();
         self.file.rewind()?;
         let c = Canvas::unpack(&mut zstd::stream::read::Decoder::new(&self.file)?, self.aside)?;
-        if std::env::var_os("EASEL_SNAPSHOT_TIMING").is_some() {
-            eprintln!("snapshot: restored in {:.3}s", t0.elapsed().as_secs_f64());
-        }
+        eprintln!("snapshot: restored in {:.3}s", t0.elapsed().as_secs_f64());
         Ok(c)
     }
 }

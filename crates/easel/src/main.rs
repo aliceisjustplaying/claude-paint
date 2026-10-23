@@ -51,6 +51,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+/// A painted canvas is millions of small pigment lists and skim layers that
+/// come and go as the paint is worked; glibc's malloc leaves their holes in
+/// its arenas (2 GiB of free, unreturnable heap by the 30th chunk of a
+/// 2400 px engine-9 painting). mimalloc keeps such allocations in size
+/// classes and gives freed pages back to the system.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// The width a painting is painted, replayed and delivered at (px) unless it
 /// names another (`session::WIDTH_MARK`, configured when it began: `configured_width`).
 const LIVE_WIDTH: usize = 2400;

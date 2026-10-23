@@ -231,6 +231,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     Some(v) => (br.vol - v.min(br.vol * 0.5) * GHOST_TOUCH).max(0.0),
                 };
             }
+            if br.vol <= 0.0 { br.lat.material = None; }
             return Some(AcceptedTransfer { laid: before - br.vol - br.solvent, ..none });
         }
         debug_assert!(
@@ -546,6 +547,8 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 continue;
             }
             lat.parts.clone_from(&c.parts.parts);
+            lat.material.clone_from(&c.parts.material);
+            lat.layers.clear();
             lat.scale_parts(inv);
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;
@@ -575,6 +578,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         if got_v > 0.0 {
             let mut got_l: Latent = Latent::default();
             got_l.parts = got_parts.parts;
+            got_l.material = got_parts.material;
             got_l.scale_parts(1.0 / got_v);
             for k in 0..LAT {
                 got_l[k] = got[LAT0 + k] / got_v;
@@ -586,6 +590,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             br.cure = mix_cure(br.cure, br.vol, got[CURE] / got_v, got_v);
             mix_into(&mut br.vol, &mut br.lat, &mut br.hide, got_v, &got_l, got_h);
         }
+        if br.vol <= 0.0 { br.lat.material = None; }
         let pad = (off + 2.0) as usize;
         grow(bounds, x0.saturating_sub(pad).max(ox), y0.saturating_sub(pad).max(oy), (x1 + pad).min(ox + sf.w), (y1 + pad).min(oy + sf.h));
         Some(AcceptedTransfer { picked: got_v + got_s, laid, outside: ploughed })

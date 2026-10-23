@@ -359,6 +359,26 @@ mod tests {
     }
 
     #[test]
+    fn dry_colors_are_continuous_as_measured_parts_go_to_zero() {
+        let mut palette = crate::Palette::new("dry trace study", crate::palette::catalog());
+        let white = palette.tubes.iter().position(|t| t.name == "lead white").unwrap();
+        for engine in [crate::PIGMENT_MIXER, crate::PIGMENT_MIXER + 1] {
+            palette.engine = engine;
+            for (i, t) in palette.tubes.iter().enumerate() {
+                if tube(t.name).is_some() {
+                    continue;
+                }
+                let pure = crate::color::to_oklab(palette.dry_color(&[(i, 1.0)]));
+                for f in [0.0, 1e-8, 1e-6] {
+                    let trace = crate::color::to_oklab(palette.dry_color(&[(i, 1.0 - f), (white, f)]));
+                    let delta = (0..3).map(|k| (pure[k] - trace[k]).powi(2)).sum::<f32>().sqrt();
+                    assert!(delta < 1e-4, "engine {engine}, {} with {f} white: delta {delta}", t.name);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn finite_film_keeps_backing_and_absorber_limits() {
         for rg in [0.0, 0.2, 0.9, 1.0] {
             assert_eq!(film(0.0, 0.0, rg), rg);

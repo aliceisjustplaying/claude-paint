@@ -136,6 +136,7 @@ rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_
   mixer::tests::measured_films_report_errors_over_both_revigo_fields \
   mixer::tests::wet_and_baked_films_keep_the_same_measured_pigment_and_partial_coverage \
   mixer::tests::measured_dry_colors_do_not_reconstruct_absorption_from_rgb \
+  mixer::tests::dry_colors_are_continuous_as_measured_parts_go_to_zero \
   mixer::tests::palette_tints_stay_light_and_grays_stay_near_neutral \
   mixer::tests::white_tints_keep_their_blue_chroma \
   mixer::tests::white_and_black_keep_middle_tints_neutral \

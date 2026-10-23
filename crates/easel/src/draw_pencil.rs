@@ -417,7 +417,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         let st1 = st.clone();
         methods.set("width", lua.create_function(move |_, p: Table| {
             if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
-                return err("width: a pastel stick draws no line of one width; a held look (look --hold) shows where it would touch");
+                return err("width: a pastel stick draws no line of one width; a look with hold and at shows where it would touch");
             }
             let lead = lead_of(&p)?;
             let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);

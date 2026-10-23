@@ -15,6 +15,7 @@ pub mod drying;
 pub mod mask;
 pub mod mixer;
 pub mod noise;
+pub mod oil;
 pub mod path;
 pub mod edge;
 pub mod fence;

@@ -21,7 +21,7 @@ paint = { path = "../paint", features = ["hand-hook", "replay-effects"] }
 mlua = { version = "0.12", features = ["lua55", "vendored"] }
 rayon = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
-zstd = "0.13"
+zstd = { version = "0.13", features = ["zstdmt"] }
 sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -134,6 +134,61 @@ fn visible_of(w: &World, d: &Depths, v: &Value, normalize: impl Fn(Rc<Mask>) -> 
     Ok(out)
 }
 
+/// Where a pass lying just behind a selection shows (`behind=`, and a view's `behind` in a
+/// painting whose calls agree), within `out`: a mask is a thing in front of everything,
+/// so not where it is; and behind each named thing (not behind their union's farthest part).
+fn behind_of(st: &S, w: &World, d: &Depths, v: &Value, mut out: Mask) -> Result<Mask> {
+    let (masks, names): (Vec<Value>, Vec<Value>) = match v {
+        Value::Table(t) => t.sequence_values::<Value>().collect::<Result<Vec<_>>>()?.into_iter().partition(|x| mask_of(x).is_ok()),
+        x if mask_of(x).is_ok() => (vec![x.clone()], vec![]),
+        x => (vec![], vec![x.clone()]),
+    };
+    for x in &masks {
+        out = out.subtract(&*paint_mask_of(st, x)?);
+    }
+    if !names.is_empty() {
+        let mut picks = Vec::new();
+        for x in &names {
+            pick(w, x, &mut picks)?;
+        }
+        for p in &picks {
+            let one = Sel(vec![p.clone()]);
+            out = out.mul(&d.behind(&|t| one.has(t)));
+        }
+    }
+    Ok(out)
+}
+
+/// What hides a selection, where it is, as `behind_of` picks: a mask in it is a thing in
+/// front of everything, so it hides the named things where it lies over them and nothing
+/// hides it.
+fn front_of(st: &S, w: &World, d: &Depths, v: &Value) -> Result<Mask> {
+    let (mut masks, mut names) = (Vec::new(), Vec::new());
+    split_masks(v, &mut masks, &mut names)?;
+    let mut picks = Vec::new();
+    for x in &names {
+        pick(w, x, &mut picks)?;
+    }
+    let s = Sel(picks);
+    let mut front = d.front(&|t| s.has(t));
+    if !masks.is_empty() {
+        let mut over = Mask::empty(crate::api::frame(st)?);
+        for m in masks {
+            over = over.invert().mul(&(*paint_mask(st, m)).clone().invert()).invert();
+        }
+        let hidden = d.visible(&|t| s.has(t)).mul(&over);
+        for (f, h) in front.data.iter_mut().zip(&hidden.data) {
+            *f += h;
+        }
+    }
+    Ok(front)
+}
+
+/// The painting's state, in a painting whose calls agree (`calls_agree`).
+fn agreeing(lua: &mlua::Lua) -> Option<S> {
+    lua.app_data_ref::<S>().map(|s| s.clone()).filter(|s| s.borrow().tubes.calls_agree)
+}
+
 fn sel_of(w: &World, v: &Value) -> Result<Sel> {
     let mut out = Vec::new();
     pick(w, v, &mut out)?;
@@ -173,12 +228,19 @@ pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
     // v:visible(x): where x is seen (less whatever is in front of it)
     m.add_method("visible", |_, v, x: Value| Ok(wrap(visible_of(&v.0.world, v.0.view.depths(), &x, |m| m)?)));
     // v:front(x): what hides x, where x is
-    m.add_method("front", |_, v, x: Value| {
+    m.add_method("front", |lua, v, x: Value| {
+        if let Some(st) = agreeing(lua) {
+            return Ok(wrap(front_of(&st, &v.0.world, v.0.view.depths(), &x)?));
+        }
         let s = sel_of(&v.0.world, &x)?;
         Ok(wrap(v.0.view.depths().front(&|t| s.has(t))))
     });
     // v:behind(x): where a pass lying just behind x shows
-    m.add_method("behind", |_, v, x: Value| {
+    m.add_method("behind", |lua, v, x: Value| {
+        if let Some(st) = agreeing(lua) {
+            let full = Mask::full(crate::api::frame(&st)?);
+            return Ok(wrap(behind_of(&st, &v.0.world, v.0.view.depths(), &x, full)?));
+        }
         let s = sel_of(&v.0.world, &x)?;
         Ok(wrap(v.0.view.depths().behind(&|t| s.has(t))))
     });
@@ -269,27 +331,7 @@ pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
         out = out.mul(&visible_of(w, d, &vis, |m| paint_mask(st, m))?);
     }
     if !beh.is_nil() {
-        // a mask is a thing in front of everything; names go by depth
-        let (masks, names): (Vec<Value>, Vec<Value>) = match &beh {
-            Value::Table(t) => t.sequence_values::<Value>().collect::<Result<Vec<_>>>()?.into_iter().partition(|x| mask_of(x).is_ok()),
-            x if mask_of(x).is_ok() => (vec![x.clone()], vec![]),
-            x => (vec![], vec![x.clone()]),
-        };
-        for x in &masks {
-            out = out.subtract(&*paint_mask_of(st, x)?);
-        }
-        if !names.is_empty() {
-            let mut picks = Vec::new();
-            for x in &names {
-                pick(w, x, &mut picks)?;
-            }
-            let s = Sel(picks);
-            // behind each of them (not behind their union's farthest part)
-            for p in &s.0 {
-                let one = Sel(vec![p.clone()]);
-                out = out.mul(&d.behind(&|t| one.has(t)));
-            }
-        }
+        out = behind_of(st, w, d, &beh, out)?;
     }
     if !at.is_nil() {
         out = out.mul(&d.at_depth(meters(w, &at)?));
@@ -321,4 +363,38 @@ pub(crate) fn layer_args(w: &World, name: &Value, mask: &Value, depth: &Value) -
     }
     let m = mask_of(mask)?;
     Ok((name, (*m).clone(), layer_depth(w, depth)?))
+}
+
+// a new painting's view picks as a pass's behind= does (session.rs CALLS_AGREE_MARK)
+#[cfg(test)]
+mod tests {
+    use crate::session::{Session, box_for};
+
+    #[test]
+    fn view_queries_pick_as_passes_do() {
+        for agree in [false, true] {
+            let mut tubes = box_for(None).unwrap();
+            tubes.calls_agree = agree;
+            let mut s = Session::with_box(64, tubes).unwrap();
+            s.run(r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#).unwrap();
+            // two half-coverage layers at 5 m and 10 m, overlapping at 500,100 (in the sky)
+            let out = s.run(r#"local half = function(m) return m:map(function(v) return 0.5 * v end) end
+w = world{horizon=250}:layer("near", half(rect(0, 0, 600, 1000)), 5):layer("far", half(rect(400, 0, 1000, 1000)), 10)
+v = w:view()
+print(v:behind({"near", "far"}):at(500, 100), v:behind("near"):at(500, 100) * v:behind("far"):at(500, 100))"#).unwrap().out;
+            let got: Vec<f32> = out.lines().last().unwrap().split_whitespace().map(|v| v.parse().unwrap()).collect();
+            assert!((got[0] - if agree { got[1] } else { 0.25 }).abs() < 1e-3, "agree {agree}: {got:?}");
+            let masks = s.run(r#"local m = rect(0, 0, 200, 1000)
+print(v:behind(m):at(100, 100), v:behind({"near", m}):at(100, 100), v:front(m):at(100, 100), v:front({"near", m}):at(100, 100), v:front("near"):at(100, 100))"#);
+            match masks {
+                Ok(r) => {
+                    assert!(agree, "a mask was accepted");
+                    let got: Vec<f32> = r.out.lines().last().unwrap().split_whitespace().map(|v| v.parse().unwrap()).collect();
+                    // the mask hides what is behind it, and hides the near layer where it lies over it
+                    assert!(got[0].abs() < 1e-3 && got[1].abs() < 1e-3 && got[2].abs() < 1e-3 && (got[3] - 0.5).abs() < 1e-3 && got[4].abs() < 1e-3, "{got:?}");
+                }
+                Err(e) => assert!(!agree, "{e}"),
+            }
+        }
+    }
 }

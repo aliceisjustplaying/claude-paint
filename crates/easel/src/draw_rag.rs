@@ -125,7 +125,7 @@ impl UserData for RagU {
                         None => None,
                     };
                     let sd = seed(&u.st, lua, o.as_ref())?;
-                    let pass = RagPass { pressure: pr[0], angle, passes: passes as u32, refold, seed: sd };
+                    let pass = RagPass { pressure: pr[0], angle, passes: passes as u32, refold, seed: sd, graded: u.st.borrow().tubes.calls_agree };
                     time::verb(&u.st, Verb::Pass, |s| {
                         let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
                         let (n, full) = c.rag_region(&mut u.rag.borrow_mut(), &m, &pass);
@@ -274,6 +274,28 @@ print(n, h, type(rag))"#;
         assert!(paint::ENGINE >= 3);
         run(&mut new, CANVAS);
         assert_eq!(run(&mut new, "print(type(rag))").trim(), "function");
+    }
+
+    /// In a new painting a rag wipes a faint mask as it wipes a full one, lifting by the
+    /// mask's value (an older log's plans no wipe under half coverage).
+    #[test]
+    fn a_faint_mask_wipe_lifts_by_its_value() {
+        let lift = |scale: f32| {
+            let mut s = Session::with_box(W, crate::session::box_for(None).unwrap()).unwrap();
+            run(&mut s, CANVAS);
+            let lum = |s: &Session| {
+                let c = s.canvas().unwrap();
+                let (f, seen) = (c.window(), c.seen());
+                let px: Vec<f32> = (0..f.w * f.h).filter(|i| (130.0..270.0).contains(&((i % f.w) as f32 / f.scale)) && (130.0..270.0).contains(&((i / f.w) as f32 / f.scale))).map(|i| seen[i][1]).collect();
+                px.iter().sum::<f32>() / px.len() as f32
+            };
+            run(&mut s, r#"work(rect(50, 50, 350, 350), {hand="broad", pile=pile{{"bone black", 1}, medium=0.5}, coverage=0.6, fill=true, seed=1})"#);
+            let before = lum(&s);
+            run(&mut s, &format!("r = rag{{width=60, seed=3}}; r:wipe(rect(100, 100, 300, 300):map(function(v) return {scale} * v end), {{pressure=0.6, seed=4}})"));
+            lum(&s) - before
+        };
+        let (full, faint) = (lift(1.0), lift(0.25));
+        assert!(full > 0.0 && (0.1..0.5).contains(&(faint / full)), "a quarter mask lifted {faint}, a full one {full}");
     }
 
     /// With the rag lift switch (every new painting) a wipe that runs on a

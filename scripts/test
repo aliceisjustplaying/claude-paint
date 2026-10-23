@@ -249,6 +249,9 @@ rust easel-bin easel 'bin easel test' session::tests::engine_2_logs_replay_as_be
   api::carried_palette_tests::graded_dips_preserve_palette_tint_strength_at_negligible_dirt \
   api::carried_palette_tests::every_internal_dip_carries_the_paint_retained_from_the_canvas \
   api::blend_at_masks_tests::soften_keeps_a_graded_mask_graded \
+  api::calls_agree_tests::a_misspelled_brush_option_is_refused api::calls_agree_tests::brush_and_knife_loads_refuse_the_same_amounts \
+  api::calls_agree_tests::recipes_and_mixes_whose_parts_overflow_are_refused depth::tests::view_queries_pick_as_passes_do \
+  api::draw_rag::tests::a_faint_mask_wipe_lifts_by_its_value \
   api::blend_at_masks_tests::an_unclipped_blend_or_glaze_reaches_half_a_brush_past_its_mask
 # The first 2.0 painting is the judge of knife skim over wet dark paint.
 known_rust knife-skim paint 'lib paint test' bristle::knife_skim::a_skimming_knife_keeps_its_light_on_wet_dark_paint

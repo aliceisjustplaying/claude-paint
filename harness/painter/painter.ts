@@ -36,7 +36,7 @@
  * The PAINTER_* variables are read once and removed from the environment.
  */
 import { Type } from "@earendil-works/pi-ai";
-import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createReadToolDefinition, defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { buildSummary, CANVAS_VIEW } from "./summary.ts";
 import { registerEaselTools } from "./easel-tools.ts";
 import vision from "./vision.ts";
@@ -46,6 +46,7 @@ import { limitWaitFromEnv, limitWaitMs, usageLimit } from "./limits.ts";
 import { text } from "./easel-client.ts";
 import { CRITIQUE, criticFromEnv, leaveNote, passagesToTakeUp, sittingCritique, TO_CRITIC, visit } from "./visit.ts";
 import { registerInbox } from "./inbox.ts";
+import { bindHostCancellation } from "./host-cancellation.ts";
 
 /** The system prompt is only what --system-prompt gives (the critic's session uses this too). */
 export function onlyOurSystemPrompt(pi: ExtensionAPI) {
@@ -71,19 +72,42 @@ export default function painter(pi: ExtensionAPI) {
 	const passagesFirst = process.env.PAINTER_OPEN_PASSAGES === "1";
 	const critic = criticFromEnv();
 	let sitting = new AbortController();
-	pi.on("before_agent_start", () => { sitting = new AbortController(); });
+	let openingPrepared = false;
+	let recovery: Promise<unknown> | undefined;
+	let unbind: (() => void) | undefined;
+	function bindCancellation(ctx?: ExtensionContext) {
+		if (unbind || !ctx?.sessionManager) return;
+		unbind = bindHostCancellation(ctx.sessionManager, () => {
+			sitting.abort();
+			return recovery?.then(() => {}, () => {});
+		});
+	}
+	pi.on("session_start", (_event, ctx) => bindCancellation(ctx));
+	pi.on("before_agent_start", (_event, ctx) => {
+		bindCancellation(ctx);
+		if (!openingPrepared) sitting = new AbortController();
+		openingPrepared = false;
+		limited = undefined;
+		pendingLimit = false;
+	});
 	pi.on("agent_settled", () => sitting.abort());
-	pi.on("session_shutdown", () => sitting.abort());
+	pi.on("session_shutdown", async () => {
+		sitting.abort();
+		await recovery?.catch(() => {});
+		unbind?.();
+		unbind = undefined;
+	});
 	for (const k of ["PAINTER_MAX_IMAGES", "PAINTER_MAX_IMAGE_MB", "PAINTER_INPUT_TPM", "PAINTER_LIMIT_PROBE_S", "PAINTER_LIMIT_GIVE_UP_H", "PAINTER_SITTING_RECOVERY", "PAINTER_OPEN_PASSAGES", "PAINTER_CRITIC"]) delete process.env[k];
 	const studio = process.cwd();
 	const read = createReadToolDefinition(studio);
 	const views = new Map<string, unknown[]>();
 	/** The image blocks of a canvas view in the studio (successful reads cached). */
-	async function viewImages(path: string, ctx: Parameters<typeof read.execute>[4]): Promise<unknown[]> {
+	async function viewImages(path: string, ctx: Parameters<typeof read.execute>[4], signal?: AbortSignal): Promise<unknown[]> {
+		if (signal?.aborted) return [];
 		let imgs = views.get(path);
 		if (!imgs) {
 			try {
-				const r = await read.execute("canvas-view", { path }, undefined, undefined, ctx);
+				const r = await read.execute("canvas-view", { path }, signal, undefined, ctx);
 				imgs = r.content.filter((c) => c.type === "image");
 			} catch {
 				imgs = [];
@@ -96,16 +120,37 @@ export default function painter(pi: ExtensionAPI) {
 
 	// a later sitting opens with what a compaction summary holds, and the canvas as it is
 	pi.on("input", async (event, ctx) => {
+		bindCancellation(ctx);
+		if (!event.streamingBehavior && ctx.isIdle?.() !== false) {
+			sitting = new AbortController();
+			openingPrepared = true;
+		}
 		if (!sittingRecovery) return { action: "continue" as const };
 		sittingRecovery = false;
-		const { summary } = await buildSummary(studio, [], undefined, "");
-		const view = CANVAS_VIEW.exec(summary)?.[1];
-		const images = view ? await viewImages(view, ctx) : [];
-		let text = passagesFirst
-			? `${passagesToTakeUp(studio, critic !== undefined)}\n\n${event.text}\n\n${summary}`
-			: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
-		if (view && !images.length) text += `\n\n${unavailableView(view)}`;
-		return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
+		const signal = ctx.signal ? AbortSignal.any([sitting.signal, ctx.signal]) : sitting.signal;
+		const opening = (async () => {
+			if (signal.aborted) return { action: "handled" as const };
+			const { summary } = await buildSummary(studio, [], signal, "");
+			if (signal.aborted) return { action: "handled" as const };
+			const view = CANVAS_VIEW.exec(summary)?.[1];
+			const images = view ? await viewImages(view, ctx, signal) : [];
+			if (signal.aborted) return { action: "handled" as const };
+			let text = passagesFirst
+				? `${passagesToTakeUp(studio, critic !== undefined)}\n\n${event.text}\n\n${summary}`
+				: `${event.text}\n\n${summary}${critic ? sittingCritique(studio) : ""}`;
+			if (view && !images.length) text += `\n\n${unavailableView(view)}`;
+			return { action: "transform" as const, text, images: [...(event.images ?? []), ...(images as never[])] };
+		})();
+		recovery = opening;
+		try {
+			return await opening;
+		} finally {
+			recovery = undefined;
+			if (signal.aborted) {
+				sittingRecovery = true;
+				openingPrepared = false;
+			}
+		}
 	});
 	registerInbox(pi);
 	const pace = tpm ? new TokenPace(tpm) : undefined;
@@ -115,6 +160,7 @@ export default function painter(pi: ExtensionAPI) {
 	let pendingLimit = false;
 
 	pi.on("context", async (event, ctx) => {
+		const signal = ctx.signal ? AbortSignal.any([sitting.signal, ctx.signal]) : sitting.signal;
 		// after each compaction summary, the canvas view it names (the session file holds the summary only)
 		let shown = false;
 		const withViews: typeof event.messages = [];
@@ -122,7 +168,7 @@ export default function painter(pi: ExtensionAPI) {
 			withViews.push(m);
 			const summary = (m as { role?: string; summary?: string }).role === "compactionSummary" ? (m as { summary?: string }).summary : undefined;
 			const view = summary ? CANVAS_VIEW.exec(summary)?.[1] : undefined;
-			const images = view ? await viewImages(view, ctx) : [];
+			const images = view ? await viewImages(view, ctx, signal) : [];
 			if (view) {
 				withViews.push({ role: "custom", customType: "painter-canvas-view", display: false, timestamp: (m as { timestamp?: number }).timestamp ?? 0,
 					content: [{ type: "text", text: images.length ? `The canvas as it was when this was written (${view}):` : unavailableView(view) }, ...images] } as never);
@@ -136,15 +182,15 @@ export default function painter(pi: ExtensionAPI) {
 		if (pace) {
 			const wait = pace.waitMs(lastRequest, Date.now());
 			if (wait > 0) await new Promise<void>((resolve) => {
-				const signal = ctx.signal;
 				if (signal?.aborted) return resolve();
+				const signals = ctx.signal ? [sitting.signal, ctx.signal] : [sitting.signal];
 				const done = () => {
 					clearTimeout(timer);
-					signal?.removeEventListener("abort", done);
+					for (const signal of signals) signal.removeEventListener("abort", done);
 					resolve();
 				};
 				const timer = setTimeout(done, wait);
-				signal?.addEventListener("abort", done, { once: true });
+				for (const signal of signals) signal.addEventListener("abort", done, { once: true });
 			});
 		}
 		return dropped > 0 || shown ? { messages } : undefined;

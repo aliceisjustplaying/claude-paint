@@ -91,10 +91,10 @@ function readPaths(messages: readonly Message[]): Map<string, string> {
 
 export function placeholder(path: string | undefined): string {
 	return path
-		? `[You saw this image earlier (${path}); removed from this request to save space. Use read to reopen it within the studio, or look for the current canvas.]`
+		? `[An earlier image (${path}) was removed from this request to save space. Use read to reopen it within the studio, or look for the current canvas.]`
 		: path === ""
-			? "[You saw this image when you called look earlier; removed from this request to save space. Call look again for the current canvas.]"
-			: "[You saw this image earlier; removed from this request to save space. Call look for the current canvas.]";
+			? "[An image from an earlier look was removed from this request to save space. Call look again for the current canvas.]"
+			: "[An earlier image was removed from this request to save space. Call look for the current canvas.]";
 }
 
 /** What stands for an image that alone is over the size limit. */

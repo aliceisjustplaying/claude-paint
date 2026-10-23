@@ -16,7 +16,7 @@ export const HEADER = "Earlier parts of this session were condensed.";
  * condensed often (a small window, PAINTER_COMPACT_RESERVE): what carries over, and that the journal does.
  */
 export const CARRIES_OVER =
-	"What follows is what carries over: BRIEF.md, your journal, your globals, the canvas clock and the canvas, " +
+	"What follows is what carries over: BRIEF.md, your journal (notes/journal.md), your notebook (notebook.md) when the studio has one, your globals, the canvas clock and the canvas, " +
 	"then the latest part of the session. Nothing else from before is here, including the message that opened this " +
 	"sitting. The studio's notes are still there to read, and paintings/lua/painting.lua holds the painting's chunks " +
 	"(`log` shows its latest part). This happens again each time the session grows this large, and what you write " +

@@ -4,15 +4,17 @@
  * one passage that appears exactly once, as `note` does for the journal. Every call is kept, whole, in
  * out/easel/notebook-revisions.jsonl (time, what was added or replaced and with what, and the notebook before).
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { notePath, publishNotes } from "./note-publication.ts";
 
 export const NOTEBOOK = "notebook.md";
 export const NOTEBOOK_REVISIONS = "out/easel/notebook-revisions.jsonl";
 
 /** Add `text` to the studio's notebook, or put it in place of the one occurrence of `replaces`; the tool's reply. Throws a reply for the painter on a bad request. */
 export function writeNotebook(studio: string, text: string, replaces?: string, now: Date = new Date()): string {
-	const path = join(studio, NOTEBOOK);
+	const path = notePath(studio, NOTEBOOK, "notebook");
+	const log = notePath(studio, NOTEBOOK_REVISIONS, "notebook");
 	const before = existsSync(path) ? readFileSync(path, "utf8") : "";
 	let after: string;
 	let record: Record<string, string>;
@@ -29,9 +31,9 @@ export function writeNotebook(studio: string, text: string, replaces?: string, n
 		after = before.slice(0, at) + text + before.slice(at + replaces.length);
 		record = { at: now.toISOString(), replaced: replaces, with: text, before };
 	}
-	const log = join(studio, NOTEBOOK_REVISIONS);
-	mkdirSync(dirname(log), { recursive: true });
-	appendFileSync(log, JSON.stringify(record) + "\n");
-	writeFileSync(path, after);
-	return replaces === undefined ? `noted in ${path}\n` : `revised in ${path}\n`;
+	publishNotes(studio, "notebook", "notebook", [
+		{ path: join(studio, NOTEBOOK), slot: "current", text: after },
+		{ path: join(studio, NOTEBOOK_REVISIONS), slot: "history", text: (existsSync(log) ? readFileSync(log, "utf8") : "") + JSON.stringify(record) + "\n" },
+	]);
+	return replaces === undefined ? `noted in ${join(studio, NOTEBOOK)}\n` : `revised in ${join(studio, NOTEBOOK)}\n`;
 }

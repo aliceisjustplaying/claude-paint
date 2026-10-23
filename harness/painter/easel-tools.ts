@@ -12,7 +12,8 @@
 import { existsSync } from "node:fs";
 import { Type } from "@earendil-works/pi-ai";
 import { createReadToolDefinition, defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { reviseJournal } from "./journal.ts";
+import { JOURNAL, reviseJournal } from "./journal.ts";
+import { notePath } from "./note-publication.ts";
 import { writeNotebook } from "./notebook.ts";
 import { reference, referenceList } from "./references.ts";
 import { atEasel, directoryListing, hideCounters, logFind, logReply, paintReply, probeArgs, renameLook, renameLooks, statusReply, studioPath, lookArgs, tail, text, toolWords, surveyReply } from "./easel-client.ts";
@@ -123,6 +124,7 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 			parameters: Type.Object({ text: Type.String(), replaces: Type.Optional(Type.String()) }),
 			async execute(_id, p, signal) {
 				if (p.replaces !== undefined) return text(reviseJournal(studio, p.replaces, p.text));
+				notePath(studio, JOURNAL, "note");
 				return text(await atEasel(studio, ["note", "-"], p.text, signal));
 			},
 		}),
@@ -188,76 +190,82 @@ export function registerEaselTools(pi: ExtensionAPI, studio: string, limits: Pru
 }
 
 /** `look`, as the painter has it; the critic's session (critic.ts) has the same tool. */
-export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimits): void {
+export function registerLook(pi: ExtensionAPI, studio: string, limits: PruneLimits, critic?: { resolve: (path: string) => string; description: string }): void {
 	const read = createReadToolDefinition(studio);
-	pi.registerTool({
-		...defineTool({
-			name: "look",
-			label: "look",
-			description:
-				"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
-				"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at full detail up to 1200 pixels a side; larger crops are scaled down. The reply gives the scale in pixels per canvas unit. " +
-				"mask: a global mask's name (or several, comma-separated), shown as outlines and a light fill over the view. " +
-				"mode: \"value\" (the picture in grays, its lightness alone, in the gallery light), \"squint\", \"edges\" (the picture's edges drawn over a dim gray of it: orange where an edge is hard, blue where it is soft, brighter the more the lightness changes across it; hard and soft as they read at the size of the image the look returns), \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
-				"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
-				"grid: true, or a spacing in canvas units. " +
-				"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
-				"compare: the path of an image in this studio, usually an earlier look, resized to the current view's height and shown left of it; to compare an earlier look, supply matching crop, mode and light options explicitly. " +
-				"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
-				"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery, light and mask; size, grid, mirror and edges are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
-				"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
-			parameters: Type.Object({
-				scratch,
-				crop: Type.Optional(Type.String()),
-				mask: Type.Optional(Type.String()),
-				mode: Type.Optional(Type.String()),
-				light: Type.Optional(Type.String()),
-				survey: Type.Optional(Type.Boolean()),
-				compare: Type.Optional(Type.String()),
-				ref: Type.Optional(Type.String()),
-				hold: Type.Optional(Type.String()),
-				at: Type.Optional(Type.String()),
-				pose: Type.Optional(Type.String()),
-				side: Type.Optional(Type.String()),
-				palette: Type.Optional(Type.Boolean()),
-				size: Type.Optional(Type.Number()),
-				grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
-			}),
-			async execute(id, p, signal, onUpdate, ctx) {
-				const { scratch: onScratch, ...view } = p;
-				let said: string;
-				lookArgs(view); // validate combinations before resolving compare paths
-				if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
-				if (p.ref && (p.survey || p.compare || p.hold)) throw new Error("look: ref is a look of its own: no survey, compare or hold");
-				// ref: a picture of the motif in this studio, nothing outside it (as `read`)
-				let ref = p.ref || undefined;
-				if (ref !== undefined) {
-					ref = studioPath(studio, ref);
-					if (ref === undefined) throw new Error("look: ref is the path of a picture of the motif in this studio");
-				}
-				// compare: an image in this studio, nothing outside it (as `read`)
-				let compare = p.compare || undefined; // (an empty path is none)
-				if (compare !== undefined) {
-					compare = studioPath(studio, compare);
-					if (compare === undefined) throw new Error("look: compare is the path of an image in this studio");
-				}
-				try {
-					said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare, ref })], undefined, signal);
-				} catch (e) {
-					throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
-				}
-				let paths: string[];
-				({ said, paths } = renameLooks(studio, said));
-				said = `${label(onScratch)}\n${said}`;
-				if (paths.length === 0) throw new Error(said);
-				// (a survey names several looks: each is read, in order)
-				const reads = [];
-				for (const path of paths) reads.push(await read.execute(id, { path }, signal, onUpdate, ctx));
-				const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
-				if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
-				return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
-			},
+	const viewOptions = ["crop", "mode", "light", "size", "grid", "survey", "compare"] as const;
+	const tool = defineTool({
+		name: "look",
+		label: "look",
+		description: critic?.description ??
+			"Look at the canvas as it is now. Without options: the whole canvas, scaled down. " +
+			"crop: \"x0,y0,x1,y1\" in canvas units (two opposite corners), at full detail up to 1200 pixels a side; larger crops are scaled down. The reply gives the scale in pixels per canvas unit. " +
+			"mask: a global mask's name (or several, comma-separated), shown as outlines and a light fill over the view. " +
+			"mode: \"value\" (the picture in grays, its lightness alone, in the gallery light), \"squint\", \"edges\" (the picture's edges drawn over a dim gray of it: orange where an edge is hard, blue where it is soft, brighter the more the lightness changes across it; hard and soft as they read at the size of the image the look returns), \"mirror\", \"relief\" (a raking light on the paint's ridges and furrows), \"gallery\" (the light the picture hangs in) or several, comma-separated. " +
+			"light: \"azimuth,elevation\" in degrees for the relief light (default \"135,25\", from the upper left). size: the long side in pixels. " +
+			"grid: true, or a spacing in canvas units. " +
+			"survey: true surveys the whole canvas at full detail, as several tiles (with mode, not crop or size); a partial reply lists remaining tiles to read in separate turns. " +
+			"compare: the path of an image in this studio, usually an earlier look, resized to the current view's height and shown left of it; to compare an earlier look, supply matching crop, mode and light options explicitly. " +
+			"ref: the path of a picture of the motif in this studio (a photograph, a study), fitted to the canvas's shape (scaled to cover it and centered, so a picture of another shape loses its edges) and shown left of the same view of the canvas: the same crop, size, mode and grid, as a picture pinned beside the easel. " +
+			"hold: the name of a knife (what is on it) or a pile (a fresh load), with at: \"x,y\" (canvas units): the loaded knife held up to the canvas there, its paint thick on the blade (crop sets the passage). Supports mode value, squint, relief or gallery, light and mask; size, grid, mirror and edges are unavailable with hold. It shows the paint on the knife, not how it would look laid. " +
+			"palette: true shows the palette board instead: each pile knifed out thick and smeared thin across a black stripe.",
+		parameters: Type.Object({
+			scratch,
+			crop: Type.Optional(Type.String()),
+			mask: Type.Optional(Type.String()),
+			mode: Type.Optional(Type.String()),
+			light: Type.Optional(Type.String()),
+			survey: Type.Optional(Type.Boolean()),
+			compare: Type.Optional(Type.String()),
+			ref: Type.Optional(Type.String()),
+			hold: Type.Optional(Type.String()),
+			at: Type.Optional(Type.String()),
+			pose: Type.Optional(Type.String()),
+			side: Type.Optional(Type.String()),
+			palette: Type.Optional(Type.Boolean()),
+			size: Type.Optional(Type.Number()),
+			grid: Type.Optional(Type.Union([Type.Boolean(), Type.Number()])),
 		}),
+		async execute(id, p, signal, onUpdate, ctx) {
+			if (critic && Object.keys(p).some((key) => !(viewOptions as readonly string[]).includes(key))) {
+				throw new Error("look: you can view the painting and its earlier looks, not the scratch canvas, masks, knives or the palette");
+			}
+			const { scratch: onScratch, ...view } = p;
+			let said: string;
+			lookArgs(view); // validate combinations before resolving compare paths
+			if (p.survey && p.compare) throw new Error("look: survey and compare are two looks; ask for one");
+			if (p.ref && (p.survey || p.compare || p.hold)) throw new Error("look: ref is a look of its own: no survey, compare or hold");
+			// ref: a picture of the motif in this studio, nothing outside it (as `read`)
+			let ref = p.ref || undefined;
+			if (ref !== undefined) {
+				ref = studioPath(studio, ref);
+				if (ref === undefined) throw new Error("look: ref is the path of a picture of the motif in this studio");
+			}
+			// compare: an image in this studio, nothing outside it (as `read`)
+			let compare = p.compare || undefined; // (an empty path is none)
+			if (compare !== undefined) {
+				compare = critic ? critic.resolve(compare) : studioPath(studio, compare);
+				if (compare === undefined) throw new Error("look: compare is the path of an image in this studio");
+			}
+			try {
+				said = await atEasel(studio, ["look", ...on(p), ...lookArgs({ ...view, compare, ref })], undefined, signal);
+			} catch (e) {
+				throw new Error(toolWords((e as Error).message)); // the easel's messages name its command-line flags
+			}
+			let paths: string[];
+			({ said, paths } = renameLooks(studio, said));
+			said = `${label(onScratch)}\n${said}`;
+			if (paths.length === 0) throw new Error(said);
+			// (a survey names several looks: each is read, in order)
+			const reads = [];
+			for (const path of paths) reads.push(await read.execute(id, { path: critic ? critic.resolve(path) : path }, signal, onUpdate, ctx));
+			const images = reads.flatMap((r) => r.content.filter((c) => c.type === "image"));
+			if (p.survey) return { ...reads[0], ...surveyReply(said, paths, images, limits) };
+			return { ...reads[0], content: [{ type: "text" as const, text: said }, ...images] };
+		},
+	});
+	if (critic) tool.parameters = Type.Pick(tool.parameters, viewOptions, { additionalProperties: false }) as typeof tool.parameters;
+	pi.registerTool({
+		...tool,
 		executionMode: "sequential",
 	});
 }

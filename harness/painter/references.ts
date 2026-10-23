@@ -11,13 +11,33 @@ interface Reference {
 function library(studio: string): Reference[] {
 	const path = studioPath(studio, "notes/reference-library.json");
 	if (!path || !existsSync(path)) throw new Error("reference: this studio has no reference library");
-	const entries: Reference[] = JSON.parse(readFileSync(path, "utf8"));
+	const source = readFileSync(path, "utf8");
+	let entries: unknown;
+	try {
+		entries = JSON.parse(source);
+	} catch (error) {
+		throw new Error(`reference: notes/reference-library.json isn't valid JSON: ${(error as Error).message}`);
+	}
+	if (!Array.isArray(entries)) throw new Error("reference: notes/reference-library.json must be a list of entries");
 	const seen = new Set<string>();
-	for (const { id } of entries) {
+	for (const [index, entry] of entries.entries()) {
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+			throw new Error(`reference: notes/reference-library.json entry ${index + 1} must be an object with id, title, keywords and text`);
+		}
+		const label = typeof entry.id === "string" && entry.id.trim() ? JSON.stringify(entry.id) : String(index + 1);
+		for (const field of ["id", "title", "text"]) {
+			if (typeof entry[field] !== "string" || !entry[field].trim()) {
+				throw new Error(`reference: notes/reference-library.json entry ${label}: ${field} must be a nonblank string`);
+			}
+		}
+		if (!Array.isArray(entry.keywords) || !entry.keywords.every((word: unknown) => typeof word === "string")) {
+			throw new Error(`reference: notes/reference-library.json entry ${label}: keywords must be a list of strings`);
+		}
+		const { id } = entry;
 		if (seen.has(id)) throw new Error(`reference: notes/reference-library.json has duplicate id "${id}"; give each entry its own id`);
 		seen.add(id);
 	}
-	return entries;
+	return entries as Reference[];
 }
 
 export function referenceList(studio: string, params: Record<string, unknown>) {

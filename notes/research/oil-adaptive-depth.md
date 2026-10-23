@@ -20,20 +20,20 @@ Solvent-free columns borrow the tile's kinetics table directly. Solvent-bearing 
 
 ## Primary measurements
 
-Measured on primary `machine_01M5M4F0WEBPVQ6BSF48E8QTYN`, using standalone optimized `rustc`, not Cargo. The linked primary debug rlib SHA-256 is `87d5aedbd0eddf83c83ec160b9e0e2a84d3f6787fd489613ceee332b2d959711`. The measured depth source SHA-256 is `468107c464066017ea304698c7ced87a0c97b02b8deced34bfbedf1276b28e09`. The primary live checkout was not edited.
+Measured on primary `machine_01M5M4F0WEBPVQ6BSF48E8QTYN`, using standalone optimized `rustc`, not Cargo. The linked primary debug rlib SHA-256 is `24418ab1edf065ff389ff49dbe18a5e13abe0fdd550b2410d8eb223ba765bea4`, including the parent's positive implicit-diffusion elimination. The measured depth source SHA-256 is `468107c464066017ea304698c7ced87a0c97b02b8deced34bfbedf1276b28e09`. Verification ran entirely in primary scratch; this work did not edit the primary live checkout.
 
 All 14 endpoints agree with both 96- and 192-cell references within 600 seconds and satisfy the source targets within that same sampling tolerance. Both reference grids give the same sampled endpoints. Times below are hours; a triple is set-to-touch / dry-to-touch / dry-hard.
 
 | Fixture | Fixed 96 and 192 | Adaptive | Peak / final cells | Fixed 96 / 192 / adaptive runtime, seconds |
 | --- | --- | --- | --- | --- |
-| S3LWLO 450 µm | 63 / 90 / 134 | 63 / 90 / 134 | 386 / 386 | 0.430 / 0.859 / 3.770 |
-| S3UBLO 450 µm | 213 / 242 / 284 | 213 / 242 / 284 | 256 / 256 | 0.482 / 0.897 / 1.462 |
-| S3LWSO 450 µm | 112 / 157 / 207 | 112.166667 / 157 / 207 | 256 / 256 | 0.332 / 0.663 / 1.593 |
-| S3UBSO 450 µm | 234 / 261 / 305 | 234 / 261 / 305 | 259 / 259 | 0.484 / 0.966 / 1.561 |
-| Golden 76 µm | 47.833333 | 47.833333 | 16 / 16 | 0.903 / 1.802 / 0.297 |
-| Golden 254 µm | 99 | 99.166667 | 37 / 37 | 2.005 / 4.009 / 1.463 |
+| S3LWLO 450 µm | 63 / 90 / 134 | 63 / 90 / 134 | 386 / 386 | 0.430 / 0.861 / 3.777 |
+| S3UBLO 450 µm | 213 / 242 / 284 | 213 / 242 / 284 | 256 / 256 | 0.450 / 0.898 / 1.463 |
+| S3LWSO 450 µm | 112 / 157 / 207 | 112.166667 / 157 / 207 | 256 / 256 | 0.332 / 0.662 / 1.587 |
+| S3UBSO 450 µm | 234 / 261 / 305 | 234 / 261 / 305 | 259 / 259 | 0.490 / 0.991 / 1.559 |
+| Golden 76 µm | 47.833333 | 47.833333 | 16 / 16 | 0.901 / 1.803 / 0.296 |
+| Golden 254 µm | 99 | 99.166667 | 37 / 37 | 2.078 / 4.003 / 1.463 |
 
-The runtime horizon is the first dry-hard observation, matching the existing predictor, even for the Golden touch endpoint. The complete fixed-grid comparisons plus adaptive runs take 23.97 seconds and peak at 3,044 KiB RSS. These adaptive runs are not faster than a fixed 192-cell solve for every fixture: the S3LWLO case spends extra work resolving the gel front and checking selective trials. They do eliminate the runaway refinement without a numerical cap.
+The runtime horizon is the first dry-hard observation, matching the existing predictor, even for the Golden touch endpoint. The complete fixed-grid comparisons plus adaptive runs take 24.04 seconds and peak at 3,048 KiB RSS. These adaptive runs are not faster than a fixed 192-cell solve for every fixture: the S3LWLO case spends extra work resolving the gel front and checking selective trials. They do eliminate the runaway refinement without a numerical cap.
 
 The grids are not prescribed uniform 2.5 µm grids. At the final observation S3LWLO cells span 0.220–1.758 µm and Golden254 spans 3.969–7.938 µm. Some fixtures do select uniform grids when their errors demand it. The primary mesh receipts record intermediate growth; the 1e-5 sweep also shows coarsening, including S3UBLO's peak of 81 cells and final 75 cells.
 
@@ -51,7 +51,7 @@ At 3e-7 the LWSO endpoint also matches exactly; Golden254 stays one sample later
 
 ## Tests and reproduction
 
-Four inline regressions cover conservative linear prolongation and bounds, the nonlocal S3LWLO calendar plus thick Golden calendar, real coupled growth-threshold acceptance and sparse solvent-adjustment equivalence on the accepted mesh. The focused calendars assert the unchanged 600-second agreement with both fixed grids. The separate primary calendar executable asserts all 14 endpoints. The four tests pass in 12.68 seconds.
+Four inline regressions cover conservative linear prolongation and bounds, the nonlocal S3LWLO calendar plus thick Golden calendar, real coupled growth-threshold acceptance and sparse solvent-adjustment equivalence on the accepted mesh. The focused calendars assert the unchanged 600-second agreement with both fixed grids. The separate primary calendar executable asserts all 14 endpoints. The four tests pass in 12.72 seconds.
 
 The threshold test supplies a real callback that computes extension/coupling/bending and evaluates `mechanics::coupled_linear_growth_oracle`. Its initial coarse and reconstructed grids have opposite growth signs at a fixed compressive load. After refinement the callback reports the same sign and <=1% relative error. Force and moment are unchanged. The source-calendar runs pass `None`: those runs verify chemistry and rigidity, not a missing coupled callback. No coupled threshold is claimed for them.
 

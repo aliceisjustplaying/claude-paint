@@ -73,6 +73,27 @@ class FriedrichModelTests(unittest.TestCase):
         self.assertFalse(self.runner.exists())
         self.assertFalse((self.studio / "BRIEF.md").exists())
 
+    def test_inspection_typo_never_launches_or_mutates_the_run(self):
+        subprocess.run(self.prepare, check=True, capture_output=True, text=True)
+        house = self.runner / "r21_chains.py"
+        with house.open("a") as stream:
+            stream.write('\ndef paint(*args):\n    (RUN / "LAUNCH_REACHED").touch()\n    return []\n')
+        run = self.runner / "run"
+        command = [sys.executable, str(self.runner / "run.py")]
+        checked = subprocess.run(command + ["--check"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertIn("first_sitting_cmd", json.loads(checked.stdout))
+        self.assertFalse(run.exists())
+        for args in (["--chek"], ["--check", "--chek"], ["unexpected"], ["--check", "unexpected"]):
+            with self.subTest(args=args):
+                result = subprocess.run(command + args, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse(run.exists())
+        launched = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        self.assertTrue((run / "LAUNCH_REACHED").exists())
+        self.assertEqual(json.loads((run / "studios.json").read_text()), {"OPUS1": self.studio.name})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -562,6 +562,39 @@ mod tests {
     }
 
     #[test]
+    fn researched_tubes_keep_their_spectra_in_wet_and_retained_films() {
+        let mut palette = crate::Palette::new("researched films", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let white = palette.tubes.iter().position(|t| t.name == "lead white").unwrap();
+        for name in researched::RESEARCHED_TUBES {
+            let tube = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            for fraction in [0.25, 1.0] {
+                for medium in [0.0, 0.8] {
+                    let paint = palette.pile(vec![(tube, fraction), (white, 1.0 - fraction)]).paint(medium);
+                    for under in [[0.02; 3], [0.8; 3]] {
+                        let expected = paint.over(under, 0.5);
+                        for passes in [1, 4] {
+                            let mut canvas = crate::Canvas::new_window(2, 1.0, under, None)
+                                .with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+                            for _ in 0..passes {
+                                canvas.wet.vol.fill(0.5 / passes as f32);
+                                canvas.wet.lat.fill(paint.latent());
+                                canvas.wet.hide.fill(paint.prop());
+                                canvas.wet.dirty = Some((0, 0, 2, 2));
+                                let wet = canvas.look_px(0);
+                                canvas.dry();
+                                assert_eq!(wet, canvas.px[0]);
+                            }
+                            assert!((0..3).all(|k| (canvas.px[0][k] - expected[k]).abs() < 2e-6), "{name}, fraction={fraction}, medium={medium}, passes={passes}: {:?} != {expected:?}", canvas.px[0]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn researched_spectra_mix_by_volume_and_dilute_through_knives_and_wet_paint() {
         let mut palette = crate::Palette::new("extension transport", crate::palette::catalog());
         palette.engine = crate::PIGMENT_MIXER;

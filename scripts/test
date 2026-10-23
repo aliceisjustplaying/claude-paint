@@ -142,6 +142,7 @@ check runner-round24 "cd notes/round24/runner && $pytest -rs ." "$passed"
 check runner-effects "cd notes/round29/runner && $pytest -rs test_painting_effects.py" "$passed"
 rust paint-lib paint 'lib paint test' tests::fixture_matches_golden tests::drag_conserves_paint \
   mixer::tests::researched_tubes_have_independent_exact_spectra \
+  mixer::tests::researched_tubes_keep_their_spectra_in_wet_and_retained_films \
   mixer::tests::researched_spectra_mix_by_volume_and_dilute_through_knives_and_wet_paint \
   mixer::tests::extension_lanes_leave_legacy_optics_and_palette_construction_unchanged \
   checkpoint::tests::legacy_checkpoints_and_dumps_keep_twenty_one_lanes \

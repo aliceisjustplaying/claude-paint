@@ -77,8 +77,8 @@ ochre.
 Barium yellow and zinc yellow take their color from the measured color of
 reconstructed pigments and their tinting strength from values measured in
 test paints, relative to lead chromate [OTE]; the darkening for oil is this
-easel's adjustment, not a sourced value. Carmine lake's numbers are
-estimates.
+easel's adjustment, not a sourced value. Carmine lake's color and mixing
+are measured from a cochineal lake oil paint; it tints very strongly.
 
 ## 10. At this easel
 

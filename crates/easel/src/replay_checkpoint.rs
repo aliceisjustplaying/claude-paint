@@ -482,7 +482,7 @@ impl Live {
 
     pub fn completed(&mut self, path: &Path, s: &Session, source: &str, width: usize) -> Result<(), String> {
         let done = s.log.len();
-        if done == 0 || (done.saturating_sub(self.done) < 10 && self.written.elapsed() < Duration::from_secs(900)) {
+        if done == 0 || (self.done != 0 && done.saturating_sub(self.done) < 10 && self.written.elapsed() < Duration::from_secs(900)) {
             return Ok(());
         }
         let identity = self.identity(source, width)?;
@@ -786,6 +786,37 @@ print(counter,rand(),drying(300,300))
     }
 
     #[test]
+    fn drying_omission_footer_reconstructs_from_checkpoint() {
+        let dir = Temp::new();
+        let mut s = session();
+        let mut live = Live::new();
+        for chunk in [
+            r#"canvas{size=200,aspect=1.25,linen=15,seed=7,ground={{pile={{"lead white",1}},um=40,apply="knife"}}}
+                p=pile{{"lead white",6},{"smalt",1},medium=0.2}
+                m=rect(100,100,100,100); work(m,{pile=p,coverage=3,fill=true,clip=true,seed=1})
+                while drying(150,150)=="open" do wait(10) end"#,
+            "for i=1,4 do blend(m,{coverage=0,seed=i}) end",
+        ] {
+            live.with(|| s.run(chunk)).unwrap();
+        }
+        assert!(s.st.borrow().out.ends_with("(and 1 more passes on setting or tacky paint)\n"), "{}", s.st.borrow().out);
+        let source = s.program("live");
+        let chunks = crate::session::parse_program(&source);
+        let path = dir.0.join("live.ckpt");
+        live.written -= Duration::from_secs(900);
+        live.completed(&path, &s, &source, 64).unwrap();
+        let mut restored = session();
+        let mut resumed = Live::new();
+        assert_eq!(resumed.resume(&path, &source, 64, &mut restored, &chunks, "live", &|_, _| {}).unwrap(), 2);
+        assert_eq!(canvas(&restored), canvas(&s));
+        assert_eq!(encode(&State::capture(&restored.st)).unwrap(), encode(&State::capture(&s.st)).unwrap());
+        assert_eq!(encode(&resumed.trace.events).unwrap(), encode(&live.trace.events).unwrap());
+        let next = "for i=1,4 do blend(m,{coverage=0,seed=i}) end";
+        assert_eq!(resumed.with(|| restored.run(next)).unwrap().out, live.with(|| s.run(next)).unwrap().out);
+        assert_eq!(canvas(&restored), canvas(&s));
+    }
+
+    #[test]
     fn checkpoint_round_trip_reconstructs_closures_aliases_tools_rng_and_clock() {
         let dir = Temp::new();
         let chunks = crate::session::parse_program(SOURCE);
@@ -902,25 +933,40 @@ print(counter,rand(),drying(300,300))
         let path = dir.0.join("live.ckpt");
         let mut s = session();
         let mut live = Live::new();
-        for done in 1..=10 {
+        for done in 1..=11 {
             live.with(|| s.run("counter = (counter or 0) + 1")).unwrap();
             live.completed(&path, &s, &s.program("live"), 64).unwrap();
-            assert_eq!(path.exists(), done == 10);
+            assert_eq!(load(&path).unwrap().0.done, if done < 11 { 1 } else { 11 });
         }
-        assert_eq!(load(&path).unwrap().0.done, 10);
+        assert_eq!(load(&path).unwrap().0.done, 11);
         live.with(|| s.run("counter = (counter or 0) + 1")).unwrap();
         live.completed(&path, &s, &s.program("live"), 64).unwrap();
-        assert_eq!(load(&path).unwrap().0.done, 10);
+        assert_eq!(load(&path).unwrap().0.done, 11);
         live.written -= Duration::from_secs(900);
         let written = live.written;
         assert!(live.completed(&dir.0, &s, &s.program("live"), 64).is_err());
-        assert_eq!(live.done, 10);
-        assert_eq!(live.written, written);
-        assert_eq!(load(&path).unwrap().0.done, 10);
-        live.completed(&path, &s, &s.program("live"), 64).unwrap();
         assert_eq!(live.done, 11);
-        assert!(live.written > written);
+        assert_eq!(live.written, written);
         assert_eq!(load(&path).unwrap().0.done, 11);
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        assert_eq!(live.done, 12);
+        assert!(live.written > written);
+        assert_eq!(load(&path).unwrap().0.done, 12);
+    }
+
+    #[test]
+    fn the_first_checkpoint_is_retried_after_a_failed_write() {
+        let dir = Temp::new();
+        let path = dir.0.join("live.ckpt");
+        let mut s = session();
+        let mut live = Live::new();
+        live.with(|| s.run("counter = 1")).unwrap();
+        let written = live.written;
+        assert!(live.completed(&dir.0, &s, &s.program("live"), 64).is_err());
+        assert_eq!(live.done, 0);
+        assert_eq!(live.written, written);
+        live.completed(&path, &s, &s.program("live"), 64).unwrap();
+        assert_eq!(load(&path).unwrap().0.done, 1);
     }
 
     #[test]

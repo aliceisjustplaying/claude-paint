@@ -690,7 +690,11 @@ fn serve_lock(name: &str) -> Result<std::fs::File, String> {
             std::thread::spawn(move || {
                 let _ = tx.send(request(&owner, "status", &[], &[]));
             });
-            if !matches!(rx.recv_timeout(Duration::from_millis(250)), Ok(Err(_))) {
+            let response = rx.recv_timeout(Duration::from_millis(250));
+            if let Some(f) = try_lock(name)? {
+                break f;
+            }
+            if !matches!(response, Ok(Err(_))) {
                 let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
                 return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
             }
@@ -1338,22 +1342,13 @@ impl Server {
         progress(0, chunks.len());
         self.s.set_replaying(true);
         let checkpoint = session_dir(&self.name).join("replay.ckpt");
-        let resumed = self.replay.resume(&checkpoint, text, width, &mut self.s, &chunks, &self.name, progress)
-            .and_then(|done| { self.start_hand_frames(Some(done))?; Ok(done) });
-        let done = match resumed {
-            Ok(done) => done,
-            Err(e) if e.contains("obsolete pigment representation") => return Err(e),
-            Err(e) => {
-                eprintln!("warning: replay checkpoint: {e}; replaying the full log");
-                let limit = self.s.chunk_limit;
-                self.s = Session::with_box(width, self.s.tube_box()).and_then(|s| s.with_paper(session::logged_paper(text))).map_err(|e| e.to_string())?;
-                self.s.chunk_limit = limit;
-                self.s.set_replaying(true);
-                self.replay = replay_checkpoint::Live::new();
-                self.start_hand_frames(None)?;
-                progress(0, chunks.len());
-                0
-            }
+        let done = if chunks.is_empty() {
+            self.start_hand_frames(None)?;
+            0
+        } else {
+            let done = self.replay.resume(&checkpoint, text, width, &mut self.s, &chunks, &self.name, progress)?;
+            self.start_hand_frames(Some(done))?;
+            done
         };
         for (i, chunk) in chunks.iter().enumerate().skip(done) {
             let t0 = Instant::now();

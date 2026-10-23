@@ -215,12 +215,18 @@ The tube box:
 | Rinmann's green | cobalt-zinc oxide | 0.35 | 0.5 | 0.4 | 1.4 |
 | copper green | verdigris ground in oil | 0.25 | 0.4 | 1.0 | 1.6 |
 
-Hiding is how much one coat of the tube paint hides what is under it (0
-transparent, 1 opaque). Stiffness is the paint's body as it comes from the
-tube (0 fluid, 1 stiff). Tinting strength is relative to an average
-pigment. Drying is the rate relative to average paint (higher dries
-faster); a pile dries at its tubes' rates mixed by volume. These numbers
-are estimates from the pigment literature.
+Hiding is the tube's hiding as the pigment literature gives it (0
+transparent, 1 opaque); in a painting, how much a coat hides follows from
+what its pigments absorb and scatter, so a strong tube hides far more
+than its number. Stiffness is the paint's body as it comes from the tube
+(0 fluid, 1 stiff). Tinting strength is relative to an average pigment.
+Some tubes mix from measurements of real oil paint: for them the
+measurement carries the strength and this number is only a calibration
+weight, so a tube at 1.0 can tint white more than ten times as strongly as
+an earth at 0.8. Drying is the rate relative to average paint (higher dries
+faster); a pile dries at its tubes' rates mixed by volume. The other
+numbers, and the colors and strengths of the tubes not measured, are
+estimates from the pigment literature.
 
 ### Thinner
 
@@ -396,7 +402,9 @@ valid ones.
 wherever its strokes reach. Where strokes overlap, the film gets no
 thicker. What shows through it depends on the pile: the more medium, the
 more transparent the film; transparent tubes tint what is under it, and
-white veils it. Each further pass adds another film. A `scumble` pass
+white veils it. How strong the paint is counts as much as its hiding: the
+strongest tubes lay a dark, nearly opaque film even with much medium.
+Each further pass adds another film. A `scumble` pass
 lays a thinner film, about 5 µm, as a broken veil; laid with body paint,
 it hides part of what it crosses. For both hands, `coverage` is the share
 of the mask the film reaches: 1 reaches all of it, 0.5 about half, and the
@@ -448,8 +456,10 @@ strokes.
 
 ## Masks and geometry
 
-Masks are coverage maps (0..1) of the whole canvas. Operations return new
-masks.
+Masks are maps of the whole canvas, and operations return new masks. Shapes
+and `mask(fn)` give coverage (0..1). `m:distance()` gives signed distance in
+units (positive inside the edge, negative outside), and `m:map(fn)` keeps
+whatever `fn` returns, so both can run past 0..1.
 
 ```lua
 everywhere()   rect(x, y, w, h)   ellipse(cx, cy, rx, ry)
@@ -463,6 +473,15 @@ m:roughen(units, period, seed, edge)   m:soften(units)   m:blur(units)
 m:grow(units)   m:shrink(units)   m:offset(units)   m:rim(width, soft)
 m:distance()   m:band(lo, hi, soft)   m:times(fn or mask)   m:map(function(v) return v * v end)
 m:at(x, y)   m:area()
+```
+
+To turn a field back into coverage, band it, clamp it or ramp it:
+
+```lua
+d = m:distance()
+d:band(0, 40, 4)                                       -- the 40 units just inside the edge
+d:map(function(v) return clamp(v / 40, 0, 1) end)      -- 0 at the edge, 1 from 40 units in
+d:map(function(v) return smoothstep(-20, 20, v) end)   -- a soft edge 40 units wide
 ```
 
 `m:soften(units)` gives a hard edge a ramp that many units wide and leaves

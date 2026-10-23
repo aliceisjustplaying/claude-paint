@@ -59,6 +59,7 @@ usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; exi
 log=$1 out=$2; shift 2
 every=60 length=20 pace=0.6 width=1000 dir="" sheet="" floor=0.2 gamma=0.7 ramp=1 rampspan=0.35 openhold=0 finalfirst=0.5 reuse=0 maxhold=1 fps=30 hold=3
 light=gallery encoderthreads=1
+painted=()
 easel=""
 while [ $# -gt 0 ]; do
   case $1 in
@@ -77,6 +78,7 @@ while [ $# -gt 0 ]; do
     --width) width=$2; shift 2 ;;
     --frames-dir) dir=$2; shift 2 ;;
     --reuse) reuse=1; shift ;;
+    --painted-input) painted=(--painted-input); shift ;;
     --max-hold) maxhold=$2; shift 2 ;;
     --easel) easel=$2; shift 2 ;;
     --sheet) sheet=$2; shift 2 ;;
@@ -148,7 +150,7 @@ if [ "$pace" = dynamic ]; then
   command -v uv >/dev/null || { echo "replay_clip: --pace dynamic needs uv" >&2; exit 1; }
   uv run -q --script "$(dirname "$0")/replay_pace.py" "$dir" --length "$plength" --max-hold "$maxhold" --hold "$hold" \
     --fps "$fps" --floor "$floor" --gamma "$gamma" --ramp "$ramp" --ramp-span "$rampspan" --open-hold "$openhold" \
-    --before "$finalfirst" --eval
+    --before "$finalfirst" "${painted[@]}" --eval
 else
 # entries are file names: ffmpeg reads them relative to the list, which is in $dir
 awk -F'\t' -v fps="$fps" -v length_="$plength" -v pace="$pace" -v hold="$hold" -v maxhold="$maxhold" -v ff="$finalfirst" -v q="'" '

@@ -23,7 +23,7 @@ PRIVATE_WIDE = re.compile(rb's\x00a\x00r\x00a\x00h|\x00s\x00a\x00r\x00a\x00h', r
 HOME_TOKEN = '/ARCHIVE_HOME'
 ENCODED = re.compile(r'data:[^\s;,]+;base64,[A-Za-z0-9+/]{4,}={0,2}')
 ENCODED_VALUE = re.compile(r'[A-Za-z0-9+/]{64,}={0,2}')
-TEXT_SUFFIXES = {'.json', '.jsonl', '.md', '.txt', '.py', '.sh', '.rs', '.toml', '.lock',
+TEXT_SUFFIXES = {'.json', '.jsonc', '.jsonl', '.md', '.txt', '.py', '.sh', '.rs', '.toml', '.lock',
                  '.lua', '.ts', '.js', '.html', '.css', '.svg', '.nix', '.yaml', '.yml', '.csv'}
 OPAQUE_SUFFIXES = {'.gz', '.zip', '.xz', '.bz2', '.7z', '.zst', '.pdf', '.png', '.jpg',
                    '.jpeg', '.webp', '.mp4', '.mov', '.woff', '.woff2'}
@@ -119,9 +119,45 @@ class Redactor:
         return safe_name(self(str(path)))
 
 
+def load_jsonc(text):
+    decoder = json.JSONDecoder()
+    tokens = []
+    i = 0
+    while i < len(text):
+        if text[i] == '"':
+            _, end = decoder.raw_decode(text, i)
+            tokens.append(text[i:end])
+            i = end
+        elif text.startswith('//', i):
+            end = re.search(r'[\r\n]', text[i + 2:])
+            i = i + 2 + end.start() if end else len(text)
+            tokens.append(' ')
+        elif text.startswith('/*', i):
+            end = text.find('*/', i + 2)
+            if end == -1:
+                raise ValueError('Unterminated JSONC comment')
+            tokens.append(' ')
+            i = end + 2
+        else:
+            tokens.append(text[i])
+            i += 1
+    stripped = ''.join(tokens)
+
+    def trailing_comma(match):
+        if match[1]:
+            return match[1]
+        previous = stripped[:match.start()].rstrip()
+        return ',' if not previous or previous[-1] in '[{,' else ''
+
+    stripped = re.sub(r'("(?:[^"\\]|\\.)*")|,(?=\s*[}\]])',
+                      trailing_comma, stripped)
+    return json.loads(stripped)
+
+
 def transform_stream(source, destination, name, transform):
     """JSON values are decoded before redaction; complete JSONL records are retained."""
     suffix = Path(name).suffix.lower()
+    jsonc = suffix == '.jsonc' or re.fullmatch(r'tsconfig(?:\.[^/]+)?\.json', Path(name).name) is not None
     source.seek(0)
     sample = source.read(8192)
     source.seek(0)
@@ -134,8 +170,9 @@ def transform_stream(source, destination, name, transform):
         try:
             wrapper = io.TextIOWrapper(source, encoding='utf-8', newline='')
             try:
-                if suffix == '.json':
-                    serialized = json.dumps(strings(json.load(wrapper), transform), ensure_ascii=False, indent=2)
+                if suffix == '.json' or jsonc:
+                    value = load_jsonc(wrapper.read()) if jsonc else json.load(wrapper)
+                    serialized = json.dumps(strings(value, transform), ensure_ascii=False, indent=2)
                     # Escaping the first character preserves JSON/base64 values without a raw-name leak.
                     serialized = PRIVATE.sub(lambda m: '\\u%04x' % ord(m[0][0]) + m[0][1:], serialized)
                     destination.write((serialized + '\n').encode())
@@ -155,7 +192,7 @@ def transform_stream(source, destination, name, transform):
             return 'text'
         except (UnicodeError, ValueError) as error:
             # Malformed logs must not silently lose entries or evade decoded checks.
-            if suffix in {'.json', '.jsonl'} or not isinstance(error, UnicodeError):
+            if suffix in {'.json', '.jsonl'} or jsonc or not isinstance(error, UnicodeError):
                 raise ValueError('Content transformation blocked: ' + str(error)) from error
             destination.seek(0)
             destination.truncate()

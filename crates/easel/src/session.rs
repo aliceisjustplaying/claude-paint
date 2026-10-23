@@ -558,12 +558,19 @@ impl Session {
         }));
         self.deadline.set(None);
         let secs = t0.elapsed().as_secs_f64();
+        let feedback = crate::replay_checkpoint::effect(&self.st, "drying feedback", || {
+            crate::pass_feedback::finish(&mut self.st.borrow_mut());
+            Ok(())
+        });
         let out = self.st.borrow().out.clone();
         let (mut fail, globals) = match r {
             Ok(Ok(g)) => (None, Some(g)),
             Ok(Err(e)) => (Some(clean_error(&e.to_string())), None),
             Err(p) => (Some(format!("engine panic: {}", panic_text(&p))), None),
         };
+        if let Err(e) = feedback {
+            fail.get_or_insert_with(|| clean_error(&e.to_string()));
+        }
         let globals = if self._serials.capped.get() { None } else { globals };
         if fail.is_none() && self._serials.capped.get() {
             fail = Some(format!("the chunk asked for more memory than a painting may hold ({} GiB), so nothing it did was kept", LUA_MAX_BYTES >> 30));

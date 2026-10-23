@@ -22,9 +22,10 @@ black, the cadmiums, bone brown, bitumen) [DRY23; AP1 p.72; SAL §243;
 CAMEO]. Several are transparent
 lakes or glazing colors; several are documented to fade, darken or change
 color with time (§8). The easel guide's tube table gives each tube's
-hiding, stiffness, tinting strength and drying as the easel models them;
-those numbers are estimates from the pigment literature, not measurements
-[EASEL]. Fading, darkening and color change with age are not modeled at
+hiding, stiffness, tinting strength and drying from the pigment literature;
+for fifteen tubes, color, strength and thin films come instead from
+measured spectra of real oil paint [EASEL]. Fading, darkening and color
+change with age are not modeled at
 the easel [EASEL].
 
 **Terms.** *Masstone*: the color of the paint laid thick. *Hiding*: how
@@ -125,7 +126,8 @@ fading in light.
 - **orange vermilion** (mercuric sulfide, a yellower grade). A grade of
   vermilion listed by name in a palette of 1887 [MANUAL]. The shade is
   inferred from the name. *Uncertain.* Body and drying as vermilion
-  [EASEL].
+  [EASEL]. At this easel it mixes as the one measured vermilion, so the
+  three grades give the same color [EASEL].
 - (deep cadmium: see the cadmiums under Yellows.)
 
 ### Reds
@@ -137,7 +139,8 @@ fading in light.
   bound in linseed oil [TB24 p.26]. A slow drier in the catalog (estimate) [EASEL].
 - **Chinese vermilion** (mercuric sulfide, a deeper grade). The second
   named grade in the same palette [MANUAL]; otherwise as vermilion
-  [EASEL]. Little else is documented.
+  [EASEL]. Little else is documented. At this easel it mixes as the one
+  measured vermilion, so the three grades give the same color [EASEL].
 - **cadmium red** (cadmium sulfoselenide). "An opaque scarlet" [BAS]; low
   oil content rated low by one maker, so a stiff paint [OH]; slow but reliable drying, like the other cadmiums
   [AP1 p.72].
@@ -160,12 +163,14 @@ fading in light.
   madder [EASEL]. Little else is documented.
 - **carmine lake** (carminic acid from cochineal, on alumina). Cochineal as
   well as madder lakes are found in French paint of the late 19th century
-  [POZ]. It fades [AM]. Its numbers are estimates [EASEL].
+  [POZ]. It fades [AM]. Its color and mixing are measured from a cochineal
+  lake oil paint, and it is one of the strongest tinters in the box; its
+  other numbers are estimates [EASEL].
 - **magenta** (fuchsine, an aniline dye, laked on alumina). A London
   colorman's "Magenta" of 1896 was an "Aniline Lake" [CAR p.506]. It fades
   in light: "a want of permanence has been fatal to their success. Mauve is
-  more durable than magenta" [SAL]. Transparent and strong in the catalog
-  (estimates) [EASEL].
+  more durable than magenta" [SAL]. Transparent in the catalog; in white
+  it tints about as an earth does (estimates) [EASEL].
 
 ### Violets
 
@@ -190,8 +195,8 @@ fading in light.
   opaque, greenish blue" [BAS]; one maker rates it opaque, with low oil
   content [OH]. Used from 1860 [BAS "Appendix"].
 - **ultramarine blue** (synthetic ultramarine). Tinting strength "quite
-  good" [AP2 p.44]; the catalog's masstone is converted from a published
-  measurement [AP2 p.51]. Sold as "permanent blue" [AP2 p.55], and in a
+  good" [AP2 p.44]; at this easel its color and mixing come from a measured
+  ultramarine oil paint [EASEL]. Sold as "permanent blue" [AP2 p.55], and in a
   darker, more transparent grade [BLUE21]. A model ultramarine oil paint had
   a yield stress of only 10–20 Pa, and its brushstrokes came out regular and
   low in relief [1].

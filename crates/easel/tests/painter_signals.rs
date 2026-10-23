@@ -197,6 +197,11 @@ fn an_older_log_still_scrapes_the_oldest_pile_off() {
     let text = format!("-- easel session \"{s}\": a painting replayed chunk by chunk.\n-- Each \"--@ chunk\" line starts one chunk as it was run at the easel.\n--@ engine 7\n--@ limbs-join-nearest\n\n--@ chunk 1\n{CANVAS}\n\n--@ chunk 2\n{SIXTEEN} {SEVENTEENTH} b = brush(\"filbert\", 8) b:load(p[1], 0.9)\n");
     std::fs::write(logs.join(format!("{s}.lua")), &text).unwrap();
     std::fs::write(dir.join("committed.lua"), &text).unwrap();
+    assert!(fails(&["open", s]).contains("no checkpoint found; refusing resume"));
+    ok(&["run", logs.join(format!("{s}.lua")).to_str().unwrap(),
+        "--replay-checkpoint", dir.join("replay.ckpt").to_str().unwrap(),
+        "--frames-every", "60", "--frames-dir", dir.join("hand-frames").to_str().unwrap(),
+        "--frame-width", "1000", "--gallery", "--out", dir.join("recovered.png").to_str().unwrap()]);
     let r = ok(&["open", s]);
     assert!(r.contains("resumed 2 chunks"), "{r}");
     let board = ok(&["-s", s, "do", "print(palette())"]);

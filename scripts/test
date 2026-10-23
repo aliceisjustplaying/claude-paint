@@ -116,7 +116,12 @@ rust material-inert paint 'lib paint test' \
   oil::inert::tests::inert_glaze_preserves_exact_coefficients_geometry_and_buried_history \
   oil::inert::tests::inert_coating_stays_below_later_cover_deposits \
   oil::inert::tests::inert_checkpoint_roundtrip_and_aggregate_bounds_include_sparse_entries \
-  oil::inert::tests::inert_coated_contact_transport_and_clock_fail_without_mutating_history
+  oil::inert::tests::inert_coated_contact_transport_and_clock_fail_without_mutating_history \
+  oil::inert::tests::preexisting_hand_time_is_settled_before_the_inert_coating_is_appended
+rust material-relief paint 'lib paint test' \
+  oil::presentation::tests::material_relief_matches_the_lighting_operator_and_roundtrips_without_recoloring_paint \
+  oil::presentation::tests::arbitrary_material_rgb_edits_are_rejected_before_the_closure_runs
+rust material-finishing easel 'bin easel test' finish::tests::material_varnish_settles_prior_and_application_hand_time_before_sealing
 rust material-native paint 'lib paint test' \
   oil::native::tests::native_brush_commits_fragments_and_releases_dense_material \
   oil::native::tests::native_work_does_not_expose_a_slow_base_through_a_set_cover \

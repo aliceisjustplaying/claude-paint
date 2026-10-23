@@ -244,6 +244,7 @@ pub struct Canvas {
     pub(crate) material: Option<crate::oil::Material>,
     pub(crate) native_exchange: Option<crate::oil::native::NativeExchange>,
     pub(crate) drawing_projection: bool,
+    pub(crate) material_relief: Option<[f32; 2]>,
     pub(crate) quarter_tiles: bool,
     pub(crate) adaptive_sweep: bool,
     pub(crate) liquid_film_levels: bool,
@@ -303,7 +304,7 @@ impl Clone for Canvas {
             wet, surf_gen: self.surf_gen, base: None, e7_contact: Default::default(),
             drawing: self.drawing.clone(), tally: self.tally.clone(), hand_slice: self.hand_slice,
             engine: self.engine, material_revision: self.material_revision,
-            material: self.native_exchange.as_ref().map(|e| e.before.clone()).or_else(|| self.material.clone()), native_exchange: None, drawing_projection: false,
+            material: self.native_exchange.as_ref().map(|e| e.before.clone()).or_else(|| self.material.clone()), native_exchange: None, drawing_projection: false, material_relief: self.material_relief,
             quarter_tiles: self.quarter_tiles, adaptive_sweep: self.adaptive_sweep,
             liquid_film_levels: self.liquid_film_levels, sealed_drawing_guide: self.sealed_drawing_guide,
             drawing_optics: self.drawing_optics, glaze_film: self.glaze_film, film_pass: self.film_pass,
@@ -371,6 +372,7 @@ impl Canvas {
             material: None,
             native_exchange: None,
             drawing_projection: false,
+            material_relief: None,
             quarter_tiles: false,
             adaptive_sweep: false,
             liquid_film_levels: false,
@@ -423,6 +425,7 @@ impl Canvas {
             self.initialize_material();
         } else {
             self.material = None;
+            self.material_relief = None;
             let now = self.wet.clock.now;
             self.wet = crate::wet::Wet::new(self.f.w * self.f.h);
             self.wet.clock.now = now;
@@ -727,11 +730,13 @@ impl Canvas {
     /// Current color at a point in units.
     #[inline]
     pub fn sample(&self, x: f32, y: f32) -> Rgb {
+        if self.material_exchange_needed() { return self.material_look_px(self.f.index(x, y)); }
         self.px[self.f.index(x, y)]
     }
 
     /// Per-pixel transform; `g(x, y, current) -> new`, x/y in units.
-    pub fn apply(&mut self, g: impl Fn(f32, f32, Rgb) -> Rgb + Sync) {
+    pub fn apply(&mut self, g: impl Fn(f32, f32, Rgb) -> Rgb + Sync) -> Result<(), crate::oil::store::MaterialError> {
+        if self.material_revision == 1 { return Err(crate::oil::store::MaterialError::Unsupported("arbitrary RGB edits on material columns")); }
         let f = self.f;
         self.px.par_chunks_mut(f.w).enumerate().for_each(|(y, row)| {
             let yu = f.uy(y);
@@ -739,10 +744,12 @@ impl Canvas {
                 *p = g(f.ux(x), yu, *p);
             }
         });
+        Ok(())
     }
 
     /// Like `apply`, but only where `m` > 0; `g` receives the coverage.
-    pub fn apply_masked(&mut self, m: &Mask, g: impl Fn(f32, f32, Rgb, f32) -> Rgb + Sync) {
+    pub fn apply_masked(&mut self, m: &Mask, g: impl Fn(f32, f32, Rgb, f32) -> Rgb + Sync) -> Result<(), crate::oil::store::MaterialError> {
+        if self.material_revision == 1 { return Err(crate::oil::store::MaterialError::Unsupported("arbitrary masked RGB edits on material columns")); }
         self.check_mask(m);
         let f = self.f;
         let w = f.w;
@@ -757,6 +764,7 @@ impl Canvas {
                 }
             }
         });
+        Ok(())
     }
 
     /// Kubelka–Munk glaze: a layer of `pigment` whose thickness is
@@ -847,6 +855,11 @@ impl Canvas {
     /// `strength` ≈ 0.3–1.0; `gloss` adds a faint varnish sheen on ridges.
     pub fn relief(&mut self, strength: f32, gloss: f32) {
         self.dry();
+        if self.material_revision == 1 {
+            assert!(strength.is_finite() && gloss.is_finite(), "material relief parameters must be finite");
+            self.material_relief = Some([strength, gloss]);
+            return;
+        }
         let (w, h) = (self.f.w, self.f.h);
         let surf = &self.height;
         // light from the upper left at ~35° elevation

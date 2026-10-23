@@ -91,20 +91,22 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         if !(coats.is_finite() && vary.is_finite() && coats >= 0.0 && vary >= 0.0) {
             return err("varnish: coats and vary must be nonnegative and finite");
         }
+        if st1.borrow().canvas.as_ref().is_some_and(|canvas| canvas.material_revision() == 1) { time::flush(&st1, true)?; }
         // brushed over the whole canvas once it is dry
         needs_dry(&st1, "varnish")?;
         time::verb(&st1, Verb::Pass, |s| {
             let var = Fbm::new(s.seed as u32 + seed, 3, 400.0);
             let c = s.canvas.as_mut().ok_or_else(no_canvas)?;
+            let laid = coats > 0.0 || vary > 0.0;
+            if c.material_revision() == 1 && laid { brushed(c, None); }
             c.try_glaze(&Pigment::varnish(hex(MASTIC)), None, |x, y| coats + vary * var.get(x, y)).map_err(mlua::Error::external)?;
             // (a varnished surface is glossy: engine 4 shows no matte veil;
             // no coats, no varnish, and from engine 4 not the hand's time for
             // brushing it: an older log keeps the time it always had)
-            let laid = coats > 0.0 || vary > 0.0;
             if laid {
                 c.varnished();
             }
-            if laid || c.engine() < 4 {
+            if c.material_revision() == 0 && (laid || c.engine() < 4) {
                 brushed(c, None);
             }
             Ok(())
@@ -146,4 +148,46 @@ pub(crate) fn install(lua: &Lua, st: S) -> Result<()> {
         }).inspect(|_| st1.borrow_mut().mark_effects += 1)
     })?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::session::Session;
+    use paint::oil::chemistry::{Cell, Kinetics};
+    use paint::oil::store::{DepositMode, Formulation};
+    use paint::oil::transfer::{Fragment, MaterialTransfer, TransferCell};
+    use std::sync::Arc;
+
+    #[test]
+    fn material_varnish_settles_prior_and_application_hand_time_before_sealing() {
+        let mut palette = paint::Palette::tube_box(); palette.engine = 9; palette.material_revision = 1;
+        let mut session = Session::with_box(3, palette).unwrap();
+        session.run("canvas{size=50,aspect=1,linen=15}").unwrap();
+        {
+            let mut studio = session.st.borrow_mut();
+            let canvas = studio.canvas.as_mut().unwrap();
+            canvas.set_hand_time(Some(0.25));
+            let paint = paint::Paint::body([0.2, 0.3, 0.4]);
+            let recipe = Arc::new(Formulation::new(paint.latent(), paint.prop(), Kinetics::default()).unwrap());
+            canvas.edit_material(|store| {
+                let area = store.pixel_area();
+                let mut fragment = Fragment::new(vec![TransferCell::from_cell(Cell { pigment_um: 10.0, binder_um: 10.0, oxygen: 1.0, oxidation: 1.0, network: 1.0, ..Cell::default() }, recipe, area)], 1.0);
+                fragment.reference_area = area;
+                store.deposit(4, MaterialTransfer { fragments: vec![fragment], free_solvent: 0.0 }, DepositMode::Cover)
+            }).unwrap();
+            canvas.tally_mut().glaze(1.0);
+            assert!(canvas.hand_owed_secs() > 0.0);
+        }
+        let before = session.canvas().unwrap().clock();
+        session.run("varnish{coats=0.4,vary=0}; relief(0.2,0.1)").unwrap();
+        let canvas = session.canvas().unwrap();
+        assert!(canvas.clock() > before);
+        assert_eq!(canvas.hand_owed_secs(), 0.0);
+        assert_eq!(canvas.material_store().unwrap().read_column(4).unwrap().inert_coatings().count(), 1);
+        let mut retained = Vec::new(); canvas.material_store().unwrap().write_to(&mut retained).unwrap();
+        drop(canvas);
+        assert!(session.run("wait(1)").unwrap_err().contains("unsupported material operation"));
+        let mut after = Vec::new(); session.canvas().unwrap().material_store().unwrap().write_to(&mut after).unwrap();
+        assert_eq!(after, retained);
+    }
 }

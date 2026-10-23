@@ -204,6 +204,33 @@ mod tests {
         ));
         assert_eq!(bytes(store), before);
     }
+
+    #[test]
+    fn preexisting_hand_time_is_settled_before_the_inert_coating_is_appended() {
+        let mut canvas = canvas();
+        canvas.set_hand_time(Some(0.25));
+        canvas.tally_mut().glaze(0.01);
+        assert!(canvas.hand_owed_secs() > 0.0);
+        canvas.try_glaze(&coating(), None, |_, _| 0.7).unwrap();
+        assert!(canvas.clock() > 0.0);
+        assert_eq!(canvas.hand_owed_secs(), 0.0);
+        assert_eq!(
+            canvas
+                .material_store()
+                .unwrap()
+                .read_column(0)
+                .unwrap()
+                .inert_coatings()
+                .count(),
+            1
+        );
+        let before = bytes(canvas.material_store().unwrap());
+        assert!(matches!(
+            canvas.try_wait(1.0),
+            Err(MaterialError::Unsupported(_))
+        ));
+        assert_eq!(bytes(canvas.material_store().unwrap()), before);
+    }
 }
 
 impl Canvas {
@@ -224,6 +251,13 @@ impl Canvas {
             return Err(MaterialError::Invalid(
                 "invalid inert coating coefficients or thickness",
             ));
+        }
+        if add.iter().all(|value| *value <= 0.0) {
+            return Ok(());
+        }
+        if self.hand_owed_secs() > 0.0 {
+            self.material_store().unwrap().check_clock_advance()?;
+            self.clock_hand_min();
         }
         let store = self.material_store().expect("material backend");
         for (i, &amount) in add.iter().enumerate() {

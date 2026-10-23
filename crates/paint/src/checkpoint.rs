@@ -133,6 +133,7 @@ const MAGIC19: &[u8; 8] = b"PAINTC19";
 const MAGIC20: &[u8; 8] = b"PAINTC20";
 const MAGIC21: &[u8; 8] = b"PAINTC21";
 const MAGIC22: &[u8; 8] = b"PAINTC22";
+const MAGIC23: &[u8; 8] = b"PAINTC23";
 const HISTORICAL_LAT: usize = 7;
 /// Version 11 followed by the paper's section (`crate::paper`).
 const MAGIC13: &[u8; 8] = b"PAINTC13";
@@ -394,6 +395,7 @@ fn read_magic_header(r: &mut impl Read) -> io::Result<(u32, String)> {
         m if m == MAGIC20 => 20,
         m if m == MAGIC21 => 21,
         m if m == MAGIC22 => 22,
+        m if m == MAGIC23 => 23,
         m if m == MAGIC13 => 13,
         m if m == MAGIC15 => 15,
         _ => return Err(bad("not a canvas checkpoint (or an older format)")),
@@ -422,6 +424,7 @@ impl Canvas {
         if !crate::supported_material_revision(self.engine, self.material_revision) || material != (self.material_revision == 1) {
             return Err(bad("invalid material backend identity"));
         }
+        if self.material_relief.is_some_and(|parameters| !material || parameters.iter().any(|value| !value.is_finite())) { return Err(bad("invalid material relief parameters")); }
         if material && !self.wet.vol.is_empty() {
             return Err(bad("cannot checkpoint an open material exchange"));
         }
@@ -456,7 +459,7 @@ impl Canvas {
             (4.., false) => 11,
             _ => 8,
         };
-        w.write_all(if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
+        w.write_all(if material && self.material_relief.is_some() { MAGIC23 } else if material { MAGIC22 } else if backing { MAGIC21 } else if layers { MAGIC20 } else { MAGIC19 })?;
         put_u64(w, header.len() as u64)?;
         w.write_all(header.as_bytes())?;
         put_u64(w, if self.spectral_films() { crate::mixer::film_identity() } else { crate::mixer::identity() })?;
@@ -464,6 +467,7 @@ impl Canvas {
         put_u64(w, u64::from(pigments))?;
         if material {
             put_u64(w, self.material_revision as u64)?;
+            if let Some(parameters) = self.material_relief { for value in parameters { put_f32(w, value)?; } }
         }
         let f = self.f;
         for v in [f.w, f.h, f.x0, f.y0, f.full_w, f.full_h, self.keep.0, self.keep.1, self.keep.2, self.keep.3] {
@@ -630,7 +634,8 @@ impl Canvas {
 
     pub fn read_state_with_material_budget(r: &mut impl Read, budget: crate::oil::checkpoint::LoadBudget) -> io::Result<(Canvas, String)> {
         let (version, header) = read_magic_header(r)?;
-        let material = version == 22;
+        let material = matches!(version, 22 | 23);
+        let material_relief = version == 23;
         let mut layers = version == 20;
         let spectral_backing = version == 21;
         let own_mixer = version >= 19;
@@ -655,6 +660,11 @@ impl Canvas {
             if get_u64(r)? != 1 || pigments { return Err(bad("invalid material checkpoint identity")); }
             1
         } else { 0 };
+        let material_relief = if material_relief {
+            let parameters = [get_f32(r)?, get_f32(r)?];
+            if parameters.iter().any(|value| !value.is_finite()) { return Err(bad("invalid material relief parameters")); }
+            Some(parameters)
+        } else { None };
         let mut u = [0usize; 10];
         for v in u.iter_mut() {
             *v = usize::try_from(get_u64(r)?).map_err(|_| bad("checkpoint frame is invalid"))?;
@@ -814,6 +824,7 @@ impl Canvas {
         }
         if !crate::supported_material_revision(c.engine, material_revision) { return Err(bad("invalid material revision for checkpoint engine")); }
         c.material_revision = material_revision;
+        c.material_relief = material_relief;
         if version >= 11 && !material {
             if c.engine < 4 {
                 return Err(bad("checkpoint material format holds a canvas of an engine before 4"));

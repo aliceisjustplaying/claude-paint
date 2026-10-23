@@ -329,24 +329,38 @@ impl Canvas {
     }
 
     pub(crate) fn material_seen(&self) -> Vec<Rgb> {
-        (0..self.f.w * self.f.h)
-            .map(|i| {
-                if let Some(color) = self.sheet_seen(i) {
-                    return color;
-                }
-                let column = self
-                    .material_store()
-                    .unwrap()
-                    .read_column(i)
-                    .expect("material pixel");
-                let gloss = if column.cells.is_empty() {
-                    column.state.gloss
-                } else {
-                    1.0
-                };
-                crate::canvas::haze(self.material_look_px(i), gloss)
-            })
-            .collect()
+        let mut color: Vec<_> = (0..self.f.w * self.f.h)
+            .map(|i| self.material_look_px(i))
+            .collect();
+        if let Some([strength, gloss]) = self.material_relief {
+            super::presentation::light(
+                &mut color,
+                &self.wet_surface(),
+                self.f.w,
+                self.f.h,
+                self.px_mm(),
+                strength,
+                gloss,
+            );
+        }
+        for (i, color) in color.iter_mut().enumerate() {
+            if let Some(sheet) = self.sheet_seen(i) {
+                *color = sheet;
+                continue;
+            }
+            let column = self
+                .material_store()
+                .unwrap()
+                .read_column(i)
+                .expect("material pixel");
+            let gloss = if column.cells.is_empty() {
+                column.state.gloss
+            } else {
+                1.0
+            };
+            *color = crate::canvas::haze(*color, gloss);
+        }
+        color
     }
 
     pub(crate) fn material_under(&self, x: f32, y: f32, r: f32) -> Rgb {

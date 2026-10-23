@@ -95,6 +95,7 @@ impl Canvas {
             if let Some(start) = &material.interval_start { start.write_to(&mut interval_start).expect("valid material interval dump"); }
             return vec![
                 Field { name: "material.revision", shape: vec![1], values: Values::U32(vec![self.material_revision]) },
+                Field { name: "material.relief", shape: vec![3], values: Values::F32(self.material_relief.map_or(vec![0.0; 3], |parameters| vec![1.0, parameters[0], parameters[1]])) },
                 Field { name: "engine", shape: vec![1], values: Values::U32(vec![self.engine]) },
                 Field { name: "clock.seconds", shape: vec![3], values: Values::F64(vec![store.clock.seconds, store.clock.committed_seconds, store.clock.pending_seconds]) },
                 Field { name: "clock.schedule", shape: vec![2], values: Values::U64(vec![store.clock.step, store.clock.seed]) },

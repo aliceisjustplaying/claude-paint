@@ -51,13 +51,32 @@ buried paint directly to air:
 Geometry-only reads, optical rendering, serialization and Cover deposition
 remain available. `try_glaze` and `try_wait` expose the fallible engine paths;
 the developer Lua glaze, varnish and wait bindings propagate their errors.
-Hand-clock flushing also propagates an unsupported chemistry advance, so a
-varnish operation with owed hand time is rejected rather than silently aging
-buried paint through an unmodeled coating. A finishing render with hand time
-off can retain the coating without advancing that unsupported clock.
+Hand time already owed is settled against the uncoated substrate before a
+coating is appended. The varnish binding also counts its application time
+before that flush, then appends the immediately set coating at the end of the
+pass. Prior hand time does not invalidate a finishing operation. Genuinely
+subsequent hand time and waits still propagate an unsupported chemistry advance
+rather than silently aging buried paint through an unmodeled coating.
 
 The top of a coating is an immediately set inert surface. Its surface stage is
 Dry; this does not mark buried reactive material as chemically mature. Once
 paint is deposited above it, surface observations use that upper reactive stack
 only. General constitutive integration across coating spacers, crack formation
 and resin-aware knife pickup are not supplied by this compatibility boundary.
+
+## Presentation-only relief
+
+Material canvases retain the selected relief strength and sheen outside the
+FilmStore. Each `relief` call selects those lighting parameters; rendering
+evaluates the existing relief-lighting operator against the current physical
+surface before the surface haze. It does not change optical material,
+formulations or pickup color, and later paint is lit using its current relief.
+No finished RGB plane is retained. Revision-0 relief remains its original
+destructive operation without code changes to that path.
+
+PAINTC23 stores the two finite parameters only when material relief is selected.
+PAINTC22 remains the material format without relief, and both remain readable.
+Legacy checkpoint bytes are unchanged. Material `apply` and `apply_masked`
+return an explicit unsupported-operation error before evaluating arbitrary RGB
+callbacks; a destructive RGB transformation cannot be inferred as a material
+recipe or stored by replacing the lower stack with a flat color.

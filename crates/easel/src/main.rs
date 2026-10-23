@@ -193,6 +193,14 @@ fn main() -> ExitCode {
         "serve" => serve(&rest),
         "run" => run(&rest),
         "render-checkpoint" => render_checkpoint(&rest),
+        "memdiag-ckpt" => (|| -> Result<(), String> {
+            let canvas = replay_checkpoint::load_canvas(std::path::Path::new(&rest[0]))?;
+            let c = canvas.ok_or("no canvas")?;
+            for (k, v) in c.memory_census() { eprintln!("{k}\t{}", if k.starts_with('#') { v } else { v >> 20 }); }
+            let l = c.latent_census();
+            eprintln!("wet now\t{}\nnon-default latent\t{}\nstale (non-default, dry)\t{}\nstale without layers\t{}\nstale parts only\t{}\nempty parts with capacity\t{}", l[0], l[1], l[2], l[3], l[4], l[5]);
+            Ok(())
+        })(),
         #[cfg(feature = "state-store")]
         "render-state" => render_state(&rest),
         #[cfg(feature = "render-snapshot")]

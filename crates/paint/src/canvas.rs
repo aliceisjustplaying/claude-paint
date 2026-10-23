@@ -943,3 +943,22 @@ impl Canvas {
         v
     }
 }
+
+#[doc(hidden)]
+impl Canvas {
+    /// Diagnostic: pixels whose latent differs from the default, split by whether the pixel is wet now, holds layers or parts.
+    pub fn latent_census(&self) -> [usize; 6] {
+        let mut c = [0usize; 6];
+        for (i, l) in self.wet.lat.iter().enumerate() {
+            let wet = self.wet.vol[i] > 0.0;
+            let nondefault = l.color.iter().any(|&v| v != 0.0) || !l.parts.is_empty() || !l.layers.is_empty();
+            if wet { c[0] += 1; }
+            if nondefault { c[1] += 1; }
+            if nondefault && !wet { c[2] += 1; }
+            if nondefault && !wet && l.layers.is_empty() { c[3] += 1; }
+            if !l.parts.is_empty() && !wet && l.layers.is_empty() { c[4] += 1; }
+            if l.parts.capacity() > 0 && l.parts.is_empty() { c[5] += 1; }
+        }
+        c
+    }
+}

@@ -1200,3 +1200,6 @@ print(counter,rand(),drying(300,300))
         assert!(load(&path).err().unwrap().contains("obsolete pigment representation"));
     }
 }
+
+#[doc(hidden)]
+pub fn load_canvas(path: &Path) -> Result<Option<paint::Canvas>, String> { load(path).map(|(_, c, _)| c) }

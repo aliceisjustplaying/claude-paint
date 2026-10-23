@@ -193,6 +193,7 @@ impl Cell {
         [0, 1, 2].map(|k| ((optics.fixed * self.non_pastel_floor + optics.graphite * g) * base + optics.bound[k] * b * (1.0 - l) + self.r[k] * l) / total)
     }
 
+    #[inline]
     pub(crate) fn add_pastel(&mut self, q: f32, color: Rgb, volume: f32) {
         let a1 = (self.a + (1.0 - self.a) * q).min(0.995);
         let old = if self.optics.is_some() { self.loose } else { self.a * (1.0 - q) };

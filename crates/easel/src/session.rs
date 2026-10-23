@@ -2403,3 +2403,13 @@ pub fn memdiag(tag: &str, s: &Session) {
     let fields: Vec<String> = census.iter().map(|(k, b)| if k.starts_with('#') { format!("{k}={b}") } else { format!("{k}={}", b >> 20) }).collect();
     eprintln!("MEMDIAG\t{tag}\trss_mib={}\tswap_mib={}\thwm_mib={}\tarena_mib={}\thblkhd_mib={}\tuord_mib={}\tford_mib={}\tlua_used_mib={}\tcanvas_mib={}\t{}", field("VmRSS:") >> 10, field("VmSwap:") >> 10, field("VmHWM:") >> 10, m.arena >> 20, m.hblkhd >> 20, m.uordblks >> 20, m.fordblks >> 20, s._serials.used.get() >> 20, total >> 20, fields.join("\t"));
 }
+
+/// Diagnostic: pack the canvas away and bring it back, so its heap is laid out afresh.
+pub fn refresh(s: &Session) -> std::io::Result<()> {
+    let mut st = s.st.borrow_mut();
+    let Some(c) = st.canvas.as_ref() else { return Ok(()) };
+    let snap = CanvasSnapshot::take(c)?;
+    st.canvas = None;
+    st.canvas = Some(snap.restore()?);
+    Ok(())
+}

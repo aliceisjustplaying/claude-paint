@@ -2445,6 +2445,12 @@ fn run(args: &[String]) -> Result<(), String> {
         print!("{}", r.out);
         eprintln!("  chunk {:>3}  {:>7.2}s", i + 1, r.secs);
         session::memdiag(&format!("run chunk {}", i + 1), &s);
+        if let Some(every) = std::env::var("EASEL_REFRESH_EVERY").ok().and_then(|v| v.parse::<usize>().ok()) && (i + 1) % every == 0 {
+            session::refresh(&s).map_err(|e| e.to_string())?;
+            unsafe extern "C" { fn malloc_trim(pad: usize) -> i32; }
+            if std::env::var_os("EASEL_REFRESH_TRIM").is_some() { unsafe { malloc_trim(0); } }
+            session::memdiag(&format!("run chunk {} refreshed", i + 1), &s);
+        }
         if paint::engine7::stats() {
             eprintln!("E7CHUNK	{}	{:.6}", i + 1, r.secs);
         }

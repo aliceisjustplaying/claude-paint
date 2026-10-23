@@ -26,9 +26,9 @@ pub struct Tube {
     /// Hiding power of one coat of the tube paint (0 transparent .. 1
     /// opaque): contrast ratio, see `pigment::hiding_of`.
     ///
-    /// An estimated input for the older RGB-channel layer model, not a
-    /// measurement of the rendered film. Engine 9 with the glaze-film
-    /// switch instead uses spectral K and S at the film's physical thickness.
+    /// An estimate, not a measurement of the rendered film. Engine 9 uses
+    /// it to constrain scattering of RGB-only spectral stand-ins; measured
+    /// tubes retain their measured K and S instead.
     pub hiding: f32,
     /// Stiffness straight from the tube (0 fluid .. 1 stiff).
     pub stiff: f32,
@@ -818,6 +818,7 @@ pub struct Palette {
     /// now, added to and dirtied (the easel's `pastel`): new paintings.
     pub pastel_current_heap: bool,
     lat: Vec<[f32; crate::mixer::LATENT_SIZE]>,
+    lat9: Vec<[f32; crate::mixer::LATENT_SIZE]>,
     /// Scattering per coat of each tube paint.
     scat: Vec<f32>,
     /// Each tube's packed oil, drained floor and oil share by volume, in
@@ -845,9 +846,10 @@ impl std::fmt::Debug for Palette {
 impl Palette {
     pub fn new(name: &'static str, tubes: Vec<Tube>) -> Self {
         let lat = tubes.iter().map(|t| crate::mixer::tube(t.name).unwrap_or_else(|| crate::mixer::encode(&t.color))).collect();
+        let lat9 = tubes.iter().map(|t| crate::mixer::tube(t.name).unwrap_or_else(|| crate::mixer::encode_tube9(&t.color, t.hiding))).collect();
         let scat = tubes.iter().map(|t| scatter_for(luminance(t.color), t.hiding)).collect();
         let pack = tubes.iter().map(|t| tube_packing(t, name)).collect();
-        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, lat, scat, pack, stock: name }
+        Palette { name, tubes, engine: crate::ENGINE, quarter_tiles: false, adaptive_sweep: false, drain: false, liquid_film_levels: false, sealed_drawing_guide: false, drawing_optics: false, limbs_join_nearest: false, carried_paint: false, reload_finite: false, blend_at_masks: false, glaze_film: false, rag_lift: false, full_palette_refuses: false, knife_skim: false, blend_feather: false, brush_skim: false, pastel_current_heap: false, lat, lat9, scat, pack, stock: name }
     }
 
     /// Return a palette restricted to the named tubes. Unknown names panic.
@@ -970,12 +972,13 @@ impl Palette {
     /// Masstone, scattering per coat and stiffness of a mixture.
     fn eval(&self, parts: &[(usize, f32)]) -> ([f32; crate::mixer::LATENT_SIZE], f32, f32) {
         let mut lat = [0.0f32; crate::mixer::LATENT_SIZE];
+        let tubes = if self.engine >= crate::PIGMENT_MIXER { &self.lat9 } else { &self.lat };
         let (mut wsum, mut sct, mut stf) = (0.0, 0.0, 0.0);
         for &(i, f) in parts {
             let strength = if self.engine >= crate::PIGMENT_MIXER { crate::mixer::tube_strength9(self.tubes[i].name).unwrap_or(self.tubes[i].strength) } else { self.tubes[i].strength };
             let w = f * strength;
             for k in 0..crate::mixer::LATENT_SIZE {
-                lat[k] += self.lat[i][k] * w;
+                lat[k] += tubes[i][k] * w;
             }
             wsum += w;
             sct += self.scat[i] * f;

@@ -862,8 +862,8 @@ mod tests {
     // Outside the film the two surfaces are the same.
     #[test]
     fn a_liquid_film_levels_the_weave_under_it_from_engine_4() {
-        let mut liquid = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4).with_liquid_film_levels(true);
         let mut raised = crate::Style::oil().prepare(160, 1.0, 3).with_engine(4);
+        let mut liquid = raised.clone().with_liquid_film_levels(true);
         let w = liquid.f.w;
         let band = |i: usize| (40..120).contains(&(i % w));
         liquid.wet.solv = vec![0.0; liquid.height.len()];

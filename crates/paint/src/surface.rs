@@ -723,8 +723,9 @@ mod liquid_film_tests {
 
     #[test]
     fn absent_switch_keeps_the_old_surface_and_lighting_through_checkpoints() {
+        let prepared = crate::Style::oil().prepare(80, 1.0, 3);
         for engine in [4, 5, 7, 8] {
-            let mut c = crate::Style::oil().prepare(80, 1.0, 3).with_engine(engine);
+            let mut c = prepared.clone().with_engine(engine);
             c.wet.solv = vec![0.0; c.height.len()];
             for i in 0..c.height.len() {
                 c.wet.vol[i] = (i % 7) as f32 * 0.3;

@@ -5,29 +5,42 @@
  * Every revision is kept, whole, in out/easel/journal-revisions.jsonl (time, the passage, its
  * replacement and the journal before), so the record of what the painter first wrote survives.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { notePath, publishNotes } from "./note-publication.ts";
 
 export const JOURNAL = "notes/journal.md";
 export const REVISIONS = "out/easel/journal-revisions.jsonl";
+/** Held by every writer of the journal: the easel's notes (main.rs `append_note`) and revisions. */
+export const JOURNAL_LOCK = "out/easel/journal.lock";
 
 /** Replace the one occurrence of `old` in the studio's journal with `text`; the tool's reply. Throws a reply for the painter on a bad request. */
 export function reviseJournal(studio: string, old: string, text: string, now: Date = new Date()): string {
 	const path = notePath(studio, JOURNAL, "note");
 	const log = notePath(studio, REVISIONS, "note");
 	if (!old.trim()) throw new Error("note: `replaces` is empty; give the exact text of the passage to replace");
-	if (!existsSync(path)) throw new Error(`note: ${JOURNAL} has no entries yet`);
-	const before = readFileSync(path, "utf8");
-	const at = before.indexOf(old);
-	if (at < 0) throw new Error(`note: the passage given in \`replaces\` isn't in ${JOURNAL} (it has to match exactly)`);
-	if (before.indexOf(old, at + 1) >= 0) throw new Error(`note: the passage given in \`replaces\` is in ${JOURNAL} more than once; give more of it`);
-	const after = before.slice(0, at) + text + before.slice(at + old.length);
-	publishNotes(studio, "journal", "note", [
-		{ path: join(studio, JOURNAL), slot: "current", text: after },
-		{ path: join(studio, REVISIONS), slot: "history", text: (existsSync(log) ? readFileSync(log, "utf8") : "") + JSON.stringify({ at: now.toISOString(), replaced: old, with: text, before }) + "\n" },
-	]);
-	return `revised in ${join(studio, JOURNAL)}\n`;
+	const lock = notePath(studio, JOURNAL_LOCK, "note");
+	mkdirSync(dirname(lock), { recursive: true });
+	const fd = openSync(lock, "a");
+	try {
+		// the easel takes the lock on this open file, which keeps it until it is closed
+		const held = spawnSync(join(studio, "bin", "easel"), ["lock-journal"], { cwd: studio, env: { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "", EASEL_ROOT: studio }, stdio: [fd, "ignore", "pipe"], encoding: "utf8" });
+		if (held.status !== 0) throw new Error(held.error?.message ?? held.stderr.trim());
+		if (!existsSync(path)) throw new Error(`note: ${JOURNAL} has no entries yet`);
+		const before = readFileSync(path, "utf8");
+		const at = before.indexOf(old);
+		if (at < 0) throw new Error(`note: the passage given in \`replaces\` isn't in ${JOURNAL} (it has to match exactly)`);
+		if (before.indexOf(old, at + 1) >= 0) throw new Error(`note: the passage given in \`replaces\` is in ${JOURNAL} more than once; give more of it`);
+		const after = before.slice(0, at) + text + before.slice(at + old.length);
+		publishNotes(studio, "journal", "note", [
+			{ path: join(studio, JOURNAL), slot: "current", text: after, expect: before },
+			{ path: join(studio, REVISIONS), slot: "history", text: (existsSync(log) ? readFileSync(log, "utf8") : "") + JSON.stringify({ at: now.toISOString(), replaced: old, with: text, before }) + "\n" },
+		], undefined, `note: ${JOURNAL} changed while this revision was being written, so nothing was revised; read it again and give the passage as it is now`);
+		return `revised in ${join(studio, JOURNAL)}\n`;
+	} finally {
+		closeSync(fd);
+	}
 }
 /** The line a handoff's list of open passages starts with (the runner's first-sitting message names it). */
 export const OPEN_PASSAGES = "Open passages:";

@@ -24,9 +24,9 @@ export function reviseJournal(studio: string, old: string, text: string, now: Da
 	if (before.indexOf(old, at + 1) >= 0) throw new Error(`note: the passage given in \`replaces\` is in ${JOURNAL} more than once; give more of it`);
 	const after = before.slice(0, at) + text + before.slice(at + old.length);
 	publishNotes(studio, "journal", "note", [
-		{ path: join(studio, JOURNAL), slot: "current", text: after },
+		{ path: join(studio, JOURNAL), slot: "current", text: after, expect: before },
 		{ path: join(studio, REVISIONS), slot: "history", text: (existsSync(log) ? readFileSync(log, "utf8") : "") + JSON.stringify({ at: now.toISOString(), replaced: old, with: text, before }) + "\n" },
-	]);
+	], undefined, `note: ${JOURNAL} changed while this revision was being written, so nothing was revised; read it again and give the passage as it is now`);
 	return `revised in ${join(studio, JOURNAL)}\n`;
 }
 /** The line a handoff's list of open passages starts with (the runner's first-sitting message names it). */

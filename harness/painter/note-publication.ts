@@ -51,9 +51,15 @@ export interface NoteFile {
 	text: string;
 	root?: string;
 	independent?: boolean;
+	/** What the file must still hold when it is replaced: the text the new one was made from. */
+	expect?: string;
 }
 
-export function publishNotes(studio: string, key: string, tool: string, files: NoteFile[], signal?: AbortSignal): void {
+function unchanged(file: NoteFile, label: string): void {
+	if (file.expect !== undefined && readFileSync(file.path, "utf8") !== file.expect) throw new Error(label);
+}
+
+export function publishNotes(studio: string, key: string, tool: string, files: NoteFile[], signal?: AbortSignal, changed = ""): void {
 	const base = notePath(studio, `out/easel/.note-publications/${key}`, tool, key);
 	const pointer = join(base, "current");
 	notePath(studio, pointer, tool, key);
@@ -63,6 +69,7 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 		const before = existsSync(target.real) ? readFileSync(target.real) : undefined;
 		if (before !== undefined) accessSync(target.real, constants.W_OK);
 		const mode = before === undefined ? undefined : lstatSync(target.real).mode & 0o777;
+		unchanged(file, changed);
 		return { ...file, ...target, before, mode };
 	});
 	mkdirSync(base, { recursive: true });
@@ -127,6 +134,7 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 				sync(previous);
 			}
 			mkdirSync(dirname(file.anchor), { recursive: true });
+			unchanged(file, changed);
 			const link = join(dirname(file.anchor), `.note-link-${key}-${stage.split(sep).at(-1)}-${file.slot}`);
 			temporary.push(link);
 			symlinkSync(relative(dirname(file.anchor), published), link);
@@ -139,6 +147,7 @@ export function publishNotes(studio: string, key: string, tool: string, files: N
 		rmSync(next, { force: true });
 		symlinkSync(relative(base, stage), next);
 		if (signal?.aborted) throw new Error("Operation aborted");
+		for (const file of targets) unchanged(file, changed);
 		renameSync(next, pointer);
 		stage = undefined;
 		prepared.length = 0;

@@ -375,23 +375,29 @@ fn append_note(clock: f64, text: &str) -> Result<String, String> {
         return Err("note: empty".into());
     }
     let p = journal_path();
-    std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let dir = p.parent().unwrap();
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // the whole journal with the entry is written beside it and renamed over the file it is
+    // (through a revision's link): an interrupted note leaves the journal as it was
+    let real = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
+    let mut journal = match std::fs::read(&real) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(format!("{}: {e}", p.display())),
+    };
     // an entry starts on a line of its own
-    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
-    let mut entry = String::new();
-    if len > 0 {
-        let mut last = [0u8; 1];
-        let mut r = std::fs::File::open(&p).map_err(|e| e.to_string())?;
-        use std::io::Seek;
-        r.seek(std::io::SeekFrom::End(-1)).map_err(|e| e.to_string())?;
-        r.read_exact(&mut last).map_err(|e| e.to_string())?;
-        if last[0] != b'\n' {
-            entry.push('\n');
-        }
+    if journal.last().is_some_and(|&b| b != b'\n') {
+        journal.push(b'\n');
     }
-    entry.push_str(&journal_entry(clock, text));
-    f.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
+    journal.extend_from_slice(journal_entry(clock, text).as_bytes());
+    let pending = dir.join(".journal.pending");
+    let mut f = std::fs::File::create(&pending).map_err(|e| format!("{}: {e}", pending.display()))?;
+    if let Ok(m) = std::fs::metadata(&real) {
+        f.set_permissions(m.permissions()).map_err(|e| format!("{}: {e}", pending.display()))?;
+    }
+    f.write_all(&journal).and_then(|_| f.sync_all()).map_err(|e| format!("{}: {e}", pending.display()))?;
+    std::fs::rename(&pending, &real).map_err(|e| format!("{}: {e}", p.display()))?;
+    std::fs::File::open(real.parent().unwrap_or(dir)).and_then(|d| d.sync_all()).map_err(|e| e.to_string())?;
     Ok(format!("noted in {}\n", p.display()))
 }
 
@@ -1025,11 +1031,12 @@ fn export_journal(path: &Path, source: &str) -> Result<(), String> {
 }
 
 /// Put a session's log aside as `<name>-N.lua` (the first N free) and drop its committed
-/// record, so a fresh session of that name starts empty. The path it went to, if any.
+/// record, so a fresh session of that name starts empty. The path it went to, if any. The
+/// record goes only once the log is aside: a log that can't be moved keeps it.
 fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
     let lp = log_path(name);
-    let _ = std::fs::remove_file(witness_path(name));
     if !lp.exists() {
+        let _ = std::fs::remove_file(witness_path(name));
         return Ok(None);
     }
     let mut n = 1;
@@ -1041,7 +1048,44 @@ fn put_aside(name: &str) -> Result<Option<PathBuf>, String> {
         n += 1;
     };
     std::fs::rename(&lp, &to).map_err(|e| format!("{}: {e}", lp.display()))?;
+    let _ = std::fs::remove_file(witness_path(name));
     Ok(Some(to))
+}
+
+/// A publication `save_log` didn't finish (the easel stopped, or couldn't undo it): its
+/// pending record names the revision it was publishing, and the log holds that revision
+/// or part of it. The pair goes on from an accepted revision: the pending one when the log
+/// holds all of it (only the record's rename was left), else the committed one, the part
+/// appended taken back out. Without a pending record a log that differs from its record
+/// was changed outside the easel and is refused (`validate_log`). What happened, for the
+/// reopen to say.
+fn recover_publication(name: &str) -> Result<Option<String>, String> {
+    let (lp, wp) = (log_path(name), witness_path(name));
+    let pending = wp.with_extension("pending");
+    let (Ok(log), Ok(next)) = (std::fs::read(&lp), std::fs::read(&pending)) else { return Ok(None) };
+    let witness = std::fs::read(&wp).ok();
+    if witness.as_deref() == Some(log.as_slice()) {
+        return Ok(None);
+    }
+    let sync_dir = |p: &Path| std::fs::File::open(p.parent().unwrap()).and_then(|d| d.sync_all()).map_err(|e| format!("{}: {e}", p.display()));
+    if next == log {
+        std::fs::rename(&pending, &wp).map_err(|e| format!("{}: {e}", wp.display()))?;
+        sync_dir(&wp)?;
+        return Ok(Some("warning: the last chunk's publication was interrupted after its log held it whole; the chunk is kept".into()));
+    }
+    if !next.starts_with(&log) || witness.as_ref().is_some_and(|w| !log.starts_with(w)) {
+        return Ok(None);
+    }
+    match &witness {
+        Some(w) => {
+            let f = std::fs::OpenOptions::new().write(true).open(&lp).map_err(|e| format!("{}: {e}", lp.display()))?;
+            f.set_len(w.len() as u64).and_then(|_| f.sync_all()).map_err(|e| format!("{}: {e}", lp.display()))?;
+        }
+        None => std::fs::remove_file(&lp).map_err(|e| format!("{}: {e}", lp.display()))?,
+    }
+    std::fs::remove_file(&pending).map_err(|e| format!("{}: {e}", pending.display()))?;
+    sync_dir(&lp)?;
+    Ok(Some("warning: the last chunk's publication was interrupted before its log held it whole; the painting goes on from the chunk before it".into()))
 }
 
 /// The log and the committed record on disk both hold `expected`.
@@ -1283,6 +1327,9 @@ impl Server {
                 export_journal(path, &source)?;
             }
         }
+        if let Some(note) = recover_publication(&name)? {
+            eprintln!("{note}");
+        }
         let text = if lp.exists() || witness_path(&name).exists() { Some(std::fs::read_to_string(&lp).map_err(|e| format!("session integrity: {e}"))?) } else { None };
         if let Some(t) = &text {
             validate_log(&name, t)?;
@@ -1407,12 +1454,35 @@ impl Server {
         if self.written.is_none() {
             opts.create_new(true);
         }
-        let mut f = opts.open(&p).map_err(|e| format!("session integrity: {e}"))?;
-        f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| format!("session integrity: {e}"))?;
+        // the pending record first: a reopen after a stop anywhere below goes on from an
+        // accepted revision (`recover_publication`)
         let pending = self.witness().with_extension("pending");
-        let mut f = std::fs::File::create(&pending).map_err(|e| e.to_string())?;
-        f.write_all(text.as_bytes()).and_then(|_| f.sync_all()).map_err(|e| e.to_string())?;
-        std::fs::rename(pending, self.witness()).map_err(|e| e.to_string())?;
+        let mut appended = None;
+        let published = std::fs::File::create(&pending).and_then(|mut w| w.write_all(text.as_bytes()).and_then(|_| w.sync_all())).and_then(|_| {
+            let f = appended.insert(opts.open(&p)?);
+            f.write_all(suffix.as_bytes()).and_then(|_| f.sync_all())?;
+            std::fs::rename(&pending, self.witness())
+        });
+        if let Err(e) = published {
+            // the log back to the revision before, and the state with it
+            let undone = match appended {
+                None => Ok(()),
+                Some(_) if self.written.is_none() => std::fs::remove_file(&p),
+                Some(f) => f.set_len(previous.len() as u64).and_then(|_| f.sync_all()),
+            };
+            if undone.is_ok() && std::fs::metadata(&pending).is_ok_and(|m| m.is_file()) {
+                let _ = std::fs::remove_file(&pending);
+            }
+            if !changed {
+                return Err(format!("session integrity: {e}"));
+            }
+            self.s.log.pop();
+            self.s.stale = true;
+            return Err(match undone {
+                Ok(()) => format!("the chunk ran, but the easel couldn't write it to the log ({e}), so it isn't kept: the painting goes on from the chunk before it. The easel rebuilds it from the log now; status reports progress and other commands must retry after that"),
+                Err(u) => format!("the chunk ran, but the easel couldn't write it to the log ({e}) nor take it back out ({u}): reopen the painting, which goes on from the last chunk the log holds whole"),
+            });
+        }
         self.written = Some(text);
         if changed {
             self.record_frame();
@@ -1940,7 +2010,7 @@ impl Server {
             let fresh = self.new_scratch().map_err(|e| format!("{out}{e}"))?;
             out += &fresh;
         }
-        let sc = self.scratch.as_mut().ok_or("there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting")?;
+        let sc = self.scratch.as_mut().ok_or_else(|| format!("{out}there is no scratch canvas yet: the first chunk painted on it sets it up beside the painting"))?;
         if let Err(e) = sc.ready() {
             self.scratch = None;
             return Err(format!("{out}{e}\n(the scratch canvas is put away; the next chunk painted on it starts a fresh one)"));

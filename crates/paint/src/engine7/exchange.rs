@@ -425,8 +425,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                     }
                     // (the paint lifted: with the drain switch from the top
                     // down, `bristle::take_from`; without, the film's)
-                    let picked = sf.pickup_lat(i, tk);
-                    let hp = sf.take(i, tk);
+                    let (hp, picked) = sf.take_with_lat(i, tk);
                     accumulate(&mut got, &packed(sf, i, &hp, cure, picked.as_ref()), tk * px_area);
                     got_parts.add_parts(picked.as_ref().unwrap_or(&*sf.lat.add(i)), tk * px_area);
                 }
@@ -518,8 +517,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
                 // cure it had, the cover it brings (fine tools) and its
                 // solvent (µm), in the film's proportions (m ≤ v, so these
                 // never move more than is there)
-                let picked = sf.pickup_lat(i, out_m);
-                let hp = sf.take(i, out_m);
+                let (hp, picked) = sf.take_with_lat(i, out_m);
                 let mut src = packed(sf, i, &hp, cure, picked.as_ref());
                 src[COVER] = src_cover;
                 src[SOLV] = src_solv;

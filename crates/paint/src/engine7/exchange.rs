@@ -532,6 +532,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
         win.hits = hits;
         win.weights = weights;
         // the ploughed paint lands, one add per destination pixel
+        let mut lat = Latent::default();
         for c in win.hit_cells() {
             let m = c.a[VOL];
             if m <= 0.0 {
@@ -542,8 +543,7 @@ unsafe fn contact(seg: SegmentInput<'_>, bounds: &mut Bounds, win: &mut Window) 
             if !inv.is_finite() {
                 continue;
             }
-            let mut lat: Latent = Latent::default();
-            lat.parts = c.parts.parts.clone();
+            lat.parts.clone_from(&c.parts.parts);
             lat.scale_parts(inv);
             for k in 0..LAT {
                 lat[k] = c.a[LAT0 + k] * inv;

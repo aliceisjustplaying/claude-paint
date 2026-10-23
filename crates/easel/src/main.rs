@@ -690,7 +690,11 @@ fn serve_lock(name: &str) -> Result<std::fs::File, String> {
             std::thread::spawn(move || {
                 let _ = tx.send(request(&owner, "status", &[], &[]));
             });
-            if !matches!(rx.recv_timeout(Duration::from_millis(250)), Ok(Err(_))) {
+            let response = rx.recv_timeout(Duration::from_millis(250));
+            if let Some(f) = try_lock(name)? {
+                break f;
+            }
+            if !matches!(response, Ok(Err(_))) {
                 let pid = std::fs::read_to_string(lock_path(name)).unwrap_or_default();
                 return Err(format!("another easel serves session {name:?} (pid {}); nothing ran", pid.trim()));
             }

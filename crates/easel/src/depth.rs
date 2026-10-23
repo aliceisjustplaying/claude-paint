@@ -17,7 +17,7 @@
 //! also take masks (alone or in a list): a mask is a thing in front of
 //! everything.
 
-use crate::api::{S, check_keys, err, mask_of, num, wrap};
+use crate::api::{S, check_keys, err, mask_of, num, paint_mask, paint_mask_of, wrap};
 use crate::world::{SpotU, ViewU};
 use mlua::{Result, Table, UserDataMethods, Value};
 use paint::Mask;
@@ -118,7 +118,7 @@ fn split_masks(v: &Value, masks: &mut Vec<Rc<Mask>>, names: &mut Vec<Value>) -> 
 /// Where a selection is seen. A mask in it is a thing in front of
 /// everything (as in `behind=`): it is seen wherever it is, and it hides
 /// the named things behind it, so the union is `1 - (1 - m)(1 - seen)`.
-fn visible_of(w: &World, d: &Depths, v: &Value) -> Result<Mask> {
+fn visible_of(w: &World, d: &Depths, v: &Value, normalize: impl Fn(Rc<Mask>) -> Rc<Mask>) -> Result<Mask> {
     let (mut masks, mut names) = (Vec::new(), Vec::new());
     split_masks(v, &mut masks, &mut names)?;
     let mut picks = Vec::new();
@@ -127,8 +127,9 @@ fn visible_of(w: &World, d: &Depths, v: &Value) -> Result<Mask> {
     }
     let s = Sel(picks);
     let mut out = d.visible(&|t| s.has(t));
-    for m in &masks {
-        out = out.invert().mul(&(**m).clone().invert()).invert();
+    for m in masks {
+        let m = normalize(m);
+        out = out.invert().mul(&(*m).clone().invert()).invert();
     }
     Ok(out)
 }
@@ -170,7 +171,7 @@ pub(crate) fn layer_depth(w: &World, v: &Value) -> Result<LayerDepth> {
 /// Depth masks on a view (registered from world.rs).
 pub fn view_methods<M: UserDataMethods<ViewU>>(m: &mut M) {
     // v:visible(x): where x is seen (less whatever is in front of it)
-    m.add_method("visible", |_, v, x: Value| Ok(wrap(visible_of(&v.0.world, v.0.view.depths(), &x)?)));
+    m.add_method("visible", |_, v, x: Value| Ok(wrap(visible_of(&v.0.world, v.0.view.depths(), &x, |m| m)?)));
     // v:front(x): what hides x, where x is
     m.add_method("front", |_, v, x: Value| {
         let s = sel_of(&v.0.world, &x)?;
@@ -265,7 +266,7 @@ pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
     let w = &view.0.world;
     let d = view.0.view.depths();
     if !vis.is_nil() {
-        out = out.mul(&visible_of(w, d, &vis)?);
+        out = out.mul(&visible_of(w, d, &vis, |m| paint_mask(st, m))?);
     }
     if !beh.is_nil() {
         // a mask is a thing in front of everything; names go by depth
@@ -275,7 +276,7 @@ pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
             x => (vec![], vec![x.clone()]),
         };
         for x in &masks {
-            out = out.subtract(&*mask_of(x)?);
+            out = out.subtract(&*paint_mask_of(st, x)?);
         }
         if !names.is_empty() {
             let mut picks = Vec::new();
@@ -292,6 +293,9 @@ pub fn restrict(st: &S, o: &Table, m: Option<Rc<Mask>>) -> Result<Restricted> {
     }
     if !at.is_nil() {
         out = out.mul(&d.at_depth(meters(w, &at)?));
+    }
+    if st.borrow().tubes.engine >= 9 {
+        out = out.map(|v| v.clamp(0.0, 1.0));
     }
     let seed = match m {
         Some(m) => (*m).clone().mul(&out),

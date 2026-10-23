@@ -8,7 +8,7 @@
 //! A failed chunk puts the rags back with the brushes (session.rs), and a
 //! replay loads them the same way. The rag needs no extra canvas fields.
 
-use crate::api::{S, check_keys, err, mask_of, num, points, seed_of};
+use crate::api::{S, check_keys, err, num, paint_mask_of, points, seed_of};
 use crate::time::{self, Verb};
 use mlua::{Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use paint::rag::{FULL, PAD_MM, Rag, RagPass, pace};
@@ -106,7 +106,7 @@ impl UserData for RagU {
             let pr = pressures(o.as_ref())?;
             match &a {
                 Value::UserData(_) => {
-                    let m = mask_of(&a)?;
+                    let m = paint_mask_of(&u.st, &a)?;
                     let get = |k: &str| -> Result<Option<f32>> { o.as_ref().map(|o| num(o, k)).transpose().map(Option::flatten) };
                     if pr.len() != 1 {
                         return err("wipe: over a mask, pressure is one number");

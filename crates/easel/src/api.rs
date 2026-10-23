@@ -562,7 +562,7 @@ impl UserData for Brush {
                 if let Some(s) = o.get::<Option<Vec<f32>>>("swell")? {
                     g = g.swell(s);
                 }
-                clip = mask_opt(o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?)?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.drag(&mut b.held.borrow_mut(), &g, clip.as_deref());
@@ -624,7 +624,7 @@ impl UserData for Brush {
                 g_orient = orient_of(o.get("orient")?)?;
                 ramps = pair(o, "ramps")?;
                 shake = num(o, "shake")?;
-                clip = mask_opt(o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?)?;
             }
             // a Catmull-Rom curve through the points, a sample every unit or so,
             // with the pressure carried along it
@@ -740,7 +740,7 @@ impl UserData for Brush {
                 if let Some(a) = num(o, "angle")? {
                     t = t.angle(a);
                 }
-                clip = mask_opt(o.get("clip")?)?;
+                clip = mask_opt(&b.st, o.get("clip")?)?;
             }
             time::verb(&b.st, Verb::Marks, |s| {
                 s.canvas.as_mut().ok_or_else(no_canvas)?.touch(&mut b.held.borrow_mut(), &t, clip.as_deref());
@@ -766,7 +766,7 @@ impl UserData for Brush {
             if !(0.0..=1.0).contains(&force) {
                 return err("spatter: force is how hard the flick is, 0 to 1");
             }
-            let clip = mask_opt(o.get("clip")?)?;
+            let clip = mask_opt(&b.st, o.get("clip")?)?;
             let seed = b.st.borrow_mut().rng.next_u64();
             let sp = paint::Spatter { at, toward, spread, force, seed };
             time::verb(&b.st, Verb::Marks, |s| Ok(s.canvas.as_mut().ok_or_else(no_canvas)?.spatter(&mut b.held.borrow_mut(), &sp, clip.as_deref())))
@@ -1146,10 +1146,23 @@ pub(crate) fn mask_of(v: &Value) -> Result<Rc<Mask>> {
         o => err(format!("want a mask, got {}; use rect(100,100,200,200) or convert a drawn outline with o:mask() (closed), o:below()/o:above() (open), or o:band(10). Call the method: o.mask is not a mask", o.type_name())),
     }
 }
-fn mask_opt(v: Value) -> Result<Option<Rc<Mask>>> {
+pub(crate) fn paint_mask(st: &S, mut m: Rc<Mask>) -> Rc<Mask> {
+    if st.borrow().tubes.engine >= 9 && m.data.iter().any(|&v| v < 0.0 || v > 1.0) {
+        for v in &mut Rc::make_mut(&mut m).data {
+            *v = v.clamp(0.0, 1.0);
+        }
+    }
+    m
+}
+
+pub(crate) fn paint_mask_of(st: &S, v: &Value) -> Result<Rc<Mask>> {
+    Ok(paint_mask(st, mask_of(v)?))
+}
+
+fn mask_opt(st: &S, v: Value) -> Result<Option<Rc<Mask>>> {
     match v {
         Value::Nil => Ok(None),
-        v => mask_of(&v).map(Some),
+        v => paint_mask_of(st, &v).map(Some),
     }
 }
 
@@ -1377,7 +1390,7 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
             let q = edge_name(&s.to_str()?)?;
             Ok(Mask::from_fn(f, move |_, _| q))
         }
-        Value::UserData(u) if u.borrow::<M>().is_ok() => Ok((*u.borrow::<M>()?.0).clone()),
+        Value::UserData(u) if u.borrow::<M>().is_ok() => Ok((*paint_mask_of(st, v)?).clone()),
         Value::Table(t) => {
             check_keys(t, EDGE_KEYS, "edge")?;
             if let Some(q) = t.get::<Option<Value>>("quality")? {
@@ -1400,6 +1413,7 @@ pub(crate) fn edge_quality(st: &S, v: &Value, region: &Mask, b: (f32, f32, f32, 
 
 fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     check_keys(&o, &crate::legacy::work_keys(st, WORK_KEYS), "work")?;
+    let mask = paint_mask(st, mask);
     let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let sty = style(st)?;
@@ -1546,7 +1560,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
     if let Some(n) = o.get::<Option<usize>>("scrub")? {
         h = h.scrub(n);
     }
-    let (clip, limit) = clip_opt(&o, limit)?;
+    let (clip, limit) = clip_opt(st, &o, limit)?;
     if let Some(c) = clip {
         h = h.clip(c);
     }
@@ -1758,12 +1772,12 @@ fn feedback_options(o: &Table) -> Result<(String, Option<Rc<Mask>>)> {
 /// `clip=` on a pass: true, false, or a mask the strokes are clipped to,
 /// soft edges and all (the deposit is scaled by the mask's value), combined
 /// with any limit from `behind=`/`at=`.
-fn clip_opt(o: &Table, limit: Option<std::sync::Arc<Mask>>) -> Result<(Option<bool>, Option<std::sync::Arc<Mask>>)> {
+fn clip_opt(st: &S, o: &Table, limit: Option<std::sync::Arc<Mask>>) -> Result<(Option<bool>, Option<std::sync::Arc<Mask>>)> {
     match o.get::<Value>("clip")? {
         Value::Nil => Ok((None, limit)),
         Value::Boolean(b) => Ok((Some(b), limit)),
         Value::UserData(u) if u.borrow::<M>().is_ok() => {
-            let m = (*u.borrow::<M>()?.0).clone();
+            let m = (*paint_mask(st, u.borrow::<M>()?.0.clone())).clone();
             let m = match limit {
                 Some(l) => m.mul(&l),
                 None => m,
@@ -1787,6 +1801,7 @@ const STIPPLE_KEYS: &[&str] = &[
 
 fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     check_keys(&o, &crate::legacy::stipple_keys(st, STIPPLE_KEYS), "stipple")?;
+    let mask = paint_mask(st, mask);
     let region = mask.clone();
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
@@ -1834,7 +1849,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
         Value::Table(t) => sp = sp.cluster(t.get(1)?, t.get::<Option<f32>>(2)?),
         v => sp = sp.cluster(f32::from_lua_value(v)?, None),
     }
-    let (clip, limit) = clip_opt(&o, limit)?;
+    let (clip, limit) = clip_opt(st, &o, limit)?;
     if let Some(c) = clip {
         sp = sp.clip(c);
     }
@@ -2621,6 +2636,54 @@ fn ground_of(tubes: &Palette, v: &Value) -> Result<Vec<Ground>> {
 }
 
 // Default-box sessions (`Session::new`, `Session::replay`): not in a painter build for one box.
+#[cfg(test)]
+mod mask_coverage_tests {
+    use crate::session::{Session, box_for};
+
+    fn painting(engine: u32, clamped: bool, action: &str) -> String {
+        let mut s = Session::replay_with(128, box_for(Some(&format!("--@ engine {engine}\n"))).unwrap()).unwrap();
+        s.run(r#"canvas{size=400, aspect=1, linen=15, seed=7, ground={{pile={{"lead white",1}}, um=120, apply="knife"}}}
+            p=pile{{"cobalt blue",1}}
+            d=rect(250,250,500,500):distance()
+            m=d
+            b=brush("flat",40,17)
+            b:load(p,0.8)"#).unwrap();
+        if clamped {
+            s.run("m=d:map(function(v) return clamp(v,0,1) end)").unwrap();
+        } else {
+            s.run("m=d").unwrap();
+        }
+        s.run(action).unwrap();
+        s.run(r#"assert(d:at(500,500)>200 and d:at(100,500)<-100)
+            assert(d:map(function(v) return v*2 end):at(500,500)>400)
+            assert(d:band(0,40,4):at(100,500)==0)
+            assert(d:map(function(v) return smoothstep(-20,20,v) end):at(500,500)==1)"#).unwrap();
+        crate::state_digest_line(&s, 0, 0.0)
+    }
+
+    #[test]
+    fn distance_clip_is_coverage_from_engine9() {
+        let stroke = "b:stroke({{100,500},{900,500}},{pressure={0.8,0.8},ramps={0,0},clip=m})";
+        assert_ne!(painting(8, false, stroke), painting(8, true, stroke));
+        for action in [
+            stroke,
+            "b:gesture({{100,500,0.8},{900,500,0.8}},{clip=m})",
+            "b:touch(500,500,{clip=m})",
+            "b:spatter{at={100,500},toward={800,0},clip=m}",
+            "work(m,{pile=p,tool='flat 40',coverage=0.2,seed=17})",
+            "blend(m,{tool='flat 40',coverage=0.2,seed=17})",
+            "stipple(m,{pile=p,width=40,coverage=0.2,seed=17})",
+            "work(everywhere(),{pile=p,tool='flat 40',coverage=0.2,clip=m,seed=17})",
+            "stipple(everywhere(),{pile=p,width=40,coverage=0.2,clip=m,seed=17})",
+            "v=world{horizon=250}:view(); work(everywhere(),{pile=p,tool='flat 40',coverage=0.2,visible=m,clip=mask(function() return 0.5 end),seed=17})",
+            "v=world{horizon=250}:view(); work(everywhere(),{pile=p,tool='flat 40',coverage=0.2,visible=mask(function() return 0.5 end),clip=m,seed=17})",
+            "v=world{horizon=250}:view(); stipple(everywhere(),{pile=p,width=40,coverage=0.2,behind=m,seed=17})",
+        ] {
+            assert_eq!(painting(9, false, action), painting(9, true, action), "{action}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod carried_palette_tests {
     use crate::session::{Session, box_for, CARRIED_PAINT_MARK};

@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -40,6 +41,61 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
     def status(self):
         return F.read_json(next((self.root / "state").glob("*/status.json")))
+
+    @unittest.skipUnless(os.environ.get("EASEL_BIN"), "needs EASEL_BIN for a real recording")
+    async def test_real_two_mark_recording_finishes_with_exact_video_and_stream_stop(self):
+        from PIL import Image, ImageChops, ImageStat
+
+        env = {key: value for key, value in os.environ.items() if not key.startswith("EASEL_")}
+        env.update(EASEL_ROOT=str(self.studio), EASEL_SESSION="painting", RAYON_NUM_THREADS="2")
+        easel = str(Path(os.environ["EASEL_BIN"]).resolve())
+
+        def run(*args):
+            return F.command([easel, *args], cwd=self.studio, env=env)
+
+        run("open", "painting")
+        try:
+            run("do", 'canvas{size=300, aspect=5, linen={16,14}, seed=3, ground={{pile={{"lead white",6},{"raw umber",1}}, um=50, apply="roller"}}}')
+            run("do", 'b=brush("filbert",8); b:load(pile{{"cobalt blue",1}},0.9)')
+            run("do", 'b:stroke({{100,100},{800,130}}, {pressure=0.8})')
+            run("do", 'b:stroke({{100,500},{800,530}}, {pressure=0.8})')
+            run("do", "tubes()")
+        finally:
+            run("close")
+        before = {path.relative_to(self.saved): hashlib.sha256(path.read_bytes()).hexdigest()
+                  for path in self.saved.rglob("*") if path.is_file()}
+        self.finish()
+        with patch.object(F, "stop_stream", new_callable=AsyncMock, return_value=True) as stop:
+            await self.worker.scan()
+            status = self.status()
+            self.assertTrue(status.get("done"), status)
+            stop.assert_awaited_once_with(STREAM, self.studio.name)
+        work = Path(status["video"]).parent
+        F.verify_video(Path(status["video"]))
+        rows = (work / "clip-frames/frames.tsv").read_text().splitlines()[1:]
+        self.assertEqual(len({row.split("\t")[1] for row in rows}), 2)
+        durations = [float(line.split()[1]) for line in (work / "clip-frames/concat.txt").read_text().splitlines()
+                     if line.startswith("duration ")]
+        self.assertEqual([round(duration * 30) for duration in durations], [15, 495, 88, 1])
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-threads", "1", "-i", status["video"], "-filter_threads", "1",
+             "-vf", "scale=100:20", "-f", "rawvideo", "-pix_fmt", "rgb24", "-threads", "1", "-"],
+            capture_output=True, check=True).stdout
+        size = 100 * 20 * 3
+        frames = [Image.frombytes("RGB", (100, 20), decoded[index:index + size])
+                  for index in range(0, len(decoded), size)]
+        self.assertEqual(len(frames), 600)
+        source = self.saved / "hand-frames"
+        reference = Image.open(source / rows[0].split("\t")[0]).convert("RGB").resize((100, 20))
+        ground_name = (source / "frames.tsv").read_text().splitlines()[1].split("\t")[0]
+        ground = Image.open(source / ground_name).convert("RGB").resize((100, 20))
+        self.assertGreater(sum(ImageStat.Stat(ImageChops.difference(frames[15], ground)).mean), 1)
+        for frame in frames[15:510]:
+            self.assertLess(sum(ImageStat.Stat(ImageChops.difference(frame, reference)).mean), 8)
+        for frame in frames[:15] + frames[510:]:
+            self.assertLess(sum(ImageStat.Stat(ImageChops.difference(frame, frames[-1])).mean), 2)
+        self.assertEqual(before, {path.relative_to(self.saved): hashlib.sha256(path.read_bytes()).hexdigest()
+                                  for path in self.saved.rglob("*") if path.is_file()})
 
     async def test_only_durable_finished_outcomes_trigger(self):
         with patch.object(F, "render", side_effect=self.rendered) as render, patch.object(F, "stop_stream", new_callable=AsyncMock, return_value=True) as stop:
@@ -212,6 +268,29 @@ class OBSTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FrameTests(unittest.TestCase):
+    def test_one_painted_moment_renders_the_full_clip(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as temp:
+            studio = Path(temp) / "studio"
+            saved = studio / "out/easel/painting"
+            source = saved / "hand-frames"
+            source.mkdir(parents=True)
+            (saved / "frames").mkdir()
+            text = "--@ chunk 1\npaint()\n"
+            (saved / "committed.lua").write_text(text)
+            (saved / "live.txt").write_text("chunks 1\n")
+            (saved / "frames/index.tsv").write_text("chunk\thand_s\tpainted\n1\t25.5\t1\n")
+            (source / "frames.tsv").write_text(
+                "file\thand_secs\tticks\tchunks_done\tkind\n1.png\t25.5\t0\t1\tfinal\n")
+            state = {"light": [115.0, 55.0], "identity": {"source": list(hashlib.sha256(text.encode()).digest())}}
+            (source / "frames.states").write_text(json.dumps(state) + "\n")
+            Image.new("RGB", (32, 24), "blue").save(source / "1.png")
+            (saved / "live.png").write_bytes((source / "1.png").read_bytes())
+            work = Path(temp) / "work"
+            F.render({"studio": str(studio)}, {"status": "finished"}, work)
+            F.verify_video(work / "painting.mp4")
+
     def test_sparse_saved_recording_renders_the_full_clip_without_replay(self):
         from PIL import Image
 

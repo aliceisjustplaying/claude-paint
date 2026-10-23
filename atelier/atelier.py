@@ -124,8 +124,8 @@ def title_of(reply):
 
 
 def house():
-    """The house runner (house/r21_chains.py, r40's, byte for byte), with its helpers from notes/round24/runner."""
-    helpers = str(REPO / "notes/round24/runner")
+    """The maintained house runner with its helpers from notes/round29/runner."""
+    helpers = str(REPO / "notes/round29/runner")
     if helpers not in sys.path:
         sys.path.insert(0, helpers)
     spec = importlib.util.spec_from_file_location("atelier_house", HERE / "house/r21_chains.py")

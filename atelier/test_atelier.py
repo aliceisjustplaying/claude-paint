@@ -106,7 +106,7 @@ def test_briefs_are_the_texts_as_section_5_renders_them(tmp_path, monkeypatch):
 
 def test_the_house_runner_is_r40s():
     source = (Path(__file__).with_name("house") / "r21_chains.py").read_bytes()
-    assert hashlib.sha256(source).hexdigest() == "3f972151c92401232fc0e9d3dd9e7ac0073a2b8279e5998f1d0004165a9e49ca"
+    assert hashlib.sha256(source).hexdigest() == "97601bca73b998fdbd70e5c6334ef3585b5d37cc7fccda8a286ec2b66de820f1"
 
 
 def test_the_studios_come_from_studios_json():

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { getEventListeners } from "node:events";
 import { basename, dirname, join, resolve } from "node:path";
@@ -363,7 +363,8 @@ touch opened; sleep 30`);
 // what the painter must not hear about a chunk: the machine's time, the tool's wait, the easel's line and mark counts, chunk numbers
 const MACHINE_WORDS = /running for|within|\d+ minutes?\b|budget|limit|\bline \d|\d+ lines|of \d|strokes|touches|chunk \d|\(chunk|\d+ chunks?/;
 
-test("a chunk that outlasts the tool's wait is reported as running, in the log, or neither", async () => {
+test("a chunk that outlasts the tool's wait is reported as running, in the log, or neither", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
 	const doWait = WAIT_MS.do;
 	WAIT_MS.do = 300;
 	const ran = /^Error: `paint` stopped waiting for the easel's answer, but the chunk ran: it is in the log\.$/;
@@ -384,16 +385,31 @@ test("a chunk that outlasts the tool's wait is reported as running, in the log, 
  [ -f asked ] || { touch asked; echo '1 chunks · 2400px · no canvas yet'; exit 0; }
  ${status}; exit 0
 fi
-sleep 30`);
+mkfifo waiting
+read -r _ < waiting`);
 			mkdirSync(join(studio, "paintings", "lua"), { recursive: true });
 			writeFileSync(join(studio, "paintings", "lua", "painting.lua"), "--@ chunk 1\nx = 0\n\n--@ chunk 2\nx = 0\n\n--@ chunk 3\nx = 0\n");
+			writeFileSync(join(studio, "calls"), "");
+			let started: () => void;
+			const command = new Promise<void>(resolve => { started = resolve; });
+			const watcher = watch(join(studio, "calls"), () => {
+				if (calls(studio).includes("do")) started();
+			});
+			const ac = new AbortController();
 			try {
-				await assert.rejects(atEasel(studio, ["do", "-"], "x = 1"), (e: Error) => {
+				const rejected = assert.rejects(atEasel(studio, ["do", "-"], "x = 1", ac.signal), (e: Error) => {
 					assert.match(String(e), error);
 					assert.doesNotMatch(e.message, MACHINE_WORDS);
 					return true;
 				});
+				await Promise.race([command, rejected]);
+				assert.deepEqual(calls(studio), ["status", "do"]);
+				t.mock.timers.tick(WAIT_MS.do);
+				await rejected;
+				assert.deepEqual(calls(studio), ["status", "do", "status"]);
 			} finally {
+				ac.abort();
+				watcher.close();
 				rmSync(studio, { recursive: true, force: true });
 			}
 		}

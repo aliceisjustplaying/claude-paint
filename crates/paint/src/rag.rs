@@ -497,6 +497,9 @@ pub struct RagPass {
     /// Refold whenever the face in use is loaded past this (None: never).
     pub refold: Option<f32>,
     pub seed: u64,
+    /// The strokes run where the mask is at least half its highest value, not half of
+    /// full: a faint mask is wiped as a full one is, and lifts by its value.
+    pub graded: bool,
 }
 
 impl Canvas {
@@ -1077,7 +1080,7 @@ impl Canvas {
         for pass in 0..o.passes.max(1) {
             let ang = o.angle + if pass == 0 { 0.0 } else { rng.range(-0.18, 0.18) };
             let shift = if pass % 2 == 1 { 0.5 } else { 0.0 };
-            let plan = plan_region(m, rag.width, ang, shift, &mut rng);
+            let plan = plan_region(m, rag.width, ang, shift, o.graded, &mut rng);
             for (k, pts) in plan.iter().enumerate() {
                 if let Some(lim) = o.refold
                     && rag.load > lim
@@ -1105,16 +1108,21 @@ impl Canvas {
 /// Strokes over mask `m` (whole canvas) for a pad `w` units wide, in
 /// direction `ang`: rows about 0.6 pad apart (offset by `shift` rows),
 /// each the runs of the row inside the mask, pulled in at both ends,
-/// bowed a little, alternating direction.
-pub fn plan_region(m: &Mask, w: f32, ang: f32, shift: f32, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
+/// bowed a little, alternating direction. Inside: at least 0.5, or `graded`, at least
+/// half the mask's highest value (up to 1).
+pub fn plan_region(m: &Mask, w: f32, ang: f32, shift: f32, graded: bool, rng: &mut Rng) -> Vec<Vec<(f32, f32)>> {
     let f = m.f;
+    let cut = if graded { 0.5 * m.data.iter().fold(0.0f32, |a, &v| a.max(v)).min(1.0) } else { 0.5 };
+    if cut <= 0.0 {
+        return Vec::new();
+    }
     let (c, s) = (ang.cos(), ang.sin());
     // the mask's extent along (u) and across (v) the strokes
     let (mut umin, mut umax, mut vmin, mut vmax) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     let stride = ((0.1 * w * f.scale) as usize).max(1);
     for py in (0..f.h).step_by(stride) {
         for px in (0..f.w).step_by(stride) {
-            if m.data[py * f.w + px] >= 0.5 {
+            if m.data[py * f.w + px] >= cut {
                 let (x, y) = (f.ux(px), f.uy(py));
                 let (u, v) = (x * c + y * s, -x * s + y * c);
                 umin = umin.min(u);
@@ -1142,7 +1150,7 @@ pub fn plan_region(m: &Mask, w: f32, ang: f32, shift: f32, rng: &mut Rng) -> Vec
         let mut u = umin - du;
         while u <= umax + du {
             let (x, y) = at(u, v);
-            let inside = m.sample(x, y) >= 0.5;
+            let inside = m.sample(x, y) >= cut;
             match (inside, start) {
                 (true, None) => start = Some(u),
                 (false, Some(a)) => {
@@ -1265,7 +1273,7 @@ mod rag_lift {
             let (f0, _) = film(&c, around);
             let (i0, _) = film(&c, inside);
             let mut r = Rag::new(60.0, 3);
-            c.rag_region(&mut r, &m, &RagPass { pressure: 0.6, angle: 0.0, passes: 1, refold: Some(0.5), seed: 5 });
+            c.rag_region(&mut r, &m, &RagPass { pressure: 0.6, angle: 0.0, passes: 1, refold: Some(0.5), seed: 5, graded: false });
             let (f1, _) = film(&c, around);
             let (i1, _) = film(&c, inside);
             let (w, s) = (((670.0 - 330.0) * c.f.scale) as usize, c.f.scale);

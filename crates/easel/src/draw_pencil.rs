@@ -403,11 +403,22 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         })?)?;
     }
     // p:sharpen(): a fresh point
-    methods.set("sharpen", lua.create_function(|_, p: Table| p.set("worn", 0.0))?)?;
+    {
+        let st1 = st.clone();
+        methods.set("sharpen", lua.create_function(move |_, p: Table| {
+            if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
+                return err("sharpen: a pastel stick has no point to sharpen; its end wears into facets as it draws (p.facets)");
+            }
+            p.set("worn", 0.0)
+        })?)?;
+    }
     // p:width(): the width of the line it draws now, in units (at pressure 0.5)
     {
         let st1 = st.clone();
         methods.set("width", lua.create_function(move |_, p: Table| {
+            if st1.borrow().tubes.calls_agree && is_stick(&st1, &p)? {
+                return err("width: a pastel stick draws no line of one width; a held look (look --hold) shows where it would touch");
+            }
             let lead = lead_of(&p)?;
             let worn: f32 = p.get::<Option<f32>>("worn")?.unwrap_or(0.0);
             let s = st1.borrow();
@@ -587,6 +598,15 @@ pub(crate) fn install_paper(lua: &Lua, st: S) -> Result<()> {
             }).collect();
             let speed = along(o.as_ref(), "speed", n, 60.0)?;
             let roll = along(o.as_ref(), "roll", n, 0.0)?;
+            // (a stroke's upper limits: `p:stroke`'s)
+            if st1.borrow().tubes.calls_agree {
+                if force.iter().any(|f| *f > 20.0) {
+                    return err("side: force is newtons, 0 to 20 (light 0.1–0.5, normal 0.5–2, heavy 2–5)");
+                }
+                if speed.iter().any(|v| *v > 2000.0) {
+                    return err("side: speed is mm/s, 1 to 2000 (hatching 60–400)");
+                }
+            }
             // (laid flat: the hand presses the piece down along its length)
             stick_stroke(lua, &st1, &p, &pts, &force, &vec![0.0; n], &az, &roll, &speed)
         })?)?;
@@ -900,6 +920,32 @@ mod tests {
 
     fn run(s: &mut Session, src: &str) -> String {
         s.run(src).unwrap_or_else(|e| panic!("{src}: {e}")).out
+    }
+
+    /// A new painting's stick keeps its strokes' upper limits on its side and refuses the
+    /// pencil's sharpen and width; an older log's as it was painted.
+    #[test]
+    fn a_stick_on_its_side_keeps_stroke_limits_and_refuses_pencil_calls() {
+        for agree in [false, true] {
+            let mut tubes = crate::session::box_for(None).unwrap();
+            tubes.calls_agree = agree;
+            let mut s = Session::with_box(W, tubes).unwrap().with_paper(true).unwrap();
+            run(&mut s, PAPER);
+            run(&mut s, r#"p = pastel(pile{{"vermilion", 1}}, {kind="soft"})"#);
+            for (src, says) in [
+                ("p:side({{100, 100}, {300, 100}}, {force=21})", "side: force is newtons, 0 to 20"),
+                ("p:side({{100, 100}, {300, 100}}, {speed=2001})", "side: speed is mm/s, 1 to 2000"),
+                ("p:sharpen()", "sharpen: a pastel stick has no point to sharpen"),
+                ("p:width()", "width: a pastel stick draws no line of one width"),
+            ] {
+                match s.run(src) {
+                    Err(e) => assert!(e.contains(if agree { says } else { "kind" }), "{src}: {e}"),
+                    Ok(_) => assert!(!agree, "{src} was accepted"),
+                }
+            }
+            assert!(s.run("p:stroke({{100, 100}, {300, 100}}, {force=21})").is_err());
+            run(&mut s, "p:side({{100, 100}, {300, 100}}, {force=20, speed=2000}); l = pencil('2B'); l:sharpen(); print(l:width())");
+        }
     }
 
     #[test]

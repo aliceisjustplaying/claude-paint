@@ -72,6 +72,13 @@ pub const RAG_LIFT_MARK: &str = "--@ rag-lift";
 /// now, added to and dirtied (draw_pencil.rs): every new painting. A log without it
 /// replays its sticks in the colors of the piles as first knifed.
 pub const PASTEL_HEAP_MARK: &str = "--@ pastel-current-heap";
+/// Marks a painting whose calls agree with each other: a brush table refuses an option it
+/// doesn't know, a brush's load refuses an amount outside 0..1 as a knife's does, a recipe or
+/// mix whose parts overflow is refused, a pastel stick's side strokes keep its strokes' upper
+/// limits and it refuses the pencil's sharpen and width, a view's `behind` and `front` pick as a
+/// pass's `behind=` does, and a rag wipes a faint mask as it wipes a full one, lifting by
+/// the mask's value: every new painting. A log without it replays as it was painted.
+pub const CALLS_AGREE_MARK: &str = "--@ calls-agree";
 /// The drain switch, in the head of a session file: a painting whose log
 /// has it is painted with an absorbent ground that drains paint as its
 /// pigment packs, and blotting that stops at the drained floor (paint's
@@ -686,6 +693,9 @@ impl Session {
         }
         if self.st.borrow().tubes.pastel_current_heap {
             let _ = writeln!(s, "{PASTEL_HEAP_MARK}");
+        }
+        if self.st.borrow().tubes.calls_agree {
+            let _ = writeln!(s, "{CALLS_AGREE_MARK}");
         }
         if self.st.borrow().width == SKETCH_WIDTH {
             let _ = writeln!(s, "{SKETCH_MARK}");
@@ -1451,6 +1461,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
         b.drawing_optics = true;
         b.full_palette_refuses = true;
         b.pastel_current_heap = true;
+        b.calls_agree = true;
         b.blend_at_masks = true;
         b.blend_feather = true;
         b.brush_skim = true;
@@ -1514,6 +1525,7 @@ pub fn box_for(log: Option<&str>) -> Result<Palette, String> {
     }
     b.full_palette_refuses = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == FULL_PALETTE_MARK);
     b.pastel_current_heap = head(PASTEL_HEAP_MARK);
+    b.calls_agree = head(CALLS_AGREE_MARK);
     b.blend_at_masks = text.lines().map(str::trim).take_while(|l| !l.starts_with(MARK)).any(|l| l == BLEND_MARK);
     b.blend_feather = blend_feather;
     b.brush_skim = brush_skim;

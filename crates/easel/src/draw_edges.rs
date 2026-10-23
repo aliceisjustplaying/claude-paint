@@ -32,7 +32,7 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
     check_keys(&o, KEYS, "lose")?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
-        Some(t) => tool_of(&t)?,
+        Some(t) => tool_of(st, &t)?,
         None => paint::Tool::filbert(4.0),
     };
     tool.validate().map_err(mlua::Error::runtime)?;

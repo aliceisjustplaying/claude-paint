@@ -361,8 +361,11 @@ fn tool_named(kind: &str, width: f32) -> Result<Tool> {
     })
 }
 
+/// What a brush table may say (`tool_of`), besides its kind and width given in order.
+const TOOL_KEYS: &[&str] = &["kind", "width", "length", "stiffness", "hair", "run", "lay", "pickup", "push", "splay", "ragged", "point", "bristles"];
+
 /// A tool from a `Brush`, "filbert 8", or {kind, width, stiffness=...}.
-pub(crate) fn tool_of(v: &Value) -> Result<Tool> {
+pub(crate) fn tool_of(st: &S, v: &Value) -> Result<Tool> {
     match v {
         Value::UserData(u) => Ok(u.borrow::<Brush>()?.held.borrow().tool.clone()),
         Value::String(s) => {
@@ -373,6 +376,9 @@ pub(crate) fn tool_of(v: &Value) -> Result<Tool> {
             tool_named(kind, w)
         }
         Value::Table(t) => {
+            if st.borrow().tubes.calls_agree {
+                check_keys(t, TOOL_KEYS, "brush")?;
+            }
             let kind: String = t.get::<Option<String>>("kind")?.or(t.get::<Option<String>>(1)?).unwrap_or_else(|| "round".into());
             let w: f32 = num(&t, "width")?.or(t.get::<Option<f32>>(2)?).ok_or_else(|| mlua::Error::runtime("tool: needs a width"))?;
             let mut tool = tool_named(&kind, w)?;
@@ -503,6 +509,9 @@ impl UserData for Brush {
         m.add_method("load", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
             // (before anything is drawn from the session's randomness: a refused load leaves it as it was)
             let amount = load_amount(amount, 0.8, "b:load")?;
+            if b.st.borrow().tubes.calls_agree && !(0.0..=1.0).contains(&amount) {
+                return err("b:load: amount is a share of a full load (0..1)");
+            }
             // (on a legacy canvas a table is its load's options: brushload's)
             let legacy = crate::legacy::on(&b.st);
             if let Value::Table(t) = &extra
@@ -526,6 +535,9 @@ impl UserData for Brush {
         // b:reload(pile, amount?): wipe most of the old paint off, then load
         m.add_method("reload", |_, b, (p, amount, extra): (Value, Option<f32>, Value)| {
             let amount = if b.st.borrow().tubes.reload_finite { load_amount(amount, 0.8, "b:reload")? } else { amount.unwrap_or(0.8) };
+            if b.st.borrow().tubes.calls_agree && !(0.0..=1.0).contains(&amount) {
+                return err("b:reload: amount is a share of a full load (0..1)");
+            }
             // it is wiped first: only what the rag left goes into the heap
             let carry = 0.15 * b.held.borrow().fullness().min(1.0);
             let (paint, color) = brushload(&b.st, &p, &extra, "reload", carry, &b.held.borrow().carried_parts())?;
@@ -1030,6 +1042,9 @@ pub(crate) fn parts_of(tubes: &Palette, t: &Table, what: &str) -> Result<(Vec<(u
         return err(format!("{what}: needs at least one tube: {{{{\"tube name\", parts}}, ...}} (tubes() lists the names)"));
     }
     let sum: f32 = parts.iter().map(|p| p.1).sum();
+    if tubes.calls_agree && !sum.is_finite() {
+        return err(format!("{what}: the parts add up to more than the easel can count; give smaller numbers in the same proportions"));
+    }
     for p in parts.iter_mut() {
         p.1 /= sum;
     }
@@ -1479,7 +1494,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         }
     }
     if let Some(t) = o.get::<Option<Value>>("tool")? {
-        h.tool = tool_of(&t)?;
+        h.tool = tool_of(st, &t)?;
     }
     let len = h.length.1.max(h.length.0);
     if let Some((a, b)) = pair(&o, "length")? {
@@ -1548,7 +1563,7 @@ fn work(st: &S, mask: Rc<Mask>, o: Table, preset: Option<&str>) -> Result<()> {
         h.scale_at = Some(scalar_field(st, &v, b, "scale_at")?);
     }
     if let Some(t) = o.get::<Option<Value>>("cut_in")? {
-        h = h.cut_in(tool_of(&t)?);
+        h = h.cut_in(tool_of(st, &t)?);
     }
     if let Some((a, z)) = pair(&o, "pressure")? {
         h = h.pressure(a, z);
@@ -1816,7 +1831,7 @@ fn stipple(st: &S, mask: Rc<Mask>, o: Table) -> Result<()> {
     let (mask, limit) = crate::depth::restrict_mask(st, &o, mask)?;
     let f = frame(st)?;
     let tool = match o.get::<Option<Value>>("tool")? {
-        Some(t) => tool_of(&t)?,
+        Some(t) => tool_of(st, &t)?,
         None => Tool::stippler(num(&o, "width")?.unwrap_or(2.0)),
     };
     let (b, feedback_bounds) = support_with_pixels(Some(&mask), f, tool.width * 2.0 + 4.0);
@@ -2220,6 +2235,9 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
                 return err("mix: give the heaps to knife together: mix{{p1, 1}, {p2, 0.5}}");
             }
             let part_sum = if st.borrow().tubes.engine >= paint::PIGMENT_MIXER { parts.iter().map(|q| q.1).sum() } else { wsum };
+            if st.borrow().tubes.calls_agree && ![wsum, part_sum, medium, solvent, thinner, oil].iter().all(|v| v.is_finite()) {
+                return err("mix: the shares add up to more than the easel can count; give smaller numbers in the same proportions");
+            }
             parts.iter_mut().for_each(|q| q.1 /= part_sum);
             let (medium, solvent, thinner, oil) = (medium / wsum, solvent / wsum, thinner / wsum, oil / wsum);
             let tubes = st.borrow().tubes.clone();
@@ -2417,7 +2435,7 @@ pub fn install(lua: &Lua, st: S) -> Result<()> {
         g.set("brush", lua.create_function(move |lua, (a, w): (Value, Option<f32>)| {
             let tool = match (&a, w) {
                 (Value::String(s), Some(w)) => tool_named(&s.to_str()?, w)?,
-                (v, _) => tool_of(v)?,
+                (v, _) => tool_of(&st1, v)?,
             };
             let seed = st1.borrow_mut().auto_seed();
             let (engine, drain) = (st1.borrow().tubes.engine, st1.borrow().tubes.drain);
@@ -2842,6 +2860,71 @@ mod carried_palette_tests {
             let mut again = Vec::new();
             restored.write_state(&mut again, "palette").unwrap();
             assert_eq!(bytes, again);
+        }
+    }
+}
+
+// a new painting's calls agree with each other (session.rs CALLS_AGREE_MARK); an older log's as they were
+#[cfg(test)]
+mod calls_agree_tests {
+    use crate::session::{Session, box_for};
+
+    const CANVAS: &str = r#"canvas{size=100, aspect=1, linen=15, seed=1, ground={{pile={{"lead white", 1}}, um=40, apply="knife"}}}"#;
+
+    fn sessions() -> [(bool, Session); 2] {
+        [false, true].map(|agree| {
+            let mut tubes = box_for(None).unwrap();
+            tubes.calls_agree = agree;
+            let mut s = Session::with_box(16, tubes).unwrap();
+            s.run(CANVAS).unwrap();
+            (agree, s)
+        })
+    }
+
+    #[test]
+    fn a_misspelled_brush_option_is_refused() {
+        for (agree, mut s) in sessions() {
+            for src in ["b = brush{kind=\"round\", width=8, piont=1}", "work(rect(0, 0, 100, 100), {pile=pile{{\"lead white\", 1}}, tool={\"round\", 8, piont=1}, seed=1})"] {
+                match s.run(src) {
+                    Err(e) => assert!(agree && e.contains("brush: unknown option \"piont\""), "{src}: {e}"),
+                    Ok(_) => assert!(!agree, "{src} was accepted"),
+                }
+            }
+            s.run("b = brush{kind=\"round\", width=8, point=1}; c = brush{\"filbert\", 6, bristles=40}").unwrap();
+        }
+    }
+
+    #[test]
+    fn brush_and_knife_loads_refuse_the_same_amounts() {
+        for (agree, mut s) in sessions() {
+            s.run("p = pile{{\"cobalt blue\", 1}}; b = brush(\"round\", 8); k = knife{width=30}").unwrap();
+            for amount in ["-0.5", "1.5"] {
+                let knife = s.run(&format!("k:load(p, {amount})")).unwrap_err();
+                assert!(knife.contains("k:load: amount is a share of a full load (0..1)"), "{knife}");
+                for verb in ["load", "reload"] {
+                    match s.run(&format!("b:{verb}(p, {amount})")) {
+                        Err(e) => assert!(agree && e.contains(&format!("b:{verb}: amount is a share of a full load (0..1)")), "{e}"),
+                        Ok(_) => assert!(!agree, "b:{verb}(p, {amount}) was accepted"),
+                    }
+                }
+            }
+            s.run("b:load(p, 1); b:reload(p, 0)").unwrap();
+        }
+    }
+
+    #[test]
+    fn recipes_and_mixes_whose_parts_overflow_are_refused() {
+        for (agree, mut s) in sessions() {
+            match s.run("p = pile{{'lead white', 3e38}, {'cobalt blue', 3e38}}") {
+                Err(e) => assert!(agree && e.contains("pile: the parts add up to more than the easel can count"), "{e}"),
+                Ok(_) => assert!(!agree),
+            }
+            s.run("p = pile{{'lead white', 1}}; q = pile{{'cobalt blue', 1}}").unwrap();
+            match s.run("m = mix{{p, 3e38}, {q, 3e38}}") {
+                Err(e) => assert!(agree && e.contains("mix: the shares add up to more than the easel can count"), "{e}"),
+                Ok(_) => assert!(!agree),
+            }
+            s.run("p = pile{{'lead white', 1e30}, {'cobalt blue', 1e30}}; m = mix{{p, 1e30}, {q, 1e30}}").unwrap();
         }
     }
 }

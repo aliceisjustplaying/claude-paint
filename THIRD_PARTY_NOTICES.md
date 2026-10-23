@@ -48,7 +48,7 @@ residual method from Šárka Sochorová and Ondřej Jamriška, "Practical
 Pigment Mixing for Digital Painting", ACM Transactions on Graphics
 40(6):234 (2021), https://doi.org/10.1145/3478513.3480549.
 
-The implementation, the derived K/S coefficients and the generated tables
+The implementation and the Revigo-derived K/S coefficients and tables
 are original project work under the root MIT license. They were not
 copied from the authors' library, lookup tables or fitted coefficients.
 The table generator uses the D65/CIE color conversion data from the MIT
@@ -71,6 +71,24 @@ publications cite Geldof, Proaño Gaibor, Ligterink, Hendriks and Kirchner,
 characteristics of his paints", Heritage Science 6:17 (2018),
 https://doi.org/10.1186/s40494-018-0181-6 (CC BY 4.0), which describes
 the measurements. The article is cited, not redistributed.
+
+## Non-oil pigment reflectance references
+
+`scripts/pigment_data/hyperspectral-pigments` retains Hilda Deborah's
+*Hyperspectral Pigments* (2022), version 1,
+https://doi.org/10.5281/zenodo.5592485, under CC BY 4.0.
+`scripts/pigment_data/bath00183` retains a subset of Pallipurath, Skelton,
+Ricciardi and Elliott's 2016 lead-tin-yellow reflectance and tint data,
+https://doi.org/10.15125/BATH-00183, also under CC BY 4.0. The requested
+associated citation is https://doi.org/10.1016/j.talanta.2016.03.052 .
+
+Each directory contains the full license, source attribution, preparation
+limits and a record of modifications in `ATTRIBUTION.md`. These data are
+not relicensed MIT. `mixer/researched.bin` and its JSON metadata derive from
+these sources and retain their attribution and CC BY 4.0 terms. Selection,
+resampling, averaging and constrained oil-film inference are project
+modifications, not author-endorsed measurements of oil K and S. The fitter
+and runtime code remain MIT.
 
 ## Other dependency and asset licenses
 

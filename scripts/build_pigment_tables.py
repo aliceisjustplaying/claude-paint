@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -322,5 +323,120 @@ def derive_measured(fitted, primary_used):
     }
 
 
+def build_researched():
+    from researched_pigments import WAVELENGTHS, build, resample, validate_gum_tints
+
+    data = ROOT / "scripts/pigment_data"
+    manifest_path = data / "researched-tubes.json"
+    manifest = json.loads(manifest_path.read_text())
+    source_hashes = {}
+    for directory in ("hyperspectral-pigments", "bath00183"):
+        for filename, expected in json.loads((data / directory / "SHA256SUMS.json").read_text()).items():
+            path = data / directory / filename
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual != expected:
+                raise ValueError(f"source checksum mismatch: {directory}/{filename}")
+            source_hashes[f"{directory}/{filename}"] = actual
+    source_hashes[manifest_path.name] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    library = data / "hyperspectral-pigments"
+    header = (library / "__speclib_medians.hdr").read_text()
+
+    def field(name):
+        return [v.strip() for v in re.search(r"^" + re.escape(name) + r"\s*=\s*\{([^}]+)\}", header, re.M).group(1).split(",")]
+
+    nm = np.array(field("wavelength"), dtype=float)
+    names = field("spectra names")
+    products = np.array(field("pnumber"), dtype=int)
+    spectra = np.fromfile(library / "__speclib_medians.sli", dtype="<f4").reshape(len(names), len(nm))
+    visible = nm <= nm[np.searchsorted(nm, 750)]
+    matrix = spectral_array("XYZ_RGB") @ spectral_array("CMF")
+
+    def bath(sample):
+        paths = sorted((data / "bath00183/raw").glob(sample + "_Spectrum*.txt"))
+        if len(paths) != 3:
+            raise ValueError(f"expected all three Bath spots: {sample}")
+        observations = np.array([np.loadtxt(path, skiprows=1) for path in paths])
+        if not np.all(observations[:, :, 0] == observations[0, :, 0]):
+            raise ValueError(f"inconsistent Bath wavelengths: {sample}")
+        band = (observations[0, :, 0] >= 380) & (observations[0, :, 0] <= 750)
+        values = observations[:, band, 1]
+        return {
+            "name": sample,
+            "source_nm": observations[0, band, 0].tolist(),
+            "source_reflectance": values.mean(axis=0).tolist(),
+            "source_files": [str(path.relative_to(data)) for path in paths],
+            "spot_range_rms": float(np.sqrt(np.mean(np.ptp(values, axis=0) ** 2))),
+            "spot_min": values.min(axis=0).tolist(),
+            "spot_max": values.max(axis=0).tolist(),
+        }
+
+    entries = []
+    for row in manifest["tubes"]:
+        source = row["source"]
+        if source is None:
+            continue
+        if source["dataset"] == "hyperspectral-pigments":
+            index = names.index(source["sample"])
+            if products[index] != source["product"]:
+                raise ValueError(f"wrong source product for {row['name']}")
+            observation = {"source_nm": nm[visible].tolist(), "source_reflectance": spectra[index, visible].astype(float).tolist()}
+        elif source["dataset"] == "bath00183":
+            observation = bath(source["sample"])
+        else:
+            raise ValueError(f"unknown dataset: {source['dataset']}")
+        entries.append({**observation, "name": row["name"], "hiding": row["hiding_estimate"],
+                        "source_class": row["source_class"], "provenance": source})
+    coefficients, metadata = build(
+        entries, np.ones(len(WAVELENGTHS)), matrix,
+        reference_name="assumed ideal white, not a measured source backing",
+        reference_assumption="The non-oil source is modeled as a 100 um oil film over ideal inside-white R=1. Source backing, thickness, loading and binder conversion are unknown. Runtime reference remains measured Revigo 07A_w.",
+    )
+    order = list(coefficients)
+    if not order:
+        raise ValueError("no source spectra satisfy the declared stand-in model")
+    binary = np.array([coefficients[name] for name in order], dtype="<f4").tobytes()
+    metadata.update({"order": order, "source_sha256": source_hashes,
+                     "license": "CC BY 4.0; source attribution in scripts/pigment_data/*/ATTRIBUTION.md and THIRD_PARTY_NOTICES.md",
+                     "sha256": hashlib.sha256(binary).hexdigest(), "tube_coverage": manifest["tubes"]})
+    for row in metadata["tube_coverage"]:
+        fit = metadata["entries"].get(row["name"])
+        row["runtime_provenance"] = "measured non-oil reflectance; modeled oil stand-in" if row["name"] in coefficients else "catalog RGB and estimated opacity; no measured spectrum wired"
+        if fit is not None and row["name"] not in coefficients:
+            row["not_wired_reason"] = fit["failure"]
+    tints = []
+    for sample, fraction in (("LW-LTY_33.3-66.7", .667), ("LW-LTY_50.0-50.0", .5), ("LW-LTY_66.7-33.3", .333)):
+        tints.append({**bath(sample), "pigment_mass_fraction": fraction})
+    metadata["bath_tint_validation"] = validate_gum_tints(bath("LTY_Pure"), None, tints, {"LW-LTY_50.0-50.0"})
+    metadata["bath_measured_tints"] = tints
+    metadata["bath_tint_validation"]["interpretation"] = "A failed positive opaque fit is evidence against using this variable-thickness gum/glass ladder as calibrated oil mixing data. Spot spread and all tint means are retained, not filtered to improve the score."
+    mixtures = []
+    for sample, fraction in (("RL-LTY_33.3-66.7", .667), ("RL-LTY_50.0-50.0", .5), ("RL-LTY_66.7-33.3", .333)):
+        mixtures.append({**bath(sample), "pigment_mass_fraction": fraction})
+    metadata["bath_chromatic_validation"] = validate_gum_tints(bath("LTY_Pure"), bath("RL_Pure"), mixtures, {"RL-LTY_50.0-50.0"}, partner_label="red lead")
+    metadata["bath_measured_chromatic_mixtures"] = mixtures
+    metadata["bath_pure_references"] = [bath("LTY_Pure"), bath("RL_Pure")]
+    endpoints = np.array([resample(row["source_nm"], row["source_reflectance"])[0] for row in metadata["bath_pure_references"]])
+    violations = {}
+    for mixture in mixtures:
+        observed = resample(mixture["source_nm"], mixture["source_reflectance"])[0]
+        error = np.maximum(0, np.maximum(endpoints.min(axis=0) - observed, observed - endpoints.max(axis=0)))
+        violations[mixture["name"]] = {"outside_endpoint_bands_nm": WAVELENGTHS[error > 1e-10].tolist(), "maximum_excess_reflectance": float(error.max())}
+    metadata["bath_chromatic_validation"]["endpoint_range_check"] = violations
+    metadata["bath_chromatic_validation"]["endpoint_range_meaning"] = "Positive opaque two-constant mixtures stay between both pure reflectance endpoints at every wavelength. Violations reject that preparation/model assumption without interpreting a failed fit as measured oil coefficients."
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "researched.bin").write_bytes(binary)
+    (OUT / "researched.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
+    rust = f"pub(super) const RESEARCHED_TUBES: [&str; {len(order)}] = [\n"
+    rust += "".join(f"    {json.dumps(name)},\n" for name in order) + "];\n"
+    (OUT / "researched.rs").write_text(rust)
+    print(json.dumps({"modeled_non_oil_references": len(order), "remaining_catalog_stand_ins": len(manifest["tubes"]) - len(order),
+                      "bath_validation": metadata["bath_tint_validation"]["status"], "sha256": metadata["sha256"]}, indent=2))
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--researched"]:
+        build_researched()
+    elif not sys.argv[1:]:
+        main()
+    else:
+        raise SystemExit("usage: build_pigment_tables.py [--researched]")

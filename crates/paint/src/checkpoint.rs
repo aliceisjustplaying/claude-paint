@@ -488,7 +488,8 @@ impl Canvas {
         put_all(w, self.height.iter().copied())?;
         put_all(w, self.film.iter().copied())?;
         put_all(w, wt.vol.iter().copied())?;
-        put_all(w, wt.lat.iter().flat_map(|l| l.color))?;
+        let width = if self.engine >= crate::PIGMENT_MIXER { LAT } else { crate::mixer::LEGACY_LATENT_SIZE };
+        put_all(w, wt.lat.iter().flat_map(|l| l.color[..width].iter().copied()))?;
         if version >= 11 {
             // (engine 4's five properties: the pigment's packing, `Prop`'s
             // last five, is the drain section's, version 14; without it, it
@@ -693,9 +694,14 @@ impl Canvas {
         c.film = get_all(r, n)?;
         let mut wet = crate::wet::Wet::new(n);
         wet.vol = get_all(r, n)?;
-        let lat = get_all(r, n * if own_mixer { LAT } else { HISTORICAL_LAT })?;
+        let width = if !own_mixer { HISTORICAL_LAT } else if identity == crate::mixer::identity() { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
+        let lat = get_all(r, n * width)?;
         if own_mixer {
-            wet.lat = lat.as_chunks::<LAT>().0.iter().copied().map(crate::wet::Latent::from_color).collect();
+            wet.lat = lat.chunks_exact(width).map(|stored| {
+                let mut color = [0.0; LAT];
+                color[..width].copy_from_slice(stored);
+                crate::wet::Latent::from_color(color)
+            }).collect();
         }
         // (the pigment's packing is the drain section's, version 14; else
         // paint naming no tubes')
@@ -1005,6 +1011,56 @@ mod tests {
         for identity in [1, crate::mixer::identity() ^ 1] {
             set(&mut bytes, 16, identity);
             let error = load(bytes.clone()).err().unwrap();
+            assert!(error.to_string().contains("obsolete pigment representation"));
+        }
+    }
+
+    #[test]
+    fn legacy_checkpoints_and_dumps_keep_twenty_one_lanes() {
+        for engine in (1..=8).filter(|&engine| crate::supported_engine(engine)) {
+            let mut canvas = Canvas::new_window(2, 1.0, [0.1; 3], None).with_engine(engine);
+            let color = crate::mixer::encode(&[0.2, 0.4, 0.6]);
+            canvas.wet.vol[0] = 1.0;
+            canvas.wet.lat[0] = crate::wet::Latent::from_color(color);
+            let mut bytes = Vec::new();
+            canvas.write_state(&mut bytes, "").unwrap();
+            canvas.wet.lat[0].color[crate::mixer::LEGACY_LATENT_SIZE..].fill(1.0);
+            let mut with_extra = Vec::new();
+            canvas.write_state(&mut with_extra, "").unwrap();
+            assert_eq!(with_extra, bytes);
+            let restored = load(bytes.clone()).unwrap();
+            assert_eq!(restored.wet.lat[0].color, color);
+            let mut again = Vec::new();
+            restored.write_state(&mut again, "").unwrap();
+            assert_eq!(again, bytes);
+            let fields = restored.state_fields();
+            let lat = fields.iter().find(|f| f.name == "wet.lat").unwrap();
+            assert_eq!(lat.shape, [2, 2, crate::mixer::LEGACY_LATENT_SIZE]);
+            assert_eq!(lat.values.le_bytes().len(), 4 * 4 * crate::mixer::LEGACY_LATENT_SIZE);
+        }
+    }
+
+    #[test]
+    fn old_engine_nine_identity_is_rejected_without_a_payload() {
+        use sha2::{Digest, Sha256};
+        let mut hash = Sha256::new();
+        hash.update(crate::mixer::identity().to_le_bytes());
+        hash.update(b"extensive-pigment-and-residual/volume-strength/v1");
+        hash.update(b"opacity-constrained-rgb-tube-proxies/v2");
+        hash.update(b"physical-volume-ks/dark-calibration/v1");
+        hash.update(include_bytes!("mixer/calibrated.bin"));
+        hash.update(include_bytes!("mixer/calibrated-densities.bin"));
+        let old: u64 = u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap());
+        let mut film = Sha256::new();
+        film.update(old.to_le_bytes());
+        film.update(b"film25um/spectral-dry/transmitted-residual/v1");
+        let old_film = u64::from_le_bytes(film.finalize()[..8].try_into().unwrap());
+        for identity in [old, old_film] {
+            let mut bytes = MAGIC19.to_vec();
+            put_u64(&mut bytes, 0).unwrap();
+            put_u64(&mut bytes, identity).unwrap();
+            let error = load(bytes).err().unwrap();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
             assert!(error.to_string().contains("obsolete pigment representation"));
         }
     }

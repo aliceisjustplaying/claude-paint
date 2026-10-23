@@ -1,0 +1,1083 @@
+{
+  "schema": 1,
+  "measured_oil": false,
+  "inference": "Measured non-oil reflectance is an assumed 100 um oil-film appearance target. Estimated catalog 25 um opacity and wavelength-flat S close an otherwise unidentifiable inverse problem. No new oil K/S or tint strength is measured.",
+  "tubes": [
+    {
+      "name": "smalt",
+      "chemistry": "cobalt potash glass, coarse",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "every"
+      ],
+      "hiding_estimate": 0.3,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "BL_1_1_p4_sh4",
+        "product": 10010,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "grade-substitute",
+      "source_caveat": "Genuine cobalt glass, but source is very fine <80 micrometers and catalog requires coarse. Not a measured coarse smalt.",
+      "maker_evidence": {
+        "opacity": "transparent glass; very poor hiding in oil",
+        "tint": null,
+        "assessment": "Kremer's own glass recipe and standard coarse grade support low hiding. No numeric tint calibration is supplied.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/gallery/smalt/",
+          "https://www.kremer-pigmente.com/en/shop/pigments/10000-smalt-standard.html"
+        ]
+      },
+      "remaining_measurement_need": "Licensed D10010/G smalt is very fine, not the catalog's coarse glass. Particle size, binder index and thickness are material parameters, not an RGB match.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "pale smalt",
+      "chemistry": "a paler grade of smalt",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "every"
+      ],
+      "hiding_estimate": 0.35,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "Same very fine smalt is only a related reference. No verified paler glass composition or pale grade. A white backing is not a pale-smalt preparation.",
+      "maker_evidence": {
+        "opacity": "related smalt is transparent; exact pale grade unverified",
+        "tint": null,
+        "assessment": "Kremer 10010 is finer smalt, not an authenticated paler cobalt-glass composition. Do not infer that adding white makes pale smalt.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/gallery/smalt/",
+          "https://www.kremer-pigmente.com/en/shop/pigments/10010-smalt-very-fine.html"
+        ]
+      },
+      "remaining_measurement_need": "No exact measured pale-glass grade established. Same very-fine smalt data can only be a labeled comparison; its opacity cannot be copied as an exact pale tube.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "yellow ochre",
+      "chemistry": "hydrated iron oxide earth",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "sargent",
+        "inness",
+        "alma-tadema",
+        "tonn",
+        "hopper",
+        "giverny",
+        "impressionist",
+        "seurat",
+        "cezanne",
+        "every"
+      ],
+      "hiding_estimate": 0.8,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "EY_1_3_p4_sh4",
+        "product": 40010,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Natural washed French yellow earth. Source mineral fractions, locality and pigment loading are not the unique catalog formulation.",
+      "maker_evidence": {
+        "opacity": "grade-dependent: French ochre semi-transparent; pale ocher transparent; Blue Ridge semi-opaque",
+        "tint": "French average; pale low; Blue Ridge medium",
+        "assessment": "All three are natural PY43, unlike synthetic PY42 sold as Yellow Ochre. Primary manufacturer descriptions demonstrate why a single generic ochre opacity is not universal.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/french-yellow-ochre-133",
+          "https://www.naturalpigments.com/yellow-ocher-pale-oil-paint.html",
+          "https://www.naturalpigments.com/blue-ridge-yellow-ocher-oil-paint.html",
+          "https://www.naturalpigments.com/artist-materials/yellow-ochre-a-comprehensive-guide"
+        ]
+      },
+      "remaining_measurement_need": "D/G/U provide measured earth-family references, not this unnamed locality, grind, loading or oil. Choose and disclose a formulation rather than interpreting catalog 0.8 as physical truth.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "red earth",
+      "chemistry": "iron oxide earth",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "sargent",
+        "inness",
+        "alma-tadema",
+        "hopper",
+        "impressionist",
+        "seurat",
+        "cezanne",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "ER_1_1_p4_sh4",
+        "product": 40020,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Washed French red ochre. Natural earth mixture, not a pure ferric oxide assay.",
+      "maker_evidence": {
+        "opacity": "unresolved within source: prose opaque, table semi-transparent",
+        "tint": "unresolved within source: prose above-average, table low",
+        "assessment": "Rublev French Red Ocher PR102 is a chemistry-family match but its own prose contradicts its technical table. Both claims are retained; neither becomes a numeric coefficient.",
+        "urls": [
+          "https://www.naturalpigments.com/french-red-ocher-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D40020 is a specific washed French earth. Generic red earth covers mineral composition and particle-size distributions; manufacturer conflict prevents a universal qualitative rating.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "raw umber",
+      "chemistry": "iron and manganese oxide earth",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "inness",
+        "alma-tadema",
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.8,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "EU_1_1_p4_sh4",
+        "product": 40610,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Cyprus raw umber. Iron/manganese earth family; exact mineral and manganese fractions unmeasured here.",
+      "maker_evidence": {
+        "opacity": "semi-opaque (French Raw Umber)",
+        "tint": "good in prose; medium in table",
+        "assessment": "Manufacturer identifies natural iron oxide-hydroxide and manganese oxide in linseed oil. French grade does not authenticate the Cyprus grade in D40610.",
+        "urls": [
+          "https://www.naturalpigments.com/french-raw-umber-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "Measured Cyprus/French/powder references do not establish an arbitrary raw umber oil tube's absolute scattering or tint weight.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "green earth",
+      "chemistry": "celadonite and glauconite clay",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.2,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "EG_1_2_p3_sh4",
+        "product": 40821,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Inventory says genuine pure Verona green earth; not the Prussian-blue/chrome-enhanced 41750. Celadonite/glauconite fractions not assayed in this dataset.",
+      "maker_evidence": {
+        "opacity": "semi-transparent",
+        "tint": "very low",
+        "assessment": "Harding explicitly uses single-pigment PG23 without enhanced tinting pigments and describes glazing. This supports weak low-hiding behavior, not a chosen contrast ratio.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/terre-verte-115"
+        ]
+      },
+      "remaining_measurement_need": "D40821 genuine Verona green earth is a family reference. It is not a calibrated oil preparation and should not be confused with green-earth hues containing phthalo green.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Rinmann's green",
+      "chemistry": "cobalt-zinc oxide",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "every"
+      ],
+      "hiding_estimate": 0.35,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "GR_2_1_p3_sh4",
+        "product": 44151,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "chemistry-match",
+      "source_caveat": "SDS section 3: cobalt zinc oxide green, 100% PG19 CI77335. Exact broad catalog chemistry, not an oil formulation or identical batch.",
+      "maker_evidence": {
+        "opacity": "semi-transparent; limited hiding",
+        "tint": "poor",
+        "assessment": "Natural Pigments explicitly identifies cobalt-zinc oxide PG19, limited hiding and poor tint strength. Kremer 44151 identifies Rinmann Green and cobalt zinc oxide; do not substitute cobalt titanate/chromite simply because another product says cobalt green.",
+        "urls": [
+          "https://www.naturalpigments.com/cobalt-green-light-pigment.html",
+          "https://www.kremer-pigmente.com/en/shop/pigments/44151-cobalt-green-bluish-a.html"
+        ]
+      },
+      "remaining_measurement_need": "D44151 is a same-family measured chart reference but is not an oil-film K,S calibration.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "copper green",
+      "chemistry": "verdigris ground in oil",
+      "boxes": [
+        "tube box",
+        "friedrich",
+        "every"
+      ],
+      "hiding_estimate": 0.25,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "GR_2_2_p1_sh4",
+        "product": 44450,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "SDS: 100% copper(II) acetate monohydrate CAS6046-93-1, a neutral verdigris. Historical basic acetate phases and oil reaction are not represented by gum-bound chart.",
+      "maker_evidence": {
+        "opacity": null,
+        "tint": null,
+        "assessment": "Kremer identifies PG20 basic/neutral copper acetates and notes verdigris terminology; inspected maker documents do not give an oil opacity or tint-strength rating. Repository literature quote 'poor hiding power in oil' is separate evidence, not a new manufacturer measurement.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/shop/pigments/44450-verdigris-synthetic.html",
+          "https://www.kremer-pigmente.com/elements/resources/products/files/44450e.pdf"
+        ]
+      },
+      "remaining_measurement_need": "D/G verdigris references are not oil-ground verdigris. Acetate phase, hydration and reaction with oil matter; malachite and copper resinate are not silent equivalents.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "lead-tin yellow",
+      "chemistry": "lead-tin oxide",
+      "boxes": [
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "bath00183",
+        "sample": "LTY_Pure",
+        "aggregation": "arithmetic mean of all three source spots"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Type-I lead-tin yellow Pb2SnO4, gum arabic on glass. No thickness, backing spectrum or pure lead-white endpoint. Oil conversion is assumed, not measured.",
+      "maker_evidence": {
+        "opacity": "semi-opaque (Rublev Type I)",
+        "tint": "medium",
+        "assessment": "Own-brand maker describes reconstructed Type I in linseed oil. The maker's printed chemical formula appears malformed; catalog lead-tin oxide is retained without copying that formula.",
+        "urls": [
+          "https://www.naturalpigments.com/lead-tin-yellow-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "Bath Type I and G reference offer measured reflectance and, for Bath, white-mixture ladders in gum. Neither supplies oil-film thickness or a portable finite-film K,S pair. Catalog does not select Type I versus II.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Naples yellow",
+      "chemistry": "lead antimonate",
+      "boxes": [
+        "friedrich",
+        "alma-tadema",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "YL_3_3_p3_sh4",
+        "product": 43125,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "chemistry-match",
+      "source_caveat": "SDS: 100% lead antimonate Pb2Sb2O7, PY41. 10130 is not used. Modern SDS identifies product number, not an analytical test of the 2018 chart batch.",
+      "maker_evidence": {
+        "opacity": "unresolved within source: opaque in prose, semi-opaque in table",
+        "tint": "medium",
+        "assessment": "Rublev explicitly distinguishes genuine PY41 lead antimonate from convenience Naples hues. Its prose/table opacity conflict is preserved.",
+        "urls": [
+          "https://www.naturalpigments.com/naples-yellow-lead-antimonate-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D43125 is confirmed lead antimonate reference. Historical Naples names and modern hues vary; no universal oil K,S or exact recipe is established.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "pale cadmium",
+      "chemistry": "cadmium sulfide, a pale grade",
+      "boxes": [
+        "alma-tadema",
+        "hopper",
+        "giverny",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "CD_1_2_p4_sh4",
+        "product": 21020,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "composition-qualified-reference",
+      "source_caveat": "Very light grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS. Zinc fraction and remainder unspecified.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "high in prose; average in table",
+        "assessment": "Harding PY35 Cadmium Yellow Lemon is a pale sulfide-family oil comparison, not cadmium-free hue. Its strength wording conflicts internally.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/cadmium-yellow-lemon-401"
+        ]
+      },
+      "remaining_measurement_need": "D21020 and N PY35 supply family references. Zinc content, crystal form, size and loading for a chosen pale grade remain relevant; no oil-film coefficients are licensed by a qualitative rating.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "deep cadmium",
+      "chemistry": "cadmium sulfide, a deep grade",
+      "boxes": [
+        "alma-tadema",
+        "hopper",
+        "giverny",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.9,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "CD_1_2_p3_sh4",
+        "product": 21060,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "composition-qualified-reference",
+      "source_caveat": "Dark grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS or sulfoselenide. Grade and zinc fraction matter.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "high on current page; average in older brochure",
+        "assessment": "Current Harding 404 page calls it PY35, but the directly read 2023 maker brochure calls 404 PO20. This conflict makes it unsafe to use the brand name alone as proof of a pure CdS grade; D21060 remains the explicit reference path.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/cadmium-yellow-deep-404",
+          "https://www.michaelharding.co.uk/wp-content/uploads/2023/02/MichaelHarding_Paint_Colours_And_Materials_Brochure.pdf"
+        ]
+      },
+      "remaining_measurement_need": "Deep CdS and cadmium sulfoselenide orange PO20 are not identical. No measured oil formulation for the catalog's deep sulfide grade is established.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "cadmium yellow",
+      "chemistry": "cadmium sulfide",
+      "boxes": [
+        "sargent",
+        "inness",
+        "tonn",
+        "hopper",
+        "giverny",
+        "impressionist",
+        "seurat",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "CD_1_1_p3_sh4",
+        "product": 21040,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "composition-qualified-reference",
+      "source_caveat": "Medium grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS. Not interchangeable with other cadmium grades.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "high",
+        "assessment": "Harding 402 specifies single-pigment PY35 CdS in linseed oil. Grade and pigment loading still matter.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/cadmium-yellow-402"
+        ]
+      },
+      "remaining_measurement_need": "D21040/N PY37 are measured family references, not the named modern oil tube or historical CdS formulation. Do not reuse a pale/deep coefficient unchanged merely because all contain cadmium.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Indian yellow",
+      "chemistry": "magnesium and calcium euxanthate",
+      "boxes": [
+        "sargent",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.15,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "23350 is explicitly nickel-containing Indian-yellow imitation, not magnesium/calcium euxanthate.",
+      "maker_evidence": {
+        "opacity": "transparent genuine material",
+        "tint": null,
+        "assessment": "Golden's manufacturer lab studied an authenticated historical sample and published 6-mil oil drawdowns with titanium-white tints. A qualitative tint ranking is not stated in the inspected text; images are not numerical coefficients.",
+        "urls": [
+          "https://justpaint.org/meeting-a-ghost-a-sample-of-genuine-indian-yellow/"
+        ]
+      },
+      "remaining_measurement_need": "Actual oil spectra/tints exist, but raw-file inspection and an explicit commercial adaptation/redistribution grant remain unresolved in STIL-274. Modern nickel-azo/diarylide India Yellow hues and D23350 imitation are wrong chemistry.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Mars yellow",
+      "chemistry": "synthetic iron oxide hydroxide",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_3_1_p3_sh4",
+        "product": 48000,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Synthetic yellow iron oxide 920, medium. Broad iron oxide hydroxide match; loading and morphology unknown.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "high",
+        "assessment": "Rublev specifies synthetic PY42 iron(III) oxide-hydroxide in linseed oil and high tinting strength.",
+        "urls": [
+          "https://www.naturalpigments.com/mars-yellow-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D48000/N PY42 are family references. PY42 does not fix particle size or scattering; it cannot be interchanged with transparent oxide yellow by CI number alone.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "transparent oxide yellow",
+      "chemistry": "transparent synthetic iron oxide",
+      "boxes": [
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.2,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_3_2_p1_sh4",
+        "product": 52200,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Translucent yellow iron oxide. Transparency is a product property, not evidence of identical particle size, oil scattering or thin-film K/S.",
+      "maker_evidence": {
+        "opacity": "transparent",
+        "tint": "huge in prose; average in table",
+        "assessment": "Harding 219 explicitly attributes behavior to small particles. Same-page tint conflict is retained. The displayed tint/glaze swatches explicitly use a computed perceptual model, so they are not optical measurement targets.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/transparent-oxide-yellow-219"
+        ]
+      },
+      "remaining_measurement_need": "D52200 is a translucent-oxide chart reference. Opaque PY42 Mars yellow or a generic synthetic yellow oxide cannot honestly supply its scattering; independent oil drawdowns are absent.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "brown ochre",
+      "chemistry": "iron oxide earth, a darker grade",
+      "boxes": [
+        "alma-tadema",
+        "every"
+      ],
+      "hiding_estimate": 0.8,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "EB_1_1_p3_sh4",
+        "product": 40231,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "German brown ochre light. Natural earth family; the catalog calls a darker grade and has no precise mineral recipe.",
+      "maker_evidence": {
+        "opacity": "semi-transparent",
+        "tint": "good in prose; moderate in table",
+        "assessment": "Rublev Italian Brown Ocher is a natural hydrated oxide oil comparison. The page's table header says Italian Raw Sienna despite the product title; its code labels also differ from other sellers, so chemistry and batch matter more than names.",
+        "urls": [
+          "https://www.naturalpigments.com/italian-brown-ocher-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D40231 German brown ochre is not the Italian locality or an oil film. Brown ochre is not fixed by copying yellow ochre's numbers.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "raw sienna",
+      "chemistry": "sienna earth, unroasted",
+      "boxes": [
+        "sargent",
+        "inness",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.4,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "EY_2_1_p1_sh4",
+        "product": 40392,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "French natural yellow earth, raw sienna. Locality, mineral fractions and grind unspecified by catalog.",
+      "maker_evidence": {
+        "opacity": "semi-transparent",
+        "tint": "good in prose; medium in table",
+        "assessment": "Rublev specifies natural Italian raw sienna, PY43 and alpha-FeOOH in linseed oil. Other sources call sienna PBr7/PBr6; source labels are preserved, not harmonized into false identity.",
+        "urls": [
+          "https://www.naturalpigments.com/italian-raw-sienna-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D40392 and N Terra_de_Siena_PBr-6 support family reflectance. Neither is a calibrated oil formulation for this unspecified catalog grade.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "orange chrome",
+      "chemistry": "basic lead chromate",
+      "boxes": [
+        "inness",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.88,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified basic-lead-chromate reference. Ordinary chrome yellow, rutile tin-zinc PY216 and molybdate colors are not exact substitutes.",
+      "maker_evidence": {
+        "opacity": "strong covering power (industrial powder claim)",
+        "tint": "high (industrial powder claim)",
+        "assessment": "COLORKEM directly lists PO21 PbCrO4.PbO. Its relative tint >=95 is against an unnamed standard and its covering-power specification has no transferable oil-film protocol; both remain supplier specifications, never engine coefficients.",
+        "urls": [
+          "https://www.colorkem.com/chrome-orange-1344-38-3-product/"
+        ]
+      },
+      "remaining_measurement_need": "No cleared numerical basic-lead-chromate reflectance established. Chrome yellow, PO20 cadmium orange and lead-molybdate PR104 are different chemistries. Industrial product availability is not a verified historical artist formulation.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Mars orange",
+      "chemistry": "synthetic iron oxide, an orange grade",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.5,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_1_2_p4_sh4",
+        "product": 48060,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Synthetic iron oxide orange 960, light. Broad family/grade reference, not measured oil hiding.",
+      "maker_evidence": {
+        "opacity": "opaque (modern Langridge)",
+        "tint": null,
+        "assessment": "Langridge PY42 oxide in linseed oil is opaque. Its 'Pigment Loading: Medium' is not tinting strength. This modern grade conflicts with the catalog's historical 'much transparency' basis, so its behavior cannot erase the grade distinction.",
+        "urls": [
+          "https://langridgecolours.com/products/mars-orange/"
+        ]
+      },
+      "remaining_measurement_need": "D48060 is a synthetic orange oxide reference, not proof of the translucent historical grade or an oil calibration.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "cadmium red",
+      "chemistry": "cadmium sulfoselenide",
+      "boxes": [
+        "sargent",
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.9,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "CD_1_2_p1_sh4",
+        "product": 21130,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "composition-qualified-reference",
+      "source_caveat": "Medium cadmium red. SDS confirms cadmium sulfoselenide PR108, 50-100%; exact sulfide/selenide ratio, remainder and chart lot not analyzed in dataset.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "very high in prose; high in table",
+        "assessment": "Rublev directly specifies single-pigment PR108 cadmium sulfoselenide in linseed oil, opaque and high tinting strength. Its drawdown images use a specified nominal 6-mil film and a 1:2 titanium-white tint. These establish source conditions, not raw spectra or a universal hiding ratio.",
+        "urls": [
+          "https://www.naturalpigments.com/cadmium-red-medium-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D21130/N PR108 are family reflectance. RGB-matched eosin reconstruction is chemically and optically different; no same-tube absolute oil K,S is supplied by those references.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Mars red",
+      "chemistry": "synthetic iron oxide",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.9,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_1_2_p3_sh4",
+        "product": 48150,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Synthetic iron oxide red 130 B, medium. Broad chemistry match, not a unique pure-phase or oil formulation match.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "high",
+        "assessment": "Rublev supplies synthetic iron-oxide PR101 oil-paint evidence. Its dark maroon grade is not the universal hue of Mars red.",
+        "urls": [
+          "https://www.naturalpigments.com/mars-red-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D48150/N PR101 are family references with unmeasured oil-film scattering/loading for a particular chosen formulation.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Indian red",
+      "chemistry": "nearly pure ferric oxide",
+      "boxes": [
+        "inness",
+        "every"
+      ],
+      "hiding_estimate": 0.92,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_1_1_p2_sh4",
+        "product": 48220,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "grade-substitute",
+      "source_caveat": "Caput mortuum synthetic 180 M, bluish dark iron oxide/Persian red. Related ferric-oxide grade, not independently established nearly pure Indian-red formulation.",
+      "maker_evidence": {
+        "opacity": "opaque; excellent covering power",
+        "tint": "above-average in prose; high in table",
+        "assessment": "Rublev explicitly identifies natural hematite PR102 from near Chennai with ferric oxide usually above 90%. This supports the catalog's natural, nearly pure oxide rather than assuming a synthetic Persian red is exact.",
+        "urls": [
+          "https://www.naturalpigments.com/indian-red-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D48220 is synthetic dark oxide, a measured stand-in. G hematite may support chemistry but not the target grade's size or oil scattering.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "rose madder",
+      "chemistry": "madder lake on alumina",
+      "boxes": [
+        "friedrich",
+        "sargent",
+        "alma-tadema",
+        "giverny",
+        "impressionist",
+        "seurat",
+        "cezanne",
+        "every"
+      ],
+      "hiding_estimate": 0.1,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "OP_1_1_p2_sh4",
+        "product": 37202,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Genuine root madder NR9, alizarin and purpurin confirmed by SDS. Lake substrate is not specified in that SDS, so exact alumina/chalk support remains unverified.",
+      "maker_evidence": {
+        "opacity": "transparent",
+        "tint": null,
+        "assessment": "W&N genuine oil paint explicitly uses NR9 natural madder and safflower oil. General range marketing about strength is not a tube-specific tint rating.",
+        "urls": [
+          "https://www.winsornewton.com/products/artists-oil-colour-rose-madder-genuine"
+        ]
+      },
+      "remaining_measurement_need": "D37202 natural madder is a family reference. PR83 alizarin and cochineal are not replacements; support, dye proportions, fluorescence and binder are not fixed by NR9 alone.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "permanent alizarin",
+      "chemistry": "a quinacridone",
+      "boxes": [
+        "tonn",
+        "every"
+      ],
+      "hiding_estimate": 0.15,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "OV_1_2_p1_sh4",
+        "product": 23710,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "grade-substitute",
+      "source_caveat": "Quinacridone violet PV19 CI73900 CAS1047-16-1. Matches catalog's broad quinacridone family, not a known crimson grade or PR206. Alternative 23402 is quinacridone pink D PV19; neither is fuchsine or natural alizarin.",
+      "maker_evidence": {
+        "opacity": "transparent in retailer's 699 specification",
+        "tint": null,
+        "assessment": "Maker-authored Extra-Fine Oils chart mirrored on a distributor CDN lists 699 PR206. Jerry's corroborates transparent and safflower binder. Manufacturer's range-wide 'highest possible tinting strength' is not a tube-specific measurement. Catalog only says a quinacridone, so PR206 is a candidate, not an authenticated target.",
+        "urls": [
+          "https://assets.ctfassets.net/f1fikihmjtrp/7eXCSuYRP7d1bKtpzGerng/b2bd5f0b7f52cad821f51f8c775cbe9d/01529_-_Sennelier_Artists-_Oils.pdf",
+          "https://www.jerrysartarama.com/sennelier-artists-extra-fine-oil-permanent-alizarin-crimson-deep-40ml"
+        ]
+      },
+      "remaining_measurement_need": "N PV19 is a measured quinacridone family stand-in, not PR206 crimson. W&N PR177 permanent alizarin is anthraquinone, not the catalog chemistry; Sennelier 696 is a blend, not the single-quinacridone candidate.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "magenta",
+      "chemistry": "fuchsine (aniline) lake on alumina",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.1,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No fuchsine-on-alumina lake. Quinacridone pink and fluorescent pigment magenta red are different chemistries.",
+      "maker_evidence": {
+        "opacity": "soluble parent dye transparent; target lake unverified",
+        "tint": null,
+        "assessment": "Kremer 94110 is BV14 fuchsin dye and explicitly water/alcohol soluble. It is not the catalog's alumina lake. Its opacity cannot be promoted into a measured lake property.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/shop/dyes-vegetable-colors/94110-fuchsin.html"
+        ]
+      },
+      "remaining_measurement_need": "No cleared fuchsine-on-alumina spectrum or authenticated oil tube established. PR122/PV19 quinacridone and Revigo eosin have different chemistry. Lake substrate and dye loading affect both K and S.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "burnt sienna",
+      "chemistry": "roasted sienna earth",
+      "boxes": [
+        "sargent",
+        "alma-tadema",
+        "tonn",
+        "hopper",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.45,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "ER_1_1_p3_sh4",
+        "product": 40430,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Italian dark burnt sienna no.3. Representative roasted earth; recipe and heating history not a measured match to every burnt sienna.",
+      "maker_evidence": {
+        "opacity": "semi-transparent",
+        "tint": "good in prose; high in table",
+        "assessment": "Rublev Italian Burnt Sienna identifies roasted natural earth PR102 in linseed oil, with an explicitly semitransparent formulation.",
+        "urls": [
+          "https://www.naturalpigments.com/italian-burnt-sienna-oil-paint.html"
+        ]
+      },
+      "remaining_measurement_need": "D40430/U provide natural burnt-sienna references, not oil-film thickness/loading. Burnt umber and synthetic red oxide are related but do not measure burnt sienna.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Mars brown",
+      "chemistry": "synthetic iron oxide, roasted",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.85,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "IR_4_1_p4_sh4",
+        "product": 48300,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "family-reference",
+      "source_caveat": "Synthetic iron oxide brown 610, light. Catalog roasted brown is not given a precise phase or grade. Do not identify it with manganese ferrite PBr43.",
+      "maker_evidence": {
+        "opacity": "very opaque",
+        "tint": null,
+        "assessment": "Langridge identifies PBr6 prepared iron oxide in linseed oil. 'Pigment Loading: Medium' does not state tint strength. PBr43 manganese ferrite is not the same material.",
+        "urls": [
+          "https://langridgecolours.com/products/mars-brown/"
+        ]
+      },
+      "remaining_measurement_need": "D48300 is measured synthetic brown oxide reference, not absolute oil-film K,S or a manganese-containing umber.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "bone brown",
+      "chemistry": "bone roasted until brown",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.6,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "Burnt bone black or other brown earth is not incompletely carbonized brown bone.",
+      "maker_evidence": {
+        "opacity": null,
+        "tint": null,
+        "assessment": "Getty defines incompletely combusted bone. A small-batch pigment maker hosts an artist's watercolor review describing a transparent/opaque balance, not an oil specification or standardized tint test. Historic specimen inventory lists calcium phosphate and carbon, not numerical optical data.",
+        "urls": [
+          "https://www.getty.edu/vow/AATFullDisplay?find=dye&logic=AND&note=&subjectid=300013355",
+          "https://www.pollybennett.com/polben-s-pigment-artist-collaboration",
+          "https://memoryofpaper.eu/pigmente/Content/?col=brown"
+        ]
+      },
+      "remaining_measurement_need": "No cleared visible spectrum, authenticated oil preparation or manufacturer oil opacity/tint rating established. Bone black, vine black and brown earth cannot honestly cover partial-carbonization bone brown.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "bitumen",
+      "chemistry": "asphaltum",
+      "boxes": [
+        "inness",
+        "every"
+      ],
+      "hiding_estimate": 0.12,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified asphaltum sample. Other organic browns or iron oxides are not bitumen.",
+      "maker_evidence": {
+        "opacity": "transparent; preparation-dependent",
+        "tint": null,
+        "assessment": "Natural Pigments calls Utah gilsonite transparent and used in glazes, explicitly depending on preparation. It is a documented asphaltite comparison, not an authenticated historical dissolved bitumen recipe. Its printed chlorinated molecular formula is not accepted as the composition of natural bitumen.",
+        "urls": [
+          "https://www.naturalpigments.com/gilsonite-pigment.html"
+        ]
+      },
+      "remaining_measurement_need": "No cleared relevant oil spectrum established. Generic road asphalt spectra and pigment-scattering assumptions cannot stand for a dissolved, aging hydrocarbon/resin mixture.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "cerulean blue",
+      "chemistry": "cobalt stannate",
+      "boxes": [
+        "sargent",
+        "tonn",
+        "hopper",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.8,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "BL_4_2_p3_sh4",
+        "product": 45730,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "composition-substitute",
+      "source_caveat": "SDS: PB35 60-100%, PB72 10-30% and PB36 1-5%. Cobalt-tin/chromite blend, not pure catalog cobalt stannate.",
+      "maker_evidence": {
+        "opacity": "opaque",
+        "tint": "average (own-brand summary)",
+        "assessment": "Jackson's own-brand Genuine Cerulean supplies PB35 in linseed oil and opaque rating. Drying wording conflicts but is outside the opacity/tint assessment.",
+        "urls": [
+          "https://www.jacksonsart.com/en-us/jackson-s-professional-oil-paint-40ml-cerulean-blue-genuine"
+        ]
+      },
+      "remaining_measurement_need": "D45730 is a PB35/PB72/PB36 cobalt-cerulean mixture per STIL-274, not pure cobalt stannate. Generic cerulean PB36 is not PB35.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "ultramarine ash",
+      "chemistry": "natural ultramarine, a pale last extraction",
+      "boxes": [
+        "sargent",
+        "every"
+      ],
+      "hiding_estimate": 0.15,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "Grayish lapis 10550/10530 or regular lapis does not demonstrate the pale final natural-ultramarine extraction fraction.",
+      "maker_evidence": {
+        "opacity": "highly transparent, valued for blue glazing",
+        "tint": null,
+        "assessment": "Kremer explicitly identifies the pale last extraction with much colorless material and few small blue particles. The adjacent general lapis-lazuli tint-strength statement is not an ash-specific strength rating.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/shop/pigments/10580-ultramarine-ash.html",
+          "https://www.kremer-pigmente.com/elements/resources/products/files/10500-10580e.pdf"
+        ]
+      },
+      "remaining_measurement_need": "No cleared measured ash-fraction reference established. Gray lapis or synthetic ultramarine PB29 can compare chemistry/color but not the fraction's concentration or scattering.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "Antwerp blue",
+      "chemistry": "Prussian blue on an alumina base",
+      "boxes": [
+        "inness",
+        "every"
+      ],
+      "hiding_estimate": 0.4,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "Prussian blue is not demonstrated Prussian-blue-on-alumina preparation. Existing Revigo Prussian blue is a separate stand-in, not a Deborah match.",
+      "maker_evidence": {
+        "opacity": "related Prussian blue transparent; target alumina preparation unverified",
+        "tint": "related Prussian blue high; target unverified",
+        "assessment": "Rublev calls Prussian Blue also Antwerp blue, but supplies no alumina-supported formulation. CAMEO distinguishes historical cobalt/Prussian blend and later Prussian with about 75% alumina. The catalog selects the latter chemistry, not every historical name.",
+        "urls": [
+          "https://www.naturalpigments.com/prussian-blue-50ml.html",
+          "https://cameo.mfa.org/wiki/Antwerp_blue"
+        ]
+      },
+      "remaining_measurement_need": "Revigo CC0 Prussian is a measured active-pigment stand-in. Arbitrarily adding white is not a measurement of the supported particle structure, alumina amount or oil paint.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "cobalt violet",
+      "chemistry": "cobalt phosphate or arsenate",
+      "boxes": [
+        "sargent",
+        "tonn",
+        "giverny",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.35,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "BL_2_2_p2_sh4",
+        "product": 45800,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "chemistry-match",
+      "source_caveat": "SDS: 100% cobalt phosphate Co3(PO4)2 PV14 CI77360. Matches catalog phosphate alternative, not arsenate. Modern SDS is product-number evidence, not batch assay.",
+      "maker_evidence": {
+        "opacity": "semi-transparent",
+        "tint": "average (Harding phosphate grade)",
+        "assessment": "Harding PV14 cobalt phosphate is one allowed branch of the catalog's phosphate-or-arsenate wording. The page repeats wording about the light grade on the dark product; retain the grade limitation rather than claiming all cobalt violets share this rating.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/cobalt-violet-dark-602"
+        ]
+      },
+      "remaining_measurement_need": "D45800 phosphate is a same-chemistry family reference, not cobalt arsenate or an absolute oil-film calibration.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "strontium yellow",
+      "chemistry": "strontium chromate",
+      "boxes": [
+        "impressionist",
+        "seurat",
+        "every"
+      ],
+      "hiding_estimate": 0.55,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified strontium chromate sample.",
+      "maker_evidence": {
+        "opacity": "low (industrial Tiankai powder description)",
+        "tint": "low (SNCZ industrial powder); Otero comparative test is separate",
+        "assessment": "SNCZ directly identifies SrCrO4, low tinting strength and industrial coatings use. Tiankai also describes poor tint and low opacity. Industrial grades are not proof of a historical artist recipe. Otero's relative 78% belongs to its particular test paint, not an engine weight.",
+        "urls": [
+          "https://www.sncz.com/en/pigment/strontium-chromate-l203e/",
+          "https://www.tkechemical.com/pigment/inorganic-pigments/strontium-chrome-yellow.html",
+          "https://www.nature.com/articles/s40494-017-0160-3"
+        ]
+      },
+      "remaining_measurement_need": "No cleared absolute numerical reflectance established. Otero's normalized FORS gives shape only; reagent/industrial SrCrO4 does not fix historic grain or oil scattering.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "barium yellow",
+      "chemistry": "barium chromate (lemon yellow)",
+      "boxes": [
+        "giverny",
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.45,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified barium chromate sample.",
+      "maker_evidence": {
+        "opacity": "current Harding table opaque; prose low covering power",
+        "tint": "low (Harding); Otero comparative test is separate",
+        "assessment": "Harding 108 explicitly uses PY31 barium chromate. Current categorical opaque rating coexists with low covering-power prose; neither is a numeric contrast ratio. Otero's 92% comparison is protocol-specific, not a universal paint-strength ratio.",
+        "urls": [
+          "https://michaelharding.co.uk/oil-colours/lemon-yellow-108",
+          "https://www.nature.com/articles/s40494-017-0160-3"
+        ]
+      },
+      "remaining_measurement_need": "No cleared absolute numerical same-formulation reflectance established. Otero normalized FORS and comparative strength cannot produce K,S, although a genuine modern artist tube exists.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "zinc yellow",
+      "chemistry": "potassium zinc chromate",
+      "boxes": [
+        "giverny",
+        "impressionist",
+        "seurat",
+        "every"
+      ],
+      "hiding_estimate": 0.4,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified potassium-zinc-chromate sample. Zinc-containing cadmium or tin-zinc yellows are not zinc yellow.",
+      "maker_evidence": {
+        "opacity": null,
+        "tint": "65% of pure lead chromate in Otero's specified comparison, not a proposed coefficient",
+        "assessment": "Primary research identifies potassium zinc chromate rather than generic ZnCrO4. No directly matching manufacturer's oil opacity or tint description was established; broad zinc-chromate anticorrosive grades and pigments with extenders are not evidence of this exact phase.",
+        "urls": [
+          "https://www.nature.com/articles/s40494-017-0160-3"
+        ]
+      },
+      "remaining_measurement_need": "No cleared absolute visible arrays established for potassium-zinc chromate. Normalized FORS and CIELAB cannot identify absolute scattering or finite-film coefficients. Reagent ZnCrO4 is not the target phase.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "yellow lake",
+      "chemistry": "flavonoid dye (weld, quercitron) on alumina and chalk",
+      "boxes": [
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.08,
+      "source": null,
+      "source_class": "catalog-rgb-stand-in",
+      "source_caveat": "No verified weld/quercitron flavonoid lake on alumina/chalk. Indian-yellow imitation or another yellow is not evidence.",
+      "maker_evidence": {
+        "opacity": null,
+        "tint": null,
+        "assessment": "Kremer directly identifies insoluble weld Reseda lake NY2 and oil suitability. It gives no opacity or tint rating on the inspected page and does not establish an alumina/chalk support ratio. Quercitron is an alternative source dye, not this product.",
+        "urls": [
+          "https://www.kremer-pigmente.com/en/shop/pigments/36262-lake-made-of-reseda.html"
+        ]
+      },
+      "remaining_measurement_need": "No cleared exact weld/quercitron lake arrays established. G buckthorn/alum ink is a different dye/preparation; soluble reseda dye or a green reseda/indigo pigment is not the catalog lake.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    },
+    {
+      "name": "vine black",
+      "chemistry": "charcoal of vine twigs",
+      "boxes": [
+        "impressionist",
+        "every"
+      ],
+      "hiding_estimate": 0.75,
+      "source": {
+        "dataset": "hyperspectral-pigments",
+        "sample": "OP_8_2_p2_sh4",
+        "product": 12015,
+        "statistic": "spatial median; recommended by source article for metrological comparisons"
+      },
+      "source_class": "feedstock-substitute",
+      "source_caveat": "Product 12015 is grape-seed black PBk8, not charcoal of vine twigs. Bone black and synthetic iron black are excluded.",
+      "maker_evidence": {
+        "opacity": "opaque according to retailer, not a manufacturer optical specification",
+        "tint": "retailer reports strong tint power for a specific vine-charcoal batch; no manufacturer rating established",
+        "assessment": "Wallace Seymour's maker chart lists Vine Black PBk8 in linseed oil. The vine-twig origin, opaque rating and tint observation are from Supreme Paint's specific Waning Moon Charcoal listing and are labeled secondary. PBk11 iron-oxide products sold as Vine Black are rejected.",
+        "urls": [
+          "https://www.wallaceseymour.co.uk/product/artists-oil-colours",
+          "https://www.supremepaint.co.uk/vine-black-waning-moon-charcoal-20ml/"
+        ]
+      },
+      "remaining_measurement_need": "D12015/G grape-seed black is measured seed charcoal, not vine twigs. Carbonization, ash/mineral content and particle size differ; a common name or black RGB does not identify K,S.",
+      "measurement_plan": "STIL-274, per-tube purchase table and oil-film measurement plan; no purchase authorized"
+    }
+  ]
+}

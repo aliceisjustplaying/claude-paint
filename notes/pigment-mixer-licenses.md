@@ -5,9 +5,10 @@ the two MIT workspace packages, and no noncommercial dependency. Mixbox 2.0.0
 (CC-BY-NC-4.0) and its sole additional dependency are removed from both Cargo
 locks and the paint manifest. No optional or legacy mixer remains.
 
-The independent implementation, the K/S derivation and the generated
-tables are project MIT; the measured paint data they derive from is CC0
-(Revigo, below). The paper supplies the mathematical method, not code,
+The independent implementation and Revigo-derived tables are project MIT;
+the Revigo measured paint data is CC0. The later researched-pigment
+extension uses CC BY 4.0 sources and retains that license and attribution
+for its derived numerical tables. The paper supplies the mathematical method, not code,
 coefficients or tables. No restricted implementation or data was inspected,
 copied or fitted against. Old/new outputs are comparison evidence only, not
 generator inputs. The existing spectral.js D65/CIE conversion data remains
@@ -23,8 +24,11 @@ The paper is linked, not redistributed.
 | Component | License | Where | Action |
 |---|---|---|---|
 | Removed Mixbox 2.0.0 | CC-BY-NC-4.0 | Initial root Cargo resolution and old third-party notice | Completely removed, with no optional feature, copied source, LUT, coefficients or port. Historical wet checkpoints are refused rather than reinterpreted. |
-| Independent mixer, derived K/S and tables | Project MIT | `crates/paint/src/mixer.rs`, `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | K/S derived from the CC0 Revigo measurements below; reproduce using the pinned generator. No paper-image import. |
+| Independent mixer code and Revigo-derived tables | Project MIT | `crates/paint/src/mixer.rs`, legacy/calibrated tables in `crates/paint/src/mixer/`, `scripts/build_pigment_tables.py` | Revigo-derived K/S use the CC0 measurements below. The separately credited researched tables are excluded from this blanket MIT statement. |
 | Revigo paint reflectance data | CC0 1.0 | `scripts/pigment_data/revigo`; upstream `fligt/revigo-spectra` at `f09ed72` | Vendored unchanged with its CC0 text and a provenance README; cite Geldof et al. 2018 (doi:10.1186/s40494-018-0181-6, CC BY 4.0) in publications. |
+| Deborah Hyperspectral Pigments v1 (2022) | CC BY 4.0 | `scripts/pigment_data/hyperspectral-pigments`; doi:10.5281/zenodo.5592485 | Retain Hilda Deborah's attribution, full license and modification notice. Native mean/median libraries and inventory are unchanged. Modeled oil coefficients are not measured oil data. |
+| Bath lead-tin-yellow spectra, tints and chromatic mixtures (2016) | CC BY 4.0 | `scripts/pigment_data/bath00183`; doi:10.15125/BATH-00183 | Retain Pallipurath, Skelton, Ricciardi and Elliott's dataset and paper citations, full license and modification notice. Twenty-four selected raw spectra are unchanged. |
+| Researched numerical pigment tables | CC BY 4.0 | `crates/paint/src/mixer/researched.bin`, `researched.json` | Derived from the two sources above through stated resampling and oil-model assumptions; preserve their attribution in distributions. No source-author endorsement. |
 | spectral.js 3.0 Rust port and D65/CIE tables | MIT | `crates/paint/src/spectral.rs`; upstream `rvanwijnen/spectral.js` at `bb2b05c9d1e65ae824d47e3b1cc17ea32c8ee68f` | Preserve Ronald van Wijnen’s full MIT notice in `THIRD_PARTY_NOTICES.md`. No separate FORS database imported. |
 | Root Rust dependency closure | Commercial-use MIT/Apache/BSD/Zlib/Unicode or permissive alternatives | Root and paint Cargo locks; 85-package final Cargo metadata | Exact expressions and actions appear below and in the JSON inventory. Choose the permissive alternative where available; keep notices. |
 | NumPy 2.4.2 and SciPy 1.17.1 | BSD-family and bundled-library terms | Generator PEP 723 pins and installed wheel licenses | Build-only; no Python library is linked into the engine or embedded in generated tables. If distributing the tool environment, preserve full wheel notices including GCC runtime’s GPL exception and libquadmath’s LGPL terms. |
@@ -37,7 +41,7 @@ The paper is linked, not redistributed.
 | Pillow and bundled native libraries | MIT-CMU plus FTL/IJG/BSD/MIT/zlib/public-domain terms in sampled Linux wheel | Python image tools and saved wheel license receipts | Preserve complete wheel notices; select FreeType’s FTL alternative. Different platform wheels can have different native dependencies. |
 | Oklab conversion | Public domain or MIT | `crates/paint/src/color.rs`; [author’s grant](https://bottosson.github.io/posts/oklab/) | Preserve attribution; MIT is available if public-domain treatment is unsuitable. |
 | Bristle-motion conceptual inspiration | Upstream MIT | `crates/paint/src/bristle.rs`; `dli/paint` | Existing source citation remains. Preserve David Li’s notice if distributing substantial copied code; no claim of a history-wide source comparison. |
-| Existing palette/material parameters | Project MIT for original code; source-specific quotations | Palette, pigment and drying source; research notes | Keep estimates distinct from measurements and retain citations. No additional tracked measured-spectra dataset was found. |
+| Existing palette/material parameters | Project MIT for original code; source-specific quotations | Palette, pigment and drying source; research notes | Keep estimates distinct from measurements and retain citations. Later added spectral sources are listed separately above. |
 | Engine render goldens and thinner state/image captures | Project-generated technical data, MIT | Test constructors and baseline manifest | Re-record only mixer-dependent captures using their existing seeded scenes, tolerances and exact state checks. Provenance records identify commands and producing build. |
 | Numeric plough volume/cure baseline | Project-generated technical data, MIT | `crates/paint/tests/plough_volume_cure.png`; seeded test in `bristle.rs` | Preserve the seed-9 numerical construction and two-level channel tolerance, not an arbitrary replacement picture. Original construction revision `4ec3169`. |
 | Old ck7 binaries and unused r19 goldens | Removed opaque fixtures | Former ck7 fixture directory and unused golden/digest paths | Replaced ck7 coverage with runtime-generated obsolete-layout input. Removed unused r19 artifacts; active outputs are re-recorded from source. |

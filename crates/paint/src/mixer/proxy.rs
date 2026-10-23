@@ -246,7 +246,7 @@ mod tests {
             "25 um green earth contrast ratio {}",
             ratio(&green, 1.0)
         );
-        let reference = to_oklab(palette.tubes[at("cadmium red")].color);
+        let reference = to_oklab(red.color);
         let covered = to_oklab(red.over([0.01; 3], 4.0));
         assert!(
             (0..3)
@@ -260,6 +260,7 @@ mod tests {
             .into_iter()
             .map(|hiding| {
                 let mut tube = tube.clone();
+                tube.name = "unnamed opacity control";
                 tube.hiding = hiding;
                 let mut palette = crate::Palette::new("opacity control", vec![tube]);
                 palette.engine = crate::PIGMENT_MIXER;

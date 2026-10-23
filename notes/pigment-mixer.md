@@ -231,3 +231,144 @@ redistributed. The earlier patent-record search is not legal clearance.
 Fixture sources are in `notes/pigment-mixer-assets.md`; licenses and
 package inventory are in `notes/pigment-mixer-licenses.md` and
 `notes/pigment-mixer-dependencies.json`.
+
+## Additional engine-9 reflectance references
+
+The current engine-9 extension adds **27 modeled oil stand-ins** based on
+measured non-oil reflectance. It does not turn them into measured oil paints.
+The 15 Revigo catalog names remain the measured-oil group; 12 names retain
+catalog RGB reconstruction and estimated opacity. The round-5
+21-float/39-RGB-only statements above describe the earlier representation,
+not this extension. Engine 9 carries 48 floats: the original 18 pigment
+amounts, three RGB residuals at their unchanged positions and 27 additional
+pigment amounts. Engines 8 and earlier do not use the additional identities.
+
+### What is measured and what is assumed
+
+Deborah's CC BY 4.0 library supplies 26 selected light-backed chart spectra.
+The source article recommends spatial medians for metrological comparisons;
+the original mean and median libraries retain all four backing regions.
+The four gray fields are not tints. Their bare reflectances, paint thickness,
+pigment loading and exact binder recipes were not recorded in the compact
+library. Later Kremer documentation describes normally gum-arabic-bound
+screen prints, not oil drawdowns. Bath supplies the lead-tin-yellow
+reference, averaging all three spots on its gum-arabic/glass pure film.
+Each source directory retains its license and attribution.
+
+A source spectrum alone does not identify separate K and S. The extension
+**assumes** the measured spectrum is the diffuse appearance target of a
+100 µm oil film over ideal white. It solves positive wavelength-dependent
+K and wavelength-flat S subject to the existing estimated tube hiding at
+25 µm, using ideal black and white fields. That estimate and the flat-S
+assumption supply the missing information; they are not measurements.
+The source-surface geometry is not called SCI, and the renderer's
+Saunderson boundary is a display convention, not a correction verified
+against these sources. The runtime reference remains Revigo 07A_w.
+This transfer replaces an RGB-only material guess with a spectrum-based
+one; it does not recover an unknown oil formulation.
+
+Native Deborah coverage begins at 405.369888 nm. Values at 380–400 nm
+hold that endpoint; other output bands use linear interpolation.
+Raw spectra are never clipped, smoothed or recolored. Infeasible inputs
+fail explicitly. Added pigments have unit volume weight and retain their
+own inferred coefficients through mixing and dilution. Their scattering
+already expresses the assumed tint behavior; no second empirical
+tint-strength multiplier is fitted. Oil tint strength and glaze transport
+still require measurements of oil preparations.
+
+### Validation and limits
+
+The generator reconstructs each selected source appearance and its
+estimated opacity constraint. Those are in-sample model checks, not
+independent oil validation. Maker descriptions in
+`scripts/pigment_data/researched-tubes.json` provide qualitative checks,
+such as opaque cadmiums versus low-hiding green earth, but do not supply
+numerical contrast ratios. Conflicting maker descriptions and differences
+between modern grades and historical materials remain explicit.
+
+Bath provides three actual lead-white tint ratios by **dry pigment mass**,
+not tube-paint volume. Its spots vary substantially, and its mean tint
+sequence is not monotonic. A positive opaque two-constant fit to the
+33.3% and 66.7% yellow tints, with unknown gum-white coefficients and
+the 50% tint reserved for prediction, fails at all 38 output bands.
+The generator records that failure, all source means and spot envelopes;
+it does not filter spots, substitute Revigo oil white or claim a passed
+oil-mixture validation. No absolute film scale is identifiable from it.
+
+The same source's three red-lead/yellow mixtures and pure red lead are
+also retained. A positive opaque fit using the two outer compositions
+hits its numerical bound. At 640–750 nm, the 66.7% red-lead mixture lies
+outside both pure reflectance endpoints, by up to 0.036682. No positive
+opaque two-constant mixture can reproduce that at those wavelengths.
+This rejects the opaque/common-preparation assumption, not the measured
+observations. The midpoint mixture stays out of fitting. These failures
+are limits on calibration, not reasons to discard inconvenient data.
+
+The generated `mixer/researched.json` records each tube's provenance,
+inference assumptions, coefficients, source hashes, residuals and
+unresolved measurement need. Data and derived numerical tables retain
+CC BY 4.0; generator and runtime code remain MIT. Regenerate this extension:
+
+```sh
+uv run --script scripts/build_pigment_tables.py --researched
+uv run --with numpy==2.4.2 --with scipy==1.17.1 python scripts/tests/researched_pigments_test.py
+```
+
+The original no-argument generator remains the legacy regeneration path.
+The extension command does not rewrite Revigo, calibrated tables or
+the legacy inverse.
+
+### All 39 previously RGB-only tubes
+
+“Reference” means a measured specimen in another preparation, not an
+authenticated oil tube. A matching pigment family does not establish
+its grind, mineral fractions, lake support or loading.
+
+| Tube | Runtime provenance | Selected reference | Material limitation |
+|---|---|---|---|
+| smalt | Measured non-oil reference → modeled oil stand-in | Deborah 10010, `BL_1_1_p4_sh4` | Genuine cobalt glass, but source is very fine <80 micrometers and catalog requires coarse. Not a measured coarse smalt. |
+| pale smalt | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | Same very fine smalt is only a related reference. No verified paler glass composition or pale grade. A white backing is not a pale-smalt preparation. |
+| yellow ochre | Measured non-oil reference → modeled oil stand-in | Deborah 40010, `EY_1_3_p4_sh4` | Natural washed French yellow earth. Source mineral fractions, locality and pigment loading are not the unique catalog formulation. |
+| red earth | Measured non-oil reference → modeled oil stand-in | Deborah 40020, `ER_1_1_p4_sh4` | Washed French red ochre. Natural earth mixture, not a pure ferric oxide assay. |
+| raw umber | Measured non-oil reference → modeled oil stand-in | Deborah 40610, `EU_1_1_p4_sh4` | Cyprus raw umber. Iron/manganese earth family; exact mineral and manganese fractions unmeasured here. |
+| green earth | Measured non-oil reference → modeled oil stand-in | Deborah 40821, `EG_1_2_p3_sh4` | Inventory says genuine pure Verona green earth; not the Prussian-blue/chrome-enhanced 41750. Celadonite/glauconite fractions not assayed in this dataset. |
+| Rinmann's green | Measured non-oil reference → modeled oil stand-in | Deborah 44151, `GR_2_1_p3_sh4` | SDS section 3: cobalt zinc oxide green, 100% PG19 CI77335. Exact broad catalog chemistry, not an oil formulation or identical batch. |
+| copper green | Measured non-oil reference → modeled oil stand-in | Deborah 44450, `GR_2_2_p1_sh4` | SDS: 100% copper(II) acetate monohydrate CAS6046-93-1, a neutral verdigris. Historical basic acetate phases and oil reaction are not represented by gum-bound chart. |
+| lead-tin yellow | Measured non-oil reference → modeled oil stand-in | Bath `LTY_Pure`, all three spots | Type-I lead-tin yellow Pb2SnO4, gum arabic on glass. No thickness, backing spectrum or pure lead-white endpoint. Oil conversion is assumed, not measured. |
+| Naples yellow | Measured non-oil reference → modeled oil stand-in | Deborah 43125, `YL_3_3_p3_sh4` | SDS: 100% lead antimonate Pb2Sb2O7, PY41. 10130 is not used. Modern SDS identifies product number, not an analytical test of the 2018 chart batch. |
+| pale cadmium | Measured non-oil reference → modeled oil stand-in | Deborah 21020, `CD_1_2_p4_sh4` | Very light grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS. Zinc fraction and remainder unspecified. |
+| deep cadmium | Measured non-oil reference → modeled oil stand-in | Deborah 21060, `CD_1_2_p3_sh4` | Dark grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS or sulfoselenide. Grade and zinc fraction matter. |
+| cadmium yellow | Measured non-oil reference → modeled oil stand-in | Deborah 21040, `CD_1_1_p3_sh4` | Medium grade. SDS says cadmium zinc sulfide PY35, 50-100%, not proven pure CdS. Not interchangeable with other cadmium grades. |
+| Indian yellow | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | 23350 is explicitly nickel-containing Indian-yellow imitation, not magnesium/calcium euxanthate. |
+| Mars yellow | Measured non-oil reference → modeled oil stand-in | Deborah 48000, `IR_3_1_p3_sh4` | Synthetic yellow iron oxide 920, medium. Broad iron oxide hydroxide match; loading and morphology unknown. |
+| transparent oxide yellow | Measured non-oil reference → modeled oil stand-in | Deborah 52200, `IR_3_2_p1_sh4` | Translucent yellow iron oxide. Transparency is a product property, not evidence of identical particle size, oil scattering or thin-film K/S. |
+| brown ochre | Measured non-oil reference → modeled oil stand-in | Deborah 40231, `EB_1_1_p3_sh4` | German brown ochre light. Natural earth family; the catalog calls a darker grade and has no precise mineral recipe. |
+| raw sienna | Measured non-oil reference → modeled oil stand-in | Deborah 40392, `EY_2_1_p1_sh4` | French natural yellow earth, raw sienna. Locality, mineral fractions and grind unspecified by catalog. |
+| orange chrome | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified basic-lead-chromate reference. Ordinary chrome yellow, rutile tin-zinc PY216 and molybdate colors are not exact substitutes. |
+| Mars orange | Measured non-oil reference → modeled oil stand-in | Deborah 48060, `IR_1_2_p4_sh4` | Synthetic iron oxide orange 960, light. Broad family/grade reference, not measured oil hiding. |
+| cadmium red | Measured non-oil reference → modeled oil stand-in | Deborah 21130, `CD_1_2_p1_sh4` | Medium cadmium red. SDS confirms cadmium sulfoselenide PR108, 50-100%; exact sulfide/selenide ratio, remainder and chart lot not analyzed in dataset. |
+| Mars red | Measured non-oil reference → modeled oil stand-in | Deborah 48150, `IR_1_2_p3_sh4` | Synthetic iron oxide red 130 B, medium. Broad chemistry match, not a unique pure-phase or oil formulation match. |
+| Indian red | Measured non-oil reference → modeled oil stand-in | Deborah 48220, `IR_1_1_p2_sh4` | Caput mortuum synthetic 180 M, bluish dark iron oxide/Persian red. Related ferric-oxide grade, not independently established nearly pure Indian-red formulation. |
+| rose madder | Measured non-oil reference → modeled oil stand-in | Deborah 37202, `OP_1_1_p2_sh4` | Genuine root madder NR9, alizarin and purpurin confirmed by SDS. Lake substrate is not specified in that SDS, so exact alumina/chalk support remains unverified. |
+| permanent alizarin | Measured non-oil reference → modeled oil stand-in | Deborah 23710, `OV_1_2_p1_sh4` | Quinacridone violet PV19 CI73900 CAS1047-16-1. Matches catalog's broad quinacridone family, not a known crimson grade or PR206. Alternative 23402 is quinacridone pink D PV19; neither is fuchsine or natural alizarin. |
+| magenta | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No fuchsine-on-alumina lake. Quinacridone pink and fluorescent pigment magenta red are different chemistries. |
+| burnt sienna | Measured non-oil reference → modeled oil stand-in | Deborah 40430, `ER_1_1_p3_sh4` | Italian dark burnt sienna no.3. Representative roasted earth; recipe and heating history not a measured match to every burnt sienna. |
+| Mars brown | Measured non-oil reference → modeled oil stand-in | Deborah 48300, `IR_4_1_p4_sh4` | Synthetic iron oxide brown 610, light. Catalog roasted brown is not given a precise phase or grade. Do not identify it with manganese ferrite PBr43. |
+| bone brown | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | Burnt bone black or other brown earth is not incompletely carbonized brown bone. |
+| bitumen | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified asphaltum sample. Other organic browns or iron oxides are not bitumen. |
+| cerulean blue | Measured non-oil reference → modeled oil stand-in | Deborah 45730, `BL_4_2_p3_sh4` | SDS: PB35 60-100%, PB72 10-30% and PB36 1-5%. Cobalt-tin/chromite blend, not pure catalog cobalt stannate. |
+| ultramarine ash | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | Grayish lapis 10550/10530 or regular lapis does not demonstrate the pale final natural-ultramarine extraction fraction. |
+| Antwerp blue | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | Prussian blue is not demonstrated Prussian-blue-on-alumina preparation. Existing Revigo Prussian blue is a separate stand-in, not a Deborah match. |
+| cobalt violet | Measured non-oil reference → modeled oil stand-in | Deborah 45800, `BL_2_2_p2_sh4` | SDS: 100% cobalt phosphate Co3(PO4)2 PV14 CI77360. Matches catalog phosphate alternative, not arsenate. Modern SDS is product-number evidence, not batch assay. |
+| strontium yellow | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified strontium chromate sample. |
+| barium yellow | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified barium chromate sample. |
+| zinc yellow | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified potassium-zinc-chromate sample. Zinc-containing cadmium or tin-zinc yellows are not zinc yellow. |
+| yellow lake | Catalog RGB stand-in; no spectrum wired | New measurement/rights needed | No verified weld/quercitron flavonoid lake on alumina/chalk. Indian-yellow imitation or another yellow is not evidence. |
+| vine black | Measured non-oil reference → modeled oil stand-in | Deborah 12015, `OP_8_2_p2_sh4` | Product 12015 is grape-seed black PBk8, not charcoal of vine twigs. Bone black and synthetic iron black are excluded. |
+
+The 12 unresolved names are pale smalt, Indian yellow, orange chrome,
+magenta, bone brown, bitumen, ultramarine ash, Antwerp blue, strontium
+yellow, barium yellow, zinc yellow and yellow lake. Individual reasons
+and primary-source links are in the manifest. The named-product purchase
+table and paired black/white oil-drawdown plan are in Captain report
+STIL-274. No paint, instrument or laboratory service was purchased.

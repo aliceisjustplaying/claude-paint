@@ -115,6 +115,53 @@ class ExportMaterialsTests(unittest.TestCase):
         self.assertEqual((dest / "bin/studio").read_text(), "painter tonn\n")
         self.assertTrue((dest / "notes/research/oil_paint_physics.md").is_file())
 
+    def test_success_removes_only_its_probe(self):
+        unrelated = self.root / "studio-probe.unrelated"
+        self.write(unrelated / "keep", "unrelated data\n")
+        dest, result = self.export()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list(self.root.glob("studio-probe.*")), [unrelated])
+        self.assertEqual((unrelated / "keep").read_text(), "unrelated data\n")
+        self.assertEqual(list((dest / "paintings/lua").iterdir()), [])
+        self.assertFalse((dest / "out").exists())
+
+    def test_external_builds_without_tmpdir_or_repo_target(self):
+        self.env.pop("TMPDIR", None)
+        self.assertFalse((self.repo / "target").exists())
+        _, result = self.export()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list((self.repo / "target").glob("studio-probe.*")), [])
+
+    def test_missing_tmpdir_parent_is_created(self):
+        parent = self.root / "new/tmp"
+        self.env["TMPDIR"] = str(parent)
+        _, result = self.export()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(parent.is_dir())
+        self.assertEqual(list(parent.iterdir()), [])
+
+    def test_failed_probe_is_removed(self):
+        built = next((self.root / "builds").glob("code-*/built/universal/easel"))
+        source = built.read_text()
+        failures = {
+            "session": source.replace('elif command == "save":',
+                                      'elif command == "look":\n'
+                                      '    sys.exit("fixture probe failure")\n'
+                                      'elif command == "save":'),
+            "validation": source.replace('header + "--@ chunk\\n"',
+                                         '"--@ box wrong\\n--@ chunk\\n"'),
+        }
+        for stage, code in failures.items():
+            with self.subTest(stage=stage):
+                built.write_text(code)
+                dest, result = self.export()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("fixture probe failure" if stage == "session" else
+                              "the probe's log names box 'wrong'", result.stderr)
+                self.assertEqual(list(self.root.glob("studio-probe.*")), [])
+                self.assertTrue((dest / "bin/easel").is_file())
+                shutil.rmtree(dest)
+
     def test_license_retry_is_only_used_on_macos(self):
         code = hashlib.sha1(b"fixture-tree\n" * 4).hexdigest()[:12]
         src = Path(self.env["STUDIO_BUILDS"]) / f"code-{code}"

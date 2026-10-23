@@ -256,7 +256,10 @@ fi
 
 # the binary runs with no source present: a short session in a throwaway
 # copy of the studio, from another directory
-probe=$(mktemp -d "${TMPDIR:-$repo/target}/studio-probe.XXXXXX")
+probe_parent=${TMPDIR:-$repo/target}
+mkdir -p "$probe_parent"
+probe=$(mktemp -d "$probe_parent/studio-probe.XXXXXX")
+trap 'rm -rf -- "$probe"' EXIT
 cp -R "$dest/." "$probe/"
 E="$probe/bin/easel"
 (
@@ -288,7 +291,7 @@ if [[ $help_text == *'easel check'* || $help_text == *'easel run'* ]]; then
 fi
 
 echo "exported the $profile studio from $branch ($sha) to $dest"
-echo "  easel: $dest/bin/easel (checked in $probe)"
+echo "  easel: $dest/bin/easel (checked)"
 echo "  notices: $dest/bin/THIRD_PARTY_NOTICES.md"
 echo "  box: ${box:-the default tube box}"
 echo "  notes: $(cd "$dest/notes" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ')"

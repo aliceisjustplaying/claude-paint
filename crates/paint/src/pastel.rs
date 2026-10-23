@@ -1669,6 +1669,18 @@ mod tests {
         c.drawing.as_ref().map_or(0.0, |d| d.cells.iter().enumerate().filter(|&(i, _)| keep(i)).map(|(_, c)| c.loose).sum::<f32>() * a * 1e-3)
     }
 
+    fn crumb_stroke() -> &'static (Canvas, Stick, Laid, std::collections::BTreeSet<usize>) {
+        static STROKE: std::sync::OnceLock<(Canvas, Stick, Laid, std::collections::BTreeSet<usize>)> = std::sync::OnceLock::new();
+        STROKE.get_or_init(|| {
+            let mut c = sheet(600);
+            let mut st = Stick::round([0.05; 3], 0.8, 12.0);
+            let pts = [StrokePoint { x: 300.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }, StrokePoint { x: 700.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }];
+            let out = c.stick_stroke(&mut st, &pts);
+            let touch = contacts(&c, &st, 500.0, 300.0, 700.0, 2.0, 60.0);
+            (c, st, out, touch)
+        })
+    }
+
     /// Crumbs: most of what a contact abrades (SHED) rides under the face
     /// and settles into the paper along and beside it, so a stroke's pastel
     /// lies on half as many pixels again as the stick touches (all the worn
@@ -1678,20 +1690,16 @@ mod tests {
     /// says it laid.
     #[test]
     fn crumbs_spread_a_stroke_beyond_its_contact() {
-        let mut c = sheet(600);
-        let mut st = Stick::round([0.05; 3], 0.8, 12.0);
-        let pts = [StrokePoint { x: 300.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }, StrokePoint { x: 700.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }];
-        let out = c.stick_stroke(&mut st, &pts);
+        let (c, _, out, touch) = crumb_stroke();
         assert!(out.volume_mm3 > 0.0 && out.on_wet == 0.0);
-        let laid = loose_mm3(&c, |_| true);
+        let laid = loose_mm3(c, |_| true);
         assert!((laid - out.volume_mm3).abs() < 1e-4 * out.volume_mm3, "conserved: {laid} in the tooth, {} laid", out.volume_mm3);
-        let touch = contacts(&c, &st, 500.0, 300.0, 700.0, 2.0, 60.0);
         let f = c.window();
         let d = c.drawing.as_ref().unwrap();
         let has: Vec<usize> = (0..d.cells.len()).filter(|&i| d.cells[i].loose > 0.0).collect();
         let (r0, r1) = (touch.iter().map(|i| i / f.w).min().unwrap(), touch.iter().map(|i| i / f.w).max().unwrap());
         let (above, below) = (has.iter().any(|i| i / f.w < r0), has.iter().any(|i| i / f.w > r1));
-        let off_share = loose_mm3(&c, |i| !touch.contains(&i)) / laid;
+        let off_share = loose_mm3(c, |i| !touch.contains(&i)) / laid;
         assert!(2 * has.len() > 3 * touch.len(), "pastel on {} pixels, the stick touched {}", has.len(), touch.len());
         assert!(above && below, "crumbs settle beside the contact on both sides");
         assert!(off_share > 0.4, "crumbs carry pastel off the contact: {off_share}");
@@ -1704,14 +1712,9 @@ mod tests {
     #[test]
     fn crumbs_on_wet_paint_are_lost() {
         let pts = [StrokePoint { x: 300.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }, StrokePoint { x: 700.0, y: 500.0, pose: pose(2.0, 60.0), speed: 50.0 }];
-        let (mut dry, mut wet) = (sheet(600), sheet(600));
-        let mut s1 = Stick::round([0.05; 3], 0.8, 12.0);
-        let mut s2 = s1.clone();
-        // (where the stick touches: from a stroke on a third sheet)
-        let mut probe = sheet(600);
-        let mut s0 = s1.clone();
-        probe.stick_stroke(&mut s0, &pts);
-        let touch = contacts(&probe, &s0, 500.0, 300.0, 700.0, 2.0, 60.0);
+        let (dry, s1, a, touch) = crumb_stroke();
+        let mut wet = sheet(600);
+        let mut s2 = Stick::round([0.05; 3], 0.8, 12.0);
         let f = wet.window();
         let (r0, r1) = (touch.iter().map(|i| i / f.w).min().unwrap(), touch.iter().map(|i| i / f.w).max().unwrap());
         // wet paint everywhere but the contact's rows and one more each side
@@ -1722,9 +1725,8 @@ mod tests {
                 wet.wet.vol[i] = 1.0;
             }
         }
-        let a = dry.stick_stroke(&mut s1, &pts);
         let b = wet.stick_stroke(&mut s2, &pts);
-        assert_eq!(s1, s2, "the stick wears the same");
+        assert_eq!(s1, &s2, "the stick wears the same");
         let (dd, dw) = (dry.drawing.as_ref().unwrap(), wet.drawing.as_ref().unwrap());
         for i in 0..dd.cells.len() {
             if is_wet(i) {
@@ -1733,7 +1735,7 @@ mod tests {
                 assert!(dd.cells[i].loose == dw.cells[i].loose && dd.cells[i].a == dw.cells[i].a, "the dry paper differs at {i}");
             }
         }
-        let beside = loose_mm3(&dry, is_wet);
+        let beside = loose_mm3(dry, is_wet);
         assert!(beside > 0.005 * a.volume_mm3, "crumbs settle beside the contact: {beside} of {}", a.volume_mm3);
         let lost = b.on_wet * (b.volume_mm3 / (1.0 - b.on_wet));
         assert!((a.volume_mm3 - b.volume_mm3 - beside).abs() < 1e-3 * a.volume_mm3, "laid {} vs {} with {beside} beside", a.volume_mm3, b.volume_mm3);

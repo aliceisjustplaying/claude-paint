@@ -1102,7 +1102,7 @@ fn hold_look(s: &Session, name: &str, at: (f32, f32), v: &look::View) -> Result<
     let (len, wide) = (2.0 * blade, blade + 12.0);
     let board_h = wide + 20.0;
     let mut board = Canvas::new(f.full_w.max(16), 1000.0 / board_h, paint::hex("#9aa0a6")).with_size_mm(1000.0 * c.mm_per_unit()).with_engine(c.engine()).with_drain(c.drain()).with_glaze_film(c.engine() >= paint::PIGMENT_MIXER && c.glaze_film());
-    let mut knife = paint::Knife::new(blade);
+    let mut knife = paint::Knife::new(blade).with_engine(c.engine());
     knife.load(paint, full);
     let cy = board_h / 2.0;
     // (the pull starts before the part shown, so the paint comes to the blade's very end)
@@ -2733,7 +2733,7 @@ mod tests {
             let mut board = Canvas::new(1600, 1000.0 / 230.0, paint::hex("#d6d1c7"))
                 .with_size_mm(420.0).with_engine(engine).with_drain(true).with_glaze_film(spectral);
             for _ in 0..3 {
-                let mut knife = paint::Knife::new(34.0);
+                let mut knife = paint::Knife::new(34.0).with_engine(engine);
                 knife.load(paint::Paint::body(paint::hex("#0d0c0c")), 1.0);
                 board.knife(&mut knife, &[(100.0, 140.0), (240.0, 140.0)], (0.3, 0.3), Some(std::f32::consts::FRAC_PI_2), true, 0.0);
             }
@@ -2752,6 +2752,7 @@ mod tests {
             };
             let actual = image::load_from_memory(&actual).unwrap().to_rgb8();
             assert!(image::imageops::crop_imm(&actual, 100, 40, 140, 160).to_image() == image::imageops::crop_imm(&expected, 100, 40, 140, 160).to_image(), "engine {engine}, film {film}: palette smear");
+            assert!(image::imageops::crop_imm(&actual, 340, 216, 32, 20).to_image() == image::imageops::crop_imm(&expected, 340, 216, 32, 20).to_image(), "engine {engine}, film {film}: palette backing stripe");
             let c = s.canvas().unwrap();
             let mut blade = Canvas::new(1000, 1000.0 / 62.0, paint::hex("#9aa0a6"))
                 .with_size_mm(1000.0 * c.mm_per_unit()).with_engine(engine).with_drain(true).with_glaze_film(spectral);

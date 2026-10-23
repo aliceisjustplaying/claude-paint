@@ -96,7 +96,7 @@ fn lose(lua: &Lua, st: &S, m: Value, o: Option<Table>) -> Result<usize> {
             plans.push((vec![start, mid, end], from, into));
         }
     }
-    let mut held = Held::new(tool, seed ^ 0x5EED);
+    let mut held = Held::new(tool, seed ^ 0x5EED).with_engine(tubes.engine);
     let n = plans.len();
     for (pts, _from, _into) in plans {
         // a light load from the pile (remixed a little: a pile knifed by hand is uneven)

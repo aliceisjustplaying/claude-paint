@@ -1,0 +1,27 @@
+{
+  "round": 6,
+  "revision": 1,
+  "dark_fit_samples": ["03D", "03E", "04D", "04E", "05D", "05E", "06D", "06E", "08B", "09D", "09E", "10D", "10E", "11D", "11E", "14D", "14E", "16B", "16C"],
+  "dark_focus_samples": ["04E", "10D", "11E"],
+  "dark_reporting": "All 18 previously omitted non-primary black mixtures plus trace-black/lead-white 08B are now fitted, not held out. No black-containing source row remains held out. Report all 82 modeled source rows with status and before/after error. Revised12 remains disjoint from coefficient fitting, but its historical and current selection exposure means it is not a newly blind test.",
+  "declaration": "2026-10-23, after the STIL-273 audit exposed the omitted dark rows and before the engine-9 volume-fit trials. The model and objective were selected adaptively using reported scores. No newly blind validation is claimed.",
+  "reason": "Retain the historical round-5 fit and revised12 partitions, add every remaining black-containing source row to fitting and convert the source mass recipes to estimated wet-paint volumes before fitting additive physical K/S. Never fit revised12 spectra. Report all dark rows as fitted and every modeled source row, including historical selection exposure and unused pure Prussian13A.",
+  "additional_fit_samples": {
+    "BariumSulphate": ["16D", "16E", "16F"],
+    "CalciumCarbonate": ["17D", "17F"],
+    "PrussianBlue": ["13F"]
+  },
+  "pure_samples_reported_apart": ["13A"],
+  "moved_from_round3_test": ["13F", "16D", "16F", "17D", "17F"],
+  "moved_from_selection_touched": ["16E"],
+  "round3_test_set": [
+    "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
+    "13C", "13F", "13G", "14C", "16D", "16F", "17D", "17F"
+  ],
+  "test_set": [
+    "03C", "04C", "04F", "06C", "08D", "08E", "08F", "08G", "10C",
+    "13C", "13G", "14C"
+  ],
+  "prior_selection_exposure": ["08E"],
+  "reporting": "Report the complete old 17-sample test and revised 12-sample test. Mark 13F, 16D, 16F, 17D and 17F as fitted, not held out. Also mark 16E as fitted rather than merely selection-touched. Report unused pure 13A apart. The original eleven fit samples remain fitted and the other four selection-touched samples remain reported separately."
+}

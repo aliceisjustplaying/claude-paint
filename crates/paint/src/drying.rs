@@ -1356,7 +1356,7 @@ mod tests {
         let inventory = |c: &Canvas, coats: &[f32]| {
             let mut values = (0..crate::wet::LAT).map(|pig| coats.iter().enumerate().map(|(i, &v)| {
                 v as f64 * c.wet.lat[i][pig] as f64 * c.wet.hide[i][0] as f64
-                    / crate::mixer::scattering(&c.wet.lat[i]).max(1e-9) as f64
+                    / crate::mixer::scattering9(&c.wet.lat[i]).max(1e-9) as f64
             }).sum::<f64>()).collect::<Vec<_>>();
             values.extend((0..p.tubes.len()).map(|tube| coats.iter().enumerate().map(|(i, &v)| {
                 v as f64 * c.wet.lat[i].parts.iter().filter(|p| p.0 == tube).map(|p| p.1 as f64).sum::<f64>()

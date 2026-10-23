@@ -2,7 +2,9 @@
 # requires-python = ">=3.12"
 # dependencies = ["numpy==2.4.2", "scipy==1.17.1", "pillow==12.3.0"]
 # ///
-"""Score the built mixer on the old round-3 and declared round-5 measured-paint splits.
+"""Score the built mixer; --engine9 reports every modeled source row using physical volume recipes.
+
+Without --engine9 this preserves the historical round-3/round-5 mass-law score for legacy tables.
 
 Every two-paint mixture in the Revigo data whose pure paints are measured is predicted from the two paints'
 own measured K and S when the calibration encoding is measured-ks, or from their measured masstone colours
@@ -64,6 +66,11 @@ def sheet(path, groups):
 
 
 def main():
+    if "--engine9" in sys.argv:
+        sys.argv.remove("--engine9")
+        from pigment_mixer_score9 import main as score9
+        score9()
+        return
     parser = argparse.ArgumentParser()
     parser.add_argument("mixpairs")
     parser.add_argument("--strengths", required=True)
@@ -78,6 +85,8 @@ def main():
     provenance = json.loads((ROOT / "crates/paint/src/mixer/primaries.json").read_text())
     pure, pairs, fit, test, selected = split_for_strengths(samples, spectra, provenance["primaries"], set(sum(provenance["samples_used"].values(), [])))
     calibration = json.loads(Path(args.strengths).read_text())
+    if calibration.get("encoding") == "volume-ks":
+        parser.error("volume-ks tables require --engine9; legacy scoring uses historical mass strengths")
     reference_calibration = json.loads(Path(args.reference_strengths).read_text()) if args.reference_strengths else calibration
     assert calibration.get("old_test_set", calibration["test_set"]) == test, "the strengths file was fitted on another split"
     colour = lambda n: measured_colour(spectra, pure[n], matrix) if n != "BoneBlack" else np.zeros(3)

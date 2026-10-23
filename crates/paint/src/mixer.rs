@@ -9,14 +9,21 @@
 use crate::color::{Rgb, linear_to_srgb};
 
 mod proxy;
+mod researched;
+#[cfg(test)]
+mod calibration;
 
-pub const LATENT_SIZE: usize = 21;
+pub const LEGACY_LATENT_SIZE: usize = 21;
+pub const LATENT_SIZE: usize = LEGACY_LATENT_SIZE + researched::RESEARCHED_TUBES.len();
 const PRIMARIES: usize = 5;
-const PIGMENTS: usize = LATENT_SIZE - 3;
+const PIGMENTS: usize = 18;
 const INVERSE_SIZE: usize = 33;
 const INVERSE: &[u8; INVERSE_SIZE * INVERSE_SIZE * INVERSE_SIZE * 2 * (PRIMARIES - 1)] = include_bytes!("mixer/inverse.bin");
 const COEFFICIENT_BYTES: usize = PIGMENTS * 2 * crate::spectral::N * 4;
 const MEASURED: &[u8; COEFFICIENT_BYTES + PIGMENTS * 4] = include_bytes!("mixer/measured.bin");
+const CALIBRATED: &[u8; COEFFICIENT_BYTES + PIGMENTS * 4] = include_bytes!("mixer/calibrated.bin");
+const DENSITIES: &[u8; PIGMENTS * 4] = include_bytes!("mixer/calibrated-densities.bin");
+const RESEARCHED: &[u8; researched::RESEARCHED_TUBES.len() * 2 * crate::spectral::N * 4] = include_bytes!("mixer/researched.bin");
 const REFERENCE: &[u8; crate::spectral::N * 4] = include_bytes!("mixer/reference.bin");
 const NAMES: [&str; PIGMENTS] = [
     "CobaltBlue", "ChromeYellowOtero", "Eosin", "BoneBlack", "ZincWhite",
@@ -53,6 +60,14 @@ fn tube_pigment(name: &str) -> Option<&'static str> {
 
 pub fn tube(name: &str) -> Option<[f32; LATENT_SIZE]> {
     measured(tube_pigment(name)?)
+}
+
+pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> {
+    if let Some(lat) = tube(name) { return Some(lat); }
+    let i = researched::RESEARCHED_TUBES.iter().position(|&n| n == name)?;
+    let mut lat = [0.0; LATENT_SIZE];
+    lat[LEGACY_LATENT_SIZE + i] = 1.0;
+    Some(lat)
 }
 
 pub fn tube_strength(name: &str) -> Option<f32> {
@@ -102,33 +117,93 @@ pub fn identity9() -> u64 {
     hash.update(identity().to_le_bytes());
     hash.update(b"extensive-pigment-and-residual/volume-strength/unit-measured-tubes/v2");
     hash.update(b"opacity-constrained-rgb-tube-proxies/joint-earth-tints/catalog-inputs/v4");
+    hash.update(b"physical-volume-ks/dark-calibration/retained-backing/v2");
+    hash.update(CALIBRATED);
+    hash.update(DENSITIES);
+    hash.update(b"independent-researched-ks/legacy18-residual3-extension/tuple-f32/v1");
+    hash.update((LATENT_SIZE as u64).to_le_bytes());
+    for name in researched::RESEARCHED_TUBES {
+        hash.update((name.len() as u64).to_le_bytes());
+        hash.update(name.as_bytes());
+    }
+    hash.update(RESEARCHED);
     u64::from_le_bytes(hash.finalize()[..8].try_into().unwrap())
 }
 
-pub fn encode9(rgb: &Rgb) -> [f32; LATENT_SIZE] { encode(rgb) }
+pub fn encode9(rgb: &Rgb) -> [f32; LATENT_SIZE] {
+    let mut lat = encode(rgb);
+    lat[PIGMENTS..].fill(0.0);
+    let base = decode9(&lat);
+    for k in 0..3 {
+        lat[PIGMENTS + k] = rgb[k] - base[k];
+    }
+    lat
+}
 
 pub fn encode_tube9(rgb: &Rgb, hiding: f32) -> [f32; LATENT_SIZE] { proxy::encode(*rgb, hiding) }
 
-pub fn tube9(name: &str) -> Option<[f32; LATENT_SIZE]> { tube(name).or_else(|| proxy::tube(name)) }
+pub fn tube_strength9(name: &str) -> Option<f32> {
+    if researched::RESEARCHED_TUBES.contains(&name) && tube_pigment(name).is_none() { return Some(1.0); }
+    let name = tube_pigment(name)?;
+    let p = NAMES.iter().position(|&n| n == name)?;
+    let offset = COEFFICIENT_BYTES + p * 4;
+    Some(f32::from_le_bytes(CALIBRATED[offset..offset + 4].try_into().unwrap()))
+}
 
-pub fn tube_strength9(name: &str) -> Option<f32> { tube_pigment(name).map(|_| 1.0) }
+/// Estimated wet-paint density in g/cm³, not a Revigo density measurement.
+/// Inputs and their sources are in `scripts/pigment_densities.json`.
+pub fn measured_density9(name: &str) -> Option<f32> {
+    let p = NAMES.iter().position(|&n| n == name)?;
+    Some(f32::from_le_bytes(DENSITIES[p * 4..p * 4 + 4].try_into().unwrap()))
+}
 
 fn normalized9(lat: &[f32; LATENT_SIZE]) -> [f32; LATENT_SIZE] {
-    let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>();
+    let total = lat[..PIGMENTS].iter().chain(&lat[LEGACY_LATENT_SIZE..]).map(|c| c.max(0.0)).sum::<f32>();
     if total <= 0.0 { return [0.0; LATENT_SIZE]; }
     lat.map(|c| c / total)
 }
 
-pub fn decode9(lat: &[f32; LATENT_SIZE]) -> Rgb { decode(&normalized9(lat)) }
+pub fn decode9(lat: &[f32; LATENT_SIZE]) -> Rgb {
+    let lat = normalized9(lat);
+    let p = pigment9(&lat);
+    let reflectance = std::array::from_fn(|w| {
+        let rg = f32::from_le_bytes(REFERENCE[w * 4..w * 4 + 4].try_into().unwrap());
+        outside(film(p.k[w], p.s[w], rg))
+    });
+    let base = crate::spectral::to_rgb(&reflectance).map(|v| v.clamp(0.0, 1.0));
+    std::array::from_fn(|k| (base[k] + lat[PIGMENTS + k]).clamp(0.0, 1.0))
+}
 
 pub fn pigment9(lat: &[f32; LATENT_SIZE]) -> crate::spectral::SpectralPigment {
-    let total = lat[..PIGMENTS].iter().map(|c| c.max(0.0)).sum::<f32>();
-    let mut p = pigment(lat);
-    for w in 0..crate::spectral::N {
-        p.k[w] *= total;
-        p.s[w] *= total;
+    static COEFFICIENTS: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; PIGMENTS]> = std::sync::OnceLock::new();
+    let coefficients = COEFFICIENTS.get_or_init(|| std::array::from_fn(|p| std::array::from_fn(|ks| std::array::from_fn(|w| {
+        let offset = ((p * 2 + ks) * crate::spectral::N + w) * 4;
+        f32::from_le_bytes(CALIBRATED[offset..offset + 4].try_into().unwrap())
+    }))));
+    let mut absorption = [0.0; crate::spectral::N];
+    let mut scattering = [0.0; crate::spectral::N];
+    for p in 0..PIGMENTS {
+        let c = lat[p].max(0.0);
+        if c == 0.0 { continue; }
+        for w in 0..crate::spectral::N {
+            absorption[w] += c * coefficients[p][0][w];
+            scattering[w] += c * coefficients[p][1][w];
+        }
     }
-    p
+    static EXTRA: std::sync::OnceLock<[[crate::spectral::Spectrum; 2]; researched::RESEARCHED_TUBES.len()]> = std::sync::OnceLock::new();
+    let extra = EXTRA.get_or_init(|| std::array::from_fn(|p| std::array::from_fn(|ks| std::array::from_fn(|w| {
+        let offset = ((p * 2 + ks) * crate::spectral::N + w) * 4;
+        f32::from_le_bytes(RESEARCHED[offset..offset + 4].try_into().unwrap())
+    }))));
+    for (p, coefficients) in extra.iter().enumerate() {
+        let c = lat[LEGACY_LATENT_SIZE + p].max(0.0);
+        if c == 0.0 { continue; }
+        for w in 0..crate::spectral::N {
+            absorption[w] += c * coefficients[0][w];
+            scattering[w] += c * coefficients[1][w];
+        }
+    }
+    crate::spectral::SpectralPigment { k: absorption, s: scattering }
 }
 
 pub fn scattering9(lat: &[f32; LATENT_SIZE]) -> f32 {
@@ -136,7 +211,7 @@ pub fn scattering9(lat: &[f32; LATENT_SIZE]) -> f32 {
 }
 
 pub fn over9(lat: &[f32; LATENT_SIZE], scatter: f32, under: Rgb, coats: f32) -> Rgb {
-    over(&normalized9(lat), scatter, under, coats)
+    Backing::default().under(under).over(&normalized9(lat), scatter, coats, 1.0).color
 }
 
 pub fn decode(lat: &[f32; LATENT_SIZE]) -> Rgb {
@@ -218,7 +293,7 @@ impl Backing {
             return self;
         }
         let cover = cover.min(1.0);
-        let p = pigment(lat);
+        let p = pigment9(lat);
         let mean_s = p.s.iter().sum::<f32>() / crate::spectral::N as f32;
         let x = (coats / cover).min(1e4) * scatter / mean_s.max(1e-12);
         let mut transmission = [0.0; crate::spectral::N];
@@ -443,7 +518,7 @@ mod tests {
             palette.glaze_film = spectral;
             for (i, tube) in palette.tubes.iter().enumerate() {
                 let Some(latent) = super::tube(tube.name) else { continue };
-                let measured = pigment(&latent);
+                let measured = pigment9(&latent);
                 for medium in [0.0, 0.8] {
                     let paint = palette.pile(vec![(i, 1.0)]).paint(medium);
                     let actual = pigment9(&paint.latent());
@@ -453,6 +528,150 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn researched_tubes_have_independent_exact_spectra() {
+        for (i, name) in researched::RESEARCHED_TUBES.iter().enumerate() {
+            assert!(tube(name).is_none());
+            let lat = tube9(name).unwrap();
+            assert_eq!(lat[LEGACY_LATENT_SIZE + i], 1.0);
+            assert_eq!(lat.iter().filter(|&&c| c != 0.0).count(), 1);
+            assert_eq!(tube_strength9(name), Some(1.0));
+            let pigment = pigment9(&lat);
+            for (ks, actual) in [pigment.k, pigment.s].iter().enumerate() {
+                for (w, value) in actual.iter().enumerate() {
+                    let offset = ((i * 2 + ks) * crate::spectral::N + w) * 4;
+                    let expected = f32::from_le_bytes(RESEARCHED[offset..offset + 4].try_into().unwrap());
+                    assert_eq!(value.to_bits(), expected.to_bits(), "{name}, {ks}, {w}");
+                    assert!(value.is_finite() && *value >= 0.0);
+                }
+            }
+            let legacy = super::pigment(&lat);
+            assert!(legacy.k.iter().chain(&legacy.s).all(|&c| c == 0.0));
+        }
+        for name in NAMES { assert_eq!(measured(name).unwrap()[LEGACY_LATENT_SIZE..], [0.0; LATENT_SIZE - LEGACY_LATENT_SIZE]); }
+        for name in ["lead white", "Prussian blue", "vermilion"] { assert_eq!(tube9(name), tube(name)); }
+        let mut residual = tube9("yellow ochre").unwrap();
+        residual[PIGMENTS..LEGACY_LATENT_SIZE].copy_from_slice(&[0.02, -0.01, 0.03]);
+        let diluted = residual.map(|c| c * 0.25);
+        let expected = decode9(&residual);
+        let actual = decode9(&diluted);
+        assert!((0..3).all(|k| (actual[k] - expected[k]).abs() < 2e-6));
+    }
+
+    #[test]
+    fn researched_tubes_keep_their_spectra_in_wet_and_retained_films() {
+        let mut palette = crate::Palette::new("researched films", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let white = palette.tubes.iter().position(|t| t.name == "lead white").unwrap();
+        for name in researched::RESEARCHED_TUBES {
+            let tube = palette.tubes.iter().position(|t| t.name == name).unwrap();
+            for fraction in [0.25, 1.0] {
+                for medium in [0.0, 0.8] {
+                    let paint = palette.pile(vec![(tube, fraction), (white, 1.0 - fraction)]).paint(medium);
+                    for under in [[0.02; 3], [0.8; 3]] {
+                        let expected = paint.over(under, 0.5);
+                        for passes in [1, 4] {
+                            let mut canvas = crate::Canvas::new_window(2, 1.0, under, None)
+                                .with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+                            for _ in 0..passes {
+                                canvas.wet.vol.fill(0.5 / passes as f32);
+                                canvas.wet.lat.fill(paint.latent());
+                                canvas.wet.hide.fill(paint.prop());
+                                canvas.wet.dirty = Some((0, 0, 2, 2));
+                                let wet = canvas.look_px(0);
+                                canvas.dry();
+                                assert_eq!(wet, canvas.px[0]);
+                            }
+                            assert!((0..3).all(|k| (canvas.px[0][k] - expected[k]).abs() < 2e-6), "{name}, fraction={fraction}, medium={medium}, passes={passes}: {:?} != {expected:?}", canvas.px[0]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn researched_spectra_mix_by_volume_and_dilute_through_knives_and_wet_paint() {
+        let mut palette = crate::Palette::new("extension transport", crate::palette::catalog());
+        palette.engine = crate::PIGMENT_MIXER;
+        palette.glaze_film = true;
+        let at = |name| palette.tubes.iter().position(|t| t.name == name).unwrap();
+        let a = palette.pile(vec![(at("yellow ochre"), 1.0)]).paint(0.6);
+        let b = palette.pile(vec![(at("vermilion"), 1.0)]).paint(0.0);
+        assert!(a.parts.is_empty() && b.parts.is_empty());
+        let expected: [f32; LATENT_SIZE] = std::array::from_fn(|k| (a.latent()[k] + 3.0 * b.latent()[k]) / 4.0);
+        let pa = pigment9(&a.latent());
+        let pb = pigment9(&b.latent());
+        let mixed = pigment9(&expected);
+        for w in 0..crate::spectral::N {
+            assert!((mixed.k[w] - (pa.k[w] + 3.0 * pb.k[w]) / 4.0).abs() < 2e-6);
+            assert!((mixed.s[w] - (pa.s[w] + 3.0 * pb.s[w]) / 4.0).abs() < 2e-6);
+        }
+        let pure = palette.pile(vec![(at("yellow ochre"), 1.0)]).paint(0.0);
+        let diluted = pigment9(&a.latent());
+        let undiluted = pigment9(&pure.latent());
+        for w in 0..crate::spectral::N {
+            assert!((diluted.k[w] - 0.4 * undiluted.k[w]).abs() < 2e-6);
+            assert!((diluted.s[w] - 0.4 * undiluted.s[w]).abs() < 2e-6);
+        }
+        for under in [[0.02; 3], [0.8; 3]] {
+            let actual = a.over(under, 1.0);
+            let expected = pure.over(under, 0.4);
+            assert!((0..3).all(|k| (actual[k] - expected[k]).abs() < 2e-6));
+        }
+        let mut knife = crate::Knife::new(200.0);
+        knife.load(a.clone(), 0.1);
+        knife.load(b.clone(), 0.3);
+        let carried = knife.paint().unwrap();
+        assert!((0..LATENT_SIZE).all(|k| (carried.latent()[k] - expected[k]).abs() < 2e-6));
+        let mut vol = 0.0;
+        let mut lat = crate::wet::Latent::default();
+        let mut prop = [0.0; 10];
+        crate::wet::mix_into(&mut vol, &mut lat, &mut prop, 1.0, &a.latent(), a.prop());
+        crate::wet::mix_into(&mut vol, &mut lat, &mut prop, 3.0, &b.latent(), b.prop());
+        assert_eq!(vol, 4.0);
+        assert!((0..LATENT_SIZE).all(|k| (lat[k] - expected[k]).abs() < 2e-6));
+        let mut canvas = crate::Canvas::new_window(16, 1.0, [0.3; 3], None).with_engine(crate::PIGMENT_MIXER).with_glaze_film(true);
+        canvas.knife(&mut knife, &[(300.0, 500.0), (700.0, 500.0)], (0.5, 0.5), Some(0.0), true, 0.0);
+        assert!(canvas.wet_total() > 0.0);
+        for (i, latent) in canvas.wet.lat.iter().enumerate().filter(|(i, _)| canvas.wet.vol[*i] > 0.0) {
+            assert!((0..LATENT_SIZE).all(|k| (latent[k] - expected[k]).abs() < 2e-6), "wet pixel {i}");
+        }
+        let mut bytes = Vec::new();
+        canvas.write_state(&mut bytes, "extension transport").unwrap();
+        let (restored, _) = crate::Canvas::read_state(&mut &bytes[..]).unwrap();
+        assert_eq!(restored.wet.lat, canvas.wet.lat);
+        assert_eq!(restored.seen(), canvas.seen());
+        let mut again = Vec::new();
+        restored.write_state(&mut again, "extension transport").unwrap();
+        assert_eq!(again, bytes);
+    }
+
+    #[test]
+    fn extension_lanes_leave_legacy_optics_and_palette_construction_unchanged() {
+        let rgb = hex("#365b7e");
+        let legacy = encode(&rgb);
+        let mut extended = legacy;
+        extended[LEGACY_LATENT_SIZE..].fill(2.0);
+        assert_eq!(decode(&legacy), decode(&extended));
+        assert_eq!(pigment(&legacy).k, pigment(&extended).k);
+        assert_eq!(pigment(&legacy).s, pigment(&extended).s);
+        assert_eq!(over(&legacy, 0.7, [0.8; 3], 0.3), over(&extended, 0.7, [0.8; 3], 0.3));
+        let mut palette = crate::Palette::new("legacy extension", crate::palette::catalog());
+        let i = palette.tubes.iter().position(|t| t.name == "yellow ochre").unwrap();
+        for engine in [8, 9, 8] {
+            palette.engine = engine;
+            let lat = palette.pile(vec![(i, 1.0)]).pigment_latent;
+            if engine == 8 {
+                let expected = encode(&palette.tubes[i].color);
+                assert!((0..LATENT_SIZE).all(|k| (lat[k] - expected[k]).abs() < 1e-6));
+                assert!(lat[LEGACY_LATENT_SIZE..].iter().all(|&c| c == 0.0));
+            }
+            else { assert_eq!(lat, tube9("yellow ochre").unwrap()); }
         }
     }
 
@@ -507,7 +726,7 @@ mod tests {
                         canvas.wet.hide.fill(paint.prop());
                         canvas.wet.dirty = Some((0, 0, canvas.f.w, canvas.f.h));
                         let rgb = paint.pigment().over(under, coats);
-                        let measured = over(&pile.pigment_latent, paint.scatter, under, coats);
+                        let measured = if engine >= crate::PIGMENT_MIXER { over9(&expected_latent, paint.scatter, under, coats) } else { over(&pile.pigment_latent, paint.scatter, under, coats) };
                         for k in 0..3 {
                             optics_difference = optics_difference.max((measured[k] - rgb[k]).abs());
                         }

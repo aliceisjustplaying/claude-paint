@@ -374,6 +374,8 @@ pub struct Held {
     /// Painting on a canvas that drains (`Canvas::with_drain`): and the
     /// pigment's packing, `Prop`'s last five (`with_packing`).
     shows_packing: bool,
+    #[cfg_attr(feature = "replay-effects", serde(skip))]
+    volume_latent: bool,
     /// Dry pastel held in the bristles, mg (`Canvas::dust_pastel`, the
     /// paper-and-pastel switch's `b:dust`); a wipe takes its share off.
     /// Printed only when there is some, so a brush that never brushed pastel
@@ -506,7 +508,7 @@ impl Held {
                 }
             })
             .collect();
-        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, pastel_mg: 0.0 }
+        Held { tool, bristles, shows_solvent: false, shows_oil: false, shows_packing: false, volume_latent: false, pastel_mg: 0.0 }
     }
 
     /// The brush of a painting with engine `v`: from engine 3 its `Debug`
@@ -515,6 +517,7 @@ impl Held {
     pub fn with_engine(mut self, v: u32) -> Self {
         self.shows_solvent = v >= 3;
         self.shows_oil = v >= 4;
+        self.volume_latent = v >= crate::PIGMENT_MIXER;
         self
     }
 
@@ -544,6 +547,7 @@ impl Held {
     /// canvas of engine 3 takes it: `Canvas::drag` and `touch` panic before
     /// drawing otherwise.
     pub fn load(&mut self, paint: Paint, amount: f32) {
+        let paint = if self.volume_latent { paint.with_engine(crate::PIGMENT_MIXER) } else { paint };
         let lat = paint.latent();
         let full = self.full();
         let scatter = paint.scatter();
@@ -572,6 +576,7 @@ impl Held {
     /// colors then come off side by side within one stroke and mingle as they
     /// go. With `Part::ALL` this is `load`.
     pub fn load_part(&mut self, paint: Paint, amount: f32, part: &Part) {
+        let paint = if self.volume_latent { paint.with_engine(crate::PIGMENT_MIXER) } else { paint };
         let lat = paint.latent();
         let full = self.full();
         let scatter = paint.scatter();
@@ -2826,6 +2831,58 @@ mod volume_mixing {
     use super::*;
 
     #[test]
+    fn raw_rgb_loads_use_the_tools_engine_before_mixing() {
+        for engine in [1, 2, 3, 4, 5, 7, 8, 9] {
+            let a = Paint::body([0.2, 0.4, 0.7]);
+            let b = Paint::new([0.6, 0.1, 0.2], 0.5, 0.6);
+            let encode = if engine >= crate::PIGMENT_MIXER { crate::mixer::encode9 } else { crate::mixer::encode };
+            let expected: [f32; LAT] = std::array::from_fn(|k| (encode(&a.color)[k] + encode(&b.color)[k]) * 0.5);
+            let mut held = Held::new(Tool::hog_flat(20.0), 17).with_engine(engine);
+            held.load(a.clone(), 0.5);
+            for bristle in &held.bristles {
+                assert_eq!(bristle.lat.color, encode(&a.color), "engine {engine}");
+            }
+            let mut hand = crate::hand::Hand::new((0.0, 0.0), 100.0, 17).with_engine(engine);
+            let taken = hand.take(Tool::hog_flat, 0.2, a.clone(), 0.5);
+            for bristle in &taken.bristles {
+                assert_eq!(bristle.lat.color, encode(&a.color), "hand engine {engine}");
+            }
+            held.load_part(b.clone(), 0.5, &Part::ALL);
+            for bristle in &held.bristles {
+                assert!((0..LAT).all(|k| (bristle.lat[k] - expected[k]).abs() < 2e-6), "engine {engine}");
+            }
+            let mut knife = Knife::new(20.0).with_engine(engine);
+            knife.load(a.clone(), 0.5);
+            let loaded = knife.paint().unwrap();
+            assert_eq!(loaded.latent().color, encode(&a.color), "knife engine {engine}");
+            assert!((0..3).all(|k| (loaded.color[k] - a.color[k]).abs() < 2e-6));
+            knife.load(b, 0.5);
+            assert!((0..LAT).all(|k| (knife.lat[k] - expected[k]).abs() < 2e-6));
+            let mut canvas = Canvas::new(2, 1.0, [0.8; 3]).with_engine(engine);
+            canvas.wet.vol.fill(1.0);
+            canvas.wet.lat.fill(loaded.latent());
+            canvas.wet.hide.fill(loaded.prop());
+            let actual = canvas.look_px(0);
+            let preview = a.over([0.8; 3], 1.0);
+            assert!((0..3).all(|k| (actual[k] - preview[k]).abs() < 2e-6), "engine {engine}: {actual:?} != {preview:?}");
+            for stipple in [false, true] {
+                let mut canvas = Canvas::new(64, 1.0, [0.8; 3]).with_engine(engine);
+                let mask = crate::Mask::from_fn(canvas.f, |_, _| 1.0);
+                let rgb = a.color;
+                if stipple {
+                    canvas.stipple(&mask, &crate::Stipple::new(Tool::hog_flat(100.0)).color(move |_, _| rgb).jitter(0.0, 0.0).coverage(|_, _| 1.0), 17);
+                } else {
+                    canvas.work(&mask, &crate::Handling::new(Tool::hog_flat(100.0)).color(move |_, _| rgb).jitter(0.0, 0.0).coverage(1.0), 17);
+                }
+                assert!(canvas.wet_total() > 0.0);
+                for (i, lat) in canvas.wet.lat.iter().enumerate().filter(|(i, _)| canvas.wet.vol[*i] > 0.0) {
+                    assert!((0..LAT).all(|k| (lat[k] - encode(&rgb)[k]).abs() < 2e-6), "engine {engine}, stipple {stipple}, pixel {i}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn palette_tools_and_wet_exchange_keep_the_same_extensive_pigments() {
         let mut palette = crate::Palette::new("mixing", crate::palette::catalog());
         palette.engine = 9;
@@ -2939,6 +2996,10 @@ impl Knife {
     pub fn new(width: f32) -> Self {
         Knife { width: if width.is_finite() { width.clamp(1.0, 1000.0) } else { 1.0 }, vol: 0.0, solvent: 0.0, lat: Latent::default(), hide: [0.0; 10], cure: 0.0, shows_packing: false, spectral_films: false, volume_latent: false }
     }
+    pub fn with_engine(mut self, engine: u32) -> Self {
+        self.volume_latent = engine >= crate::PIGMENT_MIXER;
+        self
+    }
     /// The knife of a painting whose canvas drains (`Canvas::with_drain`):
     /// its `Debug` gives the paint's packing too.
     pub fn with_packing(mut self, on: bool) -> Self {
@@ -2957,6 +3018,7 @@ impl Knife {
             return;
         }
         let liquid = amount * self.full();
+        let paint = if self.volume_latent { paint.with_engine(crate::PIGMENT_MIXER) } else { paint };
         self.volume_latent = paint.volume_latent;
         let v = liquid * (1.0 - paint.thinner);
         if v > 0.0 {

@@ -56,9 +56,11 @@ fn public_palette_engine_changes_and_clones_keep_the_universal_cache() {
             let tube = &p.tubes[i];
             let strength = if engine >= PIGMENT_MIXER { mixer::tube_strength9(tube.name).unwrap_or(tube.strength) } else { tube.strength };
             let weight = fraction * strength;
-            let latent = (if engine >= PIGMENT_MIXER { mixer::tube9(tube.name) } else { mixer::tube(tube.name) }).unwrap_or_else(|| {
-                if engine >= PIGMENT_MIXER { mixer::encode_tube9(&tube.color, tube.hiding) } else { mixer::encode(&tube.color) }
-            });
+            let latent = if engine >= PIGMENT_MIXER {
+                mixer::tube9(tube.name).unwrap_or_else(|| mixer::encode_tube9(&tube.color, tube.hiding))
+            } else {
+                mixer::tube(tube.name).unwrap_or_else(|| mixer::encode(&tube.color))
+            };
             for k in 0..mixer::LATENT_SIZE { expected[k] += latent[k] * weight; }
             total += weight;
         }
@@ -113,9 +115,20 @@ fn engine_switches_keep_the_universal_pigment_representation() {
     let c = painted(5);
     let latent = floats(&c, "wet.lat");
     let colors = c.seen();
+    let older = painted(5).with_engine(8);
+    assert_eq!(floats(&older, "wet.lat"), latent);
+    assert_eq!(older.seen(), colors);
     let switched = c.with_engine(PIGMENT_MIXER);
-    assert_eq!(floats(&switched, "wet.lat"), latent);
-    assert_eq!(switched.seen(), colors);
+    let expanded = floats(&switched, "wet.lat");
+    assert_eq!(latent.len() % mixer::LEGACY_LATENT_SIZE, 0);
+    assert_eq!(expanded.len(), latent.len() / mixer::LEGACY_LATENT_SIZE * mixer::LATENT_SIZE);
+    for (new, old) in expanded.chunks_exact(mixer::LATENT_SIZE).zip(latent.chunks_exact(mixer::LEGACY_LATENT_SIZE)) {
+        assert_eq!(&new[..mixer::LEGACY_LATENT_SIZE], old);
+        assert!(new[mixer::LEGACY_LATENT_SIZE..].iter().all(|&v| v == 0.0));
+    }
+    let independent = painted(PIGMENT_MIXER);
+    assert_eq!(expanded, floats(&independent, "wet.lat"));
+    assert_eq!(switched.seen(), independent.seen());
     assert_eq!(&save(&switched)[..8], b"PAINTC19");
 }
 

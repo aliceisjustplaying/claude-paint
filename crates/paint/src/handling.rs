@@ -985,10 +985,11 @@ impl Canvas {
         if hd.blender && self.blend_feather {
             self.receptive = Some(self.receptive(&tool));
         }
+        let engine = self.engine;
         self.paint_pass(pass, hd.dip_with.is_some(), |surf, ti, first_id| {
             // (a blender lays back paint it lifted: it mixes as it always did)
             let surf = if hd.blender { crate::bristle::Surf { skim: 0.0, ..surf } } else { surf };
-            let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9));
+            let mut held = Held::new(tool.clone(), seed ^ 0x5EED ^ (ti as u64).wrapping_mul(0x9E37_79B9)).with_engine(engine);
             let mut scratch = Vec::new();
             let mut b: crate::bristle::Bounds = None;
             let mut k = 0u32;
@@ -998,7 +999,7 @@ impl Canvas {
                     first_id.wrapping_add(k - 1)
                 });
                 if p.fresh {
-                    held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64);
+                    held = Held::new(p.tool.clone().unwrap_or_else(|| tool.clone()), seed ^ 0xF4E5 ^ (p.pts[0].0.to_bits() as u64) << 20 ^ p.pts[0].1.to_bits() as u64).with_engine(engine);
                 }
                 if let Some(paint) = p.dip.clone() {
                     if hd.blender {

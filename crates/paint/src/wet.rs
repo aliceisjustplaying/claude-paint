@@ -26,10 +26,11 @@ use crate::color::{Rgb, luminance};
 use crate::pigment::{Pigment, hiding_of, scatter_for};
 
 pub const LAT: usize = crate::mixer::LATENT_SIZE;
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "replay-effects", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Latent {
+    #[cfg_attr(feature = "replay-effects", serde(with = "latent_array"))]
     pub color: [f32; LAT],
     pub parts: Vec<(usize, f32)>,
     #[cfg_attr(feature = "replay-effects", serde(skip))]
@@ -44,9 +45,68 @@ pub(crate) struct Layer {
     pub(crate) hide: Prop,
 }
 
+impl Default for Latent {
+    fn default() -> Self { Self::from_color([0.0; LAT]) }
+}
+
+#[cfg(test)]
+mod latent_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_debug_keeps_twenty_one_lanes() {
+        let latent = Latent::default();
+        assert_eq!(format!("{latent:?}"), format!("{:?}", [0.0f32; crate::mixer::LEGACY_LATENT_SIZE]));
+        let mut extended = latent;
+        extended.color[LAT - 1] = 1.0;
+        assert_eq!(format!("{extended:?}"), format!("{:?}", extended.color));
+    }
+
+    #[cfg(feature = "replay-effects")]
+    #[test]
+    fn expanded_tuple_deserialization_is_safe_and_rejects_short_input() {
+        use serde::de::value::{Error, SeqDeserializer};
+        let color: [f32; LAT] = std::array::from_fn(|i| i as f32 * 0.01);
+        let decoded = latent_array::deserialize(SeqDeserializer::<_, Error>::new(color.into_iter())).unwrap();
+        assert_eq!(decoded, color);
+        let short = SeqDeserializer::<_, Error>::new([0.0f32; crate::mixer::LEGACY_LATENT_SIZE].into_iter());
+        assert!(latent_array::deserialize(short).is_err());
+    }
+}
+
+#[cfg(feature = "replay-effects")]
+mod latent_array {
+    use super::LAT;
+    use serde::{Deserializer, Serializer, de::{Error, SeqAccess, Visitor}, ser::SerializeTuple};
+
+    pub fn serialize<S: Serializer>(color: &[f32; LAT], serializer: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = serializer.serialize_tuple(LAT)?;
+        for value in color { tuple.serialize_element(value)?; }
+        tuple.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[f32; LAT], D::Error> {
+        struct Array;
+        impl<'de> Visitor<'de> for Array {
+            type Value = [f32; LAT];
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "{LAT} latent floats") }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut color = [0.0; LAT];
+                for (i, value) in color.iter_mut().enumerate() {
+                    *value = seq.next_element()?.ok_or_else(|| A::Error::invalid_length(i, &self))?;
+                }
+                Ok(color)
+            }
+        }
+        deserializer.deserialize_tuple(LAT, Array)
+    }
+}
+
 impl std::fmt::Debug for Latent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.parts.is_empty() { self.color.fmt(f) } else { f.debug_tuple("Latent").field(&self.color).field(&self.parts).finish() }
+        let width = if self.color[crate::mixer::LEGACY_LATENT_SIZE..].iter().all(|&c| c == 0.0) { crate::mixer::LEGACY_LATENT_SIZE } else { LAT };
+        let color = &self.color[..width];
+        if self.parts.is_empty() { color.fmt(f) } else { f.debug_tuple("Latent").field(&color).field(&self.parts).finish() }
     }
 }
 
@@ -254,6 +314,12 @@ impl Paint {
     }
     pub fn scumble(color: Rgb) -> Self {
         Paint::new(color, 0.5, 0.6)
+    }
+    pub fn with_engine(mut self, engine: u32) -> Self {
+        if self.pigment_latent.is_none() {
+            self.volume_latent = engine >= crate::PIGMENT_MIXER;
+        }
+        self
     }
     /// This paint with its scattering set so one coat hides `hiding`
     /// (the masstone, stiffness and drying rate stay).

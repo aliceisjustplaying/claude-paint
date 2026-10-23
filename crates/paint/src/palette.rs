@@ -1017,7 +1017,7 @@ impl Palette {
     /// (a pastel stick, a toned sheet's pulp): `dry::dry_color` from each
     /// tube's masstone, scattering in oil and refractive index.
     pub fn dry_color(&self, parts: &[(usize, f32)]) -> crate::Rgb {
-        if self.engine >= crate::PIGMENT_MIXER && parts.iter().any(|&(i, _)| crate::mixer::tube(self.tubes[i].name).is_some()) {
+        if self.engine >= crate::PIGMENT_MIXER {
             let pigment = |i: usize| crate::mixer::tube(self.tubes[i].name).map_or_else(
                 || crate::spectral::SpectralPigment::masstone(self.tubes[i].color, self.scat[i]),
                 |lat| crate::mixer::pigment(&lat).scaled(crate::COAT_UM / 100.0),

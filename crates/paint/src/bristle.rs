@@ -920,7 +920,7 @@ impl Surf {
             for k in 0..LAT {
                 l[k] += (lat[k] - l[k]) * a;
             }
-            l.blend_parts(lat, a);
+            l.blend_contact_parts(lat, a, *self.cover.add(i));
             // (the drain switch: paint laid is fluid however packed it was
             // where the brush took it up; the film's packed share, by
             // volume, thins)

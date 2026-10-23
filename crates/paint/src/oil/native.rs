@@ -189,6 +189,34 @@ mod tests {
     }
 
     #[test]
+    fn pointed_brush_retains_actual_contact_coverage() {
+        let mut canvas = canvas(32);
+        let mut held = Held::new(Tool {
+            point: 1.0,
+            bristles: 1,
+            hair: 0.2,
+            pickup: 0.0,
+            push: 0.0,
+            ..Tool::round_sable(50.0)
+        }, 4).with_engine(9);
+        held.load(paint(), 1.0);
+        let contact = canvas.with_native_material(|canvas| {
+            canvas.drag(&mut held, &Gesture::line((100.0, 500.0), (900.0, 500.0)).shake(0.0), None);
+            canvas.wet.vol.iter().zip(&canvas.wet.cover).enumerate()
+                .filter(|(_, (volume, _))| **volume > 0.0)
+                .map(|(pixel, (_, coverage))| (pixel, *coverage))
+                .collect::<Vec<_>>()
+        });
+        assert!(!contact.is_empty());
+        assert!(contact.iter().any(|(_, coverage)| *coverage < 1.0));
+        for (pixel, coverage) in contact {
+            let column = canvas.material_store().unwrap().read_column(pixel).unwrap();
+            assert!(!column.coverage.is_empty());
+            assert!(column.coverage.iter().all(|&actual| actual == coverage));
+        }
+    }
+
+    #[test]
     fn a_small_calibrated_brush_keeps_valid_transfer_geometry() {
         let mut palette = crate::Palette::tube_box();
         palette.engine = 9;

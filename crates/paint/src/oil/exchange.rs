@@ -440,6 +440,21 @@ mod tests {
     }
 
     #[test]
+    fn contact_coverage_preserves_inventories_and_coherent_geometry() {
+        let mut material = parcel(0.0, 0.4).material.unwrap();
+        material.append(&parcel(0.8, 0.4).material.unwrap(), 1.0);
+        let mut stressed = parcel(0.0, 0.4).material.unwrap();
+        stressed.fragments[0].history.tension_n_m = [1.0; 3];
+        material.append(&stressed, 1.0);
+        let before = material.inventory();
+        let coherent = material.fragments[1..].to_vec();
+        material.set_mobile_coverage(0.25);
+        assert_eq!(material.fragments[0].history.coverage, 0.25);
+        assert_eq!(material.fragments[1..], coherent);
+        assert_eq!(material.inventory(), before);
+    }
+
+    #[test]
     fn rag_refold_retains_the_mobile_material_inside_the_cloth() {
         let mut rag = crate::rag::Rag::new(20.0, 7);
         rag.mobile.mm3 = 0.5;
@@ -670,6 +685,19 @@ impl MaterialPayload {
     pub fn blend(&mut self, other: &Self, weight: f64) {
         self.scale(1.0 - weight);
         self.mix_in(other, weight);
+    }
+
+    pub(crate) fn set_mobile_coverage(&mut self, coverage: f32) {
+        assert!(coverage.is_finite() && coverage > 0.0 && coverage <= 1.0);
+        let gel = super::constitutive::Parameters::default().gel_network;
+        for fragment in &mut self.fragments {
+            if fragment.network <= gel
+                && fragment.history.tension_n_m == [0.0; 3]
+                && fragment.history.moment_n == [0.0; 3]
+            {
+                fragment.history.coverage = coverage;
+            }
+        }
     }
 
     pub fn mix_in(&mut self, other: &Self, factor: f64) {

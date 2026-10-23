@@ -231,6 +231,28 @@ impl Latent {
         self.add_parts(other, weight);
         self.parts.retain(|p| p.1 > 0.0);
     }
+
+    pub(crate) fn blend_contact_parts(&mut self, other: &Self, weight: f32, coverage: f32) {
+        if let Some(material) = &mut self.material {
+            material.set_mobile_coverage(coverage);
+        }
+        let mut incoming;
+        let other = if other.material.as_ref().is_some_and(|material| {
+            material.fragments.iter().any(|fragment| fragment.history.coverage != coverage)
+        }) {
+            incoming = Self {
+                color: other.color,
+                parts: other.parts.clone(),
+                layers: Vec::new(),
+                material: other.material.clone(),
+            };
+            incoming.material.as_mut().unwrap().set_mobile_coverage(coverage);
+            &incoming
+        } else {
+            other
+        };
+        self.blend_parts(other, weight);
+    }
 }
 /// Paint properties mixed by volume alongside the pigment: [KM scattering per
 /// coat, stiffness, drying rate, solvent, oil, packed oil, drained floor,

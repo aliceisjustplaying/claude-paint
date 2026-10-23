@@ -142,7 +142,7 @@ impl Film {
             for k in 0..crate::wet::LAT {
                 l[k] += (p.parts[k] - l[k]) * a;
             }
-            (*self.lat.add(i)).blend_parts(p.source(), a);
+            (*self.lat.add(i)).blend_contact_parts(p.source(), a, *self.surf.cover.add(i));
             let h = self.hide.add(i).cast::<f32>();
             let (h0, h1, h2) = (h.cast::<[f32; 4]>().read_unaligned(), h.add(3).cast::<[f32; 4]>().read_unaligned(), h.add(6).cast::<[f32; 4]>().read_unaligned());
             h.cast::<[f32; 4]>().write_unaligned(lerp4(h0, p.hide[0], a));
